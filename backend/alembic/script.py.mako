@@ -8,7 +8,6 @@ Create Date: ${create_date}
 from alembic import op
 import sqlalchemy as sa
 ${imports if imports else ""}
-import app.models.types
 
 # revision identifiers, used by Alembic.
 revision = ${repr(up_revision)}

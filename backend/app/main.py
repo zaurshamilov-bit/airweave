@@ -7,6 +7,7 @@ and unhandled exceptions.
 import time
 import traceback
 import uuid
+from contextlib import asynccontextmanager
 from typing import Union
 
 from fastapi import FastAPI, Request, Response
@@ -17,13 +18,24 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.api_v1.api import api_router
 from app.core.config import settings
-from app.core.exceptions import NotFoundException, PermissionException, unpack_validation_error
 from app.core.logging import logger
 from app.db.init_db import init_db
 from app.db.session import AsyncSessionLocal
-from app.flow_execution.sync import sync_integration_tasks_and_triggers
+from app.shared.exceptions import NotFoundException, PermissionException, unpack_validation_error
 
-app = FastAPI(title=settings.PROJECT_NAME, openapi_url="/openapi.json")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
+    # Startup
+    async with AsyncSessionLocal() as db:
+        if settings.RUN_SYSTEM_SYNC:
+            pass
+        await init_db(db)
+    yield
+    # Shutdown
+
+app = FastAPI(title=settings.PROJECT_NAME, openapi_url="/openapi.json", lifespan=lifespan)
 
 app.include_router(api_router)
 
@@ -166,33 +178,23 @@ async def not_found_exception_handler(request: Request, exc: NotFoundException) 
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Event handler to run on application startup."""
-    async with AsyncSessionLocal() as db:
-        if settings.RUN_SYNC:
-            await sync_integration_tasks_and_triggers("app/flow_execution/integrations", db)
-        await init_db(db)
-
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "localhost:5173",
-        "app.dev-neena.io",
-        "app.tst-neena.io",
-        "app.acc-neena.io",
-        "app.neena.io",
-        "https://app.dev-neena.io",
-        "https://app.tst-neena.io",
-        "https://app.acc-neena.io",
-        "https://app.neena.io",
+        "http://localhost:3000",
+        "localhost:3000",
+        "app.dev-airweave.ai",
+        "app.tst-airweave.ai",
+        "app.acc-airweave.ai",
+        "app.airweave.ai",
+        "https://app.dev-airweave.ai",
+        "https://app.tst-airweave.ai",
+        "https://app.acc-airweave.ai",
+        "https://app.airweave.ai",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_origin_regex=r"https://.*\.apps\.zdusercontent\.com",  # https://1047156.apps.zdusercontent.com Zendesk  # noqa
 )
 
 
@@ -209,11 +211,11 @@ async def show_docs_reference() -> HTMLResponse:
     <!DOCTYPE html>
     <html>
         <head>
-            <title>Neena API</title>
+            <title>Airweave API</title>
         </head>
         <body>
-            <h1>Welcome to the Neena API</h1>
-            <p>Please visit the <a href="https://docs.neena.io">docs</a> for more information.</p>
+            <h1>Welcome to the Airweave API</h1>
+            <p>Please visit the <a href="https://docs.airweave.ai">docs</a> for more information.</p>
         </body>
     </html>
     """

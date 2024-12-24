@@ -23,6 +23,7 @@ redis = {extras = ["hiredis"], version = "^5.0.1"}
 tenacity = "^8.2.3"
 structlog = "^24.1.0"
 pydantic-settings = "^2.7.0"
+psycopg2-binary = "^2.9.10"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
@@ -48,6 +49,7 @@ line-length = 88
 target-version = ['py311']
 include = '\.pyi?$'
 
+
 [tool.isort]
 profile = "black"
 multi_line_output = 3
@@ -56,6 +58,8 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 line_length = 100
+extend_skip = ["backend (old, neena, only for inspiration)"]
+
 
 [tool.mypy]
 python_version = "3.11"
@@ -82,4 +86,5 @@ ignore = ["E501", "B008"]  # Line length is handled by black
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
-addopts = "-v --cov=airweave --cov-report=term-missing" 
+addopts = "-v --cov=airweave --cov-report=term-missing"
+extend-exclude = ["backend (old, neena, only for inspiration)"]

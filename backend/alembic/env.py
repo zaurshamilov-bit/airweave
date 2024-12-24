@@ -27,7 +27,7 @@ current_dir = Path(__file__).parent.parent.absolute()
 if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
-from app.db.base import Base  # noqa
+from app.models._base import Base  # noqa
 
 target_metadata = Base.metadata
 

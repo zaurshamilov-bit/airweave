@@ -71,20 +71,4 @@ class Settings(BaseSettings):
             path=f"{info.data.get('POSTGRES_DB') or ''}",
         )
 
-    @field_validator("REDIS_HOST", mode="before")
-    def assemble_redis_host(cls, v: Optional[str], info: ValidationInfo) -> str:
-        """Get the Redis host.
-
-        Args:
-        ----
-            v (Optional[str]): The value of the REDIS_HOST setting.
-            info (ValidationInfo): The validation context containing all field values.
-
-        Returns:
-        -------
-            str: The Redis host.
-
-        """
-        return info.data.get("REDIS_CONNECTION_STRING").split(",")[0].split(":")[0]
-
 settings = Settings()

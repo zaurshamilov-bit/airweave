@@ -10,8 +10,8 @@ class UserBase(BaseModel):
     """Base schema for User."""
 
     email: EmailStr
-    full_name: Optional[str] = "Undefined"
-    auth0_id: str
+    full_name: Optional[str] = "Superuser"
+    organization_id: UUID
 
     class Config:
         """Pydantic config for UserBase."""
@@ -23,7 +23,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for creating a User object."""
 
-    pass
+    password: str
 
 
 class UserUpdate(UserBase):
@@ -58,3 +58,10 @@ class UserInDB(UserInDBBase):
     """Schema for User stored in DB."""
 
     hashed_password: Optional[str] = None
+
+class UserWithOrganizations(UserInDBBase):
+    """Schema for User with Organizations."""
+
+    pass
+
+    # organizations: list[Organization]

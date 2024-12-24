@@ -7,7 +7,6 @@
             "request": "launch",
             "module": "uvicorn",
             "args": [
-                // "app.main:app", fill in app.main in the dialog
                 "--reload",
                 "--host",
                 "127.0.0.1",
@@ -19,29 +18,13 @@
             "console": "integratedTerminal",
             "jinja": true,
             "justMyCode": false,
-        },
-        {
-            "name": "FastAPI on 8001",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "uvicorn",
-            "args": [
-                // "app.main:app", fill in app.main in the dialog
-                "--reload",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "8001",
-                "app.main:app"
-            ],
-            "cwd": "${workspaceFolder}/backend",
-            "console": "integratedTerminal",
-            "jinja": true,
-            "justMyCode": false,
+            "preLaunchTask": "startup-db",
+            "envFile": "${workspaceFolder}/.env"
         },
         {
             "name": "Pytest Debug",
             "type": "debugpy",
+            "request": "launch",
             "purpose": ["debug-test"],
             "python": "${command:python.interpreterPath}",
             "console": "integratedTerminal",
@@ -62,29 +45,6 @@
             "justMyCode": true
         },
         {
-            "type": "chrome",
-            "request": "launch",
-            "name": "Vite Vue.js Debug",
-            "url": "http://localhost:5173",
-            "webRoot": "${workspaceFolder}/frontend/src",
-            "sourceMaps": true,
-            "sourceMapPathOverrides": {
-                "webpack:///src/*": "${webRoot}/*",
-                "vite:///*": "${webRoot}/*"
-            }
-        },
-        {
-            "name": "Start Ngrok on 8001 and update env",
-            "type": "node",
-            "request": "launch",
-            "runtimeExecutable": "bash",
-            "runtimeArgs": [
-                "-c",
-                "pkill ngrok || true && ngrok http 8001 & sleep 4 && python .vscode/scripts/update_ngrok.py"
-            ],
-            "console": "integratedTerminal",
-        },
-        {
             "name": "ARQ Worker",
             "type": "debugpy",
             "request": "launch",
@@ -96,14 +56,9 @@
                 "PYTHONPATH": "${workspaceFolder}/backend"
             },
             "justMyCode": false
-        }
+        },
     ],
     "compounds": [
-        {
-            "name": "FastAPI + Ngrok",
-            "configurations": ["FastAPI on 8001", "Start Ngrok on 8001 and update env"],
-            "stopAll": true,
-        },
         {
             "name": "FastAPI + ARQ Worker",
             "configurations": ["FastAPI", "ARQ Worker"],

@@ -7,7 +7,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.base_class import Base
+from app.crud._decorators import transactional
+from app.models._base import Base
 
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
@@ -65,6 +66,7 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         result = await db.execute(select(self.model).offset(skip).limit(limit))
         return list(result.unique().scalars().all())
 
+    @transactional
     async def create(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType:
         """Create a new object.
 
@@ -82,10 +84,9 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             obj_in = obj_in.model_dump()
         db_obj = self.model(**obj_in)
         db.add(db_obj)
-        await db.commit()
-        await db.refresh(db_obj)
         return db_obj
 
+    @transactional
     async def create_many(
         self, db: AsyncSession, objs_in: list[CreateSchemaType]
     ) -> list[ModelType]:
@@ -103,11 +104,9 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """
         db_objs = [self.model(**obj_in.model_dump()) for obj_in in objs_in]
         db.add_all(db_objs)
-        await db.commit()
-        for db_obj in db_objs:
-            await db.refresh(db_obj)
         return db_objs
 
+    @transactional
     async def update(
         self,
         db: AsyncSession,
@@ -134,10 +133,9 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         for key, value in obj_in.items():
             setattr(db_obj, key, value) if hasattr(db_obj, key) else None
         db.add(db_obj)
-        await db.commit()
-        await db.refresh(db_obj)
         return db_obj
 
+    @transactional
     async def remove(self, db: AsyncSession, *, id: UUID) -> Optional[ModelType]:
         """Delete an object.
 
@@ -157,5 +155,4 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return None
 
         await db.delete(db_obj)
-        await db.commit()
         return db_obj

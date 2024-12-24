@@ -16,7 +16,7 @@ router = APIRouter()
 @router.get("/", response_model=User)
 async def read_user(
     *,
-    current_user: User = Depends(deps.get_current_user),
+    current_user: User = Depends(deps.get_user),
 ) -> schemas.User:
     """Get current user.
 
@@ -30,7 +30,6 @@ async def read_user(
 
     """
     return current_user
-
 
 # @router.post("/create_if_not_exists", response_model=schemas.User)
 # async def create_if_not_exists(

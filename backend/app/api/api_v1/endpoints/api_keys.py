@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.api import deps
@@ -14,9 +14,9 @@ router = APIRouter()
 @router.post("/", response_model=schemas.APIKeyWithPlainKey)
 async def create_api_key(
     *,
-    db: Session = Depends(deps.get_db),
+    db: AsyncSession = Depends(deps.get_db),
     api_key_in: schemas.APIKeyCreate = Body(...),
-    user: schemas.User = Depends(deps.get_current_user),
+    user: schemas.User = Depends(deps.get_user),
 ) -> schemas.APIKeyWithPlainKey:
     """Create a new API key for the current user.
 
@@ -25,7 +25,7 @@ async def create_api_key(
 
     Args:
     ----
-        db (Session): The database session.
+        db (AsyncSession): The database session.
         api_key_in (schemas.APIKeyCreate): The API key creation data.
         user (schemas.User): The current user.
 
@@ -43,15 +43,15 @@ async def create_api_key(
 @router.get("/", response_model=schemas.APIKey)
 async def read_api_key(
     *,
-    db: Session = Depends(deps.get_db),
+    db: AsyncSession = Depends(deps.get_db),
     id: UUID,
-    user: schemas.User = Depends(deps.get_current_user),
+    user: schemas.User = Depends(deps.get_user),
 ) -> schemas.APIKey:
     """Retrieve an API key by ID.
 
     Args:
     ----
-        db (Session): The database session.
+        db (AsyncSession): The database session.
         id (UUID): The ID of the API key.
         user (schemas.User): The current user.
 
@@ -73,16 +73,16 @@ async def read_api_key(
 @router.get("/all", response_model=list[schemas.APIKey])
 async def read_api_keys(
     *,
-    db: Session = Depends(deps.get_db),
+    db: AsyncSession = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
-    user: schemas.User = Depends(deps.get_current_user),
+    user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.APIKey]:
     """Retrieve all API keys for the current user.
 
     Args:
     ----
-        db (Session): The database session.
+        db (AsyncSession): The database session.
         skip (int): Number of records to skip for pagination.
         limit (int): Maximum number of records to return.
         user (schemas.User): The current user.
@@ -101,15 +101,15 @@ async def read_api_keys(
 @router.delete("/", response_model=schemas.APIKey)
 async def delete_api_key(
     *,
-    db: Session = Depends(deps.get_db),
+    db: AsyncSession = Depends(deps.get_db),
     id: UUID,
-    user: schemas.User = Depends(deps.get_current_user),
+    user: schemas.User = Depends(deps.get_user),
 ) -> schemas.APIKey:
     """Delete an API key.
 
     Args:
     ----
-        db (Session): The database session.
+        db (AsyncSession): The database session.
         id (UUID): The ID of the API key.
         user (schemas.User): The current user.
 
