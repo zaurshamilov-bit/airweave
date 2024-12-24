@@ -3,8 +3,6 @@
 from typing import Optional
 from uuid import UUID
 
-from app.core.shared_models import FlaggableFeature
-from app.schemas.feature_flag import FeatureFlagInDBBase
 from pydantic import BaseModel, EmailStr
 
 
@@ -39,20 +37,6 @@ class UserInDBBase(UserBase):
 
     id: UUID
     permissions: Optional[list[str]] = None
-    has_flags: Optional[list[FeatureFlagInDBBase]] = []
-
-    def has_feature(self, feature: FlaggableFeature) -> bool:
-        """Checks if the user has a specific feature flag enabled.
-
-        Args:
-            feature (FlaggableFeature): The feature flag to check.
-
-        Returns:
-            bool: True if the feature is enabled for the user, False otherwise.
-        """
-        return any(
-            flag.feature == feature and flag.flag.lower() == "true" for flag in self.has_flags
-        )
 
     class Config:
         """Pydantic config for UserInDBBase."""

@@ -12,7 +12,8 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Pydantic settings class.
 
-    Attributes:
+    Attributes
+    ----------
         PROJECT_NAME (str): The name of the project.
         LOCAL_DEVELOPMENT (Optional[bool]): Whether the application is running locally.
         FIRST_SUPERUSER (str): The email address of the first superuser.
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
         LOCAL_NGROK_SERVER (Optional[str]): The local ngrok server URL.
         RUN_SYSTEM_SYNC (Optional[bool]): Whether to run the system sync to process sources,
             destinations, and chunk types.
+
     """
 
     PROJECT_NAME: str = "Airweave"
@@ -50,11 +52,14 @@ class Settings(BaseSettings):
         """Build the SQLAlchemy database URI.
 
         Args:
+        ----
             v (Optional[str]): The value of the SQLALCHEMY_DATABASE_URI setting.
             info (ValidationInfo): The validation context containing all field values.
 
         Returns:
+        -------
             PostgresDsn: The assembled SQLAlchemy async database URI.
+
         """
         if isinstance(v, str):
             return v
@@ -71,11 +76,14 @@ class Settings(BaseSettings):
         """Get the Redis host.
 
         Args:
+        ----
             v (Optional[str]): The value of the REDIS_HOST setting.
             info (ValidationInfo): The validation context containing all field values.
 
         Returns:
+        -------
             str: The Redis host.
+
         """
         return info.data.get("REDIS_CONNECTION_STRING").split(",")[0].split(":")[0]
 

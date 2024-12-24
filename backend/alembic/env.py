@@ -1,4 +1,4 @@
-"""This file is used to configure the Alembic migrations."""
+"""Alembic environment file."""
 
 from __future__ import with_statement
 
@@ -7,9 +7,10 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
+
+from alembic import context
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -39,8 +40,10 @@ target_metadata = Base.metadata
 def get_url() -> str:
     """Get the database URL from the environment variables.
 
-    Returns:
+    Returns
+    -------
         str: The database URL.
+
     """
     load_dotenv(".env")
     user = os.getenv("POSTGRES_USER")

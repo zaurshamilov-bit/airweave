@@ -1,4 +1,4 @@
-"""This module contains the APIKey schema."""
+"""APIKey schema."""
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -28,10 +28,13 @@ class APIKeyCreate(BaseModel):
         """Ensure expiration_date is in UTC if no timezone is specified.
 
         Args:
+        ----
             values (dict): The values to validate.
 
         Returns:
+        -------
             dict: The validated values.
+
         """
         expiration_date = values.get("expiration_date")
         if expiration_date is None:
@@ -54,13 +57,17 @@ class APIKeyCreate(BaseModel):
         """Validate the expiration date.
 
         Args:
+        ----
             v (datetime): The expiration date.
 
         Raises:
+        ------
             ValueError: If the expiration date is in the past or more than 1 year in the future.
 
         Returns:
+        -------
             datetime: The expiration date.
+
         """
         now = datetime.now(timezone.utc)
         if v < now:

@@ -3,8 +3,6 @@
 import logging
 from typing import Optional
 
-from app.core.config import settings
-
 
 class _ContextualLogger(logging.LoggerAdapter):
     """A LoggerAdapter that supports both custom dimensions and prefixes."""
@@ -18,9 +16,11 @@ class _ContextualLogger(logging.LoggerAdapter):
         """Initialize the contextual logger.
 
         Args:
+        ----
             logger (logging.Logger): Base logger instance
             dimensions (Optional[dict]): Custom dimensions for structured logging
             prefix (str): Optional prefix for log messages
+
         """
         super().__init__(logger, {})
         self.prefix = prefix
@@ -30,11 +30,14 @@ class _ContextualLogger(logging.LoggerAdapter):
         """Process the log message and keywords.
 
         Args:
+        ----
             msg (str): The log message
             kwargs (dict): The logging keywords
 
         Returns:
+        -------
             Tuple[str, dict]: Processed message and keywords
+
         """
         if self.prefix:
             msg = f"{self.prefix}{msg}"
@@ -57,10 +60,13 @@ class _ContextualLogger(logging.LoggerAdapter):
         """Create a new logger with an additional prefix while maintaining dimensions.
 
         Args:
+        ----
             prefix (str): The prefix to add
 
         Returns:
+        -------
             _ContextualLogger: New logger instance with updated prefix
+
         """
         return _ContextualLogger(self.logger, prefix, self.dimensions)
 
@@ -68,10 +74,13 @@ class _ContextualLogger(logging.LoggerAdapter):
         """Create a new logger with additional context dimensions.
 
         Args:
+        ----
             dimensions: Keyword arguments to add to dimensions
 
         Returns:
+        -------
             _ContextualLogger: New logger instance with updated dimensions
+
         """
         new_dimensions = {**self.dimensions, **dimensions}
         return _ContextualLogger(self.logger, self.prefix, new_dimensions)
@@ -124,6 +133,7 @@ class LoggerConfigurator:
         severity="high"
     ).with_prefix("ERROR: ")
     ```
+
     """
 
     @staticmethod
@@ -135,12 +145,15 @@ class LoggerConfigurator:
         """Configure and return a logger with the given name and initial context.
 
         Args:
+        ----
             name (str): Logger name (typically __name__)
             dimensions (Optional[dict]): Initial custom dimensions
             prefix (str): Initial prefix for log messages
 
         Returns:
+        -------
             _ContextualLogger: Configured logger with context support
+
         """
         logger = logging.getLogger(name)
         logger.setLevel(logging.INFO)

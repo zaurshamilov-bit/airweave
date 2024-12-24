@@ -1,15 +1,16 @@
-"""This module contains the base class for CRUD operations."""
+"""Base class for CRUD operations."""
 
 from typing import Any, Generic, Optional, Type, TypeVar, Union
 from uuid import UUID
 
-from app import models, schemas
-from app.core.exceptions import ImmutableFieldError, NotFoundException, PermissionException
-from app.db.base_class import Base
-from app.schemas import User
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app import models, schemas
+from app.db.base_class import Base
+from app.schemas import User
+from app.shared.exceptions import ImmutableFieldError, NotFoundException, PermissionException
 
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
@@ -17,16 +18,18 @@ UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
 
 class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
-    """This class is the repository object with default methods.
+    """Base class for CRUD operations.
 
     Implements methods like Create, Read, Update, Delete (CRUD) in user context.
     """
 
     def __init__(self, model: Type[ModelType]):
-        """CRUD object with default methods to Create, Read, Update, Delete (CRUD) in user context.
+        """Initialize the CRUD object.
 
         Args:
+        ----
             model (Type[ModelType]): The model to be used in the CRUD operations.
+
         """
         self.model = model
 
@@ -34,12 +37,15 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Get a single object by ID.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             id (UUID): The UUID of the object to get. Doesn't require strict typing.
             current_user (User): The current user.
 
         Returns:
+        -------
             Optional[ModelType]: The object with the given ID.
+
         """
         query = select(self.model).where(self.model.id == id)
         result = await db.execute(query)
@@ -58,13 +64,16 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Get multiple objects.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             current_user (User): The current user.
             skip (int): The number of objects to skip.
             limit (int): The number of objects to return.
 
         Returns:
+        -------
             List[ModelType]: A list of objects.
+
         """
         query = (
             select(self.model)
@@ -90,6 +99,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Create a new object in db for a given schema type and optional user or assistant context.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             obj_in (CreateSchemaType): The object to create.
             current_user (User): The current user.
@@ -97,7 +107,9 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
                 with the object.
 
         Returns:
+        -------
             ModelType: The created object.
+
         """
         if not isinstance(obj_in, dict):
             obj_in = obj_in.model_dump()
@@ -129,6 +141,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Update an object.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             db_obj (ModelType): The object to update.
             obj_in (Union[UpdateSchemaType, Dict[str, Any]]): The new object data.
@@ -137,7 +150,9 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
                 the object to be updated.
 
         Returns:
+        -------
             ModelType: The updated object
+
         """
         if not isinstance(obj_in, dict):
             obj_in = obj_in.model_dump(exclude_unset=True)
@@ -161,15 +176,19 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Delete an object.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             id (UUID): The UUID of the object to delete.
             current_user (User): The current user.
 
         Returns:
+        -------
             Optional[ModelType]: The deleted object.
 
         Raises:
+        ------
             NotFoundException: If the object is not found.
+
         """
         query = select(self.model).where(self.model.id == id)
         result = await db.execute(query)
@@ -190,15 +209,18 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Get the default assistant for the user.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             user (User): The user.
 
         Returns:
+        -------
             Optional[schemas.Assistant]: The default assistant for the user.
+
         """
         query = select(models.Assistant).where(
             models.Assistant.created_by_email == user.email,
-            models.Assistant.is_default_for_user == True,
+            models.Assistant.is_default_for_user is True,
         )
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -213,6 +235,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Set the assistant field if it is present in the model.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             db_obj (ModelType): The object to update.
             current_user (schemas.User): The current user.
@@ -220,11 +243,14 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
                 the object.
 
         Returns:
+        -------
             ModelType: The updated object.
 
         Raises:
+        ------
             NotFoundException: If no default assistant is found for the user.
             ValueError: If the model does not have an assistant field.
+
         """
         assistant_field = self._model_assistant_field(db_obj)
 
@@ -247,8 +273,10 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Validate that the current assistant has permission to access the object.
 
         Args:
+        ----
             db_obj (ModelType): The object to check.
             current_assistant (schemas.Assistant): The current assistant.
+
         """
         assistant_field = self._model_assistant_field(db_obj)
         if assistant_field and current_assistant:
@@ -260,11 +288,14 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Validate if the user has permission to access the object.
 
         Args:
+        ----
             db_obj (ModelType): The object to check.
             current_user (User): The current user.
 
         Raises:
+        ------
             PermissionException: If the user does not have the right to access the object.
+
         """
         if (
             db_obj.created_by_email != current_user.email
@@ -283,13 +314,16 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         Only checks for fields that are already present in the database object.
 
         Args:
+        ----
             db_obj (ModelType): The existing object in the database.
             obj_in (Union[UpdateSchemaType, Dict[str, Any]]): The new data intended for update.
             extra_immutable_fields (Optional[List[str]]): Additional fields that should be treated
                 as immutable.
 
         Raises:
+        ------
             ImmutableFieldError: If an immutable field is being modified.
+
         """
         immutable_fields = ["created_date", "created_by_email"]
 
@@ -313,10 +347,13 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Get the assistant field name of the model if it exists.
 
         Args:
+        ----
             db_obj (ModelType): The object to check.
 
         Returns:
+        -------
             str | None: The assistant field name if it exists, otherwise None.
+
         """
         assistant_field = None
         if hasattr(db_obj, "assistant"):
@@ -331,12 +368,15 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Validate that the current assistant is the same as the db_obj's assistant.
 
         Args:
+        ----
             db_obj (ModelType): The object to check.
             assistant_field (str): The assistant field name (can be 'assistant' or 'assistant_id').
             current_assistant (schemas.Assistant): The current assistant.
 
         Raises:
+        ------
             PermissionException: If the current assistant is not the same as the db_obj's assistant.
+
         """
         if getattr(db_obj, assistant_field) != current_assistant.id:
             raise PermissionException("User does not have the right to access this object")

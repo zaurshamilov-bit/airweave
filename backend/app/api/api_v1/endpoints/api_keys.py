@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app import crud, schemas
 from app.api import deps
-from app.core.contexts import AppContext
 
 router = APIRouter()
 
@@ -17,7 +16,7 @@ async def create_api_key(
     *,
     db: Session = Depends(deps.get_db),
     api_key_in: schemas.APIKeyCreate = Body(...),
-
+    user: schemas.User = Depends(deps.get_current_user),
 ) -> schemas.APIKeyWithPlainKey:
     """Create a new API key for the current user.
 
@@ -28,7 +27,7 @@ async def create_api_key(
     ----
         db (Session): The database session.
         api_key_in (schemas.APIKeyCreate): The API key creation data.
-        app_context (AppContext): The application context.
+        user (schemas.User): The current user.
 
     Returns:
     -------
@@ -36,7 +35,7 @@ async def create_api_key(
 
     """
     api_key_obj = await crud.api_key.create_with_user(
-        db=db, obj_in=api_key_in, current_user=app_context.user
+        db=db, obj_in=api_key_in, current_user=user
     )
     return api_key_obj
 
@@ -46,7 +45,7 @@ async def read_api_key(
     *,
     db: Session = Depends(deps.get_db),
     id: UUID,
-    app_context: AppContext = Depends(deps.get_app_context),
+    user: schemas.User = Depends(deps.get_current_user),
 ) -> schemas.APIKey:
     """Retrieve an API key by ID.
 
@@ -54,7 +53,7 @@ async def read_api_key(
     ----
         db (Session): The database session.
         id (UUID): The ID of the API key.
-        app_context (AppContext): The application context.
+        user (schemas.User): The current user.
 
     Returns:
     -------
@@ -65,7 +64,7 @@ async def read_api_key(
         HTTPException: If the API key is not found.
 
     """
-    api_key = await crud.api_key.get(db=db, id=id, current_user=app_context.user)
+    api_key = await crud.api_key.get(db=db, id=id, current_user=user)
     if not api_key:
         raise HTTPException(status_code=404, detail="API key not found")
     return api_key
@@ -77,7 +76,7 @@ async def read_api_keys(
     db: Session = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
-    app_context: AppContext = Depends(deps.get_app_context),
+    user: schemas.User = Depends(deps.get_current_user),
 ) -> list[schemas.APIKey]:
     """Retrieve all API keys for the current user.
 
@@ -86,7 +85,7 @@ async def read_api_keys(
         db (Session): The database session.
         skip (int): Number of records to skip for pagination.
         limit (int): Maximum number of records to return.
-        app_context (AppContext): The application context.
+        user (schemas.User): The current user.
 
     Returns:
     -------
@@ -94,7 +93,7 @@ async def read_api_keys(
 
     """
     api_keys = await crud.api_key.get_multi(
-        db=db, skip=skip, limit=limit, current_user=app_context.user
+        db=db, skip=skip, limit=limit, current_user=user
     )
     return api_keys
 
@@ -104,7 +103,7 @@ async def delete_api_key(
     *,
     db: Session = Depends(deps.get_db),
     id: UUID,
-    app_context: AppContext = Depends(deps.get_app_context),
+    user: schemas.User = Depends(deps.get_current_user),
 ) -> schemas.APIKey:
     """Delete an API key.
 
@@ -112,7 +111,7 @@ async def delete_api_key(
     ----
         db (Session): The database session.
         id (UUID): The ID of the API key.
-        app_context (AppContext): The application context.
+        user (schemas.User): The current user.
 
     Returns:
     -------
@@ -123,8 +122,8 @@ async def delete_api_key(
         HTTPException: If the API key is not found.
 
     """
-    api_key = await crud.api_key.get(db=db, id=id, current_user=app_context.user)
+    api_key = await crud.api_key.get(db=db, id=id, current_user=user)
     if not api_key:
         raise HTTPException(status_code=404, detail="API key not found")
-    api_key = await crud.api_key.remove(db=db, id=id, current_user=app_context.user)
+    api_key = await crud.api_key.remove(db=db, id=id, current_user=user)
     return api_key

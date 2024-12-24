@@ -9,6 +9,12 @@ import traceback
 import uuid
 from typing import Union
 
+from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import ValidationError
+from starlette.middleware.cors import CORSMiddleware
+
 from app.api.api_v1.api import api_router
 from app.core.config import settings
 from app.core.exceptions import NotFoundException, PermissionException, unpack_validation_error
@@ -16,11 +22,6 @@ from app.core.logging import logger
 from app.db.init_db import init_db
 from app.db.session import AsyncSessionLocal
 from app.flow_execution.sync import sync_integration_tasks_and_triggers
-from fastapi import FastAPI, Request, Response
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import ValidationError
-from starlette.middleware.cors import CORSMiddleware
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url="/openapi.json")
 
@@ -32,11 +33,14 @@ async def add_request_id(request: Request, call_next: callable) -> Response:
     """Middleware to add a request ID to the request.
 
     Args:
+    ----
         request (Request): The incoming request.
         call_next (callable): The next middleware in the chain.
 
     Returns:
+    -------
         Response: The response to the incoming request.
+
     """
     request.state.request_id = str(uuid.uuid4())
     return await call_next(request)
@@ -47,11 +51,14 @@ async def log_requests(request: Request, call_next: callable) -> Response:
     """Middleware to log incoming requests.
 
     Args:
+    ----
         request (Request): The incoming request.
         call_next (callable): The next middleware in the chain.
 
     Returns:
+    -------
         Response: The response to the incoming request.
+
     """
     start_time = time.time()
     response = await call_next(request)
@@ -70,11 +77,14 @@ async def exception_logging_middleware(request: Request, call_next: callable) ->
     """Middleware to log unhandled exceptions.
 
     Args:
+    ----
         request (Request): The incoming request.
         call_next (callable): The next middleware in the chain.
 
     Returns:
+    -------
         Response: The response to the incoming request.
+
     """
     try:
         response = await call_next(request)
@@ -97,12 +107,14 @@ async def validation_exception_handler(
     and why, facilitating easier debugging and correction.
 
     Args:
+    ----
         request (Request): The incoming request that triggered the exception.
         exc (Union[RequestValidationError, ValidationError]): The exception object that was raised.
             This can either be a RequestValidationError for request body/schema validation issues,
             or a ValidationError for other data model validations within FastAPI.
 
     Returns:
+    -------
         JSONResponse: A 422 Unprocessable Entity status response that details the validation
             errors. Each error message is a dictionary where the key is the location
             of the validation error in the request, and the value is the associated error message.
@@ -114,6 +126,7 @@ async def validation_exception_handler(
                 {"body.age": "value is not a valid integer"}
             ]
         }
+
     """
     error_messages = unpack_validation_error(exc)
     return JSONResponse(status_code=422, content=error_messages)
@@ -124,11 +137,14 @@ async def permission_exception_handler(request: Request, exc: PermissionExceptio
     """Exception handler for PermissionException.
 
     Args:
+    ----
         request (Request): The incoming request that triggered the exception.
         exc (PermissionException): The exception object that was raised.
 
     Returns:
+    -------
         JSONResponse: A 403 Forbidden status response that details the error message.
+
     """
     return JSONResponse(status_code=403, content={"detail": str(exc)})
 
@@ -138,11 +154,14 @@ async def not_found_exception_handler(request: Request, exc: NotFoundException) 
     """Exception handler for NotFoundException.
 
     Args:
+    ----
         request (Request): The incoming request that triggered the exception.
         exc (NotFoundException): The exception object that was raised.
 
     Returns:
+    -------
         JSONResponse: A 404 Not Found status response that details the error message.
+
     """
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
@@ -181,8 +200,10 @@ app.add_middleware(
 async def show_docs_reference() -> HTMLResponse:
     """Root endpoint to display the API documentation.
 
-    Returns:
+    Returns
+    -------
         HTMLResponse: The HTML content to display the API documentation.
+
     """
     html_content = """
     <!DOCTYPE html>

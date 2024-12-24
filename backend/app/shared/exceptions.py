@@ -1,4 +1,4 @@
-"""This module contains the shared exceptions for the application."""
+"""Shared exceptions module."""
 
 from typing import Optional
 
@@ -13,7 +13,9 @@ class PermissionException(Exception):
         """Create a new PermissionException instance.
 
         Args:
+        ----
             message (str, optional): The error message. Has default message.
+
         """
         self.message = message
         super().__init__(self.message)
@@ -26,7 +28,9 @@ class NotFoundException(Exception):
         """Create a new NotFoundException instance.
 
         Args:
+        ----
             message (str, optional): The error message. Has default message.
+
         """
         self.message = message
         super().__init__(self.message)

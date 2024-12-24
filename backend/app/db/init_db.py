@@ -1,15 +1,18 @@
-"""This module initializes the database with the first superuser."""
+"""Initialize the database with the first superuser."""
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.core.config import settings
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def init_db(db: AsyncSession) -> None:
     """Initialize the database with the first superuser.
 
     Args:
+    ----
         db (AsyncSession): The database session.
+
     """
     user = await crud.user.get_by_email(db, email=settings.FIRST_SUPERUSER)
     if not user:

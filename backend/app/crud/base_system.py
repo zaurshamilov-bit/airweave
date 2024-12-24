@@ -1,12 +1,13 @@
-"""This module contains the base CRUD class for public tables."""
+"""Base CRUD class for public tables."""
 
 from typing import Any, Generic, Optional, Type, TypeVar, Union
 from uuid import UUID
 
-from app.db.base_class import Base
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.base_class import Base
 
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
@@ -14,7 +15,7 @@ UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
 
 class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
-    """This class is the repository object with default methods for system tables.
+    """CRUD base class for system tables.
 
     Implements CRUD methods without user or organization context.
     """
@@ -23,7 +24,9 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """CRUD object with default methods for public tables.
 
         Args:
+        ----
             model (Type[ModelType]): The model to be used in the CRUD operations.
+
         """
         self.model = model
 
@@ -31,11 +34,14 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Get a single object by ID.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             id (UUID): The UUID of the object to get.
 
         Returns:
+        -------
             Optional[ModelType]: The object with the given ID.
+
         """
         result = await db.execute(select(self.model).where(self.model.id == id))
         return result.unique().scalar_one_or_none()
@@ -46,12 +52,15 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Get multiple objects.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             skip (int): The number of objects to skip.
             limit (int): The number of objects to return.
 
         Returns:
+        -------
             List[ModelType]: A list of objects.
+
         """
         result = await db.execute(select(self.model).offset(skip).limit(limit))
         return list(result.unique().scalars().all())
@@ -60,11 +69,14 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Create a new object.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             obj_in (CreateSchemaType): The object to create.
 
         Returns:
+        -------
             ModelType: The created object.
+
         """
         if not isinstance(obj_in, dict):
             obj_in = obj_in.model_dump()
@@ -80,11 +92,14 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Create multiple objects.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             objs_in (list[CreateSchemaType]): The objects to create.
 
         Returns:
+        -------
             list[ModelType]: The created objects.
+
         """
         db_objs = [self.model(**obj_in.model_dump()) for obj_in in objs_in]
         db.add_all(db_objs)
@@ -103,12 +118,15 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Update an object.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             db_obj (ModelType): The object to update.
             obj_in (Union[UpdateSchemaType, Dict[str, Any]]): The new object data.
 
         Returns:
+        -------
             ModelType: The updated object
+
         """
         if not isinstance(obj_in, dict):
             obj_in = obj_in.model_dump(exclude_unset=True)
@@ -124,11 +142,14 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """Delete an object.
 
         Args:
+        ----
             db (AsyncSession): The database session.
             id (UUID): The UUID of the object to delete.
 
         Returns:
+        -------
             Optional[ModelType]: The deleted object.
+
         """
         result = await db.execute(select(self.model).where(self.model.id == id))
         db_obj = result.unique().scalar_one_or_none()
