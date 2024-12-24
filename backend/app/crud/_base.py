@@ -7,10 +7,10 @@ from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ImmutableFieldError, NotFoundException, PermissionException
 from app.crud._decorators import transactional
 from app.models._base import Base
 from app.schemas import User
-from app.shared.exceptions import ImmutableFieldError, NotFoundException, PermissionException
 
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)

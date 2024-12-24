@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.core.config import settings
+from app.core.exceptions import NotFoundException
 from app.core.logging import logger
 from app.db.session import get_db
-from app.shared.exceptions import NotFoundException
 
 
 async def get_user(

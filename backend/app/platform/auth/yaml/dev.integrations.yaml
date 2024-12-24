@@ -1,0 +1,10 @@
+integrations:
+  asana:
+    auth_type: "oauth2_with_refresh"
+    url: "https://app.asana.com/-/oauth_authorize"
+    backend_url: "https://app.asana.com/-/oauth_token"
+    grant_type: "authorization_code"
+    client_id: "1208775363497244"
+    client_secret_id: "asana-client-secret"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"

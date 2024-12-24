@@ -18,10 +18,10 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.api_v1.api import api_router
 from app.core.config import settings
+from app.core.exceptions import NotFoundException, PermissionException, unpack_validation_error
 from app.core.logging import logger
 from app.db.init_db import init_db
 from app.db.session import AsyncSessionLocal
-from app.shared.exceptions import NotFoundException, PermissionException, unpack_validation_error
 
 
 @asynccontextmanager
