@@ -1,0 +1,1 @@
+"""This module contains the authentication logic for the application."""

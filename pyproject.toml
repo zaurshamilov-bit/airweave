@@ -1,0 +1,2 @@
+[tool.flake8]
+ignore = ["B008"]  # Ignore Depends() in function defaults 
