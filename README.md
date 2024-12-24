@@ -234,11 +234,11 @@ Please follow the existing code style and conventions. See CONTRIBUTING.md for m
 
 ## Roadmap
 
-	•	Additional Integrations: Expand chunk generators for popular SaaS APIs and databases.
-	•	Kubernetes Support: Offer easy Helm charts for production-scale deployments.
-	•	Redis & Worker Queues: Improved background job processing and caching for large or frequent syncs.
-	•	GraphQL Interface: A flexible alternative to the RESTful API.
-	•	Commercial Offerings: Enterprise features, extended metrics, and priority support.
+- **Additional Integrations**: Expand chunk generators for popular SaaS APIs and databases.
+- **Redis & Worker Queues**: Improved background job processing and caching for large or frequent syncs.
+- **Webhooks**: Trigger syncs on external events (e.g. new data in a database)
+- **Kubernetes Support**: Offer easy Helm charts for production-scale deployments.
+- **Commercial Offerings**: Enterprise features, extended metrics, and priority support.
 
 ---
 
@@ -249,8 +249,8 @@ Airweave is released under an open-core model. The community edition is licensed
 ---
 
 ## Contact & Community
-	•	Discord: Join our Discord channel to get help or discuss features.
-	•	GitHub Issues: Report bugs or request new features in GitHub Issues.
-	•	Twitter: Follow @airweave_dev for updates.
+- **Discord**: Join our Discord channel to get help or discuss features.
+- **GitHub Issues**: Report bugs or request new features in GitHub Issues.
+- **Twitter**: Follow @airweave_dev for updates.
 
 That’s it! We're looking forward to seeing what you build. If you have any questions, please don’t hesitate to open an issue or reach out on Discord.
