@@ -149,27 +149,6 @@ That’s it!
 You now have Airweave running locally. You can log in to the dashboard, add new sources, and configure your sync schedules.
 
 
-## Configuration (Upcoming)
-
-Airweave provides flexibility through environment variables, allowing you to customize key aspects of your deployment. Below are the primary configuration options:
-
-
-### 1. Bring your own database
-
-You can configure Airweave to use your own PostgreSQL database to store sources, schedules, and metadata. Update the following variables in your `.env` file:
-
-```env
-POSTGRES_USER=<your-database-username>
-POSTGRES_PASSWORD=<your-database-password>
-POSTGRES_DB=<your-database-name>
-POSTGRES_HOST=<your-database-host>
-POSTGRES_PORT=<your-database-port>\
-```
-
-This configuration will create a number of tables within the airweave schema in your specified database. More on this [later](docs.airweave.ai).
-
-### 2. Specify logging
-
 ## Usage
 
 Below are some basic commands and API endpoints that you may find useful.
@@ -217,7 +196,56 @@ API Endpoints (FastAPI)
 	•	Set up or view your sync schedules under Schedules.
 	•	Monitor sync jobs in Jobs.
 
----
+
+## Configuration (Upcoming)
+
+Airweave provides flexibility through environment variables, allowing you to customize key aspects of your deployment. Below are the primary configuration options:
+
+
+### 1. Bring your own database
+
+You can configure Airweave to use your own PostgreSQL database to store sources, schedules, and metadata. Update the following variables in your `.env` file:
+
+```env
+POSTGRES_USER=<your-database-username>
+POSTGRES_PASSWORD=<your-database-password>
+POSTGRES_DB=<your-database-name>
+POSTGRES_HOST=<your-database-host>
+POSTGRES_PORT=<your-database-port>\
+```
+
+This configuration will create a number of tables within the airweave schema in your specified database. More on this [later](docs.airweave.ai).
+
+### 2. Specify logging destination
+
+You can specify the logging destination. Currently we support Datadog and Sentry.
+
+```env
+# Datadog
+LOG_DESTINATION=datadog
+DATADOG_API_KEY=<your-datadog-api-key>
+DATADOG_HOST=<your-datadog-host>
+DATADOG_PORT=<your-datadog-port>
+
+# Sentry
+LOG_DESTINATION=sentry
+SENTRY_DSN=<your-sentry-dsn>
+SENTRY_ENVIRONMENT=development
+SENTRY_RELEASE=<your-release-name>
+```
+
+### 3. Specify SMTP settings
+
+You can specify the SMTP settings in your `.env` file. This is used for sending email notifications.
+
+```env
+SMTP_HOST=<your-smtp-host>
+SMTP_PORT=<your-smtp-port>
+SMTP_USER=<your-smtp-user>
+SMTP_PASSWORD=<your-smtp-password>
+SMTP_FROM_EMAIL=<your-from-email>
+```
+
 
 ## Contributing
 
