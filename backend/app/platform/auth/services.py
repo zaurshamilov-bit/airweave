@@ -136,7 +136,7 @@ class OAuth2Service:
     async def refresh_access_token(
         integration_short_name: str, user: schemas.User
     ) -> OAuth2TokenResponse:
-        """Refreshes an access token using a refresh token.
+        """Refresh an access token using a refresh token.
 
         Rotates the refresh token if the integration is configured to do so.
 

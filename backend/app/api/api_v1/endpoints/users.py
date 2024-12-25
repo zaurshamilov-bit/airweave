@@ -30,38 +30,3 @@ async def read_user(
 
     """
     return current_user
-
-# @router.post("/create_if_not_exists", response_model=schemas.User)
-# async def create_if_not_exists(
-#     *,
-#     db: AsyncSession = Depends(deps.get_db),
-#     user_in: schemas.UserCreate,
-# ) -> schemas.User:
-#     """Create new user in database if it does not exist.
-
-#     Can only create user with the same email as the authenticated user.
-
-#     Args:
-#         db (AsyncSession): Database session dependency to handle database operations.
-#         user_in (schemas.UserCreate): The user object to be created.
-#         current_auth0_user (Auth0User): Authenticated auth0 user.
-
-#     Returns:
-#         schemas.User: The created user object.
-
-#     Raises:
-#         HTTPException: If the user is not authorized to create this user.
-#     """
-#     if user_in.email != current_auth0_user.email:
-#         raise HTTPException(
-#             status_code=403,
-#             detail="You are not authorized to create this user.",
-#         )
-
-#     user = await crud.user.get_by_email(db, email=user_in.email)
-
-#     if user:
-#         return user
-
-#     user = await crud.user.create(db, obj_in=user_in)
-#     return user

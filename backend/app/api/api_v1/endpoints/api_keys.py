@@ -40,7 +40,7 @@ async def create_api_key(
     return api_key_obj
 
 
-@router.get("/", response_model=schemas.APIKey)
+@router.get("/{id}", response_model=schemas.APIKey)
 async def read_api_key(
     *,
     db: AsyncSession = Depends(deps.get_db),
@@ -70,7 +70,7 @@ async def read_api_key(
     return api_key
 
 
-@router.get("/all", response_model=list[schemas.APIKey])
+@router.get("/", response_model=list[schemas.APIKey])
 async def read_api_keys(
     *,
     db: AsyncSession = Depends(deps.get_db),
