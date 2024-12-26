@@ -8,3 +8,8 @@ from app.schemas.source import SourceCreate, SourceUpdate
 
 class CRUDSource(CRUDBaseSystem[Source, SourceCreate, SourceUpdate]):
     """CRUD operations for the Source model."""
+
+    pass
+
+
+source = CRUDSource(Source)

@@ -10,4 +10,4 @@ integrations:
     client_credential_location: "body"
 
   weaviate:
-    auth_type: "api_key_and_url"
+    auth_type: "config_class"

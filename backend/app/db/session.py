@@ -24,7 +24,6 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
     """Get an async database session that can be used as a context manager.
 
     Yields:
-    ------
         AsyncSession: An async database session
 
     Example:
@@ -43,7 +42,7 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Yield an async database session to be used in dependency injection.
 
-    Yields
+    Yields:
     ------
         AsyncSession: An async database session
 

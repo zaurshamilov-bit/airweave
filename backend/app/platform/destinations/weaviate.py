@@ -7,8 +7,9 @@ from weaviate.collections import Collection
 from weaviate.collections.classes.config import DataType, Property
 
 from app import schemas
-from app.platform.auth.schemas import AuthType, WeaviateAuthCredentials
+from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk
+from app.platform.configs.auth import WeaviateAuthConfig
 from app.platform.decorators import destination
 from app.platform.destinations._base import BaseDestination
 from app.platform.embedding_models._adapters import WeaviateModelAdapter
@@ -16,7 +17,7 @@ from app.platform.embedding_models._base import BaseEmbeddingModel
 from app.vector_db.weaviate_service import WeaviateService
 
 
-@destination("Weaviate", "weaviate", AuthType.url_and_api_key)
+@destination("Weaviate", "weaviate", AuthType.config_class, "WeaviateAuthConfig")
 class WeaviateDestination(BaseDestination):
     """Weaviate destination implementation."""
 
@@ -64,7 +65,7 @@ class WeaviateDestination(BaseDestination):
         await instance.setup_collection(sync_id)
         return instance
 
-    async def get_credentials(sync_id: UUID) -> WeaviateAuthCredentials | None:
+    async def get_credentials(sync_id: UUID) -> WeaviateAuthConfig | None:
         """Get credentials for sync_id.
 
         Args:

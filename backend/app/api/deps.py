@@ -36,7 +36,7 @@ async def get_user(
             no authentication method is provided.
 
     """
-    user = await crud.user.get_by_email(db, email=settings.SUPER_USER_EMAIL)
+    user = await crud.user.get_by_email(db, email=settings.FIRST_SUPERUSER)
     return schemas.User.model_validate(user)
 
 

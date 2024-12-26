@@ -206,6 +206,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         return db_obj
 
+
     def _validate_if_user_has_permission(self, db_obj: ModelType, current_user: User) -> None:
         """Validate if the user has permission to access the object.
 
@@ -264,3 +265,4 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
             if new_value is not None and new_value != original_value:
                 raise ImmutableFieldError(key)
+

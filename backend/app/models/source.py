@@ -1,6 +1,9 @@
 """Source model."""
 
-from sqlalchemy import JSON, String, Text
+from typing import Optional
+
+from sqlalchemy import Enum as SQLAlchemyEnum
+from sqlalchemy import String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models._base import Base
@@ -13,7 +16,8 @@ class Source(Base):
     __tablename__ = "source"
 
     name: Mapped[str] = mapped_column(String, unique=True)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    auth_types: Mapped[list[AuthType]] = mapped_column(JSON, nullable=True)
     short_name: Mapped[str] = mapped_column(String, unique=True)
     class_name: Mapped[str] = mapped_column(String, nullable=False)
+    auth_config_class: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    auth_type: Mapped[Optional[AuthType]] = mapped_column(SQLAlchemyEnum(AuthType), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)

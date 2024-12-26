@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Pydantic settings class.
 
-    Attributes
+    Attributes:
     ----------
         PROJECT_NAME (str): The name of the project.
         LOCAL_DEVELOPMENT (Optional[bool]): Whether the application is running locally.
@@ -24,7 +24,7 @@ class Settings(BaseSettings):
         POSTGRES_PASSWORD (str): The PostgreSQL password.
         SQLALCHEMY_ASYNC_DATABASE_URI (Optional[PostgresDsn]): The SQLAlchemy async database URI.
         LOCAL_NGROK_SERVER (Optional[str]): The local ngrok server URL.
-        RUN_SYSTEM_SYNC (Optional[bool]): Whether to run the system sync to process sources,
+        RUN_DB_SYNC (Optional[bool]): Whether to run the system sync to process sources,
             destinations, and chunk types.
 
     """
@@ -44,8 +44,7 @@ class Settings(BaseSettings):
 
     LOCAL_NGROK_SERVER: Optional[str] = None
 
-    RUN_SYSTEM_SYNC: Optional[bool] = True
-
+    RUN_DB_SYNC: Optional[bool] = True
 
     @field_validator("SQLALCHEMY_ASYNC_DATABASE_URI", mode="before")
     def assemble_db_connection(cls, v: Optional[str], info: ValidationInfo) -> PostgresDsn:

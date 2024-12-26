@@ -1,12 +1,13 @@
 """Source schema."""
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from app.platform.auth.schemas import AuthType
+from app.platform.configs.auth import AuthConfig
 
 
 class SourceBase(BaseModel):
@@ -14,7 +15,8 @@ class SourceBase(BaseModel):
 
     name: str
     description: Optional[str] = None
-    auth_types: List[AuthType]
+    auth_type: Optional[AuthType] = None
+    auth_config_class: Optional[str] = None
     short_name: str
     class_name: str
 
@@ -30,14 +32,10 @@ class SourceCreate(SourceBase):
     pass
 
 
-class SourceUpdate(BaseModel):
+class SourceUpdate(SourceBase):
     """Schema for updating a Source object."""
 
-    name: Optional[str] = None
-    description: Optional[str] = None
-    auth_types: Optional[List[AuthType]] = None
-    short_name: Optional[str] = None
-    class_name: Optional[str] = None
+    pass
 
 
 class SourceInDBBase(SourceBase):
@@ -57,3 +55,8 @@ class Source(SourceInDBBase):
     """Schema for Source."""
 
     pass
+
+class SourceWithAuthConfig(Source):
+    """Schema for Source with auth config."""
+
+    auth_config: AuthConfig

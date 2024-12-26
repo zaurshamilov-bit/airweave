@@ -1,13 +1,23 @@
 """OpenAI text2vec model for embedding."""
+
 from typing import Any, Dict, Optional
 
 from pydantic import Field
 
 from app.core.logging import logger
+from app.platform.auth.schemas import AuthType
+from app.platform.decorators import embedding_model
 
 from ._base import BaseEmbeddingModel
 
 
+@embedding_model(
+    "OpenAI Text2Vec",
+    "openai_text2vec",
+    "openai",
+    AuthType.config_class,
+    "OpenAIAuthConfig",
+)
 class OpenAIText2Vec(BaseEmbeddingModel):
     """OpenAI text2vec model configuration for embedding."""
 
@@ -21,15 +31,12 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         return {
             "type": "text2vec-openai",
             "api_key": self.api_key,
-            "dimensions": self.vector_dimensions
+            "dimensions": self.vector_dimensions,
         }
 
     def get_additional_config(self) -> Optional[Dict[str, Any]]:
         """Get additional configuration for generative features."""
-        return {
-            "type": "generative-openai",
-            "api_key": self.api_key
-        }
+        return {"type": "generative-openai", "api_key": self.api_key}
 
     def get_headers(self) -> dict:
         """Get necessary headers for the model."""

@@ -22,6 +22,7 @@ from app.core.exceptions import NotFoundException, PermissionException, unpack_v
 from app.core.logging import logger
 from app.db.init_db import init_db
 from app.db.session import AsyncSessionLocal
+from app.platform.db_sync import sync_platform_components
 
 
 @asynccontextmanager
@@ -29,11 +30,12 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
     async with AsyncSessionLocal() as db:
-        if settings.RUN_SYSTEM_SYNC:
-            pass
+        if settings.RUN_DB_SYNC:
+            await sync_platform_components("app/platform", db)
         await init_db(db)
     yield
     # Shutdown
+
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url="/openapi.json", lifespan=lifespan)
 
@@ -181,20 +183,21 @@ async def not_found_exception_handler(request: Request, exc: NotFoundException) 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "localhost:3000",
-        "app.dev-airweave.ai",
-        "app.tst-airweave.ai",
-        "app.acc-airweave.ai",
-        "app.airweave.ai",
-        "https://app.dev-airweave.ai",
-        "https://app.tst-airweave.ai",
-        "https://app.acc-airweave.ai",
-        "https://app.airweave.ai",
+        "http://localhost:5173",
+        "localhost:5173",
+        "app.dev-neena.io",
+        "app.tst-neena.io",
+        "app.acc-neena.io",
+        "app.neena.io",
+        "https://app.dev-neena.io",
+        "https://app.tst-neena.io",
+        "https://app.acc-neena.io",
+        "https://app.neena.io",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_origin_regex=r"https://.*\.apps\.zdusercontent\.com",  # https://1047156.apps.zdusercontent.com Zendesk  # noqa
 )
 
 
@@ -202,7 +205,7 @@ app.add_middleware(
 async def show_docs_reference() -> HTMLResponse:
     """Root endpoint to display the API documentation.
 
-    Returns
+    Returns:
     -------
         HTMLResponse: The HTML content to display the API documentation.
 
@@ -211,11 +214,11 @@ async def show_docs_reference() -> HTMLResponse:
     <!DOCTYPE html>
     <html>
         <head>
-            <title>Airweave API</title>
+            <title>Neena API</title>
         </head>
         <body>
-            <h1>Welcome to the Airweave API</h1>
-            <p>Please visit the <a href="https://docs.airweave.ai">docs</a> for more information.</p>
+            <h1>Welcome to the Neena API</h1>
+            <p>Please visit the <a href="https://docs.neena.io">docs</a> for more information.</p>
         </body>
     </html>
     """

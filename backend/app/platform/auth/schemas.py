@@ -27,7 +27,7 @@ class AuthType(str, Enum):
     trello_auth = "trello_auth"
     api_key = "api_key"
     native_functionality = "native_functionality"
-    url_and_api_key = "url_and_api_key"
+    config_class = "config_class"
 class OAuth2TokenResponse(BaseModel):
     """OAuth2 token response schema.
 
@@ -39,7 +39,6 @@ class OAuth2TokenResponse(BaseModel):
         refresh_token (Optional[str]): The refresh token.
         scope (Optional[str]): The scope of the token.
         extra_fields (dict[str, Any]): Extra fields.
-
     """
 
     access_token: str
@@ -136,7 +135,6 @@ class OAuth2Settings(BaseAuthSettings):
     backend_url: str
     grant_type: str
     client_id: str
-    client_secret_keyvault_name: str
     content_type: str
     client_credential_location: str
     additional_frontend_params: Optional[dict[str, str]] = None
@@ -154,14 +152,6 @@ class OAuth2WithRefreshRotatingSettings(OAuth2Settings):
 
     pass
 
-
-class AuthCredentials(BaseModel):
-    """Authentication credentials schema."""
+class ConfigClassAuthSettings(BaseAuthSettings):
+    """Config class authentication settings schema."""
     pass
-
-
-class WeaviateAuthCredentials(AuthCredentials):
-    """Weaviate authentication credentials schema."""
-
-    cluster_url: str
-    api_key: str

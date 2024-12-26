@@ -1,8 +1,7 @@
 """The API module that contains the endpoints for sources."""
 
-from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
@@ -11,11 +10,11 @@ from app.api import deps
 router = APIRouter()
 
 
-@router.get("/{id}", response_model=schemas.Source)
+@router.get("/{short_name}", response_model=schemas.Source)
 async def read_source(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    id: UUID,
+    short_name: str,
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Source:
     """Get source by id.
@@ -23,7 +22,7 @@ async def read_source(
     Args:
     ----
         db (AsyncSession): The database session.
-        id (UUID): The ID of the source.
+        short_name (str): The short name of the source.
         user (schemas.User): The current user.
 
     Returns:
@@ -31,14 +30,24 @@ async def read_source(
         schemas.Source: The source object.
 
     """
-    return await crud.source.get(db, id)
+    source = await crud.source.get_by_short_name(db, short_name)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return source
 
 
-@router.get("/", response_model=schemas.Source)
+@router.get("/", response_model=list[schemas.Source])
 async def read_sources(
     *,
     db: AsyncSession = Depends(deps.get_db),
     user: schemas.User = Depends(deps.get_user),
-) -> schemas.Source:
-    """Get all sources for the current user."""
-    return await crud.source.get_multi(db, user=user)
+) -> list[schemas.Source]:
+    """Get all sources for the current user.
+
+    Returns:
+    -------
+        list[schemas.Source]: The list of sources.
+
+    """
+    sources = await crud.source.get_multi(db)
+    return sources

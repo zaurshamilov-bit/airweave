@@ -1,12 +1,13 @@
 """Destination schema."""
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from app.platform.auth.schemas import AuthType
+from app.platform.configs._base import Fields
 
 
 class DestinationBase(BaseModel):
@@ -16,13 +17,13 @@ class DestinationBase(BaseModel):
     description: Optional[str] = None
     short_name: str
     class_name: str
-    auth_types: List[AuthType]
+    auth_type: Optional[AuthType] = None
+    auth_config_class: Optional[str] = None
 
     class Config:
         """Pydantic config for DestinationBase."""
 
         from_attributes = True
-
 
 class DestinationCreate(DestinationBase):
     """Schema for creating a Destination object."""
@@ -30,14 +31,10 @@ class DestinationCreate(DestinationBase):
     pass
 
 
-class DestinationUpdate(BaseModel):
+class DestinationUpdate(DestinationBase):
     """Schema for updating a Destination object."""
 
-    name: Optional[str] = None
-    description: Optional[str] = None
-    short_name: Optional[str] = None
-    class_name: Optional[str] = None
-    auth_types: Optional[List[AuthType]] = None
+    pass
 
 
 class DestinationInDBBase(DestinationBase):
@@ -57,3 +54,8 @@ class Destination(DestinationInDBBase):
     """Schema for Destination."""
 
     pass
+
+class DestinationWithConfigFields(Destination):
+    """Schema for Destination with auth config."""
+
+    config_fields: Fields | None = None

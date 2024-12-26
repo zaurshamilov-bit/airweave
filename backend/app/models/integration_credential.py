@@ -10,8 +10,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models._base import OrganizationBase, UserMixin
 
 
-class CredentialType(str, Enum):
-    """Credential type enum."""
+class IntegrationType(str, Enum):
+    """Integration type enum."""
 
     SOURCE = "source"
     DESTINATION = "destination"
@@ -24,27 +24,36 @@ class IntegrationCredential(OrganizationBase, UserMixin):
     __tablename__ = "integration_credential"
 
     name: Mapped[str] = mapped_column(String, nullable=False)
+    integration_short_name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    credential_type: Mapped[CredentialType] = mapped_column(String, nullable=False)
-    credentials: Mapped[dict] = mapped_column(JSON, nullable=False)
+    integration_type: Mapped[IntegrationType] = mapped_column(String, nullable=False)
+    auth_credential_type: Mapped[String] = mapped_column(
+        String, nullable=False
+    )  # TokenCredential, URLAndAPIKeyCredential, etc.
+    encrypted_credentials: Mapped[dict] = mapped_column(JSON, nullable=False)
+    auth_config_class: Mapped[str] = mapped_column(String, nullable=False)
+
 
     # Foreign keys
     source_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("source.id"), nullable=True)
-    destination_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("destination.id"), nullable=True)
-    embedding_model_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("embedding_model.id"), nullable=True)
+    destination_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("destination.id"), nullable=True
+    )
+    embedding_model_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("embedding_model.id"), nullable=True
+    )
+
 
     def __init__(self, **kwargs):
         """Initialize the integration credential."""
         super().__init__(**kwargs)
         # Ensure only one foreign key is set based on credential_type
-        if self.credential_type == CredentialType.SOURCE:
+        if self.integration_type == IntegrationType.SOURCE:
             self.destination_id = None
             self.embedding_model_id = None
-        elif self.credential_type == CredentialType.DESTINATION:
+        elif self.integration_type == IntegrationType.DESTINATION:
             self.source_id = None
             self.embedding_model_id = None
-        elif self.credential_type == CredentialType.EMBEDDING_MODEL:
+        elif self.integration_type == IntegrationType.EMBEDDING_MODEL:
             self.source_id = None
             self.destination_id = None
-
-    # add sync id

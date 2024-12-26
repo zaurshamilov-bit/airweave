@@ -8,12 +8,24 @@ from .api_key import (
     APIKeyUpdate,
     APIKeyWithPlainKey,
 )
-from .destination import Destination, DestinationCreate, DestinationInDBBase, DestinationUpdate
+from .destination import (
+    Destination,
+    DestinationCreate,
+    DestinationInDBBase,
+    DestinationUpdate,
+    DestinationWithConfigFields,
+)
 from .embedding_model import (
     EmbeddingModel,
     EmbeddingModelCreate,
     EmbeddingModelInDBBase,
     EmbeddingModelUpdate,
+    EmbeddingModelWithConfigFields,
+)
+from .integration_credential import (
+    IntegrationCredential,
+    IntegrationCredentialCreateEncrypted,
+    IntegrationCredentialUpdate,
 )
 from .organization import (
     Organization,

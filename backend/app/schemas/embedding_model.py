@@ -1,23 +1,26 @@
 """EmbeddingModel schema."""
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
 
 from app.platform.auth.schemas import AuthType
+from app.platform.configs._base import Fields
 
 
 class EmbeddingModelBase(BaseModel):
     """Base schema for EmbeddingModel."""
 
     name: str
+    short_name: str
     description: Optional[str] = None
     provider: str
-    model_name: str
-    model_version: str
-    auth_types: List[AuthType]
+    model_name: Optional[str] = None
+    model_version: Optional[str] = None
+    auth_type: Optional[AuthType] = None
+    auth_config_class: Optional[str] = None
 
     class Config:
         """Pydantic config for EmbeddingModelBase."""
@@ -31,15 +34,10 @@ class EmbeddingModelCreate(EmbeddingModelBase):
     pass
 
 
-class EmbeddingModelUpdate(BaseModel):
+class EmbeddingModelUpdate(EmbeddingModelBase):
     """Schema for updating an EmbeddingModel object."""
 
-    name: Optional[str] = None
-    description: Optional[str] = None
-    provider: Optional[str] = None
-    model_name: Optional[str] = None
-    model_version: Optional[str] = None
-    auth_types: Optional[List[AuthType]] = None
+    pass
 
 
 class EmbeddingModelInDBBase(EmbeddingModelBase):
@@ -59,3 +57,9 @@ class EmbeddingModel(EmbeddingModelInDBBase):
     """Schema for EmbeddingModel."""
 
     pass
+
+
+class EmbeddingModelWithConfigFields(EmbeddingModel):
+    """Schema for EmbeddingModel with auth config."""
+
+    config_fields: Fields | None = None

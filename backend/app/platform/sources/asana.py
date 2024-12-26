@@ -27,7 +27,7 @@ class AsanaSource(BaseSource):
         """Create a new Asana source."""
         instance = cls()
         # fetch secrets from db
-        instance.access_token = ""  # temp
+        instance.access_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3MzUyMTk4NDksInNjb3BlIjoiZGVmYXVsdCBpZGVudGl0eSIsInN1YiI6MTIwNDg1ODA3OTE4OTQ5NSwicmVmcmVzaF90b2tlbiI6MTIwODc4MDAxMzM3NzExOSwidmVyc2lvbiI6MiwiYXBwIjoxMjA4Nzc1MzYzNDk3MjQ0LCJleHAiOjE3MzUyMjM0NDl9.z3cPcRFKjq8pQHi-0dHINoku761cZpxXknSXrFnFL0k"  # temp
         instance.sync_id = sync_id
         return instance
 
@@ -258,7 +258,7 @@ class AsanaSource(BaseSource):
                             client,
                             {"gid": project_chunk.entity_id},
                             {"gid": section_chunk.entity_id, "name": section_chunk.name},
-                            project_breadcrumbs  # Pass project breadcrumbs, section will be added in _generate_task_chunks
+                            project_breadcrumbs  # Pass project breadcrumbs
                         ):
                             yield task_chunk
 

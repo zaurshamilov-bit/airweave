@@ -47,6 +47,21 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         result = await db.execute(select(self.model).where(self.model.id == id))
         return result.unique().scalar_one_or_none()
 
+    async def get_by_short_name(self, db: AsyncSession, short_name: str) -> Optional[ModelType]:
+        """Get a single object by short name.
+
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            short_name (str): The short name of the object  to get.
+
+        Returns:
+        -------
+            Optional[ModelType]: The object with the given short name.
+        """
+        result = await db.execute(select(self.model).where(self.model.short_name == short_name))
+        return result.unique().scalar_one_or_none()
+
     async def get_multi(
         self, db: AsyncSession, *, skip: int = 0, limit: int = 100
     ) -> list[ModelType]:
@@ -189,3 +204,42 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             await db.commit()
 
         return db_obj
+
+    async def sync(
+        self, db: AsyncSession, items: list[CreateSchemaType], unique_field: str = "short_name"
+    ) -> None:
+        """Sync items with the database.
+
+        Args:
+            db (AsyncSession): Database session
+            items (List[CreateSchemaType]): List of items to sync
+            unique_field (str, optional): Field to use for uniqueness check. Defaults to "short_name".
+        """
+        # Create a dictionary of new items by their unique field
+        new_items_dict = {getattr(item, unique_field): item for item in items}
+
+        # Get existing items
+        result = await db.execute(select(self.model))
+        existing_items = result.scalars().all()
+
+        # Update existing items or delete them
+        for existing_item in existing_items:
+            existing_unique_value = getattr(existing_item, unique_field)
+            if existing_unique_value in new_items_dict:
+                new_item = new_items_dict.pop(existing_unique_value)
+
+                # Update fields from new item
+                for field, value in new_item.model_dump().items():
+                    if hasattr(existing_item, field):
+                        setattr(existing_item, field, value)
+
+                db.add(existing_item)
+            else:
+                await db.delete(existing_item)
+
+        # Create new items
+        for new_item in new_items_dict.values():
+            db_item = self.model(**new_item.model_dump())
+            db.add(db_item)
+
+        await db.commit()

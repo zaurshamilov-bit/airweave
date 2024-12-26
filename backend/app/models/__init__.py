@@ -6,6 +6,7 @@ from .embedding_model import EmbeddingModel
 from .integration_credential import IntegrationCredential
 from .organization import Organization
 from .source import Source
+from .sync import Sync
 from .user import User
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "Destination",
     "EmbeddingModel",
     "IntegrationCredential",
+    "Sync",
 ]
