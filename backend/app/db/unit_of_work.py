@@ -39,7 +39,7 @@ class UnitOfWork:
     def committed(self) -> bool:
         """Check if the transaction has been committed.
 
-        Returns
+        Returns:
         -------
             bool: True if the transaction has been committed, False otherwise.
 
@@ -67,7 +67,7 @@ class UnitOfWork:
     async def __aenter__(self) -> "UnitOfWork":
         """Enter the context manager.
 
-        Returns
+        Returns:
         -------
             UnitOfWork: The UnitOfWork instance.
 

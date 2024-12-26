@@ -27,7 +27,7 @@ class AsanaSource(BaseSource):
         """Create a new Asana source."""
         instance = cls()
         # fetch secrets from db
-        instance.access_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3MzUyMTI1NzUsInNjb3BlIjoiZGVmYXVsdCBpZGVudGl0eSIsInN1YiI6MTIwNDg1ODA3OTE4OTQ5NSwicmVmcmVzaF90b2tlbiI6MTIwODc4MDAxMzM3NzExOSwidmVyc2lvbiI6MiwiYXBwIjoxMjA4Nzc1MzYzNDk3MjQ0LCJleHAiOjE3MzUyMTYxNzV9.uuR6I9I3HNUHQam5H_Oy4-3lM8pzteeAY-MhcJELCPg"  # temp
+        instance.access_token = ""  # temp
         instance.sync_id = sync_id
         return instance
 
