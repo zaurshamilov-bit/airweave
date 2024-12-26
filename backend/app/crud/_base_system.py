@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud._decorators import transactional
+from app.db.unit_of_work import UnitOfWork
 from app.models._base import Base
 
 ModelType = TypeVar("ModelType", bound=Base)
@@ -66,14 +66,21 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         result = await db.execute(select(self.model).offset(skip).limit(limit))
         return list(result.unique().scalars().all())
 
-    @transactional
-    async def create(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType:
+    async def create(
+        self,
+        db: AsyncSession,
+        *,
+        obj_in: CreateSchemaType,
+        uow: UnitOfWork = None
+    ) -> ModelType:
         """Create a new object.
 
         Args:
         ----
             db (AsyncSession): The database session.
             obj_in (CreateSchemaType): The object to create.
+            uow (UnitOfWork, optional): Unit of work for transaction control.
+                If not provided, auto-commits the transaction.
 
         Returns:
         -------
@@ -84,11 +91,17 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             obj_in = obj_in.model_dump()
         db_obj = self.model(**obj_in)
         db.add(db_obj)
+
+        if uow is None:
+            await db.commit()
+
         return db_obj
 
-    @transactional
     async def create_many(
-        self, db: AsyncSession, objs_in: list[CreateSchemaType]
+        self,
+        db: AsyncSession,
+        objs_in: list[CreateSchemaType],
+        uow: UnitOfWork = None
     ) -> list[ModelType]:
         """Create multiple objects.
 
@@ -96,6 +109,7 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         ----
             db (AsyncSession): The database session.
             objs_in (list[CreateSchemaType]): The objects to create.
+            uow (UnitOfWork, optional): Unit of work for transaction control.
 
         Returns:
         -------
@@ -104,15 +118,19 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """
         db_objs = [self.model(**obj_in.model_dump()) for obj_in in objs_in]
         db.add_all(db_objs)
+
+        if uow is None:
+            await db.commit()
+
         return db_objs
 
-    @transactional
     async def update(
         self,
         db: AsyncSession,
         *,
         db_obj: ModelType,
         obj_in: Union[UpdateSchemaType, dict[str, Any]],
+        uow: UnitOfWork = None
     ) -> ModelType:
         """Update an object.
 
@@ -121,6 +139,7 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             db (AsyncSession): The database session.
             db_obj (ModelType): The object to update.
             obj_in (Union[UpdateSchemaType, Dict[str, Any]]): The new object data.
+            uow (UnitOfWork, optional): Unit of work for transaction control.
 
         Returns:
         -------
@@ -133,16 +152,26 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         for key, value in obj_in.items():
             setattr(db_obj, key, value) if hasattr(db_obj, key) else None
         db.add(db_obj)
+
+        if uow is None:
+            await db.commit()
+
         return db_obj
 
-    @transactional
-    async def remove(self, db: AsyncSession, *, id: UUID) -> Optional[ModelType]:
+    async def remove(
+        self,
+        db: AsyncSession,
+        *,
+        id: UUID,
+        uow: UnitOfWork = None
+    ) -> Optional[ModelType]:
         """Delete an object.
 
         Args:
         ----
             db (AsyncSession): The database session.
             id (UUID): The UUID of the object to delete.
+            uow (UnitOfWork, optional): Unit of work for transaction control.
 
         Returns:
         -------
@@ -155,4 +184,8 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return None
 
         await db.delete(db_obj)
+
+        if uow is None:
+            await db.commit()
+
         return db_obj

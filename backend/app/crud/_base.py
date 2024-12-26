@@ -8,7 +8,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ImmutableFieldError, NotFoundException, PermissionException
-from app.crud._decorators import transactional
+from app.db.unit_of_work import UnitOfWork
 from app.models._base import Base
 from app.schemas import User
 
@@ -88,13 +88,13 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         result = await db.execute(query)
         return list(result.unique().scalars().all())
 
-    @transactional
     async def create(
         self,
         db: AsyncSession,
         *,
         obj_in: CreateSchemaType,
         current_user: User = None,
+        uow: Optional[UnitOfWork] = None,
     ) -> ModelType:
         """Create a new object in db for a given schema type and optional user or assistant context.
 
@@ -103,8 +103,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             db (AsyncSession): The database session.
             obj_in (CreateSchemaType): The object to create.
             current_user (User): The current user.
-            current_assistant: (schemas.Assistant, optional): The assistant to associate
-                with the object.
+            uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
         -------
@@ -120,9 +119,10 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             db_obj.modified_by_email = current_user.email
 
         db.add(db_obj)
+        if not uow:
+            await db.commit()
         return db_obj
 
-    @transactional
     async def update(
         self,
         db: AsyncSession,
@@ -130,6 +130,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db_obj: ModelType,
         obj_in: Union[UpdateSchemaType, dict[str, Any]],
         current_user: User,
+        uow: Optional[UnitOfWork] = None,
     ) -> ModelType:
         """Update an object.
 
@@ -139,7 +140,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             db_obj (ModelType): The object to update.
             obj_in (Union[UpdateSchemaType, Dict[str, Any]]): The new object data.
             current_user (User): The current user.
-
+            uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
         -------
@@ -157,11 +158,19 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db_obj.modified_by_email = current_user.email
 
         db.add(db_obj)
+
+        if not uow:
+            await db.commit()
+
         return db_obj
 
-    @transactional
     async def remove(
-        self, db: AsyncSession, *, id: UUID, current_user: User
+        self,
+        db: AsyncSession,
+        *,
+        id: UUID,
+        current_user: User,
+        uow: Optional[UnitOfWork] = None,
     ) -> Optional[ModelType]:
         """Delete an object.
 
@@ -170,6 +179,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             db (AsyncSession): The database session.
             id (UUID): The UUID of the object to delete.
             current_user (User): The current user.
+            uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
         -------
@@ -190,6 +200,10 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         self._validate_if_user_has_permission(db_obj, current_user)
 
         await db.delete(db_obj)
+
+        if not uow:
+            await db.commit()
+
         return db_obj
 
     def _validate_if_user_has_permission(self, db_obj: ModelType, current_user: User) -> None:

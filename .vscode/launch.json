@@ -18,7 +18,8 @@
             "console": "integratedTerminal",
             "jinja": true,
             "justMyCode": false,
-            "preLaunchTask": "startup-db",
+            "preLaunchTask": "start-docker-services",
+            "postDebugTask": "stop-docker-services",
             "envFile": "${workspaceFolder}/.env"
         },
         {
@@ -33,6 +34,8 @@
                 "${relativeFile}"
             ],
             "cwd": "${workspaceFolder}/backend",
+            "preLaunchTask": "start-docker-services",
+            "postDebugTask": "stop-docker-services",
             "envFile": "${workspaceFolder}/.env"
         },
         {
@@ -56,13 +59,15 @@
                 "PYTHONPATH": "${workspaceFolder}/backend"
             },
             "justMyCode": false
-        },
+        }
     ],
     "compounds": [
         {
             "name": "FastAPI + ARQ Worker",
             "configurations": ["FastAPI", "ARQ Worker"],
-            "stopAll": true
+            "stopAll": true,
+            "preLaunchTask": "start-docker-services",
+            "postDebugTask": "stop-docker-services"
         }
     ]
 }

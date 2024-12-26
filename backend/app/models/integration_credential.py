@@ -46,3 +46,5 @@ class IntegrationCredential(OrganizationBase, UserMixin):
         elif self.credential_type == CredentialType.EMBEDDING_MODEL:
             self.source_id = None
             self.destination_id = None
+
+    # add sync id

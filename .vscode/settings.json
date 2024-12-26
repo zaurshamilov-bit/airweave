@@ -12,6 +12,7 @@
         ],
     "editor.codeActionsOnSave": {
         "source.fixAll.ruff": "always",
-        "source.fixAll.eslint": "always"
+        "source.fixAll.eslint": "always",
+        "source.formatAll.ruff": "always",
     }
 }

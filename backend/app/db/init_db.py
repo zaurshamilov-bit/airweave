@@ -12,7 +12,6 @@ async def init_db(db: AsyncSession) -> None:
     Args:
     ----
         db (AsyncSession): The database session.
-
     """
     organization = await crud.organization.get_by_name(db, name=settings.FIRST_SUPERUSER)
     if not organization:
@@ -20,11 +19,10 @@ async def init_db(db: AsyncSession) -> None:
             name=settings.FIRST_SUPERUSER,
             description="Superuser organization",
         )
-        organization = await crud.organization.create(
-            db, obj_in=organization_in, auto_transaction=False
-        )
+        organization = await crud.organization.create(db, obj_in=organization_in)
 
     user = await crud.user.get_by_email(db, email=settings.FIRST_SUPERUSER)
+
     if not user:
         user_in = schemas.UserCreate(
             email=settings.FIRST_SUPERUSER,
@@ -33,3 +31,4 @@ async def init_db(db: AsyncSession) -> None:
             organization_id=organization.id,
         )
         user = await crud.user.create(db, obj_in=user_in)
+

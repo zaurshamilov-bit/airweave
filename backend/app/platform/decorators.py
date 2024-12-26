@@ -28,3 +28,28 @@ def source(name: str, short_name: str, auth_type: AuthType) -> Callable[[type], 
         return cls
 
     return decorator
+
+
+def destination(name: str, short_name: str, auth_type: AuthType) -> Callable[[type], type]:
+    """Class decorator to mark a class as representing an Airweave destination.
+
+    Args:
+    ----
+        name (str): The name of the destination.
+        short_name (str): The short name of the destination.
+        auth_type (AuthType): The authentication type of the destination.
+
+    Returns:
+    -------
+        Callable[[type], type]: The decorated class.
+
+    """
+
+    def decorator(cls: type) -> type:
+        cls._is_destination = True
+        cls._name = name
+        cls._short_name = short_name
+        cls._auth_type = auth_type
+        return cls
+
+    return decorator

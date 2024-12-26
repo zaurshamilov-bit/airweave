@@ -55,7 +55,7 @@ class OAuth2Service:
 
         This method could potentially be generalized to work with similar authorization flows.
 
-        Returns
+        Returns:
         -------
             str: The authorization URL.
 

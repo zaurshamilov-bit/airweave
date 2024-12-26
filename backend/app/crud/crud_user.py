@@ -7,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud._base import CRUDBase
-from app.crud._decorators import transactional
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 
@@ -73,7 +72,6 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         """
         raise NotImplementedError("This method is not implemented yet.")
 
-    @transactional
     async def remove(self, db: AsyncSession, *, id: UUID, current_user: User) -> Optional[User]:
         """Remove an object by ID.
 
@@ -90,7 +88,6 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         """
         raise NotImplementedError("This method is not implemented.")
 
-    @transactional
     async def update(
         self,
         db: AsyncSession,

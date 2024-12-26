@@ -24,6 +24,8 @@ tenacity = "^8.2.3"
 structlog = "^24.1.0"
 pydantic-settings = "^2.7.0"
 psycopg2-binary = "^2.9.10"
+weaviate = "^0.1.2"
+weaviate-client = "^4.10.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
@@ -80,7 +82,22 @@ select = [
     "B",  # flake8-bugbear
     "D",  # flake8-docstrings
 ]
-ignore = ["E501", "B008"]  # Line length is handled by black
+ignore = ["B008"]  # ignore fastapi dependency injection warning
+
+# Enable Google-style docstrings
+[tool.ruff.pydocstyle]
+convention = "google"
+
+# Configure formatting
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true
+
+# Configure line length related rules
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["D104"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

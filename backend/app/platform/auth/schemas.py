@@ -9,7 +9,7 @@ from pydantic import BaseModel
 class AuthType(str, Enum):
     """Enumeration of supported authentication types.
 
-    Attributes
+    Attributes:
     ----------
         oauth2: OAuth2 authentication.
         oauth2_with_refresh: OAuth2 authentication with refresh token.
@@ -17,6 +17,7 @@ class AuthType(str, Enum):
         trello_auth: Trello authentication.
         api_key: API key authentication.
         native_functionality: Native functionality.
+        url_and_api_key: URL and API key authentication.
 
     """
 
@@ -26,12 +27,11 @@ class AuthType(str, Enum):
     trello_auth = "trello_auth"
     api_key = "api_key"
     native_functionality = "native_functionality"
-
-
+    url_and_api_key = "url_and_api_key"
 class OAuth2TokenResponse(BaseModel):
     """OAuth2 token response schema.
 
-    Attributes
+    Attributes:
     ----------
         access_token (str): The access token.
         token_type (Optional[str]): The token type.
@@ -52,7 +52,7 @@ class OAuth2TokenResponse(BaseModel):
     class Config:
         """Pydantic configuration.
 
-        Attributes
+        Attributes:
         ----------
             extra: Configuration to allow extra fields.
 
@@ -64,7 +64,7 @@ class OAuth2TokenResponse(BaseModel):
 class BaseAuthSettings(BaseModel):
     """Base authentication settings schema.
 
-    Attributes
+    Attributes:
     ----------
         auth_type (AuthType): The authentication type.
 
@@ -76,7 +76,7 @@ class BaseAuthSettings(BaseModel):
 class TrelloAuthSettings(BaseAuthSettings):
     """Trello authentication settings schema.
 
-    Attributes
+    Attributes:
     ----------
         key (str): The Trello API key.
         url (str): The Trello authorization URL.
@@ -107,10 +107,16 @@ class APIKeyAuthSettings(BaseAuthSettings):
     pass
 
 
+class URLAndAPIKeyAuthSettings(BaseAuthSettings):
+    """URL and API key authentication settings schema."""
+
+    pass
+
+
 class OAuth2Settings(BaseAuthSettings):
     """OAuth2 authentication settings schema.
 
-    Attributes
+    Attributes:
     ----------
         integration_short_name (str): The integration short name.
         url (str): The authorization URL.
@@ -147,3 +153,15 @@ class OAuth2WithRefreshRotatingSettings(OAuth2Settings):
     """OAuth2 with rotating refresh token settings schema."""
 
     pass
+
+
+class AuthCredentials(BaseModel):
+    """Authentication credentials schema."""
+    pass
+
+
+class WeaviateAuthCredentials(AuthCredentials):
+    """Weaviate authentication credentials schema."""
+
+    cluster_url: str
+    api_key: str

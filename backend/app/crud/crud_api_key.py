@@ -3,11 +3,12 @@
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud._base import CRUDBase
-from app.crud._decorators import transactional
+from app.db.unit_of_work import UnitOfWork
 from app.models.api_key import APIKey
 from app.schemas import APIKeyCreate, APIKeyUpdate, User
 
@@ -15,8 +16,14 @@ from app.schemas import APIKeyCreate, APIKeyUpdate, User
 class CRUDAPIKey(CRUDBase[APIKey, APIKeyCreate, APIKeyUpdate]):
     """CRUD operations for the APIKey model."""
 
-    @transactional
-    async def create_with_user(self, db: AsyncSession, *, obj_in: APIKeyCreate, current_user: User) -> APIKey:
+    async def create_with_user(
+        self,
+        db: AsyncSession,
+        *,
+        obj_in: APIKeyCreate,
+        current_user: User,
+        uow: Optional[UnitOfWork] = None,
+    ) -> APIKey:
         """Create a new API key for a user.
 
         Args:
@@ -24,6 +31,7 @@ class CRUDAPIKey(CRUDBase[APIKey, APIKeyCreate, APIKeyUpdate]):
             db (AsyncSession): The database session.
             obj_in (APIKeyCreate): The API key creation data.
             current_user (User): The current user.
+            uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
         -------
@@ -34,7 +42,9 @@ class CRUDAPIKey(CRUDBase[APIKey, APIKeyCreate, APIKeyUpdate]):
         hashed_key = hashlib.sha256(key.encode()).hexdigest()
         key_prefix = key[:8]
 
-        expiration_date = obj_in.expiration_date or (datetime.now(timezone.utc) + timedelta(days=365))
+        expiration_date = obj_in.expiration_date or (
+            datetime.now(timezone.utc) + timedelta(days=365)
+        )
 
         db_obj = APIKey(
             key=hashed_key,
@@ -44,7 +54,11 @@ class CRUDAPIKey(CRUDBase[APIKey, APIKeyCreate, APIKeyUpdate]):
             expiration_date=expiration_date,
         )
         db.add(db_obj)
-        db_obj.plain_key = key  # Attach the plain key to the object for the response
+        if not uow:
+            await db.commit()
+
+        # Attach the plain key to the object for the response, this is not stored in the db
+        db_obj.plain_key = key
         return db_obj
 
 

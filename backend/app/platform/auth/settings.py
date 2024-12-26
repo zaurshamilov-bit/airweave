@@ -15,6 +15,7 @@ from app.platform.auth.schemas import (
     OAuth2WithRefreshRotatingSettings,
     OAuth2WithRefreshSettings,
     TrelloAuthSettings,
+    URLAndAPIKeyAuthSettings,
 )
 
 
@@ -60,6 +61,7 @@ class IntegrationSettings:
             AuthType.oauth2_with_refresh: OAuth2WithRefreshSettings,
             AuthType.oauth2_with_refresh_rotating: OAuth2WithRefreshRotatingSettings,
             AuthType.native_functionality: NativeFunctionalityAuthSettings,
+            AuthType.url_and_api_key: URLAndAPIKeyAuthSettings,
         }
         model = mapping.get(auth_type)
         config["integration_short_name"] = name
