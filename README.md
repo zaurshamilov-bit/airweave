@@ -172,7 +172,7 @@ API Endpoints (FastAPI)
 }
 ```
 
-	•	**Trigger a Sync Job: POST /api/sync_jobs**
+•	**Trigger a Sync Job: POST /api/sync_jobs**
 
 ```json
 {
@@ -181,7 +181,7 @@ API Endpoints (FastAPI)
 }
 ```
 
-	•	**Get Sync Job Status: GET /api/sync_jobs/{job_id}**
+•	**Get Sync Job Status: GET /api/sync_jobs/{job_id}**
 
 ```json
 {
