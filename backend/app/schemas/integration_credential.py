@@ -14,6 +14,7 @@ class IntegrationCredentialBase(BaseModel):
     description: str | None
     integration_type: IntegrationType
     auth_credential_type: str
+    auth_config_class: str
 
 
 class IntegrationCredentialCreate(IntegrationCredentialBase):
@@ -24,7 +25,7 @@ class IntegrationCredentialCreate(IntegrationCredentialBase):
 class IntegrationCredentialCreateEncrypted(IntegrationCredentialBase):
     """Create class for integration credentials."""
 
-    encrypted_credentials: dict
+    encrypted_credentials: str
 
 
 class IntegrationCredentialUpdate(IntegrationCredentialCreateEncrypted):
@@ -36,7 +37,7 @@ class IntegrationCredentialUpdate(IntegrationCredentialCreateEncrypted):
 class IntegrationCredentialInDB(IntegrationCredentialBase):
     """Base class for integration credentials in the database."""
 
-    encrypted_credentials: dict
+    encrypted_credentials: str
 
 
 class IntegrationCredential(IntegrationCredentialInDB):

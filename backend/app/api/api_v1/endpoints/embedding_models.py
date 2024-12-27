@@ -1,11 +1,11 @@
 """The API module that contains the endpoints for embedding models."""
 
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.api import deps
+from app.core import credentials
 from app.models.integration_credential import IntegrationType
 from app.platform.configs._base import Fields
 from app.platform.locator import resources
@@ -63,7 +63,7 @@ async def read_embedding_models(
     return await crud.embedding_model.get_multi(db)
 
 
-@router.post("/connect/{short_name}", response_model=schemas.EmbeddingModel)
+@router.post("/connect/{short_name}", response_model=schemas.IntegrationCredential)
 async def connect_to_embedding_model(
     *,
     db: AsyncSession = Depends(deps.get_db),
@@ -90,20 +90,26 @@ async def connect_to_embedding_model(
         raise HTTPException(status_code=400, detail="Embedding model does not exist")
 
     auth_config_class = resources.get_auth_config(embedding_model.auth_config_class)
-
-
-    # can raise validation error, handled by middleware
     auth_config = auth_config_class(**config_fields)
-    embedding_model.auth_config = auth_config
 
-    integration_credentials = schemas.IntegrationCredential(
+    encrypted_credentials = credentials.encrypt(auth_config.model_dump())
+
+    integration_credentials = schemas.IntegrationCredentialCreateEncrypted(
         name=f"{embedding_model.name} - {user.email}",
+        description=f"Credentials for {embedding_model.name} - {user.email}",
         integration_short_name=embedding_model.short_name,
         integration_type=IntegrationType.EMBEDDING_MODEL,
         auth_credential_type=embedding_model.auth_config_class,
-        encrypted_credentials=auth_config.model_dump(),
+        encrypted_credentials=encrypted_credentials,
         auth_config_class=embedding_model.auth_config_class,
     )
 
-    return await crud.integration.create(db, obj_in=integration_credentials)
+    integration_credentials = await crud.integration_credential.create(
+        db, obj_in=integration_credentials, current_user=user
+    )
 
+    integration_credentials.decrypted_credentials = credentials.decrypt(
+        integration_credentials.encrypted_credentials
+    )
+
+    return integration_credentials

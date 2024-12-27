@@ -24,6 +24,7 @@ from .embedding_model import (
 )
 from .integration_credential import (
     IntegrationCredential,
+    IntegrationCredentialCreate,
     IntegrationCredentialCreateEncrypted,
     IntegrationCredentialUpdate,
 )

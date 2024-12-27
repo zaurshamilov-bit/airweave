@@ -1,10 +1,13 @@
 """The API module that contains the endpoints for destinations."""
 
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.api import deps
+from app.core import credentials
+from app.models.integration_credential import IntegrationType
 from app.platform.configs._base import Fields
 from app.platform.locator import resources
 
@@ -18,7 +21,18 @@ async def read_destination(
     short_name: str,
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Destination:
-    """Get destination by id."""
+    """Get destination by id.
+
+    Args:
+    ----
+        db (AsyncSession): The database session.
+        short_name (str): The short name of the destination.
+        user (schemas.User): The current user.
+
+    Returns:
+    -------
+        schemas.Destination: The destination object.
+    """
     destination = await crud.destination.get_by_short_name(db, short_name)
     if not destination:
         raise HTTPException(status_code=404, detail="Destination not found")
@@ -44,11 +58,52 @@ async def read_destinations(
     return destinations
 
 
-@router.post("/", response_model=schemas.Destination)
-async def create_destination_credential(
+@router.post("/connect/{short_name}", response_model=schemas.IntegrationCredential)
+async def connect_to_destination(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    destination_in: schemas.DestinationCreate,
+    short_name: str,
+    config_fields: dict,
     user: schemas.User = Depends(deps.get_user),
-) -> schemas.Destination:
-    return await crud.destination.create(db, obj_in=destination_in)
+) -> schemas.IntegrationCredential:
+    """Connect to a destination.
+
+    Args:
+    ----
+        db (AsyncSession): The database session.
+        short_name (str): The short name of the destination.
+        config_fields (dict): The configuration fields.
+        user (schemas.User): The current user.
+
+    Returns:
+    -------
+        schemas.IntegrationCredential: The destination credential object.
+    """
+    destination = await crud.destination.get_by_short_name(db, short_name)
+    if not destination:
+        raise HTTPException(status_code=400, detail="Destination does not exist")
+
+    auth_config_class = resources.get_auth_config(destination.auth_config_class)
+    auth_config = auth_config_class(**config_fields)
+
+    encrypted_credentials = credentials.encrypt(auth_config.model_dump())
+
+    integration_credentials = schemas.IntegrationCredentialCreateEncrypted(
+        name=f"{destination.name} - {user.email}",
+        description=f"Credentials for {destination.name} - {user.email}",
+        integration_short_name=destination.short_name,
+        integration_type=IntegrationType.DESTINATION,
+        auth_credential_type=destination.auth_config_class,
+        encrypted_credentials=encrypted_credentials,
+        auth_config_class=destination.auth_config_class,
+    )
+
+    integration_credentials = await crud.integration_credential.create(
+        db, obj_in=integration_credentials, current_user=user
+    )
+
+    integration_credentials.decrypted_credentials = credentials.decrypt(
+        integration_credentials.encrypted_credentials
+    )
+
+    return integration_credentials

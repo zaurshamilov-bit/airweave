@@ -114,13 +114,16 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             obj_in = obj_in.model_dump()
         db_obj = self.model(**obj_in)  # type: ignore
 
+
         if current_user:
             db_obj.created_by_email = current_user.email
             db_obj.modified_by_email = current_user.email
+            db_obj.organization_id = current_user.organization_id
 
         db.add(db_obj)
         if not uow:
             await db.commit()
+            await db.refresh(db_obj)
         return db_obj
 
     async def update(
@@ -161,7 +164,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         if not uow:
             await db.commit()
-
+            await db.refresh(db_obj)
         return db_obj
 
     async def remove(

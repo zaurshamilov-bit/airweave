@@ -18,6 +18,7 @@ class Settings(BaseSettings):
         LOCAL_DEVELOPMENT (Optional[bool]): Whether the application is running locally.
         FIRST_SUPERUSER (str): The email address of the first superuser.
         FIRST_SUPERUSER_PASSWORD (str): The password of the first superuser.
+        ENCRYPTION_KEY (str): The encryption key.
         POSTGRES_SERVER (str): The PostgreSQL server hostname.
         POSTGRES_DB (str): The PostgreSQL database name.
         POSTGRES_USER (str): The PostgreSQL username.
@@ -35,6 +36,8 @@ class Settings(BaseSettings):
 
     FIRST_SUPERUSER: str
     FIRST_SUPERUSER_PASSWORD: str
+
+    ENCRYPTION_KEY: str
 
     POSTGRES_SERVER: str
     POSTGRES_DB: str

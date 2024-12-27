@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import JSON, ForeignKey, String, Text
+from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models._base import OrganizationBase, UserMixin
@@ -30,7 +30,7 @@ class IntegrationCredential(OrganizationBase, UserMixin):
     auth_credential_type: Mapped[String] = mapped_column(
         String, nullable=False
     )  # TokenCredential, URLAndAPIKeyCredential, etc.
-    encrypted_credentials: Mapped[dict] = mapped_column(JSON, nullable=False)
+    encrypted_credentials: Mapped[str] = mapped_column(Text, nullable=False)
     auth_config_class: Mapped[str] = mapped_column(String, nullable=False)
 
 
