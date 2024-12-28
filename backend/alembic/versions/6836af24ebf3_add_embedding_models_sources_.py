@@ -5,9 +5,9 @@ Revises: c7ba645ff3e0
 Create Date: 2024-12-27 17:11:24.776647
 
 """
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = '6836af24ebf3'
@@ -115,4 +115,5 @@ def downgrade():
     op.drop_table('source')
     op.drop_table('embedding_model')
     op.drop_table('destination')
+    op.execute("DROP TYPE IF EXISTS authtype")
     # ### end Alembic commands ###
