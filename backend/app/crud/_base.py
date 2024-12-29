@@ -81,7 +81,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
                 (self.model.created_by_email == current_user.email)
                 | (self.model.modified_by_email == current_user.email)
             )
-            .order_by(desc(self.model.created_date))
+            .order_by(desc(self.model.created_at))
             .offset(skip)
             .limit(limit)
         )
@@ -251,7 +251,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             ImmutableFieldError: If an immutable field is being modified.
 
         """
-        immutable_fields = ["created_date", "created_by_email"]
+        immutable_fields = ["created_at", "created_by_email"]
 
         if not isinstance(obj_in, dict):
             obj_in = obj_in.model_dump()

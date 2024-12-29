@@ -28,6 +28,7 @@ class AuthType(str, Enum):
     api_key = "api_key"
     native_functionality = "native_functionality"
     config_class = "config_class"
+
 class OAuth2TokenResponse(BaseModel):
     """OAuth2 token response schema.
 
@@ -122,7 +123,7 @@ class OAuth2Settings(BaseAuthSettings):
         backend_url (str): The backend URL.
         grant_type (str): The grant type.
         client_id (str): The client ID.
-        client_secret_keyvault_name (str): The client secret KeyVault name.
+        client_secret (Optional[str]): The client secret. Only in dev.integrations.yaml.
         content_type (str): The content type.
         client_credential_location (str): The client credential location.
         additional_frontend_params (Optional[dict[str, str]]): Additional frontend parameters.
@@ -135,6 +136,7 @@ class OAuth2Settings(BaseAuthSettings):
     backend_url: str
     grant_type: str
     client_id: str
+    client_secret: Optional[str] = None
     content_type: str
     client_credential_location: str
     additional_frontend_params: Optional[dict[str, str]] = None

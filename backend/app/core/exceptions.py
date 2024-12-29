@@ -55,6 +55,21 @@ class ImmutableFieldError(Exception):
         super().__init__(f"{message}: {field_name}")
 
 
+class TokenRefreshError(Exception):
+    """Exception raised when a token refresh fails."""
+
+    def __init__(self, message: Optional[str] = "Token refresh failed"):
+        """Create a new TokenRefreshError instance.
+
+        Args:
+        ----
+            message (str, optional): The error message. Has default message.
+
+        """
+        self.message = message
+        super().__init__(self.message)
+
+
 def unpack_validation_error(exc: ValidationError) -> dict:
     """Unpack a Pydantic validation error into a dictionary.
 

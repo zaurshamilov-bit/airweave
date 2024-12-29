@@ -1,9 +1,12 @@
 """Schemas for integration credentials."""
 
+from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel
 
 from app.models.integration_credential import IntegrationType
+from app.platform.auth.schemas import AuthType
 
 
 class IntegrationCredentialBase(BaseModel):
@@ -11,36 +14,52 @@ class IntegrationCredentialBase(BaseModel):
 
     name: str
     integration_short_name: str
-    description: str | None
+    description: Optional[str] = None
     integration_type: IntegrationType
-    auth_credential_type: str
-    auth_config_class: str
+    auth_type: AuthType
+    auth_config_class: Optional[str] = None
 
 
 class IntegrationCredentialCreate(IntegrationCredentialBase):
     """Create class for integration credentials."""
 
-    decrypted_credentials: dict
+    encrypted_credentials: str
+
 
 class IntegrationCredentialCreateEncrypted(IntegrationCredentialBase):
-    """Create class for integration credentials."""
+    """Create class for integration credentials with encrypted data."""
 
     encrypted_credentials: str
 
 
-class IntegrationCredentialUpdate(IntegrationCredentialCreateEncrypted):
+class IntegrationCredentialUpdate(BaseModel):
     """Update class for integration credentials."""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    encrypted_credentials: Optional[str] = None
+
+
+class IntegrationCredentialInDBBase(IntegrationCredentialBase):
+    """Base class for integration credentials in the database."""
+
+    id: UUID
+    organization_id: UUID
+    encrypted_credentials: str
+
+    class Config:
+        """Pydantic configuration."""
+
+        from_attributes = True
+
+
+class IntegrationCredentialInDB(IntegrationCredentialInDBBase):
+    """Integration credential in DB without decrypted data."""
 
     pass
 
 
-class IntegrationCredentialInDB(IntegrationCredentialBase):
-    """Base class for integration credentials in the database."""
-
-    encrypted_credentials: str
-
-
-class IntegrationCredential(IntegrationCredentialInDB):
-    """Integration credential."""
+class IntegrationCredential(IntegrationCredentialInDBBase):
+    """Integration credential with decrypted data."""
 
     decrypted_credentials: dict

@@ -8,6 +8,15 @@ from .api_key import (
     APIKeyUpdate,
     APIKeyWithPlainKey,
 )
+from .connection import (
+    Connection,
+    ConnectionCreate,
+    ConnectionInDBBase,
+    ConnectionUpdate,
+    DestinationConnection,
+    EmbeddingModelConnection,
+    SourceConnection,
+)
 from .destination import (
     Destination,
     DestinationCreate,

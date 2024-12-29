@@ -1,6 +1,7 @@
 """CRUD layer operations."""
 
 from .crud_api_key import api_key
+from .crud_connection import connection
 from .crud_destination import destination
 from .crud_embedding_model import embedding_model
 from .crud_integration_credential import integration_credential
@@ -16,4 +17,5 @@ __all__ = [
     "destination",
     "embedding_model",
     "integration_credential",
+    "connection",
 ]

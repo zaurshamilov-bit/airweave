@@ -99,8 +99,8 @@ class APIKeyInDBBase(APIKeyBase):
     id: UUID
     key_prefix: str
     organization: Optional[UUID]
-    created_date: datetime
-    modified_date: datetime
+    created_at: datetime
+    modified_at: datetime
     last_used_date: Optional[datetime]
     expiration_date: datetime
     created_by_email: EmailStr

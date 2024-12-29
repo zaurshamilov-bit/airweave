@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str = "Airweave"
     LOCAL_DEVELOPMENT: Optional[bool] = False
+    FRONTEND_LOCAL_DEVELOPMENT_PORT: Optional[int] = 8080
     DTAP_ENVIRONMENT: Optional[str] = "dev"
 
     FIRST_SUPERUSER: str
@@ -72,5 +73,45 @@ class Settings(BaseSettings):
             host=info.data.get("POSTGRES_SERVER"),
             path=f"{info.data.get('POSTGRES_DB') or ''}",
         )
+
+    @property
+    def api_url(self) -> str:
+        """The server URL.
+
+        Returns:
+            str: The server URL.
+        """
+        if self.LOCAL_DEVELOPMENT:
+            return self.LOCAL_NGROK_SERVER
+        if self.DTAP_ENVIRONMENT == "prod":
+            return "https://api.airweave.ai"
+        return f"https://api.{self.DTAP_ENVIRONMENT}-airweave.ai"
+
+    @property
+    def app_url(self) -> str:
+        """The app URL.
+
+        Returns:
+            str: The app URL.
+        """
+        if self.LOCAL_DEVELOPMENT:
+            return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
+        if self.DTAP_ENVIRONMENT == "prod":
+            return "https://app.airweave.ai"
+        return f"https://app.{self.DTAP_ENVIRONMENT}-airweave.ai"
+
+    @property
+    def docs_url(self) -> str:
+        """The docs URL.
+
+        Returns:
+            str: The docs URL.
+        """
+        if self.LOCAL_DEVELOPMENT:
+            return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
+        if self.DTAP_ENVIRONMENT == "prod":
+            return "https://docs.airweave.ai"
+        return f"https://docs.{self.DTAP_ENVIRONMENT}-airweave.ai"
+
 
 settings = Settings()

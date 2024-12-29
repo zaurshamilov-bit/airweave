@@ -18,7 +18,7 @@ from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
 
 
-@source("Asana", "asana", AuthType.oauth2)
+@source("Asana", "asana", AuthType.oauth2_with_refresh)
 class AsanaSource(BaseSource):
     """Asana source implementation."""
 

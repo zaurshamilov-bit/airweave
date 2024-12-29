@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.api_v1.endpoints import (
     api_keys,
+    connections,
     destinations,
     embedding_models,
     sources,
@@ -18,3 +19,4 @@ api_router.include_router(destinations.router, prefix="/destinations", tags=["de
 api_router.include_router(
     embedding_models.router, prefix="/embedding_models", tags=["embedding_models"]
 )
+api_router.include_router(connections.router, prefix="/connections", tags=["connections"])

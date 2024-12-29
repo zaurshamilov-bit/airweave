@@ -1,6 +1,7 @@
 """Model exports."""
 
 from .api_key import APIKey
+from .connection import Connection
 from .destination import Destination
 from .embedding_model import EmbeddingModel
 from .integration_credential import IntegrationCredential
@@ -18,4 +19,5 @@ __all__ = [
     "EmbeddingModel",
     "IntegrationCredential",
     "Sync",
+    "Connection",
 ]

@@ -4,8 +4,8 @@ integrations:
     url: "https://app.asana.com/-/oauth_authorize"
     backend_url: "https://app.asana.com/-/oauth_token"
     grant_type: "authorization_code"
-    client_id: "1208775363497244"
-    client_secret_id: "asana-client-secret"
+    client_id: "1209056443395835"
+    client_secret: "c981dbee8c86b014579873b98e89c0d5"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
 
