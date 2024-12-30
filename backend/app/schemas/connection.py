@@ -7,14 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.models.integration_credential import IntegrationType
-
-
-class ConnectionStatus(str, Enum):
-    """Connection status enum."""
-
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    ERROR = "error"
+from app.core.shared_models import ConnectionStatus
 
 
 class ConnectionBase(BaseModel):
@@ -28,6 +21,7 @@ class ConnectionBase(BaseModel):
 
 class ConnectionCreate(ConnectionBase):
     """Schema for creating a connection."""
+
     source_id: Optional[UUID] = None
     destination_id: Optional[UUID] = None
     embedding_model_id: Optional[UUID] = None
@@ -45,7 +39,7 @@ class ConnectionInDBBase(ConnectionBase):
 
     id: UUID
     organization_id: UUID
-    
+
     created_by_email: str
     modified_by_email: str
     source_id: Optional[UUID] = None
