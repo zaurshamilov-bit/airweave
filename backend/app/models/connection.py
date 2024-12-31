@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models._base import OrganizationBase, UserMixin
 from app.models.integration_credential import IntegrationType
-from app.schemas.connection import ConnectionStatus
+from app.core.shared_models import ConnectionStatus
 
 
 class Connection(OrganizationBase, UserMixin):

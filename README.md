@@ -2,12 +2,12 @@
 
 # Airweave 
 
-**Airweave** is an open-core tool that makes **any app searchable** by unifying your apps, APIs, and databases into your vector database of choice with minimal configuration. 
+**Airweave** is an open-core tool that makes **any app searchable** by unifying your apps, APIs, and databases and your users' data into your vector database of choice with minimal configuration. 
 
 ## Typical usecases:
-- [Internal RAG apps](blog.airweave.ai) 🔍
-- [Agents that need to integrate with user data](blog.airweave.ai) 🤖
-- [No-code RAG automation](blog.airweave.ai) 🦾
+- [Zero code required: Empower your customer support assistant by syncing Zendesk tickets, Google Drive docs, and product manuals.](blog.airweave.ai) 🦾
+- [Synchronize with your users' data with one button in your multi-tenant SaaS app and two API calls to the Airweave API.](blog.airweave.ai) 🔗
+- [Update your personal assistant with knowledge from Slack, HubSpot and your personal SQL database on a daily basis in under 5 minutes.](blog.airweave.ai) ⏰
 
 ## Table of Contents
 
@@ -38,6 +38,8 @@ Airweave simplifies the process of making your data searchable. Whether you have
 ---
 
 ## Key Features
+- **No code reqired, but extensible**: Users that prefer not to touch any code can make their app searchable in a few clicks
+- **White-Labeled Multi-Tenant Support**: Ideal for SaaS builders, Airweave provides a streamlined OAuth2-based platform for syncing data across multiple tenants while maintaining privacy and security.
 - **Chunk Generators**: Each source (like a database, API, or file system) defines a `@chunk_generator` that yields data in a consistent format. You can also define your own.
 - **Automated Sync**: Schedule data synchronization or run on-demand sync jobs.
 - **Versioning & Hashing**: Airweave detects changes in your data via hashing, updating only the modified chunks in the vector store.
