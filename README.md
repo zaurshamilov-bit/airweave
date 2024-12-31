@@ -6,8 +6,8 @@
 
 ## Typical usecases:
 - [Zero code required: Empower your customer support assistant by syncing Zendesk tickets, Google Drive docs, and product manuals.](blog.airweave.ai) 🦾
+- [Synchronize with your users' data with one button in your multi-tenant SaaS app and two API calls to the Airweave API.](blog.airweave.ai) 🔗
 - [Update your personal assistant with knowledge from Slack, HubSpot and your personal SQL database on a daily basis in under 5 minutes.](blog.airweave.ai) ⏰
-- [Synchronize with your users' data with only 1 button in your multi-tenant SaaS app and two API calls to the Airweave API.](blog.airweave.ai) 🔗
 
 ## Table of Contents
 
