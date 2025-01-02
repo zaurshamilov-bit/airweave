@@ -17,7 +17,7 @@ async def list_destinations(
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.Destination]:
     """Get all available destinations."""
-    destinations = await crud.destination.get_multi(db)
+    destinations = await crud.destination.get_all(db)
     return destinations
 
 

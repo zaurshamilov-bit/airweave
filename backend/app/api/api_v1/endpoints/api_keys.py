@@ -92,7 +92,7 @@ async def read_api_keys(
         List[schemas.APIKey]: A list of API keys.
 
     """
-    api_keys = await crud.api_key.get_multi(
+    api_keys = await crud.api_key.get_all_for_user(
         db=db, skip=skip, limit=limit, current_user=user
     )
     return api_keys

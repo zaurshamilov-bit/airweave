@@ -1,13 +1,12 @@
 """Connection schemas."""
 
-from enum import Enum
 from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.models.integration_credential import IntegrationType
 from app.core.shared_models import ConnectionStatus
+from app.models.integration_credential import IntegrationType
 
 
 class ConnectionBase(BaseModel):

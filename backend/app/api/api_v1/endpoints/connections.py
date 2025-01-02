@@ -28,7 +28,7 @@ async def list_all_connected_integrations(
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.Connection]:
     """Get all active connections for the current user across all integration types."""
-    connections = await crud.connection.get_multi(db, current_user=user)
+    connections = await crud.connection.get_all_for_user(db, current_user=user)
     return connections
 
 

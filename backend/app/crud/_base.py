@@ -58,7 +58,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         return db_obj
 
-    async def get_multi(
+    async def get_all_for_user(
         self, db: AsyncSession, current_user: User, *, skip: int = 0, limit: int = 100
     ) -> list[ModelType]:
         """Get multiple objects.
@@ -82,6 +82,18 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
                 | (self.model.modified_by_email == current_user.email)
             )
             .order_by(desc(self.model.created_at))
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await db.execute(query)
+        return list(result.unique().scalars().all())
+
+    async def get_all_for_organization(
+        self, db: AsyncSession, organization_id: UUID, *, skip: int = 0, limit: int = 100
+    ) -> list[ModelType]:
+        query = (
+            select(self.model)
+            .where(self.model.organization_id == organization_id)
             .offset(skip)
             .limit(limit)
         )
@@ -113,7 +125,6 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         if not isinstance(obj_in, dict):
             obj_in = obj_in.model_dump()
         db_obj = self.model(**obj_in)  # type: ignore
-
 
         if current_user:
             db_obj.created_by_email = current_user.email
@@ -209,7 +220,6 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         return db_obj
 
-
     def _validate_if_user_has_permission(self, db_obj: ModelType, current_user: User) -> None:
         """Validate if the user has permission to access the object.
 
@@ -268,4 +278,3 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
             if new_value is not None and new_value != original_value:
                 raise ImmutableFieldError(key)
-

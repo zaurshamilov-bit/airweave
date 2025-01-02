@@ -58,4 +58,4 @@ async def read_embedding_models(
         list[schemas.EmbeddingModel]: The list of embedding models.
 
     """
-    return await crud.embedding_model.get_multi(db)
+    return await crud.embedding_model.get_all(db)
