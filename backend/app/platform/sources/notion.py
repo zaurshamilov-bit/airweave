@@ -49,7 +49,7 @@ class NotionSource(BaseSource):
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
         """
-        Generate workspace chunks. Notion’s API doesn’t offer a direct
+        Generate workspace chunks. Notion's API doesn't offer a direct
         'list workspaces' endpoint; for a typical integration, you might
         call 'GET /v1/users/me' to identify the workspace and yield a single chunk.
         """
