@@ -1,7 +1,7 @@
 """Module for sync context."""
 
 
-from app.platform.auth import schemas
+from app import schemas
 from app.platform.destinations._base import BaseDestination
 from app.platform.embedding_models._base import BaseEmbeddingModel
 from app.platform.sources._base import BaseSource

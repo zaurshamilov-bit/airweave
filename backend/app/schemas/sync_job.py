@@ -13,10 +13,11 @@ class SyncJobBase(BaseModel):
     """Base schema for SyncJob."""
 
     sync_id: UUID
-    status: SyncJobStatus
-    records_created: Optional[int] = 0
-    records_updated: Optional[int] = 0
-    records_deleted: Optional[int] = 0
+    status: SyncJobStatus = SyncJobStatus.PENDING
+    chunks_detected: Optional[int] = 0
+    chunks_inserted: Optional[int] = 0
+    chunks_deleted: Optional[int] = 0
+    chunks_skipped: Optional[int] = 0
     error: Optional[str] = None
 
     class Config:

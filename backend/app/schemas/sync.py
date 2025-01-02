@@ -12,11 +12,11 @@ class SyncBase(BaseModel):
     """Base schema for Sync."""
 
     name: str
-    schedule: str  # Human-readable schedule description
-    source_integration_credential_id: UUID
-    destination_integration_credential_id: Optional[UUID] = None
-    embedding_model_integration_credential_id: Optional[UUID] = None
-    cron_schedule: str  # Actual cron expression
+    description: Optional[str] = None
+    source_connection_id: UUID
+    destination_connection_id: Optional[UUID] = None
+    embedding_model_connection_id: Optional[UUID] = None
+    cron_schedule: Optional[str] = None  # Actual cron expression
     white_label_id: Optional[UUID] = None
     white_label_user_identifier: Optional[str] = None
 
@@ -39,7 +39,9 @@ class SyncBase(BaseModel):
         │ └─────── Hour (0-23)
         └───────── Minute (0-59)
         """
-        cron_pattern = r"^(\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-6]|SUN|MON|TUE|WED|THU|FRI|SAT|[0-6]-[0-6]|[0-6]/[0-6]|[0-6],[0-6]|\*\/[0-6])$"
+        if v is None:
+            return None
+        cron_pattern = r"^(\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-6]|SUN|MON|TUE|WED|THU|FRI|SAT|[0-6]-[0-6]|[0-6]/[0-6]|[0-6],[0-6]|\*\/[0-6])$" # noqa: E501
         if not re.match(cron_pattern, v):
             raise ValueError("Invalid cron schedule format")
         return v
@@ -52,8 +54,11 @@ class SyncBase(BaseModel):
 
 class SyncCreate(SyncBase):
     """Schema for creating a Sync object."""
+    run_immediately: bool = False
 
-    pass
+    def to_base(self) -> SyncBase:
+        """Convert to base schema."""
+        return SyncBase(**self.model_dump(exclude={"run_immediately"}))
 
 
 class SyncUpdate(BaseModel):
@@ -61,9 +66,9 @@ class SyncUpdate(BaseModel):
 
     name: Optional[str] = None
     schedule: Optional[str] = None
-    source_integration_credential_id: Optional[UUID] = None
-    destination_integration_credential_id: Optional[UUID] = None
-    embedding_model_integration_credential_id: Optional[UUID] = None
+    source_connection_id: Optional[UUID] = None
+    destination_connection_id: Optional[UUID] = None
+    embedding_model_connection_id: Optional[UUID] = None
     cron_schedule: Optional[str] = None
     white_label_id: Optional[UUID] = None
     white_label_user_identifier: Optional[str] = None

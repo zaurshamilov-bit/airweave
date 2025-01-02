@@ -6,7 +6,6 @@ from uuid import UUID
 from weaviate.collections import Collection
 from weaviate.collections.classes.config import DataType, Property
 
-from app import schemas
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk
 from app.platform.configs.auth import WeaviateAuthConfig
@@ -33,7 +32,6 @@ class WeaviateDestination(BaseDestination):
     @classmethod
     async def create(
         cls,
-        user: schemas.User,
         sync_id: UUID,
         embedding_model: BaseEmbeddingModel,
     ) -> "WeaviateDestination":

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import crud, schemas
 from app.api import deps
 from app.platform.configs._base import Fields
-from app.platform.locator import resources
+from app.platform.locator import resource_locator
 
 router = APIRouter()
 
@@ -33,7 +33,7 @@ async def read_destination(
     if not destination:
         raise HTTPException(status_code=404, detail="Destination not found")
     if destination.auth_config_class:
-        auth_config_class = resources.get_auth_config(destination.auth_config_class)
+        auth_config_class = resource_locator.get_auth_config(destination.auth_config_class)
         fields = Fields.from_config_class(auth_config_class)
         destination_with_config_fields = schemas.DestinationWithConfigFields.model_validate(
             destination, from_attributes=True

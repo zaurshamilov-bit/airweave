@@ -13,7 +13,7 @@ from app.models.integration_credential import IntegrationType
 from app.platform.auth.schemas import AuthType
 from app.platform.auth.services import oauth2_service
 from app.platform.auth.settings import integration_settings
-from app.platform.locator import resources
+from app.platform.locator import resource_locator
 from app.schemas.connection import ConnectionCreate, ConnectionStatus
 
 router = APIRouter()
@@ -92,7 +92,7 @@ async def connect_integration(
 
         # Create and validate auth config if exists
         if integration.auth_config_class:
-            auth_config_class = resources.get_auth_config(integration.auth_config_class)
+            auth_config_class = resource_locator.get_auth_config(integration.auth_config_class)
             auth_config = auth_config_class(**config_fields)
             encrypted_creds = credentials.encrypt(auth_config.model_dump())
         else:

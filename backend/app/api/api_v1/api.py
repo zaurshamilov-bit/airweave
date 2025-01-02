@@ -8,6 +8,7 @@ from app.api.api_v1.endpoints import (
     destinations,
     embedding_models,
     sources,
+    sync,
     users,
 )
 
@@ -20,3 +21,4 @@ api_router.include_router(
     embedding_models.router, prefix="/embedding_models", tags=["embedding_models"]
 )
 api_router.include_router(connections.router, prefix="/connections", tags=["connections"])
+api_router.include_router(sync.router, prefix="/sync", tags=["sync"])
