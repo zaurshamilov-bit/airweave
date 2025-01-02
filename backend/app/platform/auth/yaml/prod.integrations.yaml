@@ -8,3 +8,15 @@ integrations:
     client_secret_id: "asana-client-secret"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
+
+  notion:
+    auth_type: "oauth2"
+    url: "https://api.notion.com/v1/oauth/authorize"
+    backend_url: "https://api.notion.com/v1/oauth/token"
+    grant_type: "authorization_code"
+    client_id: "1b99a1bd-b189-4a89-bc3e-8806182a1c07"
+    client_secret_keyvault_name: "notion-client-secret"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "header"
+    additional_frontend_params:
+      owner: "user"
