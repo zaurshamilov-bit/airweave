@@ -1,20 +1,101 @@
-"""Local script for testing."""
+"""Local script for testing various source connectors (e.g. Asana, Notion) and verifying results."""
+
 import asyncio
 import uuid
-
-import weaviate.classes as wvc
-from weaviate.collections import Collection
 
 from app import schemas
 from app.platform.destinations.weaviate import WeaviateDestination
 from app.platform.embedding_models.local_text2vec import LocalText2Vec
 from app.platform.sources.asana import AsanaSource
+from app.platform.sources.notion import NotionSource
+from app.platform.sources._base import BaseSource
 from app.vector_db.weaviate_service import WeaviateService
+
+import weaviate.classes as wvc
+from weaviate.collections import Collection
+
+
+async def process_source_chunks(
+    source: BaseSource, weaviate_dest: WeaviateDestination, buffer_size: int = 50
+):
+    """
+    Helper to fetch chunks from a given source connector and optionally insert them into Weaviate in bulk.
+    """
+    chunks_buffer = []
+    async for chunk in source.generate_chunks():
+        chunks_buffer.append(chunk)
+
+        # When buffer is full, bulk insert
+        if len(chunks_buffer) >= buffer_size:
+            await weaviate_dest.bulk_insert(chunks_buffer)
+            print(f"Inserted {len(chunks_buffer)} chunks from {source.__class__.__name__}")
+            chunks_buffer.clear()
+
+    # If any remain after the loop, insert them as well
+    if chunks_buffer:
+        await weaviate_dest.bulk_insert(chunks_buffer)
+        print(f"Inserted final {len(chunks_buffer)} chunks from {source.__class__.__name__}")
+
+    return chunks_buffer
+
+
+async def verify_chunks_in_weaviate(sync_id: uuid.UUID):
+    """
+    Check total chunk count in the corresponding Weaviate collection,
+    and print some sample documents.
+    """
+    print("\n=== Verifying Sync Results ===")
+    async with WeaviateService() as service:
+        sanitized_sync_id = str(sync_id).replace("-", "_")
+        collection: Collection = await service.get_weaviate_collection(
+            f"Chunks_{sanitized_sync_id}"
+        )
+
+        # Count how many chunk objects are in this collection
+        count = (await collection.aggregate.over_all(total_count=True)).total_count
+        print(f"\nTotal documents in 'Chunks_{sanitized_sync_id}' collection: {count}")
+
+        # Fetch some sample documents (no filter)
+        results = await collection.query.fetch_objects(limit=5, include_vector=False)
+        print("\nSample objects:")
+        for obj in results.objects:
+            print(f"\nName: {obj.properties.get('name')}")
+            print(f"Source: {obj.properties.get('source_name')}")
+            print(f"Created: {obj.metadata.creation_time}")
+            print(f"Breadcrumbs: {obj.properties.get('breadcrumbs')}")
+
+
+async def verify_asana_tasks_in_weaviate(sync_id: uuid.UUID):
+    """
+    Example of a more connector-specific verification for Asana:
+    filtering tasks using Weaviate's property filter and printing details.
+    """
+    print("\n=== Verifying Asana Tasks in Weaviate ===")
+    async with WeaviateService() as service:
+        sanitized_sync_id = str(sync_id).replace("-", "_")
+        collection: Collection = await service.get_weaviate_collection(
+            f"Chunks_{sanitized_sync_id}"
+        )
+
+        # Query tasks with filters (e.g. resource_subtype == default_task)
+        tasks = await collection.query.fetch_objects(
+            limit=5,
+            filters=wvc.query.Filter.by_property("resource_subtype").equal("default_task"),
+            return_metadata=wvc.query.MetadataQuery(creation_time=True),
+        )
+
+        print("\nSample tasks:")
+        for task in tasks.objects:
+            print(f"Task: {task.properties.get('name')}")
+            print(f"Created: {task.metadata.creation_time}")
+            print(f"Completed: {task.properties.get('completed')}")
+            print(f"Due at: {task.properties.get('due_at')}")
+            print("-----")
 
 
 async def main():
-    """Entrypoint for local script."""
-    # Create test user
+    """Entrypoint to test multiple connectors (Asana, Notion, etc.) end-to-end."""
+    # Create a test user and a unique sync ID for this sync run
     user = schemas.User(
         id=uuid.uuid4(),
         email="test@test.com",
@@ -23,72 +104,37 @@ async def main():
     )
     sync_id = uuid.uuid4()
 
-    # Initialize embedding model
+    # Initialize an embedding model
     embedding_model = LocalText2Vec()
 
-    # Initialize source and destination
-    asana_source = await AsanaSource.create(user, sync_id)
+    # Create a Weaviate destination for storing chunks
     weaviate_dest = await WeaviateDestination.create(user, sync_id, embedding_model)
 
-    # Buffer for batch processing
-    chunk_buffer = []
-    buffer_size = 50  # Adjust based on your needs
+    # -------------------------------------------------------------------------
+    # Test Asana Source Connector
+    # -------------------------------------------------------------------------
+    print("=== Testing Asana Connector ===")
+    asana_source = await AsanaSource.create(user, sync_id)
+    asana_chunks = await process_source_chunks(asana_source, weaviate_dest, buffer_size=50)
+    print(f"Asana source generated {len(asana_chunks)} chunks total.\n")
 
-    # Process chunks
-    async for chunk in asana_source.generate_chunks():
-        chunk_buffer.append(chunk)
+    # -------------------------------------------------------------------------
+    # Test Notion Source Connector
+    # -------------------------------------------------------------------------
+    print("=== Testing Notion Connector ===")
+    notion_source = await NotionSource.create(user, sync_id)
+    notion_chunks = await process_source_chunks(notion_source, weaviate_dest, buffer_size=50)
+    print(f"Notion source generated {len(notion_chunks)} chunks total.\n")
 
-        # When buffer is full, bulk insert
-        if len(chunk_buffer) >= buffer_size:
-            await weaviate_dest.bulk_insert(chunk_buffer)
-            print(f"Inserted {len(chunk_buffer)} chunks")
-            chunk_buffer = []
+    # -------------------------------------------------------------------------
+    # Verify Overall Sync (both Asana + Notion chunks). This retrieves some objects from Weaviate
+    # -------------------------------------------------------------------------
+    await verify_chunks_in_weaviate(sync_id)
 
-    # Insert any remaining chunks
-    if chunk_buffer:
-        await weaviate_dest.bulk_insert(chunk_buffer)
-        print(f"Inserted final {len(chunk_buffer)} chunks")
-
-    # Verify the sync
-    print("\n=== Verifying Sync Results ===")
-    async with WeaviateService() as service:
-        sanitized_sync_id = str(sync_id).replace("-", "_")
-        collection: Collection = await service.get_weaviate_collection(f"Chunks_{sanitized_sync_id}")
-
-        # Get total count - using the correct method from docs
-        count = (await collection.aggregate.over_all(total_count=True)).total_count
-        print(f"\nTotal documents: {count}")
-
-        # Check sample documents with metadata
-        results = await collection.query.fetch_objects(
-            limit=5,
-            include_vector=False,
-            return_metadata=wvc.query.MetadataQuery(
-                creation_time=True,
-                last_update_time=True
-            )
-        )
-
-        print("\nSample documents:")
-        for obj in results.objects:
-            print(f"\nName: {obj.properties.get('name')}")
-            print(f"Source: {obj.properties.get('source_name')}")
-            print(f"Created: {obj.metadata.creation_time}")
-            print(f"Breadcrumbs: {obj.properties.get('breadcrumbs')}")
-
-        # Query for tasks with filters
-        tasks = await collection.query.fetch_objects(
-            limit=5,
-            filters=wvc.query.Filter.by_property("resource_subtype").equal("default_task"),
-            return_metadata=wvc.query.MetadataQuery(creation_time=True)
-        )
-
-        print("\nSample tasks:")
-        for task in tasks.objects:
-            print(f"\nTask: {task.properties.get('name')}")
-            print(f"Created: {task.metadata.creation_time}")
-            print(f"Completed: {task.properties.get('completed')}")
-            print(f"Due at: {task.properties.get('due_at')}")
+    # -------------------------------------------------------------------------
+    # Optional: a connector-specific verification (for Asana). Filter tasks, etc.
+    # -------------------------------------------------------------------------
+    await verify_asana_tasks_in_weaviate(sync_id)
 
 
 if __name__ == "__main__":
