@@ -50,6 +50,10 @@ class SyncService:
                 # Calculate hash for deduplication
                 chunk_hash = chunk.hash()
 
+                if sync.white_label_user_identifier:
+                    chunk.white_label_user_identifier = sync.white_label_user_identifier
+
+
                 # Check if chunk exists in DB
                 db_chunk = await crud.chunk.get_by_entity_id(
                     db,
@@ -58,10 +62,8 @@ class SyncService:
                 )
 
                 # Add sync context metadata to chunk
-                chunk.add_sync_context_metadata(sync_context)
+                chunk.metadata = sync.metadata
 
-                if sync_context.sync.id:
-                    chunk.add_sync_user_identifier()
 
                 if db_chunk:
                     if db_chunk.hash == chunk_hash:
@@ -150,7 +152,14 @@ class SyncService:
         if not sync.destination_connection_id:
             destination = await WeaviateDestination.create(sync.id, embedding_model)
 
-        return SyncContext(source_instance, destination, embedding_model, sync)
+
+
+        sync_context = SyncContext(source_instance, destination, embedding_model, sync)
+
+        if sync.white_label_id:
+            white_label = await crud.white_label.get(db, sync.white_label_id, current_user)
+            sync_context.white_label = white_label
+        return sync_context
 
 
 sync_service = SyncService()
