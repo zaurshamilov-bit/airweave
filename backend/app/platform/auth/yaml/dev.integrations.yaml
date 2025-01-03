@@ -13,7 +13,7 @@ integrations:
     auth_type: "config_class"
 
   notion:
-    auth_type: "oauth2"
+    auth_type: "oauth2_with_refresh"
     url: "https://api.notion.com/v1/oauth/authorize"
     backend_url: "https://api.notion.com/v1/oauth/token"
     grant_type: "authorization_code"
