@@ -13,7 +13,7 @@ from app.models.integration_credential import IntegrationType
 from app.platform.auth.schemas import AuthType
 from app.platform.auth.services import oauth2_service
 from app.platform.auth.settings import integration_settings
-from app.platform.locator import resources
+from app.platform.locator import resource_locator
 from app.schemas.connection import ConnectionCreate, ConnectionStatus
 
 router = APIRouter()
@@ -28,7 +28,7 @@ async def list_all_connected_integrations(
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.Connection]:
     """Get all active connections for the current user across all integration types."""
-    connections = await crud.connection.get_multi(db, current_user=user)
+    connections = await crud.connection.get_all_for_user(db, current_user=user)
     return connections
 
 
@@ -92,7 +92,7 @@ async def connect_integration(
 
         # Create and validate auth config if exists
         if integration.auth_config_class:
-            auth_config_class = resources.get_auth_config(integration.auth_config_class)
+            auth_config_class = resource_locator.get_auth_config(integration.auth_config_class)
             auth_config = auth_config_class(**config_fields)
             encrypted_creds = credentials.encrypt(auth_config.model_dump())
         else:

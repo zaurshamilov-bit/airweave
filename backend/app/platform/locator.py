@@ -76,4 +76,4 @@ class ResourceLocator:
         return auth_config_class
 
 
-resources = ResourceLocator()
+resource_locator = ResourceLocator()

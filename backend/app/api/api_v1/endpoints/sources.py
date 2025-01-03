@@ -49,5 +49,5 @@ async def read_sources(
         list[schemas.Source]: The list of sources.
 
     """
-    sources = await crud.source.get_multi(db)
+    sources = await crud.source.get_all(db)
     return sources

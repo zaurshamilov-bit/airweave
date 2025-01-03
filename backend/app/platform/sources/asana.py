@@ -1,11 +1,9 @@
 """Asana source implementation."""
 
 from typing import AsyncGenerator, Dict, List, Optional
-from uuid import UUID
 
 import httpx
 
-from app import schemas
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
 from app.platform.chunks.asana import (
@@ -24,12 +22,10 @@ class AsanaSource(BaseSource):
     """Asana source implementation."""
 
     @classmethod
-    async def create(cls, user: schemas.User, sync_id: UUID) -> "AsanaSource":
+    async def create(cls, access_token: str) -> "AsanaSource":
         """Create a new Asana source."""
         instance = cls()
-        # fetch secrets from db
-        instance.access_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3MzU5NDE0NTIsInNjb3BlIjoiZGVmYXVsdCBpZGVudGl0eSIsInN1YiI6MTIwNzMyNDU2MTI2Mzg5MCwicmVmcmVzaF90b2tlbiI6MTIwOTA3OTQwMzkyMTk4OCwidmVyc2lvbiI6MiwiYXBwIjoxMjA5MDU2NDQzMzk1ODM1LCJleHAiOjE3MzU5NDUwNTJ9.msrBz0Zr-Gc-Blzgovi8Frr9NMDYwNrkUhfSrSLzzEs"  # temp
-        instance.sync_id = sync_id
+        instance.access_token = access_token
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict:
@@ -53,7 +49,6 @@ class AsanaSource(BaseSource):
             yield AsanaWorkspaceChunk(
                 source_name="asana",
                 entity_id=workspace["gid"],
-                sync_id=self.sync_id,
                 breadcrumbs=[],
                 name=workspace["name"],
                 asana_gid=workspace["gid"],
@@ -74,7 +69,6 @@ class AsanaSource(BaseSource):
             yield AsanaProjectChunk(
                 source_name="asana",
                 entity_id=project["gid"],
-                sync_id=self.sync_id,
                 breadcrumbs=[workspace_breadcrumb],
                 name=project["name"],
                 workspace_gid=workspace["gid"],
@@ -114,7 +108,6 @@ class AsanaSource(BaseSource):
             yield AsanaSectionChunk(
                 source_name="asana",
                 entity_id=section["gid"],
-                sync_id=self.sync_id,
                 breadcrumbs=project_breadcrumbs,
                 name=section["name"],
                 project_gid=project["gid"],
@@ -150,7 +143,6 @@ class AsanaSource(BaseSource):
             yield AsanaTaskChunk(
                 source_name="asana",
                 entity_id=task["gid"],
-                sync_id=self.sync_id,
                 breadcrumbs=task_breadcrumbs,
                 name=task["name"],
                 project_gid=project["gid"],
@@ -202,7 +194,6 @@ class AsanaSource(BaseSource):
             yield AsanaCommentChunk(
                 source_name="asana",
                 entity_id=story["gid"],
-                sync_id=self.sync_id,
                 breadcrumbs=task_breadcrumbs,
                 task_gid=task["gid"],
                 author=story["created_by"],

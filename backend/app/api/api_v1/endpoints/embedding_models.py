@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import crud, schemas
 from app.api import deps
 from app.platform.configs._base import Fields
-from app.platform.locator import resources
+from app.platform.locator import resource_locator
 
 router = APIRouter()
 
@@ -35,7 +35,7 @@ async def read_embedding_model(
     if not embedding_model:
         raise HTTPException(status_code=404, detail="Embedding model not found")
     if embedding_model.auth_config_class:
-        auth_config_class = resources.get_auth_config(embedding_model.auth_config_class)
+        auth_config_class = resource_locator.get_auth_config(embedding_model.auth_config_class)
         embedding_model.config_fields = Fields.from_config_class(auth_config_class)
     return embedding_model
 
@@ -58,4 +58,4 @@ async def read_embedding_models(
         list[schemas.EmbeddingModel]: The list of embedding models.
 
     """
-    return await crud.embedding_model.get_multi(db)
+    return await crud.embedding_model.get_all(db)

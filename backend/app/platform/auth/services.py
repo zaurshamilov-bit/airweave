@@ -137,7 +137,7 @@ class OAuth2Service:
 
     @staticmethod
     async def refresh_access_token(
-        integration_short_name: str, user: schemas.User
+        db: AsyncSession, integration_short_name: str, user: schemas.User, connection_id: UUID
     ) -> OAuth2TokenResponse:
         """Refresh an access token using a refresh token.
 
@@ -145,8 +145,10 @@ class OAuth2Service:
 
         Args:
         ----
+            db (AsyncSession): The database session.
             integration_short_name (str): The short name of the integration.
             user (schemas.User): The user for whom to refresh the token.
+            connection_id (UUID): The ID of the connection to refresh the token for.
 
         Returns:
         -------
@@ -160,7 +162,7 @@ class OAuth2Service:
         """
         try:
             # Get and validate refresh token
-            refresh_token = await OAuth2Service._get_refresh_token(user, integration_short_name)
+            refresh_token = await OAuth2Service._get_refresh_token(db, user, connection_id)
 
             # Get and validate integration config
             integration_config = OAuth2Service._get_integration_config(integration_short_name)
@@ -182,7 +184,7 @@ class OAuth2Service:
 
             # Handle rotating refresh tokens if needed
             oauth2_token_response = await OAuth2Service._handle_token_response(
-                response, integration_config, user, integration_short_name
+                db, response, integration_config, user, connection_id
             )
 
             return oauth2_token_response
@@ -339,22 +341,22 @@ class OAuth2Service:
 
     @staticmethod
     async def _handle_token_response(
+        db: AsyncSession,
         response: httpx.Response,
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
         user: schemas.User,
         connection_id: UUID,
-        db: AsyncSession,
     ) -> OAuth2TokenResponse:
         """Handle the token response and update refresh token if needed.
 
         Args:
         ----
+            db (AsyncSession): The database session.
             response (httpx.Response): The response from the token refresh request.
             integration_config (schemas.Source | schemas.Destination | schemas.EmbeddingModel):
                 The integration configuration.
             user (schemas.User): The user to update the refresh token for.
             connection_id (UUID): The ID of the connection to update.
-            db (AsyncSession): The database session.
 
         Returns:
         -------

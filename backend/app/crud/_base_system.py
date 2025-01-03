@@ -62,7 +62,7 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         result = await db.execute(select(self.model).where(self.model.short_name == short_name))
         return result.unique().scalar_one_or_none()
 
-    async def get_multi(
+    async def get_all(
         self, db: AsyncSession, *, skip: int = 0, limit: int = 100
     ) -> list[ModelType]:
         """Get multiple objects.

@@ -51,7 +51,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         """
         raise NotImplementedError("This method is not implemented yet.")
 
-    async def get_multi(self, db: AsyncSession, skip: int = 0, limit: int = 100) -> list[User]:
+    async def get_all_for_user(self, db: AsyncSession, skip: int = 0, limit: int = 100) -> list[User]:
         """Get multiple objects.
 
         WARNING: This method is not secure and should not be used in production.
