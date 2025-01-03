@@ -28,7 +28,7 @@ class NotionSource(BaseSource):
         with a hard-coded token for now.
         """
         instance = cls()
-        instance.access_token = "notion-temp-access-token"  # Replace later
+        instance.access_token = "ntn_C8812623352Qfy10TAOLuqPC1yrFuMejEFnTHLFwezI1jq"
         instance.sync_id = sync_id
         return instance
 
