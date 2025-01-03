@@ -101,6 +101,14 @@ class WeaviateDestination(BaseDestination):
                     Property(name="type", data_type=DataType.TEXT),
                 ],
             ),
+            Property(
+                name="properties",
+                data_type=DataType.OBJECT,
+                nested_properties=[
+                    Property(name="name", data_type=DataType.TEXT),
+                    Property(name="value", data_type=DataType.TEXT),
+                ],
+            ),
         ]
 
         async with WeaviateService(
@@ -112,8 +120,12 @@ class WeaviateDestination(BaseDestination):
                 self.collection = await service.create_weaviate_collection(
                     collection_name=self.collection_name,
                     properties=properties,
-                    vectorizer_config=WeaviateModelAdapter.get_vectorizer_config(self.embedding_model),
-                    generative_config=WeaviateModelAdapter.get_generative_config(self.embedding_model),
+                    vectorizer_config=WeaviateModelAdapter.get_vectorizer_config(
+                        self.embedding_model
+                    ),
+                    generative_config=WeaviateModelAdapter.get_generative_config(
+                        self.embedding_model
+                    ),
                 )
             except Exception as e:
                 if "already exists" not in str(e):
