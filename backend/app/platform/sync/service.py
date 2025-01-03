@@ -8,6 +8,7 @@ from app.core.exceptions import NotFoundException
 from app.db.session import get_db_context
 from app.platform.auth.schemas import AuthType
 from app.platform.auth.services import oauth2_service
+from app.platform.chunks._base import BaseChunk
 from app.platform.destinations.weaviate import WeaviateDestination
 from app.platform.embedding_models.local_text2vec import LocalText2Vec
 from app.platform.locator import resource_locator
@@ -40,68 +41,79 @@ class SyncService:
         async with get_db_context() as db:
             sync_context = await self.create_sync_context(db, sync, sync_job, current_user)
 
-            # Initialize source and buffer for batch processing
-            source = sync_context.source
-            chunk_buffer = []
-            buffer_size = 50  # Configurable batch size
+            # TODO: Implement microbatch processing
 
             # Process chunks from source
-            async for chunk in source.generate_chunks():
+            async for chunk in sync_context.source.generate_chunks():
+
+                # Enrich chunk with sync context information
+                chunk = await self._enrich_chunk(chunk, sync_context)
+
                 # Calculate hash for deduplication
                 chunk_hash = chunk.hash()
 
-                if sync.white_label_user_identifier:
-                    chunk.white_label_user_identifier = sync.white_label_user_identifier
-
-
                 # Check if chunk exists in DB
                 db_chunk = await crud.chunk.get_by_entity_id(
-                    db,
-                    entity_id=chunk.entity_id,
-                    sync_id=sync.id
+                    db, entity_id=chunk.entity_id, sync_id=sync.id
                 )
-
-                # Add sync context metadata to chunk
-                chunk.metadata = sync.metadata
-
 
                 if db_chunk:
                     if db_chunk.hash == chunk_hash:
                         # No changes, update sync_job_id
-                        await crud.chunk.update_with_job_id(
-                            db,
-                            db_obj=db_chunk,
-                            sync_job_id=sync_job.id
-                        )
+                        await crud.chunk.update_job_id(db, db_obj=db_chunk, sync_job_id=sync_job.id)
                     else:
                         # Content changed, update both DB and destination
-                        await crud.chunk.update(db, db_obj=db_chunk, obj_in=chunk)
-                        chunk_buffer.append(chunk)
+                        await crud.chunk.update(
+                            db, db_obj=db_chunk, obj_in=chunk, organization_id=sync.organization_id
+                        )
+                        await sync_context.destination.delete(db_chunk.id)
+                        await sync_context.destination.insert(chunk)
                 else:
                     # New chunk, insert into DB and buffer for destination
-                    await crud.chunk.create(db, obj_in=chunk)
-                    chunk_buffer.append(chunk)
-
-                # Bulk insert to destination when buffer is full
-                if len(chunk_buffer) >= buffer_size:
-                    await sync_context.destination.bulk_insert(chunk_buffer)
-                    chunk_buffer = []
-
-            # Process any remaining chunks in buffer
-            if chunk_buffer:
-                await sync_context.destination.bulk_insert(chunk_buffer)
+                    chunk_schema = schemas.ChunkCreate(
+                        sync_id=sync.id,
+                        sync_job_id=sync_job.id,
+                        entity_id=chunk.entity_id,
+                        hash=chunk_hash,
+                    )
+                    db_chunk = await crud.chunk.create(
+                        db,
+                        obj_in=chunk_schema,
+                        organization_id=sync.organization_id,
+                    )
+                    chunk.db_chunk_id = db_chunk.id
+                    await sync_context.destination.insert(chunk)
 
             # Handle deletions - remove outdated chunks
             outdated_chunks = await crud.chunk.get_all_outdated(db, sync=sync)
             if outdated_chunks:
-                chunk_ids = [chunk.entity_id for chunk in outdated_chunks]
+                db_chunk_ids = [chunk.entity_id for chunk in outdated_chunks]
                 # Remove from destination
-                await sync_context.destination.bulk_delete(chunk_ids)
-                # Remove from database
-                for chunk in outdated_chunks:
-                    await crud.chunk.remove(db, id=chunk.id)
+                for db_chunk_id in db_chunk_ids:
+                    await sync_context.destination.delete(db_chunk_id)
+                    # Remove from database
+                    await crud.chunk.remove(
+                        db, id=db_chunk_id, organization_id=current_user.organization_id
+                    )
 
             return sync
+
+    async def _enrich_chunk(
+        self,
+        chunk: BaseChunk,
+        sync_context: SyncContext,
+    ) -> BaseChunk:
+        """Enrich a chunk with information from the sync context."""
+        chunk.source_name = sync_context.source._name
+        chunk.sync_id = sync_context.sync.id
+        chunk.sync_job_id = sync_context.sync_job.id
+        chunk.sync_metadata = sync_context.sync.sync_metadata
+        if sync_context.sync.white_label_id:
+            chunk.white_label_user_identifier = sync_context.sync.white_label_user_identifier
+            chunk.white_label_id = sync_context.sync.white_label_id
+            chunk.white_label_name = sync_context.white_label.name
+
+        return chunk
 
     async def create_sync_context(
         self,
@@ -133,7 +145,7 @@ class SyncService:
 
         if (
             source_model.auth_type == AuthType.oauth2_with_refresh
-            or source_model.auth_type == AuthType.oauth2_with_refresh_and_refresh_token
+            or source_model.auth_type == AuthType.oauth2_with_refresh_rotating
         ):
             oauth2_response = await oauth2_service.refresh_access_token(
                 db, source_model.short_name, current_user, source_connection.id
@@ -152,9 +164,7 @@ class SyncService:
         if not sync.destination_connection_id:
             destination = await WeaviateDestination.create(sync.id, embedding_model)
 
-
-
-        sync_context = SyncContext(source_instance, destination, embedding_model, sync)
+        sync_context = SyncContext(source_instance, destination, embedding_model, sync, sync_job)
 
         if sync.white_label_id:
             white_label = await crud.white_label.get(db, sync.white_label_id, current_user)

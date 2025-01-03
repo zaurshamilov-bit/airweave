@@ -19,6 +19,7 @@ class SyncBase(BaseModel):
     cron_schedule: Optional[str] = None  # Actual cron expression
     white_label_id: Optional[UUID] = None
     white_label_user_identifier: Optional[str] = None
+    sync_metadata: Optional[dict] = None
 
     @field_validator("cron_schedule")
     def validate_cron_schedule(cls, v: str) -> str:
@@ -72,6 +73,7 @@ class SyncUpdate(BaseModel):
     cron_schedule: Optional[str] = None
     white_label_id: Optional[UUID] = None
     white_label_user_identifier: Optional[str] = None
+    sync_metadata: Optional[dict] = None
 
 
 class SyncInDBBase(SyncBase):

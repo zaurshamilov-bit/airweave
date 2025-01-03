@@ -1,8 +1,8 @@
 """Weaviate destination implementation."""
 
-from typing import List
 from uuid import UUID
 
+import weaviate
 from weaviate.collections import Collection
 from weaviate.collections.classes.config import DataType, Property
 
@@ -87,9 +87,11 @@ class WeaviateDestination(BaseDestination):
         properties = [
             Property(name="source_name", data_type=DataType.TEXT),
             Property(name="entity_id", data_type=DataType.TEXT),
-            Property(name="sync_id", data_type=DataType.TEXT),
+            Property(name="sync_id", data_type=DataType.UUID),
+            Property(name="sync_job_id", data_type=DataType.UUID),
             Property(name="content", data_type=DataType.TEXT),
             Property(name="url", data_type=DataType.TEXT),
+            Property(name="metadata", data_type=DataType.OBJECT),
             Property(
                 name="breadcrumbs",
                 data_type=DataType.OBJECT_ARRAY,
@@ -99,6 +101,9 @@ class WeaviateDestination(BaseDestination):
                     Property(name="type", data_type=DataType.TEXT),
                 ],
             ),
+            Property(name="white_label_user_identifier", data_type=DataType.TEXT),
+            Property(name="white_label_id", data_type=DataType.UUID),
+            Property(name="white_label_name", data_type=DataType.TEXT),
         ]
 
         async with WeaviateService(
@@ -118,7 +123,21 @@ class WeaviateDestination(BaseDestination):
                     raise
                 self.collection = await service.get_weaviate_collection(self.collection_name)
 
-    async def bulk_insert(self, chunks: List[BaseChunk]) -> None:
+    async def insert(self, chunk: BaseChunk) -> None:
+        """Insert a single chunk into Weaviate."""
+        # Transform chunks into the format Weaviate expects
+        data_object = chunk.model_dump()
+
+        # Insert into Weaviate
+        async with WeaviateService(
+            weaviate_cluster_url=self.cluster_url,
+            weaviate_api_key=self.api_key,
+            embedding_model=self.embedding_model,
+        ) as service:
+            collection = await service.get_weaviate_collection(self.collection_name)
+            await collection.data.insert(data_object, uuid=chunk.db_chunk_id)
+
+    async def bulk_insert(self, chunks: list[BaseChunk]) -> None:
         """Bulk insert chunks into Weaviate."""
         if not chunks or not self.embedding_model:
             return
@@ -130,11 +149,13 @@ class WeaviateDestination(BaseDestination):
         ) as service:
             collection = await service.get_weaviate_collection(self.collection_name)
 
-            # Transform chunks into the format Weaviate expects
+            # Transform chunks into the format Weaviate expects for uuid and properties
             objects_to_insert = []
             for chunk in chunks:
-                # Use model_dump() to get all fields including from subclasses
-                data_object = chunk.model_dump()
+                data_object = weaviate.classes.data.DataObject(
+                    uuid=chunk.db_chunk_id,
+                    properties=chunk.model_dump(),
+                )
                 objects_to_insert.append(data_object)
 
             # Bulk insert using modern client
@@ -143,22 +164,36 @@ class WeaviateDestination(BaseDestination):
             if response.errors:
                 raise Exception("Errors during bulk insert: %s", response.errors)
 
-    async def bulk_delete(self, chunk_ids: List[UUID]) -> None:
+    async def delete(self, db_chunk_id: UUID) -> None:
+        """Delete a single chunk from Weaviate."""
+        async with WeaviateService(
+            weaviate_cluster_url=self.cluster_url,
+            weaviate_api_key=self.api_key,
+            embedding_model=self.embedding_model,
+        ) as service:
+            collection = await service.get_weaviate_collection(self.collection_name)
+            await collection.data.delete_by_id(uuid=db_chunk_id)
+
+    async def bulk_delete(self, db_chunk_ids: list[UUID]) -> None:
         """Bulk delete chunks from Weaviate.
 
         Args:
-            chunk_ids (List[UUID]): The IDs of the chunks to delete.
+            db_chunk_ids (List[UUID]): The IDs of the chunks to delete.
         """
-        if not chunk_ids:
+        if not db_chunk_ids:
             return
 
-        async with WeaviateService() as service:
+        async with WeaviateService(
+            weaviate_cluster_url=self.cluster_url,
+            weaviate_api_key=self.api_key,
+            embedding_model=self.embedding_model,
+        ) as service:
             collection = await service.get_weaviate_collection(self.collection_name)
 
-            for chunk_id in chunk_ids:
+            for db_chunk_id in db_chunk_ids:
                 try:
                     # Delete using deterministic UUID
-                    await collection.objects.delete(uuid=f"{chunk_id}_{self.sync_id}")
+                    await collection.objects.delete(uuid=f"{db_chunk_id}_{self.sync_id}")
                 except Exception as e:
                     if "not found" not in str(e).lower():
                         raise

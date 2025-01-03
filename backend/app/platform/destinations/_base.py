@@ -1,7 +1,6 @@
 """Base destination class."""
 
 from abc import abstractmethod
-from typing import List
 from uuid import UUID
 
 from app import schemas
@@ -22,12 +21,22 @@ class BaseDestination:
         pass
 
     @abstractmethod
-    async def bulk_insert(self, chunks: List[BaseChunk]) -> None:
+    async def insert(self, chunk: BaseChunk) -> None:
+        """Insert a single chunk into the destination."""
+        pass
+
+    @abstractmethod
+    async def bulk_insert(self, chunks: list[BaseChunk]) -> None:
         """Bulk insert chunks into the destination."""
         pass
 
     @abstractmethod
-    async def bulk_delete(self, chunk_ids: List[str]) -> None:
+    async def delete(self, db_chunk_id: UUID) -> None:
+        """Delete a single chunk from the destination."""
+        pass
+
+    @abstractmethod
+    async def bulk_delete(self, chunk_ids: list[str]) -> None:
         """Bulk delete chunks from the destination."""
         pass
 
