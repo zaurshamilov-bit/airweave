@@ -1,5 +1,6 @@
 """CRUD operations for chunks."""
 
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -28,12 +29,17 @@ class CRUDChunk(CRUDBaseOrganization[Chunk, ChunkCreate, ChunkUpdate]):
     async def update_job_id(
         self,
         db: AsyncSession,
+        *,
         db_obj: Chunk,
         sync_job_id: UUID,
     ) -> Chunk:
-        """Update a chunk with a sync job id."""
-        db_obj.sync_job_id = sync_job_id
-        return await self.update(db, db_obj=db_obj)
+        """Update sync job ID only."""
+        update_data = ChunkUpdate(sync_job_id=sync_job_id, modified_at=datetime.now(datetime.UTC))
+
+        # Use model_dump(exclude_unset=True) to only include fields we explicitly set
+        return await super().update(
+            db, db_obj=db_obj, obj_in=update_data.model_dump(exclude_unset=True)
+        )
 
     async def get_all_outdated(
         self,

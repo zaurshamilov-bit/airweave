@@ -1,6 +1,7 @@
 """Chunk schema."""
 
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -29,7 +30,10 @@ class ChunkCreate(ChunkBase):
 class ChunkUpdate(BaseModel):
     """Schema for updating a Chunk object."""
 
-    hash: str
+    sync_job_id: Optional[UUID] = None
+    sync_id: Optional[UUID] = None
+    entity_id: Optional[str] = None
+    hash: Optional[str] = None
 
 
 class ChunkInDBBase(ChunkBase):

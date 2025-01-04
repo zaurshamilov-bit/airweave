@@ -3,7 +3,6 @@
 from typing import Generic, Optional, Type, TypeVar
 from uuid import UUID
 
-from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -126,11 +125,11 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
             ModelType: The updated object.
 
         """
-        obj_data = jsonable_encoder(db_obj)
-        update_data = obj_in.model_dump(exclude_unset=True)
-        for field in obj_data:
-            if field in update_data:
-                setattr(db_obj, field, update_data[field])
+        obj_in = obj_in.model_dump(exclude_unset=True)
+
+        for key, value in obj_in.items():
+            setattr(db_obj, key, value) if hasattr(db_obj, key) else None
+
         db.add(db_obj)
         if not uow:
             await db.commit()

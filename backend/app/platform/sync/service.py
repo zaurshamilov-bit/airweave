@@ -63,8 +63,15 @@ class SyncService:
                         await crud.chunk.update_job_id(db, db_obj=db_chunk, sync_job_id=sync_job.id)
                     else:
                         # Content changed, update both DB and destination
+                        chunk_update = schemas.ChunkUpdate(
+                            sync_job_id=sync_job.id,
+                            hash=chunk_hash,
+                        )
                         await crud.chunk.update(
-                            db, db_obj=db_chunk, obj_in=chunk, organization_id=sync.organization_id
+                            db,
+                            db_obj=db_chunk,
+                            obj_in=chunk_update,
+                            organization_id=sync.organization_id,
                         )
                         await sync_context.destination.delete(db_chunk.id)
                         await sync_context.destination.insert(chunk)
