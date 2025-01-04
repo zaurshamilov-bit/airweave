@@ -1,4 +1,5 @@
 """Asana source implementation."""
+
 from typing import AsyncGenerator, Dict, List, Optional
 
 import httpx
@@ -53,7 +54,7 @@ class AsanaSource(BaseSource):
                 asana_gid=workspace["gid"],
                 is_organization=workspace.get("is_organization", False),
                 email_domains=workspace.get("email_domains", []),
-                permalink_url=f"https://app.asana.com/0/{workspace['gid']}"
+                permalink_url=f"https://app.asana.com/0/{workspace['gid']}",
             )
 
     async def _generate_project_chunks(
@@ -92,7 +93,7 @@ class AsanaSource(BaseSource):
                 custom_field_settings=project.get("custom_field_settings", []),
                 default_access_level=project.get("default_access_level"),
                 icon=project.get("icon"),
-                permalink_url=project.get("permalink_url")
+                permalink_url=project.get("permalink_url"),
             )
 
     async def _generate_section_chunks(
@@ -111,7 +112,7 @@ class AsanaSource(BaseSource):
                 name=section["name"],
                 project_gid=project["gid"],
                 created_at=section.get("created_at"),
-                projects=section.get("projects", [])
+                projects=section.get("projects", []),
             )
 
     async def _generate_task_chunks(
@@ -119,7 +120,7 @@ class AsanaSource(BaseSource):
         client: httpx.AsyncClient,
         project: Dict,
         section: Optional[Dict] = None,
-        breadcrumbs: List[Breadcrumb] = None
+        breadcrumbs: List[Breadcrumb] = None,
     ) -> AsyncGenerator[BaseChunk, None]:
         """Generate task chunks for a project or section."""
         url = (
@@ -135,9 +136,7 @@ class AsanaSource(BaseSource):
             task_breadcrumbs = breadcrumbs
             if section:
                 section_breadcrumb = Breadcrumb(
-                    entity_id=section["gid"],
-                    name=section["name"],
-                    type="section"
+                    entity_id=section["gid"], name=section["name"], type="section"
                 )
                 task_breadcrumbs = [*breadcrumbs, section_breadcrumb]
 
@@ -177,7 +176,7 @@ class AsanaSource(BaseSource):
                 tags=task.get("tags", []),
                 custom_fields=task.get("custom_fields", []),
                 followers=task.get("followers", []),
-                workspace=task.get("workspace")
+                workspace=task.get("workspace"),
             )
 
     async def _generate_comment_chunks(
@@ -208,7 +207,7 @@ class AsanaSource(BaseSource):
                 num_likes=story.get("num_likes", 0),
                 liked=story.get("liked", False),
                 type=story.get("type", "comment"),
-                previews=story.get("previews", [])
+                previews=story.get("previews", []),
             )
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
@@ -218,29 +217,25 @@ class AsanaSource(BaseSource):
                 yield workspace_chunk
 
                 workspace_breadcrumb = Breadcrumb(
-                    entity_id=workspace_chunk.asana_gid,
-                    name=workspace_chunk.name,
-                    type="workspace"
+                    entity_id=workspace_chunk.asana_gid, name=workspace_chunk.name, type="workspace"
                 )
 
                 async for project_chunk in self._generate_project_chunks(
                     client,
                     {"gid": workspace_chunk.asana_gid, "name": workspace_chunk.name},
-                    workspace_breadcrumb
+                    workspace_breadcrumb,
                 ):
                     yield project_chunk
 
                     project_breadcrumb = Breadcrumb(
-                        entity_id=project_chunk.entity_id,
-                        name=project_chunk.name,
-                        type="project"
+                        entity_id=project_chunk.entity_id, name=project_chunk.name, type="project"
                     )
                     project_breadcrumbs = [workspace_breadcrumb, project_breadcrumb]
 
                     async for section_chunk in self._generate_section_chunks(
                         client,
                         {"gid": project_chunk.entity_id},
-                        project_breadcrumbs  # Pass full project breadcrumbs
+                        project_breadcrumbs,  # Pass full project breadcrumbs
                     ):
                         yield section_chunk
 
@@ -249,14 +244,12 @@ class AsanaSource(BaseSource):
                             client,
                             {"gid": project_chunk.entity_id},
                             {"gid": section_chunk.entity_id, "name": section_chunk.name},
-                            project_breadcrumbs  # Pass project breadcrumbs
+                            project_breadcrumbs,  # Pass project breadcrumbs
                         ):
                             yield task_chunk
 
                     # Generate tasks not in any section
                     async for task_chunk in self._generate_task_chunks(
-                        client,
-                        {"gid": project_chunk.entity_id},
-                        breadcrumbs=project_breadcrumbs
+                        client, {"gid": project_chunk.entity_id}, breadcrumbs=project_breadcrumbs
                     ):
                         yield task_chunk
