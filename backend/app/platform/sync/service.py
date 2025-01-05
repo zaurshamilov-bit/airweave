@@ -53,7 +53,7 @@ class SyncService:
                 chunk_hash = chunk.hash()
 
                 # Check if chunk exists in DB
-                db_chunk = await crud.chunk.get_by_entity_id(
+                db_chunk = await crud.chunk.get_by_entity_and_sync_id(
                     db, entity_id=chunk.entity_id, sync_id=sync.id
                 )
 
@@ -92,15 +92,14 @@ class SyncService:
                     await sync_context.destination.insert(chunk)
 
             # Handle deletions - remove outdated chunks
-            outdated_chunks = await crud.chunk.get_all_outdated(db, sync=sync)
+            outdated_chunks = await crud.chunk.get_all_outdated(db, sync_job_id=sync_job.id)
             if outdated_chunks:
-                db_chunk_ids = [chunk.entity_id for chunk in outdated_chunks]
                 # Remove from destination
-                for db_chunk_id in db_chunk_ids:
-                    await sync_context.destination.delete(db_chunk_id)
+                for chunk in outdated_chunks:
+                    await sync_context.destination.delete(chunk.id)
                     # Remove from database
                     await crud.chunk.remove(
-                        db, id=db_chunk_id, organization_id=current_user.organization_id
+                        db, id=chunk.id, organization_id=sync.organization_id
                     )
 
             return sync

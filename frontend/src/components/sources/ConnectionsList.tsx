@@ -69,7 +69,7 @@ export function ConnectionsList({
                     {getStatusIcon(connection.status)}
                   </div>
                   <code className="text-xs px-2 py-0.5 rounded-md bg-muted">
-                    {connection.id.substring(0, 12)}
+                    {connection.id}
                   </code>
                 </div>
                 <div className="flex items-center gap-1">

@@ -1,10 +1,9 @@
-/backend (old, neena, only for inspiration) 
 .DS_Store
 __pycache__
 backend/venv/
 
-
 .env
 
-
 frontend/node_modules/
+
+openapi.json

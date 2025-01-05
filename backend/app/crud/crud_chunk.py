@@ -15,7 +15,7 @@ from app.schemas.chunk import ChunkCreate, ChunkUpdate
 class CRUDChunk(CRUDBaseOrganization[Chunk, ChunkCreate, ChunkUpdate]):
     """CRUD operations for chunks."""
 
-    async def get_by_entity_id(
+    async def get_by_entity_and_sync_id(
         self,
         db: AsyncSession,
         entity_id: str,

@@ -14,11 +14,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
+import { useToast } from "@/components/ui/use-toast";
+import { apiClient } from "@/config/api";
 
 interface Connection {
   id: string;
   name: string;
-  isSelected?: boolean;
+  organization_id: string;
+  created_by_email: string;
+  modified_by_email: string;
+  status: "active" | "inactive" | "error";
+  integration_type: string;
+  integration_credential_id: string;
+  source_id: string;
+  modified_at: string;
 }
 
 interface SyncDataSourceCardProps {
@@ -38,6 +49,61 @@ export function SyncDataSourceCard({
   onSelect,
   connections = [],
 }: SyncDataSourceCardProps) {
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const sortedConnections = [...connections].sort((a, b) => 
+      new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime()
+    );
+    setSelectedConnectionId(sortedConnections[0]?.id || null);
+  }, [connections]);
+
+  const initiateOAuth = async () => {
+    try {
+      const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${shortName}`);
+
+      if (!resp.ok) {
+        throw new Error("Failed to retrieve auth URL");
+      }
+
+      // Get the auth URL and remove any quotes
+      const authUrl = await resp.text();
+      const cleanUrl = authUrl.replace(/^"|"$/g, ''); // Remove surrounding quotes
+      
+      // Log for debugging
+      console.log("Redirecting to:", cleanUrl);
+      
+      // Redirect to the cleaned OAuth provider URL
+      window.location.href = cleanUrl;
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Failed to initiate OAuth2",
+        description: err.message ?? String(err),
+      });
+    }
+  };
+
+  const handleConnectionSelect = (connectionId: string) => {
+    setSelectedConnectionId(connectionId);
+    setOpen(false);
+  };
+
+  const handleChooseSource = () => {
+    if (status === "connected" && selectedConnectionId) {
+      onSelect(selectedConnectionId);
+    } else {
+      initiateOAuth();
+    }
+  };
+
+  const handleAddNewConnection = () => {
+    initiateOAuth();
+    setOpen(false);
+  };
+
   return (
     <Card className="w-full min-h-[240px] flex flex-col justify-between overflow-hidden">
       <CardHeader className="p-4">
@@ -75,13 +141,13 @@ export function SyncDataSourceCard({
       <CardFooter className="p-4 pt-0">
         <div className="flex w-full gap-1">
           <Button 
-            onClick={onSelect} 
+            onClick={handleChooseSource}
             variant={status === "connected" ? "secondary" : "default"}
             className="flex-1"
           >
             {status === "connected" ? "Choose Source" : "Connect"}
           </Button>
-          <DropdownMenu>
+          <DropdownMenu open={open} onOpenChange={setOpen}>
             <DropdownMenuTrigger asChild>
               <Button
                 variant={status === "connected" ? "secondary" : "default"}
@@ -90,30 +156,47 @@ export function SyncDataSourceCard({
                 <ChevronDown className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[280px]">
-              {connections.length > 0 ? (
-                <>
-                  {connections.map((connection) => (
-                    <DropdownMenuItem key={connection.id} className="cursor-pointer">
-                      <div className="flex items-center justify-between w-full">
-                        <div className="flex flex-col">
-                          <span className="font-medium">{connection.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            ID: {connection.id.substring(0, 8)}
-                          </span>
-                        </div>
-                        {connection.isSelected && (
-                          <Check className="h-4 w-4 text-primary ml-2" />
-                        )}
-                      </div>
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuSeparator />
-                </>
-              ) : null}
-              <DropdownMenuItem className="cursor-pointer">
+            <DropdownMenuContent 
+              align="end" 
+              className="w-[280px]"
+              style={{ 
+                maxHeight: '300px',
+                overflowY: 'auto'
+              }}
+            >
+              <DropdownMenuItem 
+                className="cursor-pointer"
+                onClick={handleAddNewConnection}
+              >
                 <span className="font-medium text-primary">Add new connection</span>
               </DropdownMenuItem>
+
+              {connections.length > 0 && <DropdownMenuSeparator />}
+              
+              {[...connections]
+                .sort((a, b) => {
+                  return new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime();
+                })
+                .map((connection) => (
+                  <DropdownMenuItem 
+                    key={connection.id} 
+                    className="cursor-pointer"
+                    onClick={() => handleConnectionSelect(connection.id)}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{connection.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          ID: {connection.id}
+                        </span>
+                      </div>
+                      {selectedConnectionId === connection.id && (
+                        <Check className="h-4 w-4 text-primary ml-2" />
+                      )}
+                    </div>
+                  </DropdownMenuItem>
+                ))
+              }
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

@@ -41,4 +41,4 @@ class BaseChunk(BaseModel):
 
     def hash(self) -> str:
         """Hash the chunk."""
-        return hashlib.sha256(self.model_dump_json().encode()).hexdigest()
+        return hashlib.sha256(self.model_dump_json(exclude={'sync_job_id'}).encode()).hexdigest()
