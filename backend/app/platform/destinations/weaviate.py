@@ -1,5 +1,6 @@
 """Weaviate destination implementation."""
 
+import json
 from uuid import UUID
 
 import weaviate
@@ -38,7 +39,6 @@ class WeaviateDestination(BaseDestination):
         """Create a new Weaviate destination.
 
         Args:
-            user (schemas.User): The user creating the destination.
             sync_id (UUID): The ID of the sync.
             embedding_model (BaseEmbeddingModel): The embedding model to use.
 
@@ -91,7 +91,7 @@ class WeaviateDestination(BaseDestination):
             Property(name="sync_job_id", data_type=DataType.UUID),
             Property(name="content", data_type=DataType.TEXT),
             Property(name="url", data_type=DataType.TEXT),
-            Property(name="metadata", data_type=DataType.OBJECT),
+            Property(name="sync_metadata", data_type=DataType.TEXT),
             Property(
                 name="breadcrumbs",
                 data_type=DataType.OBJECT_ARRAY,
@@ -99,14 +99,6 @@ class WeaviateDestination(BaseDestination):
                     Property(name="entity_id", data_type=DataType.TEXT),
                     Property(name="name", data_type=DataType.TEXT),
                     Property(name="type", data_type=DataType.TEXT),
-                ],
-            ),
-            Property(
-                name="properties",
-                data_type=DataType.OBJECT,
-                nested_properties=[
-                    Property(name="name", data_type=DataType.TEXT),
-                    Property(name="value", data_type=DataType.TEXT),
                 ],
             ),
             Property(name="white_label_user_identifier", data_type=DataType.TEXT),
@@ -164,9 +156,13 @@ class WeaviateDestination(BaseDestination):
             # Transform chunks into the format Weaviate expects for uuid and properties
             objects_to_insert = []
             for chunk in chunks:
+                chunk_data = chunk.model_dump()
+                if "sync_metadata" in chunk_data and isinstance(chunk_data["sync_metadata"], dict):
+                    chunk_data["sync_metadata"] = json.dumps(chunk_data["sync_metadata"])
+
                 data_object = weaviate.classes.data.DataObject(
                     uuid=chunk.db_chunk_id,
-                    properties=chunk.model_dump(),
+                    properties=chunk_data,
                 )
                 objects_to_insert.append(data_object)
 
