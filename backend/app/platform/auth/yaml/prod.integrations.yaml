@@ -9,6 +9,18 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
 
+  dropbox:
+    auth_type: "oauth2_with_refresh"
+    url: "https://www.dropbox.com/oauth2/authorize"
+    backend_url: "https://api.dropboxapi.com/oauth2/token"
+    grant_type: "authorization_code"
+    client_id: "6qxkthbgrajkouc"
+    client_secret_keyvault_name: "dropbox-client-secret"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    additional_frontend_params:
+      token_access_type: "offline"
+
   notion:
     auth_type: "oauth2_with_refresh"
     url: "https://api.notion.com/v1/oauth/authorize"

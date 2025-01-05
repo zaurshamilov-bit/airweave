@@ -9,9 +9,6 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
 
-  weaviate:
-    auth_type: "config_class"
-
   notion:
     auth_type: "oauth2_with_refresh"
     url: "https://api.notion.com/v1/oauth/authorize"
@@ -23,3 +20,18 @@ integrations:
     client_credential_location: "header"
     additional_frontend_params:
       owner: "user"
+
+  dropbox:
+    auth_type: "oauth2_with_refresh"
+    url: "https://www.dropbox.com/oauth2/authorize"
+    backend_url: "https://api.dropboxapi.com/oauth2/token"
+    grant_type: "authorization_code"
+    client_id: "serobccbae1x3m0"
+    client_secret: "0ytubxc81isia5q"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    additional_frontend_params:
+      token_access_type: "offline"
+
+  weaviate:
+    auth_type: "config_class"
