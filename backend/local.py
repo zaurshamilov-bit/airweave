@@ -94,7 +94,7 @@ async def verify_asana_tasks_in_weaviate(sync_id: uuid.UUID):
 
 
 async def main():
-    """Entrypoint to test multiple connectors (Asana, Notion, etc.) end-to-end."""
+    """Entrypoint to test multiple connectors (Asana, Notion, Dropbox, etc.) end-to-end."""
     # Create a test user and a unique sync ID for this sync run
     user = schemas.User(
         id=uuid.uuid4(),
@@ -108,13 +108,14 @@ async def main():
     embedding_model = LocalText2Vec()
 
     # Create a Weaviate destination for storing chunks
-    weaviate_dest = await WeaviateDestination.create(user, sync_id, embedding_model)
+    weaviate_dest = await WeaviateDestination.create(sync_id, embedding_model)
 
     # -------------------------------------------------------------------------
     # Test Asana Source Connector
     # -------------------------------------------------------------------------
     print("=== Testing Asana Connector ===")
-    asana_source = await AsanaSource.create(user, sync_id)
+    access_token = "..."
+    asana_source = await AsanaSource.create(access_token)
     asana_chunks = await process_source_chunks(asana_source, weaviate_dest, buffer_size=50)
     print(f"Asana source generated {len(asana_chunks)} chunks total.\n")
 
@@ -127,14 +128,20 @@ async def main():
     print(f"Notion source generated {len(notion_chunks)} chunks total.\n")
 
     # -------------------------------------------------------------------------
-    # Verify Overall Sync (both Asana + Notion chunks). This retrieves some objects from Weaviate
+    # Test Dropbox Source Connector
     # -------------------------------------------------------------------------
+    print("=== Testing Dropbox Connector ===")
+    from app.platform.sources.dropbox import DropboxSource
+
+    dropbox_source = await DropboxSource.create(user, sync_id)
+    dropbox_chunks = await process_source_chunks(dropbox_source, weaviate_dest, buffer_size=50)
+    print(f"Dropbox source generated {len(dropbox_chunks)} chunks total.\n")
+
+    # Optionally, verify chunks inserted
     await verify_chunks_in_weaviate(sync_id)
 
-    # -------------------------------------------------------------------------
-    # Optional: a connector-specific verification (for Asana). Filter tasks, etc.
-    # -------------------------------------------------------------------------
-    await verify_asana_tasks_in_weaviate(sync_id)
+    # Optionally, add more connector-specific verifications here (like verify_asana_tasks_in_weaviate)
+    # await verify_dropbox_folders_in_weaviate(sync_id)  # e.g. a function you might create
 
 
 if __name__ == "__main__":
