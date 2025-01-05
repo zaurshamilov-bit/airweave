@@ -104,6 +104,14 @@ class WeaviateDestination(BaseDestination):
             Property(name="white_label_user_identifier", data_type=DataType.TEXT),
             Property(name="white_label_id", data_type=DataType.UUID),
             Property(name="white_label_name", data_type=DataType.TEXT),
+            Property(
+                name="properties",
+                data_type=DataType.OBJECT,
+                nested_properties=[
+                    Property(name="name", data_type=DataType.TEXT),
+                    Property(name="value", data_type=DataType.TEXT),
+                ],
+            ),
         ]
 
         async with WeaviateService(
