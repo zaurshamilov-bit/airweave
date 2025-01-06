@@ -27,7 +27,7 @@ export const apiClient = {
     });
   },
 
-  async post<T>(endpoint: string, params?: Record<string, string>, data?: any): ApiResponse<T> {
+  async post<T>(endpoint: string, data?: any, params?: Record<string, string>): ApiResponse<T> {
     const url = new URL(`${API_CONFIG.baseURL}${endpoint}`);
     if (params) {
       Object.entries(params).forEach(([key, value]) => 
@@ -38,7 +38,7 @@ export const apiClient = {
     return await fetch(url.toString(), {
       method: 'POST',
       headers: API_CONFIG.headers,
-      body: data ? JSON.stringify(data) : undefined,
+      body: JSON.stringify(data),
     });
   },
 

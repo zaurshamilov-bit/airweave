@@ -11,7 +11,7 @@ from app.platform.locator import resource_locator
 router = APIRouter()
 
 
-@router.get("/{short_name}", response_model=schemas.EmbeddingModelWithConfigFields)
+@router.get("/detail/{short_name}", response_model=schemas.EmbeddingModelWithConfigFields)
 async def read_embedding_model(
     *,
     db: AsyncSession = Depends(deps.get_db),
@@ -40,7 +40,7 @@ async def read_embedding_model(
     return embedding_model
 
 
-@router.get("/", response_model=list[schemas.EmbeddingModel])
+@router.get("/list", response_model=list[schemas.EmbeddingModel])
 async def read_embedding_models(
     *,
     db: AsyncSession = Depends(deps.get_db),

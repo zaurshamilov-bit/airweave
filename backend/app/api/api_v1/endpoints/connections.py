@@ -1,7 +1,6 @@
 """The API module that contains the endpoints for connections."""
 
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
@@ -20,7 +19,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/list/all",
+    "/list",
     response_model=list[schemas.Connection],
 )
 async def list_all_connected_integrations(
@@ -57,7 +56,7 @@ async def connect_integration(
     db: AsyncSession = Depends(deps.get_db),
     integration_type: IntegrationType,
     short_name: str,
-    config_fields: dict,
+    config_fields: dict = Body(...),
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Connection:
     """Connect to a source, destination, or embedding model.
@@ -104,7 +103,7 @@ async def connect_integration(
             description=f"Credentials for {integration.name} - {user.email}",
             integration_short_name=integration.short_name,
             integration_type=integration_type,
-            auth_type=integration.integration.auth_type,
+            auth_type=integration.auth_type,
             encrypted_credentials=encrypted_creds,
             auth_config_class=integration.auth_config_class,
         )

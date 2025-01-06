@@ -10,7 +10,7 @@ from app.api import deps
 router = APIRouter()
 
 
-@router.get("/{short_name}", response_model=schemas.Source)
+@router.get("/detail/{short_name}", response_model=schemas.Source)
 async def read_source(
     *,
     db: AsyncSession = Depends(deps.get_db),
@@ -36,7 +36,7 @@ async def read_source(
     return source
 
 
-@router.get("/", response_model=list[schemas.Source])
+@router.get("/list", response_model=list[schemas.Source])
 async def read_sources(
     *,
     db: AsyncSession = Depends(deps.get_db),

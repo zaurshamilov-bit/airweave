@@ -21,7 +21,7 @@ async def list_destinations(
     return destinations
 
 
-@router.get("/{short_name}", response_model=schemas.DestinationWithConfigFields)
+@router.get("/detail/{short_name}", response_model=schemas.DestinationWithConfigFields)
 async def read_destination(
     *,
     db: AsyncSession = Depends(deps.get_db),

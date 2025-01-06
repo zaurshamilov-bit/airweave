@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { SyncDataSourceCard } from "./SyncDataSourceCard";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { apiClient } from "@/config/api";
 
 interface SyncDataSourceGridProps {
   onSelect: (sourceId: string, skipCredentials?: boolean) => void;
@@ -75,13 +76,7 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
    */
   const fetchSources = async () => {
     try {
-      const resp = await fetch("http://localhost:8001/sources/", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          // "x-api-key": "someKeyValue" // Add if needed
-        },
-      });
+      const resp = await apiClient.get("/sources/list");
       if (!resp.ok) {
         throw new Error("Failed to fetch sources");
       }
@@ -103,12 +98,7 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
    */
   const fetchConnections = async () => {
     try {
-      const resp = await fetch("http://localhost:8001/connections/list/source", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const resp = await apiClient.get("/connections/list/source");
       if (!resp.ok) {
         // It's possible the user doesn't have any connections yet,
         // so handle a 404 or an empty array gracefully if needed
