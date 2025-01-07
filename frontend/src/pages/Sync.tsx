@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { useToast } from "@/components/ui/use-toast";
+import { toast, useToast } from "@/components/ui/use-toast";
 import { SyncDataSourceGrid } from "@/components/sync/SyncDataSourceGrid";
 import { VectorDBSelector } from "@/components/VectorDBSelector";
 import { SyncProgress } from "@/components/SyncProgress";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
+import { apiClient } from "@/config/api";
 
 /**
  * This component coordinates all user actions (source selection, 
@@ -15,10 +16,15 @@ import { ChevronRight } from "lucide-react";
  * if you prefer a different pattern.
  */
 
+interface ConnectionSelection {
+  connectionId: string;
+  isNative?: boolean;
+}
+
 const Sync = () => {
   const [step, setStep] = useState<number>(1);
-  const [selectedSource, setSelectedSource] = useState<string | null>(null);
-  const [selectedDB, setSelectedDB] = useState<string | null>(null);
+  const [selectedSource, setSelectedSource] = useState<{ connectionId: string } | null>(null);
+  const [selectedDB, setSelectedDB] = useState<{ connectionId: string; isNative?: boolean } | null>(null);
 
   // Store the newly created sync ID (after POST /sync/) and the job ID (after POST /sync/{id}/run).
   const [syncId, setSyncId] = useState<string | null>(null);
@@ -50,9 +56,8 @@ const Sync = () => {
    * chooses a data source. We always want to go to step 2 (vector DB selection)
    * when a source is selected.
    */
-  const handleSourceSelect = async (sourceId: string) => {
-    setSelectedSource(sourceId);
-    // Always go to step 2 (vector DB selection)
+  const handleSourceSelect = async (connectionId: string) => {
+    setSelectedSource({ connectionId });
     setStep(2);
   };
 
@@ -60,8 +65,8 @@ const Sync = () => {
    * handleVectorDBSelected sets the selected vector DB.
    * Once the user confirms, we move to step 3 (confirm + create sync).
    */
-  const handleVectorDBSelected = async (dbId: string) => {
-    setSelectedDB(dbId);
+  const handleVectorDBSelected = async (dbDetails: { connectionId: string; isNative?: boolean }) => {
+    setSelectedDB(dbDetails);
     setStep(3);
   };
 
@@ -69,25 +74,15 @@ const Sync = () => {
    * createNewSync calls the backend to create a Sync resource.
    */
   const createNewSync = async () => {
-    // Example payload with minimal fields required by /sync/:
-    // (See the openapi: SyncCreate requires { name, source_connection_id }, etc.)
     if (!selectedSource) return;
     if (!selectedDB) return;
 
     try {
-      const resp = await fetch("http://localhost:8001/sync/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-          // If you want to pass x-api-key or any auth header:
-          // "x-api-key": "someKeyValue"
-        },
-        body: JSON.stringify({
-          name: "My Sync from UI",
-          source_connection_id: selectedSource,
-          destination_connection_id: selectedDB,
-          run_immediately: false
-        }),
+      const resp = await apiClient.post("/sync/", {
+        name: "Sync from UI",
+        source_connection_id: selectedSource.connectionId,
+        ...(selectedDB.isNative ? {} : { destination_connection_id: selectedDB.connectionId }),
+        run_immediately: true
       });
       if (!resp.ok) {
         throw new Error("Failed to create sync");

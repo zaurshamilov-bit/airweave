@@ -46,7 +46,7 @@ interface Connection {
 }
 
 interface VectorDBSelectorProps {
-  onComplete: (dbId: string) => void;
+  onComplete: (connectionDetails: { connectionId: string; isNative?: boolean }) => void;
 }
 
 /**
@@ -61,9 +61,7 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
   // For storing config form states
   const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
   const [showConfig, setShowConfig] = useState(false);
-  const [configValues, setConfigValues] = useState<Record<string, string>>({
-    name: "",
-  });
+  const [configValues, setConfigValues] = useState<Record<string, string>>({});
   const [configFields, setConfigFields] = useState<ConfigField[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const { toast } = useToast();
@@ -149,11 +147,13 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
   };
 
   /**
-   * Called when user selects an existing connection from the dropdown.
-   * We simply call onComplete with that connection id.
+   * Called when user selects an existing connection or native instance
    */
-  const handleUseExistingConnection = (connId: string) => {
-    onComplete(connId);
+  const handleUseExistingConnection = (connId: string, isNative?: boolean) => {
+    onComplete({
+      connectionId: isNative ? "" : connId,
+      isNative: isNative
+    });
   };
 
   /**
@@ -162,7 +162,6 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
   const handleConnect = async () => {
     if (!selectedDestination) return;
 
-    // Check for required config fields
     const missingFields = configFields.filter((field) => !configValues[field.name]);
     if (missingFields.length > 0) {
       toast({
@@ -175,23 +174,15 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
 
     setIsConnecting(true);
     try {
-      // Separate name from other config fields
-      const { name, ...otherFields } = configValues;
-
-      const requestBody = {
-        name: name || `${selectedDestination.name} Connection`, // Use default if empty
-        config_fields: otherFields, // All other fields go into config_fields
-      };
-
       const response = await apiClient.post(
         `/connections/connect/destination/${selectedDestination.short_name}`,
-        requestBody
+        configValues
       );
 
       if (!response.ok) throw new Error("Failed to connect");
 
       const data = await response.json();
-      onComplete(data.id);
+      onComplete({ connectionId: data.id });
       setShowConfig(false);
     } catch (err) {
       toast({
@@ -230,7 +221,7 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
       <CardFooter>
         <Button 
           className="w-full" 
-          onClick={() => handleUseExistingConnection("native")}
+          onClick={() => handleUseExistingConnection("native", true)}
         >
           Use Native Instance
         </Button>
@@ -341,26 +332,6 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Name
-                <span className="text-xs text-muted-foreground ml-2">
-                  (Optional name for this connection)
-                </span>
-              </label>
-              <Input
-                type="text"
-                value={configValues.name || ""}
-                onChange={(e) =>
-                  setConfigValues((prev) => ({
-                    ...prev,
-                    name: e.target.value,
-                  }))
-                }
-                placeholder={`${selectedDestination.name} Connection`}
-              />
-            </div>
-            
             {configFields.map((field) => (
               <div key={field.name} className="space-y-2">
                 <label className="text-sm font-medium">

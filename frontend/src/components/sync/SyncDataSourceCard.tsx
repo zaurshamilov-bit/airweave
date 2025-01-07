@@ -89,6 +89,7 @@ export function SyncDataSourceCard({
   const handleConnectionSelect = (connectionId: string) => {
     setSelectedConnectionId(connectionId);
     setOpen(false);
+    onSelect(connectionId);
   };
 
   const handleChooseSource = () => {

@@ -58,7 +58,7 @@ async def connect_integration(
     db: AsyncSession = Depends(deps.get_db),
     integration_type: IntegrationType,
     short_name: str,
-    name: Optional[str] = Body(None),
+    name: Optional[str] = Body(default=None),
     config_fields: dict = Body(..., exclude={"name"}),
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Connection:

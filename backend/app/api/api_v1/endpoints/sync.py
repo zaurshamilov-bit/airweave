@@ -7,9 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.api import deps
+from app.db.unit_of_work import UnitOfWork
 from app.platform.sync.service import sync_service
 
 router = APIRouter()
+
 
 @router.get("/", response_model=list[schemas.Sync])
 async def list_syncs(
@@ -20,10 +22,9 @@ async def list_syncs(
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.Sync]:
     """List all syncs for the current user."""
-    syncs = await crud.sync.get_all_for_user(
-        db=db, current_user=user, skip=skip, limit=limit
-    )
+    syncs = await crud.sync.get_all_for_user(db=db, current_user=user, skip=skip, limit=limit)
     return syncs
+
 
 @router.get("/{sync_id}", response_model=schemas.Sync)
 async def get_sync(
@@ -38,6 +39,7 @@ async def get_sync(
         raise HTTPException(status_code=404, detail="Sync not found")
     return sync
 
+
 @router.post("/", response_model=schemas.Sync)
 async def create_sync(
     *,
@@ -47,16 +49,25 @@ async def create_sync(
     background_tasks: BackgroundTasks,
 ) -> schemas.Sync:
     """Create a new sync configuration."""
-    sync = await sync_service.create(db=db, sync=sync_in.to_base(), current_user=user)
-
-    if sync_in.run_immediately:
-        sync_job = await crud.sync_job.create(db=db, sync=sync, current_user=user)
-        # Add background task to run the sync
-        sync_job_schema = schemas.SyncJob.model_validate(sync_job)
+    async with UnitOfWork(db) as uow:
+        sync = await sync_service.create(db=db, sync=sync_in.to_base(), current_user=user, uow=uow)
+        await uow.session.flush()
         sync_schema = schemas.Sync.model_validate(sync)
-        background_tasks.add_task(sync_service.run, sync_schema, sync_job_schema, user)
+        if sync_in.run_immediately:
+            sync_job_create = schemas.SyncJobCreate(sync_id=sync_schema.id)
+            sync_job = await crud.sync_job.create(
+                db=db, obj_in=sync_job_create, current_user=user, uow=uow
+            )
+            await uow.commit()
+            await uow.session.refresh(sync_job)
+            # Add background task to run the sync
+            sync_job_schema = schemas.SyncJob.model_validate(sync_job)
+            background_tasks.add_task(sync_service.run, sync_schema, sync_job_schema, user)
+        await uow.commit()
+        await uow.session.refresh(sync)
 
     return sync
+
 
 @router.delete("/{sync_id}", response_model=schemas.Sync)
 async def delete_sync(
@@ -76,6 +87,7 @@ async def delete_sync(
         pass
 
     return await crud.sync.remove(db=db, id=sync_id, current_user=user)
+
 
 @router.post("/{sync_id}/run", response_model=schemas.SyncJob)
 async def run_sync(
@@ -102,6 +114,7 @@ async def run_sync(
 
     return sync_job
 
+
 @router.get("/{sync_id}/jobs", response_model=list[schemas.SyncJob])
 async def list_sync_jobs(
     *,
@@ -116,9 +129,8 @@ async def list_sync_jobs(
     if not sync:
         raise HTTPException(status_code=404, detail="Sync not found")
 
-    return await crud.sync_job.get_multi_by_sync(
-        db=db, sync_id=sync_id, skip=skip, limit=limit
-    )
+    return await crud.sync_job.get_multi_by_sync(db=db, sync_id=sync_id, skip=skip, limit=limit)
+
 
 @router.get("/{sync_id}/jobs/{job_id}", response_model=schemas.SyncJob)
 async def get_sync_job(

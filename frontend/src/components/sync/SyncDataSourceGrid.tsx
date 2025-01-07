@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { apiClient } from "@/config/api";
 
 interface SyncDataSourceGridProps {
-  onSelect: (sourceId: string, skipCredentials?: boolean) => void;
+  onSelect: (connectionId: string) => void;
 }
 
 /**
@@ -149,11 +149,8 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
    * If needed, you could determine whether to skip credentials (e.g. if the
    * source is already connected). For now, we'll keep it the same as before.
    */
-  const handleSelect = async (sourceId: string) => {
-    // Check if there's a connection for this source
-    const isConnected = shortNameIsConnected(sourceId);
-    // If connected, we might skip credentials and go straight to step 3
-    onSelect(sourceId, isConnected);
+  const handleSelect = async (connectionId: string) => {
+    onSelect(connectionId);
   };
 
   // Filter and sort sources similarly to the original approach
@@ -202,7 +199,7 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
                 name={source.name}
                 description={source.description || ""}
                 status={shortNameIsConnected(source.short_name) ? "connected" : "disconnected"}
-                onSelect={() => handleSelect(source.short_name)}
+                onSelect={(connectionId) => handleSelect(connectionId)}
                 connections={sourceConnections}
               />
             );

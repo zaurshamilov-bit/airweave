@@ -6,6 +6,7 @@ from app import crud, schemas
 from app.core import credentials
 from app.core.exceptions import NotFoundException
 from app.db.session import get_db_context
+from app.db.unit_of_work import UnitOfWork
 from app.platform.auth.schemas import AuthType
 from app.platform.auth.services import oauth2_service
 from app.platform.chunks._base import BaseChunk
@@ -19,10 +20,14 @@ class SyncService:
     """Main service for data synchronization."""
 
     async def create(
-        self, db: AsyncSession, sync: schemas.SyncCreate, current_user: schemas.User
+        self,
+        db: AsyncSession,
+        sync: schemas.SyncCreate,
+        current_user: schemas.User,
+        uow: UnitOfWork,
     ) -> schemas.Sync:
         """Create a new sync."""
-        return await crud.sync.create(db=db, obj_in=sync, current_user=current_user)
+        return await crud.sync.create(db=db, obj_in=sync, current_user=current_user, uow=uow)
 
     async def run(
         self,
@@ -98,9 +103,7 @@ class SyncService:
                 for chunk in outdated_chunks:
                     await sync_context.destination.delete(chunk.id)
                     # Remove from database
-                    await crud.chunk.remove(
-                        db, id=chunk.id, organization_id=sync.organization_id
-                    )
+                    await crud.chunk.remove(db, id=chunk.id, organization_id=sync.organization_id)
 
             return sync
 
