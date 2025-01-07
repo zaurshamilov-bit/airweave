@@ -14,5 +14,6 @@
         "source.fixAll.ruff": "always",
         "source.fixAll.eslint": "always",
         "source.formatAll.ruff": "always",
-    }
+    },
+    "editor.formatOnSave": true
 }

@@ -13,18 +13,15 @@ class BaseConfig(BaseModel):
 
 class ConfigField(BaseModel):
     """Config field model."""
+
     name: str
     title: str
     description: Optional[str] = None
     type: str
 
 
-_type_map = {
-    str: "string",
-    int: "number",
-    float: "number",
-    bool: "boolean"
-}
+_type_map = {str: "string", int: "number", float: "number", bool: "boolean"}
+
 
 class Fields(BaseModel):
     """Fields model."""
@@ -41,7 +38,7 @@ class Fields(BaseModel):
                     name=field_name,
                     title=field_info.title,
                     description=field_info.description,
-                    type=_type_map[field_info.annotation]
+                    type=_type_map[field_info.annotation],
                 )
             )
         return Fields(fields=fields)

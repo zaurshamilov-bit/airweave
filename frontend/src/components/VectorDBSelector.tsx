@@ -61,7 +61,9 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
   // For storing config form states
   const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
   const [showConfig, setShowConfig] = useState(false);
-  const [configValues, setConfigValues] = useState<Record<string, string>>({});
+  const [configValues, setConfigValues] = useState<Record<string, string>>({
+    name: "",
+  });
   const [configFields, setConfigFields] = useState<ConfigField[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const { toast } = useToast();
@@ -160,6 +162,7 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
   const handleConnect = async () => {
     if (!selectedDestination) return;
 
+    // Check for required config fields
     const missingFields = configFields.filter((field) => !configValues[field.name]);
     if (missingFields.length > 0) {
       toast({
@@ -172,9 +175,17 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
 
     setIsConnecting(true);
     try {
+      // Separate name from other config fields
+      const { name, ...otherFields } = configValues;
+
+      const requestBody = {
+        name: name || `${selectedDestination.name} Connection`, // Use default if empty
+        config_fields: otherFields, // All other fields go into config_fields
+      };
+
       const response = await apiClient.post(
         `/connections/connect/destination/${selectedDestination.short_name}`,
-        configValues
+        requestBody
       );
 
       if (!response.ok) throw new Error("Failed to connect");
@@ -238,8 +249,6 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
       .filter((c) => c.destination_id === dest.id)
       .sort((a, b) => new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime());
 
-    const hasConnections = destConnections.length > 0;
-
     return (
       <div key={dest.short_name} className="space-y-4">
         <div className="flex items-center justify-between">
@@ -249,40 +258,16 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
               alt={`${dest.name} icon`}
               className="w-6 h-6"
             />
-            <h3 className="font-semibold text-lg">{dest.name}</h3>
+            <h3 className="font-semibold text->lg">{dest.name}</h3>
           </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Card for destinations without connections */}
-          {!hasConnections && (
-            <Card className="flex flex-col justify-between border-dashed hover:border-primary/50 transition-colors bg-muted/5">
-              <CardHeader>
-                <CardTitle>{dest.name}</CardTitle>
-                <CardDescription>No instances configured</CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow">
-                <p className="text-sm text-muted-foreground">
-                  Configure a new connection to {dest.name} to start using it as your vector database.
-                </p>
-              </CardContent>
-              <CardFooter>
-                <Button 
-                  variant="secondary"
-                  className="w-full" 
-                  onClick={() => handleAddNewConnection(dest)}
-                >
-                  Configure New Instance
-                </Button>
-              </CardFooter>
-            </Card>
-          )}
-
           {/* Existing connections */}
           {destConnections.map((conn) => (
             <Card 
               key={conn.id} 
-              className="flex flex-col justify-between border-dashed hover:border-primary/50 transition-colors bg-muted/5"
+              className="flex flex-col justify-between hover:border-primary/50 transition-colors bg-muted/5"
             >
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -311,6 +296,27 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
               </CardFooter>
             </Card>
           ))}
+          {/* Always show the "Add New Instance" card first */}
+          <Card className="flex flex-col justify-between border-dashed hover:border-primary/50 transition-colors bg-muted/5">
+            <CardHeader>
+              <CardTitle>New Instance</CardTitle>
+              <CardDescription>Configure a new connection</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-grow">
+              <p className="text-sm text-muted-foreground">
+                Add another {dest.name} instance to your vector database collection.
+              </p>
+            </CardContent>
+            <CardFooter>
+              <Button 
+                variant="secondary"
+                className="w-full" 
+                onClick={() => handleAddNewConnection(dest)}
+              >
+                Add New Instance
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
       </div>
     );
@@ -335,6 +341,26 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Name
+                <span className="text-xs text-muted-foreground ml-2">
+                  (Optional name for this connection)
+                </span>
+              </label>
+              <Input
+                type="text"
+                value={configValues.name || ""}
+                onChange={(e) =>
+                  setConfigValues((prev) => ({
+                    ...prev,
+                    name: e.target.value,
+                  }))
+                }
+                placeholder={`${selectedDestination.name} Connection`}
+              />
+            </div>
+            
             {configFields.map((field) => (
               <div key={field.name} className="space-y-2">
                 <label className="text-sm font-medium">

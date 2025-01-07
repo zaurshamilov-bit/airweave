@@ -1,5 +1,7 @@
 """The API module that contains the endpoints for connections."""
 
+from typing import Optional
+
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,13 +58,19 @@ async def connect_integration(
     db: AsyncSession = Depends(deps.get_db),
     integration_type: IntegrationType,
     short_name: str,
-    config_fields: dict = Body(...),
+    name: Optional[str] = Body(None),
+    config_fields: dict = Body(..., exclude={"name"}),
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Connection:
     """Connect to a source, destination, or embedding model.
 
-    Use the `/sources/{short_name}, /destinations/{short_name}, /embedding_models/{short_name}`
-        endpoints to get the auth config fields.
+    Expects a POST body with:
+    ```json
+    {
+        "name": "required connection name",
+        ... other config fields specific to the integration type ...
+    }
+    ```
     """
     async with UnitOfWork(db) as uow:
         # Get the integration based on type
@@ -115,7 +123,7 @@ async def connect_integration(
 
         # Create connection with appropriate ID field
         connection_data = {
-            "name": f"Connection to {integration.name}",
+            "name": name if name else f"Connection to {integration.name}",
             "integration_type": integration_type,
             "status": ConnectionStatus.ACTIVE,
             "integration_credential_id": integration_cred.id,
