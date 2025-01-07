@@ -246,13 +246,13 @@ SMTP_FROM_EMAIL=<your-from-email>
 ## Contributing
 
 We welcome all contributions! Whether you’re fixing a bug, improving documentation, or adding a new feature:
-	1.	Fork this repository
-	2.	Create a feature branch: git checkout -b feature/new-chunk-generator
-	3.	Commit changes: git commit -m "Add new chunk generator for XYZ"
-	4.	Push to your fork: git push origin feature/new-chunk-generator
-	5.	Create a Pull Request: Submit your PR against this repo’s main branch.
+1. Fork this repository
+2. Create a feature branch: `git checkout -b feature/new-chunk-generator`
+3. Commit changes: `git commit -m "Add new chunk generator for XYZ"`
+4. Push to your fork: `git push origin feature/new-chunk-generator`
+5. Create a Pull Request: Submit your PR against this repo’s main branch.
 
-Please follow the existing code style and conventions. See CONTRIBUTING.md for more details.
+Please follow the existing code style and conventions. See `CONTRIBUTING.md` for more details.
 
 ---
 
@@ -273,7 +273,7 @@ Airweave is released under an open-core model. The community edition is licensed
 ---
 
 ## Contact & Community
-- **Discord**: Join our Discord channel to get help or discuss features.
+- **Discord**: Join our Discord channel [here](https://discord.gg/r2cF7V6s) to get help or discuss features.
 - **GitHub Issues**: Report bugs or request new features in GitHub Issues.
 - **Twitter**: Follow @airweave_dev for updates.
 
