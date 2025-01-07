@@ -156,16 +156,14 @@ You now have Airweave running locally. You can log in to the dashboard, add new 
 
 Below are some basic commands and API endpoints that you may find useful.
 
-CLI Commands
-	•	Run Tests: (If you have a test suite set up for your own code) docker-compose exec backend pytest
-	•	Start in Dev Mode: docker-compose up --build
+### CLI Commands
+- **Run Tests:** (If you have a test suite set up for your own code) `docker-compose exec backend pytest`
+- **Start in Dev Mode:** `docker-compose up --build`
 
-API Endpoints (FastAPI)
-	•	Swagger Documentation: http://localhost:8000/docs
-	•	Get All Sources: GET /api/sources
-
-•	**Create a Source: POST /api/sources**
-
+### API Endpoints (FastAPI)
+- **Swagger Documentation:** `http://localhost:8000/docs`
+- **Get All Sources:** `GET /api/sources`
+- **Create a Source:** `POST /api/sources`
 ```json
 {
   "name": "My Data Source",
@@ -173,18 +171,14 @@ API Endpoints (FastAPI)
   "connection_info": {...}
 }
 ```
-
-•	**Trigger a Sync Job: POST /api/sync_jobs**
-
+- **Trigger a Sync Job:** `POST /api/sync_jobs`
 ```json
 {
   "source_id": 123,
   "schedule_id": null
 }
 ```
-
-•	**Get Sync Job Status: GET /api/sync_jobs/{job_id}**
-
+- **Get Sync Job Status:** `GET /api/sync_jobs/{job_id}`
 ```json
 {
   "status": "running",
@@ -192,12 +186,11 @@ API Endpoints (FastAPI)
   "chunks_total": 200
 }
 ```
-
 ### Frontend
-	•	Access the React UI at http://localhost:3000.
-	•	Navigate to Sources to add new integrations.
-	•	Set up or view your sync schedules under Schedules.
-	•	Monitor sync jobs in Jobs.
+- Access the React UI at `http://localhost:3000`.
+- Navigate to Sources to add new integrations.
+- Set up or view your sync schedules under Schedules.
+- Monitor sync jobs in Jobs.
 
 
 ## Configuration (Upcoming)
