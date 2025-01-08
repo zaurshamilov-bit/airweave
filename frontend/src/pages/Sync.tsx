@@ -7,6 +7,7 @@ import { SyncProgress } from "@/components/SyncProgress";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 import { apiClient } from "@/config/api";
+import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 
 /**
  * This component coordinates all user actions (source selection, 
@@ -32,6 +33,9 @@ const Sync = () => {
 
   const location = useLocation();
   const { toast } = useToast();
+
+  // Use the subscription hook with job_id instead of sync_id
+  const updates = useSyncSubscription(syncJobId);
 
   // If a user returns from an oauth2 or other service, we show success/failure toasts
   useEffect(() => {
@@ -210,12 +214,20 @@ const Sync = () => {
         )}
 
         {step === 4 && (
-          // SyncProgress can poll the job status by referencing syncId and syncJobId.
-          // For example:
-          <SyncProgress 
-            syncId={syncId} 
-            syncJobId={syncJobId}
-          />
+          <div className="space-y-6">
+            <SyncProgress syncId={syncId} syncJobId={syncJobId} />
+            {/* Show real-time updates from SSE */}
+            <div>
+              <h2 className="text-xl font-semibold mb-2">Live Sync Updates</h2>
+              <div className="space-y-1">
+                {updates.map((update, i) => (
+                  <div key={i} className="text-sm">
+                    • Inserted: {update.inserted ?? 0}, Updated: {update.updated ?? 0}, Deleted: {update.deleted ?? 0}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

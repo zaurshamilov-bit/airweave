@@ -14,6 +14,7 @@ from app.platform.destinations.weaviate import WeaviateDestination
 from app.platform.embedding_models.local_text2vec import LocalText2Vec
 from app.platform.locator import resource_locator
 from app.platform.sync.context import SyncContext
+from app.platform.sync.pubsub import SyncProgressUpdate, sync_pubsub
 
 
 class SyncService:
@@ -48,7 +49,7 @@ class SyncService:
 
             # TODO: Implement microbatch processing
 
-            # Process chunks from source
+            sync_progress_update = SyncProgressUpdate()
             async for chunk in sync_context.source.generate_chunks():
 
                 # Enrich chunk with sync context information
@@ -66,6 +67,7 @@ class SyncService:
                     if db_chunk.hash == chunk_hash:
                         # No changes, update sync_job_id
                         await crud.chunk.update_job_id(db, db_obj=db_chunk, sync_job_id=sync_job.id)
+                        sync_progress_update.already_sync += 1
                     else:
                         # Content changed, update both DB and destination
                         chunk_update = schemas.ChunkUpdate(
@@ -80,6 +82,7 @@ class SyncService:
                         )
                         await sync_context.destination.delete(db_chunk.id)
                         await sync_context.destination.insert(chunk)
+                        sync_progress_update.updated += 1
                 else:
                     # New chunk, insert into DB and buffer for destination
                     chunk_schema = schemas.ChunkCreate(
@@ -96,6 +99,14 @@ class SyncService:
                     chunk.db_chunk_id = db_chunk.id
                     await sync_context.destination.insert(chunk)
 
+                    sync_progress_update.inserted += 1
+
+                # Publish partial progress using job_id
+                await sync_pubsub.publish(
+                    str(sync_job.id),
+                    sync_progress_update,
+                )
+
             # Handle deletions - remove outdated chunks
             outdated_chunks = await crud.chunk.get_all_outdated(db, sync_job_id=sync_job.id)
             if outdated_chunks:
@@ -104,7 +115,13 @@ class SyncService:
                     await sync_context.destination.delete(chunk.id)
                     # Remove from database
                     await crud.chunk.remove(db, id=chunk.id, organization_id=sync.organization_id)
+                    sync_progress_update.deleted += 1
 
+                # Publish partial progress using job_id
+                await sync_pubsub.publish(
+                    str(sync_job.id),
+                    sync_progress_update,
+                )
             return sync
 
     async def _enrich_chunk(

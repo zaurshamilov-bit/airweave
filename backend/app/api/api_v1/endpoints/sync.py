@@ -1,13 +1,18 @@
 """API endpoints for managing syncs."""
 
+import asyncio
+import json
+from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.api import deps
 from app.db.unit_of_work import UnitOfWork
+from app.platform.sync.pubsub import sync_pubsub
 from app.platform.sync.service import sync_service
 
 router = APIRouter()
@@ -132,7 +137,7 @@ async def list_sync_jobs(
     return await crud.sync_job.get_multi_by_sync(db=db, sync_id=sync_id, skip=skip, limit=limit)
 
 
-@router.get("/{sync_id}/jobs/{job_id}", response_model=schemas.SyncJob)
+@router.get("/job/{job_id}", response_model=schemas.SyncJob)
 async def get_sync_job(
     *,
     db: AsyncSession = Depends(deps.get_db),
@@ -145,3 +150,21 @@ async def get_sync_job(
     if not sync_job or sync_job.sync_id != sync_id:
         raise HTTPException(status_code=404, detail="Sync job not found")
     return sync_job
+
+
+@router.get("/job/{job_id}/subscribe")
+async def subscribe_sync_job(job_id: str, user=Depends(deps.get_user)) -> StreamingResponse:
+    """Server-Sent Events (SSE) endpoint to subscribe to a sync job's progress."""
+    queue = await sync_pubsub.subscribe(job_id)
+
+    async def event_stream() -> AsyncGenerator[str, None]:
+        try:
+            while True:
+                updates = await queue.get()
+                yield f"data: {json.dumps(updates)}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            sync_pubsub.unsubscribe(job_id, queue)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
