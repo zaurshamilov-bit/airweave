@@ -58,10 +58,9 @@ class SyncCreate(SyncBase):
 
     run_immediately: bool = False
 
-
-def to_base(self) -> SyncBase:
-    """Convert to base schema."""
-    return SyncBase(**self.model_dump(exclude={"run_immediately"}))
+    def to_base(self) -> SyncBase:
+        """Convert to base schema."""
+        return SyncBase(**self.model_dump(exclude={"run_immediately"}))
 
 
 class SyncUpdate(BaseModel):

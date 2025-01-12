@@ -1,7 +1,6 @@
 """API endpoints for managing syncs."""
 
 import asyncio
-import json
 from typing import AsyncGenerator
 from uuid import UUID
 
@@ -153,18 +152,32 @@ async def get_sync_job(
 
 
 @router.get("/job/{job_id}/subscribe")
-async def subscribe_sync_job(job_id: str, user=Depends(deps.get_user)) -> StreamingResponse:
+async def subscribe_sync_job(job_id: UUID, user=Depends(deps.get_user)) -> StreamingResponse:
     """Server-Sent Events (SSE) endpoint to subscribe to a sync job's progress."""
     queue = await sync_pubsub.subscribe(job_id)
+
+    if not queue:
+        raise HTTPException(status_code=404, detail="Sync job not found or completed")
 
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
             while True:
-                updates = await queue.get()
-                yield f"data: {json.dumps(updates)}\n\n"
-        except asyncio.CancelledError:
-            pass
+                try:
+                    update = await queue.get()
+                    # Proper SSE format requires each message to start with "data: "
+                    # and end with two newlines
+                    yield f"data: {update.model_dump_json()}\n\n"
+                except asyncio.CancelledError:
+                    break
         finally:
             sync_pubsub.unsubscribe(job_id, queue)
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Important for nginx
+        },
+    )

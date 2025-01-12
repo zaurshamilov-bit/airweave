@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import crud, schemas
 from app.core import credentials
 from app.core.exceptions import NotFoundException
+from app.core.logging import logger
 from app.db.session import get_db_context
 from app.db.unit_of_work import UnitOfWork
 from app.platform.auth.schemas import AuthType
@@ -47,81 +48,98 @@ class SyncService:
         async with get_db_context() as db:
             sync_context = await self.create_sync_context(db, sync, sync_job, current_user)
 
+            logger.info(f"Starting job with id {sync_context.sync_job.id}.")
+
             # TODO: Implement microbatch processing
 
+            sync_pubsub.create_topic(job_id=sync_job.id)
             sync_progress_update = SyncProgressUpdate()
-            async for chunk in sync_context.source.generate_chunks():
 
-                # Enrich chunk with sync context information
-                chunk = await self._enrich_chunk(chunk, sync_context)
+            try:
+                async for chunk in sync_context.source.generate_chunks():
 
-                # Calculate hash for deduplication
-                chunk_hash = chunk.hash()
+                    # Enrich chunk with sync context information
+                    chunk = await self._enrich_chunk(chunk, sync_context)
 
-                # Check if chunk exists in DB
-                db_chunk = await crud.chunk.get_by_entity_and_sync_id(
-                    db, entity_id=chunk.entity_id, sync_id=sync.id
-                )
+                    # Calculate hash for deduplication
+                    chunk_hash = chunk.hash()
 
-                if db_chunk:
-                    if db_chunk.hash == chunk_hash:
-                        # No changes, update sync_job_id
-                        await crud.chunk.update_job_id(db, db_obj=db_chunk, sync_job_id=sync_job.id)
-                        sync_progress_update.already_sync += 1
+                    # Check if chunk exists in DB
+                    db_chunk = await crud.chunk.get_by_entity_and_sync_id(
+                        db, entity_id=chunk.entity_id, sync_id=sync.id
+                    )
+
+                    if db_chunk:
+                        if db_chunk.hash == chunk_hash:
+                            # No changes, update sync_job_id
+                            await crud.chunk.update_job_id(
+                                db, db_obj=db_chunk, sync_job_id=sync_job.id
+                            )
+                            sync_progress_update.already_sync += 1
+                        else:
+                            # Content changed, update both DB and destination
+                            chunk_update = schemas.ChunkUpdate(
+                                sync_job_id=sync_job.id,
+                                hash=chunk_hash,
+                            )
+                            await crud.chunk.update(
+                                db,
+                                db_obj=db_chunk,
+                                obj_in=chunk_update,
+                                organization_id=sync.organization_id,
+                            )
+                            await sync_context.destination.delete(db_chunk.id)
+                            await sync_context.destination.insert(chunk)
+                            sync_progress_update.updated += 1
                     else:
-                        # Content changed, update both DB and destination
-                        chunk_update = schemas.ChunkUpdate(
+                        # New chunk, insert into DB and buffer for destination
+                        chunk_schema = schemas.ChunkCreate(
+                            sync_id=sync.id,
                             sync_job_id=sync_job.id,
+                            entity_id=chunk.entity_id,
                             hash=chunk_hash,
                         )
-                        await crud.chunk.update(
+                        db_chunk = await crud.chunk.create(
                             db,
-                            db_obj=db_chunk,
-                            obj_in=chunk_update,
+                            obj_in=chunk_schema,
                             organization_id=sync.organization_id,
                         )
-                        await sync_context.destination.delete(db_chunk.id)
+                        chunk.db_chunk_id = db_chunk.id
                         await sync_context.destination.insert(chunk)
-                        sync_progress_update.updated += 1
-                else:
-                    # New chunk, insert into DB and buffer for destination
-                    chunk_schema = schemas.ChunkCreate(
-                        sync_id=sync.id,
-                        sync_job_id=sync_job.id,
-                        entity_id=chunk.entity_id,
-                        hash=chunk_hash,
+
+                        sync_progress_update.inserted += 1
+
+                    # Publish partial progress using job_id
+                    await sync_pubsub.publish(
+                        sync_job.id,
+                        sync_progress_update,
                     )
-                    db_chunk = await crud.chunk.create(
-                        db,
-                        obj_in=chunk_schema,
-                        organization_id=sync.organization_id,
+
+                # Handle deletions - remove outdated chunks
+                outdated_chunks = await crud.chunk.get_all_outdated(db, sync_job_id=sync_job.id)
+                if outdated_chunks:
+                    # Remove from destination
+                    for chunk in outdated_chunks:
+                        await sync_context.destination.delete(chunk.id)
+                        # Remove from database
+                        await crud.chunk.remove(
+                            db, id=chunk.id, organization_id=sync.organization_id
+                        )
+                        sync_progress_update.deleted += 1
+
+                    # Publish partial progress using job_id
+                    await sync_pubsub.publish(
+                        sync_job.id,
+                        sync_progress_update,
                     )
-                    chunk.db_chunk_id = db_chunk.id
-                    await sync_context.destination.insert(chunk)
+            except Exception as e:
+                logger.error(f"An error occured while synchronizing: {e}")
+                sync_pubsub.remove_topic(sync_job.id)
 
-                    sync_progress_update.inserted += 1
+            sync_progress_update.is_complete = True
 
-                # Publish partial progress using job_id
-                await sync_pubsub.publish(
-                    str(sync_job.id),
-                    sync_progress_update,
-                )
+            await sync_pubsub.publish(sync_job.id, sync_progress_update)
 
-            # Handle deletions - remove outdated chunks
-            outdated_chunks = await crud.chunk.get_all_outdated(db, sync_job_id=sync_job.id)
-            if outdated_chunks:
-                # Remove from destination
-                for chunk in outdated_chunks:
-                    await sync_context.destination.delete(chunk.id)
-                    # Remove from database
-                    await crud.chunk.remove(db, id=chunk.id, organization_id=sync.organization_id)
-                    sync_progress_update.deleted += 1
-
-                # Publish partial progress using job_id
-                await sync_pubsub.publish(
-                    str(sync_job.id),
-                    sync_progress_update,
-                )
             return sync
 
     async def _enrich_chunk(
@@ -195,6 +213,7 @@ class SyncService:
         if sync.white_label_id:
             white_label = await crud.white_label.get(db, sync.white_label_id, current_user)
             sync_context.white_label = white_label
+
         return sync_context
 
 
