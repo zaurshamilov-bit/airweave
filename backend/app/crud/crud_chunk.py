@@ -44,10 +44,11 @@ class CRUDChunk(CRUDBaseOrganization[Chunk, ChunkCreate, ChunkUpdate]):
     async def get_all_outdated(
         self,
         db: AsyncSession,
+        sync_id: UUID,
         sync_job_id: UUID,
     ) -> list[Chunk]:
         """Get all chunks that are outdated."""
-        stmt = select(Chunk).where(Chunk.sync_job_id != sync_job_id)
+        stmt = select(Chunk).where(Chunk.sync_id == sync_id, Chunk.sync_job_id != sync_job_id)
         result = await db.execute(stmt)
         return list(result.unique().scalars().all())
 

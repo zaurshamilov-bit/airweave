@@ -10,11 +10,10 @@ import { apiClient } from "@/config/api";
 import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 
 /**
- * This component coordinates all user actions (source selection, 
+ * This component coordinates all user actions (source selection,
  * vector DB selection, sync creation, and sync job triggering).
- * It uses straightforward local state, but you can extract or 
- * replace this with global store (Redux, Zustand, etc.) or React Query 
- * if you prefer a different pattern.
+ * It uses local React state, but you can integrate any data-fetching
+ * or global state libraries (e.g., React Query, Redux, Zustand).
  */
 
 interface ConnectionSelection {
@@ -23,42 +22,50 @@ interface ConnectionSelection {
 }
 
 const Sync = () => {
+  // Which setup step are we on?
   const [step, setStep] = useState<number>(1);
-  const [selectedSource, setSelectedSource] = useState<{ connectionId: string } | null>(null);
-  const [selectedDB, setSelectedDB] = useState<{ connectionId: string; isNative?: boolean } | null>(null);
 
-  // Store the newly created sync ID (after POST /sync/) and the job ID (after POST /sync/{id}/run).
+  // Chosen data source (step 1 -> 2)
+  const [selectedSource, setSelectedSource] = useState<ConnectionSelection | null>(null);
+
+  // Chosen vector DB or native indexing (step 2 -> 3)
+  const [selectedDB, setSelectedDB] = useState<ConnectionSelection | null>(null);
+
+  // Created sync ID and job ID once we make calls
   const [syncId, setSyncId] = useState<string | null>(null);
   const [syncJobId, setSyncJobId] = useState<string | null>(null);
 
-  const location = useLocation();
+  // Hook for showing user feedback toasts
   const { toast } = useToast();
+  const location = useLocation();
 
-  // Use the subscription hook with job_id instead of sync_id
+  // Subscribe to SSE updates whenever syncJobId is set
+  // 'updates' returns an array of progress updates
   const updates = useSyncSubscription(syncJobId);
 
-  // If a user returns from an oauth2 or other service, we show success/failure toasts
+  /**
+   * Notify the user if they've just returned from an oauth2 flow.
+   */
   useEffect(() => {
     const query = new URLSearchParams(location.search);
     const connectedStatus = query.get("connected");
     if (connectedStatus === "success") {
       toast({
         title: "Connection successful",
-        description: "Your data source is now connected.",
+        description: "Your data source is now connected."
       });
     } else if (connectedStatus === "error") {
       toast({
         variant: "destructive",
         title: "Connection failed",
-        description: "There was an error connecting to your data source.",
+        description: "There was an error connecting to your data source."
       });
     }
   }, [location.search, toast]);
 
   /**
    * handleSourceSelect is triggered by SyncDataSourceGrid when the user
-   * chooses a data source. We always want to go to step 2 (vector DB selection)
-   * when a source is selected.
+   * chooses a data source. We move from step 1 -> 2 to pick vector DB.
    */
   const handleSourceSelect = async (connectionId: string) => {
     setSelectedSource({ connectionId });
@@ -66,84 +73,80 @@ const Sync = () => {
   };
 
   /**
-   * handleVectorDBSelected sets the selected vector DB.
-   * Once the user confirms, we move to step 3 (confirm + create sync).
+   * handleVectorDBSelected is triggered after the user chooses a vector DB.
+   * We move from step 2 -> 3 to confirm the pipeline.
    */
-  const handleVectorDBSelected = async (dbDetails: { connectionId: string; isNative?: boolean }) => {
+  const handleVectorDBSelected = async (dbDetails: ConnectionSelection) => {
     setSelectedDB(dbDetails);
     setStep(3);
   };
 
   /**
    * createNewSync calls the backend to create a Sync resource.
+   * We won't run immediately here; we'll call /run afterwards for clarity.
    */
   const createNewSync = async () => {
-    if (!selectedSource) return;
-    if (!selectedDB) return;
+    if (!selectedSource || !selectedDB) return null;
 
     try {
       const resp = await apiClient.post("/sync/", {
         name: "Sync from UI",
         source_connection_id: selectedSource.connectionId,
+        // If the user picked a "non-native" DB, we pass it along
         ...(selectedDB.isNative ? {} : { destination_connection_id: selectedDB.connectionId }),
-        run_immediately: true
+        run_immediately: false
       });
       if (!resp.ok) {
         throw new Error("Failed to create sync");
       }
       const data = await resp.json();
       setSyncId(data.id);
-      return data.id;
+      return data.id as string;
     } catch (err: any) {
       toast({
         variant: "destructive",
         title: "Sync creation failed",
-        description: err.message || String(err),
+        description: err.message || String(err)
       });
       return null;
     }
   };
 
   /**
-   * runSync calls the backend to start a sync job 
+   * runSync calls the backend to start a sync job
    * (POST /sync/{sync_id}/run).
    */
   const runSync = async (syncIdToRun: string) => {
     try {
-      const resp = await fetch(`/sync/${syncIdToRun}/run`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        }
-      });
+      const resp = await apiClient.post(`/sync/${syncIdToRun}/run`);
       if (!resp.ok) {
         throw new Error("Failed to run sync job");
       }
       const data = await resp.json();
-      // The returned object is a SyncJob, which has an "id"
+      // Store the job ID so SSE subscription can begin
       setSyncJobId(data.id);
     } catch (err: any) {
       toast({
         variant: "destructive",
         title: "Sync job start failed",
-        description: err.message || String(err),
+        description: err.message || String(err)
       });
     }
   };
 
   /**
-   * handleStartSync creates the sync in the backend,
-   * then runs it, then proceeds to step 4 for progress.
+   * handleStartSync creates the new Sync if necessary,
+   * then runs it, and moves to step 4 for progress updates.
    */
   const handleStartSync = async () => {
-    // If we haven't created a sync yet, do so
-    let createdId = syncId;
-    if (!createdId) {
-      createdId = await createNewSync();
+    // If we haven't created a sync yet, do so now
+    let createdSyncId = syncId;
+    if (!createdSyncId) {
+      createdSyncId = await createNewSync();
     }
 
-    if (createdId) {
-      await runSync(createdId);
+    if (createdSyncId) {
+      await runSync(createdSyncId);
       setStep(4);
     }
   };
@@ -151,6 +154,7 @@ const Sync = () => {
   return (
     <div className="container mx-auto py-8">
       <div className="mx-auto">
+        {/* Step + progress bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold">
@@ -168,41 +172,35 @@ const Sync = () => {
           </div>
         </div>
 
+        {/* Step 1: Pick data source */}
         {step === 1 && (
           <div className="space-y-6">
             <div className="flex items-center space-x-2">
               <h2 className="text-2xl font-semibold">Choose your data source</h2>
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </div>
-            {/* 
-              SyncDataSourceGrid should fetch and display available
-              sources or existing connections, then call onSelect(sourceId, skipCredentials?)
-              to progress the flow. 
-            */}
             <SyncDataSourceGrid onSelect={handleSourceSelect} />
           </div>
         )}
 
+        {/* Step 2: Pick vector DB */}
         {step === 2 && (
           <div className="space-y-6">
             <div className="flex items-center space-x-2">
               <h2 className="text-2xl font-semibold">Choose your vector database</h2>
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </div>
-            {/* 
-              VectorDBSelector should fetch and display possible vector DB 
-              destinations, then call onComplete(dbId) 
-            */}
             <VectorDBSelector onComplete={handleVectorDBSelected} />
           </div>
         )}
 
+        {/* Step 3: Confirm and start sync */}
         {step === 3 && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-semibold">Ready to sync</h2>
+              <h2 className="text-2xl font-semibold">Ready to sync?</h2>
               <p className="text-muted-foreground mt-2">
-                Your pipeline is configured and ready to start syncing
+                Your pipeline is configured and ready to start syncing.
               </p>
             </div>
             <div className="flex justify-center">
@@ -213,20 +211,10 @@ const Sync = () => {
           </div>
         )}
 
+        {/* Step 4: Show progress updates */}
         {step === 4 && (
           <div className="space-y-6">
             <SyncProgress syncId={syncId} syncJobId={syncJobId} />
-            {/* Show real-time updates from SSE */}
-            <div>
-              <h2 className="text-xl font-semibold mb-2">Live Sync Updates</h2>
-              <div className="space-y-1">
-                {updates.map((update, i) => (
-                  <div key={i} className="text-sm">
-                    • Inserted: {update.inserted ?? 0}, Updated: {update.updated ?? 0}, Deleted: {update.deleted ?? 0}
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         )}
       </div>

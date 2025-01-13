@@ -15,6 +15,7 @@ class SyncProgressUpdate(BaseModel):
     deleted: int = 0
     already_sync: int = 0
     is_complete: bool = False  # Add completion flag
+    is_failed: bool = False  # Add failure flag
 
 
 class SyncJobTopic:
@@ -53,10 +54,11 @@ class SyncPubSub:
         """Initialize the SyncPubSub instance."""
         self.topics: dict[UUID, SyncJobTopic] = {}
 
-    def create_topic(self, job_id: UUID) -> None:
-        """Create a new topic for a sync job. Called when sync starts."""
+    def get_or_create_topic(self, job_id: UUID) -> SyncJobTopic:
+        """Get an existing topic or create a new one."""
         if job_id not in self.topics:
             self.topics[job_id] = SyncJobTopic(job_id)
+        return self.topics[job_id]
 
     def remove_topic(self, job_id: UUID) -> None:
         """Remove a topic when sync is complete."""
@@ -65,17 +67,16 @@ class SyncPubSub:
 
     async def publish(self, job_id: UUID, update: SyncProgressUpdate) -> None:
         """Publish an update to a specific job topic."""
-        if job_id in self.topics:
-            await self.topics[job_id].publish(update)
-            # If the update indicates completion, schedule topic removal
-            if update.is_complete:
-                self.remove_topic(job_id)
+        topic = self.get_or_create_topic(job_id)
+        await topic.publish(update)
+        # If the update indicates completion, schedule topic removal
+        if update.is_complete:
+            self.remove_topic(job_id)
 
-    async def subscribe(self, job_id: UUID) -> Optional[asyncio.Queue]:
-        """Subscribe to a job's updates if the topic exists."""
-        if job_id in self.topics:
-            return await self.topics[job_id].add_subscriber()
-        return None
+    async def subscribe(self, job_id: UUID) -> asyncio.Queue:
+        """Subscribe to a job's updates, creating the topic if it doesn't exist."""
+        topic = self.get_or_create_topic(job_id)
+        return await topic.add_subscriber()
 
     def unsubscribe(self, job_id: UUID, queue: asyncio.Queue) -> None:
         """Remove a subscriber from a topic."""

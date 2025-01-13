@@ -52,7 +52,6 @@ class SyncService:
 
             # TODO: Implement microbatch processing
 
-            sync_pubsub.create_topic(job_id=sync_job.id)
             sync_progress_update = SyncProgressUpdate()
 
             try:
@@ -115,8 +114,15 @@ class SyncService:
                         sync_progress_update,
                     )
 
-                # Handle deletions - remove outdated chunks
-                outdated_chunks = await crud.chunk.get_all_outdated(db, sync_job_id=sync_job.id)
+            except Exception as e:
+                logger.error(f"An error occured while synchronizing: {e}")
+
+        async with get_db_context() as db:
+            # Handle deletions - remove outdated chunks
+            try:
+                outdated_chunks = await crud.chunk.get_all_outdated(
+                    db, sync_id=sync.id, sync_job_id=sync_job.id
+                )
                 if outdated_chunks:
                     # Remove from destination
                     for chunk in outdated_chunks:
@@ -133,14 +139,16 @@ class SyncService:
                         sync_progress_update,
                     )
             except Exception as e:
-                logger.error(f"An error occured while synchronizing: {e}")
-                sync_pubsub.remove_topic(sync_job.id)
+                logger.error(f"An error occured while handling deletions: {e}")
+                sync_progress_update.is_failed = True
+                await sync_pubsub.publish(sync_job.id, sync_progress_update)
+                return sync
 
-            sync_progress_update.is_complete = True
+        sync_progress_update.is_complete = True
 
-            await sync_pubsub.publish(sync_job.id, sync_progress_update)
+        await sync_pubsub.publish(sync_job.id, sync_progress_update)
 
-            return sync
+        return sync
 
     async def _enrich_chunk(
         self,

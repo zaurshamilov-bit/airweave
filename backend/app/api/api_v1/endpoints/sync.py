@@ -112,9 +112,8 @@ async def run_sync(
     sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_in, current_user=user)
     sync_job_schema = schemas.SyncJob.model_validate(sync_job)
 
-    await sync_service.run(sync_schema, sync_job_schema, user)
-
-    # background_tasks.add_task(sync_service.run, sync_schema, sync_job_schema, user) # swap for redis queue
+    # will be swapped for redis queue
+    background_tasks.add_task(sync_service.run, sync_schema, sync_job_schema, user)
 
     return sync_job
 

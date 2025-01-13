@@ -4,7 +4,7 @@ from typing import Generic, Optional, Type, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
@@ -136,7 +136,9 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
             await db.refresh(db_obj)
         return db_obj
 
-    async def remove(self, db: AsyncSession, id: UUID, organization_id: UUID, uow: Optional[UnitOfWork] = None) -> None:
+    async def remove(
+        self, db: AsyncSession, id: UUID, organization_id: UUID, uow: Optional[UnitOfWork] = None
+    ) -> None:
         """Delete an object from db for a given schema type and organization context.
 
         Args:
@@ -146,14 +148,14 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
             organization_id (UUID): The UUID of the organization.
             uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
         """
-        query = select(self.model).where(
-            self.model.id == id, self.model.organization_id == organization_id
+        stmt = (
+            delete(self.model)
+            .where(self.model.id == id, self.model.organization_id == organization_id)
+            .execution_options(synchronize_session=False)
         )
-        result = await db.execute(query)
-        db_obj = result.unique().scalar_one_or_none()
-        if db_obj is None:
+        result = await db.execute(stmt)
+        if result.rowcount == 0:
             raise NotFoundException(f"{self.model.__name__} not found")
-        await db.delete(db_obj)
+
         if not uow:
             await db.commit()
-
