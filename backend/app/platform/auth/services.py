@@ -261,7 +261,7 @@ class OAuth2Service:
 
     @staticmethod
     async def _get_client_credentials(
-        integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel
+        integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
     ) -> tuple[str, str]:
         """Get client credentials from configuration.
 
@@ -420,6 +420,68 @@ class OAuth2Service:
         """
         app_url = settings.app_url
         return f"{app_url}/auth/callback/{integration_short_name}"
+
+    @staticmethod
+    def generate_auth_url_for_whitelabel(white_label: schemas.WhiteLabel) -> str:
+        """Generate the OAuth2 authorization URL for a white label integration."""
+        integration_config = integration_settings.get_by_short_name(white_label.source_id)
+
+        # Use white_label's redirect_url instead of the default one
+        params = {
+            "response_type": "code",
+            "client_id": white_label.client_id,
+            "redirect_uri": white_label.redirect_url,
+            **(integration_config.additional_frontend_params or {}),
+        }
+
+        if integration_config.scope:
+            params["scope"] = integration_config.scope
+
+        auth_url = f"{integration_config.url}?{urlencode(params)}"
+        return auth_url
+
+    @staticmethod
+    async def exchange_code_for_whitelabel(
+        db: AsyncSession,
+        code: str,
+        white_label: schemas.WhiteLabel,
+        user: schemas.User,
+    ) -> OAuth2TokenResponse:
+        """Exchange OAuth2 authorization code for tokens using white label credentials."""
+        integration_config = integration_settings.get_by_short_name(white_label.source_id)
+
+        headers = {
+            "Content-Type": integration_config.content_type,
+        }
+
+        payload = {
+            "grant_type": integration_config.grant_type,
+            "code": code,
+            "redirect_uri": white_label.redirect_url,
+        }
+
+        if integration_config.client_credential_location == "header":
+            encoded_credentials = OAuth2Service._encode_client_credentials(
+                white_label.client_id, white_label.client_secret
+            )
+            headers["Authorization"] = f"Basic {encoded_credentials}"
+        else:
+            payload["client_id"] = white_label.client_id
+            payload["client_secret"] = white_label.client_secret
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    integration_config.backend_url, headers=headers, data=payload
+                )
+            response.raise_for_status()
+        except Exception as e:
+            oauth2_service_logger.error(
+                f"Unable to exchange OAuth2 code for WhiteLabel (id={white_label.id}): {e}"
+            )
+            raise
+
+        return OAuth2TokenResponse(**response.json())
 
 
 oauth2_service = OAuth2Service()
