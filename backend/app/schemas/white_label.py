@@ -10,7 +10,6 @@ from pydantic import BaseModel, EmailStr
 class WhiteLabelBase(BaseModel):
     """Base schema for WhiteLabel."""
 
-    org_id: str
     name: str
     source_id: str
     redirect_url: str

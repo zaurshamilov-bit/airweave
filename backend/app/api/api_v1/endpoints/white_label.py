@@ -1,6 +1,5 @@
 """White label endpoints."""
 
-from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException
@@ -14,50 +13,44 @@ from app.core.logging import logger
 from app.db.unit_of_work import UnitOfWork
 from app.models.integration_credential import IntegrationType
 from app.models.user import User
-from app.models.white_label import WhiteLabel
 from app.platform.auth.schemas import AuthType
 from app.platform.auth.services import oauth2_service
-from app.schemas.connection import ConnectionCreate, ConnectionStatus
-from app.schemas.white_label import WhiteLabelCreate, WhiteLabelUpdate
 
 router = APIRouter()
 
 
-@router.get("/list", response_model=List[WhiteLabel])
+@router.get("/list", response_model=list[schemas.WhiteLabel])
 async def list_white_label_integrations(
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-) -> List[WhiteLabel]:
+) -> list[schemas.WhiteLabel]:
     """List all white label integrations for the current user's organization."""
-    integrations = await crud.white_label.get_all_for_organization(
-        db, org_id=current_user.organization_id
-    )
+    integrations = await crud.white_label.get_all_for_user(db, current_user=current_user)
     return integrations
 
 
-@router.post("/", response_model=WhiteLabel)
+@router.post("/", response_model=schemas.WhiteLabel)
 async def create_white_label_integration(
     *,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-    integration_in: WhiteLabelCreate,
-) -> WhiteLabel:
+    integration_in: schemas.WhiteLabelCreate,
+) -> schemas.WhiteLabel:
     """Create new white label integration."""
     integration = await crud.white_label.create(
         db,
         obj_in=integration_in,
-        created_by_email=current_user.email,
-        organization_id=current_user.organization_id,
+        current_user=current_user,
     )
     return integration
 
 
-@router.get("/{white_label_id}", response_model=WhiteLabel)
+@router.get("/{white_label_id}", response_model=schemas.WhiteLabel)
 async def get_white_label_integration(
     white_label_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-) -> WhiteLabel:
+) -> schemas.WhiteLabel:
     """Get a specific white label integration."""
     white_label = await crud.white_label.get(db, id=white_label_id)
     if not white_label:
@@ -67,14 +60,14 @@ async def get_white_label_integration(
     return white_label
 
 
-@router.put("/{white_label_id}", response_model=WhiteLabel)
+@router.put("/{white_label_id}", response_model=schemas.WhiteLabel)
 async def update_white_label_integration(
     *,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
     white_label_id: UUID,
-    white_label_in: WhiteLabelUpdate,
-) -> WhiteLabel:
+    white_label_in: schemas.WhiteLabelUpdate,
+) -> schemas.WhiteLabel:
     """Update a white label integration."""
     # TODO: Check if update is valid (i.e. scopes, source id etc)
     white_label = await crud.white_label.get(db, id=white_label_id)
@@ -87,7 +80,7 @@ async def update_white_label_integration(
         db,
         db_obj=white_label,
         obj_in=white_label_in,
-        modified_by_email=current_user.email,
+        current_user=current_user,
     )
     return white_label
 
@@ -97,7 +90,7 @@ async def delete_white_label_integration(
     white_label_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-) -> dict:
+) -> schemas.WhiteLabel:
     """Delete a white label integration."""
     white_label = await crud.white_label.get(db, id=white_label_id)
     if not white_label:
@@ -175,10 +168,10 @@ async def exchange_whitelabel_oauth2_code(
         )
         await uow.session.flush()
 
-        connection_in = ConnectionCreate(
+        connection_in = schemas.ConnectionCreate(
             name=f"WhiteLabel Connection - {white_label.name}",
             integration_type=IntegrationType.SOURCE,
-            status=ConnectionStatus.ACTIVE,
+            status=schemas.ConnectionStatus.ACTIVE,
             integration_credential_id=integration_cred.id,
             source_id=source.id,
         )

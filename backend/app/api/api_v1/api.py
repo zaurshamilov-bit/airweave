@@ -10,6 +10,7 @@ from app.api.api_v1.endpoints import (
     sources,
     sync,
     users,
+    white_label,
 )
 
 api_router = APIRouter()
@@ -22,3 +23,4 @@ api_router.include_router(
 )
 api_router.include_router(connections.router, prefix="/connections", tags=["connections"])
 api_router.include_router(sync.router, prefix="/sync", tags=["sync"])
+api_router.include_router(white_label.router, prefix="/white_labels", tags=["white_labels"])
