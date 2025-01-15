@@ -4,13 +4,14 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models._base import OrganizationBase, UserMixin
 from app.platform.auth.schemas import AuthType
 
 if TYPE_CHECKING:
-    pass
+    from app.models.connection import Connection
+
 
 class IntegrationType(str, Enum):
     """Integration type enum."""
@@ -32,3 +33,8 @@ class IntegrationCredential(OrganizationBase, UserMixin):
     auth_type: Mapped[AuthType] = mapped_column(String, nullable=False)
     encrypted_credentials: Mapped[str] = mapped_column(Text, nullable=False)
     auth_config_class: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Relationships
+    connections: Mapped[list["Connection"]] = relationship(
+        "Connection", back_populates="integration_credential"
+    )

@@ -5,10 +5,10 @@ from uuid import UUID
 
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy import ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models._base import OrganizationBase, UserMixin
-from app.models.integration_credential import IntegrationType
+from app.models.integration_credential import IntegrationType, IntegrationCredential
 from app.core.shared_models import ConnectionStatus
 
 
@@ -35,6 +35,11 @@ class Connection(OrganizationBase, UserMixin):
     )
     embedding_model_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("embedding_model.id"), nullable=True
+    )
+
+    # Relationships
+    integration_credential: Mapped[IntegrationCredential] = relationship(
+        "IntegrationCredential", back_populates="connections"
     )
 
     def __init__(self, **kwargs):
