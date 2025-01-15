@@ -227,8 +227,8 @@ async def get_oauth2_auth_url(
 async def send_oauth2_code(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    short_name: str,
-    code: str,
+    short_name: str = Body(...),
+    code: str = Body(...),
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.SourceConnection:
     """Send the OAuth2 authorization code for a source.
