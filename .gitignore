@@ -9,3 +9,5 @@ frontend/node_modules/
 openapi.json
 
 test_sync_stream.py
+
+backend/.coverage
