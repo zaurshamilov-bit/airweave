@@ -22,14 +22,12 @@ class NotionSource(BaseSource):
     """Notion source implementation."""
 
     @classmethod
-    async def create(cls, user: schemas.User, sync_id: UUID) -> "NotionSource":
+    async def create(cls, access_token: str) -> "NotionSource":
         """
-        Mimic the Asana pattern of creating the source,
-        with a hard-coded token for now.
+        Create a new Notion source.
         """
         instance = cls()
-        instance.access_token = "ntn_C8812623352Qfy10TAOLuqPC1yrFuMejEFnTHLFwezI1jq"
-        instance.sync_id = sync_id
+        instance.access_token = access_token
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict:

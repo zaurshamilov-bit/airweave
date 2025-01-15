@@ -18,25 +18,13 @@ from app.platform.sources._base import BaseSource
 
 @source("Dropbox", "dropbox", AuthType.oauth2_with_refresh)
 class DropboxSource(BaseSource):
-    """
-    Dropbox source implementation.
-
-    This connector mimics the patterns used by AsanaSource and NotionSource:
-    1. Generate 'account' chunks to represent user/team info.
-    2. For each account, generate folder chunks.
-    3. For each folder, generate file chunks.
-    """
+    """Dropbox source implementation."""
 
     @classmethod
-    async def create(cls, user: schemas.User, sync_id: UUID) -> "DropboxSource":
-        """
-        Example: create a new Dropbox source instance,
-        presumably by storing an OAuth2 token or using the user's org link.
-        """
+    async def create(cls, access_token: str) -> "DropboxSource":
+        """Create a new Dropbox source."""
         instance = cls()
-        # In a real implementation, you might pull the token from the user's auth data:
-        instance.access_token = "..."
-        instance.sync_id = sync_id
+        instance.access_token = access_token
         return instance
 
     async def _get_with_auth(
