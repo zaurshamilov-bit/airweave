@@ -25,6 +25,7 @@ class Settings(BaseSettings):
         POSTGRES_PASSWORD (str): The PostgreSQL password.
         SQLALCHEMY_ASYNC_DATABASE_URI (Optional[PostgresDsn]): The SQLAlchemy async database URI.
         LOCAL_NGROK_SERVER (Optional[str]): The local ngrok server URL.
+        RUN_ALEMBIC_MIGRATIONS (Optional[bool]): Whether to run the alembic migrations.
         RUN_DB_SYNC (Optional[bool]): Whether to run the system sync to process sources,
             destinations, and chunk types.
 
@@ -48,6 +49,7 @@ class Settings(BaseSettings):
 
     LOCAL_NGROK_SERVER: Optional[str] = None
 
+    RUN_ALEMBIC_MIGRATIONS: Optional[bool] = True
     RUN_DB_SYNC: Optional[bool] = True
 
     @field_validator("SQLALCHEMY_ASYNC_DATABASE_URI", mode="before")

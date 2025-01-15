@@ -25,11 +25,7 @@ def _get_decorated_classes(directory: str) -> Dict[str, list[Type]]:
     Returns:
         Dict[str, list[Type]]: Dictionary of decorated classes by type.
     """
-    components = {
-        "sources": [],
-        "destinations": [],
-        "embedding_models": []
-    }
+    components = {"sources": [], "destinations": [], "embedding_models": []}
 
     base_package = directory.replace("/", ".")
 
@@ -55,7 +51,6 @@ def _get_decorated_classes(directory: str) -> Dict[str, list[Type]]:
                 elif getattr(cls, "_is_embedding_model", False):
                     components["embedding_models"].append(cls)
 
-
     return components
 
 
@@ -78,7 +73,7 @@ async def _sync_embedding_models(db: AsyncSession, models: list[Type[BaseEmbeddi
             model_name=model_class._model_name,
             model_version=model_class._model_version,
             auth_type=model_class._auth_type,
-            auth_config_class=model_class._auth_config_class
+            auth_config_class=model_class._auth_config_class,
         )
         model_definitions.append(model_def)
 
@@ -103,7 +98,7 @@ async def _sync_sources(db: AsyncSession, sources: list[Type[BaseSource]]) -> No
             auth_type=source_class._auth_type,
             auth_config_class=source_class._auth_config_class,
             short_name=source_class._short_name,
-            class_name=source_class.__name__
+            class_name=source_class.__name__,
         )
         source_definitions.append(source_def)
 
@@ -128,7 +123,7 @@ async def _sync_destinations(db: AsyncSession, destinations: list[Type[BaseDesti
             short_name=dest_class._short_name,
             class_name=dest_class.__name__,
             auth_type=dest_class._auth_type,
-            auth_config_class=dest_class._auth_config_class
+            auth_config_class=dest_class._auth_config_class,
         )
         destination_definitions.append(dest_def)
 

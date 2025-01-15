@@ -4,6 +4,7 @@ This module sets up the FastAPI application and the middleware to log incoming r
 and unhandled exceptions.
 """
 
+import subprocess
 import time
 import traceback
 import uuid
@@ -30,6 +31,9 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # Startup
     async with AsyncSessionLocal() as db:
+        if settings.RUN_ALEMBIC_MIGRATIONS:
+            logger.info("Running alembic migrations...")
+            subprocess.run(["alembic", "upgrade", "head"], check=True)
         if settings.RUN_DB_SYNC:
             await sync_platform_components("app/platform", db)
         await init_db(db)
@@ -189,7 +193,7 @@ app.add_middleware(
         "app.dev-airweave.ai",
         "app.tst-airweave.ai",
         "app.acc-airweave.ai",
-        "app.airweave.ai"
+        "app.airweave.ai",
     ],
     allow_credentials=True,
     allow_methods=["*"],
