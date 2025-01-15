@@ -49,7 +49,7 @@ class Settings(BaseSettings):
 
     LOCAL_NGROK_SERVER: Optional[str] = None
 
-    RUN_ALEMBIC_MIGRATIONS: Optional[bool] = True
+    RUN_ALEMBIC_MIGRATIONS: Optional[bool] = False
     RUN_DB_SYNC: Optional[bool] = True
 
     @field_validator("SQLALCHEMY_ASYNC_DATABASE_URI", mode="before")
