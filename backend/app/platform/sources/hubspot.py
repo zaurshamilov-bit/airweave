@@ -1,4 +1,5 @@
 from typing import AsyncGenerator, Dict
+
 import httpx
 
 from app.platform.auth.schemas import AuthType
@@ -59,7 +60,6 @@ class HubspotSource(BaseSource):
                 yield HubspotContactChunk(
                     source_name="hubspot",
                     entity_id=contact["id"],
-                    # No breadcrumbs in this example, but you could add them if needed
                     first_name=contact["properties"].get("firstname"),
                     last_name=contact["properties"].get("lastname"),
                     email=contact["properties"].get("email"),
