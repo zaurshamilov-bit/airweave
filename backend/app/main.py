@@ -48,7 +48,7 @@ app.include_router(api_router)
 
 @app.middleware("http")
 async def add_request_id(request: Request, call_next: callable) -> Response:
-    """Middleware to add a request ID to the request.
+    """Middleware to generate and add a request ID to the request for tracing.
 
     Args:
     ----

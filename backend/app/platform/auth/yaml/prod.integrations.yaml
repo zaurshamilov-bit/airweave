@@ -37,8 +37,8 @@ integrations:
     url: "https://api.notion.com/v1/oauth/authorize"
     backend_url: "https://api.notion.com/v1/oauth/token"
     grant_type: "authorization_code"
-    client_id: "1b99a1bd-b189-4a89-bc3e-8806182a1c07"
-    client_secret_keyvault_name: "notion-client-secret"
+    client_id: "16dd872b-594c-8007-a0ee-00376e9a88a9"
+    client_secret: "secret_O3WlZnEMgG8zRX4taqkzoJT5VcDPIos3NVpOdo3YYUl"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "header"
     additional_frontend_params:
