@@ -30,7 +30,7 @@ integrations:
     client_secret: "1c97a378-9d75-4337-947f-bca783f69377"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
-    scope: "crm.objects.companies.read crm.objects.companies.write crm.objects.contacts.read crm.objects.contacts.write crm.objects.deals.read crm.objects.deals.write oauth tickets"
+    scope: "crm.objects.companies.read crm.objects.contacts.read crm.objects.deals.read oauth tickets"
 
   notion:
     auth_type: "oauth2_with_refresh"
