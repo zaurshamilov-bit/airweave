@@ -5,9 +5,7 @@ HubSpot objects like Contacts, Companies, Deals, and Tickets.
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional
-
-from pydantic import Field
+from typing import Optional
 
 from app.platform.chunks._base import BaseChunk
 
