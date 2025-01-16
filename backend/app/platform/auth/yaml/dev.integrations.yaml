@@ -32,6 +32,17 @@ integrations:
     client_credential_location: "body"
     scope: "crm.objects.companies.read crm.objects.contacts.read crm.objects.deals.read oauth tickets"
 
+  intercom:
+    auth_type: "oauth2"
+    url: "https://app.intercom.com/oauth"
+    backend_url: "https://api.intercom.io/auth/eagle/token"
+    grant_type: "authorization_code"
+    client_id: "1f6fa99d-dea8-4b1c-a79b-cf82a1389e4c"
+    client_secret_keyvault_name: "3a7cd4a1-f0ca-4d83-8d8e-01706f175c0b"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read write"
+
   notion:
     auth_type: "oauth2_with_refresh"
     url: "https://api.notion.com/v1/oauth/authorize"
