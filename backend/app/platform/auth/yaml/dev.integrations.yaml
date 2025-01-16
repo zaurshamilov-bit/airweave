@@ -66,5 +66,14 @@ integrations:
     client_credential_location: "body"
     scope: "app_mentions:read,channels:history,channels:join,channels:read,groups:history,groups:read,im:history,im:read,mpim:history,mpim:read,users:read"
 
+  trello:
+    auth_type: "trello_auth"
+    url: "https://trello.com/1/authorize"
+    key: "2d051c43173fdbd0e89ac5b71333d310"
+    scope: "read"
+    callback_method: "fragment"
+    expiration: "never"
+    name: "Airweave Integration"
+
   weaviate:
     auth_type: "config_class"
