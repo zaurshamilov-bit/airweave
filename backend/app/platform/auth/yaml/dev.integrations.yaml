@@ -44,5 +44,16 @@ integrations:
     additional_frontend_params:
       owner: "user"
 
+  slack:
+    auth_type: "oauth2"
+    url: "https://slack.com/oauth/v2/authorize"
+    backend_url: "https://slack.com/api/oauth.v2.access"
+    grant_type: "authorization_code"
+    client_id: "6769618979345.8289604264455"
+    client_secret: "e27c2e6b34a46987ee1707bd0d9aba15"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "channels:join,channels:manage,channels:read,chat:write,groups:read,im:read,incoming-webhook,mpim:read"
+
   weaviate:
     auth_type: "config_class"
