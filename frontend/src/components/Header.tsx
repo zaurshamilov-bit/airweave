@@ -24,9 +24,11 @@ export const Header = () => {
         {/* Logo */}
         <div className="flex items-center space-x-2">
           <Link to="/" className="flex items-center space-x-2">
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
-              Airweave
-            </span>
+            <img 
+              src="/logo-and-lettermark.svg" 
+              alt="Airweave" 
+              className="h-8"
+            />
           </Link>
         </div>
 

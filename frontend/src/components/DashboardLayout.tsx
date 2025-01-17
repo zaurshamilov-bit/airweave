@@ -104,10 +104,12 @@ const DashboardLayout = () => {
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
               <div className="flex h-16 items-center px-6">
-                <Link to="/" className="flex items-center space-x-2">
-                  <span className="text-2xl font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
-                    Airweave
-                  </span>
+                <Link to="/" className="flex items-center">
+                  <img 
+                    src="/logo-and-lettermark.svg" 
+                    alt="Airweave" 
+                    className="h-6 pr-4"
+                  />
                 </Link>
               </div>
               <nav className="flex flex-col justify-between h-[calc(100%-4rem)]">
@@ -153,11 +155,13 @@ const DashboardLayout = () => {
           <div className="flex h-16 items-center px-6">
             <Link 
               to="/" 
-              className="flex items-center space-x-2 transition-transform duration-200 hover:scale-105"
+              className="flex items-center transition-transform duration-200 hover:scale-105"
             >
-              <span className="text-3xl font-bold bg-gradient-to-r from-primary-400 to-secondary-400 bg-clip-text text-transparent">
-                Airweave
-              </span>
+              <img 
+                src="/logo-and-lettermark.svg" 
+                alt="Airweave" 
+                className="h-8 pr-4"
+              />
             </Link>
           </div>
           <nav className="flex flex-col justify-between h-[calc(100%-4rem)]">
