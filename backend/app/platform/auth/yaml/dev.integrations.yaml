@@ -66,6 +66,9 @@ integrations:
     client_credential_location: "body"
     scope: "app_mentions:read,channels:history,channels:join,channels:read,groups:history,groups:read,im:history,im:read,mpim:history,mpim:read,users:read"
 
+  stripe:
+    auth_type: "api_key"
+
   todoist:
     auth_type: "oauth2"
     url: "https://todoist.com/oauth/authorize"
