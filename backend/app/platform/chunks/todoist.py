@@ -1,8 +1,7 @@
 """Todoist chunk schemas.
 
-Based on the Todoist REST API reference, we define chunk schemas for common
-Todoist objects such as Projects, Sections, Tasks, and Comments.
-These follow a style similar to our Asana and HubSpot chunk schemas.
+Based on the Todoist REST API reference, we define chunk schemas for
+Todoist objects, Projects, Sections, Tasks, and Comments.
 """
 
 from datetime import datetime
