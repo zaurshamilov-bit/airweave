@@ -66,6 +66,17 @@ integrations:
     client_credential_location: "body"
     scope: "app_mentions:read,channels:history,channels:join,channels:read,groups:history,groups:read,im:history,im:read,mpim:history,mpim:read,users:read"
 
+  todoist:
+    auth_type: "oauth2"
+    url: "https://todoist.com/oauth/authorize"
+    backend_url: "https://todoist.com/oauth/access_token"
+    grant_type: "authorization_code"
+    client_id: "74e8b22d71a14e51b78e53e7c3e4fbc8"
+    client_secret: "f356300313a74eea89ea30afa780c6e7"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "data:read"
+
   trello:
     auth_type: "trello_auth"
     url: "https://trello.com/1/authorize"
