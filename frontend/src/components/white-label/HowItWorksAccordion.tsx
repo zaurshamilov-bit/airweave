@@ -19,7 +19,7 @@ export const HowItWorksAccordion = () => {
         <div className="flex items-center justify-end">
           <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
             <Info className="h-4 w-4" />
-            <span>how does this work?</span>
+            <span>How does this work?</span>
           </CollapsibleTrigger>
         </div>
         <CollapsibleContent className="bg-card rounded-lg p-4 shadow-lg border animate-in slide-in-from-top-2">

@@ -12,21 +12,14 @@ interface CodeSnippetProps {
 export const CodeSnippet = ({ whitelabelGuid, frontendUrl, clientId, source }: CodeSnippetProps) => {
   const { toast } = useToast();
   const hasWhitelabel = !!whitelabelGuid;
+  const displayGuid = whitelabelGuid || "<your-white-label-id-will-be-added-here>";
 
   const getOAuth2Url = () => `
     // Function to initiate OAuth2 flow
-    const initiateOAuth2Flow = () => {
-      const params = new URLSearchParams({
-        response_type: 'code',
-        client_id: '${clientId || '<your-client-id>'}',
-        redirect_uri: '${frontendUrl || '<your-frontend-callback-url>'}',
-        // Add any additional parameters your OAuth2 provider requires
-        // scope: 'read write',
-        // state: 'some-random-state',
-      });
-
-      // Replace this URL with your OAuth2 provider's authorization endpoint
-      const authUrl = \`https://your-oauth2-provider.com/oauth/authorize?\${params.toString()}\`;
+    const initiateOAuth2Flow = async () => {
+      // Get the auth URL from Airweave's backend
+      const response = await fetch(\`https://api.airweave.ai/connections/oauth2/white-label/${displayGuid}/auth_url\`);
+      const authUrl = await response.text();
       
       // Redirect the user to the authorization URL
       window.location.href = authUrl;
@@ -36,8 +29,7 @@ export const CodeSnippet = ({ whitelabelGuid, frontendUrl, clientId, source }: C
     // <button onClick={initiateOAuth2Flow}>Connect to Service</button>
   `.trim();
 
-  const getCodeSnippet = () =>
-    `
+  const getCodeSnippet = () => `
     // Add this script to your callback page
     const airweaveOAuth = {
       init: async () => {
@@ -46,30 +38,18 @@ export const CodeSnippet = ({ whitelabelGuid, frontendUrl, clientId, source }: C
         
         if (code) {
           try {
-            // Edit metadata as you like. This example allows you to query 
-            // for users and organizations with the Airweave API.
-            const metadata = {
-              organization: {
-                name: "Some organization",
-                id: "org_123",
-              },
-              user: {
-                id: "user_456",
-                email: "user@example.com",
-              }
-            };
-
-            const response = await fetch(\`https://api.airweave.ai/whitelabel/oauth/${
-              hasWhitelabel ? whitelabelGuid : "<your-white-label-id>"
-            }/$\{code}\`, {
+            const response = await fetch('https://api.airweave.ai/connections/oauth2/white-label/${displayGuid}/code', {
               method: 'POST',
-              body: JSON.stringify({ metadata })
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ code })
             });
             
             const data = await response.json();
-            console.log('Airweave sync initiated:', data);
+            console.log('Airweave connection created:', data);
           } catch (error) {
-            console.error('Error syncing with Airweave:', error);
+            console.error('Error creating connection with Airweave:', error);
           }
         }
       }

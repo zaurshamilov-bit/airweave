@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 import httpx
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
@@ -12,7 +13,14 @@ from app.core import credentials
 from app.core.config import settings
 from app.core.exceptions import NotFoundException, TokenRefreshError
 from app.core.logging import logger
-from app.platform.auth.schemas import OAuth2Settings, OAuth2TokenResponse
+from app.db.unit_of_work import UnitOfWork
+from app.models.integration_credential import IntegrationType
+from app.platform.auth.schemas import (
+    AuthType,
+    BaseAuthSettings,
+    OAuth2Settings,
+    OAuth2TokenResponse,
+)
 from app.platform.auth.settings import integration_settings
 
 oauth2_service_logger = logger.with_prefix("OAuth2 Service: ").with_context(
@@ -98,42 +106,22 @@ class OAuth2Service:
         Raises:
         ------
             NotFoundException: If the integration is not found
-
         """
-        redirect_uri = OAuth2Service._get_redirect_url(integration_short_name)
         integration_config = integration_settings.get_by_short_name(integration_short_name)
         if not integration_config:
             raise NotFoundException(f"Integration {integration_short_name} not found.")
 
+        redirect_uri = OAuth2Service._get_redirect_url(integration_short_name)
         client_id = integration_config.client_id
         client_secret = integration_config.client_secret
 
-        headers = {
-            "Content-Type": integration_config.content_type,
-        }
-
-        payload = {
-            "grant_type": integration_config.grant_type,
-            "code": code,
-            "redirect_uri": redirect_uri,
-        }
-
-        if integration_config.client_credential_location == "header":
-            encoded_credentials = OAuth2Service._encode_client_credentials(client_id, client_secret)
-            headers["Authorization"] = f"Basic {encoded_credentials}"
-
-        else:
-            payload["client_id"] = client_id
-            payload["client_secret"] = client_secret
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                integration_config.backend_url, headers=headers, data=payload
-            )
-
-        response.raise_for_status()
-
-        return OAuth2TokenResponse(**response.json())
+        return await OAuth2Service._exchange_code(
+            code=code,
+            redirect_uri=redirect_uri,
+            client_id=client_id,
+            client_secret=client_secret,
+            integration_config=integration_config,
+        )
 
     @staticmethod
     async def refresh_access_token(
@@ -422,9 +410,19 @@ class OAuth2Service:
         return f"{app_url}/auth/callback/{integration_short_name}"
 
     @staticmethod
-    def generate_auth_url_for_whitelabel(white_label: schemas.WhiteLabel) -> str:
+    async def generate_auth_url_for_whitelabel(
+        db: AsyncSession, white_label: schemas.WhiteLabel
+    ) -> str:
         """Generate the OAuth2 authorization URL for a white label integration."""
-        integration_config = integration_settings.get_by_short_name(white_label.source_id)
+        source = await crud.source.get(db=db, id=white_label.source_id)
+
+        if not source:
+            raise NotFoundException("Source not found")
+
+        integration_config = integration_settings.get_by_short_name(source.short_name)
+
+        if not integration_config:
+            raise NotFoundException("Integration not found")
 
         # Use white_label's redirect_url instead of the default one
         params = {
@@ -445,11 +443,62 @@ class OAuth2Service:
         db: AsyncSession,
         code: str,
         white_label: schemas.WhiteLabel,
-        user: schemas.User,
     ) -> OAuth2TokenResponse:
-        """Exchange OAuth2 authorization code for tokens using white label credentials."""
-        integration_config = integration_settings.get_by_short_name(white_label.source_id)
+        """Exchange OAuth2 authorization code for tokens using white label credentials.
 
+        Args:
+        ----
+            db: Database session
+            code: The authorization code to exchange
+            white_label: The white label configuration to use
+
+        Returns:
+        -------
+            OAuth2TokenResponse: The response containing the access token and other token details.
+
+        Raises:
+        ------
+            NotFoundException: If the integration is not found
+        """
+        integration_config = integration_settings.get_by_short_name(white_label.source_id)
+        if not integration_config:
+            raise NotFoundException(f"Integration {white_label.source_id} not found.")
+
+        return await OAuth2Service._exchange_code(
+            code=code,
+            redirect_uri=white_label.redirect_url,
+            client_id=white_label.client_id,
+            client_secret=white_label.client_secret,
+            integration_config=integration_config,
+        )
+
+    @staticmethod
+    async def _exchange_code(
+        *,
+        code: str,
+        redirect_uri: str,
+        client_id: str,
+        client_secret: str,
+        integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
+    ) -> OAuth2TokenResponse:
+        """Core method to exchange an authorization code for tokens.
+
+        Args:
+        ----
+            code: The authorization code to exchange
+            redirect_uri: The redirect URI used in the authorization request
+            client_id: The OAuth2 client ID
+            client_secret: The OAuth2 client secret
+            integration_config: The integration configuration
+
+        Returns:
+        -------
+            OAuth2TokenResponse: The response containing the access token and other token details.
+
+        Raises:
+        ------
+            HTTPException: If the token exchange fails
+        """
         headers = {
             "Content-Type": integration_config.content_type,
         }
@@ -457,31 +506,181 @@ class OAuth2Service:
         payload = {
             "grant_type": integration_config.grant_type,
             "code": code,
-            "redirect_uri": white_label.redirect_url,
+            "redirect_uri": redirect_uri,
         }
 
         if integration_config.client_credential_location == "header":
-            encoded_credentials = OAuth2Service._encode_client_credentials(
-                white_label.client_id, white_label.client_secret
-            )
+            encoded_credentials = OAuth2Service._encode_client_credentials(client_id, client_secret)
             headers["Authorization"] = f"Basic {encoded_credentials}"
         else:
-            payload["client_id"] = white_label.client_id
-            payload["client_secret"] = white_label.client_secret
+            payload["client_id"] = client_id
+            payload["client_secret"] = client_secret
 
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     integration_config.backend_url, headers=headers, data=payload
                 )
-            response.raise_for_status()
+                response.raise_for_status()
         except Exception as e:
-            oauth2_service_logger.error(
-                f"Unable to exchange OAuth2 code for WhiteLabel (id={white_label.id}): {e}"
-            )
-            raise
+            oauth2_service_logger.error(f"Failed to exchange authorization code: {str(e)}")
+            raise HTTPException(
+                status_code=400, detail="Failed to exchange authorization code"
+            ) from e
 
         return OAuth2TokenResponse(**response.json())
+
+    @staticmethod
+    async def create_oauth2_connection(
+        db: AsyncSession,
+        short_name: str,
+        code: str,
+        user: schemas.User,
+    ) -> schemas.SourceConnection:
+        """Create a new OAuth2 connection for a source.
+
+        Does the following:
+        1. Get the OAuth2 settings for the source
+        2. Exchange the authorization code for a token
+        3. Create an integration credential with the token
+        4. Create a connection with the integration credential
+
+        Args:
+        ----
+            db: Database session
+            short_name: The short name of the source
+            code: The authorization code to exchange
+            user: The user creating the connection
+
+        Returns:
+        -------
+            schemas.SourceConnection: The created connection
+        """
+        settings = integration_settings.get_by_short_name(short_name)
+        if not settings:
+            raise NotFoundException("Integration not found")
+
+        source = await crud.source.get_by_short_name(db, short_name)
+        if not source:
+            raise NotFoundException("Source not found")
+
+        if not OAuth2Service._supports_oauth2(source.auth_type):
+            raise HTTPException(status_code=400, detail="Source does not support OAuth2")
+
+        # Exchange code for token using default credentials
+        oauth2_response = await OAuth2Service.exchange_autorization_code_for_token(short_name, code)
+
+        return await OAuth2Service._create_connection(
+            db=db,
+            source=source,
+            settings=settings,
+            oauth2_response=oauth2_response,
+            user=user,
+        )
+
+    @staticmethod
+    async def create_oauth2_connection_for_whitelabel(
+        db: AsyncSession,
+        white_label: schemas.WhiteLabel,
+        code: str,
+        user: schemas.User,
+    ) -> schemas.SourceConnection:
+        """Create a new OAuth2 connection using white label credentials.
+
+        Args:
+        ----
+            db: Database session
+            white_label: The white label configuration to use
+            code: The authorization code to exchange
+            user: The user creating the connection
+
+        Returns:
+        -------
+            schemas.SourceConnection: The created connection
+        """
+        source = await crud.source.get_by_short_name(db, white_label.source_id)
+        if not source:
+            raise NotFoundException("Source not found")
+
+        settings = integration_settings.get_by_short_name(white_label.source_id)
+        if not settings:
+            raise NotFoundException("Integration not found")
+
+        if not OAuth2Service._supports_oauth2(source.auth_type):
+            raise HTTPException(status_code=400, detail="Source does not support OAuth2")
+
+        # Exchange code for token using white label credentials
+        oauth2_response = await OAuth2Service.exchange_code_for_whitelabel(db, code, white_label)
+
+        return await OAuth2Service._create_connection(
+            db=db,
+            source=source,
+            settings=settings,
+            oauth2_response=oauth2_response,
+            user=user,
+        )
+
+    @staticmethod
+    def _supports_oauth2(auth_type: AuthType) -> bool:
+        """Check if the auth type supports OAuth2."""
+        return auth_type in (
+            AuthType.oauth2,
+            AuthType.oauth2_with_refresh,
+            AuthType.oauth2_with_refresh_rotating,
+        )
+
+    @staticmethod
+    async def _create_connection(
+        db: AsyncSession,
+        source: schemas.Source,
+        settings: BaseAuthSettings,
+        oauth2_response: OAuth2TokenResponse,
+        user: schemas.User,
+    ) -> schemas.SourceConnection:
+        """Create a new connection with OAuth2 credentials."""
+        # Prepare credentials based on auth type
+        decrypted_credentials = (
+            {"access_token": oauth2_response.access_token}
+            if settings.auth_type == "oauth2"
+            else {"refresh_token": oauth2_response.refresh_token}
+        )
+
+        encrypted_credentials = credentials.encrypt(decrypted_credentials)
+
+        async with UnitOfWork(db) as uow:
+            # Create integration credential
+            integration_credential_in = schemas.IntegrationCredentialCreate(
+                name=f"{source.name} - {user.email}",
+                description=f"OAuth2 credentials for {source.name} - {user.email}",
+                integration_short_name=source.short_name,
+                integration_type=IntegrationType.SOURCE,
+                auth_type=source.auth_type,
+                encrypted_credentials=encrypted_credentials,
+            )
+
+            integration_credential = await crud.integration_credential.create(
+                uow.session, obj_in=integration_credential_in, current_user=user, uow=uow
+            )
+
+            await uow.session.flush()
+
+            # Create connection
+            connection_in = schemas.ConnectionCreate(
+                name=f"Connection to {source.name}",
+                integration_type=IntegrationType.SOURCE,
+                status=schemas.ConnectionStatus.ACTIVE,
+                integration_credential_id=integration_credential.id,
+                source_id=source.id,
+            )
+
+            connection = await crud.connection.create(
+                uow.session, obj_in=connection_in, current_user=user, uow=uow
+            )
+
+            await uow.commit()
+            await uow.session.refresh(connection)
+
+        return connection
 
 
 oauth2_service = OAuth2Service()

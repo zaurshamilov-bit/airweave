@@ -1,5 +1,7 @@
 """Module for data synchronization."""
 
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
@@ -223,6 +225,45 @@ class SyncService:
             sync_context.white_label = white_label
 
         return sync_context
+
+    async def generate_white_label_auth_url(
+        self,
+        db: AsyncSession,
+        white_label_id: UUID,
+        current_user: schemas.User,
+    ) -> str:
+        """Generate OAuth2 authorization URL for a white label integration."""
+        # Get white label config
+        white_label = await crud.white_label.get(db, white_label_id, current_user)
+        if not white_label:
+            raise NotFoundException("White label integration not found")
+
+        # Get source settings
+        source = await crud.source.get_by_short_name(db, white_label.source_id)
+        if not source:
+            raise NotFoundException("Source not found")
+
+        # Get integration settings
+        settings = integration_settings.get_by_short_name(white_label.source_id)
+        if not settings:
+            raise NotFoundException("Integration settings not found")
+
+        if source.auth_type not in [
+            AuthType.oauth2,
+            AuthType.oauth2_with_refresh,
+            AuthType.oauth2_with_refresh_rotating,
+        ]:
+            raise ValueError("Source does not support OAuth2")
+
+        # Override OAuth2 settings with white label config
+        white_label_settings = settings.model_copy()
+        white_label_settings.client_id = white_label.client_id
+
+        # Generate auth URL using the white label client ID
+        if white_label.source_id == "trello":
+            return oauth2_service.generate_auth_url_for_trello(client_id=white_label.client_id)
+
+        return oauth2_service.generate_auth_url(white_label_settings)
 
 
 sync_service = SyncService()

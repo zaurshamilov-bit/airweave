@@ -21,6 +21,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "@/config/api";
+import { getAppIconUrl } from "@/lib/utils/icons";
 
 // The shape we want for our create/update form.
 const formSchema = z.object({
@@ -43,7 +44,19 @@ interface ValidationError {
   errors: Array<Record<string, string>>;
 }
 
-export function WhiteLabelForm() {
+interface WhiteLabelResponse {
+  id: string;
+  name: string;
+  source_id: string;
+  redirect_url: string;
+  client_id: string;
+}
+
+interface WhiteLabelFormProps {
+  onSuccess?: (data: WhiteLabelResponse) => void;
+}
+
+export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
   const { whiteLabelId } = useParams();
   const navigate = useNavigate();
   const form = useForm<WhiteLabelFormData>({
@@ -147,7 +160,14 @@ export function WhiteLabelForm() {
         );
       }
 
-      navigate("/white-label");
+      const data: WhiteLabelResponse = await response.json();
+      
+      if (whiteLabelId) {
+        navigate("/white-label");
+      } else {
+        // Instead of navigating, emit the created data
+        onSuccess?.(data);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -206,12 +226,38 @@ export function WhiteLabelForm() {
                 <FormControl>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a data source" />
+                      {field.value ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 shrink-0 flex items-center justify-center">
+                            <img
+                              src={getAppIconUrl(field.value)}
+                              alt=""
+                              className="w-4 h-4"
+                            />
+                          </div>
+                          {sources.find(s => s.short_name === field.value)?.name}
+                        </div>
+                      ) : (
+                        <SelectValue placeholder="Select a data source" />
+                      )}
                     </SelectTrigger>
                     <SelectContent>
                       {sources.map((src) => (
-                        <SelectItem key={src.id} value={src.short_name}>
-                          {src.name}
+                        <SelectItem 
+                          key={src.id} 
+                          value={src.short_name}
+                          className="flex items-center gap-2"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 shrink-0 flex items-center justify-center">
+                              <img
+                                src={getAppIconUrl(src.short_name)}
+                                alt=""
+                                className="w-4 h-4"
+                              />
+                            </div>
+                            {src.name}
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -1,6 +1,7 @@
 """The API module that contains the endpoints for connections."""
 
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -238,67 +239,78 @@ async def send_oauth2_code(
     2. Exchange the authorization code for a token
     3. Create an integration credential with the token
     """
-    settings = integration_settings.get_by_short_name(short_name)
-
-    if not settings:
-        raise HTTPException(status_code=404, detail="Integration not found")
-
-    source = await crud.source.get_by_short_name(db, short_name)
-
-    if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
-
-    if source.auth_type not in (
-        AuthType.oauth2,
-        AuthType.oauth2_with_refresh,
-        AuthType.oauth2_with_refresh_rotating,
-    ):
-        raise HTTPException(status_code=400, detail="Source does not support OAuth2")
     try:
-        oauth2_response = await oauth2_service.exchange_autorization_code_for_token(
-            short_name, code
+        return await oauth2_service.create_oauth2_connection(
+            db=db,
+            short_name=short_name,
+            code=code,
+            user=user,
         )
-
-        decrypted_credentials = (
-            {"access_token": oauth2_response.access_token}
-            if settings.auth_type == "oauth2"
-            else {"refresh_token": oauth2_response.refresh_token}
-        )
-
-        encrypted_credentials = credentials.encrypt(decrypted_credentials)
-
-        async with UnitOfWork(db) as uow:
-            integration_credential_in = schemas.IntegrationCredentialCreate(
-                name=f"{source.name} - {user.email}",
-                description=f"OAuth2 credentials for {source.name} - {user.email}",
-                integration_short_name=source.short_name,
-                integration_type=IntegrationType.SOURCE,
-                auth_type=source.auth_type,
-                encrypted_credentials=encrypted_credentials,
-            )
-
-            integration_credential = await crud.integration_credential.create(
-                uow.session, obj_in=integration_credential_in, current_user=user, uow=uow
-            )
-
-            await uow.session.flush()
-
-            connection_in = ConnectionCreate(
-                name=f"Connection to {source.name}",
-                integration_type=IntegrationType.SOURCE,
-                status=ConnectionStatus.ACTIVE,
-                integration_credential_id=integration_credential.id,
-                source_id=source.id,
-            )
-
-            connection = await crud.connection.create(
-                uow.session, obj_in=connection_in, current_user=user, uow=uow
-            )
-
-            await uow.commit()
-            await uow.session.refresh(connection)
-
-        return connection
     except Exception as e:
         logger.error(f"Failed to exchange OAuth2 code: {e}")
         raise HTTPException(status_code=400, detail="Failed to exchange OAuth2 code") from e
+
+
+@router.post("/oauth2/white-label/{white_label_id}/code")
+async def send_oauth2_white_label_code(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    white_label_id: UUID,
+    code: str = Body(...),
+    user: schemas.User = Depends(deps.get_user),
+) -> schemas.SourceConnection:
+    """Exchange the OAuth2 authorization code for a white label integration."""
+    try:
+        white_label = await crud.white_label.get(db, id=white_label_id, current_user=user)
+        if not white_label:
+            raise HTTPException(status_code=404, detail="White label integration not found")
+
+        return await oauth2_service.create_oauth2_connection_for_whitelabel(
+            db=db,
+            white_label=white_label,
+            code=code,
+            user=user,
+        )
+    except Exception as e:
+        logger.error(f"Failed to exchange OAuth2 code for white label: {e}")
+        raise HTTPException(status_code=400, detail="Failed to exchange OAuth2 code") from e
+
+
+@router.get("/oauth2/white-label/{white_label_id}/auth_url")
+async def get_oauth2_white_label_auth_url(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    white_label_id: UUID,
+    user: schemas.User = Depends(deps.get_user),
+) -> str:
+    """Get the OAuth2 authorization URL for a white label integration."""
+    try:
+        white_label = await crud.white_label.get(
+            db,
+            id=white_label_id,
+            current_user=user,
+        )
+        if not white_label:
+            raise HTTPException(status_code=404, detail="White label integration not found")
+
+        source = await crud.source.get(db, id=white_label.source_id)
+        if not source:
+            raise HTTPException(status_code=404, detail="Source not found")
+
+        # Get the source settings since white label is based on a source
+        settings = integration_settings.get_by_short_name(db, source.short_name)
+        if not settings:
+            raise HTTPException(status_code=404, detail="Integration settings not found")
+
+        if settings.auth_type not in [
+            AuthType.oauth2,
+            AuthType.oauth2_with_refresh,
+            AuthType.oauth2_with_refresh_rotating,
+        ]:
+            raise HTTPException(status_code=400, detail="Integration does not support OAuth2")
+
+        # Generate auth URL using the white label's client ID and redirect URL
+        return oauth2_service.generate_auth_url_for_whitelabel(settings, white_label)
+    except Exception as e:
+        logger.error(f"Failed to generate auth URL for white label: {e}")
+        raise HTTPException(status_code=400, detail="Failed to generate auth URL") from e

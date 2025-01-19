@@ -1,60 +1,54 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import * as z from "zod";
-import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
 import { WhiteLabelForm } from "@/components/white-label/WhiteLabelForm";
 import { CodeSnippet } from "@/components/white-label/CodeSnippet";
 import { HowItWorksAccordion } from "@/components/white-label/HowItWorksAccordion";
+import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { apiClient } from "@/config/api";
 
-const formSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  source: z.string().min(2, "Source must be at least 2 characters"),
-  frontendUrl: z.string().url("Must be a valid URL"),
-  clientId: z.string().min(1, "Client ID is required"),
-  clientSecret: z.string().min(1, "Client Secret is required"),
-});
+interface WhiteLabelData {
+  id: string;
+  name: string;
+  source_id: string;
+  redirect_url: string;
+  client_id: string;
+}
 
 const CreateWhiteLabel = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const [whitelabelGuid, setWhitelabelGuid] = useState<string>("");
+  const [whiteLabel, setWhiteLabel] = useState<WhiteLabelData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: "",
-      source: "",
-      frontendUrl: "",
-      clientId: "",
-      clientSecret: "",
-    },
-  });
-
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    // In a real app, this would be an API call
-    console.log("Submitting:", values);
-    const mockGuid = "wl_" + Math.random().toString(36).substr(2, 9);
-    setWhitelabelGuid(mockGuid);
-    toast({
-      title: "Configuration saved",
-      description: "Your OAuth2 integration has been configured successfully.",
-    });
+  const handleSuccess = (data: WhiteLabelData) => {
+    setIsLoading(false);
+    setWhiteLabel(data);
   };
 
-  const formValues = form.watch();
+  // Kick off the OAuth2 flow (matching the snippet in CodeSnippet.tsx)
+  const initiateOAuth2Flow = async () => {
+    if (!whiteLabel?.id) return;
+    try {
+      setIsLoading(true);
+      const response = await apiClient.get(
+        `/connections/oauth2/white-label/${whiteLabel.id}/auth_url`
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to get auth URL. Status: ${response.status}`);
+      }
+      const authUrl = await response.text();
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error("Error initiating OAuth2 flow:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="container mx-auto py-8 space-y-8">
       <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate("/white-label")}
-        >
+        <Button variant="ghost" size="icon" onClick={() => navigate("/white-label")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
@@ -68,19 +62,43 @@ const CreateWhiteLabel = () => {
       <HowItWorksAccordion />
 
       <div className="space-y-8">
-        <WhiteLabelForm form={form} onSubmit={onSubmit} />
+        <WhiteLabelForm onSuccess={handleSuccess} />
 
-        <CodeSnippet 
-          whitelabelGuid={whitelabelGuid}
-          frontendUrl={formValues.frontendUrl}
-          clientId={formValues.clientId}
-          source={formValues.source}
-        />
+        {isLoading ? (
+          <div className="flex items-center justify-center p-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          </div>
+        ) : (
+          <>
+            <CodeSnippet
+              whitelabelGuid={whiteLabel?.id}
+              frontendUrl={whiteLabel?.redirect_url}
+              clientId={whiteLabel?.client_id}
+              source={whiteLabel?.source_id}
+            />
 
-        {whitelabelGuid && (
-          <Button onClick={() => navigate(`/white-label/${whitelabelGuid}`)}>
-            Go to white label integration
-          </Button>
+            <div className="mt-4">
+              <Button
+                onClick={initiateOAuth2Flow}
+                variant="secondary"
+                disabled={!whiteLabel?.id}
+                className={!whiteLabel?.id ? "opacity-50 cursor-not-allowed" : ""}
+              >
+                Try out now
+              </Button>
+            </div>
+          </>
+        )}
+
+        {whiteLabel && (
+          <div className="flex gap-4">
+            <Button onClick={() => navigate(`/white-label/${whiteLabel.id}`)}>
+              Go to white label integration
+            </Button>
+            <Button onClick={() => navigate("/white-label")} variant="outline">
+              Back to list
+            </Button>
+          </div>
         )}
       </div>
     </div>
