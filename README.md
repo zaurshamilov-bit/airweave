@@ -1,4 +1,4 @@
-<img width="1673" alt="airweave-lettermark" src="https://github.com/user-attachments/assets/60d9fe33-2d75-48cb-9196-0b5203ce1fcc" />
+<img width="1673" alt="airweave-lettermark" src="https://github.com/user-attachments/assets/9e78811d-54db-4e03-8d41-2ad4fa0707ca" />
 
 # Airweave 
 
