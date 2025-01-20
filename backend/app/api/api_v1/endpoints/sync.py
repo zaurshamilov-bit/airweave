@@ -132,7 +132,9 @@ async def list_sync_jobs(
     if not sync:
         raise HTTPException(status_code=404, detail="Sync not found")
 
-    return await crud.sync_job.get_multi_by_sync(db=db, sync_id=sync_id, skip=skip, limit=limit)
+    return await crud.sync_job.get_all_for_white_label(
+        db=db, sync_id=sync_id, skip=skip, limit=limit
+    )
 
 
 @router.get("/job/{job_id}", response_model=schemas.SyncJob)

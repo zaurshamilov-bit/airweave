@@ -33,20 +33,20 @@ const WhiteLabel = () => {
     <div className="container mx-auto py-8 space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">White Label Integrations</h1>
+          <h1 className="text-3xl font-bold">White Labels</h1>
           <p className="text-muted-foreground mt-2">
-            Manage your OAuth2 integrations for different applications.
+            Manage your OAuth2 white labels for different applications.
           </p>
         </div>
         <Button onClick={() => navigate("/white-label/create")}>
           <Plus className="mr-2 h-4 w-4" />
-          New Integration
+          New White Label
         </Button>
       </div>
 
       <HowItWorksAccordion />
 
-      <WhiteLabelTable integrations={whiteLabelIntegrations} />
+      <WhiteLabelTable whiteLabels={whiteLabelIntegrations} />
     </div>
   );
 };

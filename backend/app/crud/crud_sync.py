@@ -13,13 +13,11 @@ from app.schemas.sync import SyncCreate, SyncUpdate
 class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
     """CRUD operations for syncs."""
 
-    async def get_by_white_label(
-        self, db: AsyncSession, white_label_id: UUID
-    ) -> Sync | None:
+    async def get_all_for_white_label(self, db: AsyncSession, white_label_id: UUID) -> list[Sync]:
         """Get sync by white label ID."""
         stmt = select(Sync).where(Sync.white_label_id == white_label_id)
         result = await db.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalars().unique().all()
 
 
 sync = CRUDSync(Sync)

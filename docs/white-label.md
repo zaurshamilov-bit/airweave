@@ -7,7 +7,7 @@ Airweave enables **white-labeled multi-tenant integrations** that let your SaaS 
 ## What Happens During Setup?
 
 1. **Configure an OAuth2 Integration**:
-   - Go to the Airweave dashboard, navigate to **"White Label"**, and click **"New Integration"**.
+   - Go to the Airweave dashboard, navigate to **"White Label"**, and click **"New White Label"**.
    - Fill in the following details:
      - **Integration Name**
      - **Source**: Select a data source (e.g., Slack, Google Drive).

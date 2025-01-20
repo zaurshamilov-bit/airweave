@@ -13,7 +13,7 @@ import { Eye } from "lucide-react";
 import { apiClient } from "@/config/api";
 
 // Match whatever actual shape your backend returns for a WhiteLabel
-interface WhiteLabelIntegration {
+interface WhiteLabel {
   id: string;
   name: string;
   redirect_url: string;
@@ -23,7 +23,7 @@ interface WhiteLabelIntegration {
 
 export const WhiteLabelTable = () => {
   const navigate = useNavigate();
-  const [integrations, setIntegrations] = useState<WhiteLabelIntegration[]>([]);
+  const [whiteLabels, setWhiteLabels] = useState<WhiteLabel[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +35,7 @@ export const WhiteLabelTable = () => {
         throw new Error(`Failed to load white labels. Status: ${response.status}`);
       }
       const data = await response.json();
-      setIntegrations(data);
+      setWhiteLabels(data);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -62,18 +62,18 @@ export const WhiteLabelTable = () => {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {integrations.map((integration) => (
+        {whiteLabels.map((whiteLabel) => (
           <TableRow
-            key={integration.id}
+            key={whiteLabel.id}
             className="cursor-pointer hover:bg-muted/50"
-            onClick={() => navigate(`/white-label/${integration.id}`)}
+            onClick={() => navigate(`/white-label/${whiteLabel.id}`)}
           >
-            <TableCell className="font-medium">{integration.name}</TableCell>
-            <TableCell>{integration.id}</TableCell>
-            <TableCell>{integration.redirect_url}</TableCell>
+            <TableCell className="font-medium">{whiteLabel.name}</TableCell>
+            <TableCell>{whiteLabel.id}</TableCell>
+            <TableCell>{whiteLabel.redirect_url}</TableCell>
             <TableCell>
-              {integration.created_at
-                ? new Date(integration.created_at).toLocaleDateString()
+              {whiteLabel.created_at
+                ? new Date(whiteLabel.created_at).toLocaleDateString()
                 : "N/A"}
             </TableCell>
             <TableCell>
@@ -82,7 +82,7 @@ export const WhiteLabelTable = () => {
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigate(`/white-label/${integration.id}`);
+                  navigate(`/white-label/${whiteLabel.id}`);
                 }}
               >
                 <Eye className="h-4 w-4" />

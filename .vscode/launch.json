@@ -42,7 +42,7 @@
             "name": "Python: Current Script with CWD",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
+            "program": "${file}", 
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/backend",
             "justMyCode": true
@@ -59,6 +59,18 @@
                 "PYTHONPATH": "${workspaceFolder}/backend"
             },
             "justMyCode": false
+        },
+        {
+            "name": "Debug React",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:8080",  // Update this to match your actual Vite port
+            "webRoot": "${workspaceFolder}/frontend",
+            "runtimeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "sourceMapPathOverrides": {
+                "webpack:///./src/*": "${webRoot}/src/*",
+                "webpack:///src/*": "${webRoot}/src/*"
+            },
         }
     ],
     "compounds": [

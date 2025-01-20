@@ -298,7 +298,7 @@ async def get_oauth2_white_label_auth_url(
             raise HTTPException(status_code=404, detail="Source not found")
 
         # Get the source settings since white label is based on a source
-        settings = integration_settings.get_by_short_name(db, source.short_name)
+        settings = integration_settings.get_by_short_name(source.short_name)
         if not settings:
             raise HTTPException(status_code=404, detail="Integration settings not found")
 
@@ -310,7 +310,7 @@ async def get_oauth2_white_label_auth_url(
             raise HTTPException(status_code=400, detail="Integration does not support OAuth2")
 
         # Generate auth URL using the white label's client ID and redirect URL
-        return oauth2_service.generate_auth_url_for_whitelabel(settings, white_label)
+        return await oauth2_service.generate_auth_url_for_whitelabel(db, white_label)
     except Exception as e:
         logger.error(f"Failed to generate auth URL for white label: {e}")
         raise HTTPException(status_code=400, detail="Failed to generate auth URL") from e

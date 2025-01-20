@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,13 +24,37 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
+import { apiClient } from "@/config/api";
 
-interface SyncPipeline {
+interface Sync {
   id: string;
   name: string;
-  status: "active" | "inactive";
-  lastSync: string;
-  nextSync: string;
+  description: string;
+  status: string;
+  schedule: string;
+  white_label_id: string;
+  source_id: string;
+  destination_id: string;
+  created_at: string;
+  modified_at: string;
+  created_by_email: string;
+  modified_by_email: string;
+  last_run_at?: string;
+  next_run_at?: string;
+}
+
+interface WhiteLabel {
+  id: string;
+  name: string;
+  source_id: string;
+  redirect_url: string;
+  client_id: string;
+  client_secret: string;
+  organization_id: string;
+  created_at: string;
+  modified_at: string;
+  created_by_email: string;
+  modified_by_email: string;
 }
 
 const ViewEditWhiteLabel = () => {
@@ -38,44 +62,108 @@ const ViewEditWhiteLabel = () => {
   const navigate = useNavigate();
   const [showSecret, setShowSecret] = useState(false);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [whiteLabel, setWhiteLabel] = useState<WhiteLabel | null>(null);
+  const [syncs, setSyncs] = useState<Sync[]>([]);
+  const [isSyncsLoading, setIsSyncsLoading] = useState(true);
 
-  // Mock data - in a real app this would come from your API
-  const integration = {
-    id: id,
-    name: "Customer Portal Integration",
-    clientId: "client_123456",
-    clientSecret: "secret_abcdef",
-    frontendUrl: "https://customer.example.com/callback",
-    source: "asana",
+  useEffect(() => {
+    const fetchWhiteLabel = async () => {
+      try {
+        const response = await apiClient.get(`/white_labels/${id}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch white label details');
+        }
+        const data = await response.json();
+        setWhiteLabel(data);
+      } catch (error) {
+        toast.error('Failed to load white label details');
+        console.error(error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWhiteLabel();
+  }, [id]);
+
+  useEffect(() => {
+    const fetchSyncs = async () => {
+      try {
+        const response = await apiClient.get(`/white-label/${id}/syncs`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch syncs');
+        }
+        const data = await response.json();
+        setSyncs(data);
+      } catch (error) {
+        toast.error('Failed to load syncs');
+        console.error(error);
+      } finally {
+        setIsSyncsLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchSyncs();
+    }
+  }, [id]);
+
+  const handleDelete = async () => {
+    try {
+      const response = await apiClient.delete(`/white_labels/${id}`);
+      if (!response.ok) {
+        throw new Error('Failed to delete white label');
+      }
+      toast.success("Integration deleted successfully");
+      navigate("/white-label");
+    } catch (error) {
+      toast.error('Failed to delete white label');
+      console.error(error);
+    }
   };
 
-  const syncPipelines: SyncPipeline[] = [
-    {
-      id: "sync_1",
-      name: "Daily Tasks Sync",
-      status: "active",
-      lastSync: "2024-03-20 14:30",
-      nextSync: "2024-03-21 14:30",
-    },
-    {
-      id: "sync_2",
-      name: "Weekly Projects Sync",
-      status: "inactive",
-      lastSync: "2024-03-19 10:00",
-      nextSync: "2024-03-26 10:00",
-    },
-  ];
-
-  const handleDelete = () => {
-    // API call would go here
-    toast.success("Integration deleted successfully");
-    navigate("/white-label");
+  const handleSave = async (formData: Partial<WhiteLabel>) => {
+    try {
+      const response = await apiClient.put(`/white-label/${id}`, {
+        body: JSON.stringify({
+          name: formData.name,
+          redirect_url: formData.redirect_url,
+          client_id: formData.client_id,
+          client_secret: formData.client_secret,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update white label');
+      }
+      
+      const updatedData = await response.json();
+      setWhiteLabel(updatedData);
+      toast.success("Changes saved successfully");
+    } catch (error) {
+      toast.error('Failed to save changes');
+      console.error(error);
+    }
   };
 
-  const handleSave = () => {
-    // API call would go here
-    toast.success("Changes saved successfully");
-  };
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!whiteLabel) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-center text-muted-foreground">
+          White label not found
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto py-8 space-y-8">
@@ -88,7 +176,7 @@ const ViewEditWhiteLabel = () => {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-3xl font-bold">Edit Integration</h1>
+          <h1 className="text-3xl font-bold">Edit White Label</h1>
           <p className="text-muted-foreground mt-2">
             Manage your OAuth2 integration settings
           </p>
@@ -98,11 +186,11 @@ const ViewEditWhiteLabel = () => {
       <Card className="p-6 space-y-6">
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Integration Name</Label>
+            <Label htmlFor="name">White Label Name</Label>
             <Input
               id="name"
-              defaultValue={integration.name}
-              placeholder="Enter integration name"
+              defaultValue={whiteLabel.name}
+              onChange={(e) => handleSave({ ...whiteLabel, name: e.target.value })}
             />
           </div>
 
@@ -110,8 +198,8 @@ const ViewEditWhiteLabel = () => {
             <Label htmlFor="clientId">Client ID</Label>
             <Input
               id="clientId"
-              defaultValue={integration.clientId}
-              placeholder="Enter client ID"
+              defaultValue={whiteLabel.client_id}
+              onChange={(e) => handleSave({ ...whiteLabel, client_id: e.target.value })}
             />
           </div>
 
@@ -121,8 +209,8 @@ const ViewEditWhiteLabel = () => {
               <Input
                 id="clientSecret"
                 type={showSecret ? "text" : "password"}
-                defaultValue={integration.clientSecret}
-                placeholder="Enter client secret"
+                defaultValue={whiteLabel.client_secret}
+                onChange={(e) => handleSave({ ...whiteLabel, client_secret: e.target.value })}
               />
               <Button
                 variant="ghost"
@@ -140,12 +228,28 @@ const ViewEditWhiteLabel = () => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="frontendUrl">Frontend Callback URL</Label>
+            <Label htmlFor="redirectUrl">Frontend Callback URL</Label>
             <Input
-              id="frontendUrl"
-              defaultValue={integration.frontendUrl}
-              placeholder="Enter frontend callback URL"
+              id="redirectUrl"
+              defaultValue={whiteLabel.redirect_url}
+              onChange={(e) => handleSave({ ...whiteLabel, redirect_url: e.target.value })}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Created By</Label>
+            <div className="text-sm text-muted-foreground">{whiteLabel.created_by_email}</div>
+            <div className="text-xs text-muted-foreground">
+              {new Date(whiteLabel.created_at).toLocaleString()}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Last Modified By</Label>
+            <div className="text-sm text-muted-foreground">{whiteLabel.modified_by_email}</div>
+            <div className="text-xs text-muted-foreground">
+              {new Date(whiteLabel.modified_at).toLocaleString()}
+            </div>
           </div>
 
           <div className="flex justify-between pt-4">
@@ -156,7 +260,6 @@ const ViewEditWhiteLabel = () => {
               <Trash2 className="mr-2 h-4 w-4" />
               Delete Integration
             </Button>
-            <Button onClick={handleSave}>Save Changes</Button>
           </div>
         </div>
       </Card>
@@ -174,28 +277,52 @@ const ViewEditWhiteLabel = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {syncPipelines.map((pipeline) => (
-                <TableRow
-                  key={pipeline.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/sync/${pipeline.id}`)}
-                >
-                  <TableCell>{pipeline.name}</TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        pipeline.status === "active"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-yellow-100 text-yellow-800"
-                      }`}
-                    >
-                      {pipeline.status}
-                    </span>
+              {isSyncsLoading ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center">
+                    <div className="flex items-center justify-center py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                    </div>
                   </TableCell>
-                  <TableCell>{pipeline.lastSync}</TableCell>
-                  <TableCell>{pipeline.nextSync}</TableCell>
                 </TableRow>
-              ))}
+              ) : syncs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                    No syncs found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                syncs.map((sync) => (
+                  <TableRow
+                    key={sync.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate(`/white-label/${id}/sync/${sync.id}`)}
+                  >
+                    <TableCell>{sync.name}</TableCell>
+                    <TableCell>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          sync.status === "active"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        {sync.status}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {sync.last_run_at 
+                        ? new Date(sync.last_run_at).toLocaleString() 
+                        : 'Never'}
+                    </TableCell>
+                    <TableCell>
+                      {sync.next_run_at 
+                        ? new Date(sync.next_run_at).toLocaleString() 
+                        : 'Not scheduled'}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </Card>

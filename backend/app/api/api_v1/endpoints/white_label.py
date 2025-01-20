@@ -20,39 +20,39 @@ router = APIRouter()
 
 
 @router.get("/list", response_model=list[schemas.WhiteLabel])
-async def list_white_label_integrations(
+async def list_white_labels(
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
 ) -> list[schemas.WhiteLabel]:
-    """List all white label integrations for the current user's organization."""
-    integrations = await crud.white_label.get_all_for_user(db, current_user=current_user)
-    return integrations
+    """List all white labels for the current user's organization."""
+    white_labels = await crud.white_label.get_all_for_user(db, current_user=current_user)
+    return white_labels
 
 
 @router.post("/", response_model=schemas.WhiteLabel)
-async def create_white_label_integration(
+async def create_white_label(
     *,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-    integration_in: schemas.WhiteLabelCreate,
+    white_label_in: schemas.WhiteLabelCreate,
 ) -> schemas.WhiteLabel:
     """Create new white label integration."""
-    integration = await crud.white_label.create(
+    white_label = await crud.white_label.create(
         db,
-        obj_in=integration_in,
+        obj_in=white_label_in,
         current_user=current_user,
     )
-    return integration
+    return white_label
 
 
 @router.get("/{white_label_id}", response_model=schemas.WhiteLabel)
-async def get_white_label_integration(
+async def get_white_label(
     white_label_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
 ) -> schemas.WhiteLabel:
     """Get a specific white label integration."""
-    white_label = await crud.white_label.get(db, id=white_label_id)
+    white_label = await crud.white_label.get(db, id=white_label_id, current_user=current_user)
     if not white_label:
         raise HTTPException(status_code=404, detail="White label integration not found")
     if white_label.organization_id != current_user.organization_id:
@@ -61,7 +61,7 @@ async def get_white_label_integration(
 
 
 @router.put("/{white_label_id}", response_model=schemas.WhiteLabel)
-async def update_white_label_integration(
+async def update_white_label(
     *,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
@@ -86,7 +86,7 @@ async def update_white_label_integration(
 
 
 @router.delete("/{white_label_id}")
-async def delete_white_label_integration(
+async def delete_white_label(
     white_label_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
@@ -102,7 +102,7 @@ async def delete_white_label_integration(
 
 
 @router.get("/{white_label_id}/oauth2/auth_url", response_model=str)
-async def get_whitelabel_oauth2_auth_url(
+async def get_white_label_oauth2_auth_url(
     *,
     db: AsyncSession = Depends(deps.get_db),
     white_label_id: UUID,
@@ -119,7 +119,7 @@ async def get_whitelabel_oauth2_auth_url(
 
 
 @router.post("/{white_label_id}/oauth2/code", response_model=schemas.Connection)
-async def exchange_whitelabel_oauth2_code(
+async def exchange_white_label_oauth2_code(
     *,
     white_label_id: UUID,
     code: str = Body(...),
@@ -183,3 +183,13 @@ async def exchange_whitelabel_oauth2_code(
         await uow.session.refresh(connection)
 
     return connection
+
+
+@router.get("/{white_label_id}/syncs", response_model=list[schemas.Sync])
+async def list_white_label_syncs(
+    white_label_id: UUID,
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_user),
+) -> list[schemas.Sync]:
+    """List all syncs for a specific white label."""
+    return await crud.sync.get_all_for_white_label(db, white_label_id, current_user)

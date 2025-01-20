@@ -23,17 +23,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "@/config/api";
 import { getAppIconUrl } from "@/lib/utils/icons";
 
-// The shape we want for our create/update form.
-const formSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  source_id: z.string().min(1, "Please select a source"),
-  redirect_url: z.string().url("Must be a valid URL"),
-  client_id: z.string().min(1, "Client ID is required"),
-  client_secret: z.string().min(1, "Client Secret is required"),
-});
-
-type WhiteLabelFormData = z.infer<typeof formSchema>;
-
 interface ISource {
   id: string;
   short_name: string;
@@ -55,6 +44,23 @@ interface WhiteLabelResponse {
 interface WhiteLabelFormProps {
   onSuccess?: (data: WhiteLabelResponse) => void;
 }
+
+interface WhiteLabelFormData {
+  name: string;
+  source_id: string;
+  redirect_url: string;
+  client_id: string;
+  client_secret: string;
+}
+
+// The shape we want for our create/update form
+const formSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  source_id: z.string().min(1, "Please select a source"),
+  redirect_url: z.string().url("Must be a valid URL"),
+  client_id: z.string().min(1, "Client ID is required"),
+  client_secret: z.string().min(1, "Client Secret is required"),
+});
 
 export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
   const { whiteLabelId } = useParams();
@@ -216,26 +222,35 @@ export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
               </FormItem>
             )}
           />
-
+ 
           <FormField
             control={form.control}
             name="source_id"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Source</FormLabel>
+                <FormLabel>Data Source</FormLabel>
                 <FormControl>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select
+                    onValueChange={(value) => {
+                      // Find the source by short_name to get its ID
+                      const selectedSource = sources.find(s => s.short_name === value);
+                      if (selectedSource) {
+                        field.onChange(selectedSource.id); // Use the ID for the form value
+                      }
+                    }}
+                    value={sources.find(s => s.id === field.value)?.short_name || ''}
+                  >
                     <SelectTrigger>
                       {field.value ? (
                         <div className="flex items-center gap-2">
                           <div className="w-5 h-5 shrink-0 flex items-center justify-center">
                             <img
-                              src={getAppIconUrl(field.value)}
+                              src={getAppIconUrl(sources.find(s => s.id === field.value)?.short_name)}
                               alt=""
                               className="w-4 h-4"
                             />
                           </div>
-                          {sources.find(s => s.short_name === field.value)?.name}
+                          {sources.find(s => s.id === field.value)?.name}
                         </div>
                       ) : (
                         <SelectValue placeholder="Select a data source" />
@@ -245,7 +260,7 @@ export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
                       {sources.map((src) => (
                         <SelectItem 
                           key={src.id} 
-                          value={src.short_name}
+                          value={src.short_name}  // Keep short_name as value for display purposes
                           className="flex items-center gap-2"
                         >
                           <div className="flex items-center gap-2">
