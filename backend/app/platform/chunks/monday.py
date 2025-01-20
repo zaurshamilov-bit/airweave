@@ -2,9 +2,6 @@
 
 Based on the Monday.com API (GraphQL-based), we define chunk schemas for
 commonly used Monday resources: Boards, Groups, Columns, Items, Subitems, and Updates.
-
-These schemas follow the same style as other connectors (e.g., Asana, HubSpot, Todoist),
-where each chunk class inherits from BaseChunk and includes relevant fields.
 """
 
 from datetime import datetime
