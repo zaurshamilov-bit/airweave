@@ -19,9 +19,11 @@ class Chunk(OrganizationBase):
     __tablename__ = "chunk"
 
     sync_job_id: Mapped[UUID] = mapped_column(
-        ForeignKey("sync_job.id", ondelete="CASCADE"), nullable=False
+        ForeignKey("sync_job.id", ondelete="CASCADE", name="fk_chunk_sync_job_id"), nullable=False
     )
-    sync_id: Mapped[UUID] = mapped_column(ForeignKey("sync.id", ondelete="CASCADE"), nullable=False)
+    sync_id: Mapped[UUID] = mapped_column(
+        ForeignKey("sync.id", ondelete="CASCADE", name="fk_chunk_sync_id"), nullable=False
+    )
     entity_id: Mapped[str] = mapped_column(String, nullable=False)
     hash: Mapped[str] = mapped_column(String, nullable=False)
 

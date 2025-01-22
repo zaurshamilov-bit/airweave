@@ -1,15 +1,20 @@
 """Connection model."""
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.shared_models import ConnectionStatus, IntegrationType
 from app.models._base import OrganizationBase, UserMixin
-from app.models.integration_credential import IntegrationType, IntegrationCredential
-from app.core.shared_models import ConnectionStatus
+
+if TYPE_CHECKING:
+    from app.models.destination import Destination
+    from app.models.embedding_model import EmbeddingModel
+    from app.models.integration_credential import IntegrationCredential
+    from app.models.source import Source
 
 
 class Connection(OrganizationBase, UserMixin):
@@ -29,31 +34,33 @@ class Connection(OrganizationBase, UserMixin):
     integration_credential_id: Mapped[UUID] = mapped_column(
         ForeignKey("integration_credential.id"), nullable=False
     )
-    source_id: Mapped[Optional[UUID]] = mapped_column(ForeignKey("source.id"), nullable=True)
-    destination_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("destination.id"), nullable=True
-    )
-    embedding_model_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("embedding_model.id"), nullable=True
-    )
+    short_name: Mapped[str] = mapped_column(String, nullable=False)
 
     # Relationships
-    integration_credential: Mapped[IntegrationCredential] = relationship(
+    integration_credential: Mapped["IntegrationCredential"] = relationship(
         "IntegrationCredential", back_populates="connections"
     )
-
-    def __init__(self, **kwargs):
-        """Initialize the connection ensuring only one integration type is set."""
-        super().__init__(**kwargs)
-        if not self.source_id and not self.destination_id and not self.embedding_model_id:
-            raise ValueError("At least one integration type must be set.")
-
-        if self.integration_type == IntegrationType.SOURCE:
-            self.destination_id = None
-            self.embedding_model_id = None
-        elif self.integration_type == IntegrationType.DESTINATION:
-            self.source_id = None
-            self.embedding_model_id = None
-        elif self.integration_type == IntegrationType.EMBEDDING_MODEL:
-            self.source_id = None
-            self.destination_id = None
+    source: Mapped[Optional["Source"]] = relationship(
+        "Source",
+        primaryjoin="and_(foreign(Connection.short_name)==remote(Source.short_name), "
+        "Connection.integration_type=='SOURCE')",
+        foreign_keys=[short_name],
+        viewonly=True,
+        lazy="noload",
+    )
+    destination: Mapped[Optional["Destination"]] = relationship(
+        "Destination",
+        primaryjoin="and_(foreign(Connection.short_name)==remote(Destination.short_name), "
+        "Connection.integration_type=='DESTINATION')",
+        foreign_keys=[short_name],
+        viewonly=True,
+        lazy="noload",
+    )
+    embedding_model: Mapped[Optional["EmbeddingModel"]] = relationship(
+        "EmbeddingModel",
+        primaryjoin="and_(foreign(Connection.short_name)==remote(EmbeddingModel.short_name), "
+        "Connection.integration_type=='EMBEDDING_MODEL')",
+        foreign_keys=[short_name],
+        viewonly=True,
+        lazy="noload",
+    )

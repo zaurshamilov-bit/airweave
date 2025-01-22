@@ -1,24 +1,16 @@
 """Integration credential model."""
 
-from enum import Enum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.shared_models import IntegrationType
 from app.models._base import OrganizationBase, UserMixin
 from app.platform.auth.schemas import AuthType
 
 if TYPE_CHECKING:
     from app.models.connection import Connection
-
-
-class IntegrationType(str, Enum):
-    """Integration type enum."""
-
-    SOURCE = "source"
-    DESTINATION = "destination"
-    EMBEDDING_MODEL = "embedding_model"
 
 
 class IntegrationCredential(OrganizationBase, UserMixin):

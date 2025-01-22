@@ -21,7 +21,9 @@ class SyncJob(OrganizationBase, UserMixin):
 
     __tablename__ = "sync_job"
 
-    sync_id: Mapped[UUID] = mapped_column(ForeignKey("sync.id", ondelete="CASCADE"), nullable=False)
+    sync_id: Mapped[UUID] = mapped_column(
+        ForeignKey("sync.id", ondelete="CASCADE", name="fk_sync_job_sync_id"), nullable=False
+    )
     status: Mapped[SyncJobStatus] = mapped_column(
         SQLAlchemyEnum(SyncJobStatus), default=SyncJobStatus.PENDING
     )

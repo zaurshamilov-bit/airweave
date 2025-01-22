@@ -1,13 +1,16 @@
 """Embedding model model."""
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy import String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models._base import Base
 from app.platform.auth.schemas import AuthType
+
+if TYPE_CHECKING:
+    from app.models.connection import Connection
 
 
 class EmbeddingModel(Base):
@@ -23,3 +26,13 @@ class EmbeddingModel(Base):
     model_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     model_version: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Back-reference to connections
+    connections: Mapped[list["Connection"]] = relationship(
+        "Connection",
+        primaryjoin="and_(foreign(Connection.short_name) == EmbeddingModel.short_name, "
+        "Connection.integration_type == 'EMBEDDING_MODEL')",
+        back_populates="embedding_model",
+        lazy="noload",
+        viewonly=True,
+    )

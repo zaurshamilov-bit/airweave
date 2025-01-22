@@ -24,8 +24,9 @@ interface Source {
 /**
  * Represents a Connection object from the backend (for a source).
  */
-interface SourceConnection {
+interface Connection {
   id: string;
+  short_name: string;
   name: string;
   organization_id: string;
   created_by_email: string;
@@ -37,36 +38,23 @@ interface SourceConnection {
   modified_at: string;
 }
 
-interface Connection {
-  id: string;
-  name: string;
+interface LocalConnection extends Connection {
   isSelected?: boolean;
 }
 
 /**
  * Get connections for a specific source by matching source_id
  */
-const getConnectionsForSource = (sourceId: string, connections: SourceConnection[]): Connection[] => {
-  return connections
-    .filter(conn => conn.source_id === sourceId)
-    .map(conn => ({
-      id: conn.id,
-      name: conn.name,
-      organization_id: conn.organization_id,
-      created_by_email: conn.created_by_email,
-      modified_by_email: conn.modified_by_email,
-      status: conn.status,
-      integration_type: conn.integration_type,
-      integration_credential_id: conn.integration_credential_id,
-      source_id: conn.source_id,
-      modified_at: conn.modified_at
-    }));
+const getConnectionsForSource = (shortName: string, connections: Connection[]): Connection[] => {
+  console.log("Getting connections for source:", shortName);
+  console.log("Available connections:", connections);
+  return connections.filter(conn => conn.short_name === shortName);
 };
 
 export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
   const [search, setSearch] = useState("");
   const [sources, setSources] = useState<Source[]>([]);
-  const [connections, setConnections] = useState<SourceConnection[]>([]);
+  const [connections, setConnections] = useState<LocalConnection[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const { toast } = useToast();
@@ -109,8 +97,10 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
         throw new Error("Failed to fetch source connections");
       }
       const data = await resp.json();
+      console.log("Fetched connections:", data); // Debug log
       setConnections(data);
     } catch (err: any) {
+      console.error("Error fetching connections:", err); // Debug log
       toast({
         variant: "destructive",
         title: "Fetch connections failed",
@@ -138,8 +128,7 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
     // However, we only have an ID (source_id) in the connections.
     // So we'd need to match connection.source_id to the Source's ID.
     const matchedConnection = connections.find((conn) => {
-      const matchedSource = sources.find((s) => s.id === conn.source_id);
-      return matchedSource?.short_name === shortName && conn.status === "active";
+      return conn.short_name === shortName && conn.status === "active";
     });
     return Boolean(matchedConnection);
   };
@@ -188,7 +177,7 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
           {filteredSources.map((source) => {
             // Find the source's connections
             const sourceConnections = getConnectionsForSource(
-              source.id,
+              source.short_name,
               connections
             );
             

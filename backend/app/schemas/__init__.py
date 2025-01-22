@@ -9,15 +9,7 @@ from .api_key import (
     APIKeyWithPlainKey,
 )
 from .chunk import Chunk, ChunkCreate, ChunkInDBBase, ChunkUpdate
-from .connection import (
-    Connection,
-    ConnectionCreate,
-    ConnectionInDBBase,
-    ConnectionUpdate,
-    DestinationConnection,
-    EmbeddingModelConnection,
-    SourceConnection,
-)
+from .connection import Connection, ConnectionCreate, ConnectionInDBBase, ConnectionUpdate
 from .destination import (
     Destination,
     DestinationCreate,

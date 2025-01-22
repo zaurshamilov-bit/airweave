@@ -13,6 +13,7 @@ from app.core import credentials
 from app.core.config import settings
 from app.core.exceptions import NotFoundException, TokenRefreshError
 from app.core.logging import logger
+from app.core.shared_models import ConnectionStatus
 from app.db.unit_of_work import UnitOfWork
 from app.models.integration_credential import IntegrationType
 from app.platform.auth.schemas import (
@@ -536,7 +537,7 @@ class OAuth2Service:
         short_name: str,
         code: str,
         user: schemas.User,
-    ) -> schemas.SourceConnection:
+    ) -> schemas.Connection:
         """Create a new OAuth2 connection for a source.
 
         Does the following:
@@ -554,7 +555,7 @@ class OAuth2Service:
 
         Returns:
         -------
-            schemas.SourceConnection: The created connection
+            schemas.Connection: The created connection
         """
         settings = integration_settings.get_by_short_name(short_name)
         if not settings:
@@ -584,7 +585,7 @@ class OAuth2Service:
         white_label: schemas.WhiteLabel,
         code: str,
         user: schemas.User,
-    ) -> schemas.SourceConnection:
+    ) -> schemas.Connection:
         """Create a new OAuth2 connection using white label credentials.
 
         Args:
@@ -596,7 +597,7 @@ class OAuth2Service:
 
         Returns:
         -------
-            schemas.SourceConnection: The created connection
+            schemas.Connection: The created connection
         """
         source = await crud.source.get_by_short_name(db, white_label.source_id)
         if not source:
@@ -636,7 +637,7 @@ class OAuth2Service:
         settings: BaseAuthSettings,
         oauth2_response: OAuth2TokenResponse,
         user: schemas.User,
-    ) -> schemas.SourceConnection:
+    ) -> schemas.Connection:
         """Create a new connection with OAuth2 credentials."""
         # Prepare credentials based on auth type
         decrypted_credentials = (
@@ -668,9 +669,9 @@ class OAuth2Service:
             connection_in = schemas.ConnectionCreate(
                 name=f"Connection to {source.name}",
                 integration_type=IntegrationType.SOURCE,
-                status=schemas.ConnectionStatus.ACTIVE,
+                status=ConnectionStatus.ACTIVE,
                 integration_credential_id=integration_credential.id,
-                source_id=source.id,
+                short_name=source.short_name,
             )
 
             connection = await crud.connection.create(

@@ -21,6 +21,17 @@ from app.schemas.connection import ConnectionCreate, ConnectionStatus
 router = APIRouter()
 
 
+@router.get("/detail/{connection_id}", response_model=schemas.Connection)
+async def get_connection(
+    connection_id: UUID,
+    db: AsyncSession = Depends(deps.get_db),
+    user: schemas.User = Depends(deps.get_user),
+) -> schemas.Connection:
+    """Get a specific connection."""
+    connection = await crud.connection.get(db, id=connection_id, current_user=user)
+    return connection
+
+
 @router.get(
     "/list",
     response_model=list[schemas.Connection],
@@ -128,15 +139,8 @@ async def connect_integration(
             "integration_type": integration_type,
             "status": ConnectionStatus.ACTIVE,
             "integration_credential_id": integration_cred.id,
+            "short_name": short_name,
         }
-
-        # Set the appropriate ID based on integration type
-        if integration_type == IntegrationType.SOURCE:
-            connection_data["source_id"] = integration.id
-        elif integration_type == IntegrationType.DESTINATION:
-            connection_data["destination_id"] = integration.id
-        elif integration_type == IntegrationType.EMBEDDING_MODEL:
-            connection_data["embedding_model_id"] = integration.id
 
         connection_in = ConnectionCreate(**connection_data)
         connection = await crud.connection.create(
@@ -231,7 +235,7 @@ async def send_oauth2_code(
     short_name: str = Body(...),
     code: str = Body(...),
     user: schemas.User = Depends(deps.get_user),
-) -> schemas.SourceConnection:
+) -> schemas.Connection:
     """Send the OAuth2 authorization code for a source.
 
     This will:
@@ -258,7 +262,7 @@ async def send_oauth2_white_label_code(
     white_label_id: UUID,
     code: str = Body(...),
     user: schemas.User = Depends(deps.get_user),
-) -> schemas.SourceConnection:
+) -> schemas.Connection:
     """Exchange the OAuth2 authorization code for a white label integration."""
     try:
         white_label = await crud.white_label.get(db, id=white_label_id, current_user=user)

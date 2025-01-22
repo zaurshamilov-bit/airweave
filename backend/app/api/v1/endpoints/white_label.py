@@ -10,6 +10,7 @@ from app.api import deps
 from app.core import credentials
 from app.core.exceptions import NotFoundException
 from app.core.logging import logger
+from app.core.shared_models import ConnectionStatus
 from app.db.unit_of_work import UnitOfWork
 from app.models.integration_credential import IntegrationType
 from app.models.user import User
@@ -171,9 +172,9 @@ async def exchange_white_label_oauth2_code(
         connection_in = schemas.ConnectionCreate(
             name=f"WhiteLabel Connection - {white_label.name}",
             integration_type=IntegrationType.SOURCE,
-            status=schemas.ConnectionStatus.ACTIVE,
+            status=ConnectionStatus.ACTIVE,
             integration_credential_id=integration_cred.id,
-            source_id=source.id,
+            short_name=source.short_name,
         )
         connection = await crud.connection.create(
             uow.session, obj_in=connection_in, current_user=user, uow=uow

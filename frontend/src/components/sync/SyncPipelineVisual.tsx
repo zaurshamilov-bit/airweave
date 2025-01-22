@@ -3,10 +3,27 @@ import { getAppIconUrl, getDestinationIconUrl } from "@/lib/utils/icons";
 import { Database, ArrowRight } from "lucide-react";
 
 interface SyncPipelineVisualProps {
-  sync: any; // Replace with proper type
+  sync: {
+    metadata: {
+      source: {
+        name: string;
+        shortName: string;
+        type: string;
+      } | null;
+      destination: {
+        name: string;
+        shortName: string;
+        type: string;
+      } | null;
+    };
+  };
 }
 
 export const SyncPipelineVisual = ({ sync }: SyncPipelineVisualProps) => {
+  if (!sync?.metadata) return null;
+  
+  const { source, destination } = sync.metadata;
+
   return (
     <Card className="p-6">
       <h2 className="text-xl font-semibold mb-6">Pipeline Configuration</h2>
@@ -14,13 +31,13 @@ export const SyncPipelineVisual = ({ sync }: SyncPipelineVisualProps) => {
         <div className="flex items-center gap-4">
           <div className="h-16   w-16 rounded-lg bg-secondary-100 bg-opacity-50 border border-secondary-200 flex items-center justify-center">
             <img 
-              src={getAppIconUrl(sync.metadata.source.shortName)} 
-              alt={`${sync.metadata.source.name} icon`}
+              src={getAppIconUrl(source?.shortName)} 
+              alt={`${source?.name} icon`}
               className="w-8 h-8"
             />
           </div>
           <div>
-            <p className="font-medium">{sync.metadata.source.name}</p>
+            <p className="font-medium">{source?.name || 'No Source'}</p>
             <p className="text-sm text-muted-foreground">Source</p>
           </div>
         </div>
@@ -28,13 +45,13 @@ export const SyncPipelineVisual = ({ sync }: SyncPipelineVisualProps) => {
         <div className="flex items-center gap-4">
           <div className="h-16 w-16 rounded-lg bg-secondary-100 bg-opacity-50 border border-secondary-200 flex items-center justify-center">
             <img 
-              src={getDestinationIconUrl(sync.metadata.destination.shortName)} 
-              alt={`${sync.metadata.destination.name} icon`}
+              src={getDestinationIconUrl(destination?.shortName)} 
+              alt={`${destination?.name} icon`}
               className="w-8 h-8"
             />
           </div>
           <div>
-            <p className="font-medium">{sync.metadata.destination.name}</p>
+            <p className="font-medium">{destination?.name || 'No Destination'}</p>
             <p className="text-sm text-muted-foreground">Destination</p>
           </div>
         </div>

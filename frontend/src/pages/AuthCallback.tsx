@@ -22,7 +22,7 @@ export function AuthCallback() {
       const code = searchParams.get("code");
       if (!code || !short_name) {
         // If query param missing or no short name, redirect back with error
-        navigate("/sync?connected=error", { replace: true });
+        navigate("/sync/create?connected=error", { replace: true });
         return;
       }
 
@@ -34,10 +34,10 @@ export function AuthCallback() {
         if (!response.ok) {
           throw new Error("OAuth code exchange failed.");
         }
-        navigate("/sync?connected=success", { replace: true });
+        navigate("/sync/create?connected=success", { replace: true });
       } catch (err) {
         console.error('OAuth exchange error:', err);
-        navigate("/sync?connected=error", { replace: true });
+        navigate("/sync/create?connected=error", { replace: true });
       }
     };
 

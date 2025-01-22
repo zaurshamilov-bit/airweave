@@ -180,7 +180,7 @@ class SyncService:
         source_connection = await crud.connection.get(db, sync.source_connection_id, current_user)
         if not source_connection:
             raise NotFoundException("Source connection not found")
-        source_model = await crud.source.get(db, source_connection.source_id)
+        source_model = await crud.source.get_by_short_name(db, source_connection.short_name)
 
         if not source_model:
             raise NotFoundException("Source not found")
