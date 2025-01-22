@@ -20,7 +20,7 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useNavigate, useParams } from "react-router-dom";
-import { apiClient } from "@/config/api";
+import { apiClient } from "@/lib/api";
 import { getAppIconUrl } from "@/lib/utils/icons";
 
 interface ISource {

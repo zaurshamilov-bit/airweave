@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { useSearchParams, useNavigate, useParams } from "react-router-dom";
-import { apiClient } from "@/config/api";
+import { apiClient } from "@/lib/api";
 
 /**
  * This page handles the final leg of the OAuth2 flow:

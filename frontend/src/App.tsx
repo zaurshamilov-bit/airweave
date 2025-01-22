@@ -7,8 +7,8 @@ import Settings from "@/pages/Settings";
 import WhiteLabel from "@/pages/WhiteLabel";
 import CreateWhiteLabel from "@/pages/CreateWhiteLabel";
 import { NotFound } from "@/pages/NotFound";
-import Sync from "@/pages/Sync";
-import SyncSchedule from "@/pages/SyncSchedule";
+import SyncCreate from "@/pages/SyncCreate";
+import SyncTableView from "@/pages/SyncTableView";
 import ViewEditSync from "@/pages/ViewEditSync";
 import ViewEditWhiteLabelSync from "@/pages/ViewEditWhiteLabelSync";
 import Destinations from "@/pages/Destinations";
@@ -48,10 +48,10 @@ function App() {
           
           {/* Configure section routes */}
           <Route path="/sync">
-            <Route index element={<Sync />} />
-            <Route path="schedule" element={<SyncSchedule />} />
-            <Route path=":id" element={<ViewEditSync />} />
+            <Route index element={<SyncTableView />} />
+            <Route path="create" element={<SyncCreate />} />
             <Route path="white-label/:id" element={<ViewEditWhiteLabelSync />} />
+            <Route path=":id" element={<ViewEditSync />} />
           </Route>
 
           <Route path="/sources" element={<Sources />} />

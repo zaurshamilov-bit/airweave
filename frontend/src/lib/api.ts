@@ -1,4 +1,4 @@
-import { env } from './env';
+import { env } from '../config/env';
 
 export const API_CONFIG = {
   baseURL: env.VITE_API_URL,

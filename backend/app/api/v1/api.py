@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.api_v1.endpoints import (
+from app.api.v1.endpoints import (
     api_keys,
     connections,
     destinations,

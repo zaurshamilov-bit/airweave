@@ -87,7 +87,7 @@ async def delete_sync(
         raise HTTPException(status_code=404, detail="Sync not found")
 
     if delete_data:
-        # TODO: Implement data deletion logic
+        # TODO: Implement data deletion logic, should be part of destination interface
         pass
 
     return await crud.sync.remove(db=db, id=sync_id, current_user=user)
@@ -123,8 +123,6 @@ async def list_sync_jobs(
     *,
     db: AsyncSession = Depends(deps.get_db),
     sync_id: UUID,
-    skip: int = 0,
-    limit: int = 100,
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.SyncJob]:
     """List all jobs for a specific sync."""
@@ -132,9 +130,7 @@ async def list_sync_jobs(
     if not sync:
         raise HTTPException(status_code=404, detail="Sync not found")
 
-    return await crud.sync_job.get_all_for_white_label(
-        db=db, sync_id=sync_id, skip=skip, limit=limit
-    )
+    return await crud.sync_job.get_all_by_sync_id(db=db, sync_id=sync_id)
 
 
 @router.get("/job/{job_id}", response_model=schemas.SyncJob)

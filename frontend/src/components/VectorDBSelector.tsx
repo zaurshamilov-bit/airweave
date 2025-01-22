@@ -13,7 +13,7 @@ import { Loader2, Check } from "lucide-react";
 
 import { useToast } from "@/components/ui/use-toast";
 import { getDestinationIconUrl } from "@/lib/utils/icons";
-import { apiClient } from "@/config/api";
+import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 interface Destination {

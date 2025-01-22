@@ -20,6 +20,9 @@ const DashboardLayout = () => {
       return location.pathname.startsWith("/white-label");
     }
     if (path === "/sync") {
+      if (location.pathname === "/sync/create") {
+        return false;
+      }
       return location.pathname.startsWith("/sync");
     }
     return location.pathname === path;
@@ -28,7 +31,7 @@ const DashboardLayout = () => {
   const navigation = [
     {
       name: "Set up sync",
-      href: "/sync",
+      href: "/sync/create",
       icon: RefreshCcw,
       isSpecial: true,
     },
@@ -42,7 +45,7 @@ const DashboardLayout = () => {
   const configureNavigation = [
     {
       name: "Synchronizations",
-      href: "/sync/schedule",
+      href: "/sync",
       icon: RefreshCw,
     },
     {

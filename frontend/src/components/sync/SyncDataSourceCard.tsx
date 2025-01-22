@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
-import { apiClient } from "@/config/api";
+import { apiClient } from "@/lib/api";
 
 interface Connection {
   id: string;

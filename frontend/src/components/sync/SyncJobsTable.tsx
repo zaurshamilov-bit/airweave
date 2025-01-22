@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/table";
 import { format } from "date-fns";
 
-const mockSyncSchedules = [
+const mockSyncTableViews = [
   {
     id: "sync_1",
     name: "orhanrauf@gmail.com - Slack Sync",
@@ -61,7 +61,7 @@ export const SyncJobsTable = ({ syncId }: SyncJobsTableProps) => {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {mockSyncSchedules.map((sync) => (
+          {mockSyncTableViews.map((sync) => (
             <TableRow key={sync.id} className="cursor-pointer">
               <TableCell className="font-medium">{sync.name}</TableCell>
               <TableCell>{sync.schedule}</TableCell>

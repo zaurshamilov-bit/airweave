@@ -6,7 +6,7 @@ import { VectorDBSelector } from "@/components/VectorDBSelector";
 import { SyncProgress } from "@/components/SyncProgress";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
-import { apiClient } from "@/config/api";
+import { apiClient } from "@/lib/api";
 import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 
 /**

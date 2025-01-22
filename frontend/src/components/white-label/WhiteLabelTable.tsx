@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Eye } from "lucide-react";
-import { apiClient } from "@/config/api";
+import { apiClient } from "@/lib/api";
 
 // Match whatever actual shape your backend returns for a WhiteLabel
 interface WhiteLabel {

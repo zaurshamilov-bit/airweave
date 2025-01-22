@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 from starlette.middleware.cors import CORSMiddleware
 
-from app.api.api_v1.api import api_router
+from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.exceptions import NotFoundException, PermissionException, unpack_validation_error
 from app.core.logging import logger

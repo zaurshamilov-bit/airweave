@@ -8,7 +8,7 @@ import { SyncMetadata } from "@/components/sync/SyncMetadata";
 import { SyncPipelineVisual } from "@/components/sync/SyncPipelineVisual";
 import { DeleteSyncDialog } from "@/components/sync/DeleteSyncDialog";
 import { toast } from "sonner";
-import { apiClient } from "@/config/api";
+import { apiClient } from "@/lib/api";
 
 interface Sync {
   id: string;

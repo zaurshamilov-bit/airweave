@@ -5,7 +5,7 @@ import { CodeSnippet } from "@/components/white-label/CodeSnippet";
 import { HowItWorksAccordion } from "@/components/white-label/HowItWorksAccordion";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { apiClient } from "@/config/api";
+import { apiClient } from "@/lib/api";
 
 interface WhiteLabelData {
   id: string;

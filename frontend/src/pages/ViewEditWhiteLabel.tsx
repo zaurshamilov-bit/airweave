@@ -24,7 +24,7 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { apiClient } from "@/config/api";
+import { apiClient } from "@/lib/api";
 
 interface Sync {
   id: string;

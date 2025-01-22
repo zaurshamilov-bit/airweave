@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { SyncDataSourceCard } from "./SyncDataSourceCard";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { apiClient } from "@/config/api";
+import { apiClient } from "@/lib/api";
 
 interface SyncDataSourceGridProps {
   onSelect: (connectionId: string) => void;

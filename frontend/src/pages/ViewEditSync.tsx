@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { 
@@ -32,69 +32,132 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
+import { apiClient } from "@/lib/api";
 
-// Mock data - replace with actual API calls
-const mockSyncDetails = {
-  id: "sync_123",
-  name: "Daily Notion Sync",
-  description: "Synchronizes Notion workspace daily",
-  createdAt: "2024-03-20T10:00:00Z",
-  updatedAt: "2024-03-21T15:30:00Z",
-  totalRuns: 45,
-  status: "active",
-  schedule: "Daily at 2 AM",
-  metadata: {
-    userId: "user_789",
-    organizationId: "org_456",
-    source: {
-      type: "notion",
-      name: "Notion Workspace",
-      icon: "/icons/notion.svg"
-    },
-    destination: {
-      type: "weaviate",
-      name: "Production Vector DB",
-      icon: "/icons/weaviate.svg"
-    }
-  }
-};
+interface SyncJob {
+  id: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  items_added: number;
+  items_deleted: number;
+  items_unchanged: number;
+  error: string | null;
+}
 
-const mockSyncJobs = [
-  {
-    id: "job_1",
-    startTime: "2024-03-21T02:00:00Z",
-    endTime: "2024-03-21T02:15:00Z",
-    status: "completed",
-    itemsAdded: 102,
-    itemsDeleted: 8,
-    itemsUnchanged: 489,
-    error: null
-  },
-  {
-    id: "job_2",
-    startTime: "2024-03-20T02:00:00Z",
-    endTime: "2024-03-20T02:12:00Z",
-    status: "completed",
-    itemsAdded: 45,
-    itemsDeleted: 12,
-    itemsUnchanged: 234,
-    error: null
-  }
-];
+interface SyncDetails {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  modified_at: string;
+  cron_schedule: string | null;
+  created_by_email: string;
+  organization_id: string;
+  source_connection_id: string;
+  destination_connection_id: string;
+}
 
 const ViewEditSync = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [syncDetails, setSyncDetails] = useState<any>(null);
+  const [syncJobs, setSyncJobs] = useState<SyncJob[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleDelete = () => {
-    // API call would go here
-    toast({
-      title: "Synchronization deleted",
-      description: "The synchronization has been permanently deleted."
-    });
-    navigate("/sync/schedule");
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Fetch sync details
+        const syncResponse = await apiClient.get(`/sync/${id}`);
+        const syncData: SyncDetails = await syncResponse.json();
+
+        // Fetch source connection
+        const sourceConnection = await apiClient.get(`/connections/list/source`);
+        const sourceData = await sourceConnection.json();
+        const source = sourceData.find(
+          (conn: any) => conn.id === syncData.source_connection_id
+        );
+
+        // Fetch destination connection
+        const destConnection = await apiClient.get(`/connections/list/destination`);
+        const destData = await destConnection.json();
+        const destination = destData.find(
+          (conn: any) => conn.id === syncData.destination_connection_id
+        );
+
+        // Fetch sync jobs
+        const jobsResponse = await apiClient.get(`/sync/${id}/jobs`);
+        const jobsData: SyncJob[] = await jobsResponse.json();
+
+        // Transform data to match your UI structure
+        setSyncDetails({
+          id: syncData.id,
+          name: syncData.name,
+          description: syncData.description,
+          createdAt: syncData.created_at,
+          updatedAt: syncData.modified_at,
+          totalRuns: jobsData.length,
+          status: "active", // You might want to derive this from the sync state
+          schedule: syncData.cron_schedule, // You might want to make this human readable
+          metadata: {
+            userId: syncData.created_by_email,
+            organizationId: syncData.organization_id,
+            source: source ? {
+              type: source.integration_type?.toLowerCase(),
+              name: source.name,
+              icon: `/icons/${source.short_name}.svg`
+            } : null,
+            destination: destination ? {
+              type: destination.integration_type?.toLowerCase(),
+              name: destination.name,
+              icon: `/icons/${destination.short_name}.svg`
+            } : null
+          }
+        });
+
+        setSyncJobs(jobsData);
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error fetching sync data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load sync details",
+          variant: "destructive"
+        });
+        setIsLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchData();
+    }
+  }, [id]);
+
+  const handleDelete = async () => {
+    try {
+      await apiClient.delete(`/sync/${id}`);
+      toast({
+        title: "Synchronization deleted",
+        description: "The synchronization has been permanently deleted."
+      });
+      navigate("/sync");
+    } catch (error) {
+      console.error("Error deleting sync:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete synchronization",
+        variant: "destructive"
+      });
+    }
   };
+
+  if (isLoading) {
+    return <div>Loading...</div>; // You might want to use a proper loading component
+  }
 
   return (
     <div className="container mx-auto py-8 space-y-8">
@@ -104,14 +167,14 @@ const ViewEditSync = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate("/sync/schedule")}
+            onClick={() => navigate("/sync")}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">{mockSyncDetails.name}</h1>
+            <h1 className="text-3xl font-bold">{syncDetails?.name}</h1>
             <p className="text-muted-foreground mt-1">
-              {mockSyncDetails.description}
+              {syncDetails?.description}
             </p>
           </div>
         </div>
@@ -138,7 +201,7 @@ const ViewEditSync = () => {
             Created
           </div>
           <p className="text-2xl font-semibold">
-            {format(new Date(mockSyncDetails.createdAt), "MMM d, yyyy")}
+            {syncDetails?.createdAt ? format(new Date(syncDetails.createdAt), "MMM d, yyyy") : "-"}
           </p>
         </Card>
         <Card className="p-6 space-y-2">
@@ -146,14 +209,14 @@ const ViewEditSync = () => {
             <Activity className="mr-2 h-4 w-4" />
             Total Runs
           </div>
-          <p className="text-2xl font-semibold">{mockSyncDetails.totalRuns}</p>
+          <p className="text-2xl font-semibold">{syncDetails?.totalRuns}</p>
         </Card>
         <Card className="p-6 space-y-2">
           <div className="flex items-center text-muted-foreground">
             <Clock className="mr-2 h-4 w-4" />
             Schedule
           </div>
-          <p className="text-2xl font-semibold">{mockSyncDetails.schedule}</p>
+          <p className="text-2xl font-semibold">{syncDetails?.schedule}</p>
         </Card>
       </div>
 
@@ -166,7 +229,7 @@ const ViewEditSync = () => {
               <Database className="h-6 w-6" />
             </div>
             <div>
-              <p className="font-medium">{mockSyncDetails.metadata.source.name}</p>
+              <p className="font-medium">{syncDetails?.metadata.source?.name}</p>
               <p className="text-sm text-muted-foreground">Source</p>
             </div>
           </div>
@@ -176,7 +239,7 @@ const ViewEditSync = () => {
               <Database className="h-6 w-6" />
             </div>
             <div>
-              <p className="font-medium">{mockSyncDetails.metadata.destination.name}</p>
+              <p className="font-medium">{syncDetails?.metadata.destination?.name}</p>
               <p className="text-sm text-muted-foreground">Destination</p>
             </div>
           </div>
@@ -198,16 +261,15 @@ const ViewEditSync = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockSyncJobs.map((job) => (
+              {syncJobs.map((job) => (
                 <TableRow key={job.id}>
                   <TableCell>
-                    {format(new Date(job.startTime), "MMM d, yyyy HH:mm")}
+                    {job.start_time ? format(new Date(job.start_time), "MMM d, yyyy HH:mm") : "-"}
                   </TableCell>
                   <TableCell>
-                    {format(
-                      new Date(job.endTime).getTime() - new Date(job.startTime).getTime(),
-                      "m"
-                    )}m
+                    {job.end_time && job.start_time ? 
+                      `${Math.round((new Date(job.end_time).getTime() - new Date(job.start_time).getTime()) / 60000)}m` 
+                      : "-"}
                   </TableCell>
                   <TableCell>
                     <span
@@ -222,7 +284,7 @@ const ViewEditSync = () => {
                   </TableCell>
                   <TableCell>
                     <span className="text-sm">
-                      +{job.itemsAdded} -{job.itemsDeleted} ={job.itemsUnchanged}
+                      +{job.items_added} -{job.items_deleted} ={job.items_unchanged}
                     </span>
                   </TableCell>
                   <TableCell>{job.error || "-"}</TableCell>
