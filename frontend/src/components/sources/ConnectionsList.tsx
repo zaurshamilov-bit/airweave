@@ -2,9 +2,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Connection } from "@/types";
-import { Search, Plus, Settings2, Trash2, Play, CheckCircle2, AlertCircle, Database, Clock, FileText, Activity } from "lucide-react";
+import { Search, Plus, Trash2, Database, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { Badge } from "../ui/badge";
-import { Progress } from "../ui/progress";
+import { useState } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
+import { toast } from "sonner";
+import { apiClient } from "@/lib/api";
 
 interface ConnectionsListProps {
   connections: Connection[];
@@ -19,6 +22,8 @@ export function ConnectionsList({
   onSearchChange,
   onConnect,
 }: ConnectionsListProps) {
+  const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
+
   const getStatusIcon = (status: Connection['status']) => {
     switch (status) {
       case 'active':
@@ -30,10 +35,18 @@ export function ConnectionsList({
     }
   };
 
-  const getHealthColor = (score: number) => {
-    if (score >= 80) return "bg-green-500";
-    if (score >= 50) return "bg-yellow-500";
-    return "bg-red-500";
+  const handleDelete = async () => {
+    if (!connectionToDelete) return;
+
+    try {
+      await apiClient.delete(`/connections/${connectionToDelete.id}`);
+      toast.success("Connection deleted successfully");
+      // You might want to trigger a refresh of the connections list here
+    } catch (error) {
+      toast.error("Failed to delete connection");
+    } finally {
+      setConnectionToDelete(null);
+    }
   };
 
   return (
@@ -72,40 +85,14 @@ export function ConnectionsList({
                     {connection.id}
                   </code>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Play className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Settings2 className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 mt-2">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <FileText className="h-4 w-4" />
-                    <span>{connection.documentsCount?.toLocaleString() || 0} documents</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Activity className="h-4 w-4" />
-                    <span>Used in {connection.syncCount || 0} syncs</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-muted-foreground">Health</span>
-                    <span className="text-sm font-medium">{connection.healthScore || 0}%</span>
-                  </div>
-                  <Progress 
-                    value={connection.healthScore || 0} 
-                    className={`h-2 ${getHealthColor(connection.healthScore || 0)}`}
-                  />
-                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 text-destructive"
+                  onClick={() => setConnectionToDelete(connection)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
 
               <div className="flex items-center gap-2 mt-3 pt-3 border-t">
@@ -118,16 +105,42 @@ export function ConnectionsList({
                 >
                   {connection.status}
                 </Badge>
-                {connection.lastSync && (
-                  <span className="text-xs text-muted-foreground">
-                    Last sync: {connection.lastSync}
-                  </span>
-                )}
+                <span className="text-xs text-muted-foreground">
+                  Created by: {connection.created_by_email}
+                </span>
               </div>
             </div>
           ))}
         </div>
       </ScrollArea>
+
+      <Dialog 
+        open={!!connectionToDelete} 
+        onOpenChange={(open) => !open && setConnectionToDelete(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Connection</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this connection? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConnectionToDelete(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

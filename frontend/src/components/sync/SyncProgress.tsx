@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, Clock, MessageSquare } from "lucide-react";
+import { CheckCircle2, Clock, MessageSquare, X } from "lucide-react";
 import { useSyncSubscription } from "@/hooks/useSyncSubscription";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 /**
  * Four key metrics as per pubsub:
@@ -16,9 +17,10 @@ import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 interface SyncProgressProps {
   syncId: string | null;
   syncJobId: string | null;
+  onClose?: () => void;
 }
 
-export const SyncProgress = ({ syncId, syncJobId }: SyncProgressProps) => {
+export const SyncProgress = ({ syncId, syncJobId, onClose }: SyncProgressProps) => {
   const navigate = useNavigate();
   const updates = useSyncSubscription(syncJobId);
   const latestUpdate = updates[updates.length - 1];
@@ -49,7 +51,15 @@ export const SyncProgress = ({ syncId, syncJobId }: SyncProgressProps) => {
 
   if (latestUpdate?.is_complete) {
     return (
-      <Card className="w-full max-w-md mx-auto">
+      <Card className="w-full max-w-md mx-auto relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute right-2 top-2"
+          onClick={() => onClose?.()}
+        >
+          <X className="h-4 w-4" />
+        </Button>
         <CardHeader>
           <div className="flex items-center space-x-2">
             <CheckCircle2 className="h-6 w-6 text-green-500" />
@@ -95,7 +105,15 @@ export const SyncProgress = ({ syncId, syncJobId }: SyncProgressProps) => {
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className="w-full max-w-md mx-auto relative">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute right-2 top-2"
+        onClick={() => onClose?.()}
+      >
+        <X className="h-4 w-4" />
+      </Button>
       <CardHeader>
         <CardTitle>Syncing Data</CardTitle>
         <CardDescription>Processing and embedding your data</CardDescription>

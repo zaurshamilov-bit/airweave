@@ -1,5 +1,6 @@
 """Module for data synchronization."""
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from app import crud, schemas
 from app.core import credentials
 from app.core.exceptions import NotFoundException
 from app.core.logging import logger
+from app.core.shared_models import SyncJobStatus
 from app.db.session import get_db_context
 from app.db.unit_of_work import UnitOfWork
 from app.platform.auth.schemas import AuthType
@@ -47,16 +49,16 @@ class SyncService:
         3. Handles updates, inserts, and deletions in both DB and destination
         4. Uses batch processing for efficiency
         """
-        async with get_db_context() as db:
-            sync_context = await self.create_sync_context(db, sync, sync_job, current_user)
+        try:
+            async with get_db_context() as db:
+                sync_context = await self.create_sync_context(db, sync, sync_job, current_user)
 
-            logger.info(f"Starting job with id {sync_context.sync_job.id}.")
+                logger.info(f"Starting job with id {sync_context.sync_job.id}.")
 
-            # TODO: Implement microbatch processing
+                # TODO: Implement microbatch processing
 
-            sync_progress_update = SyncProgressUpdate()
+                sync_progress_update = SyncProgressUpdate()
 
-            try:
                 async for chunk in sync_context.source.generate_chunks():
 
                     # Enrich chunk with sync context information
@@ -116,12 +118,8 @@ class SyncService:
                         sync_progress_update,
                     )
 
-            except Exception as e:
-                logger.error(f"An error occured while synchronizing: {e}")
-
-        async with get_db_context() as db:
-            # Handle deletions - remove outdated chunks
-            try:
+            async with get_db_context() as db:
+                # Handle deletions - remove outdated chunks
                 outdated_chunks = await crud.chunk.get_all_outdated(
                     db, sync_id=sync.id, sync_job_id=sync_job.id
                 )
@@ -140,17 +138,30 @@ class SyncService:
                         sync_job.id,
                         sync_progress_update,
                     )
-            except Exception as e:
-                logger.error(f"An error occured while handling deletions: {e}")
+
+        except Exception as e:
+            logger.error(f"An error occured while handling deletions: {e}")
+            async with get_db_context() as db:
+                sync_job_db = await crud.sync_job.get(db, sync_job.id)
+                sync_job_schema = schemas.SyncJobUpdate.model_validate(sync_job_db)
+                sync_job_schema.status = SyncJobStatus.FAILED
+                sync_job_schema.failed_at = datetime.now()
+                sync_job_schema.error = str(e)
+
+                await crud.sync_job.update(db, sync_job_db, sync_job_schema, current_user)
                 sync_progress_update.is_failed = True
                 await sync_pubsub.publish(sync_job.id, sync_progress_update)
+
                 return sync
 
-        sync_progress_update.is_complete = True
+        async with get_db_context() as db:
+            sync_job_db = await crud.sync_job.get(db, sync_job.id)
+            sync_job_schema = schemas.SyncJobUpdate.model_validate(sync_job_db)
+            sync_job_schema.status = SyncJobStatus.COMPLETED
+            sync_job_schema.completed_at = datetime.now()
+            await crud.sync_job.update(db, sync_job_db, sync_job_schema, current_user)
 
-        await sync_pubsub.publish(sync_job.id, sync_progress_update)
-
-        return sync
+            return sync
 
     async def _enrich_chunk(
         self,

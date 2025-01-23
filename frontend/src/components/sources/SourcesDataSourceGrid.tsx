@@ -1,68 +1,126 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
-import { dataSources } from "@/config/dataSources";
 import { useToast } from "@/components/ui/use-toast";
 import { SourcesDataSourceCard } from "./SourcesDataSourceCard";
-import { Connection } from "@/types";
+import { apiClient } from "@/lib/api";
+
+interface Source {
+  id: string;
+  name: string;
+  description?: string | null;
+  short_name: string;
+  auth_type?: string | null;
+}
+
+interface Connection {
+  id: string;
+  short_name: string;
+  name: string;
+  organization_id: string;
+  created_by_email: string;
+  modified_by_email: string;
+  status: "active" | "inactive" | "error";
+  integration_type: string;
+  integration_credential_id: string;
+  source_id: string;
+  modified_at: string;
+}
+
+const getConnectionsForSource = (shortName: string, connections: Connection[]): Connection[] => {
+  return connections.filter(conn => conn.short_name === shortName);
+};
 
 export const SourcesDataSourceGrid = () => {
   const [search, setSearch] = useState("");
-  const [connectedSources, setConnectedSources] = useState<string[]>(["notion", "slack"]);
+  const [sources, setSources] = useState<Source[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
-  const mockConnections: Connection[] = [
-    {
-      id: "conn_1234567890",
-      name: "Marketing Team Notion",
-      status: "active",
-      lastSync: "2 hours ago",
-      syncCount: 5,
-      documentsCount: 1234,
-      healthScore: 95,
-      createdAt: "2024-01-15",
-    },
-    {
-      id: "conn_0987654321",
-      name: "Engineering Wiki",
-      status: "error",
-      lastSync: "1 day ago",
-      syncCount: 3,
-      documentsCount: 567,
-      healthScore: 45,
-      createdAt: "2024-02-01",
-    },
-    {
-      id: "conn_5432167890",
-      name: "Design System Docs",
-      status: "inactive",
-      lastSync: "5 days ago",
-      syncCount: 1,
-      documentsCount: 89,
-      healthScore: 75,
-      createdAt: "2024-01-20",
-    },
-  ];
+  const fetchSources = async () => {
+    try {
+      const resp = await apiClient.get("/sources/list");
+      if (!resp.ok) {
+        throw new Error("Failed to fetch sources");
+      }
+      const data = await resp.json();
+      setSources(data);
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: "Failed to load sources",
+        variant: "destructive",
+      });
+    }
+  };
 
-  const filteredSources = dataSources
+  const fetchConnections = async () => {
+    try {
+      const resp = await apiClient.get("/connections/list/source");
+      if (!resp.ok && resp.status !== 404) {
+        throw new Error("Failed to fetch source connections");
+      }
+      const data = await resp.json();
+      setConnections(data);
+    } catch (error) {
+      console.error("Failed to fetch connections:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load connections",
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
+    (async () => {
+      setIsLoading(true);
+      await fetchSources();
+      await fetchConnections();
+      setIsLoading(false);
+    })();
+  }, []);
+
+  const shortNameIsConnected = (shortName: string) => {
+    return connections.some(conn => 
+      conn.short_name === shortName && conn.status === "active"
+    );
+  };
+
+  const handleConnect = async (sourceId: string) => {
+    try {
+      await apiClient.post(`/connections/${sourceId}`);
+      await fetchConnections(); // Refresh connections after connecting
+      toast({
+        title: "Source Connected",
+        description: `Successfully connected to ${sourceId}`,
+      });
+    } catch (error) {
+      console.error("Failed to connect source:", error);
+      toast({
+        title: "Error",
+        description: "Failed to connect source",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const filteredSources = sources
     .filter((source) =>
       source.name.toLowerCase().includes(search.toLowerCase())
     )
     .sort((a, b) => {
-      const aConnected = connectedSources.includes(a.short_name);
-      const bConnected = connectedSources.includes(b.short_name);
+      const aConnected = shortNameIsConnected(a.short_name);
+      const bConnected = shortNameIsConnected(b.short_name);
       if (aConnected && !bConnected) return -1;
       if (!aConnected && bConnected) return 1;
       return 0;
     });
 
-  const handleConnect = async (sourceId: string) => {
-    setConnectedSources([...connectedSources, sourceId]);
-    toast({
-      title: "Source Connected",
-      description: `Successfully connected to ${sourceId}`,
-    });
-  };
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -81,13 +139,13 @@ export const SourcesDataSourceGrid = () => {
             key={source.short_name}
             shortName={source.short_name}
             name={source.name}
-            description={source.description}
-            status={connectedSources.includes(source.short_name) ? "connected" : "disconnected"}
+            description={source.description || ""}
+            status={shortNameIsConnected(source.short_name) ? "connected" : "disconnected"}
             onConnect={() => handleConnect(source.short_name)}
-            existingConnections={connectedSources.includes(source.short_name) ? mockConnections : []}
+            connections={getConnectionsForSource(source.short_name, connections)}
           />
         ))}
       </div>
     </div>
   );
-}
+};

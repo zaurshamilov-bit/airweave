@@ -6,6 +6,7 @@ import { DocsCard } from "@/components/dashboard/DocsCard";
 import { Button } from "@/components/ui/button";
 import { MessageSquare } from "lucide-react";
 import { SyncJobsTable } from "@/components/sync/SyncJobsTable";
+import SyncTableView from "./SyncTableView";
 
 const Dashboard = () => {
   const handleDiscordClick = () => {
@@ -40,7 +41,7 @@ const Dashboard = () => {
         </div>
 
         <div className="bg-background rounded-lg border">
-          <SyncJobsTable syncId="dashboard" />
+          <SyncTableView />
         </div>
 
         <div className="grid gap-8 md:grid-cols-2">

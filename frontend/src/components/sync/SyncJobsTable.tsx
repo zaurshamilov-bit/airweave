@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Table,
   TableBody,
@@ -7,86 +8,95 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { format } from "date-fns";
+import { apiClient } from "@/lib/api";
 
-const mockSyncTableViews = [
-  {
-    id: "sync_1",
-    name: "orhanrauf@gmail.com - Slack Sync",
-    schedule: "Daily at 2 AM",
-    lastSync: "2024-03-21T02:15:00Z",
-    status: "active",
-    whiteLabelName: "Neena White Label for Slack"
-  },
-  {
-    id: "sync_2",
-    name: "lennertjansen@gmail.com - Slack Sync",
-    schedule: "Every Monday at 3 AM",
-    lastSync: "2024-03-20T02:12:00Z",
-    status: "active",
-    whiteLabelName: "Neena White Label for Slack"
-  },
-  {
-    id: "sync_3",
-    name: "Daily Notion Sync",
-    schedule: "Daily at 2 AM",
-    lastSync: "2024-03-21T02:15:00Z",
-    status: "paused",
-    whiteLabelName: null
-  }
-];
+interface SyncJob {
+  id: string;
+  sync_id: string;
+  status: 'completed' | 'failed' | 'running' | 'pending';
+  created_at: string;
+  completed_at: string | null;
+  error_message: string | null;
+}
 
 interface SyncJobsTableProps {
   syncId: string;
+  onTotalRunsChange?: (total: number) => void;
 }
 
-export const SyncJobsTable = ({ syncId }: SyncJobsTableProps) => {
+export const SyncJobsTable = ({ syncId, onTotalRunsChange }: SyncJobsTableProps) => {
+  const [jobs, setJobs] = useState<SyncJob[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const response = await apiClient.get(`/sync/${syncId}/jobs`);
+        const jobsData: SyncJob[] = await response.json();
+        setJobs(jobsData);
+        onTotalRunsChange?.(jobsData.length);
+      } catch (error) {
+        console.error("Error fetching sync jobs:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchJobs();
+  }, [syncId, onTotalRunsChange]);
+
+  if (isLoading) {
+    return <div className="p-6">Loading jobs...</div>;
+  }
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-semibold">Active Syncs</h2>
+          <h2 className="text-2xl font-semibold">Sync History</h2>
           <p className="text-muted-foreground mt-1">
-            Overview of your scheduled synchronizations
+            Overview of sync jobs and their status
           </p>
         </div>
       </div>
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            <TableHead className="font-semibold text-foreground">Name</TableHead>
-            <TableHead className="font-semibold text-foreground">Schedule</TableHead>
-            <TableHead className="font-semibold text-foreground">Last Sync</TableHead>
+            <TableHead className="font-semibold text-foreground">Created At</TableHead>
+            <TableHead className="font-semibold text-foreground">Completed At</TableHead>
             <TableHead className="font-semibold text-foreground">Status</TableHead>
-            <TableHead className="font-semibold text-foreground">White Label</TableHead>
+            <TableHead className="font-semibold text-foreground">Error</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {mockSyncTableViews.map((sync) => (
-            <TableRow key={sync.id} className="cursor-pointer">
-              <TableCell className="font-medium">{sync.name}</TableCell>
-              <TableCell>{sync.schedule}</TableCell>
+          {jobs.map((job) => (
+            <TableRow key={job.id}>
               <TableCell>
-                {format(new Date(sync.lastSync), "MMM d, yyyy HH:mm")}
+                {format(new Date(job.created_at), "MMM d, yyyy HH:mm")}
+              </TableCell>
+              <TableCell>
+                {job.completed_at 
+                  ? format(new Date(job.completed_at), "MMM d, yyyy HH:mm")
+                  : '-'
+                }
               </TableCell>
               <TableCell>
                 <span
                   className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    sync.status === "active"
+                    job.status === "completed"
                       ? "bg-green-100 text-green-800"
+                      : job.status === "failed"
+                      ? "bg-red-100 text-red-800"
+                      : job.status === "running"
+                      ? "bg-blue-100 text-blue-800"
                       : "bg-yellow-100 text-yellow-800"
                   }`}
                 >
-                  {sync.status}
+                  {job.status}
                 </span>
               </TableCell>
-              <TableCell>
-                {sync.whiteLabelName ? (
-                  <span className="text-sm font-medium text-primary">
-                    {sync.whiteLabelName}
-                  </span>
-                ) : (
-                  <span className="text-sm text-muted-foreground">-</span>
-                )}
+              <TableCell className="max-w-md truncate">
+                {job.error_message || '-'}
               </TableCell>
             </TableRow>
           ))}

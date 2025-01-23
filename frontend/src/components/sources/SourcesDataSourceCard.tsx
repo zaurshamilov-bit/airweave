@@ -3,11 +3,15 @@ import { Button } from "@/components/ui/button";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { ManageSourceDialog } from "./ManageSourceDialog";
 import { useState } from "react";
-import { Connection, DataSourceCardProps } from "@/types";
+import { Connection } from "@/types";
 
-interface SourcesDataSourceCardProps extends Omit<DataSourceCardProps, 'onSelect'> {
+interface SourcesDataSourceCardProps {
+  shortName: string;
+  name: string;
+  description: string;
+  status: "connected" | "disconnected";
   onConnect: () => void;
-  existingConnections?: Connection[];
+  connections: Connection[];
 }
 
 export function SourcesDataSourceCard({ 
@@ -16,9 +20,11 @@ export function SourcesDataSourceCard({
   description, 
   status,
   onConnect,
-  existingConnections = []
+  connections,
 }: SourcesDataSourceCardProps) {
   const [showManageDialog, setShowManageDialog] = useState(false);
+
+  const activeConnections = connections.filter(conn => conn.status === "active");
 
   return (
     <>
@@ -41,7 +47,12 @@ export function SourcesDataSourceCard({
           </div>
         </CardHeader>
         <CardContent className="p-4 pt-0 flex-grow">
-          <p className="text-sm text-muted-foreground line-clamp-3">
+          {status === "connected" && (
+            <div className="text-sm text-muted-foreground">
+              {activeConnections.length} active connection{activeConnections.length !== 1 ? 's' : ''}
+            </div>
+          )}
+          <p className="text-sm text-muted-foreground line-clamp-3 mt-2">
             Extract and sync your {name} data to your vector database of choice.
           </p>
         </CardContent>
@@ -63,7 +74,8 @@ export function SourcesDataSourceCard({
         shortName={shortName}
         description={description}
         onConnect={onConnect}
-        existingConnections={existingConnections}
+        existingConnections={connections}
+        isLoading={false}
       />
     </>
   );

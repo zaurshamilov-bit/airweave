@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { toast, useToast } from "@/components/ui/use-toast";
 import { SyncDataSourceGrid } from "@/components/sync/SyncDataSourceGrid";
 import { VectorDBSelector } from "@/components/VectorDBSelector";
-import { SyncProgress } from "@/components/SyncProgress";
+import { SyncProgress } from "@/components/sync/SyncProgress";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 import { apiClient } from "@/lib/api";

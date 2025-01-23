@@ -40,6 +40,9 @@ class SyncJobUpdate(BaseModel):
     records_updated: Optional[int] = None
     records_deleted: Optional[int] = None
     error: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    failed_at: Optional[datetime] = None
 
 
 class SyncJobInDBBase(SyncJobBase):
