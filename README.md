@@ -4,11 +4,6 @@
 
 **Airweave** is an open-core tool that makes **any app searchable** for your agent by unifying your apps, APIs, and databases and your users' data into your vector database of choice with minimal configuration. 
 
-[comment]: <> ## Typical usecases:
-[comment]: <> - [Zero code required: Empower your customer support assistant by syncing Zendesk tickets, Google Drive docs, and product manuals.](blog.airweave.ai) 🦾
-[comment]: <> - [Synchronize with your users' data with one button in your multi-tenant SaaS app and two API calls to the Airweave API.](blog.airweave.ai) 🔗
-[comment]: <> - [Update your personal assistant with knowledge from Slack, HubSpot and your personal SQL database on a daily basis in under 5 minutes.](blog.airweave.ai) ⏰
-
 ## Table of Contents
 
 1. [Overview](#overview)  
