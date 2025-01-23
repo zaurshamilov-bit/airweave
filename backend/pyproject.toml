@@ -26,6 +26,7 @@ pydantic-settings = "^2.7.0"
 psycopg2-binary = "^2.9.10"
 weaviate = "^0.1.2"
 weaviate-client = "^4.10.2"
+markitdown = "^0.0.1a3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

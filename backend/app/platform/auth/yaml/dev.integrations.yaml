@@ -46,13 +46,13 @@ integrations:
   monday:
     auth_type: "oauth2"
     url: "https://auth.monday.com/oauth2/authorize"
-    backend_url: "https://monday.com/oauth2/access_token"
+    backend_url: "https://auth.monday.com/oauth2/token"
     grant_type: "authorization_code"
     client_id: "ba30562df98324c4e7ea0cd131346c03"
-    client_secret: "1c1fd9c2a892177a9bac7623aa2b9e0a"
+    client_secret: "bd39987f5e2b7dcd689f81b9dbfca31b"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
-    scope: "me:read,boards:read,docs:read,workspaces:read,users:read,account:read,updates:read,assets:read,tags:read,teams:read"
+    scope: "me:read boards:read docs:read workspaces:read users:read account:read updates:read assets:read tags:read teams:read"
 
   notion:
     auth_type: "oauth2_with_refresh"
