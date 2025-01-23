@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Check } from "lucide-react";
+import { Loader2, Check, CirclePlus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { useToast } from "@/components/ui/use-toast";
 import { getDestinationIconUrl } from "@/lib/utils/icons";
@@ -41,12 +42,27 @@ interface Connection {
   id: string;
   name: string;
   status: "active" | "inactive" | "error";
-  destination_id: string;
   modified_at: string;
+  short_name: string;
 }
 
 interface VectorDBSelectorProps {
   onComplete: (connectionDetails: { connectionId: string; isNative?: boolean }) => void;
+}
+
+interface DestinationDetails {
+  name: string;
+  description: string;
+  short_name: string;
+  class_name: string;
+  auth_type: string;
+  auth_config_class: string;
+  id: string;
+  created_at: string;
+  modified_at: string;
+  config_fields: {
+    fields: ConfigField[];
+  };
 }
 
 /**
@@ -56,34 +72,36 @@ interface VectorDBSelectorProps {
  */
 
 export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
-  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [destinations, setDestinations] = useState<DestinationDetails[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   // For storing config form states
-  const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
+  const [selectedDestination, setSelectedDestination] = useState<DestinationDetails | null>(null);
   const [showConfig, setShowConfig] = useState(false);
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
   const [configFields, setConfigFields] = useState<ConfigField[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
-  // Fetch destinations list
+  // Simplified data fetching - just like in Destinations.tsx
   useEffect(() => {
-    const fetchDestinations = async () => {
+    const fetchData = async () => {
       try {
-        const response = await apiClient.get("/destinations/list");
-        if (!response.ok) {
-          throw new Error("Failed to fetch destinations");
+        // 1. Get connections
+        const connResp = await apiClient.get("/connections/list/destination");
+        if (connResp.ok) {
+          const connData = await connResp.json();
+          setConnections(connData);
         }
-        const data = await response.json();
-        // Move weaviate to the top if it exists
-        const sortedData = data.sort((a: Destination, b: Destination) => {
-          if (a.short_name === "weaviate" && b.short_name !== "weaviate") return -1;
-          if (b.short_name === "weaviate" && a.short_name !== "weaviate") return 1;
-          return 0;
-        });
-        setDestinations(sortedData);
+
+        // 2. Get destinations
+        const destResp = await apiClient.get("/destinations/list");
+        if (destResp.ok) {
+          const destData = await destResp.json();
+          setDestinations(destData);
+        }
       } catch (err) {
-        console.error("Error fetching destinations:", err);
+        console.error("Error fetching data:", err);
         toast({
           variant: "destructive",
           title: "Failed to load vector databases",
@@ -92,41 +110,14 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
       }
     };
 
-    fetchDestinations();
-  }, [toast]);
-
-  // Fetch existing connections for these destinations
-  useEffect(() => {
-    const fetchConnections = async () => {
-      try {
-        const resp = await apiClient.get("/connections/list/destination");
-        // It's possible the user doesn't have any connections yet
-        if (!resp.ok) {
-          if (resp.status === 404) {
-            setConnections([]);
-            return;
-          }
-          throw new Error("Failed to fetch destination connections");
-        }
-        const data = await resp.json();
-        setConnections(data);
-      } catch (err: any) {
-        toast({
-          variant: "destructive",
-          title: "Failed to load existing connections",
-          description: err.message ?? String(err),
-        });
-      }
-    };
-
-    fetchConnections();
-  }, [toast]);
+    fetchData();
+  }, []);
 
   /**
    * When user clicks "Add new connection" or chooses to configure a new one,
    * we fetch config fields for that destination's short_name.
    */
-  const handleAddNewConnection = async (dest: Destination) => {
+  const handleAddNewConnection = async (dest: DestinationDetails) => {
     try {
       const response = await apiClient.get(`/destinations/detail/${dest.short_name}`);
       if (!response.ok) throw new Error("Failed to fetch destination details");
@@ -232,12 +223,13 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
   /**
    * Group connections by destination type and render them as separate cards
    */
-  const renderDestinationGroup = (dest: Destination) => {
+  const renderDestinationGroup = (dest: DestinationDetails) => {
     // Skip native Weaviate as it's rendered separately
     if (dest.short_name === "weaviate_native") return null;
 
     const destConnections = connections
-      .filter((c) => c.destination_id === dest.id)
+      .filter((c) => c.short_name === dest.short_name)
+      .filter((c) => c.status === "active")
       .sort((a, b) => new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime());
 
     return (
@@ -249,7 +241,7 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
               alt={`${dest.name} icon`}
               className="w-6 h-6"
             />
-            <h3 className="font-semibold text->lg">{dest.name}</h3>
+            <h3 className="font-semibold text-lg">{dest.name}</h3>
           </div>
         </div>
 
@@ -287,24 +279,28 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
               </CardFooter>
             </Card>
           ))}
-          {/* Always show the "Add New Instance" card first */}
-          <Card className="flex flex-col justify-between border-dashed hover:border-primary/50 transition-colors bg-muted/5">
+          
+          {/* Modified "Add New Instance" card */}
+          <Card className="flex flex-col justify-between border-dashed hover:border-primary/50 transition-colors bg-gradient-to-br from-background to-muted/20">
             <CardHeader>
-              <CardTitle>New Instance</CardTitle>
-              <CardDescription>Configure a new connection</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <CirclePlus className="h-7 w-7" />
+                Add New Connection
+              </CardTitle>
+              <CardDescription>Set up a new {dest.name} instance</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow">
               <p className="text-sm text-muted-foreground">
-                Add another {dest.name} instance to your vector database collection.
+                Configure a new connection in the destinations page to add it to your vector database collection.
               </p>
             </CardContent>
             <CardFooter>
               <Button 
-                variant="secondary"
+                variant="outline"
                 className="w-full" 
-                onClick={() => handleAddNewConnection(dest)}
+                onClick={() => navigate("/destinations")}
               >
-                Add New Instance
+                Go to Destinations
               </Button>
             </CardFooter>
           </Card>

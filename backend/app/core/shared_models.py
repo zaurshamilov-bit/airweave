@@ -24,3 +24,11 @@ class IntegrationType(str, Enum):
     SOURCE = "source"
     DESTINATION = "destination"
     EMBEDDING_MODEL = "embedding_model"
+
+
+class SyncStatus(str, Enum):
+    """Sync status enum."""
+
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    ERROR = "error"

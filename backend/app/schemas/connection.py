@@ -17,6 +17,11 @@ class ConnectionBase(BaseModel):
     status: ConnectionStatus
     short_name: str
 
+    class Config:
+        """Pydantic configuration."""
+
+        from_attributes = True
+
 
 class ConnectionCreate(ConnectionBase):
     """Schema for creating a connection."""

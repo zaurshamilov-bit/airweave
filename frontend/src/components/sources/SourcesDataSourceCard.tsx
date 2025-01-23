@@ -4,6 +4,8 @@ import { getAppIconUrl } from "@/lib/utils/icons";
 import { ManageSourceDialog } from "./ManageSourceDialog";
 import { useState } from "react";
 import { Connection } from "@/types";
+import { CircleDot } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface SourcesDataSourceCardProps {
   shortName: string;
@@ -48,7 +50,11 @@ export function SourcesDataSourceCard({
         </CardHeader>
         <CardContent className="p-4 pt-0 flex-grow">
           {status === "connected" && (
-            <div className="text-sm text-muted-foreground">
+            <div className={cn(
+              "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium",
+              "bg-primary/10 text-primary"
+            )}>
+              <CircleDot className="w-3 h-3" />
               {activeConnections.length} active connection{activeConnections.length !== 1 ? 's' : ''}
             </div>
           )}
@@ -62,7 +68,7 @@ export function SourcesDataSourceCard({
             variant={status === "connected" ? "secondary" : "default"} 
             className="w-full"
           >
-            {status === "connected" ? "Manage Source" : "Connect"}
+            Manage Source
           </Button>
         </CardFooter>
       </Card>

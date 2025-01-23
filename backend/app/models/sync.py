@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import JSON, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.shared_models import SyncStatus
 from app.models._base import OrganizationBase, UserMixin
 
 if TYPE_CHECKING:
@@ -24,6 +25,7 @@ class Sync(OrganizationBase, UserMixin):
     destination_connection_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("connection.id"), nullable=True
     )
+    status: Mapped[SyncStatus] = mapped_column(default=SyncStatus.ACTIVE)
     embedding_model_connection_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("connection.id"), nullable=True
     )

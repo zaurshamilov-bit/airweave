@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
 from app.crud._base import CRUDBase
 from app.models.connection import Connection, IntegrationType
 from app.schemas.connection import ConnectionCreate, ConnectionStatus, ConnectionUpdate

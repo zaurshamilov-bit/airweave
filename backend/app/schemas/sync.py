@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, field_validator
 
+from app.core.shared_models import SyncStatus
+
 
 class SyncBase(BaseModel):
     """Base schema for Sync."""
@@ -75,6 +77,7 @@ class SyncUpdate(BaseModel):
     white_label_id: Optional[UUID] = None
     white_label_user_identifier: Optional[str] = None
     sync_metadata: Optional[dict] = None
+    status: Optional[SyncStatus] = None
 
 
 class SyncInDBBase(SyncBase):
@@ -86,6 +89,7 @@ class SyncInDBBase(SyncBase):
     modified_at: datetime
     created_by_email: EmailStr
     modified_by_email: EmailStr
+    status: SyncStatus
 
     class Config:
         """Pydantic config."""

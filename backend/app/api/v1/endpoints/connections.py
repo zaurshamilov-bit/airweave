@@ -10,6 +10,7 @@ from app import crud, schemas
 from app.api import deps
 from app.core import credentials
 from app.core.logging import logger
+from app.core.shared_models import SyncStatus
 from app.db.unit_of_work import UnitOfWork
 from app.models.integration_credential import IntegrationType
 from app.platform.auth.schemas import AuthType
@@ -54,8 +55,17 @@ async def list_connected_integrations(
     db: AsyncSession = Depends(deps.get_db),
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.Connection]:
-    """Get all integrations of specified type connected to the current user."""
-    connections = await crud.connection.get_active_by_integration_type(
+    """Get all integrations of specified type connected to the current user.
+
+    Args:
+        integration_type (IntegrationType): The type of integration to get connections for.
+        db (AsyncSession): The database session.
+        user (schemas.User): The current user.
+
+    Returns:
+        list[schemas.Connection]: The list of connections.
+    """
+    connections = await crud.connection.get_by_integration_type(
         db, integration_type=integration_type, organization_id=user.organization_id
     )
     return connections
@@ -153,54 +163,185 @@ async def connect_integration(
         return connection
 
 
-@router.delete("/disconnect/{integration_type}/{short_name}", response_model=schemas.Connection)
-async def disconnect_integration(
+@router.get("/credentials/{connection_id}", response_model=dict)
+async def get_connection_credentials(
+    connection_id: UUID,
+    db: AsyncSession = Depends(deps.get_db),
+    user: schemas.User = Depends(deps.get_user),
+) -> dict:
+    """Get the credentials for a connection.
+
+    Args:
+        connection_id (UUID): The ID of the connection to get credentials for
+        db (AsyncSession): The database session
+        user (schemas.User): The current user
+
+    Returns:
+        dict: The credentials for the connection
+    """
+    connection = await crud.connection.get(db, id=connection_id, current_user=user)
+    if not connection:
+        raise HTTPException(status_code=404, detail="Connection not found")
+
+    integration_credential = await crud.integration_credential.get(
+        db, id=connection.integration_credential_id, current_user=user
+    )
+    if not integration_credential:
+        raise HTTPException(status_code=404, detail="Integration credential not found")
+
+    decrypted_credentials = credentials.decrypt(integration_credential.encrypted_credentials)
+    return decrypted_credentials
+
+
+@router.delete("/delete/source/{connection_id}", response_model=schemas.Connection)
+async def delete_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    integration_type: IntegrationType,
-    short_name: str,
+    connection_id: UUID,
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Connection:
-    """Disconnect from a source, destination, or embedding model.
+    """Delete a connection.
 
-    This will:
-    1. Find the active connection for the given integration
-    2. Set its status to INACTIVE
-    3. Return the updated connection
+    Deletes the connection and integration credential.
+
+    Args:
+        db (AsyncSession): The database session
+        connection_id (UUID): The ID of the connection to delete
+        delete_syncs_and_data (bool): Whether to delete the associated syncs and data
+        user (schemas.User): The current user
+
+    Returns:
+        schemas.Connection: The deleted connection
     """
+    # TODO: Implement data deletion logic, should be part of destination interface
     async with UnitOfWork(db) as uow:
-        # Get active connection for this integration
-        connections = await crud.connection.get_active_by_integration_type(
-            uow.session, integration_type=integration_type, organization_id=user.organization_id
-        )
-
-        # Find the specific connection for this short_name
-        connection = next(
-            (
-                conn
-                for conn in connections
-                if conn.integration_credential.integration_short_name == short_name
-            ),
-            None,
-        )
+        # Get connection
+        connection = await crud.connection.get(uow.session, id=connection_id, current_user=user)
 
         if not connection:
             raise HTTPException(
                 status_code=404,
-                detail=f"No active connection found for {integration_type} '{short_name}'",
+                detail=f"No active connection found for '{connection_id}'",
             )
 
-        # Update connection status to inactive
-        connection_update = schemas.ConnectionUpdate(status=ConnectionStatus.INACTIVE)
+        syncs = await crud.sync.remove_all_for_connection(
+            uow.session, connection_id, current_user=user, uow=uow
+        )
+        # TODO: Implement data deletion logic, should be part of destination interface
+        pass
 
-        updated_connection = await crud.connection.update(
-            uow.session, db_obj=connection, obj_in=connection_update, current_user=user, uow=uow
+        # Delete the connection and the integration credential
+        connection = await crud.connection.remove(
+            uow.session, id=connection_id, current_user=user, uow=uow
+        )
+
+        await crud.integration_credential.remove(
+            uow.session, id=connection.integration_credential_id, current_user=user, uow=uow
         )
 
         await uow.commit()
-        await uow.session.refresh(updated_connection)
 
-        return updated_connection
+        return connection
+
+
+@router.put("/disconnect/source/{connection_id}", response_model=schemas.Connection)
+async def disconnect_source_connection(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    connection_id: UUID,
+    user: schemas.User = Depends(deps.get_user),
+) -> schemas.Connection:
+    """Disconnect from a source connection.
+
+    Args:
+        db (AsyncSession): The database session
+        connection_id (UUID): The ID of the connection to disconnect
+        user (schemas.User): The current user
+    Returns:
+        schemas.Connection: The disconnected connection
+    """
+    async with UnitOfWork(db) as uow:
+        connection = await crud.connection.get(uow.session, id=connection_id, current_user=user)
+        if not connection:
+            raise HTTPException(status_code=404, detail="Connection not found")
+        if connection.integration_type != IntegrationType.SOURCE:
+            raise HTTPException(status_code=400, detail="Connection is not a source")
+
+        connection_schema = schemas.ConnectionUpdate.model_validate(
+            connection, from_attributes=True
+        )
+
+        connection_schema.status = ConnectionStatus.INACTIVE
+        connection = await crud.connection.update(
+            uow.session, db_obj=connection, obj_in=connection_schema, current_user=user, uow=uow
+        )
+        connection_schema = schemas.Connection.model_validate(connection, from_attributes=True)
+
+        syncs = await crud.sync.get_all_for_source_connection(
+            uow.session, connection_id, current_user=user
+        )
+        for sync in syncs:
+            sync.status = SyncStatus.INACTIVE
+            sync_update_schema = schemas.SyncUpdate.model_validate(sync, from_attributes=True)
+            await crud.sync.update(
+                uow.session, db_obj=sync, obj_in=sync_update_schema, current_user=user, uow=uow
+            )
+
+        await uow.commit()
+
+    return connection_schema
+
+
+@router.put("/disconnect/destination/{connection_id}", response_model=schemas.Connection)
+async def disconnect_destination_connection(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    connection_id: UUID,
+    user: schemas.User = Depends(deps.get_user),
+) -> schemas.Connection:
+    """Disconnect from a destination connection.
+
+    Args:
+        db (AsyncSession): The database session
+        connection_id (UUID): The ID of the connection to disconnect
+        user (schemas.User): The current user
+
+    Returns:
+        schemas.Connection: The disconnected connection
+    """
+    async with UnitOfWork(db) as uow:
+        connection = await crud.connection.get(uow.session, id=connection_id, current_user=user)
+
+        if not connection:
+            raise HTTPException(status_code=404, detail="Connection not found")
+
+        if connection.integration_type != IntegrationType.DESTINATION:
+            raise HTTPException(status_code=400, detail="Connection is not a destination")
+
+        connection_schema = schemas.ConnectionUpdate.model_validate(
+            connection, from_attributes=True
+        )
+
+        connection_schema.status = ConnectionStatus.INACTIVE
+        connection = await crud.connection.update(
+            uow.session, db_obj=connection, obj_in=connection_schema, current_user=user, uow=uow
+        )
+
+        connection_schema = schemas.Connection.model_validate(connection, from_attributes=True)
+
+        syncs = await crud.sync.get_all_for_destination_connection(
+            uow.session, connection_id, current_user=user
+        )
+        for sync in syncs:
+            sync.status = SyncStatus.INACTIVE
+            sync_update_schema = schemas.SyncUpdate.model_validate(sync, from_attributes=True)
+            await crud.sync.update(
+                uow.session, db_obj=sync, obj_in=sync_update_schema, current_user=user, uow=uow
+            )
+
+        await uow.commit()
+
+        return connection_schema
 
 
 @router.get("/oauth2/source/auth_url")
