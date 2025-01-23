@@ -119,7 +119,7 @@ Airweave simplifies the process of making your data searchable. Whether you have
 - **Databases**:  
   - [PostgreSQL](https://www.postgresql.org/) for relational data  
   - Vector database (your choice, e.g. Pinecone, Weaviate, Milvus, etc.)  + (upcoming batteries-included vector DB)
-- **Asynchronous Tasks**: [ARQ](https://arq.readthedocs.io/en/latest/) for background workers
+- **Asynchronous Tasks**: [ARQ](https://arq-docs.helpmanual.io/) for background workers
 
 ---
 
