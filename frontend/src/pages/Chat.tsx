@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
@@ -29,26 +29,7 @@ const Chat = () => {
   const { toast } = useToast();
   const location = useLocation();
 
-  useEffect(() => {
-    const state = location.state as { initialMessage?: string; selectedSources?: string[] };
-    if (state?.selectedSources) {
-      setSelectedSources(state.selectedSources);
-    }
-    if (state?.initialMessage) {
-      handleSubmit(state.initialMessage, []);
-    }
-  }, []);
-
-  const handleSourceChange = (sourceId: string) => {
-    setSelectedSources((prev) => {
-      if (prev.includes(sourceId)) {
-        return prev.filter((id) => id !== sourceId);
-      }
-      return [...prev, sourceId];
-    });
-  };
-
-  const handleSubmit = async (content: string, attachments: string[]) => {
+  const handleSubmit = useCallback(async (content: string, attachments: string[]) => {
     const userMessage: Message = {
       role: "user",
       content,
@@ -77,6 +58,25 @@ const Chat = () => {
     } finally {
       setIsLoading(false);
     }
+  }, [toast]);
+
+  useEffect(() => {
+    const state = location.state as { initialMessage?: string; selectedSources?: string[] };
+    if (state?.selectedSources) {
+      setSelectedSources(state.selectedSources);
+    }
+    if (state?.initialMessage) {
+      void handleSubmit(state.initialMessage, []);
+    }
+  }, [location.state, handleSubmit, setSelectedSources]);
+
+  const handleSourceChange = (sourceId: string) => {
+    setSelectedSources((prev) => {
+      if (prev.includes(sourceId)) {
+        return prev.filter((id) => id !== sourceId);
+      }
+      return [...prev, sourceId];
+    });
   };
 
   return (

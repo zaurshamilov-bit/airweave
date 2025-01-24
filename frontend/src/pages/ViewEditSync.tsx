@@ -50,7 +50,7 @@ interface DestinationResponse {
 }
 
 const ViewEditSync = () => {
-  const { id } = useParams();1
+  const { id } = useParams();
   const navigate = useNavigate();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [syncDetails, setSyncDetails] = useState<SyncDetailsData | null>(null);
@@ -135,7 +135,7 @@ const ViewEditSync = () => {
     if (id) {
       fetchData();
     }
-  }, [id]);
+  });
 
   const handleDelete = async () => {
     try {

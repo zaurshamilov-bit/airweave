@@ -21,10 +21,15 @@ interface SyncJob {
 
 interface SyncJobsTableProps {
   syncId: string;
-  onTotalRunsChange?: (total: number) => void;
+  onTotalRunsChange: (total: number) => void;
+  onJobSelect: (jobId: string) => void;
 }
 
-export const SyncJobsTable = ({ syncId, onTotalRunsChange }: SyncJobsTableProps) => {
+export const SyncJobsTable: React.FC<SyncJobsTableProps> = ({ 
+  syncId, 
+  onTotalRunsChange,
+  onJobSelect 
+}) => {
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -49,6 +54,10 @@ export const SyncJobsTable = ({ syncId, onTotalRunsChange }: SyncJobsTableProps)
     return <div className="p-6">Loading jobs...</div>;
   }
 
+  const handleRowClick = (jobId: string) => {
+    onJobSelect(jobId);
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -70,7 +79,11 @@ export const SyncJobsTable = ({ syncId, onTotalRunsChange }: SyncJobsTableProps)
         </TableHeader>
         <TableBody>
           {jobs.map((job) => (
-            <TableRow key={job.id}>
+            <TableRow 
+              key={job.id} 
+              onClick={() => handleRowClick(job.id)}
+              className="cursor-pointer hover:bg-muted/50"
+            >
               <TableCell>
                 {format(new Date(job.created_at), "MMM d, yyyy HH:mm")}
               </TableCell>

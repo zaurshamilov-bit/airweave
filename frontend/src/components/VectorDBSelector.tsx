@@ -111,7 +111,7 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
     };
 
     fetchData();
-  }, []);
+  });
 
   /**
    * When user clicks "Add new connection" or chooses to configure a new one,

@@ -80,7 +80,7 @@ export const SourcesDataSourceGrid = () => {
       await fetchConnections();
       setIsLoading(false);
     })();
-  }, []);
+  });
 
   const shortNameIsConnected = (shortName: string) => {
     return connections.some(conn => 

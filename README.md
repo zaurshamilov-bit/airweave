@@ -2,6 +2,8 @@
 
 [![Ruff](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml)
 
+[![ESLint](https://github.com/airweave-ai/airweave/actions/workflows/eslint.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/eslint.yml)
+
 # Airweave 
 
 **Airweave** is an open-core tool that makes **any app searchable** for your agent by unifying your apps, APIs, and databases and your users' data into your vector database of choice with minimal configuration. 
