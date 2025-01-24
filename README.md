@@ -1,5 +1,7 @@
 <img width="1673" alt="airweave-lettermark" src="https://github.com/user-attachments/assets/9e78811d-54db-4e03-8d41-2ad4fa0707ca" />
 
+[![Ruff](https://github.com/airweave/airweave/actions/workflows/ruff.yml/badge.svg)](https://github.com/airweave/airweave/actions/workflows/ruff.yml)
+
 # Airweave 
 
 **Airweave** is an open-core tool that makes **any app searchable** for your agent by unifying your apps, APIs, and databases and your users' data into your vector database of choice with minimal configuration. 
@@ -90,11 +92,11 @@ Airweave simplifies the process of making your data searchable. Whether you have
 
 3. **Chunk Generators**  
    - Integration-specific modules or decorators (e.g., `@chunk_generator`) that define how to fetch and transform source data.  
-   - Produces “chunks” of data (text, metadata, etc.) that are hashed to detect changes.
+   - Produces "chunks" of data (text, metadata, etc.) that are hashed to detect changes.
 
 4. **Synchronizers**  
    - Compare generated chunk hashes., 
-   - Insert new chunks into the vector DB or mark them for deletion if they’re no longer relevant.  
+   - Insert new chunks into the vector DB or mark them for deletion if they're no longer relevant.  
    - Upcoming: run asynchronously, in parallel, to handle large data sets efficiently.
 
 5. **Data Store**  
@@ -142,7 +144,7 @@ Below is a simple guide to get Airweave up and running locally. For more detaile
    docker-compose up --build
    ```
 
-That’s it!
+That's it!
 
 You now have Airweave running locally. You can log in to the dashboard, add new sources, and configure your sync schedules.
 
@@ -240,12 +242,12 @@ SMTP_FROM_EMAIL=<your-from-email>
 
 ## Contributing
 
-We welcome all contributions! Whether you’re fixing a bug, improving documentation, or adding a new feature:
+We welcome all contributions! Whether you're fixing a bug, improving documentation, or adding a new feature:
 1. Fork this repository
 2. Create a feature branch: `git checkout -b feature/new-chunk-generator`
 3. Commit changes: `git commit -m "Add new chunk generator for XYZ"`
 4. Push to your fork: `git push origin feature/new-chunk-generator`
-5. Create a Pull Request: Submit your PR against this repo’s main branch.
+5. Create a Pull Request: Submit your PR against this repo's main branch.
 
 Please follow the existing code style and conventions. See `CONTRIBUTING.md` for more details.
 
@@ -272,7 +274,7 @@ Airweave is released under an open-core model. The community edition is licensed
 - **GitHub Issues**: Report bugs or request new features in GitHub Issues.
 - **Twitter**: Follow @airweave_dev for updates.
 
-That’s it! We're looking forward to seeing what you build. If you have any questions, please don’t hesitate to open an issue or reach out on Discord.
+That's it! We're looking forward to seeing what you build. If you have any questions, please don't hesitate to open an issue or reach out on Discord.
 
 ## Further Documentation
 
