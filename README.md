@@ -1,6 +1,6 @@
 <img width="1673" alt="airweave-lettermark" src="https://github.com/user-attachments/assets/9e78811d-54db-4e03-8d41-2ad4fa0707ca" />
 
-[![Ruff](https://github.com/airweave/airweave/actions/workflows/ruff.yml/badge.svg)](https://github.com/airweave/airweave/actions/workflows/ruff.yml)
+[![Ruff](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml)
 
 # Airweave 
 
