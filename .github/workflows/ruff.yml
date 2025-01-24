@@ -21,6 +21,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - name: Git Debug
+        run: |
+          git status
+          git diff
+          git rev-parse HEAD
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -29,12 +34,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "ruff>=0.1.14"
+          pip install "ruff==0.1.15"
       - name: Debug Info
         run: |
           which ruff
           ruff --version
+          pwd
       - name: Show Exact Differences
         run: |
           ruff format . --check --diff
-          ruff check . --diff

@@ -74,6 +74,9 @@ check_untyped_defs = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["alembic", "local.py"]
+
+[tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
@@ -84,22 +87,18 @@ select = [
     "D",  # flake8-docstrings
 ]
 ignore = ["B008"]  # ignore fastapi dependency injection warning
-extend-exclude = ["alembic", "local.py"]
 
-# Enable Google-style docstrings
-[tool.ruff.pydocstyle]
+[tool.ruff.lint.pydocstyle]
 convention = "google"
 
-# Configure formatting
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["D104"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
 docstring-code-format = true
-
-# Configure line length related rules
-[tool.ruff.per-file-ignores]
-"__init__.py" = ["D104"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
