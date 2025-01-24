@@ -26,16 +26,14 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-      - name: Debug Info
-        run: |
-          which ruff
-          ruff --version
-          pwd
-          git status
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install "ruff>=0.1.14"
+      - name: Debug Info
+        run: |
+          which ruff
+          ruff --version
       - name: Show Exact Differences
         run: |
           ruff format . --check --diff
