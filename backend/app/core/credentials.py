@@ -17,6 +17,7 @@ def get_encryption_fernet() -> Fernet:
     key = settings.ENCRYPTION_KEY.encode()
     return Fernet(key)
 
+
 def encrypt(data: dict) -> str:
     """Encrypt dictionary data.
 
@@ -33,6 +34,7 @@ def encrypt(data: dict) -> str:
     json_str = json.dumps(data)
     encrypted_data = f.encrypt(json_str.encode())
     return encrypted_data.decode()
+
 
 def decrypt(data: str) -> dict:
     """Decrypt dictionary data.

@@ -25,6 +25,7 @@ class DestinationBase(BaseModel):
 
         from_attributes = True
 
+
 class DestinationCreate(DestinationBase):
     """Schema for creating a Destination object."""
 
@@ -54,6 +55,7 @@ class Destination(DestinationInDBBase):
     """Schema for Destination."""
 
     pass
+
 
 class DestinationWithConfigFields(Destination):
     """Schema for Destination with auth config."""

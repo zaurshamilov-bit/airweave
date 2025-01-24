@@ -103,8 +103,7 @@ class LoggerConfigurator:
     Create base logger with component context:
     ```python
     logger = LoggerConfigurator.configure_logger(
-        __name__,
-        dimensions={"component": "flow_generator"}
+        __name__, dimensions={"component": "flow_generator"}
     )
     # Log a message with the base context
     logger.info("Starting flow generation")
@@ -117,21 +116,17 @@ class LoggerConfigurator:
 
     Chain multiple contexts:
     ```python
-    detail_logger = logger.with_context(
-        operation="validate"
-    ).with_context(
-        user_id="123",
-        request_id="456"
+    detail_logger = logger.with_context(operation="validate").with_context(
+        user_id="123", request_id="456"
     )
     detail_logger.info("Starting validation")
     ```
 
     Mix contexts and prefix:
     ```python
-    error_logger = logger.with_context(
-        error_type="validation",
-        severity="high"
-    ).with_prefix("ERROR: ")
+    error_logger = logger.with_context(error_type="validation", severity="high").with_prefix(
+        "ERROR: "
+    )
     ```
 
     """

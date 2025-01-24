@@ -15,7 +15,6 @@ from app.db.session import get_db
 async def get_user(
     db: AsyncSession = Depends(get_db),
     x_api_key: Optional[str] = Header(None),
-
 ) -> schemas.User:
     """Retrieve user from super user from database.
 

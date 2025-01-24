@@ -61,7 +61,6 @@ class SyncService:
                 sync_progress_update = SyncProgressUpdate()
 
                 async for chunk in sync_context.source.generate_chunks():
-
                     # Enrich chunk with sync context information
                     chunk = await self._enrich_chunk(chunk, sync_context)
 

@@ -28,6 +28,7 @@ class AuthType(str, Enum):
     native_functionality = "native_functionality"
     config_class = "config_class"
 
+
 class OAuth2TokenResponse(BaseModel):
     """OAuth2 token response schema.
 
@@ -153,6 +154,8 @@ class OAuth2WithRefreshRotatingSettings(OAuth2Settings):
 
     pass
 
+
 class ConfigClassAuthSettings(BaseAuthSettings):
     """Config class authentication settings schema."""
+
     pass

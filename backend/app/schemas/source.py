@@ -56,6 +56,7 @@ class Source(SourceInDBBase):
 
     pass
 
+
 class SourceWithAuthConfig(Source):
     """Schema for Source with auth config."""
 

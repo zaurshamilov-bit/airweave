@@ -31,4 +31,3 @@ async def init_db(db: AsyncSession) -> None:
             organization_id=organization.id,
         )
         user = await crud.user.create(db, obj_in=user_in)
-

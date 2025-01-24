@@ -9,8 +9,7 @@ class UnitOfWork:
     Usage:
     -----
     ```python
-
-    await crud.create(db, obj_in=obj_in) # commits automatically
+    await crud.create(db, obj_in=obj_in)  # commits automatically
 
     async with UnitOfWork(session) as uow:
         db_obj = await crud.create(db, obj_in=obj_in, uow=uow)

@@ -59,6 +59,7 @@ class UserInDB(UserInDBBase):
 
     hashed_password: Optional[str] = None
 
+
 class UserWithOrganizations(UserInDBBase):
     """Schema for User with Organizations."""
 

@@ -34,9 +34,7 @@ async def create_api_key(
         schemas.APIKeyWithPlainKey: The created API key object, including the key.
 
     """
-    api_key_obj = await crud.api_key.create_with_user(
-        db=db, obj_in=api_key_in, current_user=user
-    )
+    api_key_obj = await crud.api_key.create_with_user(db=db, obj_in=api_key_in, current_user=user)
     return api_key_obj
 
 
@@ -92,9 +90,7 @@ async def read_api_keys(
         List[schemas.APIKey]: A list of API keys.
 
     """
-    api_keys = await crud.api_key.get_all_for_user(
-        db=db, skip=skip, limit=limit, current_user=user
-    )
+    api_keys = await crud.api_key.get_all_for_user(db=db, skip=skip, limit=limit, current_user=user)
     return api_keys
 
 

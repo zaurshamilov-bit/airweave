@@ -18,6 +18,7 @@ class OrganizationCreate(OrganizationBase):
 
     pass
 
+
 class OrganizationUpdate(BaseModel):
     """Organization update schema."""
 

@@ -16,4 +16,3 @@ class APIKey(OrganizationBase, UserMixin):
     key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     key_prefix: Mapped[str] = mapped_column(String(8), nullable=False)
     expiration_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
