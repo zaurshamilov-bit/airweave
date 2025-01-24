@@ -30,3 +30,4 @@ jobs:
       - name: Ruff Format Check
         run: |
           ruff format --check .
+        working-directory: ./backend
