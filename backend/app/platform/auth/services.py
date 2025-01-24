@@ -234,7 +234,8 @@ class OAuth2Service:
 
         Returns:
         -------
-            schemas.Source | schemas.Destination | schemas.EmbeddingModel: The integration configuration.
+            schemas.Source | schemas.Destination | schemas.EmbeddingModel: The integration
+                configuration.
 
         Raises:
         ------

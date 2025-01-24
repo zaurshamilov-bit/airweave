@@ -98,7 +98,7 @@ class LoggerConfigurator:
     This can then be augmented with additional dimensions, such as type of operation (flow
     generation, flow execution, etc), or error type (validation, parsing, etc).
 
-    Examples
+    Examples:
     --------
     Create base logger with component context:
     ```python

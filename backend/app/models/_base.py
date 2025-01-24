@@ -13,7 +13,9 @@ class Base(DeclarativeBase):
 
     id = Column(UUID, primary_key=True, default=uuid.uuid4, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    modified_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    modified_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
 
 
 class OrganizationBase(Base):
@@ -25,6 +27,7 @@ class OrganizationBase(Base):
     def organization_id(cls):
         """Organization ID column."""
         return Column(UUID, ForeignKey("organization.id"), nullable=False)
+
 
 class UserMixin:
     """Mixin for adding user tracking columns to a model."""

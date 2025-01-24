@@ -82,11 +82,7 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         return list(result.unique().scalars().all())
 
     async def create(
-        self,
-        db: AsyncSession,
-        *,
-        obj_in: CreateSchemaType,
-        uow: UnitOfWork = None
+        self, db: AsyncSession, *, obj_in: CreateSchemaType, uow: UnitOfWork = None
     ) -> ModelType:
         """Create a new object.
 
@@ -113,10 +109,7 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         return db_obj
 
     async def create_many(
-        self,
-        db: AsyncSession,
-        objs_in: list[CreateSchemaType],
-        uow: UnitOfWork = None
+        self, db: AsyncSession, objs_in: list[CreateSchemaType], uow: UnitOfWork = None
     ) -> list[ModelType]:
         """Create multiple objects.
 
@@ -145,7 +138,7 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         *,
         db_obj: ModelType,
         obj_in: Union[UpdateSchemaType, dict[str, Any]],
-        uow: UnitOfWork = None
+        uow: UnitOfWork = None,
     ) -> ModelType:
         """Update an object.
 
@@ -174,11 +167,7 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         return db_obj
 
     async def remove(
-        self,
-        db: AsyncSession,
-        *,
-        id: UUID,
-        uow: UnitOfWork = None
+        self, db: AsyncSession, *, id: UUID, uow: UnitOfWork = None
     ) -> Optional[ModelType]:
         """Delete an object.
 
@@ -213,7 +202,7 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         Args:
             db (AsyncSession): Database session
             items (List[CreateSchemaType]): List of items to sync
-            unique_field (str, optional): Field to use for uniqueness check. Defaults to "short_name".
+            unique_field (str, optional): Field to check for uniqueness. Defaults to "short_name".
         """
         # Create a dictionary of new items by their unique field
         new_items_dict = {getattr(item, unique_field): item for item in items}

@@ -211,15 +211,15 @@ async def show_docs_reference() -> HTMLResponse:
 
     """
     html_content = """
-    <!DOCTYPE html>
-    <html>
-        <head>
-            <title>Airweave API</title>
-        </head>
-        <body>
-            <h1>Welcome to the Airweave API</h1>
-            <p>Please visit the <a href="https://docs.airweave.ai">docs</a> for more information.</p>
-        </body>
-    </html>
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Airweave API</title>
+    </head>
+    <body>
+        <h1>Welcome to the Airweave API</h1>
+        <p>Please visit the <a href="https://docs.airweave.ai">docs</a> for more information.</p>
+    </body>
+</html>
     """
     return HTMLResponse(content=html_content)

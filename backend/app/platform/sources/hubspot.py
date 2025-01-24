@@ -1,24 +1,24 @@
+"""HubSpot source implementation."""
+
 from typing import AsyncGenerator, Dict
 
 import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk
-from app.platform.decorators import source
-from app.platform.sources._base import BaseSource
-
 from app.platform.chunks.hubspot import (
-    HubspotContactChunk,
     HubspotCompanyChunk,
+    HubspotContactChunk,
     HubspotDealChunk,
     HubspotTicketChunk,
 )
+from app.platform.decorators import source
+from app.platform.sources._base import BaseSource
 
 
 @source("HubSpot", "hubspot", AuthType.oauth2_with_refresh)
 class HubspotSource(BaseSource):
-    """
-    HubSpot source implementation.
+    """HubSpot source implementation.
 
     This connector retrieves data from HubSpot CRM objects such as Contacts,
     Companies, Deals, and Tickets, then yields them as chunks using
@@ -33,8 +33,8 @@ class HubspotSource(BaseSource):
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict:
-        """
-        Make authenticated GET request to HubSpot API.
+        """Make authenticated GET request to HubSpot API.
+
         For example, to retrieve contacts:
           GET https://api.hubapi.com/crm/v3/objects/contacts
         """
@@ -48,8 +48,8 @@ class HubspotSource(BaseSource):
     async def _generate_contact_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate Contact chunks from HubSpot.
+        """Generate Contact chunks from HubSpot.
+
         This uses the REST CRM API endpoint for contacts:
           GET /crm/v3/objects/contacts
         """
@@ -78,8 +78,8 @@ class HubspotSource(BaseSource):
     async def _generate_company_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate Company chunks from HubSpot.
+        """Generate Company chunks from HubSpot.
+
         This uses the REST CRM API endpoint for companies:
           GET /crm/v3/objects/companies
         """
@@ -110,8 +110,8 @@ class HubspotSource(BaseSource):
     async def _generate_deal_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate Deal chunks from HubSpot.
+        """Generate Deal chunks from HubSpot.
+
         This uses the REST CRM API endpoint for deals:
           GET /crm/v3/objects/deals
         """
@@ -143,8 +143,8 @@ class HubspotSource(BaseSource):
     async def _generate_ticket_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate Ticket chunks from HubSpot.
+        """Generate Ticket chunks from HubSpot.
+
         This uses the REST CRM API endpoint for tickets:
           GET /crm/v3/objects/tickets
         """
@@ -168,9 +168,10 @@ class HubspotSource(BaseSource):
             url = next_link if next_link else None
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate all chunks from HubSpot:
-        Contacts, Companies, Deals, and Tickets.
+        """Generate all chunks from HubSpot.
+
+        Yields:
+            HubSpot chunks: Contacts, Companies, Deals, and Tickets.
         """
         async with httpx.AsyncClient() as client:
             # Yield contact chunks

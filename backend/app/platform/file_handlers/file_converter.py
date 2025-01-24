@@ -1,8 +1,8 @@
 """Module for converting supported file types into chunkable and vectorizable markdown text."""
 
 import os
-from typing import Optional
 from pathlib import Path
+from typing import Optional
 
 from markitdown import MarkItDown
 

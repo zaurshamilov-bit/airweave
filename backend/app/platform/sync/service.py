@@ -14,6 +14,7 @@ from app.db.session import get_db_context
 from app.db.unit_of_work import UnitOfWork
 from app.platform.auth.schemas import AuthType
 from app.platform.auth.services import oauth2_service
+from app.platform.auth.settings import integration_settings
 from app.platform.chunks._base import BaseChunk
 from app.platform.destinations.weaviate import WeaviateDestination
 from app.platform.embedding_models.local_text2vec import LocalText2Vec
@@ -255,7 +256,7 @@ class SyncService:
             raise NotFoundException("Source not found")
 
         # Get integration settings
-        settings = integration_settings.get_by_short_name(white_label.source_id)
+        settings = integration_settings.get_integration_settings(source.short_name)
         if not settings:
             raise NotFoundException("Integration settings not found")
 

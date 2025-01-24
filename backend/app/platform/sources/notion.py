@@ -1,17 +1,15 @@
 """Notion source implementation."""
 
-from typing import AsyncGenerator, Dict, List, Optional
-from uuid import UUID
+from typing import AsyncGenerator, Dict, List
 
 import httpx
 
-from app import schemas
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
 from app.platform.chunks.notion import (
-    NotionWorkspaceChunk,
     NotionDatabaseChunk,
     NotionPageChunk,
+    NotionWorkspaceChunk,
 )
 from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
@@ -23,16 +21,14 @@ class NotionSource(BaseSource):
 
     @classmethod
     async def create(cls, access_token: str) -> "NotionSource":
-        """
-        Create a new Notion source.
-        """
+        """Create a new Notion source."""
         instance = cls()
         instance.access_token = access_token
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict:
-        """
-        Make an authenticated GET request to the Notion API.
+        """Make an authenticated GET request to the Notion API.
+
         Notion requires a Notion-Version header, e.g. '2022-06-28' or newer.
         """
         headers = {
@@ -46,8 +42,9 @@ class NotionSource(BaseSource):
     async def _generate_workspace_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate workspace chunks. Notion's API doesn't offer a direct
+        """Generate workspace chunks.
+
+        Notion's API doesn't offer a direct
         'list workspaces' endpoint; for a typical integration, you might
         call 'GET /v1/users/me' to identify the workspace and yield a single chunk.
         """
@@ -68,8 +65,9 @@ class NotionSource(BaseSource):
     async def _generate_database_chunks(
         self, client: httpx.AsyncClient, workspace_breadcrumb: Breadcrumb
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate database chunks. You'd typically call
+        """Generate database chunks.
+
+        You'd typically call
         'GET /v1/search' with a filter for 'database' or
         'GET /v1/databases/{database_id}' to fetch each database.([2](https://developers.notion.com/reference/search))
         """
@@ -93,8 +91,8 @@ class NotionSource(BaseSource):
     async def _generate_page_chunks(
         self, client: httpx.AsyncClient, database_breadcrumbs: List[Breadcrumb]
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate page chunks within a given database or workspace.
+        """Generate page chunks within a given database or workspace.
+
         Typically, you'd call 'POST /v1/databases/{database_id}/query'
         or again use /v1/search with appropriate filters.([2](https://developers.notion.com/reference/post-database-query))
         """
@@ -115,7 +113,8 @@ class NotionSource(BaseSource):
         )
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """
+        """Generate all Notion chunks.
+
         Ties everything together: fetch workspaces, fetch databases,
         then fetch pages from each database, etc.
         """

@@ -1,7 +1,7 @@
 """Dropbox chunk schemas."""
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from pydantic import Field
 
@@ -9,8 +9,8 @@ from app.platform.chunks._base import BaseChunk
 
 
 class DropboxAccountChunk(BaseChunk):
-    """
-    Schema for Dropbox account-level chunks (e.g., user or team info).
+    """Schema for Dropbox account-level chunks (e.g., user or team info).
+
     For MVP purposes, store minimal fields such as account ID, display name, and email.
     """
 
@@ -22,8 +22,8 @@ class DropboxAccountChunk(BaseChunk):
 
 
 class DropboxFolderChunk(BaseChunk):
-    """
-    Schema for Dropbox folder chunks.
+    """Schema for Dropbox folder chunks.
+
     Mirrors folder metadata (like path, IDs, etc.).
     """
 
@@ -36,8 +36,8 @@ class DropboxFolderChunk(BaseChunk):
 
 
 class DropboxFileChunk(BaseChunk):
-    """
-    Schema for Dropbox file chunks.
+    """Schema for Dropbox file chunks.
+
     Includes core file metadata like file ID, path, size, timestamps.
     """
 

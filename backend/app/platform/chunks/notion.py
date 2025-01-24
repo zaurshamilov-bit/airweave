@@ -1,7 +1,7 @@
 """Notion chunk schemas."""
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from pydantic import Field
 

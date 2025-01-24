@@ -16,7 +16,7 @@ We retrieve data from the Stripe API for the following core resources:
 Then, we yield them as chunks using the respective chunk schemas defined in chunks/stripe.py.
 """
 
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 
 import httpx
 
@@ -41,8 +41,7 @@ from app.platform.sources._base import BaseSource
 
 @source("Stripe", "stripe", AuthType.oauth2_with_refresh)
 class StripeSource(BaseSource):
-    """
-    Stripe source implementation.
+    """Stripe source implementation.
 
     This connector retrieves data from various Stripe objects, yielding them as chunks
     through their respective schemas. The following resource endpoints are used:
@@ -71,8 +70,8 @@ class StripeSource(BaseSource):
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> dict:
-        """
-        Make an authenticated GET request to the Stripe API.
+        """Make an authenticated GET request to the Stripe API.
+
         The `url` should be a fully qualified endpoint (e.g., 'https://api.stripe.com/v1/customers').
         """
         headers = {"Authorization": f"Bearer {self.access_token}"}
@@ -83,9 +82,9 @@ class StripeSource(BaseSource):
     async def _generate_balance_chunk(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Retrieve the current account balance (single object) from:
-          GET https://api.stripe.com/v1/balance
+        """Retrieve the current account balance (single object) from.
+
+        GET https://api.stripe.com/v1/balance
         Yields exactly one StripeBalanceChunk if successful.
         """
         url = "https://api.stripe.com/v1/balance"
@@ -103,9 +102,9 @@ class StripeSource(BaseSource):
     async def _generate_balance_transaction_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Retrieve balance transactions in a paginated loop from:
-          GET https://api.stripe.com/v1/balance_transactions
+        """Retrieve balance transactions in a paginated loop from.
+
+        GET https://api.stripe.com/v1/balance_transactions
         Yields StripeBalanceTransactionChunk objects.
         """
         base_url = "https://api.stripe.com/v1/balance_transactions?limit=100"
@@ -140,8 +139,8 @@ class StripeSource(BaseSource):
     async def _generate_charge_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Retrieve a list of charges from:
+        """Retrieve a list of charges.
+
           GET https://api.stripe.com/v1/charges
         Paginated, yields StripeChargeChunk objects.
         """
@@ -177,9 +176,9 @@ class StripeSource(BaseSource):
     async def _generate_customer_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Retrieve a list of customers from:
-          GET https://api.stripe.com/v1/customers
+        """Retrieve a list of customers.
+
+        GET https://api.stripe.com/v1/customers
         Paginated, yields StripeCustomerChunk objects.
         """
         base_url = "https://api.stripe.com/v1/customers?limit=100"
@@ -213,9 +212,9 @@ class StripeSource(BaseSource):
     async def _generate_event_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Retrieve a list of events from:
-          GET https://api.stripe.com/v1/events
+        """Retrieve a list of events.
+
+        GET https://api.stripe.com/v1/events
         Paginated, yields StripeEventChunk objects.
         """
         base_url = "https://api.stripe.com/v1/events?limit=100"
@@ -246,9 +245,9 @@ class StripeSource(BaseSource):
     async def _generate_invoice_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Retrieve a list of invoices from:
-          GET https://api.stripe.com/v1/invoices
+        """Retrieve a list of invoices.
+
+        GET https://api.stripe.com/v1/invoices
         Paginated, yields StripeInvoiceChunk objects.
         """
         base_url = "https://api.stripe.com/v1/invoices?limit=100"
@@ -283,9 +282,9 @@ class StripeSource(BaseSource):
     async def _generate_payment_intent_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Retrieve a list of payment intents from:
-          GET https://api.stripe.com/v1/payment_intents
+        """Retrieve a list of payment intents.
+
+        GET https://api.stripe.com/v1/payment_intents
         Paginated, yields StripePaymentIntentChunk objects.
         """
         base_url = "https://api.stripe.com/v1/payment_intents?limit=100"
@@ -316,8 +315,8 @@ class StripeSource(BaseSource):
     async def _generate_payment_method_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Retrieve a list of payment methods for the account or for a specific customer.
+        """Retrieve a list of payment methods for the account or for a specific customer.
+
         The typical GET is: https://api.stripe.com/v1/payment_methods?customer=<id>&type=<type>
         For demonstration, we'll assume you pass a type of 'card' for all of them.
         Paginated, yields StripePaymentMethodChunk objects.
@@ -347,9 +346,9 @@ class StripeSource(BaseSource):
     async def _generate_payout_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Retrieve a list of payouts from:
-          GET https://api.stripe.com/v1/payouts
+        """Retrieve a list of payouts.
+
+        GET https://api.stripe.com/v1/payouts
         Paginated, yields StripePayoutChunk objects.
         """
         base_url = "https://api.stripe.com/v1/payouts?limit=100"
@@ -382,9 +381,9 @@ class StripeSource(BaseSource):
     async def _generate_refund_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Retrieve a list of refunds from:
-          GET https://api.stripe.com/v1/refunds
+        """Retrieve a list of refunds.
+
+        GET https://api.stripe.com/v1/refunds
         Paginated, yields StripeRefundChunk objects.
         """
         base_url = "https://api.stripe.com/v1/refunds?limit=100"
@@ -416,9 +415,9 @@ class StripeSource(BaseSource):
     async def _generate_subscription_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Retrieve a list of subscriptions from:
-          GET https://api.stripe.com/v1/subscriptions
+        """Retrieve a list of subscriptions.
+
+        GET https://api.stripe.com/v1/subscriptions
         Paginated, yields StripeSubscriptionChunk objects.
         """
         base_url = "https://api.stripe.com/v1/subscriptions?limit=100"
@@ -447,20 +446,20 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate all Stripe chunks by calling resource-specific methods:
-          - Balance
-          - Balance Transactions
-          - Charges
-          - Customers
-          - Events
-          - Invoices
-          - Payment Intents
-          - Payment Methods
-          - Payouts
-          - Refunds
-          - Subscriptions
+    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:  # noqa: C901
+        """Generate all Stripe chunks.
+
+        - Balance
+        - Balance Transactions
+        - Charges
+        - Customers
+        - Events
+        - Invoices
+        - Payment Intents
+        - Payment Methods
+        - Payouts
+        - Refunds
+        - Subscriptions
         """
         async with httpx.AsyncClient() as client:
             # 1) Single Balance resource

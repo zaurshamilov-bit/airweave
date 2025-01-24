@@ -1,3 +1,5 @@
+"""Shared models for the backend."""
+
 from enum import Enum
 
 

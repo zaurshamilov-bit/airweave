@@ -1,21 +1,20 @@
 """Monday source implementation.
 
-This connector retrieves data from Monday.com's GraphQL API and yields chunk objects for
-Boards, Groups, Columns, Items, Subitems, and Updates.
-
-Note that Monday.com has a flexible data model built around GraphQL. Below is an illustrative
-pattern showing how to issue GraphQL queries to retrieve these objects in a stepwise fashion.
+Retrieves data from Monday.com's GraphQL API and yields chunk objects for Boards,
+Groups, Columns, Items, Subitems, and Updates. Uses a stepwise pattern to issue
+GraphQL queries for retrieving these objects.
 """
 
-import httpx
 from typing import Any, AsyncGenerator, Dict, List, Optional
+
+import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
 from app.platform.chunks.monday import (
     MondayBoardChunk,
-    MondayGroupChunk,
     MondayColumnChunk,
+    MondayGroupChunk,
     MondayItemChunk,
     MondaySubitemChunk,
     MondayUpdateChunk,
@@ -26,18 +25,24 @@ from app.platform.sources._base import BaseSource
 
 @source("Monday", "monday", AuthType.oauth2)
 class MondaySource(BaseSource):
-    """
-    Monday source implementation.
+    """Monday source implementation.
 
-    This connector uses multiple GraphQL queries to retrieve boards, groups, columns, items,
-    subitems, and updates, yielding them as chunk objects defined in chunks/monday.py.
+    Connects to Monday.com using GraphQL queries to retrieve and chunk various
+    data types including boards, groups, columns, items, subitems, and updates.
     """
 
     GRAPHQL_ENDPOINT = "https://api.monday.com/v2"
 
     @classmethod
     async def create(cls, access_token: str) -> "MondaySource":
-        """Create a new Monday source."""
+        """Create a new Monday source.
+
+        Args:
+            access_token: The OAuth2 access token for Monday.com API access.
+
+        Returns:
+            A configured MondaySource instance.
+        """
         instance = cls()
         instance.access_token = access_token
         return instance
@@ -45,8 +50,18 @@ class MondaySource(BaseSource):
     async def _graphql_query(
         self, client: httpx.AsyncClient, query: str, variables: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """
-        Execute a single GraphQL query against the Monday.com API.
+        """Execute a single GraphQL query against the Monday.com API.
+
+        Args:
+            client: The HTTPX client instance.
+            query: The GraphQL query string.
+            variables: Optional variables for the GraphQL query.
+
+        Returns:
+            The parsed JSON response data.
+
+        Raises:
+            HTTPError: If the request fails.
         """
         headers = {
             "Authorization": self.access_token,
@@ -68,9 +83,7 @@ class MondaySource(BaseSource):
     async def _generate_board_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[MondayBoardChunk, None]:
-        """
-        Generate MondayBoardChunk objects by querying boards.
-        """
+        """Generate MondayBoardChunk objects by querying boards."""
         query = """
         query {
           boards (limit: 100) {
@@ -122,9 +135,7 @@ class MondaySource(BaseSource):
         board_id: str,
         board_breadcrumb: Breadcrumb,
     ) -> AsyncGenerator[MondayGroupChunk, None]:
-        """
-        Generate MondayGroupChunk objects by querying groups for a specific board.
-        """
+        """Generate MondayGroupChunk objects by querying groups for a specific board."""
         query = """
         query ($boardIds: [Int]) {
           boards (ids: $boardIds) {
@@ -163,8 +174,8 @@ class MondaySource(BaseSource):
         board_id: str,
         board_breadcrumb: Breadcrumb,
     ) -> AsyncGenerator[MondayColumnChunk, None]:
-        """
-        Generate MondayColumnChunk objects by querying columns for a specific board.
+        """Generate MondayColumnChunk objects by querying columns for a specific board.
+
         (You could also retrieve columns from the board query, but here's a separate example.)
         """
         query = """
@@ -202,8 +213,8 @@ class MondaySource(BaseSource):
         board_id: str,
         board_breadcrumb: Breadcrumb,
     ) -> AsyncGenerator[MondayItemChunk, None]:
-        """
-        Generate MondayItemChunk objects for items on a given board.
+        """Generate MondayItemChunk objects for items on a given board.
+
         We'll retrieve items via a GraphQL query that includes item fields.
         """
         query = """
@@ -260,8 +271,8 @@ class MondaySource(BaseSource):
         parent_item_id: str,
         item_breadcrumbs: List[Breadcrumb],
     ) -> AsyncGenerator[MondaySubitemChunk, None]:
-        """
-        Generate MondaySubitemChunk objects for subitems nested under a given item.
+        """Generate MondaySubitemChunk objects for subitems nested under a given item.
+
         Typically, subitems are retrieved separately since they're on a dedicated 'subitems' board.
         """
         query = """
@@ -323,9 +334,10 @@ class MondaySource(BaseSource):
         item_id: Optional[str] = None,
         item_breadcrumbs: Optional[List[Breadcrumb]] = None,
     ) -> AsyncGenerator[MondayUpdateChunk, None]:
-        """
-        Generate MondayUpdateChunk objects for a given board or item.
-        If item_id is provided, we fetch updates for a specific item; otherwise, board-level updates.
+        """Generate MondayUpdateChunk objects for a given board or item.
+
+        If item_id is provided, we fetch updates for a specific item; otherwise,
+        board-level updates.
         """
         if item_id is not None:
             # Query updates nested under a single item
@@ -354,7 +366,7 @@ class MondaySource(BaseSource):
                 return
             updates = items_data[0].get("updates", [])
         else:
-            # Query all updates in a board (partial example - Monday may limit how many are returned)
+            # Query all updates in a board
             query = """
             query ($boardIds: [Int]) {
               boards (ids: $boardIds) {
@@ -395,14 +407,15 @@ class MondaySource(BaseSource):
             )
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate all Monday.com chunks in a style similar to other connectors:
-         - Boards
-         - Groups per board
-         - Columns per board
-         - Items per board
-         - Subitems per item
-         - Updates per item or board
+        """Generate all Monday.com chunks in a style similar to other connectors.
+
+        Yields Monday.com chunks in the following order:
+            - Boards
+            - Groups per board
+            - Columns per board
+            - Items per board
+            - Subitems per item
+            - Updates per item or board
         """
         async with httpx.AsyncClient() as client:
             # 1) Boards

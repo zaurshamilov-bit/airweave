@@ -1,16 +1,15 @@
 """Dropbox source implementation."""
 
-import httpx
 from typing import AsyncGenerator, Dict, List, Optional
-from uuid import UUID
 
-from app import schemas
+import httpx
+
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
 from app.platform.chunks.dropbox import (
     DropboxAccountChunk,
-    DropboxFolderChunk,
     DropboxFileChunk,
+    DropboxFolderChunk,
 )
 from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
@@ -22,7 +21,14 @@ class DropboxSource(BaseSource):
 
     @classmethod
     async def create(cls, access_token: str) -> "DropboxSource":
-        """Create a new Dropbox source."""
+        """Create a new Dropbox source.
+
+        Args:
+            access_token: The OAuth2 access token for Dropbox API access.
+
+        Returns:
+            A configured DropboxSource instance.
+        """
         instance = cls()
         instance.access_token = access_token
         return instance
@@ -34,9 +40,19 @@ class DropboxSource(BaseSource):
         method: str = "GET",
         json_body: Optional[Dict] = None,
     ) -> Dict:
-        """
-        Make an authenticated request to the Dropbox API,
-        passing the OAuth2 token in Authorization header.
+        """Make an authenticated request to the Dropbox API.
+
+        Args:
+            client: The HTTPX client instance.
+            url: The API endpoint URL.
+            method: HTTP method to use (default: "GET").
+            json_body: Optional JSON payload for POST requests.
+
+        Returns:
+            The JSON response from the API.
+
+        Raises:
+            HTTPError: If the request fails.
         """
         headers = {
             "Authorization": f"Bearer {self.access_token}",
@@ -52,12 +68,14 @@ class DropboxSource(BaseSource):
     async def _generate_account_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
+        """Generate Dropbox account-level chunks.
+
+        Args:
+            client: The HTTPX client instance.
+
+        Yields:
+            Account-level chunks containing user/team information.
         """
-        Generate Dropbox account-level chunks.
-        For example, calling 'POST https://api.dropboxapi.com/2/users/get_current_account'
-        to retrieve user/team info. ([1](https://www.dropbox.com/developers/documentation/http/documentation))
-        """
-        # Dummy placeholder for MVP:
         yield DropboxAccountChunk(
             source_name="dropbox",
             entity_id="dummy_account_entity",
@@ -74,19 +92,16 @@ class DropboxSource(BaseSource):
         client: httpx.AsyncClient,
         account_breadcrumb: Breadcrumb,
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate folder chunks for a given Dropbox account.
-        Typically you'd call 'POST https://api.dropboxapi.com/2/files/list_folder'
-        to list root folders (or team folders).
+        """Generate folder chunks for a given Dropbox account.
+
+        Args:
+            client: The HTTPX client instance.
+            account_breadcrumb: Breadcrumb for the parent account.
+
+        Yields:
+            Folder chunks containing metadata about Dropbox folders.
         """
         # Dummy placeholder for MVP:
-        # In a real call:
-        # data = await self._get_with_auth(
-        #    client,
-        #    "https://api.dropboxapi.com/2/files/list_folder",
-        #    method="POST",
-        #    json_body={"path": "", "recursive": False},
-        # )
         yield DropboxFolderChunk(
             source_name="dropbox",
             entity_id="folder-entity-id",
@@ -104,12 +119,15 @@ class DropboxSource(BaseSource):
         client: httpx.AsyncClient,
         folder_breadcrumbs: List[Breadcrumb],
     ) -> AsyncGenerator[BaseChunk, None]:
+        """Generate file chunks within a given folder.
+
+        Args:
+            client: The HTTPX client instance.
+            folder_breadcrumbs: List of breadcrumbs for the parent folders.
+
+        Yields:
+            File chunks containing metadata about Dropbox files.
         """
-        Generate file chunks within a given folder.
-        Typically you'd call '/2/files/list_folder/continue' or similar
-        to get file metadata and yield one chunk per file.([1](https://www.dropbox.com/developers/documentation/http/documentation))
-        """
-        # Dummy placeholder for MVP:
         yield DropboxFileChunk(
             source_name="dropbox",
             entity_id="file-entity-id",
@@ -127,11 +145,13 @@ class DropboxSource(BaseSource):
         )
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate all chunks from Dropbox:
-         - Account-level chunks
-         - Folder chunks
-         - File chunks
+        """Generate all chunks from Dropbox.
+
+        Yields:
+            A sequence of chunks in the following order:
+            1. Account-level chunks
+            2. Folder chunks for each account
+            3. File chunks for each folder
         """
         async with httpx.AsyncClient() as client:
             # 1. Account(s)

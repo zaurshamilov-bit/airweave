@@ -40,7 +40,7 @@ target_metadata = Base.metadata
 def get_url() -> str:
     """Get the database URL from the environment variables.
 
-    Returns
+    Returns:
     -------
         str: The database URL.
 

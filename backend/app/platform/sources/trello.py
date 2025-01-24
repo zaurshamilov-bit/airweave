@@ -1,3 +1,5 @@
+"""Trello source implementation."""
+
 from typing import AsyncGenerator, Dict, List, Optional
 
 import httpx
@@ -5,12 +7,12 @@ import httpx
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
 from app.platform.chunks.trello import (
-    TrelloOrganizationChunk,
-    TrelloBoardChunk,
-    TrelloListChunk,
-    TrelloCardChunk,
-    TrelloMemberChunk,
     TrelloActionChunk,
+    TrelloBoardChunk,
+    TrelloCardChunk,
+    TrelloListChunk,
+    TrelloMemberChunk,
+    TrelloOrganizationChunk,
 )
 from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
@@ -18,8 +20,7 @@ from app.platform.sources._base import BaseSource
 
 @source("Trello", "trello", AuthType.trello_auth)
 class TrelloSource(BaseSource):
-    """
-    Trello source implementation.
+    """Trello source implementation.
 
     This connector retrieves data from Trello objects such as Organizations,
     Boards, Lists, Cards, Members, and Actions, then yields them as chunks using
@@ -32,9 +33,7 @@ class TrelloSource(BaseSource):
 
     @classmethod
     async def create(cls, access_token: str) -> "TrelloSource":
-        """
-        Create a new Trello source instance.
-        """
+        """Create a new Trello source instance."""
         instance = cls()
         instance.access_token = access_token
         return instance
@@ -42,8 +41,8 @@ class TrelloSource(BaseSource):
     async def _get_with_auth(
         self, client: httpx.AsyncClient, endpoint: str, params: Optional[Dict] = None
     ) -> Dict:
-        """
-        Make an authenticated GET request to the Trello API.
+        """Make an authenticated GET request to the Trello API.
+
         The 'key' is provided by dev.integrations.yaml, while 'token' is our access_token.
         For example, to retrieve organizations belonging to the current user:
           GET /members/me/organizations
@@ -62,10 +61,9 @@ class TrelloSource(BaseSource):
     async def _generate_organization_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate TrelloOrganizationChunk objects for each organization (workspace)
-        the current user belongs to.
-          GET /members/me/organizations
+        """Generate TrelloOrganizationChunk objects for each organization (workspace).
+
+        GET /members/me/organizations
         """
         data = await self._get_with_auth(client, "/members/me/organizations")
         for org in data:
@@ -85,9 +83,9 @@ class TrelloSource(BaseSource):
         org_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate TrelloBoardChunk objects for each board under a given organization.
-          GET /organizations/{id}/boards
+        """Generate TrelloBoardChunk objects for each board under a given organization.
+
+        GET /organizations/{id}/boards
         """
         if parent_breadcrumbs is None:
             parent_breadcrumbs = []
@@ -120,9 +118,9 @@ class TrelloSource(BaseSource):
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate TrelloListChunk objects for each list in a board.
-          GET /boards/{id}/lists
+        """Generate TrelloListChunk objects for each list in a board.
+
+        GET /boards/{id}/lists
         """
         if parent_breadcrumbs is None:
             parent_breadcrumbs = []
@@ -151,9 +149,9 @@ class TrelloSource(BaseSource):
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate TrelloCardChunk objects for each card in a board.
-          GET /boards/{id}/cards
+        """Generate TrelloCardChunk objects for each card in a board.
+
+        GET /boards/{id}/cards
         """
         if parent_breadcrumbs is None:
             parent_breadcrumbs = []
@@ -163,7 +161,8 @@ class TrelloSource(BaseSource):
             # If needed, you can fetch the list to extend breadcrumbs further.
             # But typically, board-level is enough. Or you can do an extra lookup.
             card_breadcrumbs = parent_breadcrumbs[:]
-            # Optionally, if you want to show "list" in the breadcrumb, do a quick GET /lists/{id} to fetch the name
+            # Optionally, if you want to show "list" in the breadcrumb, do a quick GET /lists/{id}
+            # to fetch the name
             # For now, we'll just use the board path.
             card_breadcrumbs.append(
                 Breadcrumb(entity_id=card["id"], name=card.get("name"), type="card")
@@ -190,9 +189,9 @@ class TrelloSource(BaseSource):
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate TrelloMemberChunk objects for each member of a board.
-          GET /boards/{id}/members
+        """Generate TrelloMemberChunk objects for each member of a board.
+
+        GET /boards/{id}/members
         """
         if parent_breadcrumbs is None:
             parent_breadcrumbs = []
@@ -224,9 +223,9 @@ class TrelloSource(BaseSource):
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate TrelloActionChunk objects for a board.
-          GET /boards/{id}/actions
+        """Generate TrelloActionChunk objects for a board.
+
+        GET /boards/{id}/actions
         """
         if parent_breadcrumbs is None:
             parent_breadcrumbs = []
@@ -251,8 +250,8 @@ class TrelloSource(BaseSource):
             )
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate all chunks from Trello:
+        """Generate all chunks from Trello.
+
         Organizations, Boards, Lists, Cards, Members, and Actions.
         This version includes a breadcrumb path to reflect the hierarchical
         structure: Organization → Board → List → Card, etc.

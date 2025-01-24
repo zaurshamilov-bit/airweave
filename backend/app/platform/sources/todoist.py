@@ -7,10 +7,10 @@ import httpx
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
 from app.platform.chunks.todoist import (
+    TodoistCommentChunk,
     TodoistProjectChunk,
     TodoistSectionChunk,
     TodoistTaskChunk,
-    TodoistCommentChunk,
 )
 from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
@@ -18,8 +18,7 @@ from app.platform.sources._base import BaseSource
 
 @source("Todoist", "todoist", AuthType.oauth2)
 class TodoistSource(BaseSource):
-    """
-    Todoist source implementation.
+    """Todoist source implementation.
 
     This connector retrieves hierarchical data from the Todoist REST API:
     - Projects
@@ -32,16 +31,14 @@ class TodoistSource(BaseSource):
 
     @classmethod
     async def create(cls, access_token: str) -> "TodoistSource":
-        """
-        Create a new Todoist source instance.
-        """
+        """Create a new Todoist source instance."""
         instance = cls()
         instance.access_token = access_token
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Optional[dict]:
-        """
-        Make an authenticated GET request to the Todoist REST API using the provided URL.
+        """Make an authenticated GET request to the Todoist REST API using the provided URL.
+
         Returns the JSON response as a dict (or list if not JSON-object).
         """
         headers = {"Authorization": f"Bearer {self.access_token}"}
@@ -58,9 +55,9 @@ class TodoistSource(BaseSource):
     async def _generate_project_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[TodoistProjectChunk, None]:
-        """
-        Retrieve and yield Project chunks:
-          GET https://api.todoist.com/rest/v2/projects
+        """Retrieve and yield Project chunks.
+
+        GET https://api.todoist.com/rest/v2/projects
         """
         url = "https://api.todoist.com/rest/v2/projects"
         projects = await self._get_with_auth(client, url)
@@ -92,9 +89,9 @@ class TodoistSource(BaseSource):
         project_name: str,
         project_breadcrumb: Breadcrumb,
     ) -> AsyncGenerator[TodoistSectionChunk, None]:
-        """
-        Retrieve and yield Section chunks for a given project:
-          GET https://api.todoist.com/rest/v2/projects/{project_id}/sections
+        """Retrieve and yield Section chunks for a given project.
+
+        GET https://api.todoist.com/rest/v2/projects/{project_id}/sections
         """
         url = f"https://api.todoist.com/rest/v2/projects/{project_id}/sections"
         sections = await self._get_with_auth(client, url)
@@ -114,9 +111,9 @@ class TodoistSource(BaseSource):
     async def _fetch_all_tasks_for_project(
         self, client: httpx.AsyncClient, project_id: str
     ) -> List[Dict]:
-        """
-        Fetch all tasks for a given project using:
-          GET https://api.todoist.com/rest/v2/tasks?project_id={project_id}
+        """Fetch all tasks for a given project.
+
+        GET https://api.todoist.com/rest/v2/tasks?project_id={project_id}
 
         Returns a list of task objects.
         """
@@ -132,8 +129,9 @@ class TodoistSource(BaseSource):
         all_tasks: List[Dict],
         breadcrumbs: List[Breadcrumb],
     ) -> AsyncGenerator[TodoistTaskChunk, None]:
-        """
-        Yield task chunks for either:
+        """Retrieve and yield Task chunks.
+
+        Yield task chunks for either
           - tasks that belong to a given section, if section_id is provided
           - tasks that have no section, if section_id is None
 
@@ -184,9 +182,9 @@ class TodoistSource(BaseSource):
         task_chunk: TodoistTaskChunk,
         task_breadcrumbs: List[Breadcrumb],
     ) -> AsyncGenerator[TodoistCommentChunk, None]:
-        """
-        Retrieve and yield Comment chunks for a given task:
-          GET https://api.todoist.com/rest/v2/comments?task_id={task_id}
+        """Retrieve and yield Comment chunks for a given task.
+
+        GET https://api.todoist.com/rest/v2/comments?task_id={task_id}
         """
         task_id = task_chunk.entity_id
         url = f"https://api.todoist.com/rest/v2/comments?task_id={task_id}"
@@ -205,8 +203,8 @@ class TodoistSource(BaseSource):
             )
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate all chunks from Todoist: Projects, Sections, Tasks, and Comments.
+        """Generate all chunks from Todoist: Projects, Sections, Tasks, and Comments.
+
         For each project:
           - yield a TodoistProjectChunk
           - yield TodoistSectionChunks

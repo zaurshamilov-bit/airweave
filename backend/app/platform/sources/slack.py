@@ -1,3 +1,5 @@
+"""Slack source implementation."""
+
 from typing import AsyncGenerator, Dict, Optional
 
 import httpx
@@ -15,8 +17,7 @@ from app.platform.sources._base import BaseSource
 
 @source("Slack", "slack", AuthType.oauth2)
 class SlackSource(BaseSource):
-    """
-    Slack source implementation.
+    """Slack source implementation.
 
     This connector retrieves data from Slack such as Channels, Users, and Messages,
     then yields them as chunks using their respective Slack chunk schemas.
@@ -24,9 +25,7 @@ class SlackSource(BaseSource):
 
     @classmethod
     async def create(cls, access_token: str) -> "SlackSource":
-        """
-        Create a new Slack source instance.
-        """
+        """Create a new Slack source instance."""
         instance = cls()
         instance.access_token = access_token
         return instance
@@ -34,8 +33,8 @@ class SlackSource(BaseSource):
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict] = None
     ) -> Dict:
-        """
-        Make authenticated GET request to the Slack Web API.
+        """Make authenticated GET request to the Slack Web API.
+
         For example, to retrieve channels:
           GET https://slack.com/api/conversations.list
         """
@@ -56,11 +55,11 @@ class SlackSource(BaseSource):
     async def _generate_channel_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate SlackChannelChunk objects from Slack using conversations.list
+        """Generate SlackChannelChunk objects from Slack using conversations.list.
 
         Endpoint: https://slack.com/api/conversations.list
-        Available scope(s) for reading channels, groups, etc.: channels:read, groups:read, im:read, mpim:read
+        Available scope(s) for reading channels, groups, etc.:
+            channels:read, groups:read, im:read, mpim:read
         """
         url = "https://slack.com/api/conversations.list"
         params = {"limit": 200}  # Adjust page size as desired
@@ -95,8 +94,7 @@ class SlackSource(BaseSource):
     async def _generate_user_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate SlackUserChunk objects from Slack using users.list
+        """Generate SlackUserChunk objects from Slack using users.list.
 
         Endpoint: https://slack.com/api/users.list
         Scope(s): users:read
@@ -133,8 +131,7 @@ class SlackSource(BaseSource):
     async def _generate_message_chunks(
         self, client: httpx.AsyncClient, channel_id: str
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate SlackMessageChunk objects for a given channel using conversations.history
+        """Generate SlackMessageChunk objects for a given channel using conversations.history.
 
         Endpoint: https://slack.com/api/conversations.history
         Scope(s): channels:history, groups:history, im:history, mpim:history
@@ -170,8 +167,8 @@ class SlackSource(BaseSource):
             params["cursor"] = next_cursor
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate all chunks from Slack:
+        """Generate all chunks from Slack.
+
         Channels, Users, and Messages.
         """
         async with httpx.AsyncClient() as client:

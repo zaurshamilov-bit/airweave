@@ -1,3 +1,5 @@
+"""Intercom source implementation."""
+
 from typing import AsyncGenerator, Dict, Optional
 
 import httpx
@@ -5,8 +7,8 @@ import httpx
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk
 from app.platform.chunks.intercom import (
-    IntercomContactChunk,
     IntercomCompanyChunk,
+    IntercomContactChunk,
     IntercomConversationChunk,
     IntercomTicketChunk,
 )
@@ -16,8 +18,7 @@ from app.platform.sources._base import BaseSource
 
 @source("Intercom", "intercom", AuthType.oauth2)
 class IntercomSource(BaseSource):
-    """
-    Intercom source implementation.
+    """Intercom source implementation.
 
     This connector retrieves data from Intercom objects such as Contacts, Companies,
     Conversations, and Tickets, then yields them as chunks using their respective
@@ -26,9 +27,7 @@ class IntercomSource(BaseSource):
 
     @classmethod
     async def create(cls, access_token: str) -> "IntercomSource":
-        """
-        Create a new Intercom source instance.
-        """
+        """Create a new Intercom source instance."""
         instance = cls()
         instance.access_token = access_token
         return instance
@@ -36,8 +35,8 @@ class IntercomSource(BaseSource):
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict] = None
     ) -> Dict:
-        """
-        Make authenticated GET request to the Intercom API.
+        """Make authenticated GET request to the Intercom API.
+
         For example, to retrieve contacts:
           GET https://api.intercom.io/contacts
         """
@@ -52,8 +51,8 @@ class IntercomSource(BaseSource):
     async def _generate_contact_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate Contact chunks from Intercom.
+        """Generate Contact chunks from Intercom.
+
         Using the Contacts endpoint:
           GET https://api.intercom.io/contacts
         """
@@ -83,8 +82,8 @@ class IntercomSource(BaseSource):
     async def _generate_company_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate Company chunks from Intercom.
+        """Generate Company chunks from Intercom.
+
         Using the Companies endpoint:
           GET https://api.intercom.io/companies
         """
@@ -115,8 +114,8 @@ class IntercomSource(BaseSource):
     async def _generate_conversation_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate Conversation chunks from Intercom.
+        """Generate Conversation chunks from Intercom.
+
         Using the Conversations endpoint:
           GET https://api.intercom.io/conversations
         """
@@ -143,8 +142,8 @@ class IntercomSource(BaseSource):
     async def _generate_ticket_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate Ticket chunks from Intercom.
+        """Generate Ticket chunks from Intercom.
+
         Using a hypothetical Tickets endpoint:
           GET https://api.intercom.io/tickets
         (In Intercom, tickets may be handled within conversations or separate endpoints.
@@ -173,9 +172,10 @@ class IntercomSource(BaseSource):
             url = next_link if next_link else None
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate all chunks from Intercom:
-        Contacts, Companies, Conversations, and Tickets.
+        """Generate all chunks from Intercom.
+
+        Yields:
+            Intercom chunks: Contacts, Companies, Conversations, and Tickets.
         """
         async with httpx.AsyncClient() as client:
             # Yield contact chunks

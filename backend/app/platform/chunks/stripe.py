@@ -10,10 +10,8 @@ where each chunk class inherits from our BaseChunk and adds relevant fields with
 shared or per-resource metadata as needed.
 """
 
-from typing import Any
-
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import Field
 
@@ -233,7 +231,9 @@ class StripePaymentMethodChunk(BaseChunk):
     )
     card: Optional[Dict[str, Any]] = Field(
         None,
-        description="If the PaymentMethod type is 'card', details about the card (brand, last4, etc.)",
+        description=(
+            "If the PaymentMethod type is 'card', details about the card " "(brand, last4, etc.)"
+        ),
     )
     created_at: Optional[datetime] = Field(None, description="When the PaymentMethod was created")
     metadata: Dict[str, str] = Field(

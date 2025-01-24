@@ -51,7 +51,9 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         """
         raise NotImplementedError("This method is not implemented yet.")
 
-    async def get_all_for_user(self, db: AsyncSession, skip: int = 0, limit: int = 100) -> list[User]:
+    async def get_all_for_user(
+        self, db: AsyncSession, skip: int = 0, limit: int = 100, current_user: User = None
+    ) -> list[User]:
         """Get multiple objects.
 
         WARNING: This method is not secure and should not be used in production.
@@ -64,6 +66,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
             db (AsyncSession): The database session.
             skip (int): The number of objects to skip.
             limit (int): The number of objects to return.
+            current_user (User): The current user.
 
         Returns:
         -------
@@ -94,7 +97,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         *,
         db_obj: User,
         obj_in: UserUpdate | dict[str, Any],
-        current_user: User
+        current_user: User,
     ) -> User:
         """Update an object.
 

@@ -84,6 +84,7 @@ select = [
     "D",  # flake8-docstrings
 ]
 ignore = ["B008"]  # ignore fastapi dependency injection warning
+extend-exclude = ["alembic", "local.py"]
 
 # Enable Google-style docstrings
 [tool.ruff.pydocstyle]

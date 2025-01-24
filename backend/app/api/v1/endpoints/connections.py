@@ -224,7 +224,7 @@ async def delete_connection(
                 detail=f"No active connection found for '{connection_id}'",
             )
 
-        syncs = await crud.sync.remove_all_for_connection(
+        _ = await crud.sync.remove_all_for_connection(
             uow.session, connection_id, current_user=user, uow=uow
         )
         # TODO: Implement data deletion logic, should be part of destination interface
