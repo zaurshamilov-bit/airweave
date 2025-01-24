@@ -11,7 +11,6 @@ on:
     paths:
       - "backend/**"
       - ".github/**"
-
 jobs:
   ruff:
     runs-on: ubuntu-latest
@@ -29,14 +28,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff==$(grep "^ruff" pyproject.toml | cut -d'"' -f2)
-      - name: Show Ruff version
-        run: ruff --version
-      - name: List files to be checked
-        run: find . -type f -name "*.py"
-      - name: Ruff Format Check
-        run: |
-          ruff format . --check --diff
+          pip install "ruff>=0.1.14"
       - name: Ruff Check
         run: |
           ruff check .
+      - name: Ruff Format Check
+        run: |
+          ruff format --check .
