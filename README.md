@@ -1,4 +1,6 @@
-<img width="1673" alt="airweave-lettermark" src="https://github.com/user-attachments/assets/9e78811d-54db-4e03-8d41-2ad4fa0707ca" />
+<img width="1673" alt="airweave-lettermark" src="https://github.com/user-attachments/assets/e79a9af7-2e93-4888-9cf4-0f700f19fe05" />
+
+
 
 [![Ruff](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml) [![ESLint](https://github.com/airweave-ai/airweave/actions/workflows/eslint.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/eslint.yml) [![Discord](https://img.shields.io/discord/1323415085011701870)](https://discord.gg/r2cF7V6s)
 
