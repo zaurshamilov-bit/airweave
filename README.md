@@ -1,4 +1,4 @@
-<img width="1673" alt="airweave-lettermark" src="https://github.com/user-attachments/assets/e79a9af7-2e93-4888-9cf4-0f700f19fe05" />
+![demo](https://github.com/user-attachments/assets/95616a33-8528-458a-8921-de29d69bc85c)<img width="1673" alt="airweave-lettermark" src="https://github.com/user-attachments/assets/e79a9af7-2e93-4888-9cf4-0f700f19fe05" />
 
 
 
@@ -7,6 +7,9 @@
 # Airweave 
 
 **Airweave** is an open-core tool that makes **any app searchable** for your agent by unifying your apps, APIs, and databases and your users' data into your vector database of choice with minimal configuration. 
+
+![airweave-demo](https://github.com/user-attachments/assets/8113122a-111e-477e-ade8-2f8a79b70c72)
+
 
 ## Table of Contents
 
