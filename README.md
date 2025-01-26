@@ -1,34 +1,83 @@
-![demo](https://github.com/user-attachments/assets/95616a33-8528-458a-8921-de29d69bc85c)<img width="1673" alt="airweave-lettermark" src="https://github.com/user-attachments/assets/e79a9af7-2e93-4888-9cf4-0f700f19fe05" />
+)<img width="1673" alt="airweave-lettermark" src="https://github.com/user-attachments/assets/e79a9af7-2e93-4888-9cf4-0f700f19fe05" />
 
 
 
-[![Ruff](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml) [![ESLint](https://github.com/airweave-ai/airweave/actions/workflows/eslint.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/eslint.yml) [![Discord](https://img.shields.io/discord/1323415085011701870)](https://discord.gg/r2cF7V6s)
+[![Ruff](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/ruff.yml) [![ESLint](https://github.com/airweave-ai/airweave/actions/workflows/eslint.yml/badge.svg)](https://github.com/airweave-ai/airweave/actions/workflows/eslint.yml) [![Discord](https://img.shields.io/discord/1323415085011701870?label=Discord&logo=discord&logoColor=white&style=flat-square)](https://discord.gg/r2cF7V6s)
 
-# Airweave 
 
-**Airweave** is an open-core tool that makes **any app searchable** for your agent by unifying your apps, APIs, and databases and your users' data into your vector database of choice with minimal configuration. 
+**Airweave** is an open-source tool that makes **any app searchable** for your agent by syncing your users' app data, APIs, databases and websites into your vector database with minimal configuration. 
 
-![airweave-demo](https://github.com/user-attachments/assets/8113122a-111e-477e-ade8-2f8a79b70c72)
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/8113122a-111e-477e-ade8-2f8a79b70c72" alt="airweave-demo" />
+  <em>Airweave demo - choose source, vector database, and sync.</em>
+</p>
 
 
 ## Table of Contents
 
 1. [Overview](#overview)  
-2. [Key Features](#key-features)  
-3. [Architecture](#architecture)  
-4. [Technology Stack](#technology-stack)  
-5. [Quick Start](#quick-start)  
+2. [Quick Start](#quick-start)  
+3. [Usage](#usage)  
+4. [Key Features](#key-features)  
+5. [Technology Stack](#technology-stack)  
 6. [Configuration](#configuration)  
-7. [Usage](#usage)  
-8. [Contributing](#contributing)  
-9. [Roadmap](#roadmap)  
-10. [License](#license)
+7. [Contributing](#contributing)  
+8. [Roadmap](#roadmap)  
+9. [License](#license)
 
 ---
 
 ## Overview
 
 Airweave simplifies the process of making your data searchable. Whether you have structured or unstructured data, Airweave helps you break it into processable chunks, store the data in a vector database, and retrieve it via your own **agent** or any **search mechanism**. 
+
+
+## Quick Start
+
+Below is a simple guide to get Airweave up and running locally. For more detailed instructions, refer to the [docs](https://docs.airweave.ai).
+
+### Prerequisites
+
+- **Docker** (v20+)  
+- **Docker Compose** (v2.0+)
+
+### Steps
+
+1. **Clone the Repository**  
+   ```bash
+   git clone https://github.com/airweave-ai/airweave/airweave.git
+   cd airweave
+
+2. **Set Up Environment Variables**  
+   Copy .env.example to .env and update any necessary variables, such as Postgres connection strings or credentials.
+
+3. **Build and Run**  
+   ```bash
+   docker-compose up --build
+   ```
+
+That's it!
+
+You now have Airweave running locally. You can log in to the dashboard, add new sources, and configure your sync schedules.
+
+
+## Usage
+
+To use Airweave, you can either use the frontend or the API.
+
+
+### Frontend
+- Access the React UI at `http://localhost:8080`.
+- Navigate to Sources to add new integrations.
+- Set up or view your sync schedules under Schedules.
+- Monitor sync jobs in Jobs.
+
+### API Endpoints (FastAPI)
+- **Swagger Documentation:** `http://localhost:8001/docs`
+- **Get All Sources:** `GET /sources`
+- **Connect a Source:** `POST /connections/{short_name}`
+
 
 ### Why Airweave?
 - **Over 120 integrations**: Airweave is your one-stop shop for building any application that requires semantic search.
@@ -42,47 +91,12 @@ Airweave simplifies the process of making your data searchable. Whether you have
 ## Key Features
 - **No code reqired, but extensible**: Users that prefer not to touch any code can make their app searchable in a few clicks
 - **White-Labeled Multi-Tenant Support**: Ideal for SaaS builders, Airweave provides a streamlined OAuth2-based platform for syncing data across multiple tenants while maintaining privacy and security.
-- **Chunk Generators**: Each source (like a database, API, or file system) defines a `@chunk_generator` that yields data in a consistent format. You can also define your own.
+- **Chunk Generators**: Each source (like a database, API, or file system) defines a `async def generate_chunks()` that yields data in a consistent format. You can also define your own.
 - **Automated Sync**: Schedule data synchronization or run on-demand sync jobs.
 - **Versioning & Hashing**: Airweave detects changes in your data via hashing, updating only the modified chunks in the vector store.
 - **Multi-Source Support**: Plug in multiple data sources and unify them into a single queryable layer.
 - **Scalable**: Deploy locally via Docker Compose for development (upcoming: deploy with Kubernetes for production scale)
 
----
-
-## Architecture
-```
-           ┌──────────────┐
-           │   Your App   │
-           └─────┬────────┘
-                 │
-                 ▼
-       ┌───────────────────┐       (Search with Airweave)
-       │      Airweave     |<--------------------------+
-       └───────────────────┘                           |
-        /        |        \                            |
-       /         |         \                           |
-      ▼          ▼          ▼                          |
-┌────────┐   ┌────────┐   ┌────────┐                   |
-│ Source │   │ Source │   │ Source │ ... (Any number of integrations)
-└────────┘   └────────┘   └────────┘                   |
-            \     |     /                              |
-             \    |    /                               |
-              ▼   ▼   ▼                                |
-       ┌────────────────────┐                          |
-       │   Chunk Generators │                          |
-       └────────────────────┘                          |
-                 │                                     |
-                 ▼                                     |
-       ┌───────────────────┐                           |
-       │  Synchronizer(s)  │                           |
-       └───────────────────┘                           |
-                 │                                     |
-                 ▼                                     |
-       ┌───────────────────┐                           |
-       │ Vector Database(s)│---------------------------+
-       └───────────────────┘
-```
 
 ### Components
 
@@ -124,75 +138,6 @@ Airweave simplifies the process of making your data searchable. Whether you have
 - **Asynchronous Tasks**: [ARQ](https://arq-docs.helpmanual.io/) for background workers
 
 ---
-
-## Quick Start
-
-Below is a simple guide to get Airweave up and running locally. For more detailed instructions, refer to the [docs](#).
-
-### Prerequisites
-
-- **Docker** (v20+)  
-- **Docker Compose** (v2.0+)
-
-### Steps
-
-1. **Clone the Repository**  
-   ```bash
-   git clone https://github.com/yourusername/airweave.git
-   cd airweave
-
-2. **Set Up Environment Variables**  
-   Copy .env.example to .env and update any necessary variables, such as Postgres connection strings or credentials.
-
-3. **Build and Run**  
-   ```bash
-   docker-compose up --build
-   ```
-
-That's it!
-
-You now have Airweave running locally. You can log in to the dashboard, add new sources, and configure your sync schedules.
-
-
-## Usage
-
-Below are some basic commands and API endpoints that you may find useful.
-
-### CLI Commands
-- **Run Tests:** (If you have a test suite set up for your own code) `docker-compose exec backend pytest`
-- **Start in Dev Mode:** `docker-compose up --build`
-
-### API Endpoints (FastAPI)
-- **Swagger Documentation:** `http://localhost:8000/docs`
-- **Get All Sources:** `GET /api/sources`
-- **Create a Source:** `POST /api/sources`
-```json
-{
-  "name": "My Data Source",
-  "type": "postgres",
-  "connection_info": {...}
-}
-```
-- **Trigger a Sync Job:** `POST /api/sync_jobs`
-```json
-{
-  "source_id": 123,
-  "schedule_id": null
-}
-```
-- **Get Sync Job Status:** `GET /api/sync_jobs/{job_id}`
-```json
-{
-  "status": "running",
-  "chunks_processed": 100,
-  "chunks_total": 200
-}
-```
-### Frontend
-- Access the React UI at `http://localhost:3000`.
-- Navigate to Sources to add new integrations.
-- Set up or view your sync schedules under Schedules.
-- Monitor sync jobs in Jobs.
 
 
 ## Configuration (Upcoming)
