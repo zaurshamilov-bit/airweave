@@ -11,6 +11,17 @@ chunk schemas for the major Jira objects relevant to our application:
 These schemas follow the patterns established by other integrations
 (e.g., Asana, Todoist, HubSpot, Confluence). Each schema subclass extends
 BaseChunk and includes relevant fields for that Jira entity.
+
+Later iterations could include support for the following objects:
+- Attachments
+- Worklog entries
+- Sprints/Boards (if using Agile)
+- Custom fields
+- Issue links
+- Components
+- Security levels
+- Watchers
+- Votes
 """
 
 from datetime import datetime
