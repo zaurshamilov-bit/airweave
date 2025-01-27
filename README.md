@@ -37,10 +37,6 @@ Airweave simplifies the process of making your data searchable. Whether you have
 
 Below is a simple guide to get Airweave up and running locally. For more detailed instructions, refer to the [docs](https://docs.airweave.ai).
 
-### Prerequisites
-
-- **Docker** (v20+)  
-- **Docker Compose** (v2.0+)
 
 ### Steps
 
@@ -48,9 +44,6 @@ Below is a simple guide to get Airweave up and running locally. For more detaile
    ```bash
    git clone https://github.com/airweave-ai/airweave/airweave.git
    cd airweave
-
-2. **Set Up Environment Variables**  
-   Copy .env.example to .env and update any necessary variables, such as Postgres connection strings or credentials.
 
 3. **Build and Run**  
    ```bash
@@ -138,6 +131,13 @@ To use Airweave, you can either use the frontend or the API.
 - **Asynchronous Tasks**: [ARQ](https://arq-docs.helpmanual.io/) for background workers
 
 ---
+
+## Integration
+
+<!-- START_APP_GRID -->
+
+
+<!-- END_APP_GRID -->
 
 
 ## Configuration (Upcoming)
