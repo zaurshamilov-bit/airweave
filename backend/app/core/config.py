@@ -28,7 +28,9 @@ class Settings(BaseSettings):
         RUN_ALEMBIC_MIGRATIONS (Optional[bool]): Whether to run the alembic migrations.
         RUN_DB_SYNC (Optional[bool]): Whether to run the system sync to process sources,
             destinations, and chunk types.
-
+        NATIVE_WEAVIATE_HOST (str): The Weaviate host.
+        NATIVE_WEAVIATE_PORT (int): The Weaviate port.
+        NATIVE_WEAVIATE_GRPC_PORT (int): The Weaviate gRPC port.
     """
 
     PROJECT_NAME: str = "Airweave"
@@ -51,6 +53,10 @@ class Settings(BaseSettings):
 
     RUN_ALEMBIC_MIGRATIONS: Optional[bool] = False
     RUN_DB_SYNC: Optional[bool] = True
+
+    NATIVE_WEAVIATE_HOST: str = "weaviate"
+    NATIVE_WEAVIATE_PORT: int = 8080
+    NATIVE_WEAVIATE_GRPC_PORT: int = 50051
 
     @field_validator("SQLALCHEMY_ASYNC_DATABASE_URI", mode="before")
     def assemble_db_connection(cls, v: Optional[str], info: ValidationInfo) -> PostgresDsn:

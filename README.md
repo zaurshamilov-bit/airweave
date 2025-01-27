@@ -8,7 +8,7 @@
 **Airweave** is an open-source tool that makes **any app searchable** for your agent by syncing your users' app data, APIs, databases and websites into your vector database with minimal configuration. 
 
 
-<p align="center">
+<p align="center" style="padding-top: 4px; padding-bottom: 4px;">
   <img src="https://github.com/user-attachments/assets/8113122a-111e-477e-ade8-2f8a79b70c72" alt="airweave-demo" />
   <em>Airweave demo - choose source, vector database, and sync.</em>
 </p>
@@ -42,12 +42,13 @@ Below is a simple guide to get Airweave up and running locally. For more detaile
 
 1. **Clone the Repository**  
    ```bash
-   git clone https://github.com/airweave-ai/airweave/airweave.git
+   git clone https://github.com/airweave-ai/airweave.git
    cd airweave
 
 3. **Build and Run**  
    ```bash
-   docker-compose up --build
+   chmod +x start.sh
+   ./start.sh
    ```
 
 That's it!
@@ -72,12 +73,26 @@ To use Airweave, you can either use the frontend or the API.
 - **Connect a Source:** `POST /connections/{short_name}`
 
 
+### Native Weaviate
+Airweave uses a local Weaviate instance by default, you can access the Weaviate API at `http://localhost:8087`. This can be used for testing and development. 
+
+You can configure your own vector database in the app UI or via the API.
+
 ### Why Airweave?
 - **Over 120 integrations**: Airweave is your one-stop shop for building any application that requires semantic search.
 - **Simplicity**: Minimal configuration needed to sync data from diverse sources (APIs, databases, and more).
 - **Extensibility**: Easily add new integrations via `sources` , `destinations` and `embedders`.
 - **Open-Core**: Core features are open source, ensuring transparency. Future commercial offerings will bring additional, advanced capabilities.
 - **Async-First**: Built to handle large-scale data synchronization asynchronously (upcoming: managed Redis workers for production scale)
+
+---
+
+## Integrations (adding more every day!)
+
+<!-- START_APP_GRID -->
+
+<!-- END_APP_GRID -->
+
 
 ---
 
@@ -91,32 +106,6 @@ To use Airweave, you can either use the frontend or the API.
 - **Scalable**: Deploy locally via Docker Compose for development (upcoming: deploy with Kubernetes for production scale)
 
 
-### Components
-
-1. **Frontend (React)**  
-   - Provides a dashboard for you to configure your sources, destinations, and sync schedules.  
-   - Visualizes sync jobs, logs, and chunk details.
-
-2. **Backend (FastAPI)**  
-   - Houses the RESTful endpoints.  
-   - Manages data models such as `source`, `destination`, `org`, `user`, `chunk types`, and more.  
-   - Allows for automatic synchronization tasks and chunk generation logic.
-
-3. **Chunk Generators**  
-   - Integration-specific modules or decorators (e.g., `@chunk_generator`) that define how to fetch and transform source data.  
-   - Produces "chunks" of data (text, metadata, etc.) that are hashed to detect changes.
-
-4. **Synchronizers**  
-   - Compare generated chunk hashes., 
-   - Insert new chunks into the vector DB or mark them for deletion if they're no longer relevant.  
-   - Upcoming: run asynchronously, in parallel, to handle large data sets efficiently.
-
-5. **Data Store**  
-   - **Postgres** for storing metadata about sources, jobs, users, and schedules.  
-   - A **vector database** (currently in the open-core version, it can be anything your Docker Compose config sets up) to store embeddings of your chunks.  
-   - Upcoming: **Redis** deployment for caching and queue-based workflows (e.g., background worker tasks).
-
----
 
 ## Technology Stack
 
@@ -128,10 +117,11 @@ To use Airweave, you can either use the frontend or the API.
 - **Databases**:  
   - [PostgreSQL](https://www.postgresql.org/) for relational data  
   - Vector database (your choice, e.g. Chroma, Milvus, Pinecone, Qdrant, Weaviate, etc.)  + (upcoming batteries-included vector DB)
-- **Asynchronous Tasks**: [ARQ](https://arq-docs.helpmanual.io/) for background workers
+- **Asynchronous Tasks**: [ARQ](https://arq-docs.helpmanual.io/) Redis for background workers
 
 ---
 
+<<<<<<< Updated upstream
 ## Integration
 
 <!-- START_APP_GRID -->
@@ -147,6 +137,8 @@ To use Airweave, you can either use the frontend or the API.
 <!-- END_APP_GRID -->
 
 
+=======
+>>>>>>> Stashed changes
 ## Configuration (Upcoming)
 
 Airweave provides flexibility through environment variables, allowing you to customize key aspects of your deployment. Below are the primary configuration options:
@@ -222,7 +214,7 @@ Please follow the existing code style and conventions. See `CONTRIBUTING.md` for
 
 ## License
 
-Airweave is released under an open-core model. The community edition is licensed under MIT License. Additional modules (for enterprise or advanced features) may be licensed separately.
+Airweave is released under an open-core model. The community edition is licensed under the [Apache 2.0 License](LICENSE). Additional modules (for enterprise or advanced features) may be licensed separately.
 
 ---
 

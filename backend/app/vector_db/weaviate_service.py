@@ -9,6 +9,7 @@ from weaviate.client import WeaviateAsyncClient
 from weaviate.collections import Collection
 from weaviate.collections.classes.config import GenerativeConfig, Property, VectorizerConfig
 
+from app.core.config import settings
 from app.core.exceptions import NotFoundException
 from app.core.logging import logger
 from app.platform.embedding_models._base import BaseEmbeddingModel
@@ -166,8 +167,9 @@ class WeaviateService:
                 else:
                     # Local deployment without authentication
                     self.client = weaviate.use_async_with_local(
-                        port=8087,
-                        grpc_port=50051,
+                        host=settings.NATIVE_WEAVIATE_HOST,
+                        port=settings.NATIVE_WEAVIATE_PORT,
+                        grpc_port=settings.NATIVE_WEAVIATE_GRPC_PORT,
                         headers=headers,
                     )
 

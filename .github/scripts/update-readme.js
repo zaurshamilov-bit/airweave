@@ -23,7 +23,7 @@ async function generateAppGrid() {
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
 
-    currentRow.push(`<img src="frontend/src/components/icons/apps/${file}" alt="${name}" width="${ICON_SIZE}" height="${ICON_SIZE}" style="margin: 4px;" />`);
+    currentRow.push(`<img src="frontend/src/components/icons/apps/${file}" alt="${name}" width="${ICON_SIZE}" height="${ICON_SIZE}" style="margin: 4px; padding: 2px;" />`);
 
     if (currentRow.length === GRID_COLUMNS) {
       rows.push(currentRow);
@@ -35,14 +35,14 @@ async function generateAppGrid() {
     // Center the last row if it's not full
     const padding = Math.floor((GRID_COLUMNS - currentRow.length) / 2);
     const paddedRow = [
-      ...Array(padding).fill(`<span style="width: ${ICON_SIZE}px; display: inline-block;"></span>`),
+      ...Array(padding).fill(`<span style="width: ${ICON_SIZE}px; display: inline-block; margin: 4px;"></span>`),
       ...currentRow,
     ];
     rows.push(paddedRow);
   }
 
-  // Wrap the grid in a centered container
-  return `<p align="center">\n  <div style="display: inline-block; text-align: center;">\n    ${
+  // Wrap the grid in a centered container with padding
+  return `<p align="center">\n  <div style="display: inline-block; text-align: center; padding: 4px;">\n    ${
     rows.map(row => row.join('')).join('\n    ')
   }\n  </div>\n</p>`;
 }
