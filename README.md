@@ -136,7 +136,6 @@ To use Airweave, you can either use the frontend or the API.
 
 <!-- START_APP_GRID -->
 
-
 <!-- END_APP_GRID -->
 
 
