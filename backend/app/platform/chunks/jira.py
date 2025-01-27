@@ -62,10 +62,9 @@ class JiraStatusChunk(BaseChunk):
       (Status APIs in Jira Cloud)
     """
 
-    status_id: str = Field(..., description="Unique ID of the status.")
     name: str = Field(..., description="Name of the status (e.g., 'To Do', 'In Progress').")
     category: Optional[str] = Field(
-        None, description="Category for the status (e.g. 'To Do', 'Done')."
+        None, description="Category for the status (e.g., 'To Do', 'Done')."
     )
     description: Optional[str] = Field(None, description="Description or help text for the status.")
 
@@ -122,7 +121,6 @@ class JiraCommentChunk(BaseChunk):
       (Comment APIs in Jira Cloud)
     """
 
-    comment_id: str = Field(..., description="Unique ID of the comment.")
     issue_key: str = Field(..., description="Key of the issue this comment belongs to.")
     body: Optional[str] = Field(None, description="Text/HTML body of the comment.")
     author: Optional[Dict[str, Any]] = Field(

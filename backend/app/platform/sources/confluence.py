@@ -75,7 +75,7 @@ class ConfluenceSource(BaseSource):
 
     async def _generate_space_chunks(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[ConfluenceSpaceChunk, None]:
         """Generate ConfluenceSpaceChunk objects."""
         url = "https://your-domain.atlassian.net/wiki/api/v2/spaces?limit=50"
         while url:
@@ -104,7 +104,7 @@ class ConfluenceSource(BaseSource):
 
     async def _generate_page_chunks(
         self, client: httpx.AsyncClient, space_key: str, space_breadcrumb: Breadcrumb
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[ConfluencePageChunk, None]:
         """Generate ConfluencePageChunk objects for a given space (optionally also retrieve children)."""
         url = f"https://your-domain.atlassian.net/wiki/api/v2/spaces/{space_key}/content/page?limit=50"
         while url:
@@ -118,9 +118,7 @@ class ConfluenceSource(BaseSource):
                     content_id=page["id"],
                     title=page.get("title"),
                     space_key=space_key,
-                    body=(
-                        page.get("body", {}).get("storage", {}).get("value")
-                    ),  # Ex: "body.storage.value"
+                    body=page.get("body", {}).get("storage", {}).get("value"),
                     version=page.get("version", {}).get("number"),
                     status=page.get("status"),
                     created_at=page.get("createdAt"),
