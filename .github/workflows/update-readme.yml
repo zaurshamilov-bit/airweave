@@ -7,7 +7,7 @@ on:
     paths:
       - "frontend/src/components/icons/apps/**"
       - "README.md"
-
+      - ".github/scripts/update-readme.js"
 jobs:
   update-readme:
     runs-on: ubuntu-latest

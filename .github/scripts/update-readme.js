@@ -23,7 +23,7 @@ async function generateAppGrid() {
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
 
-    currentRow.push(`<img src="frontend/src/components/icons/apps/${file}" alt="${name}" width="${ICON_SIZE}" height="${ICON_SIZE}" />`);
+    currentRow.push(`<img src="frontend/src/components/icons/apps/${file}" alt="${name}" width="${ICON_SIZE}" height="${ICON_SIZE}" style="margin: 4px;" />`);
 
     if (currentRow.length === GRID_COLUMNS) {
       rows.push(currentRow);
@@ -33,11 +33,45 @@ async function generateAppGrid() {
 
   if (currentRow.length > 0) {
     // Center the last row if it's not full
-    while (currentRow.length < GRID_COLUMNS) {
-      currentRow.push('<img src="" alt="" width="' + ICON_SIZE + '" height="' + ICON_SIZE + '" />');
-    }
-    rows.push(currentRow);
+    const padding = Math.floor((GRID_COLUMNS - currentRow.length) / 2);
+    const paddedRow = [
+      ...Array(padding).fill(`<span style="width: ${ICON_SIZE}px; display: inline-block;"></span>`),
+      ...currentRow,
+    ];
+    rows.push(paddedRow);
   }
 
-  return rows;
-} 
+  // Wrap the grid in a centered container
+  return `<p align="center">\n  <div style="display: inline-block; text-align: center;">\n    ${
+    rows.map(row => row.join('')).join('\n    ')
+  }\n  </div>\n</p>`;
+}
+
+async function updateReadme() {
+  const readme = fs.readFileSync(README_PATH, 'utf8');
+  const startIndex = readme.indexOf(GRID_START_MARKER);
+  const endIndex = readme.indexOf(GRID_END_MARKER);
+
+  if (startIndex === -1 || endIndex === -1) {
+    console.error('Grid markers not found in README');
+    return;
+  }
+
+  const existingGrid = readme.substring(startIndex + GRID_START_MARKER.length, endIndex).trim();
+  const newGrid = await generateAppGrid();
+
+  if (existingGrid === newGrid) {
+    console.log('README is already up to date');
+    return;
+  }
+
+  const updatedReadme = 
+    readme.substring(0, startIndex + GRID_START_MARKER.length) + 
+    '\n\n' + newGrid + '\n\n' + 
+    readme.substring(endIndex);
+
+  fs.writeFileSync(README_PATH, updatedReadme);
+  console.log('README updated successfully');
+}
+
+updateReadme().catch(console.error); 
