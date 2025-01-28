@@ -1,0 +1,85 @@
+services:
+  db:
+    container_name: airweave-db
+    image: postgres:16
+    environment:
+      POSTGRES_DB: airweave
+      POSTGRES_USER: airweave
+      POSTGRES_PASSWORD: airweave1234!
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airweave"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: airweave-redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  text2vec-transformers:
+    container_name: airweave-embeddings
+    image: semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+    ports:
+      - "8000:8080"
+    environment:
+      ENABLE_CUDA: 0
+      WORKERS_PER_NODE: 1
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: on-failure
+
+  weaviate:
+    container_name: airweave-weaviate
+    image: semitechnologies/weaviate:1.24.1
+    ports:
+      - "8087:8080"
+      - "50051:50051"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'text2vec-transformers'
+      ENABLE_MODULES: 'text2vec-transformers,text2vec-openai,text2vec-cohere,text2vec-huggingface'
+      TRANSFORMERS_INFERENCE_API: 'http://text2vec-transformers:8080'
+      CLUSTER_HOSTNAME: 'node1'
+      LOG_LEVEL: 'trace'
+      CONSOLE_LOGGER: 'true'
+      LOG_FORMAT: 'text'
+      GRPC_PORT: "50051"
+    depends_on:
+      - text2vec-transformers
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200m"
+        max-file: "10"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: on-failure
+
+volumes:
+  postgres_data:
+  redis_data:
+  weaviate_data: 

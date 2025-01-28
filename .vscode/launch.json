@@ -20,7 +20,10 @@
             "justMyCode": false,
             "preLaunchTask": "start-docker-services",
             "postDebugTask": "stop-docker-services",
-            "envFile": "${workspaceFolder}/.env"
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "LOCAL_DEVELOPMENT": "true",
+            }
         },
         {
             "name": "Pytest Debug",

@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str
 
     POSTGRES_SERVER: str
-    POSTGRES_DB: str
+    POSTGRES_DB: str = "airweave"
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     SQLALCHEMY_ASYNC_DATABASE_URI: Optional[PostgresDsn] = None
@@ -74,11 +74,17 @@ class Settings(BaseSettings):
         """
         if isinstance(v, str):
             return v
+
+        if info.data.get("LOCAL_DEVELOPMENT"):
+            host = "localhost"
+        else:
+            host = info.data.get("POSTGRES_SERVER")
+
         return PostgresDsn.build(
             scheme="postgresql+asyncpg",
             username=info.data.get("POSTGRES_USER"),
             password=info.data.get("POSTGRES_PASSWORD"),
-            host=info.data.get("POSTGRES_SERVER"),
+            host=host,
             path=f"{info.data.get('POSTGRES_DB') or ''}",
         )
 
