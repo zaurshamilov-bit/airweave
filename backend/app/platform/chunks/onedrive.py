@@ -1,5 +1,4 @@
-"""
-OneDrive chunk schemas.
+"""OneDrive chunk schemas.
 
 Based on the OneDrive (and SharePoint) API reference (read-only scope for OneDrive),
 we define chunk schemas for the following core objects:
@@ -22,8 +21,7 @@ from app.platform.chunks._base import BaseChunk
 
 
 class OneDriveDriveChunk(BaseChunk):
-    """
-    Schema for a OneDrive Drive object.
+    """Schema for a OneDrive Drive object.
 
     The inherited entity_id stores the drive's unique ID. Additional key fields come
     from the OneDrive/SharePoint drive resource. Owner and quota are typically
@@ -32,7 +30,9 @@ class OneDriveDriveChunk(BaseChunk):
 
     drive_type: Optional[str] = Field(
         None,
-        description="Describes the type of drive represented by this resource (e.g., personal, business, documentLibrary).",
+        description=(
+            "Describes the type of drive represented by this resource (e.g., personal or business)."
+        ),
     )
     owner: Optional[Dict[str, Any]] = Field(
         None, description="Information about the user or application that owns this drive."
@@ -51,8 +51,7 @@ class OneDriveDriveChunk(BaseChunk):
 
 
 class OneDriveDriveItemChunk(BaseChunk):
-    """
-    Schema for a OneDrive DriveItem object (file or folder).
+    """Schema for a OneDrive DriveItem object (file or folder).
 
     The inherited entity_id stores the DriveItem's unique ID. Many fields are optional
     because a DriveItem may represent either a file or a folder, and some properties
@@ -92,5 +91,7 @@ class OneDriveDriveItemChunk(BaseChunk):
     # Parent reference typically contains info like driveId, id, path, etc.
     parent_reference: Optional[Dict[str, Any]] = Field(
         None,
-        description="Information about the parent of this item, such as driveId or parent folder path.",
+        description=(
+            "Information about the parent of this item, such as driveId or parent folder path."
+        ),
     )

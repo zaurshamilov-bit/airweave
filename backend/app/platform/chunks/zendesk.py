@@ -1,5 +1,4 @@
-"""
-Zendesk chunk schemas.
+"""Zendesk chunk schemas.
 
 Based on the Zendesk Ticketing API (read-only scope), we define chunk schemas for the
 following core objects:
@@ -25,8 +24,7 @@ from app.platform.chunks._base import BaseChunk
 
 
 class ZendeskOrganizationChunk(BaseChunk):
-    """
-    Schema for a Zendesk organization.
+    """Schema for a Zendesk organization.
 
     References:
       https://developer.zendesk.com/api-reference/ticketing/organizations/organizations/
@@ -53,8 +51,7 @@ class ZendeskOrganizationChunk(BaseChunk):
 
 
 class ZendeskUserChunk(BaseChunk):
-    """
-    Schema for a Zendesk user (agent or end user).
+    """Schema for a Zendesk user (agent or end user).
 
     References:
       https://developer.zendesk.com/api-reference/ticketing/users/users/
@@ -73,7 +70,9 @@ class ZendeskUserChunk(BaseChunk):
     verified: bool = Field(False, description="Whether the user's identity is verified.")
     shared: bool = Field(
         False,
-        description="Whether the user is shared from a different Zendesk instance or created locally.",
+        description=(
+            "Whether the user is shared from a different Zendesk instance or created locally."
+        ),
     )
     suspended: bool = Field(False, description="Whether the user is suspended.")
     last_login_at: Optional[datetime] = Field(
@@ -85,8 +84,7 @@ class ZendeskUserChunk(BaseChunk):
 
 
 class ZendeskTicketChunk(BaseChunk):
-    """
-    Schema for a Zendesk ticket.
+    """Schema for a Zendesk ticket.
 
     References:
       https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/
@@ -118,7 +116,9 @@ class ZendeskTicketChunk(BaseChunk):
     due_at: Optional[datetime] = Field(None, description="When this ticket is due.")
     via: Optional[Dict[str, Any]] = Field(
         None,
-        description="Details about the source through which this ticket was created (e.g., channel).",
+        description=(
+            "Details about the source through which this ticket was created (e.g., channel)."
+        ),
     )
     custom_fields: List[Dict[str, Any]] = Field(
         default_factory=list,
@@ -128,8 +128,7 @@ class ZendeskTicketChunk(BaseChunk):
 
 
 class ZendeskCommentChunk(BaseChunk):
-    """
-    Schema for a Zendesk comment, typically tied to a specific ticket.
+    """Schema for a Zendesk comment, typically tied to a specific ticket.
 
     References:
       https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_comments/

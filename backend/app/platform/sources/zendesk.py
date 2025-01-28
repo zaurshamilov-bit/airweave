@@ -18,17 +18,17 @@ References:
   https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_comments/
 """
 
-from typing import AsyncGenerator, Dict, Optional
+from typing import AsyncGenerator, Dict
 
 import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk
 from app.platform.chunks.zendesk import (
-    ZendeskOrganizationChunk,
-    ZendeskUserChunk,
-    ZendeskTicketChunk,
     ZendeskCommentChunk,
+    ZendeskOrganizationChunk,
+    ZendeskTicketChunk,
+    ZendeskUserChunk,
 )
 from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
@@ -36,8 +36,7 @@ from app.platform.sources._base import BaseSource
 
 @source("Zendesk", "zendesk", AuthType.oauth2_with_refresh)
 class ZendeskSource(BaseSource):
-    """
-    Zendesk source implementation (read-only).
+    """Zendesk source implementation (read-only).
 
     Retrieves data from Zendesk for the following objects:
       - Organizations
@@ -57,10 +56,7 @@ class ZendeskSource(BaseSource):
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict:
-        """
-        Make an authenticated GET request to the Zendesk API
-        and return the JSON response as a dict.
-        """
+        """Make an authenticated GET request to the Zendesk API and return JSON response."""
         headers = {"Authorization": f"Bearer {self.access_token}"}
         response = await client.get(url, headers=headers)
         response.raise_for_status()
@@ -69,8 +65,7 @@ class ZendeskSource(BaseSource):
     async def _generate_organization_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate ZendeskOrganizationChunk objects for each organization in Zendesk.
+        """Generate ZendeskOrganizationChunk objects for each organization in Zendesk.
 
         GET /api/v2/organizations
         """
@@ -100,8 +95,7 @@ class ZendeskSource(BaseSource):
     async def _generate_user_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate ZendeskUserChunk objects for each user in Zendesk.
+        """Generate ZendeskUserChunk objects for each user in Zendesk.
 
         GET /api/v2/users
         """
@@ -129,8 +123,7 @@ class ZendeskSource(BaseSource):
     async def _generate_ticket_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate ZendeskTicketChunk objects for each ticket in Zendesk.
+        """Generate ZendeskTicketChunk objects for each ticket in Zendesk.
 
         GET /api/v2/tickets
         """
@@ -164,8 +157,7 @@ class ZendeskSource(BaseSource):
     async def _generate_comment_chunks(
         self, client: httpx.AsyncClient, ticket_id: str
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate ZendeskCommentChunk objects for comments on a given ticket.
+        """Generate ZendeskCommentChunk objects for comments on a given ticket.
 
         GET /api/v2/tickets/{ticket_id}/comments
         """
@@ -189,12 +181,13 @@ class ZendeskSource(BaseSource):
             url = data.get("next_page")
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate and yield chunks for Zendesk objects in the following order:
-          - Organizations
-          - Users
-          - Tickets
-            - Comments for each ticket
+        """Generate and yield chunks for Zendesk objects.
+
+        Yields chunks in the following order:
+        - Organizations
+        - Users
+        - Tickets
+          - Comments for each ticket
         """
         async with httpx.AsyncClient() as client:
             # 1) Yield organization chunks
