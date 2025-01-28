@@ -69,5 +69,4 @@ async def get_user_from_api_key(db: AsyncSession, api_key: str) -> schemas.User:
         logger.error(f"API key not found: {e}", exc_info=True)
         raise HTTPException(status_code=403, detail="API key not found") from e
     user = api_key_obj.created_by
-
     return schemas.User.model_validate(user)

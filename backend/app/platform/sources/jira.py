@@ -75,7 +75,6 @@ class JiraSource(BaseSource):
             yield JiraStatusChunk(
                 source_name="jira",
                 entity_id=status["id"],
-                status_id=status["id"],
                 name=status.get("name", ""),
                 category=status.get("statusCategory", {}).get("name"),
                 description=status.get("description"),
@@ -131,7 +130,6 @@ class JiraSource(BaseSource):
                         # Provide a breadcrumb back to the Issue this comment is on
                         Breadcrumb(entity_id=issue.entity_id, name=issue.issue_key, type="issue")
                     ],
-                    comment_id=comment["id"],
                     issue_key=issue.issue_key,
                     body=(
                         comment.get("body", {}).get("content")
@@ -146,6 +144,9 @@ class JiraSource(BaseSource):
             # Handle pagination, if any. Some Jira comment endpoints use "startAt" and "maxResults".
             # Check if we have more in data["total"] vs. data["maxResults"], etc.
             total = data.get("total", 0)
+            if not total:
+                break
+
             start_at = data.get("startAt", 0)
             max_results = data.get("maxResults", 50)
             next_start = start_at + max_results
@@ -237,8 +238,9 @@ class JiraSource(BaseSource):
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
         """Generate all chunks from Jira: Statuses, Projects, Issues, Comments."""
+        # TODO: Make this dynamic from user env.
         # In practice, you would determine your Jira Cloud base URL or site URL.
-        # This may come from user settings or environment. Here's an example pattern:
+        # This may come from the user's settings or environment. Here's an example pattern:
         base_url = "https://your-domain.atlassian.net"
 
         async with httpx.AsyncClient() as client:
