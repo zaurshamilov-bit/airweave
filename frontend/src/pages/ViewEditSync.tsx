@@ -135,7 +135,7 @@ const ViewEditSync = () => {
     if (id) {
       fetchData();
     }
-  });
+  }, []);
 
   const handleDelete = async () => {
     try {

@@ -116,7 +116,7 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
       await fetchConnections();
       setIsLoading(false);
     })();
-  });
+  }, []);
 
   /**
    * Generate a quick map to see if a short_name is connected

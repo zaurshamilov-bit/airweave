@@ -48,7 +48,7 @@ const Destinations = () => {
 
   useEffect(() => {
     fetchConnections();
-  });
+  }, []);
 
   const fetchDestinationDetails = async (shortName: string) => {
     try {
