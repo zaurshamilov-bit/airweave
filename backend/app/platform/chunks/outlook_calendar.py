@@ -1,5 +1,4 @@
-"""
-Outlook Calendar chunk schemas.
+"""Outlook Calendar chunk schemas.
 
 Based on the Microsoft Graph API reference (read-only scope for the Calendar endpoint),
 we define chunk schemas for:
@@ -23,8 +22,7 @@ from app.platform.chunks._base import BaseChunk
 
 
 class OutlookCalendarCalendarChunk(BaseChunk):
-    """
-    Schema for an Outlook Calendar object.
+    """Schema for an Outlook Calendar object.
 
     The inherited entity_id field stores the calendar's Microsoft Graph ID.
     """
@@ -33,7 +31,10 @@ class OutlookCalendarCalendarChunk(BaseChunk):
     color: Optional[str] = Field(None, description="Indicates the color theme for the calendar.")
     change_key: Optional[str] = Field(
         None,
-        description="Identifies the version of the calendar object. Every time the calendar changes, changeKey changes.",
+        description=(
+            "Identifies the version of the calendar object. "
+            "Every time the calendar changes, changeKey changes."
+        ),
     )
     can_edit: bool = Field(False, description="Indicates if the user can write to the calendar.")
     can_share: bool = Field(
@@ -49,8 +50,7 @@ class OutlookCalendarCalendarChunk(BaseChunk):
 
 
 class OutlookCalendarEventChunk(BaseChunk):
-    """
-    Schema for an Outlook Calendar Event object.
+    """Schema for an Outlook Calendar Event object.
 
     The inherited entity_id field stores the event's Microsoft Graph ID.
     """
@@ -61,14 +61,19 @@ class OutlookCalendarEventChunk(BaseChunk):
 
     start_datetime: Optional[datetime] = Field(
         None,
-        description="The date/time when the event starts, in UTC. Derived from 'start.dateTime' if present.",
+        description=(
+            "The date/time when the event starts, in UTC. "
+            "Derived from 'start.dateTime' if present."
+        ),
     )
     start_timezone: Optional[str] = Field(
         None, description="Time zone for the start time, from 'start.timeZone'."
     )
     end_datetime: Optional[datetime] = Field(
         None,
-        description="The date/time when the event ends, in UTC. Derived from 'end.dateTime' if present.",
+        description=(
+            "The date/time when the event ends, in UTC. " "Derived from 'end.dateTime' if present."
+        ),
     )
     end_timezone: Optional[str] = Field(
         None, description="Time zone for the end time, from 'end.timeZone'."
@@ -82,19 +87,30 @@ class OutlookCalendarEventChunk(BaseChunk):
     importance: Optional[str] = Field(None, description="Indicates the importance of the event.")
     sensitivity: Optional[str] = Field(
         None,
-        description="Indicates the sensitivity of the event (normal, personal, private, confidential).",
+        description=(
+            "Indicates the sensitivity of the event (normal, personal, private, confidential)."
+        ),
     )
 
     organizer: Optional[Dict[str, Any]] = Field(
         None,
-        description="Information about the organizer of the event, typically includes email address and name.",
+        description=(
+            "Information about the organizer of the event, "
+            "typically includes email address and name."
+        ),
     )
     attendees: Optional[List[Dict[str, Any]]] = Field(
         None,
-        description="List of attendees. Each dict usually includes email address info and response status.",
+        description=(
+            "List of attendees. Each dict usually includes email address info and response status."
+        ),
     )
     location: Optional[Dict[str, Any]] = Field(
-        None, description="Information about the location where the event is held."
+        None,
+        description=(
+            "Information about the location where the event is held. "
+            "Usually includes display address, unique identifier, and unique location type."
+        ),
     )
 
     created_at: Optional[datetime] = Field(
@@ -110,13 +126,20 @@ class OutlookCalendarEventChunk(BaseChunk):
 
     online_meeting_url: Optional[str] = Field(
         None,
-        description="A URL to join the meeting online if the event has online meeting info (e.g., Microsoft Teams).",
+        description=(
+            "A URL to join the meeting online if the event has online meeting info "
+            "(e.g., Microsoft Teams)."
+        ),
     )
 
     series_master_id: Optional[str] = Field(
         None,
-        description="If this is part of a recurring series, specifies the ID of the master recurring event.",
+        description=(
+            "If this is part of a recurring series, specifies the ID of the master "
+            "recurring event."
+        ),
     )
     recurrence: Optional[Dict[str, Any]] = Field(
-        None, description="When present, indicates the recurrence pattern of a repeating event."
+        None,
+        description=("When present, indicates the recurrence pattern of a repeating event."),
     )
