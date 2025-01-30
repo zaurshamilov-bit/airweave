@@ -1,5 +1,4 @@
-"""
-Outlook Mail source implementation.
+"""Outlook Mail source implementation.
 
 Retrieves data (read-only) from a user's Outlook/Microsoft 365 mailbox via Microsoft Graph API:
  - MailFolders (in a hierarchical folder structure)
@@ -12,8 +11,9 @@ References (Mail API only):
 This connector follows the general style of other source connectors (e.g., Asana, Todoist, HubSpot).
 """
 
-import httpx
 from typing import Any, AsyncGenerator, Dict, List, Optional
+
+import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
@@ -24,8 +24,7 @@ from app.platform.sources._base import BaseSource
 
 @source("Outlook Mail", "outlook_mail", AuthType.oauth2_with_refresh)
 class OutlookMailSource(BaseSource):
-    """
-    Outlook Mail source implementation (read-only).
+    """Outlook Mail source implementation (read-only).
 
     This connector retrieves Outlook mail folders in a hierarchical fashion
     and yields OutlookMailFolderChunk for each folder. For each folder, it
@@ -36,13 +35,14 @@ class OutlookMailSource(BaseSource):
 
     @classmethod
     async def create(cls, access_token: str) -> "OutlookMailSource":
+        """Create an OutlookMailSource instance with the given access token."""
         instance = cls()
         instance.access_token = access_token
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict[str, Any]:
-        """
-        Utility to make an authenticated GET request to Microsoft Graph.
+        """Utility to make an authenticated GET request to Microsoft Graph.
+
         Raises for non-2xx responses and returns parsed JSON.
         """
         headers = {
@@ -59,9 +59,9 @@ class OutlookMailSource(BaseSource):
         folder_id: Optional[str] = None,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
     ) -> AsyncGenerator[OutlookMailFolderChunk, None]:
-        """
-        Recursively generate OutlookMailFolderChunk objects,
-        traversing the mail folder hierarchy via Microsoft Graph.
+        """Recursively generate OutlookMailFolderChunk objects.
+
+        Traverses the mail folder hierarchy via Microsoft Graph.
 
         If folder_id is None, it fetches top-level folders with GET /me/mailFolders.
         Otherwise, it fetches children with GET /me/mailFolders/{folder_id}/childFolders.
@@ -119,9 +119,9 @@ class OutlookMailSource(BaseSource):
         client: httpx.AsyncClient,
         folder_chunk: OutlookMailFolderChunk,
     ) -> AsyncGenerator[OutlookMessageChunk, None]:
-        """
-        Generate OutlookMessageChunk objects for a given folder by
-        fetching messages with GET /me/mailFolders/{folderId}/messages.
+        """Generate OutlookMessageChunk objects for a given folder.
+
+        Fetches messages with GET /me/mailFolders/{folderId}/messages.
         """
         folder_breadcrumb = Breadcrumb(
             entity_id=folder_chunk.entity_id,
@@ -161,8 +161,9 @@ class OutlookMailSource(BaseSource):
             url = next_link if next_link else None
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate all Outlook mail chunks:
+        """Generate all Outlook mail chunks.
+
+        Yields chunks in the following order:
           - Mail folders (recursive)
           - Messages in each folder
         """

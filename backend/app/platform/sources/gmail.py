@@ -12,9 +12,9 @@ Reference:
   https://developers.google.com/gmail/api/reference/rest
 """
 
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import AsyncGenerator, List, Optional
+
 import httpx
-from pydantic import Field
 
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
@@ -323,7 +323,7 @@ class GmailSource(BaseSource):
                     created_date = datetime.utcfromtimestamp(
                         int(message_data["internalDate"]) / 1000
                     )
-                    # For now, treat updated_date as the same. If your logic fetches older/newer revs,
+                    # For now treat updated_date as same. If your logic fetches older/newer revs,
                     # store them accordingly.
 
                 # Attempt to parse the body as with messages

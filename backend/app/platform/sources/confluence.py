@@ -17,22 +17,20 @@ References:
     https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-spaces/
 """
 
+from typing import AsyncGenerator, Dict, List
+
 import httpx
-from typing import AsyncGenerator, Dict, List, Optional
 
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
 from app.platform.chunks.confluence import (
-    ConfluenceSpaceChunk,
-    ConfluencePageChunk,
     ConfluenceBlogPostChunk,
     ConfluenceCommentChunk,
-    ConfluenceLabelChunk,
-    ConfluenceTaskChunk,
-    ConfluenceWhiteboardChunk,
-    ConfluenceCustomContentChunk,
-    ConfluenceFolderChunk,
     ConfluenceDatabaseChunk,
+    ConfluenceFolderChunk,
+    ConfluenceLabelChunk,
+    ConfluencePageChunk,
+    ConfluenceSpaceChunk,
 )
 from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
@@ -105,7 +103,7 @@ class ConfluenceSource(BaseSource):
     async def _generate_page_chunks(
         self, client: httpx.AsyncClient, space_key: str, space_breadcrumb: Breadcrumb
     ) -> AsyncGenerator[ConfluencePageChunk, None]:
-        """Generate ConfluencePageChunk objects for a given space (optionally also retrieve children)."""
+        """Generate ConfluencePageChunk objects for a space (optionally also retrieve children)."""
         url = f"https://your-domain.atlassian.net/wiki/api/v2/spaces/{space_key}/content/page?limit=50"
         while url:
             data = await self._get_with_auth(client, url)
@@ -158,8 +156,7 @@ class ConfluenceSource(BaseSource):
     async def _generate_comment_chunks(
         self, client: httpx.AsyncClient, content_id: str, parent_breadcrumbs: List[Breadcrumb]
     ) -> AsyncGenerator[BaseChunk, None]:
-        """
-        Generate ConfluenceCommentChunk objects for a given content (page, blog, etc.).
+        """Generate ConfluenceCommentChunk objects for a given content (page, blog, etc.).
 
         For example:
           GET /wiki/api/v2/pages/{content_id}/child/comment

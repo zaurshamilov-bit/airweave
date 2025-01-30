@@ -1,5 +1,4 @@
-"""
-Confluence chunk schemas.
+"""Confluence chunk schemas.
 
 Based on the Confluence Cloud REST API reference (read-only scope), we define
 chunk schemas for the major Confluence objects relevant to our application:
@@ -32,8 +31,7 @@ from app.platform.chunks._base import BaseChunk
 
 
 class ConfluenceSpaceChunk(BaseChunk):
-    """
-    Schema for a Confluence Space.
+    """Schema for a Confluence Space.
 
     See:
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-spaces/
@@ -53,8 +51,7 @@ class ConfluenceSpaceChunk(BaseChunk):
 
 
 class ConfluencePageChunk(BaseChunk):
-    """
-    Schema for a Confluence Page.
+    """Schema for a Confluence Page.
 
     See:
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-pages/
@@ -73,8 +70,7 @@ class ConfluencePageChunk(BaseChunk):
 
 
 class ConfluenceBlogPostChunk(BaseChunk):
-    """
-    Schema for a Confluence Blog Post.
+    """Schema for a Confluence Blog Post.
 
     See:
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-posts/
@@ -95,8 +91,7 @@ class ConfluenceBlogPostChunk(BaseChunk):
 
 
 class ConfluenceCommentChunk(BaseChunk):
-    """
-    Schema for a Confluence Comment.
+    """Schema for a Confluence Comment.
 
     See:
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comments/
@@ -119,8 +114,7 @@ class ConfluenceCommentChunk(BaseChunk):
 
 
 class ConfluenceDatabaseChunk(BaseChunk):
-    """
-    Schema for a Confluence Database object.
+    """Schema for a Confluence Database object.
 
     See:
       (the "database" content type in Confluence Cloud).
@@ -139,8 +133,7 @@ class ConfluenceDatabaseChunk(BaseChunk):
 
 
 class ConfluenceFolderChunk(BaseChunk):
-    """
-    Schema for a Confluence Folder object.
+    """Schema for a Confluence Folder object.
 
     See:
       (the "folder" content type in Confluence Cloud).
@@ -158,8 +151,7 @@ class ConfluenceFolderChunk(BaseChunk):
 
 
 class ConfluenceLabelChunk(BaseChunk):
-    """
-    Schema for a Confluence Label object.
+    """Schema for a Confluence Label object.
 
     See:
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-labels/
@@ -171,8 +163,7 @@ class ConfluenceLabelChunk(BaseChunk):
 
 
 class ConfluenceTaskChunk(BaseChunk):
-    """
-    Schema for a Confluence Task object.
+    """Schema for a Confluence Task object.
 
     For example, tasks extracted from Confluence pages or macros.
     """
@@ -198,8 +189,7 @@ class ConfluenceTaskChunk(BaseChunk):
 
 
 class ConfluenceWhiteboardChunk(BaseChunk):
-    """
-    Schema for a Confluence Whiteboard object.
+    """Schema for a Confluence Whiteboard object.
 
     See:
       (the "whiteboard" content type in Confluence Cloud).
@@ -217,8 +207,7 @@ class ConfluenceWhiteboardChunk(BaseChunk):
 
 
 class ConfluenceCustomContentChunk(BaseChunk):
-    """
-    Schema for a Confluence Custom Content object.
+    """Schema for a Confluence Custom Content object.
 
     See:
       (the "custom content" type in Confluence Cloud).

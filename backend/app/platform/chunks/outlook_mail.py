@@ -1,5 +1,4 @@
-"""
-Outlook Mail chunk schemas.
+"""Outlook Mail chunk schemas.
 
 Based on the Microsoft Graph Mail API (read-only scope), we define chunk schemas for
 the major Outlook mail objects relevant to our application:
@@ -16,7 +15,7 @@ References:
 """
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
@@ -24,8 +23,7 @@ from app.platform.chunks._base import BaseChunk, Breadcrumb
 
 
 class OutlookMailFolderChunk(BaseChunk):
-    """
-    Schema for an Outlook mail folder.
+    """Schema for an Outlook mail folder.
 
     See:
       https://learn.microsoft.com/en-us/graph/api/resources/mailfolder?view=graph-rest-1.0
@@ -50,8 +48,7 @@ class OutlookMailFolderChunk(BaseChunk):
 
 
 class OutlookMessageChunk(BaseChunk):
-    """
-    Schema for an Outlook message.
+    """Schema for an Outlook message.
 
     See:
       https://learn.microsoft.com/en-us/graph/api/resources/message?view=graph-rest-1.0
@@ -82,7 +79,9 @@ class OutlookMessageChunk(BaseChunk):
     from_: Optional[Dict[str, Any]] = Field(
         None,
         alias="from",
-        description="Information about the sender. Typically includes emailAddress { name, address }.",
+        description=(
+            "Information about the sender. Typically includes emailAddress { name, address }."
+        ),
     )
     to_recipients: List[Dict[str, Any]] = Field(
         default_factory=list,

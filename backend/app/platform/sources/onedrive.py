@@ -17,9 +17,10 @@ Reference (Graph API):
   https://learn.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0
 """
 
-import httpx
 from collections import deque
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import AsyncGenerator, Dict, Optional
+
+import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import Breadcrumb
@@ -49,8 +50,8 @@ class OneDriveSource(BaseSource):
         return response.json()
 
     async def _list_drives(self, client: httpx.AsyncClient) -> AsyncGenerator[Dict, None]:
-        """
-        List all drives associated with the authorized user or organizational context.
+        """List all drives associated with the authorized user or organizational context.
+
         Endpoint: GET https://graph.microsoft.com/v1.0/me/drives
         (Can also return SharePoint drives under /sites if the account has them.)
         Uses @odata.nextLink for pagination.
@@ -84,11 +85,12 @@ class OneDriveSource(BaseSource):
         drive_id: str,
         initial_url: Optional[str] = None,
     ) -> AsyncGenerator[Dict, None]:
-        """
-        List (recursively) all items within a given drive using a BFS approach.
-          - If initial_url is None, we start from the root children:
-              GET /drives/{drive_id}/root/children
-          - For each folder, we enqueue its children URL to explore deeper.
+        """List (recursively) all items within a given drive using a BFS approach.
+
+        If initial_url is None, we start from the root children:
+          GET /drives/{drive_id}/root/children
+
+        For each folder, we enqueue its children URL to explore deeper.
 
         Yields each DriveItem dict as we discover it.
         Uses @odata.nextLink for paging within each folder.
@@ -118,9 +120,9 @@ class OneDriveSource(BaseSource):
     async def _generate_drive_item_chunks(
         self, client: httpx.AsyncClient, drive_id: str, drive_name: str
     ) -> AsyncGenerator[OneDriveDriveItemChunk, None]:
-        """
-        For the specified drive, yield a OneDriveDriveItemChunk for each item
-        discovered by recursively enumerating folders and files.
+        """For the specified drive, yield a OneDriveDriveItemChunk for each item.
+
+        We recursively enumerate folders and files.
         """
         # Create a drive breadcrumb for top-level (similar to Google Drive's approach)
         drive_breadcrumb = Breadcrumb(entity_id=drive_id, name=drive_name, type="drive")
@@ -147,9 +149,11 @@ class OneDriveSource(BaseSource):
             )
 
     async def generate_chunks(self) -> AsyncGenerator[object, None]:
-        """Generate all OneDrive chunks:
-        - OneDriveDriveChunk for each drive
-        - OneDriveDriveItemChunk for each item in each drive (folders/files).
+        """Generate all OneDrive chunks.
+
+        Yields chunks in the following order:
+          - OneDriveDriveChunk for each drive
+          - OneDriveDriveItemChunk for each item in each drive (folders/files).
         """
         async with httpx.AsyncClient() as client:
             # 1) Yield drive chunks

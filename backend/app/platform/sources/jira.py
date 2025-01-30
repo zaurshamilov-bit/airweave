@@ -11,15 +11,16 @@ References:
     https://developer.atlassian.com/cloud/jira/platform/rest/v3/overview
 """
 
+from typing import Any, AsyncGenerator
+
 import httpx
-from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
 from app.platform.chunks.jira import (
-    JiraProjectChunk,
-    JiraIssueChunk,
     JiraCommentChunk,
+    JiraIssueChunk,
+    JiraProjectChunk,
     JiraStatusChunk,
 )
 from app.platform.decorators import source
@@ -28,8 +29,7 @@ from app.platform.sources._base import BaseSource
 
 @source("Jira", "jira", AuthType.oauth2_with_refresh)
 class JiraSource(BaseSource):
-    """
-    Jira source implementation (read-only).
+    """Jira source implementation (read-only).
 
     This connector retrieves hierarchical data from Jira's REST API:
       - Statuses (global list)
@@ -48,8 +48,7 @@ class JiraSource(BaseSource):
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Any:
-        """
-        Make an authenticated GET request to the Jira REST API using the provided URL.
+        """Make an authenticated GET request to the Jira REST API using the provided URL.
 
         By default, we're using OAuth 2.0 with refresh tokens for authentication.
         """
@@ -61,8 +60,7 @@ class JiraSource(BaseSource):
     async def _generate_status_chunks(
         self, client: httpx.AsyncClient, base_url: str
     ) -> AsyncGenerator[JiraStatusChunk, None]:
-        """
-        Generate JiraStatusChunk objects.
+        """Generate JiraStatusChunk objects.
 
         Endpoint:
             GET /rest/api/3/status
@@ -83,8 +81,7 @@ class JiraSource(BaseSource):
     async def _generate_project_chunks(
         self, client: httpx.AsyncClient, base_url: str
     ) -> AsyncGenerator[JiraProjectChunk, None]:
-        """
-        Generate JiraProjectChunk objects.
+        """Generate JiraProjectChunk objects.
 
         Endpoint:
             GET /rest/api/3/project
@@ -109,8 +106,7 @@ class JiraSource(BaseSource):
     async def _generate_comment_chunks(
         self, client: httpx.AsyncClient, base_url: str, issue: JiraIssueChunk
     ) -> AsyncGenerator[JiraCommentChunk, None]:
-        """
-        Generate JiraCommentChunk for each comment on a given issue.
+        """Generate JiraCommentChunk for each comment on a given issue.
 
         Endpoint:
             GET /rest/api/3/issue/{issueKey}/comment
@@ -156,13 +152,15 @@ class JiraSource(BaseSource):
                 break
 
             # Else, retrieve the next page:
-            comment_url = f"{base_url}/rest/api/3/issue/{issue.issue_key}/comment?startAt={next_start}&maxResults={max_results}"
+            comment_url = (
+                f"{base_url}/rest/api/3/issue/{issue.issue_key}/"
+                f"comment?startAt={next_start}&maxResults={max_results}"
+            )
 
     async def _generate_issue_chunks(
         self, client: httpx.AsyncClient, base_url: str, project: JiraProjectChunk
     ) -> AsyncGenerator[JiraIssueChunk, None]:
-        """
-        Generate JiraIssueChunk for each issue in the given project.
+        """Generate JiraIssueChunk for each issue in the given project.
 
         We use the Search endpoint with JQL to get issues belonging to the project.
         Endpoint:
@@ -229,7 +227,7 @@ class JiraSource(BaseSource):
                     labels=labels_info,
                     watchers=watchers_info if isinstance(watchers_info, list) else [],
                     votes=votes_info if isinstance(votes_info, int) else None,
-                    archived=False,  # Jira doesn't provide a direct archived field for issues by default
+                    archived=False,  # Jira doesn't provide an archived field for issues by default
                 )
 
             start_at += max_results

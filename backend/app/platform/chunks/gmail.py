@@ -10,8 +10,9 @@ Each chunk represents a distinct Gmail object, with relationships maintained thr
 references and breadcrumbs rather than nested objects.
 """
 
-from typing import List, Optional
 from datetime import datetime
+from typing import List, Optional
+
 from pydantic import Field
 
 from app.platform.chunks._base import BaseChunk

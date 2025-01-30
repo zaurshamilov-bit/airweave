@@ -14,8 +14,9 @@ References:
     https://developers.google.com/drive/api/v3/reference/files  (Files)
 """
 
-import httpx
 from typing import AsyncGenerator, Dict, Optional
+
+import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk
@@ -185,10 +186,12 @@ class GoogleDriveSource(BaseSource):
             yield self._build_file_chunk(file_obj)
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all Google Drive chunks:
-        - Shared drives (Drive objects)
-        - Files in each shared drive
-        - Files in My Drive (corpora=user)
+        """Generate all Google Drive chunks.
+
+        Yields chunks in the following order:
+          - Shared drives (Drive objects)
+          - Files in each shared drive
+          - Files in My Drive (corpora=user)
         """
         async with httpx.AsyncClient() as client:
             # 1) Generate chunks for shared drives
