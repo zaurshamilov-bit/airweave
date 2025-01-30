@@ -27,14 +27,10 @@ current_dir = Path(__file__).parent.parent.absolute()
 if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
+from app.core.config import settings  # Import settings
 from app.models._base import Base  # noqa
 
 target_metadata = Base.metadata
-
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
 
 
 def get_url() -> str:
@@ -45,13 +41,10 @@ def get_url() -> str:
         str: The database URL.
 
     """
-    load_dotenv(".env")
-    user = os.getenv("POSTGRES_USER")
-    password = os.getenv("POSTGRES_PASSWORD")
-    server = os.getenv("POSTGRES_SERVER")
-    db = os.getenv("POSTGRES_DB")
-
-    return f"postgresql://{user}:{password}@{server}/{db}"
+    # Remove load_dotenv since config.py handles this
+    # Convert the async URL to sync URL for alembic
+    url = str(settings.SQLALCHEMY_ASYNC_DATABASE_URI)
+    return url.replace("+asyncpg", "")
 
 
 def run_migrations_offline() -> None:

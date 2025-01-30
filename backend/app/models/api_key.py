@@ -3,13 +3,13 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import DateTime, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models._base import OrganizationBase, UserMixin
 
 if TYPE_CHECKING:
-    from .user import User
+    pass
 
 
 class APIKey(OrganizationBase, UserMixin):
@@ -20,10 +20,3 @@ class APIKey(OrganizationBase, UserMixin):
     key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     key_prefix: Mapped[str] = mapped_column(String(8), nullable=False)
     expiration_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-    # Relationships
-    created_by: Mapped["User"] = relationship(
-        "User",
-        foreign_keys=[UserMixin.created_by_email],
-        primaryjoin="APIKey.created_by_email == User.email",
-    )

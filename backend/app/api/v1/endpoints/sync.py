@@ -1,7 +1,7 @@
 """API endpoints for managing syncs."""
 
 import asyncio
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Union
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
@@ -17,16 +17,20 @@ from app.platform.sync.service import sync_service
 router = APIRouter()
 
 
-@router.get("/", response_model=list[schemas.Sync])
+@router.get("/", response_model=Union[list[schemas.Sync], list[schemas.SyncWithSourceConnection]])
 async def list_syncs(
     *,
     db: AsyncSession = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
+    with_source_connection: bool = False,
     user: schemas.User = Depends(deps.get_user),
-) -> list[schemas.Sync]:
+) -> list[schemas.Sync] | list[schemas.SyncWithSourceConnection]:
     """List all syncs for the current user."""
-    syncs = await crud.sync.get_all_for_user(db=db, current_user=user, skip=skip, limit=limit)
+    if with_source_connection:
+        syncs = await crud.sync.get_all_syncs_join_with_source_connection(db=db, current_user=user)
+    else:
+        syncs = await crud.sync.get_all_for_user(db=db, current_user=user, skip=skip, limit=limit)
     return syncs
 
 

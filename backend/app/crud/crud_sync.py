@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
 from app.crud._base import CRUDBase
+from app.models.connection import Connection
 from app.models.sync import Sync
 from app.schemas.sync import SyncCreate, SyncUpdate
 
@@ -74,6 +75,33 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         for sync in syncs:
             self._validate_if_user_has_permission(sync, current_user)
         return syncs
+
+    async def get_all_syncs_join_with_source_connection(
+        self, db: AsyncSession, current_user: schemas.User
+    ) -> list[schemas.SyncWithSourceConnection]:
+        """Get all syncs join with source connection.
+
+        Args:
+            db (AsyncSession): The database session
+            current_user (schemas.User): The current user
+
+        Returns:
+            list[schemas.SyncWithSourceConnection]: The syncs with their source connections
+        """
+        stmt = (
+            select(Sync, Connection)
+            .join(Connection, Sync.source_connection_id == Connection.id)
+            .where(Sync.organization_id == current_user.organization_id)
+        )
+        result = await db.execute(stmt)
+        rows = result.unique().all()
+
+        return [
+            schemas.SyncWithSourceConnection(
+                **sync.__dict__, source_connection=schemas.Connection.model_validate(connection)
+            )
+            for sync, connection in rows
+        ]
 
 
 sync = CRUDSync(Sync)

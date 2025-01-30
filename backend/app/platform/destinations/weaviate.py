@@ -4,6 +4,7 @@ import json
 from uuid import UUID
 
 import weaviate
+from weaviate.classes.query import Filter
 from weaviate.collections import Collection
 from weaviate.collections.classes.config import DataType, Property
 
@@ -181,7 +182,11 @@ class WeaviateDestination(BaseDestination):
                 raise Exception("Errors during bulk insert: %s", response.errors)
 
     async def delete(self, db_chunk_id: UUID) -> None:
-        """Delete a single chunk from Weaviate."""
+        """Delete a single chunk from Weaviate.
+
+        Args:
+            db_chunk_id (UUID): The ID of the chunk to delete.
+        """
         async with WeaviateService(
             weaviate_cluster_url=self.cluster_url,
             weaviate_api_key=self.api_key,
@@ -213,6 +218,28 @@ class WeaviateDestination(BaseDestination):
                 except Exception as e:
                     if "not found" not in str(e).lower():
                         raise
+
+    async def search_for_sync_id(self, text: str, sync_id: UUID) -> list[dict]:
+        """Search with text and sync_id.
+
+        Args:
+            text (str): The text to search for.
+            sync_id (UUID): The sync_id to search for.
+        """
+        async with WeaviateService(
+            weaviate_cluster_url=self.cluster_url,
+            weaviate_api_key=self.api_key,
+            embedding_model=self.embedding_model,
+        ) as service:
+            collection: Collection = await service.get_weaviate_collection(self.collection_name)
+
+            # Create a proper filter using the Filter class
+            results = await collection.query.near_text(
+                query=text,
+                limit=10,
+                filters=Filter.by_property("sync_id").equal(str(sync_id)),  # Proper filter syntax
+            )
+            return results
 
     @staticmethod
     def _sanitize_collection_name(collection_name: UUID) -> str:

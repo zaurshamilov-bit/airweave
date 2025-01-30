@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, field_validator
 
+from app import schemas
 from app.core.shared_models import SyncStatus
 
 
@@ -101,3 +102,9 @@ class Sync(SyncInDBBase):
     """Schema for Sync."""
 
     pass
+
+
+class SyncWithSourceConnection(SyncInDBBase):
+    """Schema for Sync with source connection."""
+
+    source_connection: Optional[schemas.Connection] = None

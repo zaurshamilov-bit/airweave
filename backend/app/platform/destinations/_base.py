@@ -40,6 +40,11 @@ class BaseDestination:
         """Bulk delete chunks from the destination."""
         pass
 
+    @abstractmethod
+    async def search_for_sync_id(self, sync_id: UUID) -> None:
+        """Search for a sync_id in the destination."""
+        pass
+
     async def get_credentials(self, user: schemas.User) -> None:
         """Get credentials for the destination."""
         pass

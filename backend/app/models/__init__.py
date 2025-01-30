@@ -1,6 +1,7 @@
 """Model exports."""
 
 from .api_key import APIKey
+from .chat import Chat, ChatMessage
 from .chunk import Chunk
 from .connection import Connection
 from .destination import Destination
@@ -15,6 +16,8 @@ from .white_label import WhiteLabel
 
 __all__ = [
     "APIKey",
+    "Chat",
+    "ChatMessage",
     "Chunk",
     "Connection",
     "Destination",

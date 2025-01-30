@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
     api_keys,
+    chat,
     connections,
     destinations,
     embedding_models,
@@ -26,3 +27,4 @@ api_router.include_router(
 api_router.include_router(connections.router, prefix="/connections", tags=["connections"])
 api_router.include_router(sync.router, prefix="/sync", tags=["sync"])
 api_router.include_router(white_label.router, prefix="/white_labels", tags=["white_labels"])
+api_router.include_router(chat.router, prefix="/chat", tags=["chat"])

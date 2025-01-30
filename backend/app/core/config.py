@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Airweave"
     LOCAL_DEVELOPMENT: Optional[bool] = False
     FRONTEND_LOCAL_DEVELOPMENT_PORT: Optional[int] = 8080
-    DTAP_ENVIRONMENT: Optional[str] = "dev"
+    DTAP_ENVIRONMENT: Optional[str] = "local"
 
     FIRST_SUPERUSER: str
     FIRST_SUPERUSER_PASSWORD: str
@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     NATIVE_WEAVIATE_HOST: str = "weaviate"
     NATIVE_WEAVIATE_PORT: int = 8080
     NATIVE_WEAVIATE_GRPC_PORT: int = 50051
+
+    OPENAI_API_KEY: str
 
     @field_validator("SQLALCHEMY_ASYNC_DATABASE_URI", mode="before")
     def assemble_db_connection(cls, v: Optional[str], info: ValidationInfo) -> PostgresDsn:
@@ -95,7 +97,7 @@ class Settings(BaseSettings):
         Returns:
             str: The server URL.
         """
-        if self.LOCAL_DEVELOPMENT:
+        if self.DTAP_ENVIRONMENT == "local":
             return self.LOCAL_NGROK_SERVER
         if self.DTAP_ENVIRONMENT == "prod":
             return "https://api.airweave.ai"
@@ -108,7 +110,7 @@ class Settings(BaseSettings):
         Returns:
             str: The app URL.
         """
-        if self.LOCAL_DEVELOPMENT:
+        if self.DTAP_ENVIRONMENT == "local":
             return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
         if self.DTAP_ENVIRONMENT == "prod":
             return "https://app.airweave.ai"
@@ -121,7 +123,7 @@ class Settings(BaseSettings):
         Returns:
             str: The docs URL.
         """
-        if self.LOCAL_DEVELOPMENT:
+        if self.DTAP_ENVIRONMENT == "local":
             return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
         if self.DTAP_ENVIRONMENT == "prod":
             return "https://docs.airweave.ai"

@@ -17,12 +17,15 @@
             "cwd": "${workspaceFolder}/backend",
             "console": "integratedTerminal",
             "jinja": true,
-            "justMyCode": false,
+            "justMyCode": true,
             "preLaunchTask": "start-docker-services",
             "postDebugTask": "stop-docker-services",
             "envFile": "${workspaceFolder}/.env",
             "env": {
                 "LOCAL_DEVELOPMENT": "true",
+                "NATIVE_WEAVIATE_HOST": "localhost",
+                "NATIVE_WEAVIATE_PORT": "8087",
+                "NATIVE_WEAVIATE_GRPC_PORT": "50051",
             }
         },
         {

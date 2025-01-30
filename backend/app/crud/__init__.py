@@ -1,6 +1,7 @@
 """CRUD layer operations."""
 
 from .crud_api_key import api_key
+from .crud_chat import chat
 from .crud_chunk import chunk
 from .crud_connection import connection
 from .crud_destination import destination
@@ -14,16 +15,17 @@ from .crud_user import user
 from .crud_white_label import white_label
 
 __all__ = [
-    "user",
     "api_key",
-    "organization",
-    "source",
+    "chat",
+    "chunk",
+    "connection",
     "destination",
     "embedding_model",
     "integration_credential",
-    "connection",
+    "organization",
+    "source",
     "sync",
     "sync_job",
-    "chunk",
+    "user",
     "white_label",
 ]

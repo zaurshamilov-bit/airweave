@@ -8,6 +8,7 @@ from .api_key import (
     APIKeyUpdate,
     APIKeyWithPlainKey,
 )
+from .chat import Chat, ChatCreate, ChatMessage, ChatMessageCreate, ChatUpdate
 from .chunk import Chunk, ChunkCreate, ChunkInDBBase, ChunkUpdate
 from .connection import Connection, ConnectionCreate, ConnectionInDBBase, ConnectionUpdate
 from .destination import (
@@ -38,7 +39,7 @@ from .organization import (
     OrganizationUpdate,
 )
 from .source import Source, SourceCreate, SourceInDBBase, SourceUpdate
-from .sync import Sync, SyncCreate, SyncInDBBase, SyncUpdate
+from .sync import Sync, SyncCreate, SyncInDBBase, SyncUpdate, SyncWithSourceConnection
 from .sync_job import SyncJob, SyncJobCreate, SyncJobInDBBase, SyncJobUpdate
 from .user import (
     User,
