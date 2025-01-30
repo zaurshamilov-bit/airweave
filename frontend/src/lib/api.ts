@@ -13,7 +13,7 @@ export const API_CONFIG = {
 type ApiResponse<T = any> = Promise<Response>;
 
 export const apiClient = {
-  async get<T>(endpoint: string, params?: Record<string, string>): ApiResponse<T> {
+  async get<T>(endpoint: string, params?: Record<string, any>): ApiResponse<T> {
     const url = new URL(`${API_CONFIG.baseURL}${endpoint}`);
     if (params) {
       Object.entries(params).forEach(([key, value]) => 

@@ -7,7 +7,8 @@ import {
   User,
   RefreshCcw,
   Tag,
-  Menu
+  Menu,
+  MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -43,6 +44,11 @@ const DashboardLayout = () => {
   ];
 
   const configureNavigation = [
+    {
+      name: "Chat",
+      href: "/chat",
+      icon: MessageSquare,
+    },
     {
       name: "Synchronizations",
       href: "/sync",

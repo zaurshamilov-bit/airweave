@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { ChatSidebar } from "@/components/chat/ChatSidebar";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
-import { useLocation } from "react-router-dom";
-
 import {
   Select,
   SelectContent,
@@ -13,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
+import { API_CONFIG, apiClient } from "@/lib/api";
 import { dataSources } from "@/config/dataSources";
 
 interface Message {
@@ -22,44 +21,60 @@ interface Message {
   attachments?: string[];
 }
 
-const Chat = () => {
+function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const { toast } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
 
-  const handleSubmit = useCallback(async (content: string, attachments: string[]) => {
-    const userMessage: Message = {
-      role: "user",
-      content,
-      attachments: attachments.length > 0 ? attachments : undefined,
-    };
-    
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
+  // If you're using a route param like /chat/:chatId
+  const { chatId } = useParams<{ chatId: string }>();
 
-    try {
-      // Simulate API response
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      const botResponse: Message = {
-        role: "assistant",
-        content: `Based on the search across selected sources, here are the relevant results:\n\n1. Found matching documents discussing this topic.\n2. The documents suggest this functionality is implemented in the core module.\n3. There are related references in the documentation section.`,
-      };
-
-      setMessages((prev) => [...prev, botResponse]);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to get a response. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+  // Load chat data on mount or when chatId changes
+  useEffect(() => {
+    async function loadChat() {
+      if (!chatId) return;
+      try {
+        setIsLoading(true);
+        const resp = await apiClient.get(`/chat/${chatId}`);
+        
+        console.log("Loading chat data:", resp); // Debug log
+        
+        // Handle the response data directly
+        const chatData = await resp.json();
+        
+        // Ensure messages is an array, even if empty
+        const messages = chatData.messages || [];
+        
+        setMessages(messages.map((m: any) => ({
+          role: m.role || 'user',
+          content: m.content,
+          attachments: m.attachments || [],
+        })));
+      } catch (error) {
+        console.error("Failed to load chat:", error);
+        if (error.response) {
+          console.error("Error response:", error.response);
+        }
+        toast({
+          title: "Error",
+          description: "Failed to load chat. Please try again.",
+          variant: "destructive",
+        });
+        // Only navigate away if it's a 404
+        if (error.response?.status === 404) {
+          navigate("/");
+        }
+      } finally {
+        setIsLoading(false);
+      }
     }
-  }, [toast]);
+    void loadChat();
+  }, [chatId, navigate, toast]);
 
+  // Auto-run if user came here with an initial message or sources
   useEffect(() => {
     const state = location.state as { initialMessage?: string; selectedSources?: string[] };
     if (state?.selectedSources) {
@@ -68,7 +83,92 @@ const Chat = () => {
     if (state?.initialMessage) {
       void handleSubmit(state.initialMessage, []);
     }
-  }, [location.state, handleSubmit, setSelectedSources]);
+  }, [location.state]);
+
+  // Submit a message via SSE endpoint
+  const handleSubmit = useCallback(
+    async (content: string, attachments: string[]) => {
+      if (!chatId) {
+        toast({
+          title: "Error",
+          description: "Chat ID not found. Please create or select a chat first.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const userMessage: Message = {
+        role: "user",
+        content,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      };
+      setMessages((prev) => [...prev, userMessage]);
+      setIsLoading(true);
+
+      try {
+        // First, send the message
+        await apiClient.post(`/chat/${chatId}/message`, {
+          content,
+          role: "user",
+        });
+
+        // Then, get the streaming response
+        const response = await fetch(`${API_CONFIG.baseURL}/chat/${chatId}/stream`, {
+          method: 'GET',
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+
+        if (!reader) {
+          throw new Error('No reader available');
+        }
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const content = line.slice(6);
+              if (content === '[DONE]') {
+                setIsLoading(false);
+                continue;
+              }
+              
+              setMessages((prev) => {
+                const newMessages = [...prev];
+                if (!newMessages.length || newMessages[newMessages.length - 1].role !== "assistant") {
+                  newMessages.push({ role: "assistant", content: "" });
+                }
+                newMessages[newMessages.length - 1].content += content;
+                return newMessages;
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Stream Error:", error);
+        setIsLoading(false);
+        toast({
+          title: "Error",
+          description: "Failed to get response. Please try again.",
+          variant: "destructive",
+        });
+      }
+    },
+    [chatId, toast]
+  );
 
   const handleSourceChange = (sourceId: string) => {
     setSelectedSources((prev) => {
@@ -82,33 +182,9 @@ const Chat = () => {
   return (
     <div className="flex h-screen bg-background">
       <ChatSidebar />
-      
+
       <div className="flex-1 flex flex-col">
         <div className="border-b p-4">
-          <Select>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select data sources to chat with" />
-            </SelectTrigger>
-            <SelectContent>
-              {dataSources.map((source) => (
-                <SelectItem
-                  key={source.id}
-                  value={source.id}
-                  onSelect={() => handleSourceChange(source.id)}
-                  className={selectedSources.includes(source.id) ? "bg-primary/10" : ""}
-                >
-                  <div className="flex items-center gap-2">
-                    <img
-                      src={`/src/components/icons/apps/${source.short_name}.svg`}
-                      className="h-4 w-4"
-                      alt={source.name}
-                    />
-                    <span>{source.name}</span>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -123,6 +199,6 @@ const Chat = () => {
       </div>
     </div>
   );
-};
+}
 
 export default Chat;

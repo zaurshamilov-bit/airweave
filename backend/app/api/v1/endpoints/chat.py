@@ -1,6 +1,5 @@
 """Chat endpoints."""
 
-from typing import AsyncGenerator
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import crud, schemas
 from app.api.deps import get_db, get_user
 from app.core.chat_service import chat_service
+from app.core.logging import logger
 
 router = APIRouter()
 
@@ -85,26 +85,38 @@ async def delete_chat(
     await crud.chat.remove(db=db, id=chat_id, current_user=user)
 
 
-@router.post("/{chat_id}/message/stream", response_class=StreamingResponse)
-async def send_message_streaming(
+@router.post("/{chat_id}/message")
+async def send_message(
     *,
     db: AsyncSession = Depends(get_db),
     chat_id: UUID,
     message: schemas.ChatMessageCreate,
     user: schemas.User = Depends(get_user),
+) -> schemas.ChatMessage:
+    """Send a message to a chat."""
+    return await crud.chat.add_message(db=db, chat_id=chat_id, obj_in=message, current_user=user)
+
+
+@router.get("/{chat_id}/stream", response_class=StreamingResponse)
+async def stream_chat_response(
+    *,
+    db: AsyncSession = Depends(get_db),
+    chat_id: UUID,
+    user: schemas.User = Depends(get_user),
 ) -> StreamingResponse:
     """Stream an AI response for a chat message."""
-    # First save the user's message
-    await crud.chat.add_message(db=db, chat_id=chat_id, obj_in=message, current_user=user)
 
-    # Create streaming response
-    async def event_generator() -> AsyncGenerator[str, None]:
-        async for chunk in chat_service.generate_streaming_response(
-            db=db, chat_id=chat_id, user=user
-        ):
-            if chunk.choices[0].delta.content:
-                # Format as SSE
-                yield f"data: {chunk.choices[0].delta.content}\n\n"
+    async def event_generator():
+        try:
+            async for chunk in chat_service.generate_streaming_response(
+                db=db, chat_id=chat_id, user=user
+            ):
+                if chunk.choices[0].delta.content:
+                    yield f"data: {chunk.choices[0].delta.content}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.error(f"Error in stream: {str(e)}")
+            yield "data: [ERROR]\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -113,5 +125,7 @@ async def send_message_streaming(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "Content-Type": "text/event-stream",
+            "Access-Control-Allow-Origin": "*",
         },
     )

@@ -66,7 +66,7 @@ function App() {
           {/* Settings and Profile routes */}
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/chat" element={<Chat />} />
+          <Route path="/chat/:chatId?" element={<Chat />} />
         </Route>
 
         <Route path="/auth/callback/:short_name" element={<AuthCallback />} />
