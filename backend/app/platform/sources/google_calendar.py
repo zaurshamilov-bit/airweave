@@ -14,17 +14,18 @@ Reference:
     https://developers.google.com/calendar/api/v3/reference
 """
 
-from typing import AsyncGenerator, Dict, List, Optional
 from datetime import datetime, timedelta
+from typing import AsyncGenerator, Dict, List, Optional
+
 import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
 from app.platform.chunks.google_calendar import (
     GoogleCalendarCalendarChunk,
-    GoogleCalendarListChunk,
     GoogleCalendarEventChunk,
     GoogleCalendarFreeBusyChunk,
+    GoogleCalendarListChunk,
 )
 from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
@@ -210,11 +211,13 @@ class GoogleCalendarSource(BaseSource):
         )
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all Google Calendar chunks:
-        - CalendarList entries
-        - Underlying Calendar resources
-        - Events for each calendar
-        - FreeBusy data for each calendar (7-day window)
+        """Generate all Google Calendar chunks.
+
+        Yields chunks in the following order:
+          - CalendarList entries
+          - Underlying Calendar resources
+          - Events for each calendar
+          - FreeBusy data for each calendar (7-day window)
         """
         async with httpx.AsyncClient() as client:
             # 1) Get the user's calendarList

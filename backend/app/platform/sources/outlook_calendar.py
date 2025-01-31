@@ -11,8 +11,8 @@ Reference:
     https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0
 """
 
-from typing import AsyncGenerator, Dict, Optional, Any
 from datetime import datetime
+from typing import Any, AsyncGenerator, Dict, Optional
 
 import httpx
 

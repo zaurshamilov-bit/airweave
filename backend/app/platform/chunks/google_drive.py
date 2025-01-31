@@ -1,5 +1,4 @@
-"""
-Google Drive chunk schemas.
+"""Google Drive chunk schemas.
 
 Based on the Google Drive API reference (readonly scopes),
 we define chunk schemas for:
@@ -22,8 +21,7 @@ from app.platform.chunks._base import BaseChunk
 
 
 class GoogleDriveDriveChunk(BaseChunk):
-    """
-    Schema for a Drive resource (shared drive).
+    """Schema for a Drive resource (shared drive).
 
     Reference:
       https://developers.google.com/drive/api/v3/reference/drives
@@ -47,8 +45,7 @@ class GoogleDriveDriveChunk(BaseChunk):
 
 
 class GoogleDriveFileChunk(BaseChunk):
-    """
-    Schema for a File resource (in a user's or shared drive).
+    """Schema for a File resource (in a user's or shared drive).
 
     Reference:
       https://developers.google.com/drive/api/v3/reference/files
@@ -68,7 +65,10 @@ class GoogleDriveFileChunk(BaseChunk):
     )
     owners: List[Dict[str, Any]] = Field(
         default_factory=list,
-        description="List of owners for this file. Each entry may contain fields like 'displayName', 'emailAddress', etc.",
+        description=(
+            "List of owners for this file. Each entry may contain fields like 'displayName', "
+            "'emailAddress', etc."
+        ),
     )
     shared: bool = Field(False, description="Whether the file is shared.")
     web_view_link: Optional[str] = Field(

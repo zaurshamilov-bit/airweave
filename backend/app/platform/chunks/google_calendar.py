@@ -1,5 +1,4 @@
-"""
-Google Calendar chunk schemas.
+"""Google Calendar chunk schemas.
 
 Based on the Google Calendar API reference (readonly scope),
 we define chunk schemas for:
@@ -23,8 +22,7 @@ from app.platform.chunks._base import BaseChunk
 
 
 class GoogleCalendarCalendarChunk(BaseChunk):
-    """
-    Schema for a Google Calendar object (the underlying calendar resource).
+    """Schema for a Google Calendar object (the underlying calendar resource).
 
     See: https://developers.google.com/calendar/api/v3/reference/calendars
     """
@@ -37,8 +35,7 @@ class GoogleCalendarCalendarChunk(BaseChunk):
 
 
 class GoogleCalendarListChunk(BaseChunk):
-    """
-    Schema for a CalendarList entry, i.e., how the user sees a calendar.
+    """Schema for a CalendarList entry, i.e., how the user sees a calendar.
 
     See: https://developers.google.com/calendar/api/v3/reference/calendarList
     """
@@ -65,8 +62,7 @@ class GoogleCalendarListChunk(BaseChunk):
 
 
 class GoogleCalendarEventChunk(BaseChunk):
-    """
-    Schema for a Google Calendar Event.
+    """Schema for a Google Calendar Event.
 
     See: https://developers.google.com/calendar/api/v3/reference/events
     """
@@ -84,19 +80,30 @@ class GoogleCalendarEventChunk(BaseChunk):
     color_id: Optional[str] = Field(None, description="Color ID for this event.")
     start_datetime: Optional[datetime] = Field(
         None,
-        description="Start datetime if the event has a specific datetime. (DateTime from 'start' if 'dateTime' is present.)",
+        description=(
+            "Start datetime if the event has a specific datetime. "
+            "(DateTime from 'start' if 'dateTime' is present.)"
+        ),
     )
     start_date: Optional[str] = Field(
         None,
-        description="Start date if the event is an all-day event. (Date from 'start' if 'date' is present.)",
+        description=(
+            "Start date if the event is an all-day event. "
+            "(Date from 'start' if 'date' is present.)"
+        ),
     )
     end_datetime: Optional[datetime] = Field(
         None,
-        description="End datetime if the event has a specific datetime. (DateTime from 'end' if 'dateTime' is present.)",
+        description=(
+            "End datetime if the event has a specific datetime. "
+            "(DateTime from 'end' if 'dateTime' is present.)"
+        ),
     )
     end_date: Optional[str] = Field(
         None,
-        description="End date if the event is an all-day event. (Date from 'end' if 'date' is present.)",
+        description=(
+            "End date if the event is an all-day event. " "(Date from 'end' if 'date' is present.)"
+        ),
     )
     recurrence: Optional[List[str]] = Field(
         None, description="List of RRULE, EXRULE, RDATE, EXDATE lines for recurring events."
@@ -112,11 +119,16 @@ class GoogleCalendarEventChunk(BaseChunk):
     )
     attendees: Optional[List[Dict[str, Any]]] = Field(
         None,
-        description="The attendees of the event (each dict typically has 'email', 'responseStatus', etc.).",
+        description=(
+            "The attendees of the event (each dict typically has 'email', 'responseStatus', etc.)."
+        ),
     )
     transparency: Optional[str] = Field(
         None,
-        description="Specifies whether the event blocks time on the calendar ('opaque') or not ('transparent').",
+        description=(
+            "Specifies whether the event blocks time on the calendar ('opaque') or not "
+            "('transparent')."
+        ),
     )
     visibility: Optional[str] = Field(
         None, description="Visibility of the event (e.g., 'default', 'public')."
@@ -128,8 +140,7 @@ class GoogleCalendarEventChunk(BaseChunk):
 
 
 class GoogleCalendarFreeBusyChunk(BaseChunk):
-    """
-    Schema for a FreeBusy response chunk for a given calendar.
+    """Schema for a FreeBusy response chunk for a given calendar.
 
     See: https://developers.google.com/calendar/api/v3/reference/freebusy
     """

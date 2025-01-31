@@ -1,5 +1,4 @@
-"""
-Jira chunk schemas.
+"""Jira chunk schemas.
 
 Based on the Jira Cloud REST API reference (read-only scope), we define
 chunk schemas for the major Jira objects relevant to our application:
@@ -25,7 +24,7 @@ Later iterations could include support for the following objects:
 """
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
@@ -33,8 +32,7 @@ from app.platform.chunks._base import BaseChunk
 
 
 class JiraProjectChunk(BaseChunk):
-    """
-    Schema for a Jira Project.
+    """Schema for a Jira Project.
 
     See:
       https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-project-get
@@ -54,8 +52,7 @@ class JiraProjectChunk(BaseChunk):
 
 
 class JiraStatusChunk(BaseChunk):
-    """
-    Schema for a Jira Status.
+    """Schema for a Jira Status.
 
     See:
       https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-status-get
@@ -70,8 +67,7 @@ class JiraStatusChunk(BaseChunk):
 
 
 class JiraIssueChunk(BaseChunk):
-    """
-    Schema for a Jira Issue.
+    """Schema for a Jira Issue.
 
     See:
       https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-issue-issueidorkey-get
@@ -113,8 +109,7 @@ class JiraIssueChunk(BaseChunk):
 
 
 class JiraCommentChunk(BaseChunk):
-    """
-    Schema for a Jira Comment.
+    """Schema for a Jira Comment.
 
     See:
       https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-issue-issueidorkey-comment-get
