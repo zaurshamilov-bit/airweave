@@ -10,7 +10,7 @@
 </div>
 
 
-**Airweave** is an open-source tool that makes **any app searchable** for your agent by syncing your users' app data, APIs, databases and websites into your vector database with minimal configuration. 
+**Airweave** is an open-source tool that makes **any app searchable** for your agent by syncing your users' app data, APIs, databases, and websites into your vector database with minimal configuration. 
 
 
 <p align="center" style="padding-top: 4px; padding-bottom: 16px;">
