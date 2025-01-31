@@ -1,5 +1,9 @@
 import React from "react";
 import { ImageModal } from "./ImageModal";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface ChatMessageProps {
   role: "user" | "assistant";
@@ -19,8 +23,32 @@ export const ChatMessage = ({ role, content, attachments }: ChatMessageProps) =>
             : "bg-muted"
         }`}
       >
-        <p className="whitespace-pre-wrap">{content}</p>
-        {attachments && attachments.length > 0 && (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          className="prose dark:prose-invert max-w-none"
+          components={{
+            code({node, inline, className, children, ...props}) {
+              const match = /language-(\w+)/.exec(className || '');
+              return !inline && match ? (
+                <SyntaxHighlighter
+                  {...props}
+                  style={vscDarkPlus}
+                  language={match[1]}
+                  PreTag="div"
+                >
+                  {String(children).replace(/\n$/, '')}
+                </SyntaxHighlighter>
+              ) : (
+                <code {...props} className={className}>
+                  {children}
+                </code>
+              );
+            }
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+        {attachments?.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {attachments.map((file, i) => (
               file.startsWith('data:image') ? (

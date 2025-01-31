@@ -14,6 +14,9 @@ import {
 } from "@/components/ui/select";
 import { API_CONFIG, apiClient } from "@/lib/api";
 import { dataSources } from "@/config/dataSources";
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface Message {
   role: "user" | "assistant";
@@ -106,13 +109,13 @@ function Chat() {
       setIsLoading(true);
 
       try {
-        // First, send the message
+        // First send the message
         await apiClient.post(`/chat/${chatId}/message`, {
           content,
           role: "user",
         });
 
-        // Then, get the streaming response
+        // Then get the streaming response
         const response = await fetch(`${API_CONFIG.baseURL}/chat/${chatId}/stream`, {
           method: 'GET',
           credentials: 'include',
@@ -129,11 +132,12 @@ function Chat() {
           throw new Error('No reader available');
         }
 
+        // Initialize assistant message
+        setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
         while (true) {
           const { value, done } = await reader.read();
-          if (done) {
-            break;
-          }
+          if (done) break;
 
           const chunk = decoder.decode(value);
           const lines = chunk.split('\n');
@@ -146,12 +150,18 @@ function Chat() {
                 continue;
               }
               
+              // Clean up the content before adding it to the message
+              const cleanContent = content
+                .replace(/\\n/g, '\n')
+                .replace(/\\"/g, '"')
+                .replace(/\\\\/g, '\\');
+              
               setMessages((prev) => {
                 const newMessages = [...prev];
-                if (!newMessages.length || newMessages[newMessages.length - 1].role !== "assistant") {
-                  newMessages.push({ role: "assistant", content: "" });
+                const lastMessage = newMessages[newMessages.length - 1];
+                if (lastMessage.role === "assistant") {
+                  lastMessage.content += cleanContent;
                 }
-                newMessages[newMessages.length - 1].content += content;
                 return newMessages;
               });
             }
@@ -189,7 +199,13 @@ function Chat() {
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((message, index) => (
-            <ChatMessage key={index} {...message} />
+            <ChatMessage
+              key={index}
+              role={message.role}
+              content={message.content}
+              attachments={message.attachments}
+              markdown={true}
+            />
           ))}
         </div>
 

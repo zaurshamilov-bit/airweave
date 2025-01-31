@@ -100,6 +100,16 @@ export function CreateChatDialog({ open, onOpenChange, onChatCreated }: CreateCh
           <DialogDescription>Select a sync and provide optional details, then create your chat.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
+
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Chat Name</label>
+            <Input
+              placeholder="Chat Name"
+              value={chatName}
+              onChange={(e) => setChatName(e.target.value)}
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium mb-1">Sync</label>
             <Select onValueChange={setSyncId} value={syncId}>
@@ -133,23 +143,6 @@ export function CreateChatDialog({ open, onOpenChange, onChatCreated }: CreateCh
             </Select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Chat Name</label>
-            <Input
-              placeholder="Chat Name"
-              value={chatName}
-              onChange={(e) => setChatName(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Description</label>
-            <Input
-              placeholder="Chat Description (optional)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
         </div>
         <div className="mt-4 flex justify-end space-x-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>

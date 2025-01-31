@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class ChatService:
     """Service for handling chat interactions with AI."""
 
-    DEFAULT_MODEL = "gpt-4o"
+    DEFAULT_MODEL = "gpt-4"
     DEFAULT_MODEL_SETTINGS = {
         "temperature": 0.7,
         "max_tokens": 1000,
@@ -29,11 +29,23 @@ class ChatService:
     }
 
     CONTEXT_PROMPT = """You are an AI assistant with access to a knowledge base.
-    Use the following relevant context to help answer the user's question:
+    Use the following relevant context to help answer the user's question.
+    Always format your responses in proper markdown, including:
+    - Using proper headers (# ## ###)
+    - Formatting code blocks with ```language
+    - Using tables with | header | header |
+    - Using bullet points and numbered lists
+    - Using **bold** and *italic* where appropriate
 
+    Here's the context:
     {context}
 
-    Remember to be helpful, clear, and accurate while maintaining a professional tone."""
+    Remember to:
+    1. Be helpful, clear, and accurate
+    2. Maintain a professional tone
+    3. Format ALL responses in proper markdown
+    4. Use tables when presenting structured data
+    5. Use code blocks with proper language tags"""
 
     def __init__(self):
         """Initialize the chat service with OpenAI client."""
@@ -240,8 +252,9 @@ class ChatService:
                 self.CONTEXT_PROMPT.format(context=context)
                 if context
                 else (
-                    "You are a helpful AI assistant. Provide clear, accurate, "
-                    "and concise responses while being friendly and professional."
+                    "You are a helpful AI assistant. Always format your responses in proper markdown, "
+                    "including tables, code blocks with language tags, and proper headers. "
+                    "Provide clear, accurate, and concise responses while being friendly and professional."
                 )
             )
             formatted_messages.append(
