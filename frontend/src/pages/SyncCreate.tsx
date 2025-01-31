@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { useSyncSubscription } from "@/hooks/useSyncSubscription";
+import { SyncPipelineVisual } from "@/components/sync/SyncPipelineVisual";
 
 /**
  * This component coordinates all user actions (source selection,
@@ -43,6 +44,12 @@ const Sync = () => {
   // 'updates' returns an array of progress updates
   const updates = useSyncSubscription(syncJobId);
 
+  // Add UI metadata state for the pipeline visual
+  const [pipelineMetadata, setPipelineMetadata] = useState<{
+    source: { name: string; shortName: string };
+    destination: { name: string; shortName: string };
+  } | null>(null);
+
   /**
    * Notify the user if they've just returned from an oauth2 flow.
    */
@@ -67,8 +74,12 @@ const Sync = () => {
    * handleSourceSelect is triggered by SyncDataSourceGrid when the user
    * chooses a data source. We move from step 1 -> 2 to pick vector DB.
    */
-  const handleSourceSelect = async (connectionId: string) => {
+  const handleSourceSelect = async (connectionId: string, metadata: { name: string; shortName: string }) => {
     setSelectedSource({ connectionId });
+    setPipelineMetadata(prev => ({
+      source: metadata,
+      destination: { name: "Native Weaviate", shortName: "weaviate_native" }
+    }));
     setStep(2);
   };
 
@@ -76,8 +87,14 @@ const Sync = () => {
    * handleVectorDBSelected is triggered after the user chooses a vector DB.
    * We move from step 2 -> 3 to confirm the pipeline.
    */
-  const handleVectorDBSelected = async (dbDetails: ConnectionSelection) => {
+  const handleVectorDBSelected = async (dbDetails: ConnectionSelection, metadata: { name: string; shortName: string }) => {
     setSelectedDB(dbDetails);
+    setPipelineMetadata(prev => ({
+      source: prev?.source || { name: "", shortName: "" },
+      destination: dbDetails.isNative 
+        ? { name: "Native Weaviate", shortName: "weaviate_native" }
+        : metadata
+    }));
     setStep(3);
   };
 
@@ -172,6 +189,17 @@ const Sync = () => {
           </div>
         </div>
 
+        {/* Add pipeline visual for steps 3 and 4 */}
+        {pipelineMetadata?.source.name && (step === 3 || step === 4) && (
+          <div className="mb-8">
+            <SyncPipelineVisual
+              sync={{
+                uiMetadata: pipelineMetadata
+              }}
+            />
+          </div>
+        )}
+
         {/* Step 1: Pick data source */}
         {step === 1 && (
           <div className="space-y-6">
@@ -211,7 +239,7 @@ const Sync = () => {
           </div>
         )}
 
-        {/* Step 4: Show progress updates */}
+        {/* Step 4: Show progress updates with pipeline visual */}
         {step === 4 && (
           <div className="space-y-6">
             <SyncProgress syncId={syncId} syncJobId={syncJobId} />

@@ -4,13 +4,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { apiClient } from "@/lib/api";
+import { Label } from "@/components/ui/label";
 import { getAppIconUrl } from "@/lib/utils/icons";
+import { format } from "date-fns";
+import { Database } from "lucide-react";
 
 interface SyncInfo {
   id: string;
   name: string;
   description?: string;
   status?: string;
+  modified_at: string;
   source_connection?: {
     short_name: string;
     name: string;
@@ -19,22 +23,36 @@ interface SyncInfo {
 
 interface CreateChatDialogProps {
   open: boolean;
+  preselectedSyncId?: string;
   onOpenChange: (open: boolean) => void;
   onChatCreated: (newChatId: string) => void;
 }
 
-export function CreateChatDialog({ open, onOpenChange, onChatCreated }: CreateChatDialogProps) {
+export function CreateChatDialog({ 
+  open, 
+  preselectedSyncId,
+  onOpenChange, 
+  onChatCreated 
+}: CreateChatDialogProps) {
   const [syncs, setSyncs] = useState<SyncInfo[]>([]);
   const [syncId, setSyncId] = useState<string>("");
   const [chatName, setChatName] = useState("");
-  const [description, setDescription] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // Reset and load data when dialog opens
   useEffect(() => {
     if (open) {
       void loadSyncs();
+      setChatName("");
     }
   }, [open]);
+
+  // Set preselected sync after syncs are loaded
+  useEffect(() => {
+    if (preselectedSyncId && syncs.length > 0) {
+      setSyncId(preselectedSyncId);
+    }
+  }, [preselectedSyncId, syncs]);
 
   async function loadSyncs() {
     try {
@@ -45,23 +63,26 @@ export function CreateChatDialog({ open, onOpenChange, onChatCreated }: CreateCh
         limit: 100
       });
       
-      console.log("API Response:", resp);
-      
       const syncData = await resp.json();
-      console.log("Processed syncs:", syncData);
       
-      setSyncs(syncData.filter(sync => sync.status === 'active').map((sync: any) => ({
-        id: sync.id,
-        name: sync.name || `Sync ${sync.id}`,
-        description: sync.description,
-        status: sync.status,
-        source_connection: sync.source_connection
-      })));
+      // Filter active syncs and sort by modified_at desc
+      const processedSyncs = syncData
+        .filter((sync: any) => sync.status === 'active')
+        .map((sync: any) => ({
+          id: sync.id,
+          name: sync.name || `Sync ${sync.id}`,
+          description: sync.description,
+          status: sync.status,
+          modified_at: sync.modified_at,
+          source_connection: sync.source_connection
+        }))
+        .sort((a: SyncInfo, b: SyncInfo) => 
+          new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime()
+        );
+
+      setSyncs(processedSyncs);
     } catch (err) {
       console.error("Failed to load syncs: ", err);
-      if (err.response) {
-        console.error("Error response:", err.response.data);
-      }
     } finally {
       setIsLoading(false);
     }
@@ -74,9 +95,8 @@ export function CreateChatDialog({ open, onOpenChange, onChatCreated }: CreateCh
       setIsLoading(true);
       const resp = await apiClient.post("/chat", {
         name: chatName || "New Chat",
-        description,
         sync_id: syncId,
-        model_name: "gpt-4", // You might want to make this configurable
+        model_name: "gpt-4o-mini",
         model_settings: {
           temperature: 0.7,
           max_tokens: 1000,
@@ -94,57 +114,94 @@ export function CreateChatDialog({ open, onOpenChange, onChatCreated }: CreateCh
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[800px]">
+        <DialogHeader className="mb-6">
           <DialogTitle>Create New Chat</DialogTitle>
           <DialogDescription>Select a sync and provide optional details, then create your chat.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Chat Name</label>
+        <div className="space-y-8">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium mb-2.5">Chat Name</Label>
             <Input
-              placeholder="Chat Name"
               value={chatName}
               onChange={(e) => setChatName(e.target.value)}
+              className="h-11"
+              placeholder="New Chat"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Sync</label>
+            <Label className="text-sm font-medium mb-5">Sync</Label>
             <Select onValueChange={setSyncId} value={syncId}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={isLoading ? "Loading syncs..." : "Select a sync..."} />
+              <SelectTrigger className="w-full h-auto py-4 px-4">
+                {syncId ? (
+                  <div className="flex-1 space-y-2">
+                    {syncs.find(s => s.id === syncId) && (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={getAppIconUrl(
+                              syncs.find(s => s.id === syncId)?.source_connection?.short_name || 'default'
+                            )}
+                            className="h-5 w-5"
+                            alt="Source"
+                          />
+                          <span className="font-medium">
+                            {syncs.find(s => s.id === syncId)?.name}
+                          </span>
+                        </div>
+                        <div className="flex gap-4 text-xs text-muted-foreground">
+                          <span className="font-mono">{syncId}</span>
+                          <span>
+                            Modified: {format(
+                              new Date(syncs.find(s => s.id === syncId)?.modified_at || ''), 
+                              'MMM d, yyyy HH:mm'
+                            )}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-left text-muted-foreground">
+                    <p className="font-medium">Select a sync</p>
+                    <p className="text-xs mt-0.5">Choose a data source to chat with</p>
+                  </div>
+                )}
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-[400px]">
                 {syncs.length === 0 && !isLoading && (
-                  <SelectItem value="no-syncs" disabled>
+                  <SelectItem value="no-syncs" disabled className="py-4">
                     No syncs available
                   </SelectItem>
                 )}
                 {syncs.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={getAppIconUrl(s.source_connection?.short_name || 'default')}
-                        className="h-4 w-4"
-                        alt={s.source_connection?.name || 'Source'}
-                      />
-                      <span>{s.name}</span>
+                  <SelectItem key={s.id} value={s.id} className="py-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={getAppIconUrl(s.source_connection?.short_name || 'default')}
+                          className="h-5 w-5"
+                          alt={s.source_connection?.name || 'Source'}
+                        />
+                        <span className="font-medium">{s.name}</span>
+                      </div>
                       {s.description && (
-                        <span className="text-sm text-muted-foreground ml-2">
-                          ({s.description})
-                        </span>
+                        <p className="text-sm text-muted-foreground">
+                          {s.description}
+                        </p>
                       )}
+                      <div className="flex gap-4 text-xs text-muted-foreground">
+                        <span className="font-mono">{s.id}</span>
+                        <span>Modified: {format(new Date(s.modified_at), 'MMM d, yyyy HH:mm')}</span>
+                      </div>
                     </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-
         </div>
-        <div className="mt-4 flex justify-end space-x-2">
+        <div className="mt-8 flex justify-end space-x-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

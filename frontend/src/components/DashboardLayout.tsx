@@ -41,14 +41,14 @@ const DashboardLayout = () => {
       href: "/dashboard",
       icon: LayoutDashboard,
     },
-  ];
-
-  const configureNavigation = [
     {
       name: "Chat",
       href: "/chat",
       icon: MessageSquare,
     },
+  ];
+
+  const configureNavigation = [
     {
       name: "Synchronizations",
       href: "/sync",

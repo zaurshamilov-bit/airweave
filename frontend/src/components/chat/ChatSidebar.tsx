@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { PlusCircle, Search, MessageSquare, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreateChatDialog } from "./CreateChatDialog";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
@@ -28,6 +28,7 @@ export const ChatSidebar = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { chatId } = useParams<{ chatId: string }>();
 
   useEffect(() => {
     void loadChats();
@@ -110,7 +111,8 @@ export const ChatSidebar = () => {
                   variant="ghost"
                   className={cn(
                     "w-full justify-start text-left space-x-2 h-auto py-3",
-                    "hover:bg-accent hover:text-accent-foreground"
+                    "hover:bg-accent hover:text-accent-foreground",
+                    chatId === chat.id && "bg-accent text-accent-foreground"
                   )}
                   onClick={() => navigate(`/chat/${chat.id}`)}
                 >

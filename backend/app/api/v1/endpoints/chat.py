@@ -107,25 +107,12 @@ async def stream_chat_response(
     """Stream an AI response for a chat message."""
 
     async def event_generator():
-        buffer = ""
         try:
             async for chunk in chat_service.generate_streaming_response(
                 db=db, chat_id=chat_id, user=user
             ):
                 if chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
-
-                    # Add to buffer and check for complete words/markdown
-                    buffer += content
-
-                    # Only send if we have a complete word or markdown element
-                    if buffer.endswith((" ", "\n", "|", ".", ",", ":", "-")):
-                        yield f"data: {buffer}\n\n"
-                        buffer = ""
-
-            # Send any remaining content in buffer
-            if buffer:
-                yield f"data: {buffer}\n\n"
+                    yield f"data: {chunk.choices[0].delta.content}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             logger.error(f"Error in stream: {str(e)}")
@@ -134,11 +121,4 @@ async def stream_chat_response(
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-            "Content-Type": "text/event-stream",
-            "Access-Control-Allow-Origin": "*",
-        },
     )

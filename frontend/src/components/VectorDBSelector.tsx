@@ -47,7 +47,7 @@ interface Connection {
 }
 
 interface VectorDBSelectorProps {
-  onComplete: (connectionDetails: { connectionId: string; isNative?: boolean }) => void;
+  onComplete: (details: ConnectionSelection, metadata: { name: string; shortName: string }) => void;
 }
 
 interface DestinationDetails {
@@ -144,7 +144,7 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
     onComplete({
       connectionId: isNative ? "" : connId,
       isNative: isNative
-    });
+    }, { name: "", shortName: "" });
   };
 
   /**
@@ -173,7 +173,7 @@ export const VectorDBSelector = ({ onComplete }: VectorDBSelectorProps) => {
       if (!response.ok) throw new Error("Failed to connect");
 
       const data = await response.json();
-      onComplete({ connectionId: data.id });
+      onComplete({ connectionId: data.id }, { name: selectedDestination.name, shortName: selectedDestination.short_name });
       setShowConfig(false);
     } catch (err) {
       toast({

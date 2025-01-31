@@ -142,7 +142,7 @@ class SyncService:
         except Exception as e:
             logger.error(f"An error occured while handling deletions: {e}")
             async with get_db_context() as db:
-                sync_job_db = await crud.sync_job.get(db, sync_job.id)
+                sync_job_db = await crud.sync_job.get(db, sync_job.id, current_user)
                 sync_job_schema = schemas.SyncJobUpdate.model_validate(sync_job_db)
                 sync_job_schema.status = SyncJobStatus.FAILED
                 sync_job_schema.failed_at = datetime.now()
@@ -155,11 +155,21 @@ class SyncService:
                 return sync
 
         async with get_db_context() as db:
-            sync_job_db = await crud.sync_job.get(db, sync_job.id)
-            sync_job_schema = schemas.SyncJobUpdate.model_validate(sync_job_db)
+            sync_job_db = await crud.sync_job.get(db, sync_job.id, current_user)
+            sync_job_schema = schemas.SyncJobUpdate.model_validate(
+                sync_job_db, from_attributes=True
+            )
             sync_job_schema.status = SyncJobStatus.COMPLETED
             sync_job_schema.completed_at = datetime.now()
-            await crud.sync_job.update(db, sync_job_db, sync_job_schema, current_user)
+            try:
+                await crud.sync_job.update(
+                    db, db_obj=sync_job_db, obj_in=sync_job_schema, current_user=current_user
+                )
+            except Exception as e:
+                logger.error(f"An error occured while updating the sync job: {e}")
+
+            sync_progress_update.is_complete = True
+            await sync_pubsub.publish(sync_job.id, sync_progress_update)
 
             return sync
 

@@ -1,12 +1,10 @@
 import { Header } from "@/components/Header";
-import { Hero } from "@/components/Hero";
 import { Database, Server, Download, Twitter, Github, Star } from "lucide-react";
 
 const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <Hero />
       
       {/* ECL Section */}
       <section className="py-24 bg-gradient-to-b from-background to-primary-100">

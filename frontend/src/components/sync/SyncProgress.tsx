@@ -46,7 +46,12 @@ export const SyncProgress = ({ syncId, syncJobId, onClose }: SyncProgressProps) 
   };
 
   const handleTryChat = () => {
-    navigate("/chat");
+    navigate("/chat", {
+      state: { 
+        showCreateDialog: true,
+        preselectedSyncId: syncId 
+      }
+    });
   };
 
   if (latestUpdate?.is_complete) {

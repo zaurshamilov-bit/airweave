@@ -1,6 +1,5 @@
-import { Route, Routes, Navigate } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
-import { Layout } from "@/components/layout/Layout";
 import Dashboard from "@/pages/Dashboard";
 import DashboardLayout from "@/components/DashboardLayout";
 import Settings from "@/pages/Settings";
@@ -14,39 +13,18 @@ import ViewEditWhiteLabelSync from "@/pages/ViewEditWhiteLabelSync";
 import Destinations from "@/pages/Destinations";
 import Profile from "@/pages/Profile";
 import Chat from "@/pages/Chat";
-import Index from "@/pages/Index";
 import Sources from "@/pages/Sources";
 import { AuthCallback } from "./pages/AuthCallback";
 import ViewEditWhiteLabel from "./pages/ViewEditWhiteLabel";
-import Login from "./pages/Login";
-
-// Simple auth check for demo purposes
-const RequireAuth = ({ children }: { children: JSX.Element }) => {
-  const isAuthenticated = !!localStorage.getItem("user");
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-  return children;
-};
 
 function App() {
   return (
     <>
       <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Index />} />
-          <Route path="login" element={<Login />} />
-          <Route path="*" element={<NotFound />} />
-        </Route>
-
-        <Route element={
-          <RequireAuth>
-            <DashboardLayout />
-          </RequireAuth>
-        }>
+        <Route element={<DashboardLayout />}>
+          <Route path="/" element={<Dashboard />} />
           <Route path="/dashboard" element={<Dashboard />} />
           
-          {/* Configure section routes */}
           <Route path="/sync">
             <Route index element={<SyncTableView />} />
             <Route path="create" element={<SyncCreate />} />
@@ -63,10 +41,11 @@ function App() {
             <Route path=":id" element={<ViewEditWhiteLabel />} />
           </Route>
 
-          {/* Settings and Profile routes */}
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/chat/:chatId?" element={<Chat />} />
+          
+          <Route path="*" element={<NotFound />} />
         </Route>
 
         <Route path="/auth/callback/:short_name" element={<AuthCallback />} />
