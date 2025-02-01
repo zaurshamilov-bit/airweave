@@ -110,7 +110,9 @@ current_file_path = Path(__file__)
 parent_directory = current_file_path.parent
 environment = settings.DTAP_ENVIRONMENT
 if environment == "local":
-    env = "dev"
-yaml_file_path = parent_directory / f"yaml/{env}.integrations.yaml"
+    env_prefix = "dev"
+else:
+    env_prefix = environment
+yaml_file_path = parent_directory / f"yaml/{env_prefix}.integrations.yaml"
 
 integration_settings = IntegrationSettings(yaml_file_path)
