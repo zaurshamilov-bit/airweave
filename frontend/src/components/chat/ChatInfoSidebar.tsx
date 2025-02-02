@@ -41,26 +41,41 @@ const badgeVariants = {
 
 export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarProps) {
   const [modelSettings, setModelSettings] = useState<ModelSettings>(chatInfo.model_settings);
+  const [modelName, setModelName] = useState<string>(chatInfo.model_name);
   const { toast } = useToast();
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setModelSettings(chatInfo.model_settings);
-  }, [chatInfo.model_settings]);
+    setModelName(chatInfo.model_name);
+  }, [chatInfo.model_settings, chatInfo.model_name]);
+
+  const handleModelChange = async (newModelName: string) => {
+    setModelName(newModelName);
+    try {
+      // Update model_name at root level
+      await onUpdateSettings({ model_name: newModelName });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update model",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleSettingChange = (key: keyof ModelSettings, value: number | string) => {
     const newSettings = { ...modelSettings, [key]: value };
     setModelSettings(newSettings);
     
-    // Clear existing timeout
     if (saveTimeout) {
       clearTimeout(saveTimeout);
     }
     
-    // Set new timeout for auto-save
     const timeout = setTimeout(async () => {
       try {
-        await onUpdateSettings(newSettings);
+        // Update model_settings separately
+        await onUpdateSettings({ model_settings: newSettings });
       } catch (error) {
         toast({
           title: "Error",
@@ -71,12 +86,6 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
     }, 500);
     
     setSaveTimeout(timeout);
-  };
-
-  const handleModelChange = (modelName: string) => {
-    const newSettings = { ...modelSettings, model_name: modelName };
-    setModelSettings(newSettings);
-    void onUpdateSettings(newSettings);
   };
 
   return (
@@ -230,7 +239,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Model</Label>
                   <Select
-                    value={modelSettings.model_name}
+                    value={modelName}
                     onValueChange={handleModelChange}
                   >
                     <SelectTrigger className="w-full">

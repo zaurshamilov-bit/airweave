@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class ChatService:
     """Service for handling chat interactions with AI."""
 
-    DEFAULT_MODEL = "gpt-4"
+    DEFAULT_MODEL = "gpt-4o"
     DEFAULT_MODEL_SETTINGS = {
         "temperature": 0.7,
         "max_tokens": 1000,
