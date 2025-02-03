@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "backend/app/**/*.py" # API endpoint changes
+      - "backend/app/api/**/*.py" # API endpoint changes
       - "fern/**" # Fern config changes
       - ".github/workflows/fern-docs.yml" # Workflow file changes
 
@@ -63,7 +63,7 @@ jobs:
           echo "🌿 Updating Fern OpenAPI definition..."
           cp fern/openapi/openapi.json fern/definition/openapi.json || echo "OpenAPI spec not found"
 
-      - name: Generate Fern docs
+      - name: Generate SDKs
         env:
           FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -72,6 +72,11 @@ jobs:
         run: |
           cd fern
           fern generate --group public
+
+      - name: Generate Docs
+        run: |
+          cd fern
+          fern generate --docs
 
       - name: Check Fern docs status
         run: |
