@@ -2,9 +2,11 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dependencies
+# Copy package files
 COPY package*.json ./
-RUN npm ci
+
+# Install dependencies
+RUN npm install
 
 # Copy application code
 COPY . .

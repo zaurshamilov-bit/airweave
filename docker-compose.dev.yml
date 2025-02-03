@@ -39,7 +39,7 @@ services:
       WORKERS_PER_NODE: 1
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
-      interval: 30s
+      interval: 5s
       timeout: 10s
       retries: 3
     restart: on-failure

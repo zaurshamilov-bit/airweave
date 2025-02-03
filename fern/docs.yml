@@ -12,7 +12,7 @@ layout:
 default-language: python
 
 navigation:
-  - section: Get Started
+  - section: Docs
     contents:
       - page: Welcome
         path: docs/pages/welcome.mdx
@@ -20,6 +20,16 @@ navigation:
         path: docs/pages/concepts.mdx
       - page: Setup
         path: docs/pages/setup.mdx
+
+      - page: SDKs
+        path: docs/pages/sdks.mdx
+
+      - page: Extending Connectors
+        path: docs/pages/extending-connectors.mdx
+
+      - page: White Labeling
+        path: docs/pages/white-labeling.mdx
+
   - api: API Reference
     snippets:
       python: airweave-sdk
@@ -28,10 +38,10 @@ navigation:
 navbar-links:
   - type: secondary
     text: Fork this repo
-    url: https://github.com/fern-api/docs-starter
+    url: https://github.com/airweave-ai/airweave/fork
   - type: primary
     text: Get a demo
-    url: https://buildwithfern.com/contact?utm_campaign=demo&utm_medium=airweave&utm_source=navbar
+    url: https://cal.com/lennert-airweave/30min
 
 colors:
   accentPrimary:
@@ -41,8 +51,8 @@ colors:
 logo:
   dark: docs/assets/logo-dark.png
   light: docs/assets/logo-light.png
-  height: 20
-  href: https://buildwithfern.com/?utm_campaign=demo&utm_medium=airweave&utm_source=logo
+  height: 32
+  href: https://docs.airweave.ai/
 
 favicon: docs/assets/favicon.ico
 

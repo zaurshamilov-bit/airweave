@@ -1,0 +1,299 @@
+---
+title: "Extending Connectors"
+description: "Learn how to create custom source and destination connectors"
+---
+
+Airweave's connector system is designed to be extensible, allowing you to create custom source and destination connectors for your specific needs.
+
+## Source Connectors
+
+Source connectors define how data is extracted from various sources and converted into chunks for processing. 
+
+[Here](https://github.com/airweave-ai/airweave/blob/main/backend/app/platform/sources/slack.py) is an example of the Slack connector implementation.
+
+<CodeBlock title="Slack source connector">
+```python
+@source("Slack", "slack", AuthType.oauth2)
+class SlackSource(BaseSource):
+    """Slack source implementation.
+
+    This connector retrieves data from Slack such as Channels, Users, and Messages,
+    then yields them as chunks using their respective Slack chunk schemas.
+    """
+
+    @classmethod
+    async def create(cls, access_token: str) -> "SlackSource":
+        """Create a new Slack source instance."""
+        instance = cls()
+        instance.access_token = access_token
+        return instance
+```
+</CodeBlock>
+
+
+
+### Creating a Source Connector
+After you've cloned or forked the Airweave repository, you can create a new source connector by creating a new file in the [app/platform/sources](https://github.com/airweave-ai/airweave/tree/main/backend/app/platform/sources) directory.
+
+To get a 3rd party connector working, you need to implement the following:
+
+- Source class that extends `BaseSource` and is decorated with `@source`.
+- `generate_chunks`: This method should yield Chunk objects. These can be anything from a JSON object to a PDF document.
+- `create`: This method should return a SourceConnector instance. 
+- Accompanying `Chunk` schemas. You can find the Slack example [here](https://github.com/airweave-ai/airweave/tree/main/backend/app/platform/chunks/slack.py). This helps Airweave understand how to process the data, and standardize it across your syncs.
+
+<Note icon="fa-solid fa-lightbulb">
+If you're using OAuth2 and you would like Airweave to handle the OAuth2 flow for you, you need to implement the `create` so that it takes in an access token and add your integration to the `dev.integrations.yaml` file. We're working on making this easier in the near future, for now we recommend [reaching out to us](mailto:support@airweave.ai).
+</Note>
+
+<CodeBlock title="Custom source connector implementation">
+```python
+
+from app.platform.chunks._base import BaseChunk
+from app.platform.decorators import source
+from app.platform.sources._base import BaseSource
+
+class CustomSource(BaseSource):
+    """Custom source implementation.
+    
+    This connector fetches data from a custom API and yields it as chunks.
+    """
+
+    @classmethod
+    async def create(cls) -> "CustomSource":
+        """Create a new CustomSourceConnector instance."""
+        # No access token is needed for this source, so we just return an instance of the class.
+        return cls()
+
+
+    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
+        """Generate chunks from your data source.
+        
+        This method should yield Chunk objects.
+        """
+        # Your custom data fetching logic here
+        data = await 
+
+        for item in data:
+            yield Chunk(
+                content=item.content,
+                metadata={
+                    "source": self.config.name,
+                    "id": item.id,
+                    "type": item.type,
+                    # Add any other relevant metadata
+                }
+            )
+
+```
+</CodeBlock>
+
+
+
+
+
+### Source Connector Features
+
+Your source connector can implement additional features:
+
+```python
+class CustomSourceConnector(SourceConnector):
+    async def validate_config(self):
+        """
+        Validate the connector configuration
+        """
+        if not self.config.api_key:
+            raise ValueError("API key is required")
+
+    async def test_connection(self):
+        """
+        Test the connection to your data source
+        """
+        try:
+            await self.fetch_data(limit=1)
+            return True
+        except Exception as e:
+            raise ConnectionError(f"Failed to connect: {str(e)}")
+
+    async def get_schema(self):
+        """
+        Return the schema of your data source
+        """
+        return {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string"},
+                "metadata": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "type": {"type": "string"}
+                    }
+                }
+            }
+        }
+```
+
+## Destination Connectors
+
+Destination connectors handle how processed chunks are stored in your target system.
+
+### Creating a Destination Connector
+
+```python
+from airweave.connectors import DestinationConnector
+from airweave.types import Chunk, DestinationConfig
+
+class CustomDestinationConnector(DestinationConnector):
+    def __init__(self, config: DestinationConfig):
+        super().__init__(config)
+        self.config = config
+
+    async def store_chunks(self, chunks: list[Chunk]):
+        """
+        Store chunks in your destination system
+        """
+        # Your custom storage logic here
+        for chunk in chunks:
+            await self.store_chunk(chunk)
+
+    async def store_chunk(self, chunk: Chunk):
+        """
+        Store a single chunk
+        """
+        # Example implementation
+        pass
+```
+
+### Destination Connector Features
+
+Implement additional features for your destination connector:
+
+```python
+class CustomDestinationConnector(DestinationConnector):
+    async def initialize(self):
+        """
+        Initialize your destination system
+        """
+        # Example: Create necessary indexes
+        pass
+
+    async def cleanup(self):
+        """
+        Clean up resources
+        """
+        # Example: Close connections
+        pass
+
+    async def query(self, query: str, filter: dict = None):
+        """
+        Implement custom query logic
+        """
+        # Your custom query implementation
+        pass
+```
+
+## Sources
+
+The `sources` directory contains implementations for different data sources:
+
+```
+sources/
+├── api/
+│   ├── rest.py
+│   └── graphql.py
+├── database/
+│   ├── sql.py
+│   └── nosql.py
+├── filesystem/
+│   └── local.py
+└── web/
+    └── crawler.py
+```
+
+### Example Source Implementation
+
+```python
+# sources/api/rest.py
+from airweave.connectors import SourceConnector
+from airweave.types import Chunk
+
+class RestApiSource(SourceConnector):
+    async def generate_chunks(self):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(self.config.url) as response:
+                data = await response.json()
+
+                for item in data:
+                    yield Chunk(
+                        content=item["content"],
+                        metadata={
+                            "source": "rest-api",
+                            "id": item["id"]
+                        }
+                    )
+```
+
+## Destinations
+
+The `destinations` directory contains implementations for different storage systems:
+
+```
+destinations/
+├── vector_stores/
+│   ├── weaviate.py
+│   └── pinecone.py
+├── search/
+│   └── elasticsearch.py
+└── custom/
+    └── your_implementation.py
+```
+
+### Example Destination Implementation
+
+```python
+# destinations/vector_stores/custom_store.py
+from airweave.connectors import DestinationConnector
+
+class CustomVectorStore(DestinationConnector):
+    async def store_chunks(self, chunks):
+        vectors = await self.get_embeddings(chunks)
+
+        async with self.client as client:
+            for chunk, vector in zip(chunks, vectors):
+                await client.upsert(
+                    vector=vector,
+                    metadata=chunk.metadata
+                )
+```
+
+## Best Practices
+
+1. **Error Handling**
+
+   - Implement robust error handling
+   - Provide clear error messages
+   - Use appropriate exception types
+
+2. **Configuration**
+
+   - Validate configuration early
+   - Use type hints for configuration
+   - Document required configuration
+
+3. **Performance**
+
+   - Implement batching where appropriate
+   - Use async/await for I/O operations
+   - Consider rate limiting
+
+4. **Testing**
+   - Write unit tests for your connector
+   - Implement integration tests
+   - Test edge cases and error conditions
+
+## Next Steps
+
+- [Explore the SDKs](/sdks)
+- [Learn about white labeling](/architecture/white-labeling)
+- [View example implementations](https://github.com/airweave-ai/airweave/tree/main/examples)

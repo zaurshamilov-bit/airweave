@@ -15,5 +15,21 @@
         "source.fixAll.eslint": "always",
         "source.formatAll.ruff": "always",
     },
-    "editor.formatOnSave": true
+    "editor.formatOnSave": true,
+    "ruff.format.args": ["--extend-exclude=fern/**"],
+    "[mdx]": {
+        "editor.formatOnSave": false,
+        "editor.formatOnPaste": false,
+        "editor.formatOnType": false,
+        "editor.defaultFormatter": null
+    },
+    "[markdown]": {
+        "editor.formatOnSave": false,
+        "editor.formatOnPaste": false,
+        "editor.formatOnType": false,
+        "editor.defaultFormatter": null
+    },
+    "files.watcherExclude": {
+        "**/fern/**": true
+    }
 }
