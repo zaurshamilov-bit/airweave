@@ -30,7 +30,7 @@ jobs:
 
       - name: Generate OpenAPI spec
         run: poetry run python scripts/generate_openapi.py
-        working-directory: ./backend
+        working-directory: ./.github
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
