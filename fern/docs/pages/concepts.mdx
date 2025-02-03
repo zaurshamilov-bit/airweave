@@ -1,0 +1,91 @@
+---
+title: Key Concepts
+subtitle: Learn about the core concepts and architecture of Airweave
+description: Here you'll find information about the core concepts and architecture of Airweave
+slug: concepts
+---
+
+
+## What is Airweave?
+
+Airweave is an open-source tool that makes **any app searchable** for your agent by syncing your users' app data, APIs, databases and websites into your vector database with minimal configuration.
+
+## Architecture Overview
+
+Airweave consists of several key components that work together:
+
+### Sources
+Sources are the data providers that Airweave can sync from. These include:
+- APIs
+- Databases
+- File systems
+- SaaS applications
+- Websites
+
+### Chunk Generators
+Each source defines an async `generate_chunks()` function that yields data in a consistent format. This allows Airweave to:
+- Break down data into processable pieces
+- Maintain consistency across different data sources
+- Enable custom chunk generation for specific needs
+
+### Vector Database Integration
+Airweave supports multiple vector databases including:
+- Chroma
+- Milvus
+- Pinecone
+- Qdrant
+- Weaviate
+
+### Sync Management
+Data synchronization is handled through:
+- Scheduled syncs
+- On-demand sync jobs
+- Version control and hashing for change detection
+- Async processing for large-scale operations
+
+## Multi-Tenant Architecture
+
+Airweave provides white-labeled multi-tenant support:
+- OAuth2-based platform for secure data syncing
+- Privacy and security maintained across tenants
+- Ideal for SaaS builders and enterprise applications
+
+## Data Flow
+
+1. **Source Connection**: Connect to data sources via OAuth or API keys
+2. **Chunk Generation**: Data is processed into manageable chunks
+3. **Vector Storage**: Chunks are embedded and stored in your vector database
+4. **Retrieval**: Access data via your agent or search mechanism
+
+## Key Features
+
+### No-Code First
+- GUI-based configuration
+- Simple click-through setup
+- Extensible for custom needs
+
+### Automated Sync
+- Schedule-based synchronization
+- On-demand sync capabilities
+- Change detection via versioning
+
+### Scalability
+- Local development with Docker Compose
+- Production deployment options
+- Async-first architecture
+
+
+## Security & Privacy
+
+Airweave maintains security through:
+- OAuth2 authentication
+- Secure token management
+- Data isolation between tenants
+- Version control and audit trails
+
+## Next Steps
+
+Now that you understand the core concepts, you can:
+- [Get started](/setup) with installation
+- [Configure your first source](/sources)
+- [Set up synchronization](/sync)

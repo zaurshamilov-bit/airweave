@@ -1,0 +1,73 @@
+name: Fern Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/app/**/*.py" # API endpoint changes
+      - "fern/**" # Fern config changes
+      - ".github/workflows/fern-docs.yml" # Workflow file changes
+
+jobs:
+  generate-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+
+      - name: Install Python dependencies
+        working-directory: ./backend
+        run: poetry install
+
+      - name: Generate OpenAPI spec
+        run: poetry run python scripts/generate_openapi.py
+        working-directory: ./backend
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      - name: Install Fern
+        run: npm install -g fern-api
+
+      - name: Initialize Fern with OpenAPI
+        run: |
+          # Only initialize if fern folder doesn't exist
+          if [ ! -d "fern" ]; then
+            fern init --openapi fern/openapi/openapi.json
+          fi
+
+      - name: Update Fern OpenAPI definition
+        run: |
+          mkdir -p fern/definition
+          echo "🌿 Updating Fern OpenAPI definition..."
+          cp fern/openapi/openapi.json fern/definition/openapi.json || echo "OpenAPI spec not found"
+
+      - name: Generate Fern docs
+        env:
+          FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          cd fern
+          fern generate --group public
+
+      - name: Check Fern docs status
+        run: |
+          if [ $? -eq 0 ]; then
+            echo "✅ Fern docs generated successfully"
+          else
+            echo "❌ Fern docs generation failed"
+            exit 1
+          fi

@@ -1,0 +1,27 @@
+api:
+  path: ./definition/openapi.json
+
+groups:
+  public:
+    generators:
+      - name: fernapi/fern-python-sdk
+        version: 4.3.10
+        output:
+          location: pypi
+          package-name: airweave-sdk
+          token: ${PYPI_TOKEN}
+        github:
+          repository: airweave-ai/python-sdk
+        config:
+          client_class_name: AirweaveSDK
+
+      - name: fernapi/fern-typescript-node-sdk
+        version: 0.45.2
+        output:
+          location: npm
+          package-name: "@airweave/sdk"
+          token: ${NPM_TOKEN}
+        github:
+          repository: airweave-ai/typescript-sdk
+        config:
+          namespaceExport: AirweaveSDK
