@@ -1,0 +1,76 @@
+---
+title: "White Labeling"
+description: "Implement white-labeled multi-tenant 3rd party integrations"
+subtitle: "Give customers a simple way to hand off their data to you"
+slug: white-labeling
+---
+
+
+Airweave's white labeling feature enables you to create multi-tenant integrations that maintain data isolation and security while providing a seamless experience for your users.
+
+This allows you to give customers a simple way to hand off their data to you.
+
+## Overview
+
+White labeling in Airweave allows you to:
+
+- Manage OAuth2 flows for multiple tenants
+- Maintain data isolation between tenants
+
+## Setting Up White Label Integration
+
+### 1. Create a White Label Configuration
+
+```typescript
+import { AirweaveClient } from "@airweave/sdk";
+
+const client = new AirweaveClient({
+  apiKey: "your-api-key",
+});
+
+const integration = await client.whiteLabel.create({
+  name: "Custom Integration",
+  source: "slack",
+  callbackUrl: "https://your-app.com/oauth/callback",
+  clientId: "your-oauth-client-id", // Retrieved from the Slack app
+  clientSecret: "your-oauth-client-secret", // Retrieved from the Slack app
+});
+```
+
+### 2. Implement OAuth2 Flow
+
+```typescript
+// Handle the initial OAuth request
+app.get("/connect/:source", async (req, res) => {
+  const { source } = req.params;
+  const { organizationId } = req.query;
+
+  const authUrl = await client.whiteLabel.getAuthUrl({
+    integrationId: integration.id,
+    state: organizationId, // Pass any state you need
+    scope: ["read", "write"], // Required OAuth scopes
+  });
+
+  res.redirect(authUrl);
+});
+
+// Handle the OAuth callback
+app.get("/oauth/callback", async (req, res) => {
+  const { code, state } = req.query;
+
+  try {
+    await client.whiteLabel.exchangeCode({
+      integrationId: integration.id,
+      code,
+      metadata: {
+        organizationId: state,
+        userEmail: req.user.email,
+      },
+    });
+
+    res.redirect("/success");
+  } catch (error) {
+    res.redirect("/error");
+  }
+});
+```

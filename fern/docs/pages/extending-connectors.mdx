@@ -43,48 +43,61 @@ To get a 3rd party connector working, you need to implement the following:
 - Accompanying `Chunk` schemas. You can find the Slack example [here](https://github.com/airweave-ai/airweave/tree/main/backend/app/platform/chunks/slack.py). This helps Airweave understand how to process the data, and standardize it across your syncs.
 
 <Note icon="fa-solid fa-lightbulb">
-If you're using OAuth2 and you would like Airweave to handle the OAuth2 flow for you, you need to implement the `create` so that it takes in an access token and add your integration to the `dev.integrations.yaml` file. We're working on making this easier in the near future, for now we recommend [reaching out to us](mailto:support@airweave.ai).
+If you're using OAuth2 and you would like Airweave to handle the OAuth2 flow for you, you need to implement the `create` so that it takes in an access token and add your integration to the `dev.integrations.yaml` file.  We're working on making this easier in the near future, for now we recommend [reaching out to us!](mailto:support@airweave.ai)
 </Note>
+
+
+Here's an example of a custom source connector implementation. In this example, we're fetching data from the Studio Ghibli API and yielding it as chunks. These chunks are then used to process into your destinations.
 
 <CodeBlock title="Custom source connector implementation">
 ```python
+from typing import AsyncGenerator
+import httpx
 
 from app.platform.chunks._base import BaseChunk
 from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
+from app.platform.auth.schemas import AuthType
 
-class CustomSource(BaseSource):
-    """Custom source implementation.
+@source("Studio Ghibli", "ghibli", AuthType.none)
+class GhibliSource(BaseSource):
+    """Studio Ghibli source implementation.
     
-    This connector fetches data from a custom API and yields it as chunks.
+    This connector fetches film data from the Studio Ghibli API and yields it as chunks.
+    Each chunk represents a Ghibli film with its details.
     """
 
+    BASE_URL = "https://ghibli.rest/films"
+
     @classmethod
-    async def create(cls) -> "CustomSource":
-        """Create a new CustomSourceConnector instance."""
-        # No access token is needed for this source, so we just return an instance of the class.
+    async def create(cls) -> "GhibliSource":
+        """Create a new Ghibli source instance."""
         return cls()
 
-
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate chunks from your data source.
+        """Generate chunks from the Ghibli API.
         
-        This method should yield Chunk objects.
+        Each chunk contains information about a Studio Ghibli film.
         """
-        # Your custom data fetching logic here
-        data = await 
+        async with httpx.AsyncClient() as client:
+            response = await client.get(self.BASE_URL)
+            response.raise_for_status()
+            films = response.json()
 
-        for item in data:
-            yield Chunk(
-                content=item.content,
-                metadata={
-                    "source": self.config.name,
-                    "id": item.id,
-                    "type": item.type,
-                    # Add any other relevant metadata
-                }
-            )
-
+            for film in films:
+                yield BaseChunk(
+                    source_name="ghibli",
+                    entity_id=film["id"],
+                    content=film["description"],
+                    metadata={
+                        "title": film["title"],
+                        "original_title": film["original_title"],
+                        "director": film["director"],
+                        "release_date": film["release_date"],
+                        "running_time": film["running_time"],
+                        "rt_score": film["rt_score"]
+                    }
+                )
 ```
 </CodeBlock>
 

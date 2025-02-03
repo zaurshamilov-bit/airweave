@@ -26,7 +26,7 @@ jobs:
 
       - name: Install Python dependencies
         working-directory: ./backend
-        run: poetry install
+        run: poetry install --no-root
 
       - name: Generate OpenAPI spec
         run: poetry run python scripts/generate_openapi.py
