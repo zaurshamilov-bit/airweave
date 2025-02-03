@@ -31,6 +31,16 @@ jobs:
       - name: Generate OpenAPI spec
         run: poetry run python ../.github/scripts/generate_openapi.py
         working-directory: ./backend
+        # Set mock environment variables for documentation generation
+        env:
+          FIRST_SUPERUSER: "docs@example.com"
+          FIRST_SUPERUSER_PASSWORD: "docs-password"
+          ENCRYPTION_KEY: "docs-encryption-key"
+          POSTGRES_SERVER: "localhost"
+          POSTGRES_USER: "postgres"
+          POSTGRES_PASSWORD: "postgres"
+          OPENAI_API_KEY: "sk-docs"
+          LOCAL_DEVELOPMENT: "true"
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
