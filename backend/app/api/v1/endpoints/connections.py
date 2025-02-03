@@ -110,7 +110,39 @@ async def connect_integration(
                 detail=f"{integration_type} with short_name '{short_name}' does not exist",
             )
 
-        if integration.auth_type != AuthType.config_class:
+        # For AuthType.none sources, we don't need integration credentials
+        if integration.auth_type == AuthType.none:
+            # Create connection directly without integration credential
+            connection_data = {
+                "name": name if name else f"Connection to {integration.name}",
+                "integration_type": integration_type,
+                "status": ConnectionStatus.ACTIVE,
+                "integration_credential_id": None,  # No credential needed
+                "short_name": short_name,
+            }
+
+            connection_in = ConnectionCreate(**connection_data)
+            connection = await crud.connection.create(
+                uow.session, obj_in=connection_in, current_user=user, uow=uow
+            )
+
+            await uow.commit()
+            await uow.session.refresh(connection)
+
+            return connection
+
+        # For config_class auth type, validate config fields
+        elif integration.auth_type == AuthType.config_class:
+            if not integration.auth_config_class:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Integration {integration.name} does not have an auth config class",
+                )
+            # Create and validate auth config
+            auth_config_class = resource_locator.get_auth_config(integration.auth_config_class)
+            auth_config = auth_config_class(**config_fields)
+            encrypted_creds = credentials.encrypt(auth_config.model_dump())
+        else:
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -119,15 +151,7 @@ async def connect_integration(
                 ),
             )
 
-        # Create and validate auth config if exists
-        if integration.auth_config_class:
-            auth_config_class = resource_locator.get_auth_config(integration.auth_config_class)
-            auth_config = auth_config_class(**config_fields)
-            encrypted_creds = credentials.encrypt(auth_config.model_dump())
-        else:
-            encrypted_creds = credentials.encrypt({})
-
-        # Create integration credential
+        # Create integration credential for authenticated sources
         integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
             name=f"{integration.name} - {user.email}",
             description=f"Credentials for {integration.name} - {user.email}",

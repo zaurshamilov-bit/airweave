@@ -31,13 +31,13 @@ class Connection(OrganizationBase, UserMixin):
     )
 
     # Foreign keys
-    integration_credential_id: Mapped[UUID] = mapped_column(
-        ForeignKey("integration_credential.id"), nullable=False
+    integration_credential_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("integration_credential.id"), nullable=True
     )
     short_name: Mapped[str] = mapped_column(String, nullable=False)
 
     # Relationships
-    integration_credential: Mapped["IntegrationCredential"] = relationship(
+    integration_credential: Mapped[Optional["IntegrationCredential"]] = relationship(
         "IntegrationCredential", back_populates="connections"
     )
     source: Mapped[Optional["Source"]] = relationship(

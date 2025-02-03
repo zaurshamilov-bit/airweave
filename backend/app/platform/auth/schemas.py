@@ -18,6 +18,7 @@ class AuthType(str, Enum):
         api_key: API key authentication.
         native_functionality: Native functionality.
         url_and_api_key: URL and API key authentication.
+        none: No authentication.
     """
 
     oauth2 = "oauth2"
@@ -27,6 +28,7 @@ class AuthType(str, Enum):
     api_key = "api_key"
     native_functionality = "native_functionality"
     config_class = "config_class"
+    none = "none"
 
 
 class OAuth2TokenResponse(BaseModel):

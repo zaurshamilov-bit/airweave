@@ -13,7 +13,7 @@ class ConnectionBase(BaseModel):
 
     name: str
     integration_type: IntegrationType
-    integration_credential_id: UUID
+    integration_credential_id: Optional[UUID] = None
     status: ConnectionStatus
     short_name: str
 

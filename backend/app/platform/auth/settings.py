@@ -62,6 +62,7 @@ class IntegrationSettings:
             AuthType.oauth2_with_refresh_rotating: OAuth2WithRefreshRotatingSettings,
             AuthType.native_functionality: NativeFunctionalityAuthSettings,
             AuthType.config_class: ConfigClassAuthSettings,
+            AuthType.none: None,
         }
         model = mapping.get(auth_type)
         config["integration_short_name"] = name

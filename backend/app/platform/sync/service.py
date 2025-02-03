@@ -140,7 +140,7 @@ class SyncService:
                     )
 
         except Exception as e:
-            logger.error(f"An error occured while handling deletions: {e}")
+            logger.error(f"An error occured while syncing: {e}")
             async with get_db_context() as db:
                 sync_job_db = await crud.sync_job.get(db, sync_job.id, current_user)
                 sync_job_schema = schemas.SyncJobUpdate.model_validate(sync_job_db)
@@ -206,32 +206,42 @@ class SyncService:
         if not source_model:
             raise NotFoundException("Source not found")
 
-        source_integration_credential = await crud.integration_credential.get(
-            db, source_connection.integration_credential_id, current_user
-        )
-
-        if not source_integration_credential:
-            raise NotFoundException("Source integration credential not found")
-
         source_class = resource_locator.get_source(source_model)
-        decrypted_credential = credentials.decrypt(
-            source_integration_credential.encrypted_credentials
-        )
 
-        if (
-            source_model.auth_type == AuthType.oauth2_with_refresh
-            or source_model.auth_type == AuthType.oauth2_with_refresh_rotating
-        ):
-            oauth2_response = await oauth2_service.refresh_access_token(
-                db, source_model.short_name, current_user, source_connection.id
-            )
-            access_token = oauth2_response.access_token
-            source_instance = await source_class.create(access_token)
+        # Handle authentication based on auth_type
+        if source_model.auth_type == AuthType.none:
+            # For sources that don't require authentication
+            source_instance = await source_class.create()
         else:
-            # in case of API key auth / basic auth / etc.
-            auth_config = resource_locator.get_auth_config(source_model.auth_config_class)
-            source_credentials = auth_config.model_validate(decrypted_credential)
-            source_instance = await source_class.create(source_credentials)
+            # For authenticated sources, get and validate credentials
+            if not source_connection.integration_credential_id:
+                raise NotFoundException("Source connection has no integration credential")
+
+            source_integration_credential = await crud.integration_credential.get(
+                db, source_connection.integration_credential_id, current_user
+            )
+
+            if not source_integration_credential:
+                raise NotFoundException("Source integration credential not found")
+
+            decrypted_credential = credentials.decrypt(
+                source_integration_credential.encrypted_credentials
+            )
+
+            if (
+                source_model.auth_type == AuthType.oauth2_with_refresh
+                or source_model.auth_type == AuthType.oauth2_with_refresh_rotating
+            ):
+                oauth2_response = await oauth2_service.refresh_access_token(
+                    db, source_model.short_name, current_user, source_connection.id
+                )
+                access_token = oauth2_response.access_token
+                source_instance = await source_class.create(access_token)
+            else:
+                # in case of API key auth / basic auth / etc.
+                auth_config = resource_locator.get_auth_config(source_model.auth_config_class)
+                source_credentials = auth_config.model_validate(decrypted_credential)
+                source_instance = await source_class.create(source_credentials)
 
         if not sync.embedding_model_connection_id:
             embedding_model = LocalText2Vec()
