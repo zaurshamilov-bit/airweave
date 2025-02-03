@@ -29,8 +29,8 @@ jobs:
         run: poetry install --no-root
 
       - name: Generate OpenAPI spec
-        run: poetry run python scripts/generate_openapi.py
-        working-directory: ./.github
+        run: poetry run python ../.github/scripts/generate_openapi.py
+        working-directory: ./backend
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
