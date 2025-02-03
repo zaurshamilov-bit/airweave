@@ -77,6 +77,8 @@ jobs:
         run: |
           cd fern
           fern generate --docs
+        env:
+          FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
 
       - name: Check Fern docs status
         run: |
