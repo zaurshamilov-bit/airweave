@@ -40,7 +40,7 @@ const integration = await client.whiteLabel.create({
 ### 2. Implement OAuth2 Flow
 
 ```typescript
-// Handle the initial OAuth request
+// Handle the initial OAuth request from your app
 app.get("/connect/:source", async (req, res) => {
   const { source } = req.params;
   const { organizationId } = req.query;
@@ -54,7 +54,7 @@ app.get("/connect/:source", async (req, res) => {
   res.redirect(authUrl);
 });
 
-// Handle the OAuth callback
+// Handle the OAuth callback from your app
 app.get("/oauth/callback", async (req, res) => {
   const { code, state } = req.query;
 
@@ -74,3 +74,49 @@ app.get("/oauth/callback", async (req, res) => {
   }
 });
 ```
+
+## How It Works
+
+### Token Management
+
+After the OAuth2 flow completes, Airweave:
+
+1. **Securely stores tokens**:
+   - Access tokens for API authentication
+   - Refresh tokens for automatic token renewal
+   - Links tokens to your provided tenant metadata
+
+2. **Handles token lifecycle**:
+   - Automatically refreshes expired access tokens
+   - Maintains uninterrupted synchronization
+   - Manages API authentication behind the scenes
+
+### Data Synchronization
+
+Once authentication is complete, Airweave:
+
+1. **Processes data efficiently**:
+   - Runs incremental syncs to fetch only new/updated data
+   - Chunks data for optimal processing
+   - Applies versioning and computes hashes for deduplication
+
+2. **Maintains tenant isolation**:
+   - Uses your provided metadata (organization ID, user details) to isolate data
+   - Ensures secure multi-tenant operations
+   - Enables tenant-specific data enrichment
+
+## Key Features
+
+- **Simplified OAuth2 Integration**: Handles OAuth2 complexities including token management
+- **Secure Multi-Tenant Isolation**: Isolates data using your provided metadata
+- **Automatic Token Management**: Prevents downtime with automatic token refresh
+- **Customizable Data Sync**: Control sources, destinations, and metadata enrichment
+- **Scalable Processing**: Handles large data volumes through asynchronous processing
+
+## Example Workflow
+
+1. Customer clicks "Connect to Service" in your app
+2. Airweave handles OAuth2 authorization
+3. Tokens are securely stored and linked to tenant
+4. Data sync begins automatically
+5. Your app queries data using tenant metadata

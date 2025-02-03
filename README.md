@@ -220,7 +220,3 @@ Airweave is released under an open-core model. The community edition is licensed
 - **Twitter**: Follow @airweave_dev for updates.
 
 That's it! We're looking forward to seeing what you build. If you have any questions, please don't hesitate to open an issue or reach out on Discord.
-
-## Further Documentation
-
-- [White Label Multi-Tenancy](./docs/white-label.md) - Learn how Airweave's white label feature works with multi-tenant integrations
