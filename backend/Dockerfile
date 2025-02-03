@@ -6,7 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -sSL https://install.python-poetry.org | python3 -
+    && pip install --no-cache-dir poetry==1.8.4
 
 # Add Poetry to PATH
 ENV PATH="/root/.local/bin:$PATH"
