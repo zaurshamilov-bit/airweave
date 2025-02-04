@@ -1,9 +1,37 @@
 ---
 title: "Extending Connectors"
 description: "Learn how to create custom source and destination connectors"
+slug: extending-connectors
 ---
 
 Airweave's connector system is designed to be extensible, allowing you to create custom source and destination connectors for your specific needs.
+
+
+After you've cloned or forked the Airweave repository, you can extend the platform by adding your own to the repo. Airweave will automatically pick up your new sources and destinations.
+
+<Note icon="fa-solid fa-lightbulb">
+We are working on making this easier in the near future. The new Airweave CLI + connector SDK will allow you to add new sources and destinations without having to clone the repository.
+</Note>
+
+The general platform module structure is as follows:
+
+
+```
+backend/app/platform
+    ├── sources/
+    │   ├── slack.py
+    │   └── ghibli.py # See example implementation below
+    ├── chunks/
+    │   ├── slack.py
+    │   └── ghibli.py # See example implementation below
+    └── destinations/
+        └── weaviate.py
+        └── native_weaviate.py
+        └── pinecone.py
+        └── custom.py # See example implementation below
+    ... # Other platform modules
+```
+
 
 ## Source Connectors
 
@@ -206,23 +234,7 @@ class CustomDestinationConnector(DestinationConnector):
         pass
 ```
 
-## Sources
 
-The `sources` directory contains implementations for different data sources:
-
-```
-sources/
-├── api/
-│   ├── rest.py
-│   └── graphql.py
-├── database/
-│   ├── sql.py
-│   └── nosql.py
-├── filesystem/
-│   └── local.py
-└── web/
-    └── crawler.py
-```
 
 ### Example Source Implementation
 

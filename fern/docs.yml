@@ -16,8 +16,13 @@ navigation:
     contents:
       - page: Welcome
         path: docs/pages/welcome.mdx
+
       - page: Concepts
         path: docs/pages/concepts.mdx
+
+      - page: Architecture
+        path: docs/pages/architecture.mdx
+
       - page: Setup
         path: docs/pages/setup.mdx
 
