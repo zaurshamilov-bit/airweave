@@ -1,14 +1,14 @@
-"""Base destination class."""
+"""Base destination classes."""
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from uuid import UUID
 
 from app import schemas
 from app.platform.chunks._base import BaseChunk
 
 
-class BaseDestination:
-    """Base destination class."""
+class BaseDestination(ABC):
+    """Common base destination class. This is the umbrella interface for all destinations."""
 
     @abstractmethod
     async def create(self, user: schemas.User) -> None:
@@ -45,6 +45,46 @@ class BaseDestination:
         """Search for a sync_id in the destination."""
         pass
 
+    @abstractmethod
     async def get_credentials(self, user: schemas.User) -> None:
         """Get credentials for the destination."""
+        pass
+
+
+class VectorDBDestination(BaseDestination):
+    """Abstract base class for destinations backed by a vector database.
+
+    Inherits from BaseDestination and can have additional vector-specific methods if necessary.
+    """
+
+    # For now, no additional abstract methods are defined here; it uses BaseDestination's interface.
+    pass
+
+
+class GraphDBDestination(BaseDestination):
+    """Abstract base class for destinations backed by a graph database.
+
+    This interface defines additional methods specific to graph operations.
+    """
+
+    @abstractmethod
+    async def create_node(self, node_properties: dict, label: str) -> None:
+        """Create a node in the graph database."""
+        pass
+
+    @abstractmethod
+    async def create_relationship(
+        self, from_node_id: str, to_node_id: str, rel_type: str, properties: dict = None
+    ) -> None:
+        """Create a relationship between two nodes in the graph database."""
+        pass
+
+    @abstractmethod
+    async def bulk_create_nodes(self, nodes: list[dict]) -> None:
+        """Bulk create nodes in the graph database."""
+        pass
+
+    @abstractmethod
+    async def bulk_create_relationships(self, relationships: list[dict]) -> None:
+        """Bulk create relationships in the graph database."""
         pass
