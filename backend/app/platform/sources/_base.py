@@ -24,3 +24,13 @@ class BaseSource:
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
         """Generate chunks for the source."""
         pass
+
+
+class Relation(BaseModel):
+    """A relation between two entities."""
+
+    source_chunk_type: type[BaseChunk]
+    source_entity_id_attribute: str
+    target_chunk_type: type[BaseChunk]
+    target_entity_id_attribute: str
+    relation_type: str
