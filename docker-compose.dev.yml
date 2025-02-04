@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   db:
     container_name: airweave-db
@@ -79,7 +81,24 @@ services:
       start_period: 30s
     restart: on-failure
 
+  neo4j:
+    container_name: airweave-neo4j
+    image: neo4j:latest
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
 volumes:
   postgres_data:
   redis_data:
-  weaviate_data: 
+  weaviate_data:
+  neo4j_data: 
