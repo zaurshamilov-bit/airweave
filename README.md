@@ -84,7 +84,7 @@ Airweave uses a local Weaviate instance by default, you can access the Weaviate 
 You can configure your own vector database in the app UI or via the API.
 
 ### Why Airweave?
-- **Over 120 integrations**: Airweave is your one-stop shop for building any application that requires semantic search.
+- **Over 20 integrations and counting**: Airweave is your one-stop shop for building any application that requires semantic search.
 - **Simplicity**: Minimal configuration needed to sync data from diverse sources (APIs, databases, and more).
 - **Extensibility**: Easily add new integrations via `sources` , `destinations` and `embedders`.
 - **Open-Core**: Core features are open source, ensuring transparency. Future commercial offerings will bring additional, advanced capabilities.
