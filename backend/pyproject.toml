@@ -27,6 +27,7 @@ psycopg2-binary = "^2.9.10"
 weaviate = "^0.1.2"
 weaviate-client = "^4.10.2"
 markitdown = "^0.0.1a3"
+neo4j = "^5.27.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
