@@ -15,7 +15,7 @@ from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
 
 
-@source("Notion", "notion", AuthType.oauth2_with_refresh)
+@source("Notion", "notion", AuthType.oauth2)
 class NotionSource(BaseSource):
     """Notion source implementation."""
 

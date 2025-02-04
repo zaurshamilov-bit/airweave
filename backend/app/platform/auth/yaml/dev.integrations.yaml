@@ -55,7 +55,7 @@ integrations:
     scope: "me:read boards:read docs:read workspaces:read users:read account:read updates:read assets:read tags:read teams:read"
 
   notion:
-    auth_type: "oauth2_with_refresh"
+    auth_type: "oauth2"
     url: "https://api.notion.com/v1/oauth/authorize"
     backend_url: "https://api.notion.com/v1/oauth/token"
     grant_type: "authorization_code"

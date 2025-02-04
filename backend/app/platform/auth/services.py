@@ -643,7 +643,7 @@ class OAuth2Service:
         # Prepare credentials based on auth type
         decrypted_credentials = (
             {"access_token": oauth2_response.access_token}
-            if settings.auth_type == "oauth2"
+            if settings.auth_type == AuthType.oauth2
             else {"refresh_token": oauth2_response.refresh_token}
         )
 

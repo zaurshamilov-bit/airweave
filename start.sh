@@ -19,7 +19,7 @@ grep -v "^ENCRYPTION_KEY=" .env > .env.tmp
 mv .env.tmp .env
 
 # Add the new encryption key at the end of the file
-echo "ENCRYPTION_KEY=$NEW_KEY" >> .env
+echo "ENCRYPTION_KEY=\"$NEW_KEY\"" >> .env
 
 echo "Updated .env file. Current ENCRYPTION_KEY value:"
 grep "^ENCRYPTION_KEY=" .env

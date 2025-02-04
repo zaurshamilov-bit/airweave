@@ -140,7 +140,7 @@ class SyncService:
                     )
 
         except Exception as e:
-            logger.error(f"An error occured while syncing: {e}")
+            logger.error(f"An error occurred while syncing: {str(e)}", exc_info=True)
             async with get_db_context() as db:
                 sync_job_db = await crud.sync_job.get(db, sync_job.id, current_user)
                 sync_job_schema = schemas.SyncJobUpdate.model_validate(sync_job_db)
