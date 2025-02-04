@@ -8,9 +8,8 @@ These follow a style similar to our Asana and HubSpot chunk schemas.
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
-
 from app.platform.chunks._base import BaseChunk
+from app.platform.sources._base import Relation
 
 
 class TrelloOrganizationChunk(BaseChunk):
@@ -83,17 +82,6 @@ class TrelloActionChunk(BaseChunk):
     date: Optional[datetime] = None
     member_creator_id: Optional[str] = None
     data: Optional[dict] = None
-
-
-class Relation(BaseModel):
-    """A relation between two entities."""
-
-    id: str
-    source_chunk_type: type[BaseChunk]
-    source_entity_id_attribute: str
-    target_chunk_type: type[BaseChunk]
-    target_entity_id_attribute: str
-    relation_type: str
 
 
 RELATIONS = [
