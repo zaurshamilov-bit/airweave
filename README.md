@@ -10,7 +10,7 @@
 </div>
 
 
-**Airweave** is an open-source tool that makes **any app searchable** for your agent by syncing your users' app data, APIs, databases, and websites into your vector database with minimal configuration. 
+**Airweave** is an open-source tool that makes **any app searchable** for your agent by syncing your users' app data, APIs, databases, and websites into your graph and vector databases with minimal configuration. 
 
 
 <p align="center" style="padding-top: 4px; padding-bottom: 16px;">
@@ -35,7 +35,7 @@
 
 ## Overview
 
-Airweave simplifies the process of making your data searchable. Whether you have structured or unstructured data, Airweave helps you break it into processable chunks, store the data in a vector database, and retrieve it via your own **agent** or any **search mechanism**. 
+Airweave simplifies the process of making your data searchable. Whether you have structured or unstructured data, Airweave helps you break it into processable chunks, store the data in graph and vector databases, and retrieve it via your own **agent** or any **search mechanism**. 
 
 
 ## Quick Start
