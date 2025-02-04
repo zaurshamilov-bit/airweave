@@ -50,11 +50,12 @@ class ChatService:
     def __init__(self):
         """Initialize the chat service with OpenAI client."""
         if not settings.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY must be set in environment variables")
-
-        self.client = AsyncOpenAI(
-            api_key=settings.OPENAI_API_KEY,
-        )
+            logger.warning("OPENAI_API_KEY is not set in environment variables")
+            self.client = None
+        else:
+            self.client = AsyncOpenAI(
+                api_key=settings.OPENAI_API_KEY,
+            )
 
     async def generate_streaming_response(
         self,

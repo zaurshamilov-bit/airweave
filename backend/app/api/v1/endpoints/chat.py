@@ -9,9 +9,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import crud, schemas
 from app.api.deps import get_db, get_user
 from app.core.chat_service import chat_service
+from app.core.config import settings
 from app.core.logging import logger
 
 router = APIRouter()
+
+
+@router.get("/openai_key_set", response_model=bool)
+async def openai_key_set(
+    *,
+    db: AsyncSession = Depends(get_db),
+    user: schemas.User = Depends(get_user),
+) -> bool:
+    """Check if the OpenAI API key is set for the current user.
+
+    Returns:
+        bool: True if the OpenAI API key is set, False otherwise.
+    """
+    return settings.OPENAI_API_KEY is not None
 
 
 @router.post("/", response_model=schemas.Chat)

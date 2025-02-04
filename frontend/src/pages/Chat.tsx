@@ -21,6 +21,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { CreateChatDialog } from "@/components/chat/CreateChatDialog";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface Message {
   role: "user" | "assistant";
@@ -39,6 +40,7 @@ function Chat() {
   const navigate = useNavigate();
   const [chatInfo, setChatInfo] = useState<ChatInfo | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [isOpenAIKeySet, setIsOpenAIKeySet] = useState<boolean | null>(null);
 
   // If you're using a route param like /chat/:chatId
   const { chatId } = useParams<{ chatId: string }>();
@@ -305,6 +307,44 @@ function Chat() {
       setShowCreateDialog(true);
     }
   }, [location.state]);
+
+  // Add this effect at the top of other effects
+  useEffect(() => {
+    async function checkOpenAIKey() {
+      try {
+        const response = await apiClient.get('/chat/openai_key_set');
+        const isSet = await response.json();
+        setIsOpenAIKeySet(isSet);
+      } catch (error) {
+        console.error("Failed to check OpenAI key:", error);
+        setIsOpenAIKeySet(false);
+      }
+    }
+
+    void checkOpenAIKey();
+  }, []);
+
+  // Add this dialog component before the main return
+  if (isOpenAIKeySet === false) {
+    return (
+      <Dialog 
+        open={true} 
+        onOpenChange={() => navigate('/dashboard')}
+      >
+        <DialogContent onEscapeKeyDown={() => navigate('/dashboard')} onInteractOutside={() => navigate('/dashboard')}>
+          <DialogHeader>
+            <DialogTitle>OpenAI API key required</DialogTitle>
+            <DialogDescription>
+              Please add your OpenAI API key to the .env file to continue using the chat functionality. 
+              <br />
+              <br />  
+              Find the .env file in the root of the project and add the following: OPENAI_API_KEY=your_openai_api_key
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <div className="flex h-full">

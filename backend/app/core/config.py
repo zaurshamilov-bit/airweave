@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     NATIVE_WEAVIATE_PORT: int = 8080
     NATIVE_WEAVIATE_GRPC_PORT: int = 50051
 
-    OPENAI_API_KEY: str
+    OPENAI_API_KEY: Optional[str] = None
 
     @field_validator("SQLALCHEMY_ASYNC_DATABASE_URI", mode="before")
     def assemble_db_connection(cls, v: Optional[str], info: ValidationInfo) -> PostgresDsn:

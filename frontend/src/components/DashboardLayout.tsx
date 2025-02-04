@@ -42,7 +42,7 @@ const DashboardLayout = () => {
       icon: LayoutDashboard,
     },
     {
-      name: "Chat",
+      name: "Chat playground",
       href: "/chat",
       icon: MessageSquare,
     },
