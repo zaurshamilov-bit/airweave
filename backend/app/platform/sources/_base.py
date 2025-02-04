@@ -3,6 +3,8 @@
 from abc import abstractmethod
 from typing import Any, AsyncGenerator, Optional
 
+from pydantic import BaseModel
+
 from app.platform.chunks._base import BaseChunk
 
 
