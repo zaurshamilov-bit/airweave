@@ -10,7 +10,7 @@ import { apiClient } from "@/lib/api";
 interface WhiteLabelData {
   id: string;
   name: string;
-  source_id: string;
+  source_short_name: string;
   redirect_url: string;
   client_id: string;
 }
@@ -82,7 +82,7 @@ const CreateWhiteLabel = () => {
               whitelabelGuid={whiteLabel?.id}
               frontendUrl={whiteLabel?.redirect_url}
               clientId={whiteLabel?.client_id}
-              source={whiteLabel?.source_id}
+              source={whiteLabel?.source_short_name}
             />
 
             <div className="mt-4">

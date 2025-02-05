@@ -11,7 +11,7 @@ class WhiteLabelBase(BaseModel):
     """Base schema for WhiteLabel."""
 
     name: str
-    source_id: UUID
+    source_short_name: str
     redirect_url: str
     client_id: str
     client_secret: str
@@ -24,8 +24,6 @@ class WhiteLabelBase(BaseModel):
 
 class WhiteLabelCreate(WhiteLabelBase):
     """Schema for creating a WhiteLabel object."""
-
-    pass
 
 
 class WhiteLabelUpdate(BaseModel):
