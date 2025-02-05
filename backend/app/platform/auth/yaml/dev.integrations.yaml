@@ -4,8 +4,8 @@ integrations:
     url: "https://app.asana.com/-/oauth_authorize"
     backend_url: "https://app.asana.com/-/oauth_token"
     grant_type: "authorization_code"
-    client_id: "1209056443395835"
-    client_secret: "c981dbee8c86b014579873b98e89c0d5"
+    client_id: "1209332365634185"
+    client_secret: "2670cb38cc5e52b081ea721486da0195"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
 
@@ -20,6 +20,48 @@ integrations:
     client_credential_location: "body"
     additional_frontend_params:
       token_access_type: "offline"
+
+  gmail:
+    auth_type: "oauth2_with_refresh"
+    url: "https://accounts.google.com/o/oauth2/auth"
+    backend_url: "https://oauth2.googleapis.com/token"
+    grant_type: "authorization_code"
+    client_id: ${GOOGLE_GMAIL_CLIENT_ID}
+    client_secret: ${GOOGLE_GMAIL_CLIENT_SECRET}
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "https://www.googleapis.com/auth/gmail.readonly"
+    additional_frontend_params:
+      access_type: "offline"
+      prompt: "consent"
+
+  google_calendar:
+    auth_type: "oauth2_with_refresh"
+    url: "https://accounts.google.com/o/oauth2/auth"
+    backend_url: "https://oauth2.googleapis.com/token"
+    grant_type: "authorization_code"
+    client_id: ${GOOGLE_CALENDAR_CLIENT_ID}
+    client_secret: ${GOOGLE_CALENDAR_CLIENT_SECRET}
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "https://www.googleapis.com/auth/calendar.events.public.readonly https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.calendars.readonly https://www.googleapis.com/auth/calendar.events.owned.readonly https://www.googleapis.com/auth/calendar.events.readonly"
+    additional_frontend_params:
+      access_type: "offline"
+      prompt: "consent"
+
+  google_drive:
+    auth_type: "oauth2_with_refresh"
+    url: "https://accounts.google.com/o/oauth2/auth"
+    backend_url: "https://oauth2.googleapis.com/token"
+    grant_type: "authorization_code"
+    client_id: ${GOOGLE_DRIVE_CLIENT_ID}
+    client_secret: ${GOOGLE_DRIVE_CLIENT_SECRET}
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "https://www.googleapis.com/auth/docs https://www.googleapis.com/auth/drive.photos.readonly https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.metadata https://www.googleapis.com/auth/drive.metadata.readonly https://www.googleapis.com/auth/gmail.readonly"
+    additional_frontend_params:
+      access_type: "offline"
+      prompt: "consent"
 
   hubspot:
     auth_type: "oauth2_with_refresh"
