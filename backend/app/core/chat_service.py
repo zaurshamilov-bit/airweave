@@ -128,7 +128,9 @@ class ChatService:
             logger.error(f"Error generating streaming response: {str(e)}")
             # Create error message
             error_message = schemas.ChatMessageCreate(
-                content="Sorry, I encountered an error while generating a response. Please try again.",
+                content=(
+                    "Sorry, I encountered an error while generating a response. Please try again."
+                ),
                 role=ChatRole.ASSISTANT,
             )
             await crud.chat.add_message(
@@ -176,7 +178,9 @@ class ChatService:
         except Exception as e:
             logger.error(f"Error generating AI response: {str(e)}")
             error_message = schemas.ChatMessageCreate(
-                content="Sorry, I encountered an error while generating a response. Please try again.",
+                content=(
+                    "Sorry, I encountered an error while generating a response. Please try again."
+                ),
                 role=ChatRole.ASSISTANT,
             )
             return await crud.chat.add_message(
@@ -253,9 +257,11 @@ class ChatService:
                 self.CONTEXT_PROMPT.format(context=context)
                 if context
                 else (
-                    "You are a helpful AI assistant. Always format your responses in proper markdown, "
+                    "You are a helpful AI assistant. "
+                    "Always format your responses in proper markdown, "
                     "including tables, code blocks with language tags, and proper headers. "
-                    "Provide clear, accurate, and concise responses while being friendly and professional."
+                    "Provide clear, accurate, and concise responses while being friendly"
+                    " and professional."
                 )
             )
             formatted_messages.append(
