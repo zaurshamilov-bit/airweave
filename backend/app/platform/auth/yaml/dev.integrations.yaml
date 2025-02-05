@@ -101,8 +101,8 @@ integrations:
     url: "https://api.notion.com/v1/oauth/authorize"
     backend_url: "https://api.notion.com/v1/oauth/token"
     grant_type: "authorization_code"
-    client_id: "16dd872b-594c-8007-a0ee-00376e9a88a9"
-    client_secret: "secret_O3WlZnEMgG8zRX4taqkzoJT5VcDPIos3NVpOdo3YYUl"
+    client_id: "191d872b-594c-8045-ac77-0037fb8711db"
+    client_secret: "secret_tnynzAawv4DwbT5VYlScD6Lzx8R6RZLGDvj40DXaWMA"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "header"
     additional_frontend_params:
