@@ -462,7 +462,7 @@ async def get_oauth2_white_label_auth_url(
         if not white_label:
             raise HTTPException(status_code=404, detail="White label integration not found")
 
-        source = await crud.source.get(db, id=white_label.source_id)
+        source = await crud.source.get_by_short_name(db, short_name=white_label.source_short_name)
         if not source:
             raise HTTPException(status_code=404, detail="Source not found")
 

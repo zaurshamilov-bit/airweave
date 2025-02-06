@@ -416,7 +416,9 @@ class OAuth2Service:
         db: AsyncSession, white_label: schemas.WhiteLabel
     ) -> str:
         """Generate the OAuth2 authorization URL for a white label integration."""
-        source = await crud.source.get(db=db, id=white_label.source_id)
+        source = await crud.source.get_by_short_name(
+            db=db, short_name=white_label.source_short_name
+        )
 
         if not source:
             raise NotFoundException("Source not found")
