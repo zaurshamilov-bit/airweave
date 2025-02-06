@@ -212,8 +212,35 @@ class SyncService:
         if source_model.auth_type == AuthType.none:
             # For sources that don't require authentication
             source_instance = await source_class.create()
+        elif source_model.auth_type in [
+            AuthType.oauth2_with_refresh,
+            AuthType.oauth2_with_refresh_rotating,
+        ]:
+            # For OAuth2 with refresh token
+            oauth2_response = await oauth2_service.refresh_access_token(
+                db, source_model.short_name, current_user, source_connection.id
+            )
+            access_token = oauth2_response.access_token
+            source_instance = await source_class.create(access_token)
+        elif source_model.auth_type == AuthType.oauth2:
+            # For regular OAuth2 (like Notion)
+            if not source_connection.integration_credential_id:
+                raise NotFoundException("Source connection has no integration credential")
+
+            source_integration_credential = await crud.integration_credential.get(
+                db, source_connection.integration_credential_id, current_user
+            )
+
+            if not source_integration_credential:
+                raise NotFoundException("Source integration credential not found")
+
+            decrypted_credential = credentials.decrypt(
+                source_integration_credential.encrypted_credentials
+            )
+            # For OAuth2, we expect the access token to be in the credentials
+            source_instance = await source_class.create(decrypted_credential["access_token"])
         else:
-            # For authenticated sources, get and validate credentials
+            # For other auth types (API key, basic auth, etc.)
             if not source_connection.integration_credential_id:
                 raise NotFoundException("Source connection has no integration credential")
 
@@ -228,20 +255,14 @@ class SyncService:
                 source_integration_credential.encrypted_credentials
             )
 
-            if (
-                source_model.auth_type == AuthType.oauth2_with_refresh
-                or source_model.auth_type == AuthType.oauth2_with_refresh_rotating
-            ):
-                oauth2_response = await oauth2_service.refresh_access_token(
-                    db, source_model.short_name, current_user, source_connection.id
-                )
-                access_token = oauth2_response.access_token
-                source_instance = await source_class.create(access_token)
-            else:
-                # in case of API key auth / basic auth / etc.
+            if source_model.auth_config_class:
                 auth_config = resource_locator.get_auth_config(source_model.auth_config_class)
                 source_credentials = auth_config.model_validate(decrypted_credential)
                 source_instance = await source_class.create(source_credentials)
+            else:
+                raise ValueError(
+                    f"Auth config class required for auth type {source_model.auth_type}"
+                )
 
         if not sync.embedding_model_connection_id:
             embedding_model = LocalText2Vec()
