@@ -147,7 +147,7 @@ services:
     volumes:
       - neo4j_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      test: ["CMD", "neo4j-admin", "database", "info"]
       interval: 10s
       timeout: 10s
       retries: 5

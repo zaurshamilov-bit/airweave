@@ -3,7 +3,7 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
@@ -11,12 +11,14 @@ from app.api import deps
 from app.core import credentials
 from app.core.logging import logger
 from app.core.shared_models import SyncStatus
+from app.db.session import get_db_context
 from app.db.unit_of_work import UnitOfWork
 from app.models.integration_credential import IntegrationType
 from app.platform.auth.schemas import AuthType
 from app.platform.auth.services import oauth2_service
 from app.platform.auth.settings import integration_settings
 from app.platform.locator import resource_locator
+from app.platform.sync.service import sync_service
 from app.schemas.connection import ConnectionCreate, ConnectionStatus
 
 router = APIRouter()
@@ -427,6 +429,7 @@ async def send_oauth2_white_label_code(
     white_label_id: UUID,
     code: str = Body(...),
     user: schemas.User = Depends(deps.get_user),
+    background_tasks: BackgroundTasks,
 ) -> schemas.Connection:
     """Exchange the OAuth2 authorization code for a white label integration."""
     try:
@@ -434,12 +437,36 @@ async def send_oauth2_white_label_code(
         if not white_label:
             raise HTTPException(status_code=404, detail="White label integration not found")
 
-        return await oauth2_service.create_oauth2_connection_for_whitelabel(
+        white_label_schema = schemas.WhiteLabel.model_validate(white_label, from_attributes=True)
+
+        connection = await oauth2_service.create_oauth2_connection_for_whitelabel(
             db=db,
             white_label=white_label,
             code=code,
             user=user,
         )
+        connection_schema = schemas.Connection.model_validate(connection, from_attributes=True)
+
+        async with get_db_context() as db:
+            # Create sync for the connection
+            sync_in = schemas.SyncBase(
+                name=(
+                    f"Sync for {connection_schema.name} from white label {white_label_schema.name}"
+                ),
+                source_connection_id=connection_schema.id,
+                status=SyncStatus.ACTIVE,
+            )
+            sync = await crud.sync.create(db, obj_in=sync_in, current_user=user)
+            sync_schema = schemas.Sync.model_validate(sync)
+
+            sync_job_create = schemas.SyncJobCreate(sync_id=sync.id)
+            sync_job = await crud.sync_job.create(db, obj_in=sync_job_create, current_user=user)
+
+            # Add background task to run the sync
+            sync_job_schema = schemas.SyncJob.model_validate(sync_job)
+            background_tasks.add_task(sync_service.run, sync_schema, sync_job_schema, user)
+
+            return connection
     except Exception as e:
         logger.error(f"Failed to exchange OAuth2 code for white label: {e}")
         raise HTTPException(status_code=400, detail="Failed to exchange OAuth2 code") from e

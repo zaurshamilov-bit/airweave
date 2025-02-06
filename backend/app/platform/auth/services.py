@@ -444,7 +444,6 @@ class OAuth2Service:
 
     @staticmethod
     async def exchange_code_for_whitelabel(
-        db: AsyncSession,
         code: str,
         white_label: schemas.WhiteLabel,
     ) -> OAuth2TokenResponse:
@@ -452,7 +451,6 @@ class OAuth2Service:
 
         Args:
         ----
-            db: Database session
             code: The authorization code to exchange
             white_label: The white label configuration to use
 
@@ -464,9 +462,9 @@ class OAuth2Service:
         ------
             NotFoundException: If the integration is not found
         """
-        integration_config = integration_settings.get_by_short_name(white_label.source_id)
+        integration_config = integration_settings.get_by_short_name(white_label.source_short_name)
         if not integration_config:
-            raise NotFoundException(f"Integration {white_label.source_id} not found.")
+            raise NotFoundException(f"Integration {white_label.source_short_name} not found.")
 
         return await OAuth2Service._exchange_code(
             code=code,
@@ -602,11 +600,11 @@ class OAuth2Service:
         -------
             schemas.Connection: The created connection
         """
-        source = await crud.source.get_by_short_name(db, white_label.source_id)
+        source = await crud.source.get_by_short_name(db, white_label.source_short_name)
         if not source:
             raise NotFoundException("Source not found")
 
-        settings = integration_settings.get_by_short_name(white_label.source_id)
+        settings = integration_settings.get_by_short_name(source.short_name)
         if not settings:
             raise NotFoundException("Integration not found")
 
@@ -614,7 +612,9 @@ class OAuth2Service:
             raise HTTPException(status_code=400, detail="Source does not support OAuth2")
 
         # Exchange code for token using white label credentials
-        oauth2_response = await OAuth2Service.exchange_code_for_whitelabel(db, code, white_label)
+        oauth2_response = await OAuth2Service.exchange_code_for_whitelabel(
+            code=code, white_label=white_label
+        )
 
         return await OAuth2Service._create_connection(
             db=db,

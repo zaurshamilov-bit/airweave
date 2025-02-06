@@ -39,7 +39,7 @@ from .organization import (
     OrganizationUpdate,
 )
 from .source import Source, SourceCreate, SourceInDBBase, SourceUpdate
-from .sync import Sync, SyncCreate, SyncInDBBase, SyncUpdate, SyncWithSourceConnection
+from .sync import Sync, SyncBase, SyncCreate, SyncInDBBase, SyncUpdate, SyncWithSourceConnection
 from .sync_job import SyncJob, SyncJobCreate, SyncJobInDBBase, SyncJobUpdate
 from .user import (
     User,
