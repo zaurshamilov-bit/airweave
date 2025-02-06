@@ -1,0 +1,35 @@
+paths:
+  /health:
+    get:
+      x-fern-ignore: true
+  /api_keys/:
+    get:
+      x-fern-ignore: true
+    post:
+      x-fern-ignore: true
+    delete:
+      x-fern-ignore: true
+  /api_keys/{id}:
+    get:
+      x-fern-ignore: true
+  /chat/:
+    get:
+      x-fern-ignore: true
+    post:
+      x-fern-ignore: true
+  /chat/{chat_id}:
+    get:
+      x-fern-ignore: true
+    put:
+      x-fern-ignore: true
+    delete:
+      x-fern-ignore: true
+  /chat/{chat_id}/message:
+    post:
+      x-fern-ignore: true
+  /chat/{chat_id}/stream:
+    get:
+      x-fern-ignore: true
+  /chat/openai_key_set:
+    get:
+      x-fern-ignore: true

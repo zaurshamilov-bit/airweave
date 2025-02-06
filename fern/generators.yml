@@ -1,5 +1,6 @@
 api:
   path: ./definition/openapi.json
+  overrides: ./definition/overrides.yml
 
 groups:
   public:
