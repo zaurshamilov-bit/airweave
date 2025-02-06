@@ -1,65 +1,58 @@
 """Notion chunk schemas."""
 
 from datetime import datetime
-from typing import Dict, Optional
+from typing import List, Optional
 
 from pydantic import Field
 
 from app.platform.chunks._base import BaseChunk
 
 
-class NotionWorkspaceChunk(BaseChunk):
-    """Schema for Notion workspace chunks."""
-
-    name: str
-    workspace_id: str
-    domain: Optional[str] = None
-    icon: Optional[str] = None
-
-
 class NotionDatabaseChunk(BaseChunk):
     """Schema for Notion database chunks."""
 
-    name: str
-    database_id: str
-    title: Optional[str] = None
-    created_time: Optional[datetime] = None
-    last_edited_time: Optional[datetime] = None
-    icon: Optional[str] = None
-    cover: Optional[Dict] = None  # In Notion, covers can include image info
+    name: str = Field(description="The name of the database")
+    database_id: str = Field(description="The ID of the database")
+    description: Optional[str] = Field(default=None, description="The description of the database")
+    created_time: Optional[datetime] = Field(
+        default=None, description="The creation time of the database"
+    )
+    last_edited_time: Optional[datetime] = Field(
+        default=None, description="The last edited time of the database"
+    )
 
 
 class NotionPageChunk(BaseChunk):
     """Schema for Notion page chunks."""
 
-    name: str
-    page_id: str
-    created_time: Optional[datetime] = None
-    last_edited_time: Optional[datetime] = None
-    archived: bool = False
-    icon: Optional[str] = None
-    cover: Optional[Dict] = None
-    properties: Dict = Field(default_factory=dict)
+    page_id: str = Field(description="The ID of the page")
+    parent_id: str = Field(description="The ID of the parent page")
+    parent_type: str = Field(description="The type of the parent page")
+    title: str = Field(description="The title of the page")
+    created_time: Optional[datetime] = Field(
+        default=None, description="The creation time of the page"
+    )
+    last_edited_time: Optional[datetime] = Field(
+        default=None, description="The last edited time of the page"
+    )
+    archived: bool = Field(default=False, description="Whether the page is archived")
+    content: Optional[str] = Field(default=None, description="The content of the page")
 
 
 class NotionBlockChunk(BaseChunk):
     """Schema for Notion block chunks."""
 
-    block_id: str
-    block_type: str  # e.g. 'paragraph', 'heading_1', etc.
-    created_time: Optional[datetime] = None
-    last_edited_time: Optional[datetime] = None
-    has_children: bool = False
-    text_content: Optional[str] = None
-    # If you want to store raw block data, you can keep a dict here
-    raw_block: Optional[Dict] = None
-
-
-class NotionCommentChunk(BaseChunk):
-    """Schema for Notion comment or discussion chunks."""
-
-    comment_id: str
-    author: Optional[Dict] = None
-    created_time: datetime
-    text: Optional[str] = None
-    # Any other fields that might be relevant for comments
+    block_id: str = Field(description="The ID of the block")
+    parent_id: str = Field(description="The ID of the parent block")
+    block_type: str = Field(description="The type of the block")
+    text_content: Optional[str] = Field(default=None, description="The text content of the block")
+    has_children: bool = Field(default=False, description="Whether the block has children")
+    children_ids: List[str] = Field(
+        default_factory=list, description="The IDs of the children blocks"
+    )
+    created_time: Optional[datetime] = Field(
+        default=None, description="The creation time of the block"
+    )
+    last_edited_time: Optional[datetime] = Field(
+        default=None, description="The last edited time of the block"
+    )
