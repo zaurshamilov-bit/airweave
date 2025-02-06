@@ -20,14 +20,14 @@ navigation:
       - page: Concepts
         path: docs/pages/concepts.mdx
 
-      - page: Architecture
-        path: docs/pages/architecture.mdx
-
       - page: Setup
         path: docs/pages/setup.mdx
 
       - page: SDKs
         path: docs/pages/sdks.mdx
+
+      - page: Architecture
+        path: docs/pages/architecture.mdx
 
       - page: Extending Connectors
         path: docs/pages/extending-connectors.mdx
@@ -39,6 +39,11 @@ navigation:
     snippets:
       python: airweave-sdk
       typescript: "@airweave/sdk"
+
+    playground: 
+      environments:
+        - Production
+        - Local
 
 navbar-links:
   - type: secondary

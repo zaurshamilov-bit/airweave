@@ -29,6 +29,20 @@ def generate_openapi():
         routes=app.routes,
     )
 
+    # Add server configurations
+    openapi_schema["servers"] = [
+        {
+            "url": "https://api.airweave.ai",
+            "description": "Production",
+            "x-fern-server-name": "Production",
+        },
+        {
+            "url": "http://localhost:8001",
+            "description": "Local",
+            "x-fern-server-name": "Local",
+        },
+    ]
+
     # Path to fern/openapi directory from project root
     fern_dir = project_root / "fern" / "openapi"
     fern_dir.mkdir(parents=True, exist_ok=True)
