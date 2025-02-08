@@ -50,9 +50,6 @@ class ConfluenceSource(BaseSource):
       - Whiteboard
       - Custom Content
       - (Optionally) Database, Folder, etc.
-
-    Each method fetches and yields chunks in a read-only manner, leveraging
-    Confluence's REST API v2 endpoints and cursor-based pagination.
     """
 
     @classmethod
