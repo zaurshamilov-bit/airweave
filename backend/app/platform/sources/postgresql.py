@@ -49,6 +49,7 @@ class PostgreSQLSource(BaseSource):
     """
 
     def __init__(self):
+        """Initialize the PostgreSQL source."""
         self.conn: Optional[asyncpg.Connection] = None
         self.chunk_classes: Dict[str, Type[PolymorphicChunk]] = {}
 
@@ -100,8 +101,9 @@ class PostgreSQLSource(BaseSource):
                 asyncpg.ConnectionDoesNotExistError,
             ) as e:
                 raise ValueError(
-                    f"Could not connect to database at {self.config['host']}:{self.config['port']}. "
-                    f"Please check if the database is running and the port is correct. Error: {str(e)}"
+                    f"Could not connect to database at {self.config['host']}:{self.config['port']}."
+                    " Please check if the database is running and the port is correct. "
+                    f"Error: {str(e)}"
                 ) from e
             except Exception as e:
                 raise ValueError(f"Database connection failed: {str(e)}") from e
