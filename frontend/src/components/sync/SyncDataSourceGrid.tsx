@@ -190,6 +190,7 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
                 status={shortNameIsConnected(source.short_name) ? "connected" : "disconnected"}
                 onSelect={(connectionId) => handleSelect(connectionId, { name: source.name, shortName: source.short_name })}
                 connections={sourceConnections}
+                authType={source.auth_type}
               />
             );
           })}

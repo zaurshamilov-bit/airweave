@@ -195,6 +195,8 @@ app.add_middleware(
         "app.tst-airweave.ai",
         "app.acc-airweave.ai",
         "app.airweave.ai",
+        "docs.airweave.ai",
+        "https://docs.airweave.ai",
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -38,7 +38,13 @@ from .organization import (
     OrganizationInDBBase,
     OrganizationUpdate,
 )
-from .source import Source, SourceCreate, SourceInDBBase, SourceUpdate
+from .source import (
+    Source,
+    SourceCreate,
+    SourceInDBBase,
+    SourceUpdate,
+    SourceWithConfigFields,
+)
 from .sync import Sync, SyncBase, SyncCreate, SyncInDBBase, SyncUpdate, SyncWithSourceConnection
 from .sync_job import SyncJob, SyncJobCreate, SyncJobInDBBase, SyncJobUpdate
 from .user import (

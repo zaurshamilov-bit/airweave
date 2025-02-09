@@ -39,7 +39,7 @@ from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
 
 
-@source("Stripe", "stripe", AuthType.oauth2_with_refresh)
+@source("Stripe", "stripe", AuthType.config_class, "StripeAuthConfig")
 class StripeSource(BaseSource):
     """Stripe source implementation.
 

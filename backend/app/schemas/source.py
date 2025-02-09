@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.platform.auth.schemas import AuthType
-from app.platform.configs.auth import AuthConfig
+from app.platform.configs._base import Fields
 
 
 class SourceBase(BaseModel):
@@ -57,7 +57,7 @@ class Source(SourceInDBBase):
     pass
 
 
-class SourceWithAuthConfig(Source):
+class SourceWithConfigFields(Source):
     """Schema for Source with auth config."""
 
-    auth_config: AuthConfig
+    config_fields: Fields | None = None

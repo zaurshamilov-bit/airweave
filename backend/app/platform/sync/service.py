@@ -198,77 +198,11 @@ class SyncService:
         current_user: schemas.User,
     ) -> SyncContext:
         """Create a sync context."""
-        source_connection = await crud.connection.get(db, sync.source_connection_id, current_user)
-        if not source_connection:
-            raise NotFoundException("Source connection not found")
-        source_model = await crud.source.get_by_short_name(db, source_connection.short_name)
+        source_instance = await self._create_source_instance(db, sync, current_user)
 
-        if not source_model:
-            raise NotFoundException("Source not found")
-
-        source_class = resource_locator.get_source(source_model)
-
-        # Handle authentication based on auth_type
-        if source_model.auth_type == AuthType.none:
-            # For sources that don't require authentication
-            source_instance = await source_class.create()
-        elif source_model.auth_type in [
-            AuthType.oauth2_with_refresh,
-            AuthType.oauth2_with_refresh_rotating,
-        ]:
-            # For OAuth2 with refresh token
-            oauth2_response = await oauth2_service.refresh_access_token(
-                db, source_model.short_name, current_user, source_connection.id
-            )
-            access_token = oauth2_response.access_token
-            source_instance = await source_class.create(access_token)
-        elif source_model.auth_type == AuthType.oauth2:
-            # For regular OAuth2 (like Notion)
-            if not source_connection.integration_credential_id:
-                raise NotFoundException("Source connection has no integration credential")
-
-            source_integration_credential = await crud.integration_credential.get(
-                db, source_connection.integration_credential_id, current_user
-            )
-
-            if not source_integration_credential:
-                raise NotFoundException("Source integration credential not found")
-
-            decrypted_credential = credentials.decrypt(
-                source_integration_credential.encrypted_credentials
-            )
-            # For OAuth2, we expect the access token to be in the credentials
-            source_instance = await source_class.create(decrypted_credential["access_token"])
-        else:
-            # For other auth types (API key, basic auth, etc.)
-            if not source_connection.integration_credential_id:
-                raise NotFoundException("Source connection has no integration credential")
-
-            source_integration_credential = await crud.integration_credential.get(
-                db, source_connection.integration_credential_id, current_user
-            )
-
-            if not source_integration_credential:
-                raise NotFoundException("Source integration credential not found")
-
-            decrypted_credential = credentials.decrypt(
-                source_integration_credential.encrypted_credentials
-            )
-
-            if source_model.auth_config_class:
-                auth_config = resource_locator.get_auth_config(source_model.auth_config_class)
-                source_credentials = auth_config.model_validate(decrypted_credential)
-                source_instance = await source_class.create(source_credentials)
-            else:
-                raise ValueError(
-                    f"Auth config class required for auth type {source_model.auth_type}"
-                )
-
-        if not sync.embedding_model_connection_id:
-            embedding_model = LocalText2Vec()
-
-        if not sync.destination_connection_id:
-            destination = await WeaviateDestination.create(sync.id, embedding_model)
+        # Handle embedding model and destination
+        embedding_model = self._get_embedding_model(sync)
+        destination = await self._get_destination(sync, embedding_model)
 
         sync_context = SyncContext(source_instance, destination, embedding_model, sync, sync_job)
 
@@ -277,6 +211,122 @@ class SyncService:
             sync_context.white_label = white_label
 
         return sync_context
+
+    async def _create_source_instance(
+        self,
+        db: AsyncSession,
+        sync: schemas.Sync,
+        current_user: schemas.User,
+    ):
+        """Create and configure the source instance based on authentication type."""
+        source_connection = await crud.connection.get(db, sync.source_connection_id, current_user)
+        if not source_connection:
+            raise NotFoundException("Source connection not found")
+
+        source_model = await crud.source.get_by_short_name(db, source_connection.short_name)
+        if not source_model:
+            raise NotFoundException("Source not found")
+
+        source_class = resource_locator.get_source(source_model)
+
+        if source_model.auth_type == AuthType.none:
+            return await source_class.create()
+
+        if source_model.auth_type in [
+            AuthType.oauth2_with_refresh,
+            AuthType.oauth2_with_refresh_rotating,
+        ]:
+            return await self._create_oauth2_with_refresh_source(
+                db, source_model, source_class, current_user, source_connection
+            )
+
+        if source_model.auth_type == AuthType.oauth2:
+            return await self._create_oauth2_source(
+                db, source_class, current_user, source_connection
+            )
+
+        return await self._create_other_auth_source(
+            db, source_model, source_class, current_user, source_connection
+        )
+
+    async def _create_oauth2_with_refresh_source(
+        self,
+        db: AsyncSession,
+        source_model: schemas.Source,
+        source_class,
+        current_user: schemas.User,
+        source_connection: schemas.Connection,
+    ):
+        """Create source instance for OAuth2 with refresh token."""
+        oauth2_response = await oauth2_service.refresh_access_token(
+            db, source_model.short_name, current_user, source_connection.id
+        )
+        return await source_class.create(oauth2_response.access_token)
+
+    async def _create_oauth2_source(
+        self,
+        db: AsyncSession,
+        source_class,
+        current_user: schemas.User,
+        source_connection: schemas.Connection,
+    ):
+        """Create source instance for regular OAuth2."""
+        if not source_connection.integration_credential_id:
+            raise NotFoundException("Source connection has no integration credential")
+
+        credential = await self._get_integration_credential(db, source_connection, current_user)
+        decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
+        return await source_class.create(decrypted_credential["access_token"])
+
+    async def _create_other_auth_source(
+        self,
+        db: AsyncSession,
+        source_model: schemas.Source,
+        source_class,
+        current_user: schemas.User,
+        source_connection: schemas.Connection,
+    ):
+        """Create source instance for other authentication types."""
+        if not source_connection.integration_credential_id:
+            raise NotFoundException("Source connection has no integration credential")
+
+        credential = await self._get_integration_credential(db, source_connection, current_user)
+        decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
+
+        if not source_model.auth_config_class:
+            raise ValueError(f"Auth config class required for auth type {source_model.auth_type}")
+
+        auth_config = resource_locator.get_auth_config(source_model.auth_config_class)
+        source_credentials = auth_config.model_validate(decrypted_credential)
+        return await source_class.create(source_credentials)
+
+    async def _get_integration_credential(
+        self,
+        db: AsyncSession,
+        source_connection: schemas.Connection,
+        current_user: schemas.User,
+    ):
+        """Retrieve and validate integration credential."""
+        credential = await crud.integration_credential.get(
+            db, source_connection.integration_credential_id, current_user
+        )
+        if not credential:
+            raise NotFoundException("Source integration credential not found")
+        return credential
+
+    def _get_embedding_model(self, sync: schemas.Sync):
+        """Get the embedding model instance."""
+        if not sync.embedding_model_connection_id:
+            return LocalText2Vec()
+        return LocalText2Vec()  # TODO: Handle other embedding models
+
+    async def _get_destination(self, sync: schemas.Sync, embedding_model):
+        """Get the destination instance."""
+        if not sync.destination_connection_id:
+            return await WeaviateDestination.create(sync.id, embedding_model)
+        return await WeaviateDestination.create(
+            sync.id, embedding_model
+        )  # TODO: Handle other destinations
 
     async def generate_white_label_auth_url(
         self,
