@@ -1,10 +1,10 @@
 """Chunk schemas."""
 
 import hashlib
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Type, TypeVar
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 
 
 class Breadcrumb(BaseModel):
@@ -42,3 +42,61 @@ class BaseChunk(BaseModel):
     def hash(self) -> str:
         """Hash the chunk."""
         return hashlib.sha256(self.model_dump_json(exclude={"sync_job_id"}).encode()).hexdigest()
+
+
+class PolymorphicChunk(BaseChunk):
+    """Base class for dynamically generated chunks.
+
+    This class serves as the base for chunks that are created at runtime,
+    particularly for database table chunks where the schema is determined
+    by the table structure.
+    """
+
+    __abstract__ = True
+    table_name: str
+    schema_name: Optional[str] = None
+    primary_key_columns: List[str] = Field(default_factory=list)
+    column_metadata: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+
+    @classmethod
+    def create_table_chunk_class(
+        cls,
+        table_name: str,
+        schema_name: Optional[str],
+        columns: Dict[str, Any],
+        primary_keys: List[str],
+    ) -> Type["PolymorphicChunk"]:
+        """Create a new chunk class for a database table.
+
+        Args:
+            table_name: Name of the database table
+            schema_name: Optional database schema name
+            columns: Dictionary of column names to their types and metadata
+            primary_keys: List of primary key column names
+
+        Returns:
+            A new chunk class with fields matching the table structure
+        """
+        # Create field definitions for the new model
+        fields: Dict[str, Any] = {
+            "table_name": (str, Field(default=table_name)),
+            "schema_name": (Optional[str], Field(default=schema_name)),
+            "primary_key_columns": (List[str], Field(default_factory=lambda: primary_keys)),
+            "column_metadata": (Dict[str, Dict[str, Any]], Field(default_factory=lambda: columns)),
+        }
+
+        # Add fields for each database column
+        for col_name, col_info in columns.items():
+            python_type = col_info.get("python_type", Any)
+            fields[col_name] = (Optional[python_type], Field(default=None))
+
+        # Create the new model class
+        model_name = f"{table_name.title().replace('_', '')}TableChunk"
+        return create_model(
+            model_name,
+            __base__=cls,
+            **fields,
+        )
+
+
+T = TypeVar("T", bound=PolymorphicChunk)

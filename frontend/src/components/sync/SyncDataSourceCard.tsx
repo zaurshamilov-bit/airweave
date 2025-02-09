@@ -38,7 +38,7 @@ interface SyncDataSourceCardProps {
   name: string;
   description: string;
   status: "connected" | "disconnected";
-  onSelect: () => void;
+  onSelect: (connectionId: string) => void;
   connections?: Connection[];
   authType?: string | null;
 }
@@ -100,19 +100,17 @@ export function SyncDataSourceCard({
     if (status === "connected" && selectedConnectionId) {
       onSelect(selectedConnectionId);
     } else {
-      initiateOAuth();
+      handleConnect();
     }
   };
 
-  const handleAddNewConnection = () => {
-    initiateOAuth();
-    setOpen(false);
-  };
-
   const handleConnect = async () => {
-    if (authType === "oauth2") {
+    if (authType === "none" || authType?.startsWith("basic") || authType?.startsWith("api_key")) {
+      setShowWizard(true);
+    } else if (authType?.startsWith("oauth2")) {
       await initiateOAuth();
     } else {
+      // Default to wizard for unknown auth types
       setShowWizard(true);
     }
   };
@@ -120,6 +118,15 @@ export function SyncDataSourceCard({
   const handleWizardComplete = (connectionId: string) => {
     setSelectedConnectionId(connectionId);
     onSelect(connectionId);
+  };
+
+  const handleAddNewConnection = () => {
+    if (authType?.startsWith("oauth2")) {
+      initiateOAuth();
+    } else {
+      setShowWizard(true);
+    }
+    setOpen(false);
   };
 
   return (
@@ -160,7 +167,7 @@ export function SyncDataSourceCard({
         <CardFooter className="p-4 pt-0">
           <div className="flex w-full gap-1">
             <Button 
-              onClick={status === "connected" ? handleChooseSource : handleConnect}
+              onClick={handleChooseSource}
               variant={status === "connected" ? "secondary" : "default"}
               className="flex-1"
             >
@@ -229,6 +236,7 @@ export function SyncDataSourceCard({
           onComplete={handleWizardComplete}
           shortName={shortName}
           name={name}
+          authType={authType}
         />
       )}
     </>
