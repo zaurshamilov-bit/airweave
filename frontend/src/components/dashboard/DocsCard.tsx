@@ -3,7 +3,7 @@ import { BookOpen } from "lucide-react";
 
 export function DocsCard() {
   const handleDocsClick = () => {
-    window.open("https://docs.airweave.io", "_blank");
+    window.open("https://docs.airweave.ai", "_blank");
   };
 
   return (
