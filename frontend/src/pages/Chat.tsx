@@ -137,77 +137,65 @@ function Chat() {
   // Submit a message via SSE endpoint
   const handleSubmit = useCallback(
     async (content: string, attachments: string[]) => {
-      if (!chatId) {
-        toast({
-          title: "Error",
-          description: "Chat ID not found. Please create or select a chat first.",
-          variant: "destructive",
-        });
-        return;
-      }
+      if (!chatId) return;
 
       try {
-        // Send user message
+        // Add user message
+        const userMessage = { role: "user", content, id: Date.now() };
+        setMessages(prev => [...prev, userMessage]);
+
+        // Create assistant message placeholder
+        const assistantMessage = { role: "assistant", content: "", id: Date.now() + 1 };
+        setMessages(prev => [...prev, assistantMessage]);
+
+        // Send user message to backend
         await apiClient.post(`/chat/${chatId}/message`, {
           content,
           role: "user",
         });
 
-        // Add user message to UI
-        setMessages(prev => [...prev, { role: "user", content, id: Date.now() }]);
-
         // Start stream
-        const response = await fetch(`${API_CONFIG.baseURL}/chat/${chatId}/stream`, {
-          method: 'GET',
-          credentials: 'include',
-        });
-
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const eventSource = new EventSource(`${API_CONFIG.baseURL}/chat/${chatId}/stream`);
         
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        if (!reader) throw new Error('No reader available');
-
-        // Create ONE assistant message
-        const assistantMessage = { role: "assistant" as const, content: "", id: Date.now() };
-        setMessages(prev => [...prev, assistantMessage]);
-
-        // Stream the response
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-          
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const content = line.slice(6);
-              
-              if (content === '[DONE]' || content === '[ERROR]') {
-                setIsLoading(false);
-                break;
-              }
-              
-              console.log('Content chunk:', JSON.stringify(content));
-              
-              // Handle empty strings as newlines
-              if (content === "") {
-                assistantMessage.content += "\n";
-              } else {
-                assistantMessage.content += content;
-              }
-              setMessages(prev => [...prev]);  // Force re-render
-            }
+        eventSource.onmessage = (event) => {
+          if (event.data === '[DONE]' || event.data === '[ERROR]') {
+            eventSource.close();
+            return;
           }
-        }
+
+          setMessages(prev => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            // Decode the escaped newlines
+            const decodedContent = event.data.replace(/\\n/g, '\n');
+            newMessages[newMessages.length - 1] = {
+              ...lastMessage,
+              content: lastMessage.content + decodedContent,
+              id: Date.now()
+            };
+            return newMessages;
+          });
+        };
+
+        eventSource.onerror = (error) => {
+          console.error('EventSource failed:', error);
+          eventSource.close();
+          toast({
+            title: "Error",
+            description: "Failed to get response",
+            variant: "destructive",
+          });
+        };
+
       } catch (error) {
-        setIsLoading(false);
+        console.error(error);
         toast({
           title: "Error",
-          description: "Failed to get response. Please try again.",
+          description: "Failed to get response",
           variant: "destructive",
         });
+      } finally {
+        setIsLoading(false);
       }
     },
     [chatId, toast]

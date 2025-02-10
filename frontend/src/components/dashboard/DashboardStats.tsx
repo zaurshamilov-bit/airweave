@@ -25,7 +25,7 @@ const performanceData = [
 export function DashboardStats() {
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Documents</CardTitle>
@@ -74,7 +74,7 @@ export function DashboardStats() {
             </p>
           </CardContent>
         </Card>
-      </div>
+      </div> */}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>

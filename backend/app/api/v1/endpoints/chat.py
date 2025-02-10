@@ -126,8 +126,11 @@ async def stream_chat_response(
             async for chunk in chat_service.generate_streaming_response(
                 db=db, chat_id=chat_id, user=user
             ):
-                if chunk.choices[0].delta.content:
-                    yield f"data: {chunk.choices[0].delta.content}\n\n"
+                if chunk.choices[0].delta.content is not None:
+                    content = chunk.choices[0].delta.content
+                    # Properly encode newlines for SSE
+                    content = content.replace("\n", "\\n")
+                    yield f"data: {content}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             logger.error(f"Error in stream: {str(e)}")
@@ -137,3 +140,32 @@ async def stream_chat_response(
         event_generator(),
         media_type="text/event-stream",
     )
+
+
+# @router.get("/{chat_id}/stream", response_class=StreamingResponse)
+# async def stream_chat_response(
+#     *,
+#     db: AsyncSession = Depends(get_db),
+#     user: schemas.User = Depends(get_user),
+# ) -> StreamingResponse:
+#     """Stream a test response with predefined text."""
+#     TEST_TEXT = """
+#     You still have 2 uncompleted tasks related to the Python programming language. The first is titled "Refactor Pydantic models" and the second is titled "Make use of structured outputs instead of free-form text". Would you like me to give you a detailed explanation of the tasks?
+#     """
+
+#     async def test_event_generator():
+#         await asyncio.sleep(2)
+#         try:
+#             # Split text into words and stream each word
+#             for word in TEST_TEXT.split():
+#                 yield f"data: {word} \n\n"
+#                 await asyncio.sleep(0.1)  # Add small delay between words
+#             yield "data: [DONE]\n\n"
+#         except Exception as e:
+#             logger.error(f"Error in test stream: {str(e)}")
+#             yield "data: [ERROR]\n\n"
+
+#     return StreamingResponse(
+#         test_event_generator(),
+#         media_type="text/event-stream",
+#     )
