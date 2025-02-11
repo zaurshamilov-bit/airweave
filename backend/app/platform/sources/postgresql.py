@@ -235,7 +235,10 @@ class PostgreSQLSource(BaseSource):
                         data = dict(record)
 
                         # Create entity_id from primary key values
-                        pk_values = [str(data[pk]) for pk in chunk_class.primary_keys]
+                        # Access class_vars directly from the model
+                        model_fields = chunk_class.model_fields
+                        primary_keys = model_fields["primary_key_columns"].default_factory()
+                        pk_values = [str(data[pk]) for pk in primary_keys]
                         entity_id = f"{schema}.{table}:" + ":".join(pk_values)
 
                         # Create and yield chunk

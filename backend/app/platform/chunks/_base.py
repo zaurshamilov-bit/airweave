@@ -41,7 +41,23 @@ class BaseChunk(BaseModel):
 
     def hash(self) -> str:
         """Hash the chunk."""
-        return hashlib.sha256(self.model_dump_json(exclude={"sync_job_id"}).encode()).hexdigest()
+
+        # Convert model to dict first, then sanitize any non-serializable values to strings
+        def sanitize_value(v: Any) -> Any:
+            if isinstance(v, (str, int, float, bool, type(None))):
+                return v
+            if isinstance(v, dict):
+                return sanitize_dict(v)
+            if isinstance(v, (list, tuple, set)):
+                return [sanitize_value(x) for x in v]
+            return str(v)
+
+        def sanitize_dict(d: dict) -> dict:
+            return {k: sanitize_value(v) for k, v in d.items()}
+
+        data = self.model_dump(exclude={"sync_job_id"})
+        sanitized_data = sanitize_dict(data)
+        return hashlib.sha256(str(sanitized_data).encode()).hexdigest()
 
 
 class PolymorphicChunk(BaseChunk):
