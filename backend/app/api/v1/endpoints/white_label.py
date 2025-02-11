@@ -25,7 +25,17 @@ async def list_white_labels(
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
 ) -> list[schemas.WhiteLabel]:
-    """List all white labels for the current user's organization."""
+    """List all white labels for the current user's organization.
+
+    Args:
+    -----
+        db: The database session
+        current_user: The current user
+
+    Returns:
+    --------
+        list[schemas.WhiteLabel]: A list of white labels
+    """
     white_labels = await crud.white_label.get_all_for_user(db, current_user=current_user)
     return white_labels
 
@@ -37,7 +47,18 @@ async def create_white_label(
     current_user: User = Depends(deps.get_user),
     white_label_in: schemas.WhiteLabelCreate,
 ) -> schemas.WhiteLabel:
-    """Create new white label integration."""
+    """Create new white label integration.
+
+    Args:
+    -----
+        db: The database session
+        current_user: The current user
+        white_label_in: The white label to create
+
+    Returns:
+    --------
+        white_label (schemas.WhiteLabel): The created white label
+    """
     white_label = await crud.white_label.create(
         db,
         obj_in=white_label_in,
@@ -52,7 +73,18 @@ async def get_white_label(
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
 ) -> schemas.WhiteLabel:
-    """Get a specific white label integration."""
+    """Get a specific white label integration.
+
+    Args:
+    -----
+        db: The database session
+        white_label_id: The ID of the white label to get
+        current_user: The current user
+
+    Returns:
+    --------
+        white_label (schemas.WhiteLabel): The white label
+    """
     white_label = await crud.white_label.get(db, id=white_label_id, current_user=current_user)
     if not white_label:
         raise HTTPException(status_code=404, detail="White label integration not found")
@@ -69,7 +101,19 @@ async def update_white_label(
     white_label_id: UUID,
     white_label_in: schemas.WhiteLabelUpdate,
 ) -> schemas.WhiteLabel:
-    """Update a white label integration."""
+    """Update a white label integration.
+
+    Args:
+    -----
+        db: The database session
+        current_user: The current user
+        white_label_id: The ID of the white label to update
+        white_label_in: The white label to update
+
+    Returns:
+    --------
+        white_label (schemas.WhiteLabel): The updated white label
+    """
     # TODO: Check if update is valid (i.e. scopes, source id etc)
     white_label = await crud.white_label.get(db, id=white_label_id)
     if not white_label:
@@ -92,7 +136,18 @@ async def delete_white_label(
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
 ) -> schemas.WhiteLabel:
-    """Delete a white label integration."""
+    """Delete a white label integration.
+
+    Args:
+    -----
+        db: The database session
+        current_user: The current user
+        white_label_id: The ID of the white label to delete
+
+    Returns:
+    --------
+        white_label (schemas.WhiteLabel): The deleted white label
+    """
     white_label = await crud.white_label.get(db, id=white_label_id)
     if not white_label:
         raise HTTPException(status_code=404, detail="White label integration not found")
@@ -109,7 +164,18 @@ async def get_white_label_oauth2_auth_url(
     white_label_id: UUID,
     user: User = Depends(deps.get_user),
 ) -> str:
-    """Generate the OAuth2 authorization URL by delegating to oauth2_service."""
+    """Generate the OAuth2 authorization URL by delegating to oauth2_service.
+
+    Args:
+    -----
+        db: The database session
+        white_label_id: The ID of the white label to get the auth URL for
+        user: The current user
+
+    Returns:
+    --------
+        str: The OAuth2 authorization URL
+    """
     white_label = await crud.white_label.get(db, id=white_label_id)
     if not white_label:
         raise HTTPException(status_code=404, detail="White label integration not found")
@@ -127,7 +193,19 @@ async def exchange_white_label_oauth2_code(
     db: AsyncSession = Depends(deps.get_db),
     user: User = Depends(deps.get_user),
 ) -> schemas.Connection:
-    """Exchange OAuth2 code for tokens and create connection."""
+    """Exchange OAuth2 code for tokens and create connection.
+
+    Args:
+    -----
+        white_label_id: The ID of the white label to exchange the code for
+        code: The OAuth2 code
+        db: The database session
+        user: The current user
+
+    Returns:
+    --------
+        connection (schemas.Connection): The created connection
+    """
     white_label = await crud.white_label.get(db, id=white_label_id)
     if not white_label:
         raise HTTPException(status_code=404, detail="White label integration not found")
@@ -192,5 +270,16 @@ async def list_white_label_syncs(
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
 ) -> list[schemas.Sync]:
-    """List all syncs for a specific white label."""
+    """List all syncs for a specific white label.
+
+    Args:
+    -----
+        white_label_id: The ID of the white label to list syncs for
+        db: The database session
+        current_user: The current user
+
+    Returns:
+    --------
+        list[schemas.Sync]: A list of syncs
+    """
     return await crud.sync.get_all_for_white_label(db, white_label_id, current_user)

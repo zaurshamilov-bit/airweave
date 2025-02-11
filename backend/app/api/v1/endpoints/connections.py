@@ -30,7 +30,18 @@ async def get_connection(
     db: AsyncSession = Depends(deps.get_db),
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Connection:
-    """Get a specific connection."""
+    """Get a specific connection.
+
+    Args:
+    -----
+        connection_id: The ID of the connection to get.
+        db: The database session.
+        user: The current user.
+
+    Returns:
+    -------
+        schemas.Connection: The connection.
+    """
     connection = await crud.connection.get(db, id=connection_id, current_user=user)
     return connection
 
@@ -43,7 +54,17 @@ async def list_all_connected_integrations(
     db: AsyncSession = Depends(deps.get_db),
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.Connection]:
-    """Get all active connections for the current user across all integration types."""
+    """Get all active connections for the current user across all integration types.
+
+    Args:
+    -----
+        db: The database session.
+        user: The current user.
+
+    Returns:
+    -------
+        list[schemas.Connection]: The list of connections.
+    """
     connections = await crud.connection.get_all_for_user(db, current_user=user)
     return connections
 
@@ -60,11 +81,13 @@ async def list_connected_integrations(
     """Get all integrations of specified type connected to the current user.
 
     Args:
+    -----
         integration_type (IntegrationType): The type of integration to get connections for.
         db (AsyncSession): The database session.
         user (schemas.User): The current user.
 
     Returns:
+    -------
         list[schemas.Connection]: The list of connections.
     """
     connections = await crud.connection.get_by_integration_type(
@@ -95,6 +118,19 @@ async def connect_integration(
         ... other config fields specific to the integration type ...
     }
     ```
+
+    Args:
+    -----
+        db: The database session.
+        integration_type: The type of integration to connect to.
+        short_name: The short name of the integration to connect to.
+        name: The name of the connection.
+        config_fields: The config fields for the integration.
+        user: The current user.
+
+    Returns:
+    -------
+        schemas.Connection: The connection.
     """
     async with UnitOfWork(db) as uow:
         # Get the integration based on type
@@ -198,12 +234,14 @@ async def get_connection_credentials(
     """Get the credentials for a connection.
 
     Args:
+    -----
         connection_id (UUID): The ID of the connection to get credentials for
         db (AsyncSession): The database session
         user (schemas.User): The current user
 
     Returns:
-        dict: The credentials for the connection
+    -------
+        decrypted_credentials (dict): The credentials for the connection
     """
     connection = await crud.connection.get(db, id=connection_id, current_user=user)
     if not connection:
@@ -231,13 +269,14 @@ async def delete_connection(
     Deletes the connection and integration credential.
 
     Args:
+    -----
         db (AsyncSession): The database session
         connection_id (UUID): The ID of the connection to delete
-        delete_syncs_and_data (bool): Whether to delete the associated syncs and data
         user (schemas.User): The current user
 
     Returns:
-        schemas.Connection: The deleted connection
+    --------
+        connection (schemas.Connection): The deleted connection
     """
     # TODO: Implement data deletion logic, should be part of destination interface
     async with UnitOfWork(db) as uow:
@@ -280,11 +319,14 @@ async def disconnect_source_connection(
     """Disconnect from a source connection.
 
     Args:
+    -----
         db (AsyncSession): The database session
         connection_id (UUID): The ID of the connection to disconnect
         user (schemas.User): The current user
+
     Returns:
-        schemas.Connection: The disconnected connection
+    --------
+        connection_schema (schemas.Connection): The disconnected connection
     """
     async with UnitOfWork(db) as uow:
         connection = await crud.connection.get(uow.session, id=connection_id, current_user=user)
@@ -328,12 +370,14 @@ async def disconnect_destination_connection(
     """Disconnect from a destination connection.
 
     Args:
+    -----
         db (AsyncSession): The database session
         connection_id (UUID): The ID of the connection to disconnect
         user (schemas.User): The current user
 
     Returns:
-        schemas.Connection: The disconnected connection
+    --------
+        connection_schema (schemas.Connection): The disconnected connection
     """
     async with UnitOfWork(db) as uow:
         connection = await crud.connection.get(uow.session, id=connection_id, current_user=user)
@@ -377,9 +421,15 @@ async def get_oauth2_auth_url(
     short_name: str,
     user: schemas.User = Depends(deps.get_user),
 ) -> str:
-    """Get the OAuth2 authorization URL for a source."""
-    settings = integration_settings.get_by_short_name(short_name)
+    """Get the OAuth2 authorization URL for a source.
 
+    Args:
+    -----
+        db: The database session
+        short_name: The short name of the source
+        user: The current user
+    """
+    settings = integration_settings.get_by_short_name(short_name)
     if not settings:
         raise HTTPException(status_code=404, detail="Integration not found")
 
@@ -409,6 +459,17 @@ async def send_oauth2_code(
     1. Get the OAuth2 settings for the source
     2. Exchange the authorization code for a token
     3. Create an integration credential with the token
+
+    Args:
+    -----
+        db: The database session
+        short_name: The short name of the source
+        code: The authorization code
+        user: The current user
+
+    Returns:
+    --------
+        connection (schemas.Connection): The created connection
     """
     try:
         return await oauth2_service.create_oauth2_connection(
@@ -431,7 +492,20 @@ async def send_oauth2_white_label_code(
     user: schemas.User = Depends(deps.get_user),
     background_tasks: BackgroundTasks,
 ) -> schemas.Connection:
-    """Exchange the OAuth2 authorization code for a white label integration."""
+    """Exchange the OAuth2 authorization code for a white label integration.
+
+    Args:
+    -----
+        db: The database session
+        white_label_id: The ID of the white label integration
+        code: The authorization code
+        user: The current user
+        background_tasks: The background tasks
+
+    Returns:
+    --------
+        connection (schemas.Connection): The created connection
+    """
     try:
         white_label = await crud.white_label.get(db, id=white_label_id, current_user=user)
         if not white_label:
@@ -479,7 +553,18 @@ async def get_oauth2_white_label_auth_url(
     white_label_id: UUID,
     user: schemas.User = Depends(deps.get_user),
 ) -> str:
-    """Get the OAuth2 authorization URL for a white label integration."""
+    """Get the OAuth2 authorization URL for a white label integration.
+
+    Args:
+    -----
+        db: The database session
+        white_label_id: The ID of the white label integration
+        user: The current user
+
+    Returns:
+    --------
+        str: The OAuth2 authorization URL
+    """
     try:
         white_label = await crud.white_label.get(
             db,

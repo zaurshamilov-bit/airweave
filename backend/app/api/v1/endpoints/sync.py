@@ -26,7 +26,20 @@ async def list_syncs(
     with_source_connection: bool = False,
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.Sync] | list[schemas.SyncWithSourceConnection]:
-    """List all syncs for the current user."""
+    """List all syncs for the current user.
+
+    Args:
+    -----
+        db: The database session
+        skip: The number of syncs to skip
+        limit: The number of syncs to return
+        with_source_connection: Whether to include the source connection in the response
+        user: The current user
+
+    Returns:
+    --------
+        list[schemas.Sync] | list[schemas.SyncWithSourceConnection]: A list of syncs
+    """
     if with_source_connection:
         syncs = await crud.sync.get_all_syncs_join_with_source_connection(db=db, current_user=user)
     else:
@@ -41,7 +54,18 @@ async def get_sync(
     sync_id: UUID,
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Sync:
-    """Get a specific sync by ID."""
+    """Get a specific sync by ID.
+
+    Args:
+    -----
+        db: The database session
+        sync_id: The ID of the sync to get
+        user: The current user
+
+    Returns:
+    --------
+        sync (schemas.Sync): The sync
+    """
     sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
     if not sync:
         raise HTTPException(status_code=404, detail="Sync not found")
@@ -56,7 +80,19 @@ async def create_sync(
     user: schemas.User = Depends(deps.get_user),
     background_tasks: BackgroundTasks,
 ) -> schemas.Sync:
-    """Create a new sync configuration."""
+    """Create a new sync configuration.
+
+    Args:
+    -----
+        db: The database session
+        sync_in: The sync to create
+        user: The current user
+        background_tasks: The background tasks
+
+    Returns:
+    --------
+        sync (schemas.Sync): The created sync
+    """
     async with UnitOfWork(db) as uow:
         sync = await sync_service.create(db=db, sync=sync_in.to_base(), current_user=user, uow=uow)
         await uow.session.flush()
@@ -85,7 +121,19 @@ async def delete_sync(
     delete_data: bool = False,
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Sync:
-    """Delete a sync configuration and optionally its associated data."""
+    """Delete a sync configuration and optionally its associated data.
+
+    Args:
+    -----
+        db: The database session
+        sync_id: The ID of the sync to delete
+        delete_data: Whether to delete the data associated with the sync
+        user: The current user
+
+    Returns:
+    --------
+        sync (schemas.Sync): The deleted sync
+    """
     sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
     if not sync:
         raise HTTPException(status_code=404, detail="Sync not found")
@@ -105,7 +153,19 @@ async def run_sync(
     user: schemas.User = Depends(deps.get_user),
     background_tasks: BackgroundTasks,
 ) -> schemas.SyncJob:
-    """Trigger a sync run."""
+    """Trigger a sync run.
+
+    Args:
+    -----
+        db: The database session
+        sync_id: The ID of the sync to run
+        user: The current user
+        background_tasks: The background tasks
+
+    Returns:
+    --------
+        sync_job (schemas.SyncJob): The sync job
+    """
     sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
     sync_schema = schemas.Sync.model_validate(sync)
 
@@ -129,7 +189,18 @@ async def list_sync_jobs(
     sync_id: UUID,
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.SyncJob]:
-    """List all jobs for a specific sync."""
+    """List all jobs for a specific sync.
+
+    Args:
+    -----
+        db: The database session
+        sync_id: The ID of the sync to list jobs for
+        user: The current user
+
+    Returns:
+    --------
+        list[schemas.SyncJob]: A list of sync jobs
+    """
     sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
     if not sync:
         raise HTTPException(status_code=404, detail="Sync not found")
@@ -145,7 +216,19 @@ async def get_sync_job(
     job_id: UUID,
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.SyncJob:
-    """Get details of a specific sync job."""
+    """Get details of a specific sync job.
+
+    Args:
+    -----
+        db: The database session
+        sync_id: The ID of the sync to list jobs for
+        job_id: The ID of the job to get
+        user: The current user
+
+    Returns:
+    --------
+        sync_job (schemas.SyncJob): The sync job
+    """
     sync_job = await crud.sync_job.get(db=db, id=job_id, current_user=user)
     if not sync_job or sync_job.sync_id != sync_id:
         raise HTTPException(status_code=404, detail="Sync job not found")
@@ -154,7 +237,17 @@ async def get_sync_job(
 
 @router.get("/job/{job_id}/subscribe")
 async def subscribe_sync_job(job_id: UUID, user=Depends(deps.get_user)) -> StreamingResponse:
-    """Server-Sent Events (SSE) endpoint to subscribe to a sync job's progress."""
+    """Server-Sent Events (SSE) endpoint to subscribe to a sync job's progress.
+
+    Args:
+    -----
+        job_id: The ID of the job to subscribe to
+        user: The current user
+
+    Returns:
+    --------
+        StreamingResponse: The streaming response
+    """
     queue = await sync_pubsub.subscribe(job_id)
 
     if not queue:

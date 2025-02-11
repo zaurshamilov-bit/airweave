@@ -16,7 +16,17 @@ async def list_destinations(
     db: AsyncSession = Depends(deps.get_db),
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.Destination]:
-    """Get all available destinations."""
+    """Get all available destinations.
+
+    Args:
+    -----
+        db: The database session
+        user: The current user
+
+    Returns:
+    --------
+        List[schemas.Destination]: A list of destinations
+    """
     destinations = await crud.destination.get_all(db)
     return destinations
 
@@ -28,7 +38,18 @@ async def read_destination(
     short_name: str,
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Destination:
-    """Get destination by short name."""
+    """Get destination by short name.
+
+    Args:
+    -----
+        db: The database session
+        short_name: The short name of the destination
+        user: The current user
+
+    Returns:
+    --------
+        destination (schemas.Destination): The destination
+    """
     destination = await crud.destination.get_by_short_name(db, short_name)
     if not destination:
         raise HTTPException(status_code=404, detail="Destination not found")

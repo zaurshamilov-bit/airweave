@@ -23,7 +23,13 @@ async def openai_key_set(
 ) -> bool:
     """Check if the OpenAI API key is set for the current user.
 
+    Args:
+    ----
+        db: The database session.
+        user: The current user.
+
     Returns:
+    -------
         bool: True if the OpenAI API key is set, False otherwise.
     """
     return settings.OPENAI_API_KEY is not None
@@ -36,7 +42,18 @@ async def create_chat(
     chat_in: schemas.ChatCreate,
     user: schemas.User = Depends(get_user),
 ) -> schemas.Chat:
-    """Create a new chat."""
+    """Create a new chat.
+
+    Args:
+    ----
+        db: The database session.
+        chat_in: The chat creation data.
+        user: The current user.
+
+    Returns:
+    -------
+        schemas.Chat: The created chat.
+    """
     chat = await crud.chat.create(db=db, obj_in=chat_in, current_user=user)
     return chat
 
@@ -49,7 +66,19 @@ async def list_chats(
     limit: int = 100,
     user: schemas.User = Depends(get_user),
 ) -> list[schemas.Chat]:
-    """List all chats for the current user."""
+    """List all chats for the current user.
+
+    Args:
+    ----
+        db: The database session.
+        skip: The number of chats to skip.
+        limit: The number of chats to return.
+        user: The current user.
+
+    Returns:
+    -------
+        list[schemas.Chat]: The list of chats.
+    """
     chats = await crud.chat.get_active_chats(db=db, current_user=user, skip=skip, limit=limit)
     return chats
 
@@ -61,7 +90,18 @@ async def get_chat(
     chat_id: UUID,
     user: schemas.User = Depends(get_user),
 ) -> schemas.Chat:
-    """Get a specific chat by ID."""
+    """Get a specific chat by ID.
+
+    Args:
+    ----
+        db: The database session.
+        chat_id: The ID of the chat to get.
+        user: The current user.
+
+    Returns:
+    -------
+        schemas.Chat: The chat.
+    """
     chat = await crud.chat.get_with_messages(db=db, id=chat_id, current_user=user)
     if not chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
@@ -76,7 +116,19 @@ async def update_chat(
     chat_in: schemas.ChatUpdate,
     user: schemas.User = Depends(get_user),
 ) -> schemas.Chat:
-    """Update a chat."""
+    """Update a chat.
+
+    Args:
+    ----
+        db: The database session.
+        chat_id: The ID of the chat to update.
+        chat_in: The chat update data.
+        user: The current user.
+
+    Returns:
+    -------
+        schemas.Chat: The updated chat.
+    """
     chat = await crud.chat.get(db=db, id=chat_id, current_user=user)
     if not chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
@@ -92,7 +144,14 @@ async def delete_chat(
     chat_id: UUID,
     user: schemas.User = Depends(get_user),
 ) -> None:
-    """Archive a chat."""
+    """Archive a chat.
+
+    Args:
+    ----
+        db: The database session.
+        chat_id: The ID of the chat to archive.
+        user: The current user.
+    """
     chat = await crud.chat.get(db=db, id=chat_id, current_user=user)
     if not chat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
@@ -108,7 +167,19 @@ async def send_message(
     message: schemas.ChatMessageCreate,
     user: schemas.User = Depends(get_user),
 ) -> schemas.ChatMessage:
-    """Send a message to a chat."""
+    """Send a message to a chat.
+
+    Args:
+    -----
+        db: The database session.
+        chat_id: The ID of the chat to send the message to.
+        message: The message to send.
+        user: The current user.
+
+    Returns:
+    -------
+        schemas.ChatMessage: The sent message.
+    """
     return await crud.chat.add_message(db=db, chat_id=chat_id, obj_in=message, current_user=user)
 
 
@@ -119,7 +190,18 @@ async def stream_chat_response(
     chat_id: UUID,
     user: schemas.User = Depends(get_user),
 ) -> StreamingResponse:
-    """Stream an AI response for a chat message."""
+    """Stream an AI response for a chat message.
+
+    Args:
+    -----
+        db: The database session.
+        chat_id: The ID of the chat to stream the response for.
+        user: The current user.
+
+    Returns:
+    -------
+        StreamingResponse: The streaming response.
+    """
 
     async def event_generator():
         try:
@@ -150,7 +232,10 @@ async def stream_chat_response(
 # ) -> StreamingResponse:
 #     """Stream a test response with predefined text."""
 #     TEST_TEXT = """
-#     You still have 2 uncompleted tasks related to the Python programming language. The first is titled "Refactor Pydantic models" and the second is titled "Make use of structured outputs instead of free-form text". Would you like me to give you a detailed explanation of the tasks?
+#     You still have 2 uncompleted tasks related to the Python programming language.
+#     The first is titled "Refactor Pydantic models" and the second is titled "Make use of
+#     structured outputs instead of free-form text". Would you like me to give you a detailed
+#     explanation of the tasks?
 #     """
 
 #     async def test_event_generator():
