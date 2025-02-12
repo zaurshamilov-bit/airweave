@@ -72,7 +72,6 @@ class PolymorphicChunk(BaseChunk):
     table_name: str
     schema_name: Optional[str] = None
     primary_key_columns: List[str] = Field(default_factory=list)
-    column_metadata: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 
     @classmethod
     def create_table_chunk_class(
@@ -98,12 +97,13 @@ class PolymorphicChunk(BaseChunk):
             "table_name": (str, Field(default=table_name)),
             "schema_name": (Optional[str], Field(default=schema_name)),
             "primary_key_columns": (List[str], Field(default_factory=lambda: primary_keys)),
-            "column_metadata": (Dict[str, Dict[str, Any]], Field(default_factory=lambda: columns)),
         }
 
         # Add fields for each database column
         for col_name, col_info in columns.items():
             python_type = col_info.get("python_type", Any)
+            if col_name == "id":
+                col_name = "id_"
             fields[col_name] = (Optional[python_type], Field(default=None))
 
         # Create the new model class

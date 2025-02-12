@@ -229,21 +229,33 @@ class PostgreSQLSource(BaseSource):
                     chunk_class = self.chunk_classes[f"{schema}.{table}"]
 
                     # Fetch and yield data
-                    query = f'SELECT * FROM "{schema}"."{table}"'
-                    async for record in self.conn.cursor(query):
-                        # Convert record to dict
-                        data = dict(record)
+                    BATCH_SIZE = 50
+                    offset = 0
 
-                        # Create entity_id from primary key values
-                        # Access class_vars directly from the model
-                        model_fields = chunk_class.model_fields
-                        primary_keys = model_fields["primary_key_columns"].default_factory()
-                        pk_values = [str(data[pk]) for pk in primary_keys]
-                        entity_id = f"{schema}.{table}:" + ":".join(pk_values)
+                    while True:
+                        # Fetch records in batches using LIMIT and OFFSET
+                        batch_query = (
+                            f'SELECT * FROM "{schema}"."{table}" LIMIT {BATCH_SIZE} OFFSET {offset}'
+                        )
+                        records = await self.conn.fetch(batch_query)
 
-                        # Create and yield chunk
-                        chunk = chunk_class(entity_id=entity_id, **data)
-                        yield chunk
+                        # Break if no more records
+                        if not records:
+                            break
+
+                        # Process the batch
+                        for record in records:
+                            data = dict(record)
+                            model_fields = chunk_class.model_fields
+                            primary_keys = model_fields["primary_key_columns"].default_factory()
+                            pk_values = [str(data[pk]) for pk in primary_keys]
+                            entity_id = f"{schema}.{table}:" + ":".join(pk_values)
+
+                            chunk = chunk_class(entity_id=entity_id, **data)
+                            yield chunk
+
+                        # Increment offset for next batch
+                        offset += BATCH_SIZE
 
         finally:
             if self.conn:
