@@ -45,6 +45,8 @@ class ODBCAuthConfig(AuthConfig):
     database: str = Field(title="Database", description="The name of the ODBC database")
     username: str = Field(title="Username", description="The username for the ODBC database")
     password: str = Field(title="Password", description="The password for the ODBC database")
+    schema: str = Field(title="Schema", description="The schema of the ODBC database")
+    tables: str = Field(title="Tables", description="The tables of the ODBC database")
 
 
 class StripeAuthConfig(AuthConfig):
@@ -53,8 +55,8 @@ class StripeAuthConfig(AuthConfig):
     api_key: str = Field(title="API Key", description="The API key for the Stripe account")
 
 
-class PostgreSQLAuthConfig(BaseConfig):
-    """PostgreSQL authentication configuration."""
+class BaseDatabaseAuthConfig(AuthConfig):
+    """Base database authentication configuration."""
 
     host: str = Field(title="Host", description="The host of the PostgreSQL database")
     port: int = Field(title="Port", description="The port of the PostgreSQL database")
@@ -89,3 +91,19 @@ class PostgreSQLAuthConfig(BaseConfig):
                 "tables": "users,orders",
             }
         }
+
+
+class PostgreSQLAuthConfig(BaseDatabaseAuthConfig):
+    """PostgreSQL authentication configuration."""
+
+
+class MySQLAuthConfig(BaseDatabaseAuthConfig):
+    """MySQL authentication configuration."""
+
+
+class SQLServerAuthConfig(BaseDatabaseAuthConfig):
+    """SQL Server authentication configuration."""
+
+
+class OracleAuthConfig(BaseDatabaseAuthConfig):
+    """Oracle authentication configuration."""

@@ -28,6 +28,11 @@ weaviate = "^0.1.2"
 weaviate-client = "^4.10.2"
 markitdown = "^0.0.1a3"
 neo4j = "^5.27.0"
+pyodbc = "^5.2.0"
+aiomysql = "^0.2.0"
+aiosqlite = "^0.21.0"
+aioodbc = "^0.5.0"
+oracledb = "^2.5.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
