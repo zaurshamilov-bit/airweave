@@ -24,6 +24,18 @@ echo "ENCRYPTION_KEY=\"$NEW_KEY\"" >> .env
 echo "Updated .env file. Current ENCRYPTION_KEY value:"
 grep "^ENCRYPTION_KEY=" .env
 
-# Start Docker Compose
-echo "Starting Docker Compose..."
-docker compose up -d 
+# Check if "docker compose" is available (Docker Compose v2)
+if docker compose version >/dev/null 2>&1; then
+  COMPOSE_CMD="docker compose"
+# Else, fall back to "docker-compose" (Docker Compose v1)
+elif docker-compose --version >/dev/null 2>&1; then
+  COMPOSE_CMD="docker-compose"
+else
+  echo "Neither 'docker compose' nor 'docker-compose' found. Please install Docker Compose."
+  exit 1
+fi
+
+echo "Using command: $COMPOSE_CMD"
+
+# Now run the appropriate Docker Compose command
+$COMPOSE_CMD up -d
