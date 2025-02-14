@@ -220,9 +220,9 @@ class MySQLSource(BaseSource):
                     for table in tables:
                         # Create chunk class if not already created
                         if f"{schema}.{table}" not in self.chunk_classes:
-                            self.chunk_classes[f"{schema}.{table}"] = (
-                                await self._create_chunk_class(schema, table)
-                            )
+                            self.chunk_classes[
+                                f"{schema}.{table}"
+                            ] = await self._create_chunk_class(schema, table)
 
                         chunk_class = self.chunk_classes[f"{schema}.{table}"]
 
