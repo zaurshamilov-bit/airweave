@@ -93,7 +93,10 @@ class Neo4jDestination(GraphDBDestination):
 
         WARNING: Using string interpolation for rel_type; ensure it is trusted.
         """
-        query = f"MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) CREATE (a)-[r:{rel_type} $props]->(b) RETURN r"
+        query = (
+            f"MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) "
+            f"CREATE (a)-[r:{rel_type} $props]->(b) RETURN r"
+        )
         async with self.driver.session() as session:
             await session.run(query, from_id=from_node_id, to_id=to_node_id, props=properties or {})
 
@@ -117,7 +120,10 @@ class Neo4jDestination(GraphDBDestination):
         """
         async with self.driver.session() as session:
             for rel in relationships:
-                query = f"MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) CREATE (a)-[r:{rel['rel_type']} $props]->(b) RETURN r"
+                query = (
+                    f"MATCH (a {{id: $from_id}}), (b {{id: $to_id}}) "
+                    f"CREATE (a)-[r:{rel['rel_type']} $props]->(b) RETURN r"
+                )
                 await session.run(
                     query,
                     from_id=rel.get("from_node_id"),

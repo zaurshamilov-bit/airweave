@@ -5,12 +5,12 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import NotFoundException
 from app.crud._base import CRUDBase
 from app.db.unit_of_work import UnitOfWork
-from app.core.exceptions import NotFoundException
 from app.models.api_key import APIKey
 from app.schemas import APIKeyCreate, APIKeyUpdate, User
 

@@ -251,7 +251,7 @@ class ConfluenceSource(BaseSource):
             next_link = data.get("_links", {}).get("next")
             url = f"https://your-domain.atlassian.net{next_link}" if next_link else None
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
+    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:  # noqa: C901
         """Generate all Confluence content."""
         async with httpx.AsyncClient() as client:
             # 1) Yield all spaces (top-level)

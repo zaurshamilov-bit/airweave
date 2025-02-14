@@ -74,7 +74,10 @@ class GmailSource(BaseSource):
     async def _generate_thread_chunks(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate GmailThreadChunk objects, and for each thread, generate GmailMessageChunk objects."""
+        """Generate GmailThreadChunk objects.
+
+        For each thread, generate GmailMessageChunk objects.
+        """
         base_url = "https://gmail.googleapis.com/gmail/v1/users/me/threads"
         params = {"maxResults": 100}
         while True:
@@ -152,12 +155,12 @@ class GmailSource(BaseSource):
                 break
             params["pageToken"] = next_page_token
 
-    async def _generate_message_chunks(
+    async def _generate_message_chunks(  # noqa: C901
         self,
         client: httpx.AsyncClient,
         message_list: List[dict],
         thread_id: str,
-        thread_breadcrumb: Breadcrumb,  # Add thread_breadcrumb parameter
+        thread_breadcrumb: Breadcrumb,
     ) -> AsyncGenerator[GmailMessageChunk, None]:
         """Generate GmailMessageChunk objects for a list of message references."""
         from datetime import datetime
@@ -268,7 +271,7 @@ class GmailSource(BaseSource):
                 size_estimate=msg.get("sizeEstimate"),
             )
 
-    async def _generate_draft_chunks(
+    async def _generate_draft_chunks(  # noqa: C901
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[GmailDraftChunk, None]:
         """Generate GmailDraftChunk objects."""
