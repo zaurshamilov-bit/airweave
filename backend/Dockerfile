@@ -5,6 +5,8 @@ WORKDIR /app
 # Install system dependencies and poetry
 RUN apt-get update && apt-get install -y \
     curl \
+    unixodbc \
+    unixodbc-dev \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir poetry==1.8.4
 
