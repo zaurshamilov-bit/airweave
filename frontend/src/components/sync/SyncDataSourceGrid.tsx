@@ -148,11 +148,13 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
       source.name.toLowerCase().includes(search.toLowerCase())
     )
     .sort((a, b) => {
+      // First sort by connection status
       const aConnected = shortNameIsConnected(a.short_name);
       const bConnected = shortNameIsConnected(b.short_name);
       if (aConnected && !bConnected) return -1;
       if (!aConnected && bConnected) return 1;
-      return 0;
+      // Then sort alphabetically by name
+      return a.name.localeCompare(b.name);
     });
 
   return (
