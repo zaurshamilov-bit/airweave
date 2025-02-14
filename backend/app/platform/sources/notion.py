@@ -150,6 +150,83 @@ class NotionSource(BaseSource):
             has_more = response.get("has_more", False)
             start_cursor = response.get("next_cursor")
 
+    def _extract_block_content(self, block: Dict) -> str:
+        """Extract text content from a Notion block according to the API specification.
+
+        Reference: https://developers.notion.com/reference/block
+
+        Args:
+            block (Dict): The Notion block object
+
+        Returns:
+            str: The extracted text content
+        """
+        block_type = block.get("type", "")
+        if not block_type or block_type == "unsupported":
+            return ""
+
+        block_content = block.get(block_type, {})
+
+        # Most block types have rich_text array
+        if "rich_text" in block_content:
+            text_parts = []
+            for text_entry in block_content["rich_text"]:
+                # The API guarantees plain_text will be present
+                text_parts.append(text_entry.get("plain_text", ""))
+
+            # Add block-specific formatting
+            text = " ".join(text_parts)
+            if block_type == "bulleted_list_item":
+                return f"• {text}"
+            elif block_type == "numbered_list_item":
+                return text  # Number prefixes handled by parent context
+            elif block_type == "to_do":
+                checkbox = "☑" if block_content.get("checked", False) else "☐"
+                return f"{checkbox} {text}"
+            elif block_type in ["heading_1", "heading_2", "heading_3"]:
+                # Handle toggleable headings
+                prefix = "▸ " if block_content.get("is_toggleable", False) else ""
+                return f"{prefix}{text}"
+            else:
+                return text
+
+        # Special handling for blocks without rich_text
+        elif block_type == "code":
+            language = block_content.get("language", "")
+            code_text = " ".join(
+                text.get("plain_text", "") for text in block_content.get("rich_text", [])
+            )
+            caption = " ".join(
+                text.get("plain_text", "") for text in block_content.get("caption", [])
+            )
+            if caption:
+                return f"```{language}\n{code_text}\n```\n{caption}"
+            return f"```{language}\n{code_text}\n```"
+
+        elif block_type in ["image", "video", "file", "pdf"]:
+            # Extract caption if present
+            caption = " ".join(
+                text.get("plain_text", "") for text in block_content.get("caption", [])
+            )
+            url = block_content.get("external", {}).get("url", "") or block_content.get(
+                "file", {}
+            ).get("url", "")
+            if caption:
+                return f"[{block_type}: {caption}]({url})"
+            return f"[{block_type}]({url})"
+
+        elif block_type == "child_page":
+            return f"[Page: {block_content.get('title', '')}]"
+
+        elif block_type == "child_database":
+            return f"[Database: {block_content.get('title', '')}]"
+
+        # Handle container blocks that don't have direct content
+        elif block_type in ["column", "column_list", "template", "synced_block"]:
+            return ""
+
+        return ""
+
     def _create_database_chunk(self, database: Dict) -> NotionDatabaseChunk:
         """Create a database chunk from API response."""
         # Safely extract database title
@@ -205,6 +282,8 @@ class NotionSource(BaseSource):
         self, block: Dict, parent_id: str, breadcrumbs: List[Breadcrumb]
     ) -> NotionBlockChunk:
         """Create a block chunk from API response."""
+        text_content = self._extract_block_content(block)
+
         return NotionBlockChunk(
             source_name="notion",
             block_id=block["id"],
@@ -212,9 +291,11 @@ class NotionSource(BaseSource):
             breadcrumbs=breadcrumbs,
             parent_id=parent_id,
             block_type=block["type"],
-            text_content=block.get(block["type"], {}).get("text", {}).get("content"),
+            text_content=text_content,
             has_children=block.get("has_children", False),
             children_ids=[],  # Will be populated if has_children is True
+            created_time=block.get("created_time"),
+            last_edited_time=block.get("last_edited_time"),
         )
 
     async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
