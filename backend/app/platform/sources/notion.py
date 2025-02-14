@@ -1,9 +1,13 @@
 """Notion source implementation."""
 
+import asyncio
 from typing import AsyncGenerator, Dict, List
 
 import httpx
+from httpx import ReadTimeout, TimeoutException
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from app.core.logging import logger
 from app.platform.auth.schemas import AuthType
 from app.platform.chunks._base import BaseChunk, Breadcrumb
 from app.platform.chunks.notion import (
@@ -19,6 +23,12 @@ from app.platform.sources._base import BaseSource
 class NotionSource(BaseSource):
     """Notion source implementation."""
 
+    # Add class constants for configuration
+    TIMEOUT_SECONDS = 30.0
+    RATE_LIMIT_REQUESTS = 3  # Maximum requests per second
+    RATE_LIMIT_PERIOD = 1.0  # Time period in seconds
+    MAX_RETRIES = 3
+
     @classmethod
     async def create(cls, access_token: str) -> "NotionSource":
         """Create a new Notion source."""
@@ -26,15 +36,56 @@ class NotionSource(BaseSource):
         instance.access_token = access_token
         return instance
 
+    def __init__(self):
+        """Initialize rate limiting state."""
+        super().__init__()
+        self._request_times = []
+        self._lock = asyncio.Lock()
+
+    async def _wait_for_rate_limit(self):
+        """Implement rate limiting for Notion API requests."""
+        async with self._lock:
+            current_time = asyncio.get_event_loop().time()
+
+            # Remove old request times
+            self._request_times = [
+                t for t in self._request_times if current_time - t < self.RATE_LIMIT_PERIOD
+            ]
+
+            if len(self._request_times) >= self.RATE_LIMIT_REQUESTS:
+                # Wait until enough time has passed
+                sleep_time = self._request_times[0] + self.RATE_LIMIT_PERIOD - current_time
+                if sleep_time > 0:
+                    await asyncio.sleep(sleep_time)
+
+                # Clean up old requests again after waiting
+                self._request_times = [
+                    t for t in self._request_times if current_time - t < self.RATE_LIMIT_PERIOD
+                ]
+
+            self._request_times.append(current_time)
+
+    @retry(
+        retry=retry_if_exception_type((TimeoutException, ReadTimeout)),
+        stop=stop_after_attempt(MAX_RETRIES),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+    )
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict:
-        """Make an authenticated GET request to the Notion API."""
+        """Make an authenticated GET request to the Notion API with rate limiting."""
+        await self._wait_for_rate_limit()
+
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Notion-Version": "2022-06-28",
         }
-        response = await client.get(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+
+        try:
+            response = await client.get(url, headers=headers, timeout=self.TIMEOUT_SECONDS)
+            response.raise_for_status()
+            return response.json()
+        except (TimeoutException, ReadTimeout) as e:
+            logger.warning(f"Timeout while requesting {url}. Retrying... Error: {str(e)}")
+            raise
 
     async def _post_with_auth(self, client: httpx.AsyncClient, url: str, json_data: Dict) -> Dict:
         """Make an authenticated POST request to the Notion API."""
@@ -101,16 +152,21 @@ class NotionSource(BaseSource):
 
     def _create_database_chunk(self, database: Dict) -> NotionDatabaseChunk:
         """Create a database chunk from API response."""
+        # Safely extract database title
+        title = "Untitled"
+        if database.get("title"):
+            title_items = database.get("title", [])
+            if title_items and isinstance(title_items, list) and len(title_items) > 0:
+                first_title = title_items[0]
+                if isinstance(first_title, dict):
+                    title = first_title.get("plain_text", "Untitled")
+
         return NotionDatabaseChunk(
             source_name="notion",
             database_id=database["id"],
             entity_id=database["id"],
-            name=database.get("title", [{}])[0].get("plain_text", "Untitled"),
-            description=(
-                database.get("description", [])[0].get("plain_text", "")
-                if database.get("description")
-                else ""
-            ),
+            name=title,
+            description="",  # Databases don't have descriptions in the same way as pages
             created_time=database.get("created_time"),
             last_edited_time=database.get("last_edited_time"),
         )
