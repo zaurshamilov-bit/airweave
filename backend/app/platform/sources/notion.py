@@ -167,65 +167,67 @@ class NotionSource(BaseSource):
 
         block_content = block.get(block_type, {})
 
-        # Most block types have rich_text array
+        # Use dedicated handlers for different block types
         if "rich_text" in block_content:
-            text_parts = []
-            for text_entry in block_content["rich_text"]:
-                # The API guarantees plain_text will be present
-                text_parts.append(text_entry.get("plain_text", ""))
-
-            # Add block-specific formatting
-            text = " ".join(text_parts)
-            if block_type == "bulleted_list_item":
-                return f"• {text}"
-            elif block_type == "numbered_list_item":
-                return text  # Number prefixes handled by parent context
-            elif block_type == "to_do":
-                checkbox = "☑" if block_content.get("checked", False) else "☐"
-                return f"{checkbox} {text}"
-            elif block_type in ["heading_1", "heading_2", "heading_3"]:
-                # Handle toggleable headings
-                prefix = "▸ " if block_content.get("is_toggleable", False) else ""
-                return f"{prefix}{text}"
-            else:
-                return text
-
-        # Special handling for blocks without rich_text
+            return self._handle_rich_text_block(block_type, block_content)
         elif block_type == "code":
-            language = block_content.get("language", "")
-            code_text = " ".join(
-                text.get("plain_text", "") for text in block_content.get("rich_text", [])
-            )
-            caption = " ".join(
-                text.get("plain_text", "") for text in block_content.get("caption", [])
-            )
-            if caption:
-                return f"```{language}\n{code_text}\n```\n{caption}"
-            return f"```{language}\n{code_text}\n```"
-
+            return self._handle_code_block(block_content)
         elif block_type in ["image", "video", "file", "pdf"]:
-            # Extract caption if present
-            caption = " ".join(
-                text.get("plain_text", "") for text in block_content.get("caption", [])
-            )
-            url = block_content.get("external", {}).get("url", "") or block_content.get(
-                "file", {}
-            ).get("url", "")
-            if caption:
-                return f"[{block_type}: {caption}]({url})"
-            return f"[{block_type}]({url})"
-
-        elif block_type == "child_page":
-            return f"[Page: {block_content.get('title', '')}]"
-
-        elif block_type == "child_database":
-            return f"[Database: {block_content.get('title', '')}]"
-
-        # Handle container blocks that don't have direct content
+            return self._handle_media_block(block_type, block_content)
+        elif block_type in ["child_page", "child_database"]:
+            return self._handle_child_block(block_type, block_content)
         elif block_type in ["column", "column_list", "template", "synced_block"]:
             return ""
 
         return ""
+
+    def _handle_rich_text_block(self, block_type: str, block_content: Dict) -> str:
+        """Handle blocks that contain rich text arrays."""
+        text_parts = [text_entry.get("plain_text", "") for text_entry in block_content["rich_text"]]
+        text = " ".join(text_parts)
+
+        # Format based on block type
+        if block_type == "bulleted_list_item":
+            return f"• {text}"
+        elif block_type == "numbered_list_item":
+            return text  # Number prefixes handled by parent context
+        elif block_type == "to_do":
+            checkbox = "☑" if block_content.get("checked", False) else "☐"
+            return f"{checkbox} {text}"
+        elif block_type in ["heading_1", "heading_2", "heading_3"]:
+            prefix = "▸ " if block_content.get("is_toggleable", False) else ""
+            return f"{prefix}{text}"
+
+        return text
+
+    def _handle_code_block(self, block_content: Dict) -> str:
+        """Handle code blocks with language and caption."""
+        language = block_content.get("language", "")
+        code_text = " ".join(
+            text.get("plain_text", "") for text in block_content.get("rich_text", [])
+        )
+        caption = " ".join(text.get("plain_text", "") for text in block_content.get("caption", []))
+
+        if caption:
+            return f"```{language}\n{code_text}\n```\n{caption}"
+        return f"```{language}\n{code_text}\n```"
+
+    def _handle_media_block(self, block_type: str, block_content: Dict) -> str:
+        """Handle media blocks (image, video, file, pdf)."""
+        caption = " ".join(text.get("plain_text", "") for text in block_content.get("caption", []))
+        url = block_content.get("external", {}).get("url", "") or block_content.get("file", {}).get(
+            "url", ""
+        )
+
+        if caption:
+            return f"[{block_type}: {caption}]({url})"
+        return f"[{block_type}]({url})"
+
+    def _handle_child_block(self, block_type: str, block_content: Dict) -> str:
+        """Handle child page and database blocks."""
+        if block_type == "child_page":
+            return f"[Page: {block_content.get('title', '')}]"
+        return f"[Database: {block_content.get('title', '')}]"
 
     def _create_database_chunk(self, database: Dict) -> NotionDatabaseChunk:
         """Create a database chunk from API response."""
