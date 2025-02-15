@@ -26,6 +26,9 @@ const DashboardLayout = () => {
       }
       return location.pathname.startsWith("/sync");
     }
+    if (path === "/chat") {
+      return location.pathname.startsWith("/chat");
+    }
     return location.pathname === path;
   };
 
