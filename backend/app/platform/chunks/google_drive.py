@@ -13,7 +13,7 @@ References:
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from pydantic import Field
 
@@ -63,13 +63,6 @@ class GoogleDriveFileChunk(BaseChunk):
     parents: List[str] = Field(
         default_factory=list, description="IDs of the parent folders containing this file."
     )
-    owners: List[Dict[str, Any]] = Field(
-        default_factory=list,
-        description=(
-            "List of owners for this file. Each entry may contain fields like 'displayName', "
-            "'emailAddress', etc."
-        ),
-    )
     shared: bool = Field(False, description="Whether the file is shared.")
     web_view_link: Optional[str] = Field(
         None, description="Link for opening the file in a relevant Google editor or viewer."
@@ -87,3 +80,10 @@ class GoogleDriveFileChunk(BaseChunk):
     md5_checksum: Optional[str] = Field(
         None, description="MD5 checksum for the content of the file."
     )
+
+    def model_dump(self, *args, **kwargs) -> dict[str, Any]:
+        """Override model_dump to convert size to string."""
+        data = super().model_dump(*args, **kwargs)
+        if data.get("size") is not None:
+            data["size"] = str(data["size"])
+        return data
