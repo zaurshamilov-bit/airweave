@@ -19,20 +19,30 @@ class BaseChunk(BaseModel):
     """Base chunk schema."""
 
     # Set in connector
-    chunk_id: UUID = Field(default_factory=uuid4)
-    entity_id: str
-    breadcrumbs: List[Breadcrumb] = Field(default_factory=list)
+    chunk_id: UUID = Field(default_factory=uuid4, description="Unique ID of the chunk.")
+    entity_id: str = Field(..., description="ID of the entity this chunk represents in the source.")
+    breadcrumbs: List[Breadcrumb] = Field(
+        default_factory=list, description="List of breadcrumbs for this chunk."
+    )
 
     # Set in sync service
-    db_chunk_id: Optional[UUID] = None  # The ID of the chunk in the DB
-    source_name: Optional[str] = None
-    sync_id: Optional[UUID] = None
-    sync_job_id: Optional[UUID] = None
-    url: Optional[str] = None
-    sync_metadata: Optional[dict[str, Any]] = None
-    white_label_user_identifier: Optional[str] = None
-    white_label_id: Optional[str] = None
-    white_label_name: Optional[str] = None
+    db_chunk_id: UUID = Field(
+        default_factory=uuid4, description="Unique ID of the chunk in the DB."
+    )
+    source_name: Optional[str] = Field(None, description="Name of the source this chunk came from.")
+    sync_id: Optional[UUID] = Field(None, description="ID of the sync this chunk belongs to.")
+    sync_job_id: Optional[UUID] = Field(
+        None, description="ID of the sync job this chunk belongs to."
+    )
+    url: Optional[str] = Field(None, description="URL to the original content, if applicable.")
+    sync_metadata: Optional[Dict[str, Any]] = Field(
+        None, description="Additional metadata for the sync."
+    )
+    white_label_user_identifier: Optional[str] = Field(
+        None, description="White label user identifier."
+    )
+    white_label_id: Optional[UUID] = Field(None, description="White label ID.")
+    white_label_name: Optional[str] = Field(None, description="White label name.")
 
     class Config:
         """Pydantic config."""
