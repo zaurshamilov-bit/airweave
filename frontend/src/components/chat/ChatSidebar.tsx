@@ -21,7 +21,11 @@ interface Chat {
   modified_at: string;
 }
 
-export const ChatSidebar = () => {
+interface ChatSidebarProps {
+  onCreateChat: () => void;
+}
+
+export const ChatSidebar = ({ onCreateChat }: ChatSidebarProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [chats, setChats] = useState<Chat[]>([]);

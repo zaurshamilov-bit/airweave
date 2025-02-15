@@ -342,15 +342,7 @@ function Chat() {
           <CreateChatDialog 
             open={showCreateDialog}
             preselectedSyncId={location.state?.preselectedSyncId}
-            onOpenChange={(open) => {
-              setShowCreateDialog(open);
-              if (!open) {
-                navigate(location.pathname, { replace: true });
-              }
-              if (!open && !chatId) {
-                navigate('/dashboard');
-              }
-            }}
+            onOpenChange={setShowCreateDialog}
             onChatCreated={(newChatId) => {
               setShowCreateDialog(false);
               navigate(`/chat/${newChatId}`);
