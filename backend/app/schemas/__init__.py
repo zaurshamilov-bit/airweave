@@ -1,5 +1,5 @@
 # flake8: noqa: F401
-"""Schemas module."""
+"""Schemas for the application."""
 
 from .api_key import (
     APIKey,
@@ -11,6 +11,15 @@ from .api_key import (
 from .chat import Chat, ChatCreate, ChatMessage, ChatMessageCreate, ChatUpdate
 from .chunk import Chunk, ChunkCreate, ChunkInDBBase, ChunkUpdate
 from .connection import Connection, ConnectionCreate, ConnectionInDBBase, ConnectionUpdate
+from .dag import (
+    DagEdge,
+    DagEdgeCreate,
+    DagNode,
+    DagNodeCreate,
+    SyncDagDefinition,
+    SyncDagDefinitionCreate,
+    SyncDagDefinitionUpdate,
+)
 from .destination import (
     Destination,
     DestinationCreate,
@@ -24,6 +33,15 @@ from .embedding_model import (
     EmbeddingModelInDBBase,
     EmbeddingModelUpdate,
     EmbeddingModelWithConfigFields,
+)
+from .entity import (
+    Entity,
+    EntityCreate,
+    EntityRelation,
+    EntityRelationCreate,
+    EntityRelationUpdate,
+    EntityType,
+    EntityUpdate,
 )
 from .integration_credential import (
     IntegrationCredential,
@@ -47,9 +65,11 @@ from .source import (
 )
 from .sync import Sync, SyncBase, SyncCreate, SyncInDBBase, SyncUpdate, SyncWithSourceConnection
 from .sync_job import SyncJob, SyncJobCreate, SyncJobInDBBase, SyncJobUpdate
+from .transformer import Transformer, TransformerCreate, TransformerUpdate
 from .user import (
     User,
     UserCreate,
+    UserInDB,
     UserInDBBase,
     UserUpdate,
     UserWithOrganizations,

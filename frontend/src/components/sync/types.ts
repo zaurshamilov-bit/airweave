@@ -61,15 +61,15 @@ export const syncSchema = z.object({
 
 // Additional interfaces for the UI components
 export interface SyncSource {
-  type: string;
   name: string;
   shortName: string;
+  type: string;
 }
 
 export interface SyncDestination {
-  type: string;
   name: string;
   shortName: string;
+  type: string;
 }
 
 export interface SyncUIMetadata {

@@ -6,11 +6,14 @@ from app.api.v1.endpoints import (
     api_keys,
     chat,
     connections,
+    dag,
     destinations,
     embedding_models,
+    entities,
     health,
     sources,
     sync,
+    transformers,
     users,
     white_label,
 )
@@ -28,3 +31,6 @@ api_router.include_router(connections.router, prefix="/connections", tags=["conn
 api_router.include_router(sync.router, prefix="/sync", tags=["sync"])
 api_router.include_router(white_label.router, prefix="/white_labels", tags=["white_labels"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
+api_router.include_router(dag.router, prefix="/dag", tags=["dag"])
+api_router.include_router(entities.router, prefix="/entities", tags=["entities"])
+api_router.include_router(transformers.router, prefix="/transformers", tags=["transformers"])
