@@ -1,17 +1,20 @@
 """CRUD operations for entity definitions and relations."""
 
-from app.models.entity import Entity, EntityRelation
+from app.models.entity import EntityDefinition, EntityRelation
 from app.schemas.entity import (
-    EntityCreate,
+    EntityDefinitionCreate,
+    EntityDefinitionUpdate,
     EntityRelationCreate,
     EntityRelationUpdate,
-    EntityUpdate,
 )
 
 from ._base_organization import CRUDBaseOrganization
+from ._base_system import CRUDBaseSystem
 
 
-class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
+class CRUDEntityDefinition(
+    CRUDBaseSystem[EntityDefinition, EntityDefinitionCreate, EntityDefinitionUpdate]
+):
     """CRUD operations for Entity."""
 
     pass
@@ -25,5 +28,5 @@ class CRUDEntityRelation(
     pass
 
 
-entity_definition = CRUDEntity(Entity)
+entity_definition = CRUDEntityDefinition(EntityDefinition)
 entity_relation = CRUDEntityRelation(EntityRelation)

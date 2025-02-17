@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.models.entity import EntityType
 
 
-class EntityBase(BaseModel):
+class EntityDefinitionBase(BaseModel):
     """Base schema for entity."""
 
     name: str
@@ -18,19 +18,19 @@ class EntityBase(BaseModel):
     parent_id: Optional[UUID] = None
 
 
-class EntityCreate(EntityBase):
-    """Schema for creating an entity."""
+class EntityDefinitionCreate(EntityDefinitionBase):
+    """Schema for creating an entity definition."""
 
     pass
 
 
-class EntityUpdate(EntityBase):
+class EntityDefinitionUpdate(EntityDefinitionBase):
     """Schema for updating an entity."""
 
     pass
 
 
-class Entity(EntityBase):
+class EntityDefinition(EntityDefinitionBase):
     """Schema for an entity definition."""
 
     id: UUID

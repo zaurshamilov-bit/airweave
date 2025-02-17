@@ -25,7 +25,7 @@ class DagNodeBase(BaseModel):
     source_id: Optional[UUID] = None
     destination_id: Optional[UUID] = None
     transformer_id: Optional[UUID] = None
-    entity_id: Optional[UUID] = None
+    entity_definition_id: Optional[UUID] = None
 
 
 class DagNodeCreate(DagNodeBase):

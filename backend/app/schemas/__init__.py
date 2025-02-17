@@ -35,13 +35,13 @@ from .embedding_model import (
     EmbeddingModelWithConfigFields,
 )
 from .entity import (
-    Entity,
-    EntityCreate,
+    EntityDefinition,
+    EntityDefinitionCreate,
+    EntityDefinitionUpdate,
     EntityRelation,
     EntityRelationCreate,
     EntityRelationUpdate,
     EntityType,
-    EntityUpdate,
 )
 from .integration_credential import (
     IntegrationCredential,
@@ -75,3 +75,36 @@ from .user import (
     UserWithOrganizations,
 )
 from .white_label import WhiteLabel, WhiteLabelCreate, WhiteLabelInDBBase, WhiteLabelUpdate
+
+__all__ = [
+    "Connection",
+    "ConnectionCreate",
+    "ConnectionUpdate",
+    "Destination",
+    "DestinationCreate",
+    "DestinationUpdate",
+    "EntityDefinition",
+    "EntityCreate",
+    "EntityRelation",
+    "EntityRelationCreate",
+    "EntityRelationUpdate",
+    "EntityType",
+    "EntityUpdate",
+    "Organization",
+    "OrganizationCreate",
+    "OrganizationUpdate",
+    "Source",
+    "SourceCreate",
+    "SourceUpdate",
+    "Sync",
+    "SyncCreate",
+    "SyncUpdate",
+    "Chunk",
+    "ChunkCreate",
+    "Transformer",
+    "TransformerCreate",
+    "TransformerUpdate",
+    "User",
+    "UserCreate",
+    "UserUpdate",
+]

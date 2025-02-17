@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import JSON, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Column, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,7 @@ class Destination(OrganizationBase, UserMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     input_entity_ids: Mapped[Optional[JSON]] = mapped_column(JSON, nullable=False)
     config_schema: Mapped[Optional[JSON]] = mapped_column(JSON, nullable=False)
+    organization_id = Column(ForeignKey("organization.id"), nullable=True)
 
     # Back-reference to connections
     connections: Mapped[list["Connection"]] = relationship(

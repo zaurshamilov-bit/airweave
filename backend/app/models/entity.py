@@ -4,9 +4,9 @@ from enum import Enum
 
 from sqlalchemy import JSON, Column, ForeignKey, String, UniqueConstraint
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import backref, relationship
 
-from app.models._base import OrganizationBase, UserMixin
+from app.models._base import Base
 
 
 class EntityType(str, Enum):
@@ -16,35 +16,41 @@ class EntityType(str, Enum):
     JSON = "json"
 
 
-class Entity(OrganizationBase, UserMixin):
+class EntityDefinition(Base):
     """An entity type that can be produced or consumed."""
 
-    __tablename__ = "entity"
+    __tablename__ = "entity_definition"
 
     name = Column(String, nullable=False)
     description = Column(String)
     type = Column(SQLEnum(EntityType), nullable=False)
     # For files: list of extensions, for JSON: JSON schema
     schema = Column(JSON, nullable=False)
-    parent_id = Column(ForeignKey("entity.id"), nullable=True)
+    parent_id = Column(ForeignKey("entity_definition.id"), nullable=True)
+
+    organization_id = Column(ForeignKey("organization.id"), nullable=True)
 
     # Relationships
-    parent = relationship("Entity", remote_side=[id])
-    children = relationship("Entity")
+    parent = relationship(
+        "EntityDefinition", backref=backref("children"), remote_side="[EntityDefinition.id]"
+    )
 
-    __table_args__ = (UniqueConstraint("name", "organization_id", name="uq_entity_name_org"),)
+    __table_args__ = (
+        UniqueConstraint("name", "organization_id", name="uq_entity_definition_name_org"),
+    )
 
 
-class EntityRelation(OrganizationBase, UserMixin):
+class EntityRelation(Base):
     """Relation between two entity types."""
 
     __tablename__ = "entity_relation"
 
     name = Column(String, nullable=False)
     description = Column(String)
-    from_entity_id = Column(ForeignKey("entity.id"), nullable=False)
-    to_entity_id = Column(ForeignKey("entity.id"), nullable=False)
+    from_entity_id = Column(ForeignKey("entity_definition.id"), nullable=False)
+    to_entity_id = Column(ForeignKey("entity_definition.id"), nullable=False)
+    organization_id = Column(ForeignKey("organization.id"), nullable=True)
 
     # Relationships
-    from_entity = relationship("Entity", foreign_keys=[from_entity_id])
-    to_entity = relationship("Entity", foreign_keys=[to_entity_id])
+    from_entity = relationship("EntityDefinition", foreign_keys=[from_entity_id])
+    to_entity = relationship("EntityDefinition", foreign_keys=[to_entity_id])

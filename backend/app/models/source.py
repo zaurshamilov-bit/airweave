@@ -2,18 +2,18 @@
 
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import JSON, Column, String, UniqueConstraint
+from sqlalchemy import JSON, Column, ForeignKey, String, UniqueConstraint
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models._base import OrganizationBase, UserMixin
+from app.models._base import Base
 from app.platform.auth.schemas import AuthType
 
 if TYPE_CHECKING:
     from app.models.connection import Connection
 
 
-class Source(OrganizationBase, UserMixin):
+class Source(Base):
     """A source that can produce entities."""
 
     __tablename__ = "source"
@@ -24,6 +24,7 @@ class Source(OrganizationBase, UserMixin):
     auth_config_class: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     auth_type: Mapped[Optional[AuthType]] = mapped_column(SQLAlchemyEnum(AuthType), nullable=True)
     description = Column(String)
+    organization_id = Column(ForeignKey("organization.id"), nullable=True)
     # List of entity IDs this source can output
     output_entity_ids = Column(JSON, nullable=False)
     config_schema = Column(JSON, nullable=False)  # JSON Schema for configuration
