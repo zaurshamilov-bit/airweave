@@ -1,5 +1,11 @@
 """CRUD operations for entity definitions and relations."""
 
+from typing import List
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.entity import EntityDefinition, EntityRelation
 from app.schemas.entity import (
     EntityDefinitionCreate,
@@ -17,7 +23,20 @@ class CRUDEntityDefinition(
 ):
     """CRUD operations for Entity."""
 
-    pass
+    async def get_multi_by_ids(
+        self, db: AsyncSession, *, ids: List[UUID]
+    ) -> List[EntityDefinition]:
+        """Get multiple entity definitions by their IDs.
+
+        Args:
+            db (AsyncSession): The database session
+            ids (List[UUID]): List of entity definition IDs to fetch
+
+        Returns:
+            List[EntityDefinition]: List of found entity definitions
+        """
+        result = await db.execute(select(self.model).where(self.model.id.in_(ids)))
+        return list(result.unique().scalars().all())
 
 
 class CRUDEntityRelation(

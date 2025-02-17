@@ -85,3 +85,22 @@ async def update_entity_relation(
     """Update an entity relation."""
     db_obj = await entity_relation.get(db, id=relation_id)
     return await entity_relation.update(db, db_obj=db_obj, obj_in=relation, user=current_user)
+
+
+@router.post("/definitions/by-ids/", response_model=List[EntityDefinition])
+async def get_entity_definitions_by_ids(
+    ids: List[UUID],
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_user),
+) -> List[EntityDefinition]:
+    """Get multiple entity definitions by their IDs.
+
+    Args:
+        ids: List of entity definition IDs to fetch
+        db: Database session
+        current_user: Current authenticated user
+
+    Returns:
+        List of entity definitions matching the provided IDs
+    """
+    return await entity_definition.get_multi_by_ids(db, ids=ids)

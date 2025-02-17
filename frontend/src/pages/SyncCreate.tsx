@@ -84,25 +84,25 @@ const Sync = () => {
 
   // Load user info
   useEffect(() => {
-    const loadUserInfo = async () => {
-      try {
-        const resp = await apiClient.get("/users/me");
-        if (!resp.ok) throw new Error("Failed to load user info");
-        const data = await resp.json();
-        setUserInfo({
-          userId: data.id,
-          organizationId: data.organization_id,
-          userEmail: data.email,
-        });
-      } catch (err: any) {
-        toast({
-          variant: "destructive",
-          title: "Failed to load user info",
-          description: err.message || String(err),
-        });
-      }
-    };
-    loadUserInfo();
+    // const loadUserInfo = async () => {
+    //   try {
+    //     const resp = await apiClient.get("/users/me");
+    //     if (!resp.ok) throw new Error("Failed to load user info");
+    //     const data = await resp.json();
+    //     setUserInfo({
+    //       userId: data.id,
+    //       organizationId: data.organization_id,
+    //       userEmail: data.email,
+    //     });
+    //   } catch (err: any) {
+    //     toast({
+    //       variant: "destructive",
+    //       title: "Failed to load user info",
+    //       description: err.message || String(err),
+    //     });
+    //   }
+    // };
+    // loadUserInfo();
   }, [toast]);
 
   /**
@@ -126,53 +126,6 @@ const Sync = () => {
       });
     }
     setStep(2);
-
-    // Create initial DAG with source node
-    setInitialDag({
-      nodes: [
-        {
-          id: "source",
-          type: "source",
-          position: { x: 100, y: 100 },
-          data: {
-            name: metadata.name,
-            sourceDefinitionId: connectionId,
-          },
-        },
-      ],
-      edges: [],
-    });
-  };
-
-  /**
-   * createNewSync calls the backend to create a Sync resource.
-   * We won't run immediately here; we'll call /run afterwards for clarity.
-   */
-  const createNewSync = async () => {
-    if (!selectedSource || !selectedDB) return null;
-
-    try {
-      const resp = await apiClient.post("/sync/", {
-        name: "Sync from UI",
-        source_connection_id: selectedSource.connectionId,
-        // If the user picked a "non-native" DB, we pass it along
-        ...(selectedDB.isNative ? {} : { destination_connection_id: selectedDB.connectionId }),
-        run_immediately: false
-      });
-      if (!resp.ok) {
-        throw new Error("Failed to create sync");
-      }
-      const data = await resp.json();
-      setSyncId(data.id);
-      return data.id as string;
-    } catch (err: any) {
-      toast({
-        variant: "destructive",
-        title: "Sync creation failed",
-        description: err.message || String(err)
-      });
-      return null;
-    }
   };
 
   /**
@@ -180,51 +133,85 @@ const Sync = () => {
    * We move from step 2 -> 3 to confirm the pipeline.
    */
   const handleVectorDBSelected = async (dbDetails: ConnectionSelection, metadata: { name: string; shortName: string }) => {
-    setSelectedDB(dbDetails);
-    if (userInfo) {
-      setPipelineMetadata(prev => prev ? {
-        ...prev,
-        destination: dbDetails.isNative 
-          ? {
-              name: "Native Weaviate",
-              shortName: "weaviate_native",
-              type: "destination",
-            }
-          : {
-              ...metadata,
-              type: "destination",
-            }
-      } : null);
-    }
+    try {
+      // First set the selected DB and update UI
+      setSelectedDB(dbDetails);
+      if (userInfo) {
+        setPipelineMetadata(prev => prev ? {
+          ...prev,
+          destination: dbDetails.isNative 
+            ? {
+                name: "Native Weaviate",
+                shortName: "weaviate_native",
+                type: "destination",
+              }
+            : {
+                ...metadata,
+                type: "destination",
+              }
+        } : null);
+      }
 
-    // Create sync first
-    const newSyncId = await createNewSync();
-    if (newSyncId) {
-      // Then update the DAG with source and destination nodes
-      setInitialDag({
-        nodes: [
-          {
-            id: "source",
-            type: "source",
-            position: { x: 100, y: 100 },
-            data: {
-              name: pipelineMetadata?.source.name || "",
-              sourceDefinitionId: selectedSource?.connectionId,
-            },
-          },
-          {
-            id: "destination",
-            type: "destination",
-            position: { x: 500, y: 100 },
-            data: {
-              name: dbDetails.isNative ? "Native Weaviate" : metadata.name,
-              destinationDefinitionId: dbDetails.connectionId,
-            },
-          },
-        ],
-        edges: [],
+      // Validate we have both source and destination
+      if (!selectedSource) {
+        throw new Error("No source selected");
+      }
+
+      // Create sync
+      const resp = await apiClient.post("/sync/", {
+        name: "Sync from UI",
+        source_connection_id: selectedSource.connectionId,
+        // If the user picked a "non-native" DB, we pass it along
+        ...(dbDetails.isNative ? {} : { destination_connection_id: dbDetails.connectionId }),
+        run_immediately: false
       });
+
+      if (!resp.ok) {
+        throw new Error("Failed to create sync");
+      }
+
+      const syncData = await resp.json();
+      const newSyncId = syncData.id;
+      setSyncId(newSyncId);
+
+      // Initialize the DAG
+      const dagResp = await apiClient.get(`/dag/init?sync_id=${newSyncId}`);
+
+      if (!dagResp.ok) {
+        throw new Error("Failed to initialize DAG");
+      }
+
+      const dagData = await dagResp.json();
+      
+      // Convert backend data to React Flow format
+      const flowNodes = dagData.nodes.map((node: any) => ({
+        id: node.id,
+        type: node.type.toLowerCase(),
+        position: node.position || { x: 0, y: 0 },
+        data: {
+          name: node.name,
+          config: node.config,
+          sourceId: node.source_id,
+          destinationId: node.destination_id,
+          transformerId: node.transformer_id,
+          entityDefinitionId: node.entity_definition_id,
+        },
+      }));
+
+      const flowEdges = dagData.edges.map((edge: any) => ({
+        id: edge.id,
+        source: edge.from_node_id,
+        target: edge.to_node_id,
+      }));
+
+      setInitialDag({ nodes: flowNodes, edges: flowEdges });
       setStep(3);
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Failed to setup pipeline",
+        description: err.message || String(err),
+      });
     }
   };
 

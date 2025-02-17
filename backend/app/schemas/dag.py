@@ -20,6 +20,7 @@ class DagNodeBase(BaseModel):
     name: str
     config: Optional[Dict] = None
     position: Optional[DagNodePosition] = None
+    connection_id: Optional[UUID] = None
 
     # One of these will be set based on type
     source_id: Optional[UUID] = None

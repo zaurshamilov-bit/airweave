@@ -1,11 +1,11 @@
 """Models for transformers."""
 
-from sqlalchemy import JSON, Column, String
+from sqlalchemy import JSON, UUID, Column, ForeignKey, String
 
-from app.models._base import OrganizationBase, UserMixin
+from app.models._base import Base
 
 
-class Transformer(OrganizationBase, UserMixin):
+class Transformer(Base):
     """Definition of a transformer that can transform entities."""
 
     __tablename__ = "transformer"
@@ -17,3 +17,5 @@ class Transformer(OrganizationBase, UserMixin):
     # List of entity definition IDs this transformer can output
     output_entity_definition_ids = Column(JSON, nullable=False)
     config_schema = Column(JSON, nullable=False)  # JSON Schema for configuration
+
+    organization_id = Column(UUID, ForeignKey("organization.id"), nullable=True)

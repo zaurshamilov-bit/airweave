@@ -4,6 +4,7 @@ from .api_key import APIKey
 from .chat import Chat, ChatMessage
 from .chunk import Chunk
 from .connection import Connection
+from .dag import DagEdge, DagNode, SyncDagDefinition
 from .destination import Destination
 from .embedding_model import EmbeddingModel
 from .entity import EntityDefinition, EntityRelation, EntityType
@@ -22,6 +23,8 @@ __all__ = [
     "ChatMessage",
     "Chunk",
     "Connection",
+    "DagNode",
+    "DagEdge",
     "Destination",
     "EmbeddingModel",
     "EntityDefinition",
@@ -31,6 +34,7 @@ __all__ = [
     "Organization",
     "Source",
     "Sync",
+    "SyncDagDefinition",
     "SyncJob",
     "Transformer",
     "User",

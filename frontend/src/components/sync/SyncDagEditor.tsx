@@ -9,11 +9,12 @@ import ReactFlow, {
   useEdgesState,
   useNodesState,
   Panel,
+  Connection,
+  Edge as FlowEdge,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { useToast } from "@/components/ui/use-toast";
 import { apiClient } from "@/lib/api";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Save } from "lucide-react";
 import { SourceNode } from "./nodes/SourceNode";
@@ -36,6 +37,26 @@ interface SyncDagEditorProps {
     edges: Edge[];
   };
   onSave?: () => void;
+}
+
+interface DagUpdateRequest {
+  name: string;
+  description: string;
+  sync_id: string;
+  nodes: {
+    type: string;
+    name: string;
+    config?: Record<string, any>;
+    position: { x: number; y: number };
+    source_id?: string;
+    destination_id?: string;
+    transformer_id?: string;
+    entity_definition_id?: string;
+  }[];
+  edges: {
+    from_node_id: string;
+    to_node_id: string;
+  }[];
 }
 
 export const SyncDagEditor = ({ syncId, initialDag, onSave }: SyncDagEditorProps) => {
@@ -61,9 +82,9 @@ export const SyncDagEditor = ({ syncId, initialDag, onSave }: SyncDagEditorProps
           data: {
             name: node.name,
             config: node.config,
-            sourceDefinitionId: node.source_definition_id,
-            destinationDefinitionId: node.destination_definition_id,
-            transformerDefinitionId: node.transformer_definition_id,
+            sourceId: node.source_id,
+            destinationId: node.destination_id,
+            transformerId: node.transformer_id,
             entityDefinitionId: node.entity_definition_id,
           },
         }));
@@ -90,8 +111,7 @@ export const SyncDagEditor = ({ syncId, initialDag, onSave }: SyncDagEditorProps
 
   // Handle connecting nodes
   const onConnect = useCallback(
-    (params: any) => {
-      // Validate connection here if needed
+    (params: Connection) => {
       setEdges((eds) => addEdge(params, eds));
     },
     [setEdges]
@@ -102,18 +122,18 @@ export const SyncDagEditor = ({ syncId, initialDag, onSave }: SyncDagEditorProps
     setIsLoading(true);
     try {
       // Convert React Flow data to backend format
-      const dagData = {
+      const dagData: DagUpdateRequest = {
         name: "DAG from UI",
         description: "Created via DAG editor",
         sync_id: syncId,
         nodes: nodes.map((node) => ({
-          type: node.type?.toUpperCase(),
+          type: node.type?.toUpperCase() || "",
           name: node.data.name,
           config: node.data.config,
           position: node.position,
-          source_definition_id: node.data.sourceDefinitionId,
-          destination_definition_id: node.data.destinationDefinitionId,
-          transformer_definition_id: node.data.transformerDefinitionId,
+          source_id: node.data.sourceId,
+          destination_id: node.data.destinationId,
+          transformer_id: node.data.transformerId,
           entity_definition_id: node.data.entityDefinitionId,
         })),
         edges: edges.map((edge) => ({
