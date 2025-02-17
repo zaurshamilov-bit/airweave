@@ -371,6 +371,7 @@ class OAuth2Service:
                 db=db,
                 db_obj=integration_credential,
                 obj_in={"encrypted_credentials": encrypted_credentials},
+                current_user=user,
             )
 
         return oauth2_token_response
