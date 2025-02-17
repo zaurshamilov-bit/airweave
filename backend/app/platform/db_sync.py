@@ -82,14 +82,14 @@ async def _sync_embedding_models(db: AsyncSession, models: list[Type[BaseEmbeddi
     sync_logger.info(f"Synced {len(model_definitions)} embedding models to database.")
 
 
-async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, int]:
+async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, list[str]]:
     """Sync entity definitions with the database based on chunk classes.
 
     Args:
         db (AsyncSession): Database session
 
     Returns:
-        Dict[str, int]: Mapping of chunk names to their entity definition IDs
+        Dict[str, list[str]]: Mapping of chunk names to their entity definition IDs as strings
     """
     sync_logger.info("Syncing entity definitions to database.")
 
@@ -101,10 +101,16 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, int]:
     from app.platform.chunks._base import BaseChunk
 
     entity_definitions = []
+    module_to_entities = {}  # Track which entities belong to which module
+
     for chunk_file in chunk_files:
+        module_name = chunk_file[:-3]  # Remove .py extension
         # Import the module to get its chunk classes
-        module_name = f"app.platform.chunks.{chunk_file[:-3]}"
-        module = importlib.import_module(module_name)
+        full_module_name = f"app.platform.chunks.{module_name}"
+        module = importlib.import_module(full_module_name)
+
+        # Initialize list for this module's entities
+        module_to_entities[module_name] = []
 
         # Find all chunk classes (subclasses of BaseChunk) in the module
         for name, cls in inspect.getmembers(module, inspect.isclass):
@@ -117,27 +123,32 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, int]:
                     schema=cls.model_json_schema(),  # Get the actual schema from the Pydantic model
                 )
                 entity_definitions.append(entity_def)
+                module_to_entities[module_name].append(name)  # Track all entities for this module
 
     # Sync entities
     await crud.entity_definition.sync(db, entity_definitions, unique_field="name")
 
     # Get all entities to build the mapping
     all_entities = await crud.entity_definition.get_all(db)
-    name_to_id = {entity.short_name: entity.id for entity in all_entities}
+    # Map module names to lists of entity IDs as strings
+    name_to_ids = {
+        module_name: [str(e.id) for e in all_entities if e.name in entity_names]
+        for module_name, entity_names in module_to_entities.items()
+    }
 
     sync_logger.info(f"Synced {len(entity_definitions)} entity definitions to database.")
-    return name_to_id
+    return name_to_ids
 
 
 async def _sync_sources(
-    db: AsyncSession, sources: list[Type[BaseSource]], entity_id_map: Dict[str, int]
+    db: AsyncSession, sources: list[Type[BaseSource]], entity_id_map: Dict[str, list[str]]
 ) -> None:
     """Sync sources with the database.
 
     Args:
         db (AsyncSession): Database session
         sources (list[Type[BaseSource]]): List of source classes
-        entity_id_map (Dict[str, int]): Mapping of chunk names to their entity definition IDs
+        entity_id_map (Dict[str, list[str]]): Mapping of chunk names to their entity definition IDs as strings
     """
     sync_logger.info("Syncing sources to database.")
 
@@ -148,8 +159,8 @@ async def _sync_sources(
         source_name = source_class.__name__.replace("Source", "").lower()
         chunk_name = "_".join(word for word in source_name.split() if word)
 
-        # Get the entity ID for this source's chunk type
-        output_entity_ids = [entity_id_map.get(chunk_name)] if chunk_name in entity_id_map else []
+        # Get all entity IDs for this source's chunk type (already as strings)
+        output_entity_ids = entity_id_map.get(chunk_name, [])
 
         source_def = schemas.SourceCreate(
             name=source_class._name,
@@ -158,7 +169,7 @@ async def _sync_sources(
             auth_config_class=source_class._auth_config_class,
             short_name=source_class._short_name,
             class_name=source_class.__name__,
-            output_entity_ids=output_entity_ids,
+            output_entity_definition_ids=output_entity_ids,
         )
         source_definitions.append(source_def)
 

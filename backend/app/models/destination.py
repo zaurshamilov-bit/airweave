@@ -6,14 +6,14 @@ from sqlalchemy import JSON, Column, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models._base import OrganizationBase, UserMixin
+from app.models._base import Base
 from app.platform.auth.schemas import AuthType
 
 if TYPE_CHECKING:
     from app.models.connection import Connection
 
 
-class Destination(OrganizationBase, UserMixin):
+class Destination(Base):
     """A destination that can consume entities."""
 
     __tablename__ = "destination"
@@ -24,7 +24,7 @@ class Destination(OrganizationBase, UserMixin):
     auth_config_class: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     auth_type: Mapped[Optional[AuthType]] = mapped_column(SQLAlchemyEnum(AuthType), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    input_entity_ids: Mapped[Optional[JSON]] = mapped_column(JSON, nullable=False)
+    input_entity_definition_ids: Mapped[Optional[JSON]] = mapped_column(JSON, nullable=False)
     config_schema: Mapped[Optional[JSON]] = mapped_column(JSON, nullable=False)
     organization_id = Column(ForeignKey("organization.id"), nullable=True)
 

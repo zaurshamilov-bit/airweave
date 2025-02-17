@@ -11,8 +11,8 @@ class TransformerBase(BaseModel):
 
     name: str
     description: Optional[str] = None
-    input_entity_ids: List[UUID]
-    output_entity_ids: List[UUID]
+    input_entity_definition_ids: List[UUID]
+    output_entity_definition_ids: List[UUID]
     config_schema: Dict
 
 

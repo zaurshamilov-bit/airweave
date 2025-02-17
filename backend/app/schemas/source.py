@@ -19,6 +19,9 @@ class SourceBase(BaseModel):
     auth_config_class: Optional[str] = None
     short_name: str
     class_name: str
+    output_entity_definition_ids: Optional[list[str]] = None
+    organization_id: Optional[UUID] = None
+    config_schema: Optional[dict] = None
 
     class Config:
         """Pydantic config for SourceBase."""

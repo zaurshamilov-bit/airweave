@@ -13,7 +13,7 @@ class Transformer(OrganizationBase, UserMixin):
     name = Column(String, nullable=False)
     description = Column(String)
     # List of entity definition IDs this transformer can input
-    input_entity_ids = Column(JSON, nullable=False)
+    input_entity_definition_ids = Column(JSON, nullable=False)
     # List of entity definition IDs this transformer can output
-    output_entity_ids = Column(JSON, nullable=False)
+    output_entity_definition_ids = Column(JSON, nullable=False)
     config_schema = Column(JSON, nullable=False)  # JSON Schema for configuration

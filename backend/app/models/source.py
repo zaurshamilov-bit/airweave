@@ -26,7 +26,7 @@ class Source(Base):
     description = Column(String)
     organization_id = Column(ForeignKey("organization.id"), nullable=True)
     # List of entity IDs this source can output
-    output_entity_ids = Column(JSON, nullable=False)
+    output_entity_definition_ids = Column(JSON, nullable=False)
     config_schema = Column(JSON, nullable=False)  # JSON Schema for configuration
 
     __table_args__ = (UniqueConstraint("name", "organization_id", name="uq_source_name_org"),)
