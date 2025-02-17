@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api import deps
 from app.crud.crud_dag import (
     sync_dag_definition,
 )
@@ -22,8 +22,8 @@ router = APIRouter()
 @router.get("/sync/{sync_id}/dag/", response_model=SyncDagDefinition)
 async def get_sync_dag(
     sync_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_user),
 ):
     """Get the DAG definition for a sync."""
     dag = await sync_dag_definition.get_by_sync_id(db, sync_id=sync_id, user=current_user)
@@ -36,8 +36,8 @@ async def get_sync_dag(
 async def create_sync_dag(
     sync_id: UUID,
     dag: SyncDagDefinitionCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_user),
 ):
     """Create a new DAG definition for a sync."""
     return await sync_dag_definition.create_with_nodes_and_edges(db, obj_in=dag, user=current_user)
@@ -47,8 +47,8 @@ async def create_sync_dag(
 async def update_sync_dag(
     sync_id: UUID,
     dag: SyncDagDefinitionUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_user),
 ):
     """Update a DAG definition for a sync."""
     db_dag = await sync_dag_definition.get_by_sync_id(db, sync_id=sync_id, user=current_user)
