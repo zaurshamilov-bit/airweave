@@ -53,12 +53,8 @@ class DagNode(OrganizationBase, UserMixin):
     name = Column(String, nullable=False)
     config = Column(JSON)  # Configuration for sources, destinations, transformers
 
-    connection_id = Column(UUID, ForeignKey("connection.id"), nullable=True)
-
     # Reference to the definition (one of these will be set based on type)
-    source_id = Column(UUID, ForeignKey("source.id"), nullable=True)
-    destination_id = Column(UUID, ForeignKey("destination.id"), nullable=True)
-    transformer_id = Column(UUID, ForeignKey("transformer.id"), nullable=True)
+    connection_id = Column(UUID, ForeignKey("connection.id"), nullable=True)
     entity_id = Column(UUID, ForeignKey("entity_definition.id"), nullable=True)
 
     # Position in the UI

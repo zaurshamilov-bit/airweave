@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
@@ -21,22 +22,15 @@ class DagService:
         """Create an initial DAG with source, entities, and destination."""
         ## Get sync
         sync = await crud.sync.get(db, id=sync_id, current_user=current_user)
+
+        ## Get entities from the source
         source_connection = await crud.connection.get(
             db, id=sync.source_connection_id, current_user=current_user
         )
-        destination_connection = await crud.connection.get(
-            db, id=sync.destination_connection_id, current_user=current_user
-        )
+        if not source_connection:
+            raise HTTPException(status_code=404, detail="Source connection not found")
 
-        source_connection = await crud.connection.get(
-            db, id=source_connection.id, current_user=current_user
-        )
-        destination_connection = await crud.connection.get(
-            db, id=destination_connection.id, current_user=current_user
-        )
-
-        ## Get entities from the source
-        source = await crud.source.get(db, id=sync.source_id, current_user=current_user)
+        source = await crud.source.get_by_short_name(db, short_name=source_connection.short_name)
         output_entity_definition_ids = source.output_entity_definition_ids
 
         entity_definitions = await crud.entity_definition.get_multi_by_ids(
@@ -64,11 +58,28 @@ class DagService:
             nodes.append(entity_node)
 
         # Create destination node
-        destination_node = DagNodeCreate(
-            type="destination",
-            name="Destination",
-            destination_id=sync.destination_id,
-        )
+        if sync.destination_connection_id:
+            destination_connection = await crud.connection.get(
+                db, id=sync.destination_connection_id, current_user=current_user
+            )
+            if not destination_connection:
+                raise HTTPException(status_code=404, detail="Destination connection not found")
+
+            destination_connection = await crud.connection.get(
+                db, id=destination_connection.id, current_user=current_user
+            )
+            destination_node = DagNodeCreate(
+                type="destination",
+                name="Native",
+                destination_id=destination_connection.destination_id,
+            )
+        else:
+            destination = await crud.destination.get_by_short_name(db, short_name="weaviate_native")
+            destination_node = DagNodeCreate(
+                type="destination",
+                name="Native Weaviate",
+                destination_id=destination.id,
+            )
         nodes.append(destination_node)
 
         # Create edges
