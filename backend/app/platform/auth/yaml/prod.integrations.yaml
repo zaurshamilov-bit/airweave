@@ -106,7 +106,20 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "header"
     additional_frontend_params:
-      owner: "user""
+      owner: "user"
+
+  outlook_mail:
+    auth_type: "oauth2_with_refresh_rotating"
+    url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+    backend_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+    grant_type: "authorization_code"
+    client_id: ${OUTLOOK_MAIL_CLIENT_ID}
+    client_secret: ${OUTLOOK_MAIL_CLIENT_SECRET}
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/MailboxFolder.Read https://graph.microsoft.com/Mail.Read"
+    additional_frontend_params:
+      response_mode: "query"
 
   slack:
     auth_type: "oauth2"
