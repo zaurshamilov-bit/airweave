@@ -57,10 +57,6 @@ class DagNode(OrganizationBase, UserMixin):
     connection_id = Column(UUID, ForeignKey("connection.id"), nullable=True)
     entity_id = Column(UUID, ForeignKey("entity_definition.id"), nullable=True)
 
-    # Position in the UI
-    position_x = Column(String)
-    position_y = Column(String)
-
     # Relationships
     dag = relationship("SyncDagDefinition", back_populates="nodes", lazy="noload")
     outgoing_edges = relationship(

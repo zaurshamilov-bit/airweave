@@ -7,22 +7,21 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app import schemas
+from app.crud._base import CRUDBase
 from app.models.dag import (
     DagEdge,
     DagNode,
     SyncDagDefinition,
 )
-from app.models.user import User
 from app.schemas.dag import (
     SyncDagDefinitionCreate,
     SyncDagDefinitionUpdate,
 )
 
-from ._base_organization import CRUDBaseOrganization
-
 
 class CRUDSyncDagDefinition(
-    CRUDBaseOrganization[SyncDagDefinition, SyncDagDefinitionCreate, SyncDagDefinitionUpdate]
+    CRUDBase[SyncDagDefinition, SyncDagDefinitionCreate, SyncDagDefinitionUpdate]
 ):
     """CRUD operations for SyncDagDefinition."""
 
@@ -31,32 +30,43 @@ class CRUDSyncDagDefinition(
         db: AsyncSession,
         *,
         obj_in: SyncDagDefinitionCreate,
-        user: User,
+        current_user: schemas.User,
     ) -> SyncDagDefinition:
         """Create a DAG with its nodes and edges."""
-        # Create the DAG
-        db_obj = await self.create(db, obj_in=obj_in, user=user)
+        # Create the base DAG object
+        db_obj = SyncDagDefinition(
+            name=obj_in.name,
+            description=obj_in.description,
+            sync_id=obj_in.sync_id,
+            organization_id=current_user.organization_id,
+            created_by_email=current_user.email,
+            modified_by_email=current_user.email,
+        )
+        db.add(db_obj)
+        await db.flush()  # Flush to get the ID
 
         # Create nodes
-        for node in obj_in.nodes:
+        for node_in in obj_in.nodes:
+            node_data = node_in.model_dump()
             db_node = DagNode(
-                **node.dict(),
+                **node_data,
                 dag_id=db_obj.id,
-                organization_id=user.organization_id,
-                created_by_email=user.email,
-                modified_by_email=user.email,
+                organization_id=current_user.organization_id,
+                created_by_email=current_user.email,
+                modified_by_email=current_user.email,
             )
             db.add(db_node)
         await db.flush()
 
         # Create edges
-        for edge in obj_in.edges:
+        for edge_in in obj_in.edges:
             db_edge = DagEdge(
-                **edge.dict(),
+                from_node_id=edge_in.from_node_id,
+                to_node_id=edge_in.to_node_id,
                 dag_id=db_obj.id,
-                organization_id=user.organization_id,
-                created_by_email=user.email,
-                modified_by_email=user.email,
+                organization_id=current_user.organization_id,
+                created_by_email=current_user.email,
+                modified_by_email=current_user.email,
             )
             db.add(db_edge)
 
@@ -80,24 +90,25 @@ class CRUDSyncDagDefinition(
         *,
         db_obj: SyncDagDefinition,
         obj_in: SyncDagDefinitionUpdate,
-        user: User,
+        current_user: schemas.User,
     ) -> SyncDagDefinition:
         """Update a DAG with its nodes and edges."""
         # Update DAG fields
-        db_obj = await self.update(db, db_obj=db_obj, obj_in=obj_in, user=user)
+        db_obj = await self.update(db, db_obj=db_obj, obj_in=obj_in, current_user=current_user)
 
         # If nodes provided, replace all nodes
         if obj_in.nodes is not None:
             # Delete existing nodes (cascade will handle edges)
             await db.execute(select(DagNode).where(DagNode.dag_id == db_obj.id).delete())
             # Create new nodes
-            for node in obj_in.nodes:
+            for node_in in obj_in.nodes:
+                node_data = node_in.model_dump()
                 db_node = DagNode(
-                    **node.model_dump(),
+                    **node_data,
                     dag_id=db_obj.id,
-                    organization_id=user.organization_id,
-                    created_by_email=user.email,
-                    modified_by_email=user.email,
+                    organization_id=current_user.organization_id,
+                    created_by_email=current_user.email,
+                    modified_by_email=current_user.email,
                 )
                 db.add(db_node)
             await db.flush()
@@ -107,13 +118,14 @@ class CRUDSyncDagDefinition(
             # Delete existing edges
             await db.execute(select(DagEdge).where(DagEdge.dag_id == db_obj.id).delete())
             # Create new edges
-            for edge in obj_in.edges:
+            for edge_in in obj_in.edges:
                 db_edge = DagEdge(
-                    **edge.model_dump(),
+                    from_node_id=edge_in.from_node_id,
+                    to_node_id=edge_in.to_node_id,
                     dag_id=db_obj.id,
-                    organization_id=user.organization_id,
-                    created_by_email=user.email,
-                    modified_by_email=user.email,
+                    organization_id=current_user.organization_id,
+                    created_by_email=current_user.email,
+                    modified_by_email=current_user.email,
                 )
                 db.add(db_edge)
 
@@ -136,14 +148,14 @@ class CRUDSyncDagDefinition(
         db: AsyncSession,
         *,
         sync_id: UUID,
-        user: User,
+        current_user: schemas.User,
     ) -> Optional[SyncDagDefinition]:
         """Get a DAG by sync ID."""
         result = await db.execute(
             select(SyncDagDefinition)
             .where(
                 SyncDagDefinition.sync_id == sync_id,
-                SyncDagDefinition.organization_id == user.organization_id,
+                SyncDagDefinition.organization_id == current_user.organization_id,
             )
             .options(
                 selectinload(SyncDagDefinition.nodes),

@@ -1,6 +1,6 @@
 """DAG service."""
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,24 +40,37 @@ class DagService:
         nodes: list[DagNodeCreate] = []
         edges: list[DagEdgeCreate] = []
 
-        # Create source node
+        # Create source node with pre-set ID
+        source_node_id = uuid4()
         source_node = DagNodeCreate(
+            id=source_node_id,
             type="source",
             name=source.name,
             source_id=source.id,
         )
         nodes.append(source_node)
 
-        # Create entity nodes
+        # Create entity nodes with pre-set IDs
         for entity_definition in entity_definitions:
+            entity_node_id = uuid4()
             entity_node = DagNodeCreate(
+                id=entity_node_id,
                 type="entity",
                 name=entity_definition.name,
                 entity_definition_id=entity_definition.id,
             )
             nodes.append(entity_node)
 
-        # Create destination node
+            # Create edge from source to entity
+            edges.append(
+                DagEdgeCreate(
+                    from_node_id=source_node_id,
+                    to_node_id=entity_node_id,
+                )
+            )
+
+        # Create destination node with pre-set ID
+        destination_node_id = uuid4()
         if sync.destination_connection_id:
             destination_connection = await crud.connection.get(
                 db, id=sync.destination_connection_id, current_user=current_user
@@ -65,37 +78,51 @@ class DagService:
             if not destination_connection:
                 raise HTTPException(status_code=404, detail="Destination connection not found")
 
-            destination_connection = await crud.connection.get(
-                db, id=destination_connection.id, current_user=current_user
+            destination = await crud.destination.get_by_short_name(
+                db, short_name=destination_connection.short_name
             )
             destination_node = DagNodeCreate(
+                id=destination_node_id,
                 type="destination",
-                name="Native",
-                destination_id=destination_connection.destination_id,
+                name=destination.name,
+                destination_id=destination.id,
             )
         else:
             destination = await crud.destination.get_by_short_name(db, short_name="weaviate_native")
             destination_node = DagNodeCreate(
+                id=destination_node_id,
                 type="destination",
                 name="Native Weaviate",
                 destination_id=destination.id,
             )
         nodes.append(destination_node)
 
-        # Create edges
-        for node in nodes:
-            if node.type == "source":
-                edges.append(DagEdgeCreate(from_node_id=node.id, to_node_id=nodes[1].id))
-            elif node.type == "entity":
-                edges.append(DagEdgeCreate(from_node_id=node.id, to_node_id=nodes[2].id))
+        # Create edges from entities to destination (or source to destination if no entities)
+        if entity_definitions:
+            for node in nodes[1:-1]:  # Skip source and destination nodes
+                edges.append(
+                    DagEdgeCreate(
+                        from_node_id=node.id,
+                        to_node_id=destination_node_id,
+                    )
+                )
+        else:
+            # Direct edge from source to destination if no entities
+            edges.append(
+                DagEdgeCreate(
+                    from_node_id=source_node_id,
+                    to_node_id=destination_node_id,
+                )
+            )
 
         sync_dag_definition_create = SyncDagDefinitionCreate(
             name=f"DAG for {sync.name}",
+            sync_id=sync_id,
             nodes=nodes,
             edges=edges,
         )
 
-        sync_dag_definition = await crud.sync_dag_definition.create(
+        sync_dag_definition = await crud.sync_dag_definition.create_with_nodes_and_edges(
             db, obj_in=sync_dag_definition_create, current_user=current_user
         )
 

@@ -1,16 +1,9 @@
 """Schemas for DAG system."""
 
 from typing import Dict, List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
-
-
-class DagNodePosition(BaseModel):
-    """Schema for node position in the UI."""
-
-    x: float = Field(..., description="X coordinate")
-    y: float = Field(..., description="Y coordinate")
 
 
 class DagNodeBase(BaseModel):
@@ -19,20 +12,18 @@ class DagNodeBase(BaseModel):
     type: str  # source, destination, transformer, entity
     name: str
     config: Optional[Dict] = None
-    position: Optional[DagNodePosition] = None
-    connection_id: Optional[UUID] = None
 
     # One of these will be set based on type
-    source_id: Optional[UUID] = None
-    destination_id: Optional[UUID] = None
-    transformer_id: Optional[UUID] = None
+    connection_id: Optional[UUID] = None
     entity_definition_id: Optional[UUID] = None
 
 
 class DagNodeCreate(DagNodeBase):
     """Schema for creating a DAG node."""
 
-    pass
+    id: Optional[UUID] = Field(
+        default_factory=uuid4, description="Optional pre-set ID for the node"
+    )
 
 
 class DagNodeUpdate(DagNodeBase):

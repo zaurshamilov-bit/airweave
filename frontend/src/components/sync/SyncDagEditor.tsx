@@ -44,10 +44,10 @@ interface DagUpdateRequest {
   description: string;
   sync_id: string;
   nodes: {
+    id: string;
     type: string;
     name: string;
     config?: Record<string, any>;
-    position: { x: number; y: number };
     source_id?: string;
     destination_id?: string;
     transformer_id?: string;
@@ -74,20 +74,45 @@ export const SyncDagEditor = ({ syncId, initialDag, onSave }: SyncDagEditorProps
         if (!resp.ok) throw new Error("Failed to load DAG");
         const data = await resp.json();
         
-        // Convert backend data to React Flow format
-        const flowNodes = data.nodes.map((node: any) => ({
-          id: node.id,
-          type: node.type.toLowerCase(),
-          position: node.position || { x: 0, y: 0 },
-          data: {
-            name: node.name,
-            config: node.config,
-            sourceId: node.source_id,
-            destinationId: node.destination_id,
-            transformerId: node.transformer_id,
-            entityDefinitionId: node.entity_definition_id,
-          },
-        }));
+        // Convert backend data to React Flow format and assign positions
+        const flowNodes = data.nodes.map((node: any, index: number) => {
+          let position = { x: 0, y: 0 };
+          
+          // Assign positions based on node type
+          switch (node.type.toLowerCase()) {
+            case "source":
+              position = { x: 100, y: 100 };
+              break;
+            case "entity":
+              // Distribute entity nodes vertically in the middle
+              const entityCount = data.nodes.filter((n: any) => n.type.toLowerCase() === "entity").length;
+              const ySpacing = 400 / (entityCount + 1);
+              const entityIndex = data.nodes.filter(
+                (n: any, i: number) => n.type.toLowerCase() === "entity" && i < index
+              ).length;
+              position = { x: 400, y: ySpacing * (entityIndex + 1) };
+              break;
+            case "destination":
+              position = { x: 700, y: 100 };
+              break;
+            default:
+              position = { x: 250 * (index + 1), y: 100 };
+          }
+
+          return {
+            id: node.id,
+            type: node.type.toLowerCase(),
+            position,
+            data: {
+              name: node.name,
+              config: node.config,
+              sourceId: node.source_id,
+              destinationId: node.destination_id,
+              transformerId: node.transformer_id,
+              entityDefinitionId: node.entity_definition_id,
+            },
+          };
+        });
 
         const flowEdges = data.edges.map((edge: any) => ({
           id: edge.id,
@@ -121,16 +146,16 @@ export const SyncDagEditor = ({ syncId, initialDag, onSave }: SyncDagEditorProps
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      // Convert React Flow data to backend format
+      // Convert React Flow data to backend format (omit position data)
       const dagData: DagUpdateRequest = {
         name: "DAG from UI",
         description: "Created via DAG editor",
         sync_id: syncId,
         nodes: nodes.map((node) => ({
+          id: node.id,
           type: node.type?.toUpperCase() || "",
           name: node.data.name,
           config: node.data.config,
-          position: node.position,
           source_id: node.data.sourceId,
           destination_id: node.data.destinationId,
           transformer_id: node.data.transformerId,
