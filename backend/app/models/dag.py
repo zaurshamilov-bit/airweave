@@ -55,7 +55,7 @@ class DagNode(OrganizationBase, UserMixin):
 
     # Reference to the definition (one of these will be set based on type)
     connection_id = Column(UUID, ForeignKey("connection.id"), nullable=True)
-    entity_id = Column(UUID, ForeignKey("entity_definition.id"), nullable=True)
+    entity_definition_id = Column(UUID, ForeignKey("entity_definition.id"), nullable=True)
 
     # Relationships
     dag = relationship("SyncDagDefinition", back_populates="nodes", lazy="noload")
