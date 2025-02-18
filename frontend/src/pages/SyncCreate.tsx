@@ -11,7 +11,7 @@ import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 import { SyncPipelineVisual } from "@/components/sync/SyncPipelineVisual";
 import { SyncDagEditor } from "@/components/sync/SyncDagEditor";
 import { SyncUIMetadata } from "@/components/sync/types";
-import { DagDefinition } from "@/types/dag";
+import { DagDefinition } from "@/components/sync/dag";
 
 /**
  * This component coordinates all user actions (source selection,

@@ -1,4 +1,4 @@
-import { Node, Edge } from 'reactflow';
+import { Node, Edge, Position, addEdge } from 'reactflow';
 
 export interface DagNode {
   id: string;
@@ -12,8 +12,8 @@ export interface DagNode {
 
 export interface DagEdge {
   id: string;
-  fromNodeId: string;
-  toNodeId: string;
+  from_node_id: string;
+  to_node_id: string;
 }
 
 export interface DagDefinition {
@@ -26,6 +26,9 @@ export interface DagDefinition {
 }
 
 export interface FlowNode extends Node {
+  id: string;
+  type: string;
+  position: { x: number; y: number };
   data: {
     name: string;
     shortName?: string;
@@ -33,10 +36,17 @@ export interface FlowNode extends Node {
     connection_id?: string;
     entity_definition_id?: string;
   };
+  sourcePosition?: Position;
+  targetPosition?: Position;
 }
 
 export interface FlowEdge extends Edge {
+  id: string;
+  source: string;
+  target: string;
   type: 'button';
+  sourceHandle?: string;
+  targetHandle?: string;
 }
 
 // Connection interfaces for source/destination details
@@ -63,7 +73,9 @@ export const toFlowNodes = (nodes: DagNode[]): FlowNode[] =>
       connection_id: node.connection_id,
       entity_definition_id: node.entity_definition_id,
     },
-    position: { x: 0, y: 0 }, // Will be set by layout
+    position: { x: 0, y: 0 },
+    sourcePosition: Position.Bottom,
+    targetPosition: Position.Top,
   }));
 
 export const toFlowEdges = (edges: DagEdge[]): FlowEdge[] =>

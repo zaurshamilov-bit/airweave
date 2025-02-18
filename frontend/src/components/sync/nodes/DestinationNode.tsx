@@ -3,7 +3,7 @@ import { NodeProps } from "reactflow";
 import { BaseNode } from "./BaseNode";
 import { getDestinationIconUrl } from "@/lib/utils/icons";
 import { apiClient } from "@/lib/api";
-import { Connection } from "@/types/dag";
+import { Connection } from "@/components/sync/dag";
 import { toast } from "@/components/ui/use-toast";
 
 export const DestinationNode = memo(({ data, ...props }: NodeProps) => {
