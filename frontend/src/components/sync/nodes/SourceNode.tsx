@@ -44,6 +44,7 @@ export const SourceNode = memo(({ data, ...props }: NodeProps) => {
       }
       label={connection?.name || data.name}
       handles={{ source: true, target: false }}
+      variant="square"
     />
   );
 });

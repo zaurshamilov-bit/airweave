@@ -48,6 +48,7 @@ export const DestinationNode = memo(({ data, ...props }: NodeProps) => {
       }
       label={name}
       handles={{ source: false, target: true }}
+      variant="square"
     />
   );
 });

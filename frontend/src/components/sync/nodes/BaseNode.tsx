@@ -9,9 +9,49 @@ interface BaseNodeProps extends NodeProps {
     source?: boolean;
     target?: boolean;
   };
+  variant?: 'square' | 'card';
 }
 
-export const BaseNode = memo(({ icon, label, handles = { source: true, target: true }, selected }: BaseNodeProps) => {
+export const BaseNode = memo(({ 
+  icon, 
+  label, 
+  handles = { source: true, target: true }, 
+  selected,
+  variant = 'card'
+}: BaseNodeProps) => {
+  if (variant === 'square') {
+    return (
+      <div className="flex flex-col items-center gap-1.5">
+        <div
+          className={cn(
+            "w-20 h-20 flex items-center justify-center rounded-lg shadow-md bg-background/80 backdrop-blur-sm",
+            "border-2 transition-colors duration-200",
+            selected ? "border-primary" : "border-border"
+          )}
+        >
+          {handles?.target && (
+            <Handle
+              type="target"
+              position={Position.Left}
+              className="w-2 h-2 -ml-[2px] border border-background bg-muted-foreground"
+            />
+          )}
+          <div className="w-10 h-10 flex items-center justify-center">
+            {icon}
+          </div>
+          {handles?.source && (
+            <Handle
+              type="source"
+              position={Position.Right}
+              className="w-2 h-2 -mr-[2px] border border-background bg-muted-foreground"
+            />
+          )}
+        </div>
+        <span className="text-sm font-semibold text-foreground max-w-[120px] text-center truncate">{label}</span>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(

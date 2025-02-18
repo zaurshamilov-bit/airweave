@@ -20,6 +20,7 @@ export const TransformerNode = memo(({ data, ...props }: NodeProps) => {
       icon={getTransformerIcon(data.transformer_id)}
       label={data.name}
       handles={{ source: true, target: true }}
+      variant="square"
     />
   );
 });

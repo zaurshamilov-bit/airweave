@@ -63,11 +63,11 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
 
   dagreGraph.setGraph({ 
     rankdir: 'LR',
-    nodesep: 80,
-    ranksep: 200,
+    nodesep: 50,
+    ranksep: 120,
     align: 'DL',
-    marginx: 50,
-    marginy: 50,
+    marginx: 30,
+    marginy: 30,
   });
 
   // Add nodes to dagre
