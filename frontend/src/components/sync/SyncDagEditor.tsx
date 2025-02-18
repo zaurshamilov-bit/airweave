@@ -124,8 +124,8 @@ const calculateLayoutParameters = (graphStructure: ReturnType<typeof analyzeGrap
     nodesep,
     blankEdgeWeight,
     buttonEdgeWeight,
-    marginx: Math.round(ranksep * 0.25),
-    marginy: Math.round(nodesep * 0.375),
+    marginx: 0,
+    marginy: 0,
   };
 };
 
@@ -148,9 +148,9 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
 
   // Add nodes to dagre
   nodes.forEach((node) => {
-    // Use consistent dimensions for all nodes - only consider the core square/box part
-    const nodeWidth = 40;  // All nodes should have same core width
-    const nodeHeight = 40; // All nodes should have same core height
+    // Use consistent 80x80 dimensions for layout calculations
+    const nodeWidth = 80;  // Consistent width for layout
+    const nodeHeight = 80; // Consistent height for layout
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
   });
 

@@ -1,12 +1,12 @@
 import { memo, useEffect, useState } from "react";
-import { NodeProps } from "reactflow";
-import { BaseNode } from "./BaseNode";
+import { Handle, NodeProps, Position } from "reactflow";
 import { getDestinationIconUrl } from "@/lib/utils/icons";
 import { apiClient } from "@/lib/api";
 import { Connection } from "@/components/sync/dag";
+import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
 
-export const DestinationNode = memo(({ data, ...props }: NodeProps) => {
+export const DestinationNode = memo(({ data, selected, ...props }: NodeProps) => {
   const [connection, setConnection] = useState<Connection | null>(null);
 
   useEffect(() => {
@@ -36,20 +36,32 @@ export const DestinationNode = memo(({ data, ...props }: NodeProps) => {
   const name = connection?.name || data.name || "Native Weaviate";
 
   return (
-    <BaseNode
-      {...props}
-      data={data}
-      icon={
-        <img 
-          src={getDestinationIconUrl(shortName)} 
-          alt={name}
-          className="w-8 h-8 object-contain"
+    <div className="w-20 h-20">
+      <div
+        className={cn(
+          "w-full h-full flex items-center justify-center bg-background/80 backdrop-blur-sm",
+          "border-2 transition-colors duration-200 cursor-pointer",
+          "border-muted-foreground/50 hover:border-primary rounded-l-lg rounded-r-2xl",
+          selected ? "border-primary shadow-sm shadow-primary/20" : ""
+        )}
+      >
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="w-2 h-2 -ml-[2px] border border-background bg-muted-foreground"
         />
-      }
-      label={name}
-      handles={{ source: false, target: true }}
-      variant="square"
-    />
+        <div className="w-16 h-16 flex items-center justify-center">
+          <img 
+            src={getDestinationIconUrl(shortName)} 
+            alt={name}
+            className="w-12 h-12 object-contain"
+          />
+        </div>
+      </div>
+      <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap">
+        <span className="text-sm font-semibold text-foreground text-center">{name}</span>
+      </div>
+    </div>
   );
 });
 

@@ -1,27 +1,46 @@
 import { memo } from "react";
-import { NodeProps } from "reactflow";
-import { BaseNode } from "./BaseNode";
+import { Handle, NodeProps, Position } from "reactflow";
 import { SplitSquareHorizontal, Wand2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const getTransformerIcon = (transformerId: string) => {
   switch (transformerId) {
     case 'text-splitter':
-      return <SplitSquareHorizontal className="w-8 h-8" />;
+      return <SplitSquareHorizontal className="w-12 h-12" />;
     default:
-      return <Wand2 className="w-8 h-8" />;
+      return <Wand2 className="w-12 h-12" />;
   }
 };
 
-export const TransformerNode = memo(({ data, ...props }: NodeProps) => {
+export const TransformerNode = memo(({ data, selected, ...props }: NodeProps) => {
   return (
-    <BaseNode
-      {...props}
-      data={data}
-      icon={getTransformerIcon(data.transformer_id)}
-      label={data.name}
-      handles={{ source: true, target: true }}
-      variant="square"
-    />
+    <div className="w-20 h-20">
+      <div
+        className={cn(
+          "w-full h-full flex items-center justify-center bg-background/80 backdrop-blur-sm",
+          "border-2 transition-colors duration-200 cursor-pointer",
+          "border-muted-foreground/50 hover:border-primary rounded-lg",
+          selected ? "border-primary shadow-sm shadow-primary/20" : ""
+        )}
+      >
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="w-2 h-2 -ml-[2px] border border-background bg-muted-foreground"
+        />
+        <div className="w-16 h-16 flex items-center justify-center">
+          {getTransformerIcon(data.transformer_id)}
+        </div>
+        <Handle
+          type="source"
+          position={Position.Right}
+          className="w-2 h-2 -mr-[2px] border border-background bg-muted-foreground"
+        />
+      </div>
+      <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap">
+        <span className="text-sm font-semibold text-foreground text-center">{data.name}</span>
+      </div>
+    </div>
   );
 });
 
