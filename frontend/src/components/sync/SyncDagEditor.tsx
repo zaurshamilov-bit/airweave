@@ -59,17 +59,91 @@ interface SyncDagEditorProps {
 const nodeWidth = 200;
 const nodeHeight = 50;
 
+// Add these helper functions at the top level
+const analyzeGraphStructure = (nodes: FlowNode[], edges: FlowEdge[]) => {
+  const graph = new dagre.graphlib.Graph();
+  graph.setDefaultEdgeLabel(() => ({}));
+  graph.setGraph({ rankdir: 'LR' });
+
+  // Add all nodes and edges to the graph
+  nodes.forEach(node => graph.setNode(node.id, {}));
+  edges.forEach(edge => graph.setEdge(edge.source, edge.target));
+
+  // Calculate the basic layout to get rank information
+  dagre.layout(graph);
+
+  // Get all nodes with their ranks
+  const nodeRanks = new Map<number, string[]>();
+  nodes.forEach(node => {
+    const rank = graph.node(node.id).x;
+    if (!nodeRanks.has(rank)) {
+      nodeRanks.set(rank, []);
+    }
+    nodeRanks.get(rank)?.push(node.id);
+  });
+
+  // Sort ranks and count columns
+  const uniqueRanks = Array.from(nodeRanks.keys()).sort((a, b) => a - b);
+  const columnCount = uniqueRanks.length;
+
+  // Analyze column density (nodes per column)
+  const columnDensities = uniqueRanks.map(rank => nodeRanks.get(rank)?.length || 0);
+  const maxNodesInColumn = Math.max(...columnDensities);
+  const avgNodesInColumn = columnDensities.reduce((sum, count) => sum + count, 0) / columnCount;
+
+  return {
+    columnCount,
+    maxNodesInColumn,
+    avgNodesInColumn,
+    columnDensities,
+  };
+};
+
+const calculateLayoutParameters = (graphStructure: ReturnType<typeof analyzeGraphStructure>) => {
+  const { columnCount, maxNodesInColumn, avgNodesInColumn } = graphStructure;
+  
+  // Base values
+  const baseRankSep = 120;
+  const baseNodeSep = 80;
+  
+  // Calculate scaling factors based on graph complexity
+  const rankSepScaleFactor = Math.max(0.5, Math.min(1, 3 / columnCount));
+  const nodeSepScaleFactor = Math.max(0.6, Math.min(1, 3 / maxNodesInColumn));
+  
+  // Calculate adjusted values
+  const ranksep = Math.round(baseRankSep * rankSepScaleFactor);
+  const nodesep = Math.round(baseNodeSep * nodeSepScaleFactor);
+  
+  // Calculate edge weights based on graph density
+  const denseGraph = avgNodesInColumn > 2 || columnCount > 4;
+  const blankEdgeWeight = denseGraph ? 8 : 5;
+  const buttonEdgeWeight = denseGraph ? 2 : 1;
+  
+  return {
+    ranksep,
+    nodesep,
+    blankEdgeWeight,
+    buttonEdgeWeight,
+    marginx: Math.round(ranksep * 0.25),
+    marginy: Math.round(nodesep * 0.375),
+  };
+};
+
 const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
 
+  // Analyze graph structure and get optimal layout parameters
+  const graphStructure = analyzeGraphStructure(nodes, edges);
+  const layoutParams = calculateLayoutParameters(graphStructure);
+
   dagreGraph.setGraph({ 
     rankdir: 'LR',
-    nodesep: 80,
-    ranksep: 120,
+    nodesep: layoutParams.nodesep,
+    ranksep: layoutParams.ranksep,
     align: 'DL',
-    marginx: 30,
-    marginy: 30,
+    marginx: layoutParams.marginx,
+    marginy: layoutParams.marginy,
   });
 
   // Add nodes to dagre
@@ -88,8 +162,8 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
       // For blank edges (source to entity, transformer to entity)
       if (edge.type === 'blank') {
         dagreGraph.setEdge(edge.source, edge.target, {
-          weight: 5, // Higher weight to keep these edges shorter
-          minlen: 1  // Minimum length to keep nodes close
+          weight: layoutParams.blankEdgeWeight,
+          minlen: 1
         });
       }
       // For button edges
@@ -97,22 +171,22 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
         // If target is a transformer, give more space
         if (targetNode.type === 'transformer') {
           dagreGraph.setEdge(edge.source, edge.target, {
-            weight: 1,
-            minlen: 2 // More space before transformers
+            weight: layoutParams.buttonEdgeWeight,
+            minlen: Math.min(2, graphStructure.columnCount > 4 ? 1 : 2)
           });
         }
         // If source is an entity going to destination
         else if (sourceNode.type === 'entity' && targetNode.type === 'destination') {
           dagreGraph.setEdge(edge.source, edge.target, {
-            weight: 1,
-            minlen: 2 // More space after entities
+            weight: layoutParams.buttonEdgeWeight,
+            minlen: Math.min(2, graphStructure.columnCount > 4 ? 1 : 2)
           });
         }
         // Default button edge
         else {
           dagreGraph.setEdge(edge.source, edge.target, {
-            weight: 1,
-            minlen: 2
+            weight: layoutParams.buttonEdgeWeight,
+            minlen: Math.min(2, graphStructure.columnCount > 4 ? 1 : 2)
           });
         }
       }
