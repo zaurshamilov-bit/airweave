@@ -88,8 +88,7 @@ class GoogleCalendarEventChunk(BaseChunk):
     start_date: Optional[str] = Field(
         None,
         description=(
-            "Start date if the event is an all-day event. "
-            "(Date from 'start' if 'date' is present.)"
+            "Start date if the event is an all-day event. (Date from 'start' if 'date' is present.)"
         ),
     )
     end_datetime: Optional[datetime] = Field(
@@ -102,7 +101,7 @@ class GoogleCalendarEventChunk(BaseChunk):
     end_date: Optional[str] = Field(
         None,
         description=(
-            "End date if the event is an all-day event. " "(Date from 'end' if 'date' is present.)"
+            "End date if the event is an all-day event. (Date from 'end' if 'date' is present.)"
         ),
     )
     recurrence: Optional[List[str]] = Field(

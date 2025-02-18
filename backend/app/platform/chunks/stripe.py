@@ -232,7 +232,7 @@ class StripePaymentMethodChunk(BaseChunk):
     card: Optional[Dict[str, Any]] = Field(
         None,
         description=(
-            "If the PaymentMethod type is 'card', details about the card " "(brand, last4, etc.)"
+            "If the PaymentMethod type is 'card', details about the card (brand, last4, etc.)"
         ),
     )
     created_at: Optional[datetime] = Field(None, description="When the PaymentMethod was created")

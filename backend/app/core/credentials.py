@@ -1,4 +1,5 @@
 """The module that contains the logic for credentials."""
+
 import json
 
 from cryptography.fernet import Fernet

@@ -62,8 +62,7 @@ class OutlookCalendarEventChunk(BaseChunk):
     start_datetime: Optional[datetime] = Field(
         None,
         description=(
-            "The date/time when the event starts, in UTC. "
-            "Derived from 'start.dateTime' if present."
+            "The date/time when the event starts, in UTC. Derived from 'start.dateTime' if present."
         ),
     )
     start_timezone: Optional[str] = Field(
@@ -72,7 +71,7 @@ class OutlookCalendarEventChunk(BaseChunk):
     end_datetime: Optional[datetime] = Field(
         None,
         description=(
-            "The date/time when the event ends, in UTC. " "Derived from 'end.dateTime' if present."
+            "The date/time when the event ends, in UTC. Derived from 'end.dateTime' if present."
         ),
     )
     end_timezone: Optional[str] = Field(
@@ -135,8 +134,7 @@ class OutlookCalendarEventChunk(BaseChunk):
     series_master_id: Optional[str] = Field(
         None,
         description=(
-            "If this is part of a recurring series, specifies the ID of the master "
-            "recurring event."
+            "If this is part of a recurring series, specifies the ID of the master recurring event."
         ),
     )
     recurrence: Optional[Dict[str, Any]] = Field(

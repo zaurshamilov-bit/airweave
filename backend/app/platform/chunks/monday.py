@@ -154,7 +154,7 @@ class MondayUpdateChunk(BaseChunk):
     item_id: Optional[str] = Field(
         None,
         description=(
-            "ID of the item this update is referencing " "(could also be a board-level update)."
+            "ID of the item this update is referencing (could also be a board-level update)."
         ),
     )
     board_id: Optional[str] = Field(None, description="ID of the board, if applicable.")

@@ -44,9 +44,9 @@ class SlackUserChunk(BaseChunk):
     is_primary_owner: bool = False
     is_restricted: bool = False
     is_ultra_restricted: bool = False
-    updated: Optional[
-        datetime
-    ] = None  # Slack returns profile updates in epoch time; convert to datetime
+    updated: Optional[datetime] = (
+        None  # Slack returns profile updates in epoch time; convert to datetime
+    )
 
 
 class SlackMessageChunk(BaseChunk):
