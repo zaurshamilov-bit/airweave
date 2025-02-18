@@ -22,7 +22,7 @@ export const BaseNode = memo(({
 }: BaseNodeProps) => {
   if (variant === 'square') {
     return (
-      <div className="w-20 h-20">
+      <div className="w-10 h-10">
         <div
           className={cn(
             "w-full h-full flex items-center justify-center rounded-lg shadow-md bg-background/80 backdrop-blur-sm",
@@ -37,9 +37,9 @@ export const BaseNode = memo(({
               className="w-2 h-2 -ml-[2px] border border-background bg-muted-foreground"
             />
           )}
-          <div className="w-12 h-12 flex items-center justify-center">
+          <div className="w-8 h-8 flex items-center justify-center">
             {React.cloneElement(icon as React.ReactElement, {
-              className: 'w-8 h-8'
+              className: 'w-6 h-6'
             })}
           </div>
           {handles?.source && (

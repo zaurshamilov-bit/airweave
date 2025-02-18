@@ -102,12 +102,12 @@ const analyzeGraphStructure = (nodes: FlowNode[], edges: FlowEdge[]) => {
 const calculateLayoutParameters = (graphStructure: ReturnType<typeof analyzeGraphStructure>) => {
   const { columnCount, maxNodesInColumn, avgNodesInColumn } = graphStructure;
   
-  // Base values
-  const baseRankSep = 120;
+  // Increase base values for more spread
+  const baseRankSep = 120;  // Increased from 120
   const baseNodeSep = 80;
   
   // Calculate scaling factors based on graph complexity
-  const rankSepScaleFactor = Math.max(0.5, Math.min(1, 3 / columnCount));
+  const rankSepScaleFactor = Math.max(0.7, Math.min(1, 3 / columnCount));  // Increased minimum from 0.5
   const nodeSepScaleFactor = Math.max(0.6, Math.min(1, 3 / maxNodesInColumn));
   
   // Calculate adjusted values
@@ -116,7 +116,7 @@ const calculateLayoutParameters = (graphStructure: ReturnType<typeof analyzeGrap
   
   // Calculate edge weights based on graph density
   const denseGraph = avgNodesInColumn > 2 || columnCount > 4;
-  const blankEdgeWeight = denseGraph ? 8 : 5;
+  const blankEdgeWeight = denseGraph ? 6 : 4;
   const buttonEdgeWeight = denseGraph ? 2 : 1;
   
   return {
@@ -148,8 +148,9 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
 
   // Add nodes to dagre
   nodes.forEach((node) => {
-    const nodeWidth = node.type === 'entity' ? 40 : 80;
-    const nodeHeight = node.type === 'entity' ? 40 : 80;
+    // Use consistent dimensions for all nodes - only consider the core square/box part
+    const nodeWidth = 40;  // All nodes should have same core width
+    const nodeHeight = 40; // All nodes should have same core height
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
   });
 
@@ -163,7 +164,7 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
       if (edge.type === 'blank') {
         dagreGraph.setEdge(edge.source, edge.target, {
           weight: layoutParams.blankEdgeWeight,
-          minlen: 1
+          minlen: 2  // Increased from 1
         });
       }
       // For button edges
@@ -172,21 +173,21 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
         if (targetNode.type === 'transformer') {
           dagreGraph.setEdge(edge.source, edge.target, {
             weight: layoutParams.buttonEdgeWeight,
-            minlen: Math.min(2, graphStructure.columnCount > 4 ? 1 : 2)
+            minlen: Math.min(3, graphStructure.columnCount > 4 ? 2 : 3)  // Increased spacing
           });
         }
         // If source is an entity going to destination
         else if (sourceNode.type === 'entity' && targetNode.type === 'destination') {
           dagreGraph.setEdge(edge.source, edge.target, {
             weight: layoutParams.buttonEdgeWeight,
-            minlen: Math.min(2, graphStructure.columnCount > 4 ? 1 : 2)
+            minlen: Math.min(3, graphStructure.columnCount > 4 ? 2 : 3)  // Increased spacing
           });
         }
         // Default button edge
         else {
           dagreGraph.setEdge(edge.source, edge.target, {
             weight: layoutParams.buttonEdgeWeight,
-            minlen: Math.min(2, graphStructure.columnCount > 4 ? 1 : 2)
+            minlen: Math.min(3, graphStructure.columnCount > 4 ? 2 : 3)  // Increased spacing
           });
         }
       }
