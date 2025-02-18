@@ -1,5 +1,5 @@
-import { memo, useState } from "react";
-import { EdgeProps, getBezierPath } from "reactflow";
+import { memo, useState, useCallback } from "react";
+import { EdgeProps, getBezierPath, useReactFlow } from "reactflow";
 import { PlusCircle } from "lucide-react";
 import {
   DropdownMenu,
@@ -10,11 +10,31 @@ import {
 
 // Mock transformers - replace with actual transformers later
 const TRANSFORMERS = [
-  { id: "text-splitter", name: "Text Splitter", description: "Split text into chunks" },
-  { id: "summarizer", name: "Summarizer", description: "Generate text summaries" },
-  { id: "translator", name: "Translator", description: "Translate text between languages" },
-  { id: "classifier", name: "Classifier", description: "Classify text into categories" },
+  { 
+    id: "text-splitter", 
+    name: "Text Splitter", 
+    description: "Split text into chunks",
+    icon: "split"
+  },
+  { 
+    id: "summarizer", 
+    name: "Summarizer", 
+    description: "Generate text summaries",
+    icon: "wand"
+  },
 ];
+
+interface ButtonEdgeProps extends EdgeProps {
+  data?: {
+    onTransformerAdd?: (
+      transformerId: string,
+      transformerName: string,
+      sourceNodeId: string,
+      targetNodeId: string,
+      sourceEdge: Pick<EdgeProps, 'id' | 'source' | 'target'>
+    ) => void;
+  };
+}
 
 export const ButtonEdge = memo(({
   id,
@@ -26,7 +46,11 @@ export const ButtonEdge = memo(({
   targetPosition,
   style = {},
   markerEnd,
-}: EdgeProps) => {
+  source,
+  target,
+  data,
+  ...props
+}: ButtonEdgeProps) => {
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -38,9 +62,16 @@ export const ButtonEdge = memo(({
 
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleTransformerSelect = (transformerId: string) => {
-    // TODO: Implement transformer node creation
-    console.log("Selected transformer:", transformerId);
+  const handleTransformerSelect = (transformer: typeof TRANSFORMERS[0]) => {
+    if (data?.onTransformerAdd) {
+      data.onTransformerAdd(
+        transformer.id,
+        transformer.name,
+        source,
+        target,
+        { id, source, target }
+      );
+    }
     setIsOpen(false);
   };
 
@@ -70,7 +101,7 @@ export const ButtonEdge = memo(({
             {TRANSFORMERS.map((transformer) => (
               <DropdownMenuItem
                 key={transformer.id}
-                onClick={() => handleTransformerSelect(transformer.id)}
+                onClick={() => handleTransformerSelect(transformer)}
               >
                 <div className="flex flex-col">
                   <span className="font-medium">{transformer.name}</span>
