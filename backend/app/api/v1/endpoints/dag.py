@@ -64,4 +64,5 @@ async def initialize_dag(
     current_user: User = Depends(deps.get_user),
 ) -> schemas.SyncDagDefinition:
     """Initialize a new DAG with source, entities, and destination."""
-    return await dag_service.create_initial_dag(db, sync_id=sync_id, current_user=current_user)
+    dag = await dag_service.create_initial_dag(db, sync_id=sync_id, current_user=current_user)
+    return dag

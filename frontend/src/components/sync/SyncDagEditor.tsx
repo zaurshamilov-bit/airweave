@@ -10,118 +10,121 @@ import ReactFlow, {
   useNodesState,
   Panel,
   Connection,
-  Edge as FlowEdge,
+  ConnectionLineType,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { useToast } from "@/components/ui/use-toast";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Save } from "lucide-react";
+import { LayoutGrid, Save } from "lucide-react";
 import { SourceNode } from "./nodes/SourceNode";
 import { DestinationNode } from "./nodes/DestinationNode";
-import { TransformerNode } from "./nodes/TransformerNode";
 import { EntityNode } from "./nodes/EntityNode";
+import { ButtonEdge } from "./edges/ButtonEdge";
+import dagre from "dagre";
+import { 
+  DagDefinition, 
+  FlowNode, 
+  FlowEdge,
+  toFlowNodes,
+  toFlowEdges,
+  toDagNodes,
+  toDagEdges,
+} from "@/types/dag";
 
 // Define custom node types
 const nodeTypes: NodeTypes = {
   source: SourceNode,
   destination: DestinationNode,
-  transformer: TransformerNode,
   entity: EntityNode,
+};
+
+const edgeTypes = {
+  button: ButtonEdge,
 };
 
 interface SyncDagEditorProps {
   syncId: string;
-  initialDag?: {
-    nodes: Node[];
-    edges: Edge[];
-  };
+  initialDag?: DagDefinition;
   onSave?: () => void;
 }
 
-interface DagUpdateRequest {
-  name: string;
-  description: string;
-  sync_id: string;
-  nodes: {
-    id: string;
-    type: string;
-    name: string;
-    config?: Record<string, any>;
-    source_id?: string;
-    destination_id?: string;
-    transformer_id?: string;
-    entity_definition_id?: string;
-  }[];
-  edges: {
-    from_node_id: string;
-    to_node_id: string;
-  }[];
-}
+const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[], direction = 'LR') => {
+  const dagreGraph = new dagre.graphlib.Graph();
+  dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+  const isHorizontal = direction === 'LR';
+  dagreGraph.setGraph({ rankdir: direction });
+
+  // Node width and height for layout calculation
+  const nodeWidth = 180;
+  const nodeHeight = 60;
+
+  // Add nodes to dagre
+  nodes.forEach((node) => {
+    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+  });
+
+  // Add edges to dagre
+  edges.forEach((edge) => {
+    dagreGraph.setEdge(edge.source, edge.target);
+  });
+
+  // Calculate layout
+  dagre.layout(dagreGraph);
+
+  // Get positioned nodes
+  const layoutedNodes = nodes.map((node) => {
+    const nodeWithPosition = dagreGraph.node(node.id);
+    return {
+      ...node,
+      position: {
+        x: nodeWithPosition.x - nodeWidth / 2,
+        y: nodeWithPosition.y - nodeHeight / 2,
+      },
+    };
+  });
+
+  return { nodes: layoutedNodes, edges };
+};
 
 export const SyncDagEditor = ({ syncId, initialDag, onSave }: SyncDagEditorProps) => {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialDag?.nodes || []);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialDag?.edges || []);
+  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode[]>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  // Load initial DAG if not provided
+  // Load initial DAG
   useEffect(() => {
     const loadDag = async () => {
-      if (initialDag) return;
       try {
+        // If we have initial DAG data, use it
+        if (initialDag) {
+          const flowNodes = toFlowNodes(initialDag.nodes);
+          const flowEdges = toFlowEdges(initialDag.edges);
+          const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+            flowNodes,
+            flowEdges
+          );
+          setNodes(layoutedNodes);
+          setEdges(layoutedEdges);
+          return;
+        }
+
+        // Otherwise fetch from API
         const resp = await apiClient.get(`/sync/${syncId}/dag`);
         if (!resp.ok) throw new Error("Failed to load DAG");
-        const data = await resp.json();
+        const data: DagDefinition = await resp.json();
         
-        // Convert backend data to React Flow format and assign positions
-        const flowNodes = data.nodes.map((node: any, index: number) => {
-          let position = { x: 0, y: 0 };
-          
-          // Assign positions based on node type
-          switch (node.type.toLowerCase()) {
-            case "source":
-              position = { x: 100, y: 100 };
-              break;
-            case "entity":
-              // Distribute entity nodes vertically in the middle
-              const entityCount = data.nodes.filter((n: any) => n.type.toLowerCase() === "entity").length;
-              const ySpacing = 400 / (entityCount + 1);
-              const entityIndex = data.nodes.filter(
-                (n: any, i: number) => n.type.toLowerCase() === "entity" && i < index
-              ).length;
-              position = { x: 400, y: ySpacing * (entityIndex + 1) };
-              break;
-            case "destination":
-              position = { x: 700, y: 100 };
-              break;
-            default:
-              position = { x: 250 * (index + 1), y: 100 };
-          }
+        const flowNodes = toFlowNodes(data.nodes);
+        const flowEdges = toFlowEdges(data.edges);
+        const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+          flowNodes,
+          flowEdges
+        );
 
-          return {
-            id: node.id,
-            type: node.type.toLowerCase(),
-            position,
-            data: {
-              name: node.name,
-              config: node.config,
-              sourceId: node.source_id,
-              destinationId: node.destination_id,
-              transformerId: node.transformer_id,
-              entityDefinitionId: node.entity_definition_id,
-            },
-          };
-        });
-
-        const flowEdges = data.edges.map((edge: any) => ({
-          id: edge.id,
-          source: edge.from_node_id,
-          target: edge.to_node_id,
-        }));
-
-        setNodes(flowNodes);
-        setEdges(flowEdges);
+        setNodes(layoutedNodes);
+        setEdges(layoutedEdges);
       } catch (err: any) {
         toast({
           variant: "destructive",
@@ -137,7 +140,7 @@ export const SyncDagEditor = ({ syncId, initialDag, onSave }: SyncDagEditorProps
   // Handle connecting nodes
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges((eds) => addEdge(params, eds));
+      setEdges((eds) => addEdge({ ...params, type: 'button' }, eds));
     },
     [setEdges]
   );
@@ -146,25 +149,13 @@ export const SyncDagEditor = ({ syncId, initialDag, onSave }: SyncDagEditorProps
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      // Convert React Flow data to backend format (omit position data)
-      const dagData: DagUpdateRequest = {
-        name: "DAG from UI",
-        description: "Created via DAG editor",
-        sync_id: syncId,
-        nodes: nodes.map((node) => ({
-          id: node.id,
-          type: node.type?.toUpperCase() || "",
-          name: node.data.name,
-          config: node.data.config,
-          source_id: node.data.sourceId,
-          destination_id: node.data.destinationId,
-          transformer_id: node.data.transformerId,
-          entity_definition_id: node.data.entityDefinitionId,
-        })),
-        edges: edges.map((edge) => ({
-          from_node_id: edge.source,
-          to_node_id: edge.target,
-        })),
+      const dagData: DagDefinition = {
+        id: initialDag?.id || '',
+        name: initialDag?.name || "DAG from UI",
+        description: initialDag?.description || "Created via DAG editor",
+        syncId: syncId,
+        nodes: toDagNodes(nodes),
+        edges: toDagEdges(edges),
       };
 
       const resp = await apiClient.put(`/sync/${syncId}/dag`, dagData);
@@ -195,12 +186,32 @@ export const SyncDagEditor = ({ syncId, initialDag, onSave }: SyncDagEditorProps
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         className="bg-background"
+        defaultEdgeOptions={{
+          type: 'button',
+        }}
       >
         <Background />
         <Controls />
-        <Panel position="top-right" className="bg-background/50 p-2 rounded-lg">
+        <Panel position="top-right" className="bg-background/50 p-2 rounded-lg flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+                nodes,
+                edges,
+                'LR'
+              );
+              setNodes([...layoutedNodes]);
+              setEdges([...layoutedEdges]);
+            }}
+          >
+            <LayoutGrid className="w-4 h-4 mr-2" />
+            Layout
+          </Button>
           <Button
             variant="default"
             size="sm"

@@ -1,27 +1,23 @@
-import { Handle, Position } from "reactflow";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
-import { Database } from "lucide-react";
+import { memo } from "react";
+import { NodeProps } from "reactflow";
+import { BaseNode } from "./BaseNode";
+import { getDestinationIconUrl } from "@/lib/utils/icons";
 
-interface DestinationNodeData {
-  name: string;
-  destinationId?: string;
-  config?: Record<string, any>;
-}
-
-interface DestinationNodeProps {
-  data: DestinationNodeData;
-}
-
-export const DestinationNode = ({ data }: DestinationNodeProps) => {
+export const DestinationNode = memo(({ data, ...props }: NodeProps) => {
   return (
-    <Card className="w-[200px] bg-background border-primary/20">
-      <CardHeader className="p-4">
-        <div className="flex items-center space-x-2">
-          <Database className="w-4 h-4 text-primary" />
-          <CardTitle className="text-sm font-medium">{data.name}</CardTitle>
-        </div>
-      </CardHeader>
-      <Handle type="target" position={Position.Left} className="w-2 h-2 bg-primary" />
-    </Card>
+    <BaseNode
+      {...props}
+      icon={
+        <img 
+          src={getDestinationIconUrl(data.shortName)} 
+          alt={data.name}
+          className="w-6 h-6"
+        />
+      }
+      label={data.name}
+      handles={{ source: false, target: true }}
+    />
   );
-}; 
+});
+
+DestinationNode.displayName = "DestinationNode"; 

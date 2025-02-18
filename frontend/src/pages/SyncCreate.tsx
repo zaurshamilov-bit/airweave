@@ -11,6 +11,7 @@ import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 import { SyncPipelineVisual } from "@/components/sync/SyncPipelineVisual";
 import { SyncDagEditor } from "@/components/sync/SyncDagEditor";
 import { SyncUIMetadata } from "@/components/sync/types";
+import { DagDefinition } from "@/types/dag";
 
 /**
  * This component coordinates all user actions (source selection,
@@ -56,11 +57,8 @@ const Sync = () => {
     userEmail: string;
   } | null>(null);
 
-  // Inside the Sync component, after the step state declarations
-  const [initialDag, setInitialDag] = useState<{
-    nodes: any[];
-    edges: any[];
-  } | null>(null);
+  // Replace the initialDag state with:
+  const [dag, setDag] = useState<DagDefinition | null>(null);
 
   /**
    * Notify the user if they've just returned from an oauth2 flow.
@@ -82,28 +80,6 @@ const Sync = () => {
     }
   }, [location.search, toast]);
 
-  // Load user info
-  useEffect(() => {
-    // const loadUserInfo = async () => {
-    //   try {
-    //     const resp = await apiClient.get("/users/me");
-    //     if (!resp.ok) throw new Error("Failed to load user info");
-    //     const data = await resp.json();
-    //     setUserInfo({
-    //       userId: data.id,
-    //       organizationId: data.organization_id,
-    //       userEmail: data.email,
-    //     });
-    //   } catch (err: any) {
-    //     toast({
-    //       variant: "destructive",
-    //       title: "Failed to load user info",
-    //       description: err.message || String(err),
-    //     });
-    //   }
-    // };
-    // loadUserInfo();
-  }, [toast]);
 
   /**
    * handleSourceSelect is triggered by SyncDataSourceGrid when the user
@@ -134,7 +110,6 @@ const Sync = () => {
    */
   const handleVectorDBSelected = async (dbDetails: ConnectionSelection, metadata: { name: string; shortName: string }) => {
     try {
-      // First set the selected DB and update UI
       setSelectedDB(dbDetails);
       if (userInfo) {
         setPipelineMetadata(prev => prev ? {
@@ -152,59 +127,34 @@ const Sync = () => {
         } : null);
       }
 
-      // Validate we have both source and destination
       if (!selectedSource) {
         throw new Error("No source selected");
       }
 
       // Create sync
-      const resp = await apiClient.post("/sync/", {
+      const syncResp = await apiClient.post("/sync/", {
         name: "Sync from UI",
         source_connection_id: selectedSource.connectionId,
-        // If the user picked a "non-native" DB, we pass it along
         ...(dbDetails.isNative ? {} : { destination_connection_id: dbDetails.connectionId }),
         run_immediately: false
       });
 
-      if (!resp.ok) {
+      if (!syncResp.ok) {
         throw new Error("Failed to create sync");
       }
 
-      const syncData = await resp.json();
+      const syncData = await syncResp.json();
       const newSyncId = syncData.id;
       setSyncId(newSyncId);
 
       // Initialize the DAG
       const dagResp = await apiClient.get(`/dag/init?sync_id=${newSyncId}`);
-
       if (!dagResp.ok) {
         throw new Error("Failed to initialize DAG");
       }
 
-      const dagData = await dagResp.json();
-      
-      // Convert backend data to React Flow format
-      const flowNodes = dagData.nodes.map((node: any) => ({
-        id: node.id,
-        type: node.type.toLowerCase(),
-        position: node.position || { x: 0, y: 0 },
-        data: {
-          name: node.name,
-          config: node.config,
-          sourceId: node.source_id,
-          destinationId: node.destination_id,
-          transformerId: node.transformer_id,
-          entityDefinitionId: node.entity_definition_id,
-        },
-      }));
-
-      const flowEdges = dagData.edges.map((edge: any) => ({
-        id: edge.id,
-        source: edge.from_node_id,
-        target: edge.to_node_id,
-      }));
-
-      setInitialDag({ nodes: flowNodes, edges: flowEdges });
+      const dagData: DagDefinition = await dagResp.json();
+      setDag(dagData);
       setStep(3);
     } catch (err: any) {
       toast({
@@ -300,11 +250,11 @@ const Sync = () => {
                 Add transformers and entities to your pipeline.
               </p>
             </div>
-            {initialDag && syncId && (
+            {dag && syncId && (
               <div className="space-y-8">
                 <SyncDagEditor
                   syncId={syncId}
-                  initialDag={initialDag}
+                  initialDag={dag}
                   onSave={handleStartSync}
                 />
                 <div className="flex justify-center">
