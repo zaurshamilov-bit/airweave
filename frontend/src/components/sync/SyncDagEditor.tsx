@@ -24,6 +24,7 @@ import { SourceNode } from "./nodes/SourceNode";
 import { DestinationNode } from "./nodes/DestinationNode";
 import { EntityNode } from "./nodes/EntityNode";
 import { ButtonEdge } from "./edges/ButtonEdge";
+import { BlankEdge } from "./edges/BlankEdge";
 import dagre from "dagre";
 import { 
   DagDefinition, 
@@ -46,6 +47,7 @@ const nodeTypes: NodeTypes = {
 
 const edgeTypes = {
   button: ButtonEdge,
+  blank: BlankEdge,
 };
 
 interface SyncDagEditorProps {
@@ -83,39 +85,36 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
     const targetNode = nodes.find(n => n.id === edge.target);
     
     if (sourceNode && targetNode) {
-      // If source is a transformer, push its target entities to the right
-      if (sourceNode.type === 'transformer') {
+      // For blank edges (source to entity, transformer to entity)
+      if (edge.type === 'blank') {
         dagreGraph.setEdge(edge.source, edge.target, {
-          weight: 1,
-          minlen: 2 // Force more space after transformers
+          weight: 5, // Higher weight to keep these edges shorter
+          minlen: 1  // Minimum length to keep nodes close
         });
       }
-      // If target is a transformer, pull it right and its source entity left
-      else if (targetNode.type === 'transformer') {
-        dagreGraph.setEdge(edge.source, edge.target, {
-          weight: 2,
-          minlen: 1 // Force entities to stay left of transformers
-        });
-      }
-      // Direct connections from source to entities should be short
-      else if (sourceNode.type === 'source' && targetNode.type === 'entity') {
-        dagreGraph.setEdge(edge.source, edge.target, {
-          weight: 2, // Higher weight to keep these edges short
-          minlen: 1
-        });
-      }
-      else if (sourceNode.type === 'entity' && targetNode.type === 'destination') {
-        dagreGraph.setEdge(edge.source, edge.target, {
-          weight: 1,
-          minlen: 1
-        });
-      }
-      // Default edge
+      // For button edges
       else {
-        dagreGraph.setEdge(edge.source, edge.target, {
-          weight: 1,
-          minlen: 1
-        });
+        // If target is a transformer, give more space
+        if (targetNode.type === 'transformer') {
+          dagreGraph.setEdge(edge.source, edge.target, {
+            weight: 1,
+            minlen: 2 // More space before transformers
+          });
+        }
+        // If source is an entity going to destination
+        else if (sourceNode.type === 'entity' && targetNode.type === 'destination') {
+          dagreGraph.setEdge(edge.source, edge.target, {
+            weight: 1,
+            minlen: 2 // More space after entities
+          });
+        }
+        // Default button edge
+        else {
+          dagreGraph.setEdge(edge.source, edge.target, {
+            weight: 1,
+            minlen: 2
+          });
+        }
       }
     }
   });
@@ -174,6 +173,20 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
   return { nodes: layoutedNodes, edges };
 };
 
+// Helper to determine edge type based on connection
+const getEdgeType = (sourceNode: FlowNode, targetNode: FlowNode): 'button' | 'blank' => {
+  // Sources to entities and transformers to entities use blank edges
+  if (
+    (sourceNode.type === 'source' && targetNode.type === 'entity') ||
+    (sourceNode.type === 'transformer' && targetNode.type === 'entity')
+  ) {
+    return 'blank';
+  }
+  
+  // All other connections use button edges
+  return 'button';
+};
+
 const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) => {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
@@ -208,12 +221,17 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
         // If we have initial DAG data, use it
         if (initialDag) {
           const flowNodes = toFlowNodes(initialDag.nodes);
-          const initialEdges = initialDag.edges.map(edge => ({
-            source: edge.from_node_id,
-            target: edge.to_node_id,
-            type: 'button' as const,
-            id: edge.id
-          }));
+          const initialEdges = initialDag.edges.map(edge => {
+            const sourceNode = flowNodes.find(n => n.id === edge.from_node_id);
+            const targetNode = flowNodes.find(n => n.id === edge.to_node_id);
+            const edgeType = sourceNode && targetNode ? getEdgeType(sourceNode, targetNode) : 'button';
+            return {
+              source: edge.from_node_id,
+              target: edge.to_node_id,
+              type: edgeType,
+              id: edge.id
+            };
+          });
 
           setNodes(flowNodes as Node[]);
           setEdges(initialEdges as Edge[]);
@@ -232,12 +250,17 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
         const data: DagDefinition = await resp.json();
         
         const flowNodes = toFlowNodes(data.nodes);
-        const initialEdges = data.edges.map(edge => ({
-          source: edge.from_node_id,
-          target: edge.to_node_id,
-          type: 'button' as const,
-          id: edge.id
-        }));
+        const initialEdges = data.edges.map(edge => {
+          const sourceNode = flowNodes.find(n => n.id === edge.from_node_id);
+          const targetNode = flowNodes.find(n => n.id === edge.to_node_id);
+          const edgeType = sourceNode && targetNode ? getEdgeType(sourceNode, targetNode) : 'button';
+          return {
+            source: edge.from_node_id,
+            target: edge.to_node_id,
+            type: edgeType,
+            id: edge.id
+          };
+        });
 
         setNodes(flowNodes as Node[]);
         setEdges(initialEdges as Edge[]);
@@ -262,8 +285,22 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
   }, [initialDag, syncId, setNodes, setEdges, toast, fitView]);
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
+    (params: Connection) => {
+      const sourceNode = nodes.find(n => n.id === params.source);
+      const targetNode = nodes.find(n => n.id === params.target);
+      
+      if (sourceNode && targetNode) {
+        // Prevent entity to entity connections
+        if (sourceNode.type === 'entity' && targetNode.type === 'entity') {
+          return;
+        }
+        
+        // Set the appropriate edge type
+        const edgeType = getEdgeType(sourceNode, targetNode);
+        setEdges((eds) => addEdge({ ...params, type: edgeType }, eds));
+      }
+    },
+    [nodes, setEdges]
   );
 
   // Add this new function to handle transformer creation
@@ -307,29 +344,29 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
       position: { x: 0, y: 0 }, // Will be set by layout
     };
 
-    // Create new edges
+    // Create new edges with appropriate types
     const newEdges: Edge[] = [
-      // Edge from source to transformer
+      // Edge from source to transformer (button type)
       {
         id: `edge-${Date.now()}-1`,
         source: sourceNodeId,
         target: transformerNode.id,
         type: 'button',
       },
-      // Edges from transformer to chunks
+      // Edges from transformer to chunks (blank type)
       {
         id: `edge-${Date.now()}-2`,
         source: transformerNode.id,
         target: chunk1.id,
-        type: 'button',
+        type: 'blank',
       },
       {
         id: `edge-${Date.now()}-3`,
         source: transformerNode.id,
         target: chunk2.id,
-        type: 'button',
+        type: 'blank',
       },
-      // Edges from chunks to target
+      // Edges from chunks to target (button type)
       {
         id: `edge-${Date.now()}-4`,
         source: chunk1.id,
