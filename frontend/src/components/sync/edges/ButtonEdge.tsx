@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { BaseEdge, EdgeProps, getBezierPath } from 'reactflow';
+import { BaseEdge, EdgeProps, getBezierPath, EdgeLabelRenderer } from 'reactflow';
 import { PlusCircle } from "lucide-react";
 import {
   DropdownMenu,
@@ -85,46 +85,49 @@ export const ButtonEdge = memo(({
         `}
       </style>
       {data?.onTransformerAdd && (
-        <foreignObject
-          width={40}
-          height={40}
-          x={labelX - 20}
-          y={labelY - 20}
-          className="overflow-visible"
-        >
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center justify-center w-6 h-6 rounded-full bg-background border-2 border-border hover:border-primary transition-colors">
-                <PlusCircle className="w-4 h-4 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="center" className="w-64">
-              {TRANSFORMERS.map((transformer) => (
-                <DropdownMenuItem
-                  key={transformer.id}
-                  onClick={() => {
-                    if (data?.onTransformerAdd) {
-                      data.onTransformerAdd(
-                        transformer.id,
-                        transformer.name,
-                        source,
-                        target,
-                        { id, source, target }
-                      );
-                    }
-                  }}
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">{transformer.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {transformer.description}
-                    </span>
-                  </div>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </foreignObject>
+        <EdgeLabelRenderer>
+          <div
+            className="nodrag nopan"
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              pointerEvents: 'all',
+            }}
+          >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center justify-center w-6 h-6 rounded-full bg-background border-2 border-border hover:border-primary transition-colors">
+                  <PlusCircle className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-64">
+                {TRANSFORMERS.map((transformer) => (
+                  <DropdownMenuItem
+                    key={transformer.id}
+                    onClick={() => {
+                      if (data?.onTransformerAdd) {
+                        data.onTransformerAdd(
+                          transformer.id,
+                          transformer.name,
+                          source,
+                          target,
+                          { id, source, target }
+                        );
+                      }
+                    }}
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-medium">{transformer.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {transformer.description}
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </EdgeLabelRenderer>
       )}
     </>
   );
