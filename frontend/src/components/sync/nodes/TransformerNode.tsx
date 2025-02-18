@@ -6,9 +6,9 @@ import { SplitSquareHorizontal, Wand2 } from "lucide-react";
 const getTransformerIcon = (transformerId: string) => {
   switch (transformerId) {
     case 'text-splitter':
-      return <SplitSquareHorizontal className="w-4 h-4" />;
+      return <SplitSquareHorizontal className="w-8 h-8" />;
     default:
-      return <Wand2 className="w-4 h-4" />;
+      return <Wand2 className="w-8 h-8" />;
   }
 };
 

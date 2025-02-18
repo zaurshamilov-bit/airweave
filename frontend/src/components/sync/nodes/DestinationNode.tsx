@@ -43,7 +43,7 @@ export const DestinationNode = memo(({ data, ...props }: NodeProps) => {
         <img 
           src={getDestinationIconUrl(shortName)} 
           alt={name}
-          className="w-6 h-6"
+          className="w-8 h-8 object-contain"
         />
       }
       label={name}

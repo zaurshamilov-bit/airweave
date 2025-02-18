@@ -63,7 +63,7 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
 
   dagreGraph.setGraph({ 
     rankdir: 'LR',
-    nodesep: 50,
+    nodesep: 80,
     ranksep: 120,
     align: 'DL',
     marginx: 30,
@@ -72,18 +72,58 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
 
   // Add nodes to dagre
   nodes.forEach((node) => {
+    const nodeWidth = node.type === 'entity' ? 40 : 80;
+    const nodeHeight = node.type === 'entity' ? 40 : 80;
     dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
   });
 
-  // Add edges to dagre
+  // Add edges to dagre with specific weights and constraints
   edges.forEach((edge) => {
-    dagreGraph.setEdge(edge.source, edge.target);
+    const sourceNode = nodes.find(n => n.id === edge.source);
+    const targetNode = nodes.find(n => n.id === edge.target);
+    
+    if (sourceNode && targetNode) {
+      // If source is a transformer, push its target entities to the right
+      if (sourceNode.type === 'transformer') {
+        dagreGraph.setEdge(edge.source, edge.target, {
+          weight: 1,
+          minlen: 2 // Force more space after transformers
+        });
+      }
+      // If target is a transformer, pull it right and its source entity left
+      else if (targetNode.type === 'transformer') {
+        dagreGraph.setEdge(edge.source, edge.target, {
+          weight: 2,
+          minlen: 1 // Force entities to stay left of transformers
+        });
+      }
+      // Direct connections from source to entities should be short
+      else if (sourceNode.type === 'source' && targetNode.type === 'entity') {
+        dagreGraph.setEdge(edge.source, edge.target, {
+          weight: 2, // Higher weight to keep these edges short
+          minlen: 1
+        });
+      }
+      else if (sourceNode.type === 'entity' && targetNode.type === 'destination') {
+        dagreGraph.setEdge(edge.source, edge.target, {
+          weight: 1,
+          minlen: 1
+        });
+      }
+      // Default edge
+      else {
+        dagreGraph.setEdge(edge.source, edge.target, {
+          weight: 1,
+          minlen: 1
+        });
+      }
+    }
   });
 
   // Calculate layout
   dagre.layout(dagreGraph);
 
-  // First pass: get all positions
+  // Rest of the positioning code...
   const positions = new Map();
   nodes.forEach((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);

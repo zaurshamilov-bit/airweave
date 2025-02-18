@@ -15,10 +15,10 @@ interface EntityNodeProps {
 
 export const EntityNode = memo(({ data, selected, ...props }: NodeProps) => {
   return (
-    <div className="flex flex-col items-center gap-1.5">
+    <div className="w-10 h-10">
       <div
         className={cn(
-          "w-10 h-10 flex items-center justify-center rounded-2xl bg-muted/40 backdrop-blur-sm",
+          "w-full h-full flex items-center justify-center rounded-2xl bg-muted/40 backdrop-blur-sm",
           "transition-colors duration-200",
           selected ? "bg-muted/90" : "bg-muted/80"
         )}
@@ -37,7 +37,9 @@ export const EntityNode = memo(({ data, selected, ...props }: NodeProps) => {
           style={{ right: -6 }}
         />
       </div>
-      <span className="text-sm font-light text-foreground max-w-[120px] text-center truncate">{data.name}</span>
+      <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap">
+        <span className="text-sm font-light text-foreground text-center">{data.name}</span>
+      </div>
     </div>
   );
 });

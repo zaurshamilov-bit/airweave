@@ -39,7 +39,7 @@ export const SourceNode = memo(({ data, ...props }: NodeProps) => {
         <img 
           src={getAppIconUrl(connection?.short_name || data.shortName)} 
           alt={connection?.name || data.name}
-          className="w-6 h-6"
+          className="w-8 h-8 object-contain"
         />
       }
       label={connection?.name || data.name}
