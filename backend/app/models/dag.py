@@ -36,10 +36,10 @@ class SyncDagDefinition(OrganizationBase, UserMixin):
     __table_args__ = (UniqueConstraint("sync_id", name="uq_sync_dag_def_sync_id"),)
 
     nodes = relationship(
-        "DagNode", back_populates="dag", lazy="noload", cascade="all, delete-orphan"
+        "DagNode", back_populates="dag", lazy="selectin", cascade="all, delete-orphan"
     )
     edges = relationship(
-        "DagEdge", back_populates="dag", lazy="noload", cascade="all, delete-orphan"
+        "DagEdge", back_populates="dag", lazy="selectin", cascade="all, delete-orphan"
     )
 
 

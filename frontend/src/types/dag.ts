@@ -6,10 +6,8 @@ export interface DagNode {
   name: string;
   shortName?: string;
   config?: Record<string, any>;
-  sourceId?: string;
-  destinationId?: string;
-  transformerId?: string;
-  entityDefinitionId?: string;
+  connection_id?: string;
+  entity_definition_id?: string;
 }
 
 export interface DagEdge {
@@ -32,15 +30,25 @@ export interface FlowNode extends Node {
     name: string;
     shortName?: string;
     config?: Record<string, any>;
-    sourceId?: string;
-    destinationId?: string;
-    transformerId?: string;
-    entityDefinitionId?: string;
+    connection_id?: string;
+    entity_definition_id?: string;
   };
 }
 
 export interface FlowEdge extends Edge {
   type: 'button';
+}
+
+// Connection interfaces for source/destination details
+export interface Connection {
+  id: string;
+  name: string;
+  integration_type: 'SOURCE' | 'DESTINATION' | 'EMBEDDING_MODEL';
+  status: 'active' | 'error' | 'inactive';
+  short_name: string;
+  organization_id: string;
+  created_by_email: string;
+  modified_by_email: string;
 }
 
 // Conversion utilities
@@ -52,10 +60,8 @@ export const toFlowNodes = (nodes: DagNode[]): FlowNode[] =>
       name: node.name,
       shortName: node.shortName,
       config: node.config,
-      sourceId: node.sourceId,
-      destinationId: node.destinationId,
-      transformerId: node.transformerId,
-      entityDefinitionId: node.entityDefinitionId,
+      connection_id: node.connection_id,
+      entity_definition_id: node.entity_definition_id,
     },
     position: { x: 0, y: 0 }, // Will be set by layout
   }));
@@ -75,10 +81,8 @@ export const toDagNodes = (nodes: FlowNode[]): DagNode[] =>
     name: node.data.name,
     shortName: node.data.shortName,
     config: node.data.config,
-    sourceId: node.data.sourceId,
-    destinationId: node.data.destinationId,
-    transformerId: node.data.transformerId,
-    entityDefinitionId: node.data.entityDefinitionId,
+    connection_id: node.data.connection_id,
+    entity_definition_id: node.data.entity_definition_id,
   }));
 
 export const toDagEdges = (edges: FlowEdge[]): DagEdge[] =>

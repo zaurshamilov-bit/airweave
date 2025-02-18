@@ -46,7 +46,7 @@ class DagService:
             id=source_node_id,
             type="source",
             name=source.name,
-            source_id=source.id,
+            connection_id=source_connection.id,
         )
         nodes.append(source_node)
 
@@ -85,7 +85,7 @@ class DagService:
                 id=destination_node_id,
                 type="destination",
                 name=destination.name,
-                destination_id=destination.id,
+                connection_id=destination_connection.id,
             )
         else:
             destination = await crud.destination.get_by_short_name(db, short_name="weaviate_native")
@@ -93,7 +93,6 @@ class DagService:
                 id=destination_node_id,
                 type="destination",
                 name="Native Weaviate",
-                destination_id=destination.id,
             )
         nodes.append(destination_node)
 
