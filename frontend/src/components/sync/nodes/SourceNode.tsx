@@ -37,14 +37,14 @@ export const SourceNode = memo(({ data, selected, ...props }: NodeProps) => {
         className={cn(
           "w-full h-full flex items-center justify-center bg-background/80 backdrop-blur-sm",
           "border-2 transition-colors duration-200 cursor-pointer",
-          "border-muted-foreground/50 hover:border-primary rounded-lg",
+          "border-muted-foreground/50 hover:border-primary rounded-lg rounded-l-2xl",
           selected ? "border-primary shadow-sm shadow-primary/20" : ""
         )}
       >
         <Handle
           type="source"
           position={Position.Right}
-          className="w-2 h-2 -mr-[2px] border border-background bg-muted-foreground"
+          className="w-3 h-3 -mr-[3px] border border-background bg-muted-foreground"
         />
         <div className="w-16 h-16 flex items-center justify-center">
           <img 

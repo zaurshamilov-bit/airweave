@@ -48,7 +48,7 @@ export const DestinationNode = memo(({ data, selected, ...props }: NodeProps) =>
         <Handle
           type="target"
           position={Position.Left}
-          className="w-2 h-2 -ml-[2px] border border-background bg-muted-foreground"
+          className="w-3 h-3 -ml-[3px] border border-background bg-muted-foreground"
         />
         <div className="w-16 h-16 flex items-center justify-center">
           <img 

@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { EdgeProps, getBezierPath } from "reactflow";
+import { BaseEdge, EdgeProps, getBezierPath } from 'reactflow';
 
 export const BlankEdge = memo(({
   id,
@@ -22,13 +22,31 @@ export const BlankEdge = memo(({
   });
 
   return (
-    <path
-      id={id}
-      style={style}
-      className="react-flow__edge-path stroke-muted-foreground/50"
-      d={edgePath}
-      markerEnd={markerEnd}
-    />
+    <>
+      <BaseEdge
+        path={edgePath}
+        markerEnd={markerEnd}
+        style={{
+          ...style,
+          strokeWidth: 2,
+          stroke: '#94a3b8',
+          strokeDasharray: '6 6',
+          animation: 'flowMove 0.7s linear infinite',
+        }}
+      />
+      <style>
+        {`
+          @keyframes flowMove {
+            from {
+              stroke-dashoffset: 12;
+            }
+            to {
+              stroke-dashoffset: 0;
+            }
+          }
+        `}
+      </style>
+    </>
   );
 });
 
