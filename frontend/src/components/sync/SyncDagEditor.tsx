@@ -530,23 +530,21 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
       >
         <Background />
         <Controls />
-        <Panel position="top-right" className="bg-background/50 p-2 rounded-lg flex gap-2">
+        <Panel position="top-right" className="flex gap-1">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={applyLayout}
           >
-            <LayoutGrid className="w-4 h-4 mr-2" />
-            Layout
+            <LayoutGrid className="w-4 h-4" />
           </Button>
           <Button
-            variant="default"
+            variant="ghost"
             size="sm"
             onClick={handleSave}
             disabled={isLoading}
           >
-            <Save className="w-4 h-4 mr-2" />
-            Save DAG
+            <Save className="w-4 h-4" />
           </Button>
         </Panel>
       </ReactFlow>
