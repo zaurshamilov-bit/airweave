@@ -1,6 +1,6 @@
-"""Todoist chunk schemas.
+"""Todoist entity schemas.
 
-Based on the Todoist REST API reference, we define chunk schemas for
+Based on the Todoist REST API reference, we define entity schemas for
 Todoist objects, Projects, Sections, Tasks, and Comments.
 """
 
@@ -9,11 +9,11 @@ from typing import List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class TodoistProjectChunk(BaseChunk):
-    """Schema for Todoist project chunks."""
+class TodoistProjectEntity(BaseEntity):
+    """Schema for Todoist project entities."""
 
     name: str = Field(..., description="The name of the project")
     color: Optional[str] = Field(None, description="Color of the project (e.g., 'grey', 'blue')")
@@ -28,16 +28,16 @@ class TodoistProjectChunk(BaseChunk):
     parent_id: Optional[str] = Field(None, description="ID of the parent project if nested")
 
 
-class TodoistSectionChunk(BaseChunk):
-    """Schema for Todoist section chunks."""
+class TodoistSectionEntity(BaseEntity):
+    """Schema for Todoist section entities."""
 
     name: str = Field(..., description="The name of the section")
     project_id: str = Field(..., description="ID of the project this section belongs to")
     order: int = Field(0, description="Section order in the project")
 
 
-class TodoistTaskChunk(BaseChunk):
-    """Schema for Todoist task chunks."""
+class TodoistTaskEntity(BaseEntity):
+    """Schema for Todoist task entities."""
 
     content: str = Field(..., description="The task content/title")
     description: Optional[str] = Field(
@@ -68,8 +68,8 @@ class TodoistTaskChunk(BaseChunk):
     url: Optional[str] = Field(None, description="URL to access the task")
 
 
-class TodoistCommentChunk(BaseChunk):
-    """Schema for Todoist comment chunks."""
+class TodoistCommentEntity(BaseEntity):
+    """Schema for Todoist comment entities."""
 
     task_id: str = Field(..., description="ID of the task this comment belongs to")
     content: Optional[str] = Field(None, description="The comment content")

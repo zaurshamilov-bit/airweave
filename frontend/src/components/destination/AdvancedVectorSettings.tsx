@@ -100,15 +100,15 @@ export function AdvancedVectorSettings() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Cpu className="h-5 w-5 text-primary" />
-            <CardTitle>Chunking Configuration</CardTitle>
+            <CardTitle>Entitying Configuration</CardTitle>
           </div>
           <CardDescription>
-            Configure document processing and chunking
+            Configure document processing and entitying
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-4">
-            <Label>Chunk Size (tokens)</Label>
+            <Label>Entity Size (tokens)</Label>
             <Slider 
               defaultValue={[512]} 
               max={2048} 
@@ -122,7 +122,7 @@ export function AdvancedVectorSettings() {
           </div>
 
           <div className="space-y-2">
-            <Label>Chunk Overlap (%)</Label>
+            <Label>Entity Overlap (%)</Label>
             <Slider 
               defaultValue={[50]} 
               max={100} 
@@ -133,7 +133,7 @@ export function AdvancedVectorSettings() {
 
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label>Smart Chunking</Label>
+              <Label>Smart Entitying</Label>
               <p className="text-sm text-muted-foreground">
                 Use ML to detect natural break points
               </p>
@@ -142,10 +142,10 @@ export function AdvancedVectorSettings() {
           </div>
 
           <div className="space-y-2">
-            <Label>Chunking Strategy</Label>
+            <Label>Entitying Strategy</Label>
             <Select defaultValue="semantic">
               <SelectTrigger>
-                <SelectValue placeholder="Select chunking strategy" />
+                <SelectValue placeholder="Select entitying strategy" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="semantic">Semantic (ML-based)</SelectItem>

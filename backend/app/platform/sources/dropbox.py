@@ -5,13 +5,13 @@ from typing import AsyncGenerator, Dict, List, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, Breadcrumb
-from app.platform.chunks.dropbox import (
-    DropboxAccountChunk,
-    DropboxFileChunk,
-    DropboxFolderChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities.dropbox import (
+    DropboxAccountEntity,
+    DropboxFileEntity,
+    DropboxFolderEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -65,18 +65,18 @@ class DropboxSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_account_chunks(
+    async def _generate_account_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate Dropbox account-level chunks.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate Dropbox account-level entities.
 
         Args:
             client: The HTTPX client instance.
 
         Yields:
-            Account-level chunks containing user/team information.
+            Account-level entities containing user/team information.
         """
-        yield DropboxAccountChunk(
+        yield DropboxAccountEntity(
             source_name="dropbox",
             entity_id="dummy_account_entity",
             breadcrumbs=[],
@@ -87,22 +87,22 @@ class DropboxSource(BaseSource):
             is_team=False,
         )
 
-    async def _generate_folder_chunks(
+    async def _generate_folder_entities(
         self,
         client: httpx.AsyncClient,
         account_breadcrumb: Breadcrumb,
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate folder chunks for a given Dropbox account.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate folder entities for a given Dropbox account.
 
         Args:
             client: The HTTPX client instance.
             account_breadcrumb: Breadcrumb for the parent account.
 
         Yields:
-            Folder chunks containing metadata about Dropbox folders.
+            Folder entities containing metadata about Dropbox folders.
         """
         # Dummy placeholder for MVP:
-        yield DropboxFolderChunk(
+        yield DropboxFolderEntity(
             source_name="dropbox",
             entity_id="folder-entity-id",
             breadcrumbs=[account_breadcrumb],
@@ -114,21 +114,21 @@ class DropboxSource(BaseSource):
             is_team_folder=False,
         )
 
-    async def _generate_file_chunks(
+    async def _generate_file_entities(
         self,
         client: httpx.AsyncClient,
         folder_breadcrumbs: List[Breadcrumb],
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate file chunks within a given folder.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate file entities within a given folder.
 
         Args:
             client: The HTTPX client instance.
             folder_breadcrumbs: List of breadcrumbs for the parent folders.
 
         Yields:
-            File chunks containing metadata about Dropbox files.
+            File entities containing metadata about Dropbox files.
         """
-        yield DropboxFileChunk(
+        yield DropboxFileEntity(
             source_name="dropbox",
             entity_id="file-entity-id",
             breadcrumbs=folder_breadcrumbs,
@@ -144,37 +144,41 @@ class DropboxSource(BaseSource):
             sharing_info={},
         )
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all chunks from Dropbox.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all entities from Dropbox.
 
         Yields:
-            A sequence of chunks in the following order:
-            1. Account-level chunks
-            2. Folder chunks for each account
-            3. File chunks for each folder
+            A sequence of entities in the following order:
+            1. Account-level entities
+            2. Folder entities for each account
+            3. File entities for each folder
         """
         async with httpx.AsyncClient() as client:
             # 1. Account(s)
-            async for account_chunk in self._generate_account_chunks(client):
-                yield account_chunk
+            async for account_entity in self._generate_account_entities(client):
+                yield account_entity
 
                 account_breadcrumb = Breadcrumb(
-                    entity_id=account_chunk.account_id,
-                    name=account_chunk.display_name,
+                    entity_id=account_entity.account_id,
+                    name=account_entity.display_name,
                     type="account",
                 )
 
                 # 2. Folders
-                async for folder_chunk in self._generate_folder_chunks(client, account_breadcrumb):
-                    yield folder_chunk
+                async for folder_entity in self._generate_folder_entities(
+                    client, account_breadcrumb
+                ):
+                    yield folder_entity
 
                     folder_breadcrumb = Breadcrumb(
-                        entity_id=folder_chunk.folder_id,
-                        name=folder_chunk.name,
+                        entity_id=folder_entity.folder_id,
+                        name=folder_entity.name,
                         type="folder",
                     )
                     folder_breadcrumbs = [account_breadcrumb, folder_breadcrumb]
 
                     # 3. Files
-                    async for file_chunk in self._generate_file_chunks(client, folder_breadcrumbs):
-                        yield file_chunk
+                    async for file_entity in self._generate_file_entities(
+                        client, folder_breadcrumbs
+                    ):
+                        yield file_entity

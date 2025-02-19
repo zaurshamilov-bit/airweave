@@ -1,4 +1,4 @@
-"""Chunk schemas."""
+"""Entity schemas."""
 
 import hashlib
 from typing import Any, Dict, List, Optional, Type, TypeVar
@@ -15,24 +15,28 @@ class Breadcrumb(BaseModel):
     type: str
 
 
-class BaseChunk(BaseModel):
-    """Base chunk schema."""
+class BaseEntity(BaseModel):
+    """Base entity schema."""
 
     # Set in connector
-    chunk_id: UUID = Field(default_factory=uuid4, description="Unique ID of the chunk.")
-    entity_id: str = Field(..., description="ID of the entity this chunk represents in the source.")
+    entity_id: UUID = Field(default_factory=uuid4, description="Unique ID of the entity.")
+    entity_id: str = Field(
+        ..., description="ID of the entity this entity represents in the source."
+    )
     breadcrumbs: List[Breadcrumb] = Field(
-        default_factory=list, description="List of breadcrumbs for this chunk."
+        default_factory=list, description="List of breadcrumbs for this entity."
     )
 
     # Set in sync service
-    db_chunk_id: UUID = Field(
-        default_factory=uuid4, description="Unique ID of the chunk in the DB."
+    db_entity_id: UUID = Field(
+        default_factory=uuid4, description="Unique ID of the entity in the DB."
     )
-    source_name: Optional[str] = Field(None, description="Name of the source this chunk came from.")
-    sync_id: Optional[UUID] = Field(None, description="ID of the sync this chunk belongs to.")
+    source_name: Optional[str] = Field(
+        None, description="Name of the source this entity came from."
+    )
+    sync_id: Optional[UUID] = Field(None, description="ID of the sync this entity belongs to.")
     sync_job_id: Optional[UUID] = Field(
-        None, description="ID of the sync job this chunk belongs to."
+        None, description="ID of the sync job this entity belongs to."
     )
     url: Optional[str] = Field(None, description="URL to the original content, if applicable.")
     sync_metadata: Optional[Dict[str, Any]] = Field(
@@ -50,7 +54,7 @@ class BaseChunk(BaseModel):
         from_attributes = True
 
     def hash(self) -> str:
-        """Hash the chunk."""
+        """Hash the entity."""
 
         # Convert model to dict first, then sanitize any non-serializable values to strings
         def sanitize_value(v: Any) -> Any:
@@ -70,11 +74,11 @@ class BaseChunk(BaseModel):
         return hashlib.sha256(str(sanitized_data).encode()).hexdigest()
 
 
-class PolymorphicChunk(BaseChunk):
-    """Base class for dynamically generated chunks.
+class PolymorphicEntity(BaseEntity):
+    """Base class for dynamically generated entities.
 
-    This class serves as the base for chunks that are created at runtime,
-    particularly for database table chunks where the schema is determined
+    This class serves as the base for entities that are created at runtime,
+    particularly for database table entities where the schema is determined
     by the table structure.
     """
 
@@ -84,14 +88,14 @@ class PolymorphicChunk(BaseChunk):
     primary_key_columns: List[str] = Field(default_factory=list)
 
     @classmethod
-    def create_table_chunk_class(
+    def create_table_entity_class(
         cls,
         table_name: str,
         schema_name: Optional[str],
         columns: Dict[str, Any],
         primary_keys: List[str],
-    ) -> Type["PolymorphicChunk"]:
-        """Create a new chunk class for a database table.
+    ) -> Type["PolymorphicEntity"]:
+        """Create a new entity class for a database table.
 
         Args:
             table_name: Name of the database table
@@ -100,7 +104,7 @@ class PolymorphicChunk(BaseChunk):
             primary_keys: List of primary key column names
 
         Returns:
-            A new chunk class with fields matching the table structure
+            A new entity class with fields matching the table structure
         """
         # Create field definitions for the new model
         fields: Dict[str, Any] = {
@@ -117,7 +121,7 @@ class PolymorphicChunk(BaseChunk):
             fields[col_name] = (Optional[python_type], Field(default=None))
 
         # Create the new model class
-        model_name = f"{table_name.title().replace('_', '')}TableChunk"
+        model_name = f"{table_name.title().replace('_', '')}TableEntity"
         return create_model(
             model_name,
             __base__=cls,
@@ -125,4 +129,4 @@ class PolymorphicChunk(BaseChunk):
         )
 
 
-T = TypeVar("T", bound=PolymorphicChunk)
+T = TypeVar("T", bound=PolymorphicEntity)

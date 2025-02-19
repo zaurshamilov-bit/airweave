@@ -1,13 +1,13 @@
-"""Google Calendar chunk schemas.
+"""Google Calendar entity schemas.
 
 Based on the Google Calendar API reference (readonly scope),
-we define chunk schemas for:
+we define entity schemas for:
  - Calendar objects
  - CalendarList objects
  - Event objects
  - FreeBusy responses
 
-They follow a style similar to that of Asana, HubSpot, and Todoist chunk schemas.
+They follow a style similar to that of Asana, HubSpot, and Todoist entity schemas.
 
 Reference:
     https://developers.google.com/calendar/api/v3/reference
@@ -18,10 +18,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class GoogleCalendarCalendarChunk(BaseChunk):
+class GoogleCalendarCalendarEntity(BaseEntity):
     """Schema for a Google Calendar object (the underlying calendar resource).
 
     See: https://developers.google.com/calendar/api/v3/reference/calendars
@@ -34,7 +34,7 @@ class GoogleCalendarCalendarChunk(BaseChunk):
     time_zone: Optional[str] = Field(None, description="The time zone of the calendar.")
 
 
-class GoogleCalendarListChunk(BaseChunk):
+class GoogleCalendarListEntity(BaseEntity):
     """Schema for a CalendarList entry, i.e., how the user sees a calendar.
 
     See: https://developers.google.com/calendar/api/v3/reference/calendarList
@@ -61,7 +61,7 @@ class GoogleCalendarListChunk(BaseChunk):
     deleted: bool = Field(False, description="Flag to indicate if this calendar has been deleted.")
 
 
-class GoogleCalendarEventChunk(BaseChunk):
+class GoogleCalendarEventEntity(BaseEntity):
     """Schema for a Google Calendar Event.
 
     See: https://developers.google.com/calendar/api/v3/reference/events
@@ -88,8 +88,7 @@ class GoogleCalendarEventChunk(BaseChunk):
     start_date: Optional[str] = Field(
         None,
         description=(
-            "Start date if the event is an all-day event. "
-            "(Date from 'start' if 'date' is present.)"
+            "Start date if the event is an all-day event. (Date from 'start' if 'date' is present.)"
         ),
     )
     end_datetime: Optional[datetime] = Field(
@@ -102,7 +101,7 @@ class GoogleCalendarEventChunk(BaseChunk):
     end_date: Optional[str] = Field(
         None,
         description=(
-            "End date if the event is an all-day event. " "(Date from 'end' if 'date' is present.)"
+            "End date if the event is an all-day event. (Date from 'end' if 'date' is present.)"
         ),
     )
     recurrence: Optional[List[str]] = Field(
@@ -139,8 +138,8 @@ class GoogleCalendarEventChunk(BaseChunk):
     event_type: Optional[str] = Field(None, description="Event type. E.g., 'default' or 'focus'.")
 
 
-class GoogleCalendarFreeBusyChunk(BaseChunk):
-    """Schema for a FreeBusy response chunk for a given calendar.
+class GoogleCalendarFreeBusyEntity(BaseEntity):
+    """Schema for a FreeBusy response entity for a given calendar.
 
     See: https://developers.google.com/calendar/api/v3/reference/freebusy
     """

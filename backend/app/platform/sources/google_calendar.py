@@ -7,8 +7,8 @@ Retrieves data from a user's Google Calendar (read-only mode):
   - (Optionally) Free/Busy data for each Calendar
 
 Follows the same structure and pattern as other connector implementations
-(e.g., Gmail, Asana, Todoist, HubSpot). The chunk schemas are defined in
-chunks/google_calendar.py.
+(e.g., Gmail, Asana, Todoist, HubSpot). The entity schemas are defined in
+entities/google_calendar.py.
 
 Reference:
     https://developers.google.com/calendar/api/v3/reference
@@ -20,14 +20,14 @@ from typing import AsyncGenerator, Dict, List, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, Breadcrumb
-from app.platform.chunks.google_calendar import (
-    GoogleCalendarCalendarChunk,
-    GoogleCalendarEventChunk,
-    GoogleCalendarFreeBusyChunk,
-    GoogleCalendarListChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities.google_calendar import (
+    GoogleCalendarCalendarEntity,
+    GoogleCalendarEventEntity,
+    GoogleCalendarFreeBusyEntity,
+    GoogleCalendarListEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -36,8 +36,8 @@ class GoogleCalendarSource(BaseSource):
     """Google Calendar source implementation (read-only).
 
     Retrieves and yields Google Calendar objects (CalendarList entries,
-    Calendars, Events, and Free/Busy data) as chunk schemas defined in
-    chunks/google_calendar.py.
+    Calendars, Events, and Free/Busy data) as entity schemas defined in
+    entities/google_calendar.py.
     """
 
     @classmethod
@@ -66,20 +66,20 @@ class GoogleCalendarSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_calendar_list_chunks(
+    async def _generate_calendar_list_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[GoogleCalendarListChunk, None]:
-        """Yield GoogleCalendarListChunk objects for each calendar in the user's CalendarList."""
+    ) -> AsyncGenerator[GoogleCalendarListEntity, None]:
+        """Yield GoogleCalendarListEntity objects for each calendar in the user's CalendarList."""
         url = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
         params = {"maxResults": 100}
         while True:
             data = await self._get_with_auth(client, url, params=params)
             items = data.get("items", [])
             for cal in items:
-                yield GoogleCalendarListChunk(
+                yield GoogleCalendarListEntity(
                     source_name="google_calendar",
                     entity_id=cal["id"],
-                    breadcrumbs=[],  # top level chunk
+                    breadcrumbs=[],  # top level entity
                     calendar_id=cal["id"],
                     summary=cal.get("summary"),
                     summary_override=cal.get("summaryOverride"),
@@ -97,13 +97,13 @@ class GoogleCalendarSource(BaseSource):
                 break
             params["pageToken"] = next_page_token
 
-    async def _generate_calendar_chunks(
+    async def _generate_calendar_entities(
         self, client: httpx.AsyncClient, calendar_id: str
-    ) -> AsyncGenerator[GoogleCalendarCalendarChunk, None]:
-        """Yield a GoogleCalendarCalendarChunk for the specified calendar_id."""
+    ) -> AsyncGenerator[GoogleCalendarCalendarEntity, None]:
+        """Yield a GoogleCalendarCalendarEntity for the specified calendar_id."""
         url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}"
         data = await self._get_with_auth(client, url)
-        yield GoogleCalendarCalendarChunk(
+        yield GoogleCalendarCalendarEntity(
             source_name="google_calendar",
             entity_id=data["id"],
             breadcrumbs=[],  # each calendar is top-level (matching the underlying resource)
@@ -114,10 +114,10 @@ class GoogleCalendarSource(BaseSource):
             time_zone=data.get("timeZone"),
         )
 
-    async def _generate_event_chunks(
-        self, client: httpx.AsyncClient, calendar_list_entry: GoogleCalendarListChunk
-    ) -> AsyncGenerator[GoogleCalendarEventChunk, None]:
-        """Yield GoogleCalendarEventChunks for all events in the given calendar."""
+    async def _generate_event_entities(
+        self, client: httpx.AsyncClient, calendar_list_entry: GoogleCalendarListEntity
+    ) -> AsyncGenerator[GoogleCalendarEventEntity, None]:
+        """Yield GoogleCalendarEventEntities for all events in the given calendar."""
         base_url = f"https://www.googleapis.com/calendar/v3/calendars/{calendar_list_entry.calendar_id}/events"
         params = {"maxResults": 100}
         # Create a breadcrumb for this calendar to attach to events
@@ -152,7 +152,7 @@ class GoogleCalendarSource(BaseSource):
                     else None
                 )
 
-                yield GoogleCalendarEventChunk(
+                yield GoogleCalendarEventEntity(
                     source_name="google_calendar",
                     entity_id=event_id,
                     breadcrumbs=[cal_breadcrumb],
@@ -185,10 +185,10 @@ class GoogleCalendarSource(BaseSource):
                 break
             params["pageToken"] = next_page_token
 
-    async def _generate_freebusy_chunks(
-        self, client: httpx.AsyncClient, calendar_list_entry: GoogleCalendarListChunk
-    ) -> AsyncGenerator[GoogleCalendarFreeBusyChunk, None]:
-        """Yield a GoogleCalendarFreeBusyChunk for the next 7 days for each calendar."""
+    async def _generate_freebusy_entities(
+        self, client: httpx.AsyncClient, calendar_list_entry: GoogleCalendarListEntity
+    ) -> AsyncGenerator[GoogleCalendarFreeBusyEntity, None]:
+        """Yield a GoogleCalendarFreeBusyEntity for the next 7 days for each calendar."""
         url = "https://www.googleapis.com/calendar/v3/freeBusy"
         now = datetime.utcnow()
         in_7_days = now + timedelta(days=7)
@@ -202,7 +202,7 @@ class GoogleCalendarSource(BaseSource):
         cal_busy_info = data.get("calendars", {}).get(calendar_list_entry.calendar_id, {})
         busy_ranges = cal_busy_info.get("busy", [])
 
-        yield GoogleCalendarFreeBusyChunk(
+        yield GoogleCalendarFreeBusyEntity(
             source_name="google_calendar",
             entity_id=calendar_list_entry.calendar_id + "_freebusy",
             breadcrumbs=[],
@@ -210,10 +210,10 @@ class GoogleCalendarSource(BaseSource):
             busy=busy_ranges,
         )
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all Google Calendar chunks.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all Google Calendar entities.
 
-        Yields chunks in the following order:
+        Yields entities in the following order:
           - CalendarList entries
           - Underlying Calendar resources
           - Events for each calendar
@@ -221,25 +221,27 @@ class GoogleCalendarSource(BaseSource):
         """
         async with httpx.AsyncClient() as client:
             # 1) Get the user's calendarList
-            #    For each item, yield a CalendarList chunk and store in memory for subsequent calls.
-            calendar_list_entries: List[GoogleCalendarListChunk] = []
-            async for cal_list_chunk in self._generate_calendar_list_chunks(client):
-                yield cal_list_chunk
-                calendar_list_entries.append(cal_list_chunk)
+            #    For each item, yield a CalendarList entity and store in memory for subsequent calls.
+            calendar_list_entries: List[GoogleCalendarListEntity] = []
+            async for cal_list_entity in self._generate_calendar_list_entities(client):
+                yield cal_list_entity
+                calendar_list_entries.append(cal_list_entity)
 
             # 2) For each calendar in the user's calendarList, yield its Calendar resource
-            for cal_list_chunk in calendar_list_entries:
-                async for calendar_chunk in self._generate_calendar_chunks(
-                    client, cal_list_chunk.calendar_id
+            for cal_list_entity in calendar_list_entries:
+                async for calendar_entity in self._generate_calendar_entities(
+                    client, cal_list_entity.calendar_id
                 ):
-                    yield calendar_chunk
+                    yield calendar_entity
 
-            # 3) For each calendar, yield event chunks
-            for cal_list_chunk in calendar_list_entries:
-                async for event_chunk in self._generate_event_chunks(client, cal_list_chunk):
-                    yield event_chunk
+            # 3) For each calendar, yield event entities
+            for cal_list_entity in calendar_list_entries:
+                async for event_entity in self._generate_event_entities(client, cal_list_entity):
+                    yield event_entity
 
             # 4) (Optionally) yield free/busy data for each calendar
-            for cal_list_chunk in calendar_list_entries:
-                async for freebusy_chunk in self._generate_freebusy_chunks(client, cal_list_chunk):
-                    yield freebusy_chunk
+            for cal_list_entity in calendar_list_entries:
+                async for freebusy_entity in self._generate_freebusy_entities(
+                    client, cal_list_entity
+                ):
+                    yield freebusy_entity

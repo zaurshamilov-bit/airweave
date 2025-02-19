@@ -5,13 +5,13 @@ from typing import AsyncGenerator, Dict, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk
-from app.platform.chunks.slack import (
-    SlackChannelChunk,
-    SlackMessageChunk,
-    SlackUserChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity
+from app.platform.entities.slack import (
+    SlackChannelEntity,
+    SlackMessageEntity,
+    SlackUserEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -20,7 +20,7 @@ class SlackSource(BaseSource):
     """Slack source implementation.
 
     This connector retrieves data from Slack such as Channels, Users, and Messages,
-    then yields them as chunks using their respective Slack chunk schemas.
+    then yields them as entities using their respective Slack entity schemas.
     """
 
     @classmethod
@@ -52,10 +52,10 @@ class SlackSource(BaseSource):
             raise httpx.HTTPError(f"Slack API error: {data}")
         return data
 
-    async def _generate_channel_chunks(
+    async def _generate_channel_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate SlackChannelChunk objects from Slack using conversations.list.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate SlackChannelEntity objects from Slack using conversations.list.
 
         Endpoint: https://slack.com/api/conversations.list
         Available scope(s) for reading channels, groups, etc.:
@@ -68,7 +68,7 @@ class SlackSource(BaseSource):
             data = await self._get_with_auth(client, url, params=params)
 
             for channel in data.get("channels", []):
-                yield SlackChannelChunk(
+                yield SlackChannelEntity(
                     source_name="slack",
                     entity_id=channel["id"],
                     channel_id=channel["id"],
@@ -91,10 +91,10 @@ class SlackSource(BaseSource):
                 break
             params["cursor"] = next_cursor
 
-    async def _generate_user_chunks(
+    async def _generate_user_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate SlackUserChunk objects from Slack using users.list.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate SlackUserEntity objects from Slack using users.list.
 
         Endpoint: https://slack.com/api/users.list
         Scope(s): users:read
@@ -106,7 +106,7 @@ class SlackSource(BaseSource):
             data = await self._get_with_auth(client, url, params=params)
 
             for member in data.get("members", []):
-                yield SlackUserChunk(
+                yield SlackUserEntity(
                     source_name="slack",
                     entity_id=member["id"],
                     user_id=member["id"],
@@ -128,10 +128,10 @@ class SlackSource(BaseSource):
                 break
             params["cursor"] = next_cursor
 
-    async def _generate_message_chunks(
+    async def _generate_message_entities(
         self, client: httpx.AsyncClient, channel_id: str
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate SlackMessageChunk objects for a given channel using conversations.history.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate SlackMessageEntity objects for a given channel using conversations.history.
 
         Endpoint: https://slack.com/api/conversations.history
         Scope(s): channels:history, groups:history, im:history, mpim:history
@@ -143,7 +143,7 @@ class SlackSource(BaseSource):
             data = await self._get_with_auth(client, url, params=params)
 
             for message in data.get("messages", []):
-                yield SlackMessageChunk(
+                yield SlackMessageEntity(
                     source_name="slack",
                     entity_id=f"{channel_id}-{message.get('ts')}",
                     channel_id=channel_id,
@@ -166,22 +166,22 @@ class SlackSource(BaseSource):
                 break
             params["cursor"] = next_cursor
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all chunks from Slack.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all entities from Slack.
 
         Channels, Users, and Messages.
         """
         async with httpx.AsyncClient() as client:
-            # Yield channel chunks
-            async for channel_chunk in self._generate_channel_chunks(client):
-                yield channel_chunk
+            # Yield channel entities
+            async for channel_entity in self._generate_channel_entities(client):
+                yield channel_entity
 
-                # For each channel, also yield message chunks
-                async for message_chunk in self._generate_message_chunks(
-                    client, channel_chunk.channel_id
+                # For each channel, also yield message entities
+                async for message_entity in self._generate_message_entities(
+                    client, channel_entity.channel_id
                 ):
-                    yield message_chunk
+                    yield message_entity
 
-            # Yield user chunks
-            async for user_chunk in self._generate_user_chunks(client):
-                yield user_chunk
+            # Yield user entities
+            async for user_entity in self._generate_user_entities(client):
+                yield user_entity

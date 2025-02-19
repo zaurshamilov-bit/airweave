@@ -9,12 +9,12 @@ from weaviate.collections import Collection
 from weaviate.collections.classes.config import DataType, Property
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk
 from app.platform.configs.auth import WeaviateAuthConfig
 from app.platform.decorators import destination
 from app.platform.destinations._base import VectorDBDestination
 from app.platform.embedding_models._adapters import WeaviateModelAdapter
 from app.platform.embedding_models._base import BaseEmbeddingModel
+from app.platform.entities._base import BaseEntity
 from app.vector_db.weaviate_service import WeaviateService
 
 
@@ -48,7 +48,7 @@ class WeaviateDestination(VectorDBDestination):
         """
         instance = cls()
         instance.sync_id = sync_id
-        instance.collection_name = f"Chunks_{instance._sanitize_collection_name(sync_id)}"
+        instance.collection_name = f"Entities_{instance._sanitize_collection_name(sync_id)}"
         instance.embedding_model = embedding_model
 
         # Get credentials for sync_id
@@ -77,7 +77,7 @@ class WeaviateDestination(VectorDBDestination):
         return None
 
     async def setup_collection(self, sync_id: UUID) -> None:
-        """Set up the Weaviate collection for storing chunks.
+        """Set up the Weaviate collection for storing entities.
 
         Args:
             sync_id (UUID): The ID of the sync.
@@ -136,10 +136,10 @@ class WeaviateDestination(VectorDBDestination):
                     raise
                 self.collection = await service.get_weaviate_collection(self.collection_name)
 
-    async def insert(self, chunk: BaseChunk) -> None:
-        """Insert a single chunk into Weaviate."""
-        # Transform chunks into the format Weaviate expects
-        data_object = chunk.model_dump()
+    async def insert(self, entity: BaseEntity) -> None:
+        """Insert a single entity into Weaviate."""
+        # Transform entities into the format Weaviate expects
+        data_object = entity.model_dump()
 
         # Insert into Weaviate
         async with WeaviateService(
@@ -148,11 +148,11 @@ class WeaviateDestination(VectorDBDestination):
             embedding_model=self.embedding_model,
         ) as service:
             collection = await service.get_weaviate_collection(self.collection_name)
-            await collection.data.insert(data_object, uuid=chunk.db_chunk_id)
+            await collection.data.insert(data_object, uuid=entity.db_entity_id)
 
-    async def bulk_insert(self, chunks: list[BaseChunk]) -> None:
-        """Bulk insert chunks into Weaviate."""
-        if not chunks or not self.embedding_model:
+    async def bulk_insert(self, entities: list[BaseEntity]) -> None:
+        """Bulk insert entities into Weaviate."""
+        if not entities or not self.embedding_model:
             return
 
         async with WeaviateService(
@@ -162,16 +162,18 @@ class WeaviateDestination(VectorDBDestination):
         ) as service:
             collection = await service.get_weaviate_collection(self.collection_name)
 
-            # Transform chunks into the format Weaviate expects for uuid and properties
+            # Transform entities into the format Weaviate expects for uuid and properties
             objects_to_insert = []
-            for chunk in chunks:
-                chunk_data = chunk.model_dump()
-                if "sync_metadata" in chunk_data and isinstance(chunk_data["sync_metadata"], dict):
-                    chunk_data["sync_metadata"] = json.dumps(chunk_data["sync_metadata"])
+            for entity in entities:
+                entity_data = entity.model_dump()
+                if "sync_metadata" in entity_data and isinstance(
+                    entity_data["sync_metadata"], dict
+                ):
+                    entity_data["sync_metadata"] = json.dumps(entity_data["sync_metadata"])
 
                 data_object = weaviate.classes.data.DataObject(
-                    uuid=chunk.db_chunk_id,
-                    properties=chunk_data,
+                    uuid=entity.db_entity_id,
+                    properties=entity_data,
                 )
                 objects_to_insert.append(data_object)
 
@@ -181,11 +183,11 @@ class WeaviateDestination(VectorDBDestination):
             if response.errors:
                 raise Exception("Errors during bulk insert: %s", response.errors)
 
-    async def delete(self, db_chunk_id: UUID) -> None:
-        """Delete a single chunk from Weaviate.
+    async def delete(self, db_entity_id: UUID) -> None:
+        """Delete a single entity from Weaviate.
 
         Args:
-            db_chunk_id (UUID): The ID of the chunk to delete.
+            db_entity_id (UUID): The ID of the entity to delete.
         """
         async with WeaviateService(
             weaviate_cluster_url=self.cluster_url,
@@ -193,15 +195,15 @@ class WeaviateDestination(VectorDBDestination):
             embedding_model=self.embedding_model,
         ) as service:
             collection = await service.get_weaviate_collection(self.collection_name)
-            await collection.data.delete_by_id(uuid=db_chunk_id)
+            await collection.data.delete_by_id(uuid=db_entity_id)
 
-    async def bulk_delete(self, db_chunk_ids: list[UUID]) -> None:
-        """Bulk delete chunks from Weaviate.
+    async def bulk_delete(self, db_entity_ids: list[UUID]) -> None:
+        """Bulk delete entities from Weaviate.
 
         Args:
-            db_chunk_ids (List[UUID]): The IDs of the chunks to delete.
+            db_entity_ids (List[UUID]): The IDs of the entities to delete.
         """
-        if not db_chunk_ids:
+        if not db_entity_ids:
             return
 
         async with WeaviateService(
@@ -211,10 +213,10 @@ class WeaviateDestination(VectorDBDestination):
         ) as service:
             collection = await service.get_weaviate_collection(self.collection_name)
 
-            for db_chunk_id in db_chunk_ids:
+            for db_entity_id in db_entity_ids:
                 try:
                     # Delete using deterministic UUID
-                    await collection.objects.delete(uuid=f"{db_chunk_id}_{self.sync_id}")
+                    await collection.objects.delete(uuid=f"{db_entity_id}_{self.sync_id}")
                 except Exception as e:
                     if "not found" not in str(e).lower():
                         raise

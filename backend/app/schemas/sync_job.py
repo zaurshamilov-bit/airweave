@@ -14,10 +14,10 @@ class SyncJobBase(BaseModel):
 
     sync_id: UUID
     status: SyncJobStatus = SyncJobStatus.PENDING
-    chunks_detected: Optional[int] = 0
-    chunks_inserted: Optional[int] = 0
-    chunks_deleted: Optional[int] = 0
-    chunks_skipped: Optional[int] = 0
+    entities_detected: Optional[int] = 0
+    entities_inserted: Optional[int] = 0
+    entities_deleted: Optional[int] = 0
+    entities_skipped: Optional[int] = 0
     error: Optional[str] = None
 
     class Config:

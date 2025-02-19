@@ -1,13 +1,13 @@
-"""Outlook Mail chunk schemas.
+"""Outlook Mail entity schemas.
 
-Based on the Microsoft Graph Mail API (read-only scope), we define chunk schemas for
+Based on the Microsoft Graph Mail API (read-only scope), we define entity schemas for
 the major Outlook mail objects relevant to our application:
  - MailFolder
  - Message
 
 Objects that reference a hierarchical relationship (e.g., nested mail folders)
 will represent that hierarchy through a list of breadcrumbs (see Breadcrumb in
-app.platform.chunks._base) rather than nested objects.
+app.platform.entities._base) rather than nested objects.
 
 References:
     https://learn.microsoft.com/en-us/graph/api/resources/mailfolder?view=graph-rest-1.0
@@ -19,10 +19,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk, Breadcrumb
+from app.platform.entities._base import BaseEntity, Breadcrumb
 
 
-class OutlookMailFolderChunk(BaseChunk):
+class OutlookMailFolderEntity(BaseEntity):
     """Schema for an Outlook mail folder.
 
     See:
@@ -47,7 +47,7 @@ class OutlookMailFolderChunk(BaseChunk):
     )
 
 
-class OutlookMessageChunk(BaseChunk):
+class OutlookMessageEntity(BaseEntity):
     """Schema for an Outlook message.
 
     See:

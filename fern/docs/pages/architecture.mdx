@@ -37,7 +37,7 @@ When data enters the system, it flows through several stages:
 
 **Weaviate**: We run a self-hosted instance of Weaviate to handle similarity search by managing vector embeddings, allowing for semantic search and content recommendations.
 
-**PostgreSQL**: Serves as our primary database, handling user data, configurations, chunk hashes and metadata. This does not host the actual chunks, but rather the metadata to track the chunks. Generally, you'll not need to interact with this database directly.
+**PostgreSQL**: Serves as our primary database, handling user data, configurations, entity hashes and metadata. This does not host the actual entities, but rather the metadata to track the entities. Generally, you'll not need to interact with this database directly.
 
 **Redis**: Acts as our job queue, distributing tasks to workers and handling task coordination, which isn't exposed to developers directly.
 

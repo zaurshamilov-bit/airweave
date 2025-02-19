@@ -1,11 +1,11 @@
-"""OneDrive chunk schemas.
+"""OneDrive entity schemas.
 
 Based on the OneDrive (and SharePoint) API reference (read-only scope for OneDrive),
-we define chunk schemas for the following core objects:
+we define entity schemas for the following core objects:
   • Drive
   • DriveItem
 
-Each schema inherits from BaseChunk, which already provides an entity_id field to
+Each schema inherits from BaseEntity, which already provides an entity_id field to
 store the OneDrive object's unique ID (e.g., drive.id or driveItem.id).
 
 References:
@@ -17,10 +17,10 @@ from typing import Any, Dict, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class OneDriveDriveChunk(BaseChunk):
+class OneDriveDriveEntity(BaseEntity):
     """Schema for a OneDrive Drive object.
 
     The inherited entity_id stores the drive's unique ID. Additional key fields come
@@ -50,7 +50,7 @@ class OneDriveDriveChunk(BaseChunk):
     )
 
 
-class OneDriveDriveItemChunk(BaseChunk):
+class OneDriveDriveItemEntity(BaseEntity):
     """Schema for a OneDrive DriveItem object (file or folder).
 
     The inherited entity_id stores the DriveItem's unique ID. Many fields are optional

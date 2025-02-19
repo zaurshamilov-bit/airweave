@@ -4,8 +4,8 @@ Retrieves data from a user's GitHub account, focusing on:
  - Repositories
  - Repository Contents (files, directories, etc.)
 
-and yields them as chunks using the corresponding GitHub chunk schemas
-(GithubRepoChunk and GithubContentChunk).
+and yields them as entities using the corresponding GitHub entity schemas
+(GithubRepoEntity and GithubContentEntity).
 
 References:
   https://docs.github.com/en/rest/repos/repos
@@ -22,9 +22,9 @@ from typing import AsyncGenerator, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, Breadcrumb
-from app.platform.chunks.github import GithubContentChunk, GithubRepoChunk
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities.github import GithubContentEntity, GithubRepoEntity
 from app.platform.sources._base import BaseSource
 
 
@@ -48,10 +48,10 @@ class GithubSource(BaseSource):
         response.raise_for_status()
         return response
 
-    async def _generate_repo_chunks(
+    async def _generate_repo_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[GithubRepoChunk, None]:
-        """Generate chunks for all user-accessible repositories.
+    ) -> AsyncGenerator[GithubRepoEntity, None]:
+        """Generate entities for all user-accessible repositories.
 
         GET /user/repos
         We'll follow pagination by looking for a 'Link' header with 'rel="next"'.
@@ -62,7 +62,7 @@ class GithubSource(BaseSource):
             resp = await self._get_with_auth(client, url, params=params)
             repos_data = resp.json()  # This should be a list of repo objects
             for repo in repos_data:
-                yield GithubRepoChunk(
+                yield GithubRepoEntity(
                     source_name="github",
                     entity_id=str(repo["id"]),
                     breadcrumbs=[],
@@ -109,10 +109,10 @@ class GithubSource(BaseSource):
         branch: str,
         path: str,
         breadcrumbs: Optional[list] = None,
-    ) -> AsyncGenerator[GithubContentChunk, None]:
+    ) -> AsyncGenerator[GithubContentEntity, None]:
         """Recursively walk the contents of a given repository path on the specified branch.
 
-        Yields GithubContentChunk objects.
+        Yields GithubContentEntity objects.
 
         GET /repos/{owner}/{repo}/contents/{path}?ref={branch}
         """
@@ -127,7 +127,7 @@ class GithubSource(BaseSource):
         # data can be a list (directory contents) or a dict (single file)
         if isinstance(data, dict) and data.get("type") == "file":
             # Single file item
-            yield GithubContentChunk(
+            yield GithubContentEntity(
                 source_name="github",
                 entity_id=data["sha"],
                 breadcrumbs=breadcrumbs,
@@ -144,7 +144,7 @@ class GithubSource(BaseSource):
         elif isinstance(data, list):
             # Directory listing
             for item in data:
-                yield GithubContentChunk(
+                yield GithubContentEntity(
                     source_name="github",
                     entity_id=item["sha"],
                     breadcrumbs=breadcrumbs,
@@ -173,10 +173,10 @@ class GithubSource(BaseSource):
                     ):
                         yield sub_item
 
-    async def _generate_content_chunks(
-        self, client: httpx.AsyncClient, repo: GithubRepoChunk
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate content chunks for a given repository.
+    async def _generate_content_entities(
+        self, client: httpx.AsyncClient, repo: GithubRepoEntity
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate content entities for a given repository.
 
         Walks through the hierarchy of directories/files on the default branch.
         """
@@ -188,27 +188,27 @@ class GithubSource(BaseSource):
             name=repo.name or repo.full_name,
             type="repository",
         )
-        async for content_chunk in self._walk_repository_contents(
+        async for content_entity in self._walk_repository_contents(
             client,
             repo.full_name,
             repo.default_branch,
             path="",  # start at the repo root
             breadcrumbs=[repo_breadcrumb],
         ):
-            yield content_chunk
+            yield content_entity
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate and yield chunks for GitHub objects.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate and yield entities for GitHub objects.
 
-        Yields chunks in the following order:
+        Yields entities in the following order:
           - Repositories
             - Contents (files/directories) for each repository
         """
         async with httpx.AsyncClient() as client:
-            # 1) Yield repo chunks
-            async for repo_chunk in self._generate_repo_chunks(client):
-                yield repo_chunk
+            # 1) Yield repo entities
+            async for repo_entity in self._generate_repo_entities(client):
+                yield repo_entity
 
-                # 2) For each repo, yield content chunks
-                async for content_chunk in self._generate_content_chunks(client, repo_chunk):
-                    yield content_chunk
+                # 2) For each repo, yield content entities
+                async for content_entity in self._generate_content_entities(client, repo_entity):
+                    yield content_entity

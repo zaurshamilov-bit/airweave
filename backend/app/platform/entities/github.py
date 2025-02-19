@@ -1,6 +1,6 @@
-"""GitHub chunk schemas.
+"""GitHub entity schemas.
 
-Based on the GitHub REST API (read-only scope), we define chunk schemas for:
+Based on the GitHub REST API (read-only scope), we define entity schemas for:
   • Repository
   • Repository Contents
 
@@ -14,10 +14,10 @@ from typing import List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class GithubRepoChunk(BaseChunk):
+class GithubRepoEntity(BaseEntity):
     """Schema for a GitHub repository.
 
     References:
@@ -50,7 +50,7 @@ class GithubRepoChunk(BaseChunk):
     disabled: bool = Field(False, description="Whether the repository is disabled in GitHub.")
 
 
-class GithubContentChunk(BaseChunk):
+class GithubContentEntity(BaseEntity):
     """Schema for a GitHub repository's content (file, directory, submodule, etc.).
 
     References:

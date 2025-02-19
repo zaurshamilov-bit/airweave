@@ -1,8 +1,8 @@
 """SQL Server source implementation.
 
-This source connects to a SQL Server database and generates chunks for each table
-based on its schema structure. It dynamically creates chunk classes at runtime
-using the PolymorphicChunk system.
+This source connects to a SQL Server database and generates entities for each table
+based on its schema structure. It dynamically creates entity classes at runtime
+using the PolymorphicEntity system.
 """
 
 from datetime import datetime
@@ -11,8 +11,8 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Type
 import aioodbc
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, PolymorphicChunk
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, PolymorphicEntity
 from app.platform.sources._base import BaseSource
 
 # Mapping of SQL Server types to Python types
@@ -47,17 +47,17 @@ SQLSERVER_TYPE_MAP = {
 class SQLServerSource(BaseSource):
     """SQL Server source implementation.
 
-    This source connects to a SQL Server database and generates chunks for each table
+    This source connects to a SQL Server database and generates entities for each table
     in the specified schemas. It uses database introspection to:
     1. Discover tables and their structures
-    2. Create appropriate chunk classes dynamically
-    3. Generate chunks for each table's data
+    2. Create appropriate entity classes dynamically
+    3. Generate entities for each table's data
     """
 
     def __init__(self):
         """Initialize the SQL Server source."""
         self.conn: Optional[aioodbc.Connection] = None
-        self.chunk_classes: Dict[str, Type[PolymorphicChunk]] = {}
+        self.entity_classes: Dict[str, Type[PolymorphicEntity]] = {}
 
     @classmethod
     async def create(cls, config: Dict[str, Any]) -> "SQLServerSource":
@@ -157,19 +157,19 @@ class SQLServerSource(BaseSource):
                 "primary_keys": primary_keys,
             }
 
-    async def _create_chunk_class(self, schema: str, table: str) -> Type[PolymorphicChunk]:
-        """Create a chunk class for a specific table.
+    async def _create_entity_class(self, schema: str, table: str) -> Type[PolymorphicEntity]:
+        """Create a entity class for a specific table.
 
         Args:
             schema: Schema name
             table: Table name
 
         Returns:
-            Dynamically created chunk class for the table
+            Dynamically created entity class for the table
         """
         table_info = await self._get_table_info(schema, table)
 
-        return PolymorphicChunk.create_table_chunk_class(
+        return PolymorphicEntity.create_table_entity_class(
             table_name=table,
             schema_name=schema,
             columns=table_info["columns"],
@@ -196,8 +196,8 @@ class SQLServerSource(BaseSource):
             tables = await cursor.fetchall()
             return [table[0] for table in tables]
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate chunks for all tables in specified schemas."""
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate entities for all tables in specified schemas."""
         try:
             await self._connect()
 
@@ -220,13 +220,13 @@ class SQLServerSource(BaseSource):
 
             async with self.conn.cursor() as cursor:
                 for table in tables:
-                    # Create chunk class if not already created
-                    if f"{schema}.{table}" not in self.chunk_classes:
-                        self.chunk_classes[f"{schema}.{table}"] = await self._create_chunk_class(
+                    # Create entity class if not already created
+                    if f"{schema}.{table}" not in self.entity_classes:
+                        self.entity_classes[f"{schema}.{table}"] = await self._create_entity_class(
                             schema, table
                         )
 
-                    chunk_class = self.chunk_classes[f"{schema}.{table}"]
+                    entity_class = self.entity_classes[f"{schema}.{table}"]
 
                     # Fetch and yield data
                     BATCH_SIZE = 50
@@ -255,13 +255,13 @@ class SQLServerSource(BaseSource):
                         for record in records:
                             # Convert record to dictionary using column names
                             data = dict(zip(columns, record, strict=False))
-                            model_fields = chunk_class.model_fields
+                            model_fields = entity_class.model_fields
                             primary_keys = model_fields["primary_key_columns"].default_factory()
                             pk_values = [str(data[pk]) for pk in primary_keys]
                             entity_id = f"{schema}.{table}:" + ":".join(pk_values)
 
-                            chunk = chunk_class(entity_id=entity_id, **data)
-                            yield chunk
+                            entity = entity_class(entity_id=entity_id, **data)
+                            yield entity
 
                         # Increment offset for next batch
                         offset += BATCH_SIZE

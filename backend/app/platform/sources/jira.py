@@ -16,14 +16,14 @@ from typing import Any, AsyncGenerator
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, Breadcrumb
-from app.platform.chunks.jira import (
-    JiraCommentChunk,
-    JiraIssueChunk,
-    JiraProjectChunk,
-    JiraStatusChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities.jira import (
+    JiraCommentEntity,
+    JiraIssueEntity,
+    JiraProjectEntity,
+    JiraStatusEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -37,7 +37,7 @@ class JiraSource(BaseSource):
       - Issues (within each project)
       - Comments (within each issue)
 
-    The Jira chunk schemas are defined in chunks/jira.py.
+    The Jira entity schemas are defined in entities/jira.py.
     """
 
     @classmethod
@@ -57,10 +57,10 @@ class JiraSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_status_chunks(
+    async def _generate_status_entities(
         self, client: httpx.AsyncClient, base_url: str
-    ) -> AsyncGenerator[JiraStatusChunk, None]:
-        """Generate JiraStatusChunk objects.
+    ) -> AsyncGenerator[JiraStatusEntity, None]:
+        """Generate JiraStatusEntity objects.
 
         Endpoint:
             GET /rest/api/3/status
@@ -70,7 +70,7 @@ class JiraSource(BaseSource):
 
         # This endpoint returns a list of status objects directly.
         for status in data:
-            yield JiraStatusChunk(
+            yield JiraStatusEntity(
                 source_name="jira",
                 entity_id=status["id"],
                 name=status.get("name", ""),
@@ -78,10 +78,10 @@ class JiraSource(BaseSource):
                 description=status.get("description"),
             )
 
-    async def _generate_project_chunks(
+    async def _generate_project_entities(
         self, client: httpx.AsyncClient, base_url: str
-    ) -> AsyncGenerator[JiraProjectChunk, None]:
-        """Generate JiraProjectChunk objects.
+    ) -> AsyncGenerator[JiraProjectEntity, None]:
+        """Generate JiraProjectEntity objects.
 
         Endpoint:
             GET /rest/api/3/project
@@ -91,7 +91,7 @@ class JiraSource(BaseSource):
 
         # This endpoint returns a list of projects.
         for project in data:
-            yield JiraProjectChunk(
+            yield JiraProjectEntity(
                 source_name="jira",
                 entity_id=project["id"],
                 breadcrumbs=[],  # top-level object, no parent
@@ -103,10 +103,10 @@ class JiraSource(BaseSource):
                 archived=project.get("archived", False),
             )
 
-    async def _generate_comment_chunks(
-        self, client: httpx.AsyncClient, base_url: str, issue: JiraIssueChunk
-    ) -> AsyncGenerator[JiraCommentChunk, None]:
-        """Generate JiraCommentChunk for each comment on a given issue.
+    async def _generate_comment_entities(
+        self, client: httpx.AsyncClient, base_url: str, issue: JiraIssueEntity
+    ) -> AsyncGenerator[JiraCommentEntity, None]:
+        """Generate JiraCommentEntity for each comment on a given issue.
 
         Endpoint:
             GET /rest/api/3/issue/{issueKey}/comment
@@ -119,7 +119,7 @@ class JiraSource(BaseSource):
             # For Jira cloud (v3), the field is typically "comments" in the "comments" resource.
             comments = data.get("comments", [])
             for comment in comments:
-                yield JiraCommentChunk(
+                yield JiraCommentEntity(
                     source_name="jira",
                     entity_id=comment["id"],
                     breadcrumbs=[
@@ -157,10 +157,10 @@ class JiraSource(BaseSource):
                 f"comment?startAt={next_start}&maxResults={max_results}"
             )
 
-    async def _generate_issue_chunks(
-        self, client: httpx.AsyncClient, base_url: str, project: JiraProjectChunk
-    ) -> AsyncGenerator[JiraIssueChunk, None]:
-        """Generate JiraIssueChunk for each issue in the given project.
+    async def _generate_issue_entities(
+        self, client: httpx.AsyncClient, base_url: str, project: JiraProjectEntity
+    ) -> AsyncGenerator[JiraIssueEntity, None]:
+        """Generate JiraIssueEntity for each issue in the given project.
 
         We use the Search endpoint with JQL to get issues belonging to the project.
         Endpoint:
@@ -204,7 +204,7 @@ class JiraSource(BaseSource):
                 # Grab labels from fields if present
                 labels_info = fields.get("labels", [])
 
-                yield JiraIssueChunk(
+                yield JiraIssueEntity(
                     source_name="jira",
                     entity_id=issue_data["id"],
                     breadcrumbs=[
@@ -234,8 +234,8 @@ class JiraSource(BaseSource):
             if start_at >= total:
                 break
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all chunks from Jira: Statuses, Projects, Issues, Comments."""
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all entities from Jira: Statuses, Projects, Issues, Comments."""
         # TODO: Make this dynamic from user env.
         # In practice, you would determine your Jira Cloud base URL or site URL.
         # This may come from the user's settings or environment. Here's an example pattern:
@@ -243,21 +243,21 @@ class JiraSource(BaseSource):
 
         async with httpx.AsyncClient() as client:
             # 1) Generate (and yield) all Statuses
-            async for status_chunk in self._generate_status_chunks(client, base_url):
-                yield status_chunk
+            async for status_entity in self._generate_status_entities(client, base_url):
+                yield status_entity
 
             # 2) Generate (and yield) all Projects
-            async for project_chunk in self._generate_project_chunks(client, base_url):
-                yield project_chunk
+            async for project_entity in self._generate_project_entities(client, base_url):
+                yield project_entity
 
                 # 3) Generate (and yield) all Issues for each Project
-                async for issue_chunk in self._generate_issue_chunks(
-                    client, base_url, project_chunk
+                async for issue_entity in self._generate_issue_entities(
+                    client, base_url, project_entity
                 ):
-                    yield issue_chunk
+                    yield issue_entity
 
                     # 4) Generate (and yield) Comments for each Issue
-                    async for comment_chunk in self._generate_comment_chunks(
-                        client, base_url, issue_chunk
+                    async for comment_entity in self._generate_comment_entities(
+                        client, base_url, issue_entity
                     ):
-                        yield comment_chunk
+                        yield comment_entity

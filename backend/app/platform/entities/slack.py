@@ -1,8 +1,8 @@
-"""Slack chunk schemas.
+"""Slack entity schemas.
 
-Based on the Slack Web API reference, we define chunk schemas for common Slack
+Based on the Slack Web API reference, we define entity schemas for common Slack
 objects like Channels, Users, and Messages. These follow a style similar to our
-Asana and HubSpot chunk schemas.
+Asana and HubSpot entity schemas.
 """
 
 from datetime import datetime
@@ -10,11 +10,11 @@ from typing import Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class SlackChannelChunk(BaseChunk):
-    """Schema for Slack channel chunks."""
+class SlackChannelEntity(BaseEntity):
+    """Schema for Slack channel entities."""
 
     channel_id: str
     name: Optional[str] = None
@@ -30,8 +30,8 @@ class SlackChannelChunk(BaseChunk):
     purpose: Optional[Dict] = None
 
 
-class SlackUserChunk(BaseChunk):
-    """Schema for Slack user chunks."""
+class SlackUserEntity(BaseEntity):
+    """Schema for Slack user entities."""
 
     user_id: str
     team_id: Optional[str] = None
@@ -44,13 +44,13 @@ class SlackUserChunk(BaseChunk):
     is_primary_owner: bool = False
     is_restricted: bool = False
     is_ultra_restricted: bool = False
-    updated: Optional[
-        datetime
-    ] = None  # Slack returns profile updates in epoch time; convert to datetime
+    updated: Optional[datetime] = (
+        None  # Slack returns profile updates in epoch time; convert to datetime
+    )
 
 
-class SlackMessageChunk(BaseChunk):
-    """Schema for Slack message chunks."""
+class SlackMessageEntity(BaseEntity):
+    """Schema for Slack message entities."""
 
     channel_id: str
     user_id: Optional[str] = None

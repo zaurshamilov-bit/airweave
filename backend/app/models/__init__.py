@@ -2,11 +2,11 @@
 
 from .api_key import APIKey
 from .chat import Chat, ChatMessage
-from .chunk import Chunk
 from .connection import Connection
 from .dag import DagEdge, DagNode, SyncDagDefinition
 from .destination import Destination
 from .embedding_model import EmbeddingModel
+from .entity import Entity
 from .entity_definition import EntityDefinition
 from .entity_relation import EntityRelation
 from .integration_credential import IntegrationCredential
@@ -22,7 +22,7 @@ __all__ = [
     "APIKey",
     "Chat",
     "ChatMessage",
-    "Chunk",
+    "Entity",
     "Connection",
     "DagNode",
     "DagEdge",

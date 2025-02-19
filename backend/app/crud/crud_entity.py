@@ -1,4 +1,4 @@
-"""CRUD operations for chunks."""
+"""CRUD operations for entities."""
 
 from datetime import datetime
 from typing import Optional
@@ -8,21 +8,21 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud._base_organization import CRUDBaseOrganization
-from app.models.chunk import Chunk
-from app.schemas.chunk import ChunkCreate, ChunkUpdate
+from app.models.entity import Entity
+from app.schemas.entity import EntityCreate, EntityUpdate
 
 
-class CRUDChunk(CRUDBaseOrganization[Chunk, ChunkCreate, ChunkUpdate]):
-    """CRUD operations for chunks."""
+class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
+    """CRUD operations for entities."""
 
     async def get_by_entity_and_sync_id(
         self,
         db: AsyncSession,
         entity_id: str,
         sync_id: UUID,
-    ) -> Optional[Chunk]:
-        """Get a chunk by entity id and sync id."""
-        stmt = select(Chunk).where(Chunk.entity_id == entity_id, Chunk.sync_id == sync_id)
+    ) -> Optional[Entity]:
+        """Get a entity by entity id and sync id."""
+        stmt = select(Entity).where(Entity.entity_id == entity_id, Entity.sync_id == sync_id)
         result = await db.execute(stmt)
         return result.unique().scalars().one_or_none()
 
@@ -30,11 +30,11 @@ class CRUDChunk(CRUDBaseOrganization[Chunk, ChunkCreate, ChunkUpdate]):
         self,
         db: AsyncSession,
         *,
-        db_obj: Chunk,
+        db_obj: Entity,
         sync_job_id: UUID,
-    ) -> Chunk:
+    ) -> Entity:
         """Update sync job ID only."""
-        update_data = ChunkUpdate(sync_job_id=sync_job_id, modified_at=datetime.now(datetime.UTC))
+        update_data = EntityUpdate(sync_job_id=sync_job_id, modified_at=datetime.now(datetime.UTC))
 
         # Use model_dump(exclude_unset=True) to only include fields we explicitly set
         return await super().update(
@@ -46,9 +46,9 @@ class CRUDChunk(CRUDBaseOrganization[Chunk, ChunkCreate, ChunkUpdate]):
         db: AsyncSession,
         sync_id: UUID,
         sync_job_id: UUID,
-    ) -> list[Chunk]:
-        """Get all chunks that are outdated."""
-        stmt = select(Chunk).where(Chunk.sync_id == sync_id, Chunk.sync_job_id != sync_job_id)
+    ) -> list[Entity]:
+        """Get all entities that are outdated."""
+        stmt = select(Entity).where(Entity.sync_id == sync_id, Entity.sync_job_id != sync_job_id)
         result = await db.execute(stmt)
         return list(result.unique().scalars().all())
 
@@ -56,9 +56,9 @@ class CRUDChunk(CRUDBaseOrganization[Chunk, ChunkCreate, ChunkUpdate]):
         self,
         db: AsyncSession,
         sync_job_id: UUID,
-    ) -> list[Chunk]:
-        """Get all chunks for a specific sync job."""
-        stmt = select(Chunk).where(Chunk.sync_job_id == sync_job_id)
+    ) -> list[Entity]:
+        """Get all entities for a specific sync job."""
+        stmt = select(Entity).where(Entity.sync_job_id == sync_job_id)
         result = await db.execute(stmt)
         return list(result.unique().scalars().all())
 
@@ -66,11 +66,11 @@ class CRUDChunk(CRUDBaseOrganization[Chunk, ChunkCreate, ChunkUpdate]):
         self,
         db: AsyncSession,
         sync_job_id: UUID,
-    ) -> list[Chunk]:
-        """Get all chunks for that are not from a specific sync job."""
-        stmt = select(Chunk).where(Chunk.sync_job_id != sync_job_id)
+    ) -> list[Entity]:
+        """Get all entities for that are not from a specific sync job."""
+        stmt = select(Entity).where(Entity.sync_job_id != sync_job_id)
         result = await db.execute(stmt)
         return list(result.unique().scalars().all())
 
 
-chunk = CRUDChunk(Chunk)
+entity = CRUDEntity(Entity)

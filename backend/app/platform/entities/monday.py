@@ -1,6 +1,6 @@
-"""Monday chunk schemas.
+"""Monday entity schemas.
 
-Based on the Monday.com API (GraphQL-based), we define chunk schemas for
+Based on the Monday.com API (GraphQL-based), we define entity schemas for
 commonly used Monday resources: Boards, Groups, Columns, Items, Subitems, and Updates.
 """
 
@@ -9,10 +9,10 @@ from typing import Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class MondayBoardChunk(BaseChunk):
+class MondayBoardEntity(BaseEntity):
     """Schema for Monday Board objects.
 
     https://developer.monday.com/api-reference/reference/boards
@@ -47,7 +47,7 @@ class MondayBoardChunk(BaseChunk):
     )
 
 
-class MondayGroupChunk(BaseChunk):
+class MondayGroupEntity(BaseEntity):
     """Schema for Monday Group objects.
 
     Groups are collections of items (rows) within a board.
@@ -68,7 +68,7 @@ class MondayGroupChunk(BaseChunk):
     )
 
 
-class MondayColumnChunk(BaseChunk):
+class MondayColumnEntity(BaseEntity):
     """Schema for Monday Column objects.
 
     Columns define the structure of data on a Monday board.
@@ -91,7 +91,7 @@ class MondayColumnChunk(BaseChunk):
     archived: bool = Field(False, description="Whether this column is archived or hidden.")
 
 
-class MondayItemChunk(BaseChunk):
+class MondayItemEntity(BaseEntity):
     """Schema for Monday Item objects (rows on a board).
 
     https://developer.monday.com/api-reference/reference/boards
@@ -115,7 +115,7 @@ class MondayItemChunk(BaseChunk):
     updated_at: Optional[datetime] = Field(None, description="When the item was last updated.")
 
 
-class MondaySubitemChunk(BaseChunk):
+class MondaySubitemEntity(BaseEntity):
     """Schema for Monday Subitem objects.
 
     Subitems are items nested under a parent item, often in a dedicated 'Subitems' column.
@@ -142,7 +142,7 @@ class MondaySubitemChunk(BaseChunk):
     updated_at: Optional[datetime] = Field(None, description="When the subitem was last updated.")
 
 
-class MondayUpdateChunk(BaseChunk):
+class MondayUpdateEntity(BaseEntity):
     """Schema for Monday Update objects.
 
     monday.com updates add notes and discussions to items outside of their column data.
@@ -154,7 +154,7 @@ class MondayUpdateChunk(BaseChunk):
     item_id: Optional[str] = Field(
         None,
         description=(
-            "ID of the item this update is referencing " "(could also be a board-level update)."
+            "ID of the item this update is referencing (could also be a board-level update)."
         ),
     )
     board_id: Optional[str] = Field(None, description="ID of the board, if applicable.")

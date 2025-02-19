@@ -5,14 +5,14 @@ from typing import AsyncGenerator, Dict
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk
-from app.platform.chunks.hubspot import (
-    HubspotCompanyChunk,
-    HubspotContactChunk,
-    HubspotDealChunk,
-    HubspotTicketChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity
+from app.platform.entities.hubspot import (
+    HubspotCompanyEntity,
+    HubspotContactEntity,
+    HubspotDealEntity,
+    HubspotTicketEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -21,8 +21,8 @@ class HubspotSource(BaseSource):
     """HubSpot source implementation.
 
     This connector retrieves data from HubSpot CRM objects such as Contacts,
-    Companies, Deals, and Tickets, then yields them as chunks using
-    their respective chunk schemas.
+    Companies, Deals, and Tickets, then yields them as entities using
+    their respective entity schemas.
     """
 
     @classmethod
@@ -45,10 +45,10 @@ class HubspotSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_contact_chunks(
+    async def _generate_contact_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate Contact chunks from HubSpot.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate Contact entities from HubSpot.
 
         This uses the REST CRM API endpoint for contacts:
           GET /crm/v3/objects/contacts
@@ -57,7 +57,7 @@ class HubspotSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for contact in data.get("results", []):
-                yield HubspotContactChunk(
+                yield HubspotContactEntity(
                     source_name="hubspot",
                     entity_id=contact["id"],
                     first_name=contact["properties"].get("firstname"),
@@ -75,10 +75,10 @@ class HubspotSource(BaseSource):
             next_link = paging.get("next", {}).get("link")
             url = next_link if next_link else None
 
-    async def _generate_company_chunks(
+    async def _generate_company_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate Company chunks from HubSpot.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate Company entities from HubSpot.
 
         This uses the REST CRM API endpoint for companies:
           GET /crm/v3/objects/companies
@@ -87,7 +87,7 @@ class HubspotSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for company in data.get("results", []):
-                yield HubspotCompanyChunk(
+                yield HubspotCompanyEntity(
                     source_name="hubspot",
                     entity_id=company["id"],
                     name=company["properties"].get("name"),
@@ -107,10 +107,10 @@ class HubspotSource(BaseSource):
             next_link = paging.get("next", {}).get("link")
             url = next_link if next_link else None
 
-    async def _generate_deal_chunks(
+    async def _generate_deal_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate Deal chunks from HubSpot.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate Deal entities from HubSpot.
 
         This uses the REST CRM API endpoint for deals:
           GET /crm/v3/objects/deals
@@ -119,7 +119,7 @@ class HubspotSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for deal in data.get("results", []):
-                yield HubspotDealChunk(
+                yield HubspotDealEntity(
                     source_name="hubspot",
                     entity_id=deal["id"],
                     deal_name=deal["properties"].get("dealname"),
@@ -140,10 +140,10 @@ class HubspotSource(BaseSource):
             next_link = paging.get("next", {}).get("link")
             url = next_link if next_link else None
 
-    async def _generate_ticket_chunks(
+    async def _generate_ticket_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate Ticket chunks from HubSpot.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate Ticket entities from HubSpot.
 
         This uses the REST CRM API endpoint for tickets:
           GET /crm/v3/objects/tickets
@@ -152,7 +152,7 @@ class HubspotSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for ticket in data.get("results", []):
-                yield HubspotTicketChunk(
+                yield HubspotTicketEntity(
                     source_name="hubspot",
                     entity_id=ticket["id"],
                     subject=ticket["properties"].get("subject"),
@@ -167,25 +167,25 @@ class HubspotSource(BaseSource):
             next_link = paging.get("next", {}).get("link")
             url = next_link if next_link else None
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all chunks from HubSpot.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all entities from HubSpot.
 
         Yields:
-            HubSpot chunks: Contacts, Companies, Deals, and Tickets.
+            HubSpot entities: Contacts, Companies, Deals, and Tickets.
         """
         async with httpx.AsyncClient() as client:
-            # Yield contact chunks
-            async for contact_chunk in self._generate_contact_chunks(client):
-                yield contact_chunk
+            # Yield contact entities
+            async for contact_entity in self._generate_contact_entities(client):
+                yield contact_entity
 
-            # Yield company chunks
-            async for company_chunk in self._generate_company_chunks(client):
-                yield company_chunk
+            # Yield company entities
+            async for company_entity in self._generate_company_entities(client):
+                yield company_entity
 
-            # Yield deal chunks
-            async for deal_chunk in self._generate_deal_chunks(client):
-                yield deal_chunk
+            # Yield deal entities
+            async for deal_entity in self._generate_deal_entities(client):
+                yield deal_entity
 
-            # Yield ticket chunks
-            async for ticket_chunk in self._generate_ticket_chunks(client):
-                yield ticket_chunk
+            # Yield ticket entities
+            async for ticket_entity in self._generate_ticket_entities(client):
+                yield ticket_entity

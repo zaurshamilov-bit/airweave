@@ -1,7 +1,7 @@
-"""Jira chunk schemas.
+"""Jira entity schemas.
 
 Based on the Jira Cloud REST API reference (read-only scope), we define
-chunk schemas for the major Jira objects relevant to our application:
+entity schemas for the major Jira objects relevant to our application:
  - Project
  - Issue
  - Comment
@@ -9,7 +9,7 @@ chunk schemas for the major Jira objects relevant to our application:
 
 These schemas follow the patterns established by other integrations
 (e.g., Asana, Todoist, HubSpot, Confluence). Each schema subclass extends
-BaseChunk and includes relevant fields for that Jira entity.
+BaseEntity and includes relevant fields for that Jira entity.
 
 Later iterations could include support for the following objects:
 - Attachments
@@ -28,10 +28,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class JiraProjectChunk(BaseChunk):
+class JiraProjectEntity(BaseEntity):
     """Schema for a Jira Project.
 
     See:
@@ -51,7 +51,7 @@ class JiraProjectChunk(BaseChunk):
     archived: bool = Field(False, description="Indicates if this project is archived.")
 
 
-class JiraStatusChunk(BaseChunk):
+class JiraStatusEntity(BaseEntity):
     """Schema for a Jira Status.
 
     See:
@@ -66,7 +66,7 @@ class JiraStatusChunk(BaseChunk):
     description: Optional[str] = Field(None, description="Description or help text for the status.")
 
 
-class JiraIssueChunk(BaseChunk):
+class JiraIssueEntity(BaseEntity):
     """Schema for a Jira Issue.
 
     See:
@@ -108,7 +108,7 @@ class JiraIssueChunk(BaseChunk):
     archived: bool = Field(False, description="Indicates if this issue has been archived.")
 
 
-class JiraCommentChunk(BaseChunk):
+class JiraCommentEntity(BaseEntity):
     """Schema for a Jira Comment.
 
     See:

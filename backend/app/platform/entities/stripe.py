@@ -1,12 +1,12 @@
-"""Stripe chunk schemas.
+"""Stripe entity schemas.
 
-Based on the Stripe API reference (2024-12-18.acacia), we define chunk schemas for
+Based on the Stripe API reference (2024-12-18.acacia), we define entity schemas for
 commonly used Stripe Core Resources: Customers, Invoices, Charges, Subscriptions,
 Payment Intents, Balance, Balance Transactions, Events, Payouts, Payment Methods,
 and Refunds.
 
 These schemas follow the same style as other connectors (e.g., Asana, HubSpot, Todoist),
-where each chunk class inherits from our BaseChunk and adds relevant fields with
+where each entity class inherits from our BaseEntity and adds relevant fields with
 shared or per-resource metadata as needed.
 """
 
@@ -15,10 +15,10 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class StripeBalanceChunk(BaseChunk):
+class StripeBalanceEntity(BaseEntity):
     """Schema for Stripe Balance resource.
 
     https://stripe.com/docs/api/balance/balance_object
@@ -45,7 +45,7 @@ class StripeBalanceChunk(BaseChunk):
     livemode: bool = Field(False, description="Whether this balance is in live mode (vs test mode)")
 
 
-class StripeBalanceTransactionChunk(BaseChunk):
+class StripeBalanceTransactionEntity(BaseEntity):
     """Schema for Stripe Balance Transaction resource.
 
     https://stripe.com/docs/api/balance_transactions
@@ -77,8 +77,8 @@ class StripeBalanceTransactionChunk(BaseChunk):
     )
 
 
-class StripeChargeChunk(BaseChunk):
-    """Schema for Stripe Charge chunks.
+class StripeChargeEntity(BaseEntity):
+    """Schema for Stripe Charge entities.
 
     https://stripe.com/docs/api/charges
     """
@@ -103,8 +103,8 @@ class StripeChargeChunk(BaseChunk):
     )
 
 
-class StripeCustomerChunk(BaseChunk):
-    """Schema for Stripe Customer chunks.
+class StripeCustomerEntity(BaseEntity):
+    """Schema for Stripe Customer entities.
 
     https://stripe.com/docs/api/customers
     """
@@ -129,7 +129,7 @@ class StripeCustomerChunk(BaseChunk):
     )
 
 
-class StripeEventChunk(BaseChunk):
+class StripeEventEntity(BaseEntity):
     """Schema for Stripe Event resource.
 
     https://stripe.com/docs/api/events
@@ -156,8 +156,8 @@ class StripeEventChunk(BaseChunk):
     )
 
 
-class StripeInvoiceChunk(BaseChunk):
-    """Schema for Stripe Invoice chunks.
+class StripeInvoiceEntity(BaseEntity):
+    """Schema for Stripe Invoice entities.
 
     https://stripe.com/docs/api/invoices
     """
@@ -190,8 +190,8 @@ class StripeInvoiceChunk(BaseChunk):
     )
 
 
-class StripePaymentIntentChunk(BaseChunk):
-    """Schema for Stripe PaymentIntent chunks.
+class StripePaymentIntentEntity(BaseEntity):
+    """Schema for Stripe PaymentIntent entities.
 
     https://stripe.com/docs/api/payment_intents
     """
@@ -216,7 +216,7 @@ class StripePaymentIntentChunk(BaseChunk):
     )
 
 
-class StripePaymentMethodChunk(BaseChunk):
+class StripePaymentMethodEntity(BaseEntity):
     """Schema for Stripe PaymentMethod resource.
 
     https://stripe.com/docs/api/payment_methods
@@ -232,7 +232,7 @@ class StripePaymentMethodChunk(BaseChunk):
     card: Optional[Dict[str, Any]] = Field(
         None,
         description=(
-            "If the PaymentMethod type is 'card', details about the card " "(brand, last4, etc.)"
+            "If the PaymentMethod type is 'card', details about the card (brand, last4, etc.)"
         ),
     )
     created_at: Optional[datetime] = Field(None, description="When the PaymentMethod was created")
@@ -242,7 +242,7 @@ class StripePaymentMethodChunk(BaseChunk):
     )
 
 
-class StripePayoutChunk(BaseChunk):
+class StripePayoutEntity(BaseEntity):
     """Schema for Stripe Payout resource.
 
     https://stripe.com/docs/api/payouts
@@ -275,7 +275,7 @@ class StripePayoutChunk(BaseChunk):
     )
 
 
-class StripeRefundChunk(BaseChunk):
+class StripeRefundEntity(BaseEntity):
     """Schema for Stripe Refund resource.
 
     https://stripe.com/docs/api/refunds
@@ -304,8 +304,8 @@ class StripeRefundChunk(BaseChunk):
     )
 
 
-class StripeSubscriptionChunk(BaseChunk):
-    """Schema for Stripe Subscription chunks.
+class StripeSubscriptionEntity(BaseEntity):
+    """Schema for Stripe Subscription entities.
 
     https://stripe.com/docs/api/subscriptions
     """

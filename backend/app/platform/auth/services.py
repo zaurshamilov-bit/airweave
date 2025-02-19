@@ -216,7 +216,7 @@ class OAuth2Service:
         refresh_token = decrypted_credentials.get("refresh_token", None)
         if not refresh_token:
             error_message = (
-                f"No refresh token found for user {user.email} and " f"connection {connection_id}"
+                f"No refresh token found for user {user.email} and connection {connection_id}"
             )
             oauth2_service_logger.error(error_message)
             raise TokenRefreshError(error_message)
@@ -371,6 +371,7 @@ class OAuth2Service:
                 db=db,
                 db_obj=integration_credential,
                 obj_in={"encrypted_credentials": encrypted_credentials},
+                current_user=user,
             )
 
         return oauth2_token_response

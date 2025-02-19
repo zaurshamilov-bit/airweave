@@ -13,7 +13,7 @@ We retrieve data from the Stripe API for the following core resources:
 - Refunds
 - Subscriptions
 
-Then, we yield them as chunks using the respective chunk schemas defined in chunks/stripe.py.
+Then, we yield them as entities using the respective entity schemas defined in entities/stripe.py.
 """
 
 from typing import AsyncGenerator
@@ -21,21 +21,21 @@ from typing import AsyncGenerator
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk
-from app.platform.chunks.stripe import (
-    StripeBalanceChunk,
-    StripeBalanceTransactionChunk,
-    StripeChargeChunk,
-    StripeCustomerChunk,
-    StripeEventChunk,
-    StripeInvoiceChunk,
-    StripePaymentIntentChunk,
-    StripePaymentMethodChunk,
-    StripePayoutChunk,
-    StripeRefundChunk,
-    StripeSubscriptionChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity
+from app.platform.entities.stripe import (
+    StripeBalanceEntity,
+    StripeBalanceTransactionEntity,
+    StripeChargeEntity,
+    StripeCustomerEntity,
+    StripeEventEntity,
+    StripeInvoiceEntity,
+    StripePaymentIntentEntity,
+    StripePaymentMethodEntity,
+    StripePayoutEntity,
+    StripeRefundEntity,
+    StripeSubscriptionEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -43,7 +43,7 @@ from app.platform.sources._base import BaseSource
 class StripeSource(BaseSource):
     """Stripe source implementation.
 
-    This connector retrieves data from various Stripe objects, yielding them as chunks
+    This connector retrieves data from various Stripe objects, yielding them as entities
     through their respective schemas. The following resource endpoints are used:
 
       - /v1/balance
@@ -59,7 +59,7 @@ class StripeSource(BaseSource):
       - /v1/subscriptions
 
     Each resource endpoint may use Stripe’s pagination (has_more + starting_after) to
-    retrieve all objects. Fields are mapped to the chunk schemas defined in chunks/stripe.py.
+    retrieve all objects. Fields are mapped to the entity schemas defined in entities/stripe.py.
     """
 
     @classmethod
@@ -79,17 +79,17 @@ class StripeSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_balance_chunk(
+    async def _generate_balance_entity(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[BaseEntity, None]:
         """Retrieve the current account balance (single object) from.
 
         GET https://api.stripe.com/v1/balance
-        Yields exactly one StripeBalanceChunk if successful.
+        Yields exactly one StripeBalanceEntity if successful.
         """
         url = "https://api.stripe.com/v1/balance"
         data = await self._get_with_auth(client, url)
-        yield StripeBalanceChunk(
+        yield StripeBalanceEntity(
             source_name="stripe",
             entity_id="balance",  # Arbitrary ID since there's only one balance resource
             available=data.get("available", []),
@@ -99,13 +99,13 @@ class StripeSource(BaseSource):
             livemode=data.get("livemode", False),
         )
 
-    async def _generate_balance_transaction_chunks(
+    async def _generate_balance_transaction_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[BaseEntity, None]:
         """Retrieve balance transactions in a paginated loop from.
 
         GET https://api.stripe.com/v1/balance_transactions
-        Yields StripeBalanceTransactionChunk objects.
+        Yields StripeBalanceTransactionEntity objects.
         """
         base_url = "https://api.stripe.com/v1/balance_transactions?limit=100"
         url = base_url
@@ -113,7 +113,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for txn in data.get("data", []):
-                yield StripeBalanceTransactionChunk(
+                yield StripeBalanceTransactionEntity(
                     source_name="stripe",
                     entity_id=txn["id"],
                     amount=txn.get("amount"),
@@ -136,13 +136,13 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def _generate_charge_chunks(
+    async def _generate_charge_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[BaseEntity, None]:
         """Retrieve a list of charges.
 
           GET https://api.stripe.com/v1/charges
-        Paginated, yields StripeChargeChunk objects.
+        Paginated, yields StripeChargeEntity objects.
         """
         base_url = "https://api.stripe.com/v1/charges?limit=100"
         url = base_url
@@ -150,7 +150,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for charge in data.get("data", []):
-                yield StripeChargeChunk(
+                yield StripeChargeEntity(
                     source_name="stripe",
                     entity_id=charge["id"],
                     amount=charge.get("amount"),
@@ -173,13 +173,13 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def _generate_customer_chunks(
+    async def _generate_customer_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[BaseEntity, None]:
         """Retrieve a list of customers.
 
         GET https://api.stripe.com/v1/customers
-        Paginated, yields StripeCustomerChunk objects.
+        Paginated, yields StripeCustomerEntity objects.
         """
         base_url = "https://api.stripe.com/v1/customers?limit=100"
         url = base_url
@@ -187,7 +187,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for cust in data.get("data", []):
-                yield StripeCustomerChunk(
+                yield StripeCustomerEntity(
                     source_name="stripe",
                     entity_id=cust["id"],
                     email=cust.get("email"),
@@ -209,13 +209,13 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def _generate_event_chunks(
+    async def _generate_event_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[BaseEntity, None]:
         """Retrieve a list of events.
 
         GET https://api.stripe.com/v1/events
-        Paginated, yields StripeEventChunk objects.
+        Paginated, yields StripeEventEntity objects.
         """
         base_url = "https://api.stripe.com/v1/events?limit=100"
         url = base_url
@@ -223,7 +223,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for evt in data.get("data", []):
-                yield StripeEventChunk(
+                yield StripeEventEntity(
                     source_name="stripe",
                     entity_id=evt["id"],
                     event_type=evt.get("type"),
@@ -242,13 +242,13 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def _generate_invoice_chunks(
+    async def _generate_invoice_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[BaseEntity, None]:
         """Retrieve a list of invoices.
 
         GET https://api.stripe.com/v1/invoices
-        Paginated, yields StripeInvoiceChunk objects.
+        Paginated, yields StripeInvoiceEntity objects.
         """
         base_url = "https://api.stripe.com/v1/invoices?limit=100"
         url = base_url
@@ -256,7 +256,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for inv in data.get("data", []):
-                yield StripeInvoiceChunk(
+                yield StripeInvoiceEntity(
                     source_name="stripe",
                     entity_id=inv["id"],
                     customer_id=inv.get("customer"),
@@ -279,13 +279,13 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def _generate_payment_intent_chunks(
+    async def _generate_payment_intent_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[BaseEntity, None]:
         """Retrieve a list of payment intents.
 
         GET https://api.stripe.com/v1/payment_intents
-        Paginated, yields StripePaymentIntentChunk objects.
+        Paginated, yields StripePaymentIntentEntity objects.
         """
         base_url = "https://api.stripe.com/v1/payment_intents?limit=100"
         url = base_url
@@ -293,7 +293,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for pi in data.get("data", []):
-                yield StripePaymentIntentChunk(
+                yield StripePaymentIntentEntity(
                     source_name="stripe",
                     entity_id=pi["id"],
                     amount=pi.get("amount"),
@@ -312,14 +312,14 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def _generate_payment_method_chunks(
+    async def _generate_payment_method_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[BaseEntity, None]:
         """Retrieve a list of payment methods for the account or for a specific customer.
 
         The typical GET is: https://api.stripe.com/v1/payment_methods?customer=<id>&type=<type>
         For demonstration, we'll assume you pass a type of 'card' for all of them.
-        Paginated, yields StripePaymentMethodChunk objects.
+        Paginated, yields StripePaymentMethodEntity objects.
         """
         # Adjust as needed to retrieve the correct PaymentMethods.
         base_url = "https://api.stripe.com/v1/payment_methods?limit=100&type=card"
@@ -328,7 +328,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for pm in data.get("data", []):
-                yield StripePaymentMethodChunk(
+                yield StripePaymentMethodEntity(
                     source_name="stripe",
                     entity_id=pm["id"],
                     type=pm.get("type"),
@@ -343,13 +343,13 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def _generate_payout_chunks(
+    async def _generate_payout_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[BaseEntity, None]:
         """Retrieve a list of payouts.
 
         GET https://api.stripe.com/v1/payouts
-        Paginated, yields StripePayoutChunk objects.
+        Paginated, yields StripePayoutEntity objects.
         """
         base_url = "https://api.stripe.com/v1/payouts?limit=100"
         url = base_url
@@ -357,7 +357,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for payout in data.get("data", []):
-                yield StripePayoutChunk(
+                yield StripePayoutEntity(
                     source_name="stripe",
                     entity_id=payout["id"],
                     amount=payout.get("amount"),
@@ -378,13 +378,13 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def _generate_refund_chunks(
+    async def _generate_refund_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[BaseEntity, None]:
         """Retrieve a list of refunds.
 
         GET https://api.stripe.com/v1/refunds
-        Paginated, yields StripeRefundChunk objects.
+        Paginated, yields StripeRefundEntity objects.
         """
         base_url = "https://api.stripe.com/v1/refunds?limit=100"
         url = base_url
@@ -392,7 +392,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for refund in data.get("data", []):
-                yield StripeRefundChunk(
+                yield StripeRefundEntity(
                     source_name="stripe",
                     entity_id=refund["id"],
                     amount=refund.get("amount"),
@@ -412,13 +412,13 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def _generate_subscription_chunks(
+    async def _generate_subscription_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
+    ) -> AsyncGenerator[BaseEntity, None]:
         """Retrieve a list of subscriptions.
 
         GET https://api.stripe.com/v1/subscriptions
-        Paginated, yields StripeSubscriptionChunk objects.
+        Paginated, yields StripeSubscriptionEntity objects.
         """
         base_url = "https://api.stripe.com/v1/subscriptions?limit=100"
         url = base_url
@@ -426,7 +426,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for sub in data.get("data", []):
-                yield StripeSubscriptionChunk(
+                yield StripeSubscriptionEntity(
                     source_name="stripe",
                     entity_id=sub["id"],
                     customer_id=sub.get("customer"),
@@ -446,8 +446,8 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:  # noqa: C901
-        """Generate all Stripe chunks.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:  # noqa: C901
+        """Generate all Stripe entities.
 
         - Balance
         - Balance Transactions
@@ -463,45 +463,45 @@ class StripeSource(BaseSource):
         """
         async with httpx.AsyncClient() as client:
             # 1) Single Balance resource
-            async for balance_chunk in self._generate_balance_chunk(client):
-                yield balance_chunk
+            async for balance_entity in self._generate_balance_entity(client):
+                yield balance_entity
 
             # 2) Balance Transactions
-            async for txn_chunk in self._generate_balance_transaction_chunks(client):
-                yield txn_chunk
+            async for txn_entity in self._generate_balance_transaction_entities(client):
+                yield txn_entity
 
             # 3) Charges
-            async for charge_chunk in self._generate_charge_chunks(client):
-                yield charge_chunk
+            async for charge_entity in self._generate_charge_entities(client):
+                yield charge_entity
 
             # 4) Customers
-            async for customer_chunk in self._generate_customer_chunks(client):
-                yield customer_chunk
+            async for customer_entity in self._generate_customer_entities(client):
+                yield customer_entity
 
             # 5) Events
-            async for event_chunk in self._generate_event_chunks(client):
-                yield event_chunk
+            async for event_entity in self._generate_event_entities(client):
+                yield event_entity
 
             # 6) Invoices
-            async for invoice_chunk in self._generate_invoice_chunks(client):
-                yield invoice_chunk
+            async for invoice_entity in self._generate_invoice_entities(client):
+                yield invoice_entity
 
             # 7) Payment Intents
-            async for pi_chunk in self._generate_payment_intent_chunks(client):
-                yield pi_chunk
+            async for pi_entity in self._generate_payment_intent_entities(client):
+                yield pi_entity
 
             # 8) Payment Methods
-            async for pm_chunk in self._generate_payment_method_chunks(client):
-                yield pm_chunk
+            async for pm_entity in self._generate_payment_method_entities(client):
+                yield pm_entity
 
             # 9) Payouts
-            async for payout_chunk in self._generate_payout_chunks(client):
-                yield payout_chunk
+            async for payout_entity in self._generate_payout_entities(client):
+                yield payout_entity
 
             # 10) Refunds
-            async for refund_chunk in self._generate_refund_chunks(client):
-                yield refund_chunk
+            async for refund_entity in self._generate_refund_entities(client):
+                yield refund_entity
 
             # 11) Subscriptions
-            async for sub_chunk in self._generate_subscription_chunks(client):
-                yield sub_chunk
+            async for sub_entity in self._generate_subscription_entities(client):
+                yield sub_entity

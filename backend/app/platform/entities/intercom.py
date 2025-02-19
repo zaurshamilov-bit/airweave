@@ -1,18 +1,18 @@
-"""Intercom chunk schemas.
+"""Intercom entity schemas.
 
-Based on the Intercom API reference (v2.11), we define chunk schemas for common
+Based on the Intercom API reference (v2.11), we define entity schemas for common
 Intercom objects like Contacts, Companies, Conversations, and Tickets.
-These follow a style similar to our Asana and HubSpot chunk schemas.
+These follow a style similar to our Asana and HubSpot entity schemas.
 """
 
 from datetime import datetime
 from typing import Optional
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class IntercomContactChunk(BaseChunk):
-    """Schema for Intercom contact chunks."""
+class IntercomContactEntity(BaseEntity):
+    """Schema for Intercom contact entities."""
 
     role: Optional[str] = None  # e.g. "user" or "lead"
     external_id: Optional[str] = None
@@ -25,8 +25,8 @@ class IntercomContactChunk(BaseChunk):
     archived: bool = False
 
 
-class IntercomCompanyChunk(BaseChunk):
-    """Schema for Intercom company chunks."""
+class IntercomCompanyEntity(BaseEntity):
+    """Schema for Intercom company entities."""
 
     name: Optional[str] = None
     company_id: Optional[str] = None
@@ -40,8 +40,8 @@ class IntercomCompanyChunk(BaseChunk):
     archived: bool = False
 
 
-class IntercomConversationChunk(BaseChunk):
-    """Schema for Intercom conversation chunks."""
+class IntercomConversationEntity(BaseEntity):
+    """Schema for Intercom conversation entities."""
 
     conversation_id: str
     title: Optional[str] = None
@@ -51,8 +51,8 @@ class IntercomConversationChunk(BaseChunk):
     archived: bool = False
 
 
-class IntercomTicketChunk(BaseChunk):
-    """Schema for Intercom ticket chunks."""
+class IntercomTicketEntity(BaseEntity):
+    """Schema for Intercom ticket entities."""
 
     subject: Optional[str] = None
     description: Optional[str] = None

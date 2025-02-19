@@ -1,15 +1,15 @@
-"""Asana chunk schemas."""
+"""Asana entity schemas."""
 
 from datetime import datetime
 from typing import Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class AsanaWorkspaceChunk(BaseChunk):
-    """Schema for Asana workspace chunks."""
+class AsanaWorkspaceEntity(BaseEntity):
+    """Schema for Asana workspace entities."""
 
     name: str
     asana_gid: str
@@ -18,8 +18,8 @@ class AsanaWorkspaceChunk(BaseChunk):
     permalink_url: Optional[str] = None
 
 
-class AsanaProjectChunk(BaseChunk):
-    """Schema for Asana project chunks."""
+class AsanaProjectEntity(BaseEntity):
+    """Schema for Asana project entities."""
 
     name: str
     workspace_gid: str
@@ -47,8 +47,8 @@ class AsanaProjectChunk(BaseChunk):
     permalink_url: Optional[str] = None
 
 
-class AsanaSectionChunk(BaseChunk):
-    """Schema for Asana section chunks."""
+class AsanaSectionEntity(BaseEntity):
+    """Schema for Asana section entities."""
 
     name: str
     project_gid: str
@@ -56,8 +56,8 @@ class AsanaSectionChunk(BaseChunk):
     projects: List[Dict] = Field(default_factory=list)  # Deprecated but included for compatibility
 
 
-class AsanaTaskChunk(BaseChunk):
-    """Schema for Asana task chunks."""
+class AsanaTaskEntity(BaseEntity):
+    """Schema for Asana task entities."""
 
     name: str
     project_gid: str
@@ -94,8 +94,8 @@ class AsanaTaskChunk(BaseChunk):
     workspace: Optional[Dict] = None
 
 
-class AsanaCommentChunk(BaseChunk):
-    """Schema for Asana comment/story chunks."""
+class AsanaCommentEntity(BaseEntity):
+    """Schema for Asana comment/story entities."""
 
     task_gid: str
     author: Dict

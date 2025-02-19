@@ -5,15 +5,15 @@ from typing import AsyncGenerator, Dict, List, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, Breadcrumb
-from app.platform.chunks.asana import (
-    AsanaCommentChunk,
-    AsanaProjectChunk,
-    AsanaSectionChunk,
-    AsanaTaskChunk,
-    AsanaWorkspaceChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities.asana import (
+    AsanaCommentEntity,
+    AsanaProjectEntity,
+    AsanaSectionEntity,
+    AsanaTaskEntity,
+    AsanaWorkspaceEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -37,16 +37,16 @@ class AsanaSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_workspace_chunks(
+    async def _generate_workspace_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate workspace chunks."""
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate workspace entities."""
         workspaces_data = await self._get_with_auth(
             client, "https://app.asana.com/api/1.0/workspaces"
         )
 
         for workspace in workspaces_data.get("data", []):
-            yield AsanaWorkspaceChunk(
+            yield AsanaWorkspaceEntity(
                 source_name="asana",
                 entity_id=workspace["gid"],
                 breadcrumbs=[],
@@ -57,16 +57,16 @@ class AsanaSource(BaseSource):
                 permalink_url=f"https://app.asana.com/0/{workspace['gid']}",
             )
 
-    async def _generate_project_chunks(
+    async def _generate_project_entities(
         self, client: httpx.AsyncClient, workspace: Dict, workspace_breadcrumb: Breadcrumb
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate project chunks for a workspace."""
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate project entities for a workspace."""
         projects_data = await self._get_with_auth(
             client, f"https://app.asana.com/api/1.0/workspaces/{workspace['gid']}/projects"
         )
 
         for project in projects_data.get("data", []):
-            yield AsanaProjectChunk(
+            yield AsanaProjectEntity(
                 source_name="asana",
                 entity_id=project["gid"],
                 breadcrumbs=[workspace_breadcrumb],
@@ -96,16 +96,16 @@ class AsanaSource(BaseSource):
                 permalink_url=project.get("permalink_url"),
             )
 
-    async def _generate_section_chunks(
+    async def _generate_section_entities(
         self, client: httpx.AsyncClient, project: Dict, project_breadcrumbs: List[Breadcrumb]
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate section chunks for a project."""
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate section entities for a project."""
         sections_data = await self._get_with_auth(
             client, f"https://app.asana.com/api/1.0/projects/{project['gid']}/sections"
         )
 
         for section in sections_data.get("data", []):
-            yield AsanaSectionChunk(
+            yield AsanaSectionEntity(
                 source_name="asana",
                 entity_id=section["gid"],
                 breadcrumbs=project_breadcrumbs,
@@ -115,14 +115,14 @@ class AsanaSource(BaseSource):
                 projects=section.get("projects", []),
             )
 
-    async def _generate_task_chunks(
+    async def _generate_task_entities(
         self,
         client: httpx.AsyncClient,
         project: Dict,
         section: Optional[Dict] = None,
         breadcrumbs: List[Breadcrumb] = None,
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate task chunks for a project or section."""
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate task entities for a project or section."""
         url = (
             f"https://app.asana.com/api/1.0/sections/{section['gid']}/tasks"
             if section
@@ -140,7 +140,7 @@ class AsanaSource(BaseSource):
                 )
                 task_breadcrumbs = [*breadcrumbs, section_breadcrumb]
 
-            yield AsanaTaskChunk(
+            yield AsanaTaskEntity(
                 source_name="asana",
                 entity_id=task["gid"],
                 breadcrumbs=task_breadcrumbs,
@@ -179,10 +179,10 @@ class AsanaSource(BaseSource):
                 workspace=task.get("workspace"),
             )
 
-    async def _generate_comment_chunks(
+    async def _generate_comment_entities(
         self, client: httpx.AsyncClient, task: Dict, task_breadcrumbs: List[Breadcrumb]
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate comment chunks for a task."""
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate comment entities for a task."""
         stories_data = await self._get_with_auth(
             client, f"https://app.asana.com/api/1.0/tasks/{task['gid']}/stories"
         )
@@ -191,7 +191,7 @@ class AsanaSource(BaseSource):
             if story.get("resource_subtype") != "comment_added":
                 continue
 
-            yield AsanaCommentChunk(
+            yield AsanaCommentEntity(
                 source_name="asana",
                 entity_id=story["gid"],
                 breadcrumbs=task_breadcrumbs,
@@ -210,46 +210,48 @@ class AsanaSource(BaseSource):
                 previews=story.get("previews", []),
             )
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all chunks from Asana."""
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all entities from Asana."""
         async with httpx.AsyncClient() as client:
-            async for workspace_chunk in self._generate_workspace_chunks(client):
-                yield workspace_chunk
+            async for workspace_entity in self._generate_workspace_entities(client):
+                yield workspace_entity
 
                 workspace_breadcrumb = Breadcrumb(
-                    entity_id=workspace_chunk.asana_gid, name=workspace_chunk.name, type="workspace"
+                    entity_id=workspace_entity.asana_gid,
+                    name=workspace_entity.name,
+                    type="workspace",
                 )
 
-                async for project_chunk in self._generate_project_chunks(
+                async for project_entity in self._generate_project_entities(
                     client,
-                    {"gid": workspace_chunk.asana_gid, "name": workspace_chunk.name},
+                    {"gid": workspace_entity.asana_gid, "name": workspace_entity.name},
                     workspace_breadcrumb,
                 ):
-                    yield project_chunk
+                    yield project_entity
 
                     project_breadcrumb = Breadcrumb(
-                        entity_id=project_chunk.entity_id, name=project_chunk.name, type="project"
+                        entity_id=project_entity.entity_id, name=project_entity.name, type="project"
                     )
                     project_breadcrumbs = [workspace_breadcrumb, project_breadcrumb]
 
-                    async for section_chunk in self._generate_section_chunks(
+                    async for section_entity in self._generate_section_entities(
                         client,
-                        {"gid": project_chunk.entity_id},
+                        {"gid": project_entity.entity_id},
                         project_breadcrumbs,  # Pass full project breadcrumbs
                     ):
-                        yield section_chunk
+                        yield section_entity
 
                         # Generate tasks within section with full breadcrumb path
-                        async for task_chunk in self._generate_task_chunks(
+                        async for task_entity in self._generate_task_entities(
                             client,
-                            {"gid": project_chunk.entity_id},
-                            {"gid": section_chunk.entity_id, "name": section_chunk.name},
+                            {"gid": project_entity.entity_id},
+                            {"gid": section_entity.entity_id, "name": section_entity.name},
                             project_breadcrumbs,  # Pass project breadcrumbs
                         ):
-                            yield task_chunk
+                            yield task_entity
 
                     # Generate tasks not in any section
-                    async for task_chunk in self._generate_task_chunks(
-                        client, {"gid": project_chunk.entity_id}, breadcrumbs=project_breadcrumbs
+                    async for task_entity in self._generate_task_entities(
+                        client, {"gid": project_entity.entity_id}, breadcrumbs=project_breadcrumbs
                     ):
-                        yield task_chunk
+                        yield task_entity

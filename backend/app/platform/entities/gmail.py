@@ -1,12 +1,12 @@
-"""Gmail chunk schemas.
+"""Gmail entity schemas.
 
-Defines chunk schemas for Gmail resources:
+Defines entity schemas for Gmail resources:
   - Label
   - Thread
   - Message
   - Draft
 
-Each chunk represents a distinct Gmail object, with relationships maintained through
+Each entity represents a distinct Gmail object, with relationships maintained through
 references and breadcrumbs rather than nested objects.
 """
 
@@ -15,11 +15,11 @@ from typing import List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class GmailLabelChunk(BaseChunk):
-    """Schema for Gmail label chunks.
+class GmailLabelEntity(BaseEntity):
+    """Schema for Gmail label entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.labels
     """
@@ -34,8 +34,8 @@ class GmailLabelChunk(BaseChunk):
     )
 
 
-class GmailThreadChunk(BaseChunk):
-    """Schema for Gmail thread chunks.
+class GmailThreadEntity(BaseEntity):
+    """Schema for Gmail thread entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.threads
     """
@@ -47,8 +47,8 @@ class GmailThreadChunk(BaseChunk):
     last_message_date: Optional[datetime] = Field(None, description="Date of the last message")
 
 
-class GmailMessageChunk(BaseChunk):
-    """Schema for Gmail message chunks.
+class GmailMessageEntity(BaseEntity):
+    """Schema for Gmail message entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.messages
     """
@@ -68,8 +68,8 @@ class GmailMessageChunk(BaseChunk):
     size_estimate: Optional[int] = Field(None, description="Estimated size in bytes")
 
 
-class GmailDraftChunk(BaseChunk):
-    """Schema for Gmail draft chunks.
+class GmailDraftEntity(BaseEntity):
+    """Schema for Gmail draft entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.drafts
     """

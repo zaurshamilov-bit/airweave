@@ -6,8 +6,8 @@ Retrieves data from a user's Google Drive (read-only mode):
   - Files in the user's "My Drive" (non-shared, corpora=user)
 
 Follows the same structure and pattern as other connector implementations
-(e.g., Gmail, Asana, Todoist, HubSpot). The chunk schemas are defined in
-chunks/google_drive.py.
+(e.g., Gmail, Asana, Todoist, HubSpot). The entity schemas are defined in
+entities/google_drive.py.
 
 References:
     https://developers.google.com/drive/api/v3/reference/drives (Shared drives)
@@ -19,9 +19,9 @@ from typing import AsyncGenerator, Dict, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk
-from app.platform.chunks.google_drive import GoogleDriveDriveChunk, GoogleDriveFileChunk
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity
+from app.platform.entities.google_drive import GoogleDriveDriveEntity, GoogleDriveFileEntity
 from app.platform.sources._base import BaseSource
 
 
@@ -30,9 +30,9 @@ class GoogleDriveSource(BaseSource):
     """Google Drive source implementation (read-only).
 
     Retrieves and yields:
-      - GoogleDriveDriveChunk objects, representing shared drives
-      - GoogleDriveFileChunk objects, representing files in each shared drive
-      - GoogleDriveFileChunk objects, representing files in the user's My Drive
+      - GoogleDriveDriveEntity objects, representing shared drives
+      - GoogleDriveFileEntity objects, representing files in each shared drive
+      - GoogleDriveFileEntity objects, representing files in the user's My Drive
     """
 
     @classmethod
@@ -71,12 +71,12 @@ class GoogleDriveSource(BaseSource):
             params["pageToken"] = next_page_token
             url = "https://www.googleapis.com/drive/v3/drives"  # keep the same base URL
 
-    async def _generate_drive_chunks(
+    async def _generate_drive_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate GoogleDriveDriveChunk objects for each shared drive."""
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate GoogleDriveDriveEntity objects for each shared drive."""
         async for drive_obj in self._list_drives(client):
-            yield GoogleDriveDriveChunk(
+            yield GoogleDriveDriveEntity(
                 source_name="google_drive",
                 entity_id=drive_obj["id"],
                 # No breadcrumbs for top-level drives in this connector
@@ -147,9 +147,9 @@ class GoogleDriveSource(BaseSource):
             params["pageToken"] = next_page_token
             url = "https://www.googleapis.com/drive/v3/files"
 
-    def _build_file_chunk(self, file_obj: Dict) -> GoogleDriveFileChunk:
-        """Helper to build a GoogleDriveFileChunk from a file API response object."""
-        return GoogleDriveFileChunk(
+    def _build_file_entity(self, file_obj: Dict) -> GoogleDriveFileEntity:
+        """Helper to build a GoogleDriveFileEntity from a file API response object."""
+        return GoogleDriveFileEntity(
             source_name="google_drive",
             entity_id=file_obj["id"],
             breadcrumbs=[],
@@ -171,43 +171,43 @@ class GoogleDriveSource(BaseSource):
             md5_checksum=file_obj.get("md5Checksum"),
         )
 
-    async def _generate_file_chunks_in_drive(
+    async def _generate_file_entities_in_drive(
         self, client: httpx.AsyncClient, drive_id: str
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate GoogleDriveFileChunk objects for each file in a shared drive."""
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate GoogleDriveFileEntity objects for each file in a shared drive."""
         async for file_obj in self._list_files_in_drive(client, drive_id):
-            yield self._build_file_chunk(file_obj)
+            yield self._build_file_entity(file_obj)
 
-    async def _generate_file_chunks_in_my_drive(
+    async def _generate_file_entities_in_my_drive(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate GoogleDriveFileChunk objects for each file in the user's My Drive."""
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate GoogleDriveFileEntity objects for each file in the user's My Drive."""
         async for file_obj in self._list_files_in_my_drive(client):
-            yield self._build_file_chunk(file_obj)
+            yield self._build_file_entity(file_obj)
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all Google Drive chunks.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all Google Drive entities.
 
-        Yields chunks in the following order:
+        Yields entities in the following order:
           - Shared drives (Drive objects)
           - Files in each shared drive
           - Files in My Drive (corpora=user)
         """
         async with httpx.AsyncClient() as client:
-            # 1) Generate chunks for shared drives
-            async for drive_chunk in self._generate_drive_chunks(client):
-                yield drive_chunk
+            # 1) Generate entities for shared drives
+            async for drive_entity in self._generate_drive_entities(client):
+                yield drive_entity
 
-            # 2) For each shared drive, yield file chunks
+            # 2) For each shared drive, yield file entities
             #    We'll re-list drives in memory so we don't have to fetch them again
             drive_ids = []
             async for drive_obj in self._list_drives(client):
                 drive_ids.append(drive_obj["id"])
 
             for drive_id in drive_ids:
-                async for file_chunk in self._generate_file_chunks_in_drive(client, drive_id):
-                    yield file_chunk
+                async for file_entity in self._generate_file_entities_in_drive(client, drive_id):
+                    yield file_entity
 
-            # 3) Finally, yield file chunks for My Drive (corpora=user)
-            async for mydrive_file_chunk in self._generate_file_chunks_in_my_drive(client):
-                yield mydrive_file_chunk
+            # 3) Finally, yield file entities for My Drive (corpora=user)
+            async for mydrive_file_entity in self._generate_file_entities_in_my_drive(client):
+                yield mydrive_file_entity

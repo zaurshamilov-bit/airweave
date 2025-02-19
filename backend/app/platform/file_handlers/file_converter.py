@@ -1,4 +1,4 @@
-"""Module for converting supported file types into chunkable and vectorizable markdown text."""
+"""Module for converting supported file types into entityable and vectorizable markdown text."""
 
 import os
 from pathlib import Path

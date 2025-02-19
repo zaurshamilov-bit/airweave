@@ -1,12 +1,12 @@
-"""Outlook Calendar chunk schemas.
+"""Outlook Calendar entity schemas.
 
 Based on the Microsoft Graph API reference (read-only scope for the Calendar endpoint),
-we define chunk schemas for:
+we define entity schemas for:
   • Calendar
   • Event
 
-They follow a style similar to the existing chunk schemas, inheriting entity_id from
-BaseChunk to store the Microsoft Graph unique identifier for each object.
+They follow a style similar to the existing entity schemas, inheriting entity_id from
+BaseEntity to store the Microsoft Graph unique identifier for each object.
 
 Reference:
   https://learn.microsoft.com/en-us/graph/api/resources/calendar?view=graph-rest-1.0
@@ -18,10 +18,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class OutlookCalendarCalendarChunk(BaseChunk):
+class OutlookCalendarCalendarEntity(BaseEntity):
     """Schema for an Outlook Calendar object.
 
     The inherited entity_id field stores the calendar's Microsoft Graph ID.
@@ -49,7 +49,7 @@ class OutlookCalendarCalendarChunk(BaseChunk):
     )
 
 
-class OutlookCalendarEventChunk(BaseChunk):
+class OutlookCalendarEventEntity(BaseEntity):
     """Schema for an Outlook Calendar Event object.
 
     The inherited entity_id field stores the event's Microsoft Graph ID.
@@ -62,8 +62,7 @@ class OutlookCalendarEventChunk(BaseChunk):
     start_datetime: Optional[datetime] = Field(
         None,
         description=(
-            "The date/time when the event starts, in UTC. "
-            "Derived from 'start.dateTime' if present."
+            "The date/time when the event starts, in UTC. Derived from 'start.dateTime' if present."
         ),
     )
     start_timezone: Optional[str] = Field(
@@ -72,7 +71,7 @@ class OutlookCalendarEventChunk(BaseChunk):
     end_datetime: Optional[datetime] = Field(
         None,
         description=(
-            "The date/time when the event ends, in UTC. " "Derived from 'end.dateTime' if present."
+            "The date/time when the event ends, in UTC. Derived from 'end.dateTime' if present."
         ),
     )
     end_timezone: Optional[str] = Field(
@@ -135,8 +134,7 @@ class OutlookCalendarEventChunk(BaseChunk):
     series_master_id: Optional[str] = Field(
         None,
         description=(
-            "If this is part of a recurring series, specifies the ID of the master "
-            "recurring event."
+            "If this is part of a recurring series, specifies the ID of the master recurring event."
         ),
     )
     recurrence: Optional[Dict[str, Any]] = Field(

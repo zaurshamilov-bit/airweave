@@ -9,7 +9,6 @@ from .api_key import (
     APIKeyWithPlainKey,
 )
 from .chat import Chat, ChatCreate, ChatMessage, ChatMessageCreate, ChatUpdate
-from .chunk import Chunk, ChunkCreate, ChunkInDBBase, ChunkUpdate
 from .connection import Connection, ConnectionCreate, ConnectionInDBBase, ConnectionUpdate
 from .dag import (
     DagEdge,
@@ -34,6 +33,7 @@ from .embedding_model import (
     EmbeddingModelUpdate,
     EmbeddingModelWithConfigFields,
 )
+from .entity import Entity, EntityCreate, EntityInDBBase, EntityUpdate
 from .entity_definition import (
     EntityDefinition,
     EntityDefinitionCreate,

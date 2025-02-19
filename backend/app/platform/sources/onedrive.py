@@ -1,8 +1,8 @@
 """OneDrive source implementation (read-only).
 
 Retrieves data from a user's OneDrive or SharePoint document library, including:
- - Drives (OneDriveDriveChunk objects)
- - DriveItems (OneDriveDriveItemChunk objects) for each drive
+ - Drives (OneDriveDriveEntity objects)
+ - DriveItems (OneDriveDriveItemEntity objects) for each drive
 
 This follows a hierarchical pattern (similar to Todoist or Asana):
     Drive
@@ -10,7 +10,7 @@ This follows a hierarchical pattern (similar to Todoist or Asana):
           └── DriveItem (file/folder)
               └── ...
 
-We fetch and yield these as chunk schemas defined in chunks/onedrive.py.
+We fetch and yield these as entity schemas defined in entities/onedrive.py.
 
 Reference (Graph API):
   https://learn.microsoft.com/en-us/graph/api/drive-list?view=graph-rest-1.0
@@ -23,9 +23,9 @@ from typing import AsyncGenerator, Dict, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import Breadcrumb
-from app.platform.chunks.onedrive import OneDriveDriveChunk, OneDriveDriveItemChunk
 from app.platform.decorators import source
+from app.platform.entities._base import Breadcrumb
+from app.platform.entities.onedrive import OneDriveDriveEntity, OneDriveDriveItemEntity
 from app.platform.sources._base import BaseSource
 
 
@@ -63,15 +63,15 @@ class OneDriveSource(BaseSource):
                 yield drive
             url = data.get("@odata.nextLink")
 
-    async def _generate_drive_chunks(
+    async def _generate_drive_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[OneDriveDriveChunk, None]:
-        """Generate OneDriveDriveChunk objects for each drive."""
+    ) -> AsyncGenerator[OneDriveDriveEntity, None]:
+        """Generate OneDriveDriveEntity objects for each drive."""
         async for drive_obj in self._list_drives(client):
-            yield OneDriveDriveChunk(
+            yield OneDriveDriveEntity(
                 source_name="onedrive",
                 entity_id=drive_obj["id"],
-                breadcrumbs=[],  # top-level chunk
+                breadcrumbs=[],  # top-level entity
                 drive_type=drive_obj.get("driveType"),
                 owner=drive_obj.get("owner"),
                 quota=drive_obj.get("quota"),
@@ -117,10 +117,10 @@ class OneDriveSource(BaseSource):
             if next_link:
                 queue.append(next_link)
 
-    async def _generate_drive_item_chunks(
+    async def _generate_drive_item_entities(
         self, client: httpx.AsyncClient, drive_id: str, drive_name: str
-    ) -> AsyncGenerator[OneDriveDriveItemChunk, None]:
-        """For the specified drive, yield a OneDriveDriveItemChunk for each item.
+    ) -> AsyncGenerator[OneDriveDriveItemEntity, None]:
+        """For the specified drive, yield a OneDriveDriveItemEntity for each item.
 
         We recursively enumerate folders and files.
         """
@@ -128,10 +128,10 @@ class OneDriveSource(BaseSource):
         drive_breadcrumb = Breadcrumb(entity_id=drive_id, name=drive_name, type="drive")
 
         async for item in self._list_drive_items(client, drive_id):
-            # Build a chunk for each item
+            # Build a entity for each item
             # (Breadcrumbs can optionally be extended if you want each folder in path,
             #  though here we only store drive-level breadcrumb for simplicity.)
-            yield OneDriveDriveItemChunk(
+            yield OneDriveDriveItemEntity(
                 source_name="onedrive",
                 entity_id=item["id"],
                 breadcrumbs=[drive_breadcrumb],  # Minimal: just the drive-level
@@ -148,26 +148,26 @@ class OneDriveSource(BaseSource):
                 web_url=item.get("webUrl"),
             )
 
-    async def generate_chunks(self) -> AsyncGenerator[object, None]:
-        """Generate all OneDrive chunks.
+    async def generate_entities(self) -> AsyncGenerator[object, None]:
+        """Generate all OneDrive entities.
 
-        Yields chunks in the following order:
-          - OneDriveDriveChunk for each drive
-          - OneDriveDriveItemChunk for each item in each drive (folders/files).
+        Yields entities in the following order:
+          - OneDriveDriveEntity for each drive
+          - OneDriveDriveItemEntity for each item in each drive (folders/files).
         """
         async with httpx.AsyncClient() as client:
-            # 1) Yield drive chunks
+            # 1) Yield drive entities
             #    Note: We'll also collect them in memory to enumerate items from each drive
             drives = []
-            async for drive_chunk in self._generate_drive_chunks(client):
-                yield drive_chunk
-                drives.append(drive_chunk)
+            async for drive_entity in self._generate_drive_entities(client):
+                yield drive_entity
+                drives.append(drive_entity)
 
-            # 2) For each drive, yield item chunks
-            for drive_chunk in drives:
-                drive_id = drive_chunk.entity_id
-                drive_name = drive_chunk.drive_type or drive_chunk.entity_id  # fallback
-                async for item_chunk in self._generate_drive_item_chunks(
+            # 2) For each drive, yield item entities
+            for drive_entity in drives:
+                drive_id = drive_entity.entity_id
+                drive_name = drive_entity.drive_type or drive_entity.entity_id  # fallback
+                async for item_entity in self._generate_drive_item_entities(
                     client, drive_id, drive_name
                 ):
-                    yield item_chunk
+                    yield item_entity

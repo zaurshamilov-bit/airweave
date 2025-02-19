@@ -1,6 +1,6 @@
 """Monday source implementation.
 
-Retrieves data from Monday.com's GraphQL API and yields chunk objects for Boards,
+Retrieves data from Monday.com's GraphQL API and yields entity objects for Boards,
 Groups, Columns, Items, Subitems, and Updates. Uses a stepwise pattern to issue
 GraphQL queries for retrieving these objects.
 """
@@ -10,16 +10,16 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, Breadcrumb
-from app.platform.chunks.monday import (
-    MondayBoardChunk,
-    MondayColumnChunk,
-    MondayGroupChunk,
-    MondayItemChunk,
-    MondaySubitemChunk,
-    MondayUpdateChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities.monday import (
+    MondayBoardEntity,
+    MondayColumnEntity,
+    MondayGroupEntity,
+    MondayItemEntity,
+    MondaySubitemEntity,
+    MondayUpdateEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -27,7 +27,7 @@ from app.platform.sources._base import BaseSource
 class MondaySource(BaseSource):
     """Monday source implementation.
 
-    Connects to Monday.com using GraphQL queries to retrieve and chunk various
+    Connects to Monday.com using GraphQL queries to retrieve and entity various
     data types including boards, groups, columns, items, subitems, and updates.
     """
 
@@ -80,10 +80,10 @@ class MondaySource(BaseSource):
             pass
         return data.get("data", {})
 
-    async def _generate_board_chunks(
+    async def _generate_board_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[MondayBoardChunk, None]:
-        """Generate MondayBoardChunk objects by querying boards."""
+    ) -> AsyncGenerator[MondayBoardEntity, None]:
+        """Generate MondayBoardEntity objects by querying boards."""
         query = """
         query {
           boards (limit: 100) {
@@ -114,7 +114,7 @@ class MondaySource(BaseSource):
         boards = result.get("boards", [])
 
         for board in boards:
-            yield MondayBoardChunk(
+            yield MondayBoardEntity(
                 source_name="monday",
                 entity_id=str(board["id"]),
                 board_id=str(board["id"]),
@@ -129,13 +129,13 @@ class MondaySource(BaseSource):
                 columns=board.get("columns", []),
             )
 
-    async def _generate_group_chunks(
+    async def _generate_group_entities(
         self,
         client: httpx.AsyncClient,
         board_id: str,
         board_breadcrumb: Breadcrumb,
-    ) -> AsyncGenerator[MondayGroupChunk, None]:
-        """Generate MondayGroupChunk objects by querying groups for a specific board."""
+    ) -> AsyncGenerator[MondayGroupEntity, None]:
+        """Generate MondayGroupEntity objects by querying groups for a specific board."""
         query = """
         query ($boardIds: [Int]) {
           boards (ids: $boardIds) {
@@ -156,7 +156,7 @@ class MondaySource(BaseSource):
 
         groups = boards_data[0].get("groups", [])
         for group in groups:
-            yield MondayGroupChunk(
+            yield MondayGroupEntity(
                 source_name="monday",
                 entity_id=f"{board_id}-{group['id']}",  # or just group["id"]
                 breadcrumbs=[board_breadcrumb],
@@ -168,13 +168,13 @@ class MondaySource(BaseSource):
                 items=[],  # You could populate items in a separate step if desired
             )
 
-    async def _generate_column_chunks(
+    async def _generate_column_entities(
         self,
         client: httpx.AsyncClient,
         board_id: str,
         board_breadcrumb: Breadcrumb,
-    ) -> AsyncGenerator[MondayColumnChunk, None]:
-        """Generate MondayColumnChunk objects by querying columns for a specific board.
+    ) -> AsyncGenerator[MondayColumnEntity, None]:
+        """Generate MondayColumnEntity objects by querying columns for a specific board.
 
         (You could also retrieve columns from the board query, but here's a separate example.)
         """
@@ -197,7 +197,7 @@ class MondaySource(BaseSource):
 
         columns = boards_data[0].get("columns", [])
         for col in columns:
-            yield MondayColumnChunk(
+            yield MondayColumnEntity(
                 source_name="monday",
                 entity_id=f"{board_id}-{col['id']}",
                 breadcrumbs=[board_breadcrumb],
@@ -207,13 +207,13 @@ class MondaySource(BaseSource):
                 column_type=col.get("type"),
             )
 
-    async def _generate_item_chunks(
+    async def _generate_item_entities(
         self,
         client: httpx.AsyncClient,
         board_id: str,
         board_breadcrumb: Breadcrumb,
-    ) -> AsyncGenerator[MondayItemChunk, None]:
-        """Generate MondayItemChunk objects for items on a given board.
+    ) -> AsyncGenerator[MondayItemEntity, None]:
+        """Generate MondayItemEntity objects for items on a given board.
 
         We'll retrieve items via a GraphQL query that includes item fields.
         """
@@ -250,7 +250,7 @@ class MondaySource(BaseSource):
 
         items = boards_data[0].get("items", [])
         for item in items:
-            yield MondayItemChunk(
+            yield MondayItemEntity(
                 source_name="monday",
                 entity_id=str(item["id"]),
                 breadcrumbs=[board_breadcrumb],
@@ -265,13 +265,13 @@ class MondaySource(BaseSource):
                 column_values=item.get("column_values", []),
             )
 
-    async def _generate_subitem_chunks(
+    async def _generate_subitem_entities(
         self,
         client: httpx.AsyncClient,
         parent_item_id: str,
         item_breadcrumbs: List[Breadcrumb],
-    ) -> AsyncGenerator[MondaySubitemChunk, None]:
-        """Generate MondaySubitemChunk objects for subitems nested under a given item.
+    ) -> AsyncGenerator[MondaySubitemEntity, None]:
+        """Generate MondaySubitemEntity objects for subitems nested under a given item.
 
         Typically, subitems are retrieved separately since they're on a dedicated 'subitems' board.
         """
@@ -311,7 +311,7 @@ class MondaySource(BaseSource):
 
         subitems = items_data[0].get("subitems", [])
         for subitem in subitems:
-            yield MondaySubitemChunk(
+            yield MondaySubitemEntity(
                 source_name="monday",
                 entity_id=str(subitem["id"]),
                 breadcrumbs=item_breadcrumbs,
@@ -327,14 +327,14 @@ class MondaySource(BaseSource):
                 column_values=subitem.get("column_values", []),
             )
 
-    async def _generate_update_chunks(
+    async def _generate_update_entities(
         self,
         client: httpx.AsyncClient,
         board_id: str,
         item_id: Optional[str] = None,
         item_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[MondayUpdateChunk, None]:
-        """Generate MondayUpdateChunk objects for a given board or item.
+    ) -> AsyncGenerator[MondayUpdateEntity, None]:
+        """Generate MondayUpdateEntity objects for a given board or item.
 
         If item_id is provided, we fetch updates for a specific item; otherwise,
         board-level updates.
@@ -393,7 +393,7 @@ class MondaySource(BaseSource):
             updates = boards_data[0].get("updates", [])
 
         for upd in updates:
-            yield MondayUpdateChunk(
+            yield MondayUpdateEntity(
                 source_name="monday",
                 entity_id=str(upd["id"]),
                 breadcrumbs=item_breadcrumbs or [],
@@ -406,10 +406,10 @@ class MondaySource(BaseSource):
                 assets=upd.get("assets", []),
             )
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all Monday.com chunks in a style similar to other connectors.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all Monday.com entities in a style similar to other connectors.
 
-        Yields Monday.com chunks in the following order:
+        Yields Monday.com entities in the following order:
             - Boards
             - Groups per board
             - Columns per board
@@ -419,60 +419,60 @@ class MondaySource(BaseSource):
         """
         async with httpx.AsyncClient() as client:
             # 1) Boards
-            async for board_chunk in self._generate_board_chunks(client):
-                yield board_chunk
+            async for board_entity in self._generate_board_entities(client):
+                yield board_entity
 
                 board_breadcrumb = Breadcrumb(
-                    entity_id=board_chunk.board_id,
-                    name=board_chunk.name or "",
+                    entity_id=board_entity.board_id,
+                    name=board_entity.name or "",
                     type="board",
                 )
 
                 # 2) Groups
-                async for group_chunk in self._generate_group_chunks(
-                    client, board_chunk.board_id, board_breadcrumb
+                async for group_entity in self._generate_group_entities(
+                    client, board_entity.board_id, board_breadcrumb
                 ):
-                    yield group_chunk
+                    yield group_entity
 
                 # 3) Columns
-                async for column_chunk in self._generate_column_chunks(
-                    client, board_chunk.board_id, board_breadcrumb
+                async for column_entity in self._generate_column_entities(
+                    client, board_entity.board_id, board_breadcrumb
                 ):
-                    yield column_chunk
+                    yield column_entity
 
                 # 4) Items
-                async for item_chunk in self._generate_item_chunks(
-                    client, board_chunk.board_id, board_breadcrumb
+                async for item_entity in self._generate_item_entities(
+                    client, board_entity.board_id, board_breadcrumb
                 ):
-                    yield item_chunk
+                    yield item_entity
 
                     item_breadcrumbs = [
                         board_breadcrumb,
                         Breadcrumb(
-                            entity_id=item_chunk.item_id,
-                            name=item_chunk.name or "",
+                            entity_id=item_entity.item_id,
+                            name=item_entity.name or "",
                             type="item",
                         ),
                     ]
 
                     # 4a) Subitems for each item
-                    async for subitem_chunk in self._generate_subitem_chunks(
-                        client, item_chunk.item_id, item_breadcrumbs
+                    async for subitem_entity in self._generate_subitem_entities(
+                        client, item_entity.item_id, item_breadcrumbs
                     ):
-                        yield subitem_chunk
+                        yield subitem_entity
 
                     # 4b) Updates for each item
-                    async for update_chunk in self._generate_update_chunks(
+                    async for update_entity in self._generate_update_entities(
                         client,
-                        board_chunk.board_id,
-                        item_id=item_chunk.item_id,
+                        board_entity.board_id,
+                        item_id=item_entity.item_id,
                         item_breadcrumbs=item_breadcrumbs,
                     ):
-                        yield update_chunk
+                        yield update_entity
 
                 # 5) Board-level updates (if desired)
                 # (Some users only store item-level updates; you can include or exclude this.)
-                async for update_chunk in self._generate_update_chunks(
-                    client, board_chunk.board_id, item_id=None, item_breadcrumbs=[board_breadcrumb]
+                async for update_entity in self._generate_update_entities(
+                    client, board_entity.board_id, item_id=None, item_breadcrumbs=[board_breadcrumb]
                 ):
-                    yield update_chunk
+                    yield update_entity
