@@ -5,14 +5,14 @@ from typing import AsyncGenerator, Dict, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk
-from app.platform.chunks.intercom import (
-    IntercomCompanyChunk,
-    IntercomContactChunk,
-    IntercomConversationChunk,
-    IntercomTicketChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity
+from app.platform.entities.intercom import (
+    IntercomCompanyEntity,
+    IntercomContactEntity,
+    IntercomConversationEntity,
+    IntercomTicketEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -21,8 +21,8 @@ class IntercomSource(BaseSource):
     """Intercom source implementation.
 
     This connector retrieves data from Intercom objects such as Contacts, Companies,
-    Conversations, and Tickets, then yields them as chunks using their respective
-    Intercom chunk schemas.
+    Conversations, and Tickets, then yields them as entities using their respective
+    Intercom entity schemas.
     """
 
     @classmethod
@@ -48,10 +48,10 @@ class IntercomSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_contact_chunks(
+    async def _generate_contact_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate Contact chunks from Intercom.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate Contact entities from Intercom.
 
         Using the Contacts endpoint:
           GET https://api.intercom.io/contacts
@@ -60,7 +60,7 @@ class IntercomSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for contact in data.get("data", []):
-                yield IntercomContactChunk(
+                yield IntercomContactEntity(
                     source_name="intercom",
                     entity_id=contact.get("id"),
                     role=contact.get("role"),
@@ -79,10 +79,10 @@ class IntercomSource(BaseSource):
             next_link = pages.get("next")
             url = next_link if next_link else None
 
-    async def _generate_company_chunks(
+    async def _generate_company_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate Company chunks from Intercom.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate Company entities from Intercom.
 
         Using the Companies endpoint:
           GET https://api.intercom.io/companies
@@ -91,7 +91,7 @@ class IntercomSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for company in data.get("data", []):
-                yield IntercomCompanyChunk(
+                yield IntercomCompanyEntity(
                     source_name="intercom",
                     entity_id=company.get("id"),
                     name=company.get("name"),
@@ -111,10 +111,10 @@ class IntercomSource(BaseSource):
             next_link = pages.get("next")
             url = next_link if next_link else None
 
-    async def _generate_conversation_chunks(
+    async def _generate_conversation_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate Conversation chunks from Intercom.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate Conversation entities from Intercom.
 
         Using the Conversations endpoint:
           GET https://api.intercom.io/conversations
@@ -123,7 +123,7 @@ class IntercomSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for convo in data.get("data", []):
-                yield IntercomConversationChunk(
+                yield IntercomConversationEntity(
                     source_name="intercom",
                     entity_id=convo.get("id"),
                     conversation_id=convo.get("id", ""),
@@ -139,10 +139,10 @@ class IntercomSource(BaseSource):
             next_link = pages.get("next")
             url = next_link if next_link else None
 
-    async def _generate_ticket_chunks(
+    async def _generate_ticket_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate Ticket chunks from Intercom.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate Ticket entities from Intercom.
 
         Using a hypothetical Tickets endpoint:
           GET https://api.intercom.io/tickets
@@ -153,7 +153,7 @@ class IntercomSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for ticket in data.get("data", []):
-                yield IntercomTicketChunk(
+                yield IntercomTicketEntity(
                     source_name="intercom",
                     entity_id=ticket.get("id"),
                     subject=ticket.get("subject"),
@@ -171,25 +171,25 @@ class IntercomSource(BaseSource):
             next_link = pages.get("next")
             url = next_link if next_link else None
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all chunks from Intercom.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all entities from Intercom.
 
         Yields:
-            Intercom chunks: Contacts, Companies, Conversations, and Tickets.
+            Intercom entities: Contacts, Companies, Conversations, and Tickets.
         """
         async with httpx.AsyncClient() as client:
-            # Yield contact chunks
-            async for contact_chunk in self._generate_contact_chunks(client):
-                yield contact_chunk
+            # Yield contact entities
+            async for contact_entity in self._generate_contact_entities(client):
+                yield contact_entity
 
-            # Yield company chunks
-            async for company_chunk in self._generate_company_chunks(client):
-                yield company_chunk
+            # Yield company entities
+            async for company_entity in self._generate_company_entities(client):
+                yield company_entity
 
-            # Yield conversation chunks
-            async for conversation_chunk in self._generate_conversation_chunks(client):
-                yield conversation_chunk
+            # Yield conversation entities
+            async for conversation_entity in self._generate_conversation_entities(client):
+                yield conversation_entity
 
-            # Yield ticket chunks
-            async for ticket_chunk in self._generate_ticket_chunks(client):
-                yield ticket_chunk
+            # Yield ticket entities
+            async for ticket_entity in self._generate_ticket_entities(client):
+                yield ticket_entity

@@ -10,7 +10,7 @@ from app.core.shared_models import SyncStatus
 from app.models._base import OrganizationBase, UserMixin
 
 if TYPE_CHECKING:
-    from app.models.chunk import Chunk
+    from app.models.entity import Entity
     from app.models.sync_job import SyncJob
 
 
@@ -44,8 +44,8 @@ class Sync(OrganizationBase, UserMixin):
         passive_deletes=True,
     )
 
-    chunks: Mapped[list["Chunk"]] = relationship(
-        "Chunk",
+    entities: Mapped[list["Entity"]] = relationship(
+        "Entity",
         back_populates="sync",
         lazy="noload",
         cascade="all, delete-orphan",

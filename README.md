@@ -35,7 +35,7 @@
 
 ## Overview
 
-Airweave simplifies the process of making your data searchable. Whether you have structured or unstructured data, Airweave helps you break it into processable chunks, store the data in graph and vector databases, and retrieve it via your own **agent** or any **search mechanism**. 
+Airweave simplifies the process of making your data searchable. Whether you have structured or unstructured data, Airweave helps you break it into processable entities, store the data in graph and vector databases, and retrieve it via your own **agent** or any **search mechanism**. 
 
 
 ## Quick Start
@@ -114,9 +114,9 @@ You can configure your own vector database in the app UI or via the API.
 ## Key Features
 - **No code reqired, but extensible**: Users that prefer not to touch any code can make their app searchable in a few clicks
 - **White-Labeled Multi-Tenant Support**: Ideal for SaaS builders, Airweave provides a streamlined OAuth2-based platform for syncing data across multiple tenants while maintaining privacy and security.
-- **Chunk Generators**: Each source (like a database, API, or file system) defines a `async def generate_chunks()` that yields data in a consistent format. You can also define your own.
+- **Entity Generators**: Each source (like a database, API, or file system) defines a `async def generate_entities()` that yields data in a consistent format. You can also define your own.
 - **Automated Sync**: Schedule data synchronization or run on-demand sync jobs.
-- **Versioning & Hashing**: Airweave detects changes in your data via hashing, updating only the modified chunks in the vector store.
+- **Versioning & Hashing**: Airweave detects changes in your data via hashing, updating only the modified entities in the vector store.
 - **Multi-Source Support**: Plug in multiple data sources and unify them into a single queryable layer.
 - **Scalable**: Deploy locally via Docker Compose for development (upcoming: deploy with Kubernetes for production scale)
 
@@ -190,9 +190,9 @@ SMTP_FROM_EMAIL=<your-from-email>
 
 We welcome all contributions! Whether you're fixing a bug, improving documentation, or adding a new feature:
 1. Fork this repository
-2. Create a feature branch: `git checkout -b feature/new-chunk-generator`
-3. Commit changes: `git commit -m "Add new chunk generator for XYZ"`
-4. Push to your fork: `git push origin feature/new-chunk-generator`
+2. Create a feature branch: `git checkout -b feature/new-entity-generator`
+3. Commit changes: `git commit -m "Add new entity generator for XYZ"`
+4. Push to your fork: `git push origin feature/new-entity-generator`
 5. Create a Pull Request: Submit your PR against this repo's main branch.
 
 Please follow the existing code style and conventions. See `CONTRIBUTING.md` for more details.
@@ -201,7 +201,7 @@ Please follow the existing code style and conventions. See `CONTRIBUTING.md` for
 
 ## Roadmap
 
-- **Additional Integrations**: Expand chunk generators for popular SaaS APIs and databases.
+- **Additional Integrations**: Expand entity generators for popular SaaS APIs and databases.
 - **Redis & Worker Queues**: Improved background job processing and caching for large or frequent syncs.
 - **Webhooks**: Trigger syncs on external events (e.g. new data in a database)
 - **Kubernetes Support**: Offer easy Helm charts for production-scale deployments.

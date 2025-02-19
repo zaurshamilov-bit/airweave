@@ -9,13 +9,13 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from app.core.logging import logger
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, Breadcrumb
-from app.platform.chunks.notion import (
-    NotionBlockChunk,
-    NotionDatabaseChunk,
-    NotionPageChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities.notion import (
+    NotionBlockEntity,
+    NotionDatabaseEntity,
+    NotionPageEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -229,8 +229,8 @@ class NotionSource(BaseSource):
             return f"[Page: {block_content.get('title', '')}]"
         return f"[Database: {block_content.get('title', '')}]"
 
-    def _create_database_chunk(self, database: Dict) -> NotionDatabaseChunk:
-        """Create a database chunk from API response."""
+    def _create_database_entity(self, database: Dict) -> NotionDatabaseEntity:
+        """Create a database entity from API response."""
         # Safely extract database title
         title = "Untitled"
         if database.get("title"):
@@ -240,7 +240,7 @@ class NotionSource(BaseSource):
                 if isinstance(first_title, dict):
                     title = first_title.get("plain_text", "Untitled")
 
-        return NotionDatabaseChunk(
+        return NotionDatabaseEntity(
             source_name="notion",
             database_id=database["id"],
             entity_id=database["id"],
@@ -250,8 +250,8 @@ class NotionSource(BaseSource):
             last_edited_time=database.get("last_edited_time"),
         )
 
-    def _create_page_chunk(self, page: Dict, breadcrumbs: List[Breadcrumb]) -> NotionPageChunk:
-        """Create a page chunk from API response."""
+    def _create_page_entity(self, page: Dict, breadcrumbs: List[Breadcrumb]) -> NotionPageEntity:
+        """Create a page entity from API response."""
         parent = page.get("parent", {})
 
         # Safely extract title with proper nesting and fallbacks
@@ -266,7 +266,7 @@ class NotionSource(BaseSource):
             else "Untitled"
         )
 
-        return NotionPageChunk(
+        return NotionPageEntity(
             source_name="notion",
             page_id=page["id"],
             entity_id=page["id"],
@@ -280,13 +280,13 @@ class NotionSource(BaseSource):
             content=None,  # Will be populated from blocks
         )
 
-    def _create_block_chunk(
+    def _create_block_entity(
         self, block: Dict, parent_id: str, breadcrumbs: List[Breadcrumb]
-    ) -> NotionBlockChunk:
-        """Create a block chunk from API response."""
+    ) -> NotionBlockEntity:
+        """Create a block entity from API response."""
         text_content = self._extract_block_content(block)
 
-        return NotionBlockChunk(
+        return NotionBlockEntity(
             source_name="notion",
             block_id=block["id"],
             entity_id=block["id"],
@@ -300,8 +300,8 @@ class NotionSource(BaseSource):
             last_edited_time=block.get("last_edited_time"),
         )
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all chunks from Notion.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all entities from Notion.
 
         Instead of traversing a hierarchy, we use Notion's search endpoint to get:
         1. All databases
@@ -311,8 +311,8 @@ class NotionSource(BaseSource):
         async with httpx.AsyncClient() as client:
             # 1. Get all databases
             async for database in self._search_notion_objects(client, filter_type="database"):
-                database_chunk = self._create_database_chunk(database)
-                yield database_chunk
+                database_entity = self._create_database_entity(database)
+                yield database_entity
 
             # 2. Get all pages
             async for page in self._search_notion_objects(client, filter_type="page"):
@@ -336,30 +336,30 @@ class NotionSource(BaseSource):
                         )
                     )
 
-                page_chunk = self._create_page_chunk(page, breadcrumbs)
-                yield page_chunk
+                page_entity = self._create_page_entity(page, breadcrumbs)
+                yield page_entity
 
                 # 3. Get all blocks for this page
                 page_breadcrumb = Breadcrumb(
-                    entity_id=page["id"], name=page_chunk.title, type="page"
+                    entity_id=page["id"], name=page_entity.title, type="page"
                 )
                 block_breadcrumbs = [*breadcrumbs, page_breadcrumb]
 
                 async for block in self._get_block_children(client, page["id"]):
-                    block_chunk = self._create_block_chunk(block, page["id"], block_breadcrumbs)
-                    yield block_chunk
+                    block_entity = self._create_block_entity(block, page["id"], block_breadcrumbs)
+                    yield block_entity
 
                     # If block has children, get them too
                     if block["has_children"]:
                         block_breadcrumb = Breadcrumb(
                             entity_id=block["id"],
-                            name=block_chunk.text_content or "Block",
+                            name=block_entity.text_content or "Block",
                             type="block",
                         )
                         child_breadcrumbs = [*block_breadcrumbs, block_breadcrumb]
 
                         async for child_block in self._get_block_children(client, block["id"]):
-                            child_chunk = self._create_block_chunk(
+                            child_entity = self._create_block_entity(
                                 child_block, block["id"], child_breadcrumbs
                             )
-                            yield child_chunk
+                            yield child_entity

@@ -6,7 +6,7 @@ Retrieves data from a user's Gmail account in read-only mode:
   - Drafts
 
 Follows the same structure and pattern as other connector implementations
-(e.g., Asana, Todoist, HubSpot). The chunk schemas are defined in chunks/gmail.py.
+(e.g., Asana, Todoist, HubSpot). The entity schemas are defined in entities/gmail.py.
 
 Reference:
   https://developers.google.com/gmail/api/reference/rest
@@ -17,14 +17,14 @@ from typing import AsyncGenerator, List, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, Breadcrumb
-from app.platform.chunks.gmail import (
-    GmailDraftChunk,
-    GmailLabelChunk,
-    GmailMessageChunk,
-    GmailThreadChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities.gmail import (
+    GmailDraftEntity,
+    GmailLabelEntity,
+    GmailMessageEntity,
+    GmailThreadEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -33,7 +33,7 @@ class GmailSource(BaseSource):
     """Gmail source implementation (read-only).
 
     Retrieves and yields Gmail objects (labels, threads, messages, drafts)
-    as chunk schemas defined in chunks/gmail.py.
+    as entity schemas defined in entities/gmail.py.
     """
 
     @classmethod
@@ -52,14 +52,14 @@ class GmailSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_label_chunks(
+    async def _generate_label_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[GmailLabelChunk, None]:
-        """Generate GmailLabelChunk objects."""
+    ) -> AsyncGenerator[GmailLabelEntity, None]:
+        """Generate GmailLabelEntity objects."""
         url = "https://gmail.googleapis.com/gmail/v1/users/me/labels"
         data = await self._get_with_auth(client, url)
         for label in data.get("labels", []):
-            yield GmailLabelChunk(
+            yield GmailLabelEntity(
                 source_name="gmail",
                 entity_id=label["id"],
                 breadcrumbs=[],
@@ -71,12 +71,12 @@ class GmailSource(BaseSource):
                 unread_messages=label.get("messagesUnread", 0),
             )
 
-    async def _generate_thread_chunks(
+    async def _generate_thread_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate GmailThreadChunk objects.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate GmailThreadEntity objects.
 
-        For each thread, generate GmailMessageChunk objects.
+        For each thread, generate GmailMessageEntity objects.
         """
         base_url = "https://gmail.googleapis.com/gmail/v1/users/me/threads"
         params = {"maxResults": 100}
@@ -90,7 +90,7 @@ class GmailSource(BaseSource):
                 detail_url = f"{base_url}/{thread_id}"
                 thread_data = await self._get_with_auth(client, detail_url)
 
-                # Collect top-level fields for the Thread chunk
+                # Collect top-level fields for the Thread entity
                 snippet = thread_data.get("snippet")
                 history_id = thread_data.get("historyId")
                 message_list = thread_data.get("messages", [])
@@ -120,8 +120,8 @@ class GmailSource(BaseSource):
 
                     last_message_date = datetime.utcfromtimestamp(int(last_message_date) / 1000)
 
-                # Create thread chunk and its breadcrumb
-                thread_chunk = GmailThreadChunk(
+                # Create thread entity and its breadcrumb
+                thread_entity = GmailThreadEntity(
                     source_name="gmail",
                     entity_id=thread_id,
                     breadcrumbs=[],  # Thread is top-level, so empty breadcrumbs
@@ -131,7 +131,7 @@ class GmailSource(BaseSource):
                     label_ids=label_ids,
                     last_message_date=last_message_date,
                 )
-                yield thread_chunk
+                yield thread_entity
 
                 # Create thread breadcrumb for messages
                 thread_breadcrumb = Breadcrumb(
@@ -140,14 +140,14 @@ class GmailSource(BaseSource):
                     type="thread",
                 )
 
-                # For each message in the thread, yield a GmailMessageChunk with thread breadcrumb
-                async for message_chunk in self._generate_message_chunks(
+                # For each message in the thread, yield a GmailMessageEntity with thread breadcrumb
+                async for message_entity in self._generate_message_entities(
                     client,
                     message_list=message_list,
                     thread_id=thread_id,
                     thread_breadcrumb=thread_breadcrumb,  # Pass thread breadcrumb
                 ):
-                    yield message_chunk
+                    yield message_entity
 
             # Handle pagination
             next_page_token = data.get("nextPageToken")
@@ -155,14 +155,14 @@ class GmailSource(BaseSource):
                 break
             params["pageToken"] = next_page_token
 
-    async def _generate_message_chunks(  # noqa: C901
+    async def _generate_message_entities(  # noqa: C901
         self,
         client: httpx.AsyncClient,
         message_list: List[dict],
         thread_id: str,
         thread_breadcrumb: Breadcrumb,
-    ) -> AsyncGenerator[GmailMessageChunk, None]:
-        """Generate GmailMessageChunk objects for a list of message references."""
+    ) -> AsyncGenerator[GmailMessageEntity, None]:
+        """Generate GmailMessageEntity objects for a list of message references."""
         from datetime import datetime
 
         for msg in message_list:
@@ -252,7 +252,7 @@ class GmailSource(BaseSource):
                     elif payload.get("mimeType") == "text/html":
                         body_html = decoded_body
 
-            yield GmailMessageChunk(
+            yield GmailMessageEntity(
                 source_name="gmail",
                 entity_id=msg_id,
                 breadcrumbs=[thread_breadcrumb],  # Include thread in breadcrumb path
@@ -271,10 +271,10 @@ class GmailSource(BaseSource):
                 size_estimate=msg.get("sizeEstimate"),
             )
 
-    async def _generate_draft_chunks(  # noqa: C901
+    async def _generate_draft_entities(  # noqa: C901
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[GmailDraftChunk, None]:
-        """Generate GmailDraftChunk objects."""
+    ) -> AsyncGenerator[GmailDraftEntity, None]:
+        """Generate GmailDraftEntity objects."""
         base_url = "https://gmail.googleapis.com/gmail/v1/users/me/drafts"
         params = {"maxResults": 100}
 
@@ -393,7 +393,7 @@ class GmailSource(BaseSource):
                     )
                     breadcrumbs = [thread_breadcrumb]
 
-                yield GmailDraftChunk(
+                yield GmailDraftEntity(
                     source_name="gmail",
                     entity_id=draft_id,
                     breadcrumbs=breadcrumbs,  # Include thread breadcrumb if draft is part of thread
@@ -415,17 +415,17 @@ class GmailSource(BaseSource):
                 break
             params["pageToken"] = next_page_token
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all Gmail chunks: Labels, Threads (Messages), Drafts."""
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all Gmail entities: Labels, Threads (Messages), Drafts."""
         async with httpx.AsyncClient() as client:
-            # 1) Generate label chunks
-            async for label_chunk in self._generate_label_chunks(client):
-                yield label_chunk
+            # 1) Generate label entities
+            async for label_entity in self._generate_label_entities(client):
+                yield label_entity
 
-            # 2) Generate thread chunks (each yields one thread chunk + message chunks)
-            async for thread_or_msg_chunk in self._generate_thread_chunks(client):
-                yield thread_or_msg_chunk
+            # 2) Generate thread entities (each yields one thread entity + message entities)
+            async for thread_or_msg_entity in self._generate_thread_entities(client):
+                yield thread_or_msg_entity
 
-            # 3) Generate draft chunks
-            async for draft_chunk in self._generate_draft_chunks(client):
-                yield draft_chunk
+            # 3) Generate draft entities
+            async for draft_entity in self._generate_draft_entities(client):
+                yield draft_entity

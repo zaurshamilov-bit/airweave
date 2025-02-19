@@ -5,16 +5,16 @@ from typing import AsyncGenerator, Dict, List, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, Breadcrumb
-from app.platform.chunks.trello import (
-    TrelloActionChunk,
-    TrelloBoardChunk,
-    TrelloCardChunk,
-    TrelloListChunk,
-    TrelloMemberChunk,
-    TrelloOrganizationChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities.trello import (
+    TrelloActionEntity,
+    TrelloBoardEntity,
+    TrelloCardEntity,
+    TrelloListEntity,
+    TrelloMemberEntity,
+    TrelloOrganizationEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -23,8 +23,8 @@ class TrelloSource(BaseSource):
     """Trello source implementation.
 
     This connector retrieves data from Trello objects such as Organizations,
-    Boards, Lists, Cards, Members, and Actions, then yields them as chunks using
-    their respective Trello chunk schemas. This version also utilizes the
+    Boards, Lists, Cards, Members, and Actions, then yields them as entities using
+    their respective Trello entity schemas. This version also utilizes the
     'breadcrumb' pattern to reflect the hierarchy:
       Organization → Board → List → Card
     """
@@ -58,16 +58,16 @@ class TrelloSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_organization_chunks(
+    async def _generate_organization_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate TrelloOrganizationChunk objects for each organization (workspace).
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate TrelloOrganizationEntity objects for each organization (workspace).
 
         GET /members/me/organizations
         """
         data = await self._get_with_auth(client, "/members/me/organizations")
         for org in data:
-            yield TrelloOrganizationChunk(
+            yield TrelloOrganizationEntity(
                 source_name="trello",
                 entity_id=org["id"],
                 breadcrumbs=[],  # Top-level, no parent
@@ -77,13 +77,13 @@ class TrelloSource(BaseSource):
                 website=org.get("website"),
             )
 
-    async def _generate_board_chunks(
+    async def _generate_board_entities(
         self,
         client: httpx.AsyncClient,
         org_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate TrelloBoardChunk objects for each board under a given organization.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate TrelloBoardEntity objects for each board under a given organization.
 
         GET /organizations/{id}/boards
         """
@@ -98,7 +98,7 @@ class TrelloSource(BaseSource):
                 Breadcrumb(entity_id=board["id"], name=board.get("name"), type="board")
             )
 
-            yield TrelloBoardChunk(
+            yield TrelloBoardEntity(
                 source_name="trello",
                 entity_id=board["id"],
                 breadcrumbs=board_breadcrumbs,
@@ -112,13 +112,13 @@ class TrelloSource(BaseSource):
                 date_last_activity=board.get("dateLastActivity"),
             )
 
-    async def _generate_list_chunks(
+    async def _generate_list_entities(
         self,
         client: httpx.AsyncClient,
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate TrelloListChunk objects for each list in a board.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate TrelloListEntity objects for each list in a board.
 
         GET /boards/{id}/lists
         """
@@ -133,7 +133,7 @@ class TrelloSource(BaseSource):
                 Breadcrumb(entity_id=lst["id"], name=lst.get("name"), type="list")
             )
 
-            yield TrelloListChunk(
+            yield TrelloListEntity(
                 source_name="trello",
                 entity_id=lst["id"],
                 breadcrumbs=list_breadcrumbs,
@@ -143,13 +143,13 @@ class TrelloSource(BaseSource):
                 subscribed=lst.get("subscribed", False),
             )
 
-    async def _generate_card_chunks(
+    async def _generate_card_entities(
         self,
         client: httpx.AsyncClient,
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate TrelloCardChunk objects for each card in a board.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate TrelloCardEntity objects for each card in a board.
 
         GET /boards/{id}/cards
         """
@@ -168,7 +168,7 @@ class TrelloSource(BaseSource):
                 Breadcrumb(entity_id=card["id"], name=card.get("name"), type="card")
             )
 
-            yield TrelloCardChunk(
+            yield TrelloCardEntity(
                 source_name="trello",
                 entity_id=card["id"],
                 breadcrumbs=card_breadcrumbs,
@@ -183,13 +183,13 @@ class TrelloSource(BaseSource):
                 url=card.get("url"),
             )
 
-    async def _generate_member_chunks(
+    async def _generate_member_entities(
         self,
         client: httpx.AsyncClient,
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate TrelloMemberChunk objects for each member of a board.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate TrelloMemberEntity objects for each member of a board.
 
         GET /boards/{id}/members
         """
@@ -204,7 +204,7 @@ class TrelloSource(BaseSource):
                 Breadcrumb(entity_id=member["id"], name=member.get("fullName"), type="member")
             )
 
-            yield TrelloMemberChunk(
+            yield TrelloMemberEntity(
                 source_name="trello",
                 entity_id=member["id"],
                 breadcrumbs=member_breadcrumbs,
@@ -217,13 +217,13 @@ class TrelloSource(BaseSource):
                 boards=member.get("idBoards", []),
             )
 
-    async def _generate_action_chunks(
+    async def _generate_action_entities(
         self,
         client: httpx.AsyncClient,
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate TrelloActionChunk objects for a board.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate TrelloActionEntity objects for a board.
 
         GET /boards/{id}/actions
         """
@@ -239,7 +239,7 @@ class TrelloSource(BaseSource):
                 Breadcrumb(entity_id=action["id"], name=action.get("type"), type="action")
             )
 
-            yield TrelloActionChunk(
+            yield TrelloActionEntity(
                 source_name="trello",
                 entity_id=action["id"],
                 breadcrumbs=action_breadcrumbs,
@@ -249,57 +249,57 @@ class TrelloSource(BaseSource):
                 data=action.get("data"),
             )
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all chunks from Trello.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all entities from Trello.
 
         Organizations, Boards, Lists, Cards, Members, and Actions.
         This version includes a breadcrumb path to reflect the hierarchical
         structure: Organization → Board → List → Card, etc.
         """
         async with httpx.AsyncClient() as client:
-            # Yield all organization (workspace) chunks
-            async for org_chunk in self._generate_organization_chunks(client):
-                yield org_chunk
+            # Yield all organization (workspace) entities
+            async for org_entity in self._generate_organization_entities(client):
+                yield org_entity
 
                 # Build the breadcrumb for the organization
                 org_breadcrumb = Breadcrumb(
-                    entity_id=org_chunk.entity_id,
-                    name=org_chunk.display_name or org_chunk.name,
+                    entity_id=org_entity.entity_id,
+                    name=org_entity.display_name or org_entity.name,
                     type="organization",
                 )
 
                 # For each organization, yield boards
-                async for board_chunk in self._generate_board_chunks(
-                    client, org_chunk.entity_id, [org_breadcrumb]
+                async for board_entity in self._generate_board_entities(
+                    client, org_entity.entity_id, [org_breadcrumb]
                 ):
-                    yield board_chunk
+                    yield board_entity
 
                     # Now build board breadcrumbs
-                    board_breadcrumbs = board_chunk.breadcrumbs
+                    board_breadcrumbs = board_entity.breadcrumbs
 
                     # Yield lists for each board
-                    async for list_chunk in self._generate_list_chunks(
-                        client, board_chunk.entity_id, board_breadcrumbs
+                    async for list_entity in self._generate_list_entities(
+                        client, board_entity.entity_id, board_breadcrumbs
                     ):
-                        yield list_chunk
+                        yield list_entity
 
                         # If you want to generate cards per-list, you could do it here.
                         # But as an example, we generate all board cards in one pass below.
 
                     # Yield cards for each board (not per-list, but per-board)
-                    async for card_chunk in self._generate_card_chunks(
-                        client, board_chunk.entity_id, board_breadcrumbs
+                    async for card_entity in self._generate_card_entities(
+                        client, board_entity.entity_id, board_breadcrumbs
                     ):
-                        yield card_chunk
+                        yield card_entity
 
                     # Yield members for each board
-                    async for member_chunk in self._generate_member_chunks(
-                        client, board_chunk.entity_id, board_breadcrumbs
+                    async for member_entity in self._generate_member_entities(
+                        client, board_entity.entity_id, board_breadcrumbs
                     ):
-                        yield member_chunk
+                        yield member_entity
 
                     # Yield actions for each board
-                    async for action_chunk in self._generate_action_chunks(
-                        client, board_chunk.entity_id, board_breadcrumbs
+                    async for action_entity in self._generate_action_entities(
+                        client, board_entity.entity_id, board_breadcrumbs
                     ):
-                        yield action_chunk
+                        yield action_entity

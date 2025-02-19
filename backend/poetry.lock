@@ -3558,17 +3558,17 @@ files = [
 
 [package.dependencies]
 audioop-lts = {version = "*", markers = "python_version >= \"3.13\""}
-standard-chunk = {version = "*", markers = "python_version >= \"3.13\""}
+standard-entity = {version = "*", markers = "python_version >= \"3.13\""}
 
 [[package]]
-name = "standard-chunk"
+name = "standard-entity"
 version = "3.13.0"
-description = "Standard library chunk redistribution. \"dead battery\"."
+description = "Standard library entity redistribution. \"dead battery\"."
 optional = false
 python-versions = "*"
 files = [
-    {file = "standard_chunk-3.13.0-py3-none-any.whl", hash = "sha256:17880a26c285189c644bd5bd8f8ed2bdb795d216e3293e6dbe55bbd848e2982c"},
-    {file = "standard_chunk-3.13.0.tar.gz", hash = "sha256:4ac345d37d7e686d2755e01836b8d98eda0d1a3ee90375e597ae43aaf064d654"},
+    {file = "standard_entity-3.13.0-py3-none-any.whl", hash = "sha256:17880a26c285189c644bd5bd8f8ed2bdb795d216e3293e6dbe55bbd848e2982c"},
+    {file = "standard_entity-3.13.0.tar.gz", hash = "sha256:4ac345d37d7e686d2755e01836b8d98eda0d1a3ee90375e597ae43aaf064d654"},
 ]
 
 [[package]]

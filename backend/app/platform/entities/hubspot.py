@@ -1,17 +1,17 @@
-"""HubSpot chunk schemas.
+"""HubSpot entity schemas.
 
-Based on the HubSpot CRM API reference, we define chunk schemas for common
+Based on the HubSpot CRM API reference, we define entity schemas for common
 HubSpot objects like Contacts, Companies, Deals, and Tickets.
 """
 
 from datetime import datetime
 from typing import Optional
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class HubspotContactChunk(BaseChunk):
-    """Schema for HubSpot contact chunks."""
+class HubspotContactEntity(BaseEntity):
+    """Schema for HubSpot contact entities."""
 
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -23,8 +23,8 @@ class HubspotContactChunk(BaseChunk):
     archived: bool = False
 
 
-class HubspotCompanyChunk(BaseChunk):
-    """Schema for HubSpot company chunks."""
+class HubspotCompanyEntity(BaseEntity):
+    """Schema for HubSpot company entities."""
 
     name: Optional[str] = None
     domain: Optional[str] = None
@@ -39,8 +39,8 @@ class HubspotCompanyChunk(BaseChunk):
     archived: bool = False
 
 
-class HubspotDealChunk(BaseChunk):
-    """Schema for HubSpot deal chunks."""
+class HubspotDealEntity(BaseEntity):
+    """Schema for HubSpot deal entities."""
 
     deal_name: Optional[str] = None
     amount: Optional[float] = None
@@ -52,8 +52,8 @@ class HubspotDealChunk(BaseChunk):
     archived: bool = False
 
 
-class HubspotTicketChunk(BaseChunk):
-    """Schema for HubSpot ticket chunks."""
+class HubspotTicketEntity(BaseEntity):
+    """Schema for HubSpot ticket entities."""
 
     subject: Optional[str] = None
     content: Optional[str] = None

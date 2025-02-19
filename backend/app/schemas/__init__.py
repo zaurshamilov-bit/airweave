@@ -9,7 +9,6 @@ from .api_key import (
     APIKeyWithPlainKey,
 )
 from .chat import Chat, ChatCreate, ChatMessage, ChatMessageCreate, ChatUpdate
-from .chunk import Chunk, ChunkCreate, ChunkInDBBase, ChunkUpdate
 from .connection import Connection, ConnectionCreate, ConnectionInDBBase, ConnectionUpdate
 from .destination import (
     Destination,
@@ -25,6 +24,7 @@ from .embedding_model import (
     EmbeddingModelUpdate,
     EmbeddingModelWithConfigFields,
 )
+from .entity import Entity, EntityCreate, EntityInDBBase, EntityUpdate
 from .integration_credential import (
     IntegrationCredential,
     IntegrationCredentialCreate,

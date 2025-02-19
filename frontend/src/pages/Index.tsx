@@ -25,9 +25,9 @@ const Index = () => {
               <div className="p-4 rounded-full bg-primary-100 mb-6">
                 <Server className="h-8 w-8 text-primary-400" />
               </div>
-              <h3 className="text-xl font-semibold mb-4">Chunk</h3>
+              <h3 className="text-xl font-semibold mb-4">Entity</h3>
               <p className="text-center text-muted-foreground">
-                Process and split your data into optimized chunks for efficient vector embedding generation.
+                Process and split your data into optimized entities for efficient vector embedding generation.
               </p>
             </div>
             
@@ -37,7 +37,7 @@ const Index = () => {
               </div>
               <h3 className="text-xl font-semibold mb-4">Load</h3>
               <p className="text-center text-muted-foreground">
-                Transform chunks into vector embeddings and load them into your preferred vector database.
+                Transform entities into vector embeddings and load them into your preferred vector database.
               </p>
             </div>
           </div>

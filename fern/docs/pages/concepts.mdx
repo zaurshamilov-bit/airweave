@@ -70,36 +70,36 @@ You can either use the native Weaviate database, or connect to an existing datab
 </Frame>
 
 
-## Chunks
+## Entities
 
-Chunks are the fundamental building blocks that power Airweave's search
+Entities are the fundamental building blocks that power Airweave's search
 capabilities. They provide a standardized way to represent information across
 different platforms and integrations, making your data uniformly searchable.
 
 <Note>
-Chunks are the smallest unit of data in Airweave. Every chunk has an **entity_id** and belongs to a **sync job**, which in turn belongs to a <a href="#synchronization">sync</a>.
-During ingestion, chunks are hashed and version-tracked in the Airweave database. This allows for efficient deduplication and change detection.
+Entities are the smallest unit of data in Airweave. Every entity has an **entity_id** and belongs to a **sync job**, which in turn belongs to a <a href="#synchronization">sync</a>.
+During ingestion, entities are hashed and version-tracked in the Airweave database. This allows for efficient deduplication and change detection.
 </Note>
 
 #### Core Structure
 
-Every chunk in Airweave inherits from a base structure that ensures consistency and searchability:
+Every entity in Airweave inherits from a base structure that ensures consistency and searchability:
 
-<CodeBlock title="Base Chunk Structure">
+<CodeBlock title="Base Entity Structure">
 ```python 
-class BaseChunk(BaseModel): 
-  """Base class for all chunks."""
+class BaseEntity(BaseModel): 
+  """Base class for all entities."""
   entity_id: str # Unique identifier from platform
   breadcrumbs: list[Breadcrumb] # Tracks ancestry/hierarchy
 ```
 </CodeBlock>
 
-These chunks are extended by platform-specific chunks:
+These entities are extended by platform-specific entities:
 
-<CodeBlock title="Slack Message Chunk">
+<CodeBlock title="Slack Message Entity">
 ```python
-class SlackMessageChunk(BaseChunk):
-  """Schema for Slack message chunks."""
+class SlackMessageEntity(BaseEntity):
+  """Schema for Slack message entities."""
 
   channel_id: str
   user_id: Optional[str] = None

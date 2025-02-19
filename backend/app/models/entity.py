@@ -1,4 +1,4 @@
-"""Chunk model."""
+"""Entity model."""
 
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -13,16 +13,16 @@ if TYPE_CHECKING:
     from app.models.sync_job import SyncJob
 
 
-class Chunk(OrganizationBase):
-    """Chunk model."""
+class Entity(OrganizationBase):
+    """Entity model."""
 
-    __tablename__ = "chunk"
+    __tablename__ = "entity"
 
     sync_job_id: Mapped[UUID] = mapped_column(
-        ForeignKey("sync_job.id", ondelete="CASCADE", name="fk_chunk_sync_job_id"), nullable=False
+        ForeignKey("sync_job.id", ondelete="CASCADE", name="fk_entity_sync_job_id"), nullable=False
     )
     sync_id: Mapped[UUID] = mapped_column(
-        ForeignKey("sync.id", ondelete="CASCADE", name="fk_chunk_sync_id"), nullable=False
+        ForeignKey("sync.id", ondelete="CASCADE", name="fk_entity_sync_id"), nullable=False
     )
     entity_id: Mapped[str] = mapped_column(String, nullable=False)
     hash: Mapped[str] = mapped_column(String, nullable=False)
@@ -30,13 +30,13 @@ class Chunk(OrganizationBase):
     # Add back references
     sync_job: Mapped["SyncJob"] = relationship(
         "SyncJob",
-        back_populates="chunks",
+        back_populates="entities",
         lazy="noload",
     )
 
     sync: Mapped["Sync"] = relationship(
         "Sync",
-        back_populates="chunks",
+        back_populates="entities",
         lazy="noload",
     )
 

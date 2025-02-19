@@ -4,7 +4,7 @@ Retrieves data from a user's Outlook/Microsoft 365 Calendars via Microsoft Graph
   - Calendars (GET /me/calendars)
   - Events (GET /me/calendars/{calendar_id}/events)
 
-The chunk schemas are defined in chunks/outlook_calendar.py.
+The entity schemas are defined in entities/outlook_calendar.py.
 
 Reference:
     https://learn.microsoft.com/en-us/graph/api/resources/calendar?view=graph-rest-1.0
@@ -17,12 +17,12 @@ from typing import Any, AsyncGenerator, Dict, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, Breadcrumb
-from app.platform.chunks.outlook_calendar import (
-    OutlookCalendarCalendarChunk,
-    OutlookCalendarEventChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities.outlook_calendar import (
+    OutlookCalendarCalendarEntity,
+    OutlookCalendarEventEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -52,10 +52,10 @@ class OutlookCalendarSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_calendar_chunks(
+    async def _generate_calendar_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[OutlookCalendarCalendarChunk, None]:
-        """Yield OutlookCalendarCalendarChunk objects for each calendar in the user's account.
+    ) -> AsyncGenerator[OutlookCalendarCalendarEntity, None]:
+        """Yield OutlookCalendarCalendarEntity objects for each calendar in the user's account.
 
         Endpoint:
           GET /me/calendars
@@ -68,10 +68,10 @@ class OutlookCalendarSource(BaseSource):
             data = await self._get_with_auth(client, next_url)
             calendars = data.get("value", [])
             for cal in calendars:
-                yield OutlookCalendarCalendarChunk(
+                yield OutlookCalendarCalendarEntity(
                     source_name="outlook_calendar",
                     entity_id=cal["id"],  # inherited field for unique ID
-                    breadcrumbs=[],  # top-level chunk, no parent
+                    breadcrumbs=[],  # top-level entity, no parent
                     name=cal.get("name"),
                     color=cal.get("color"),
                     change_key=cal.get("changeKey"),
@@ -84,12 +84,12 @@ class OutlookCalendarSource(BaseSource):
             # Handle pagination
             next_url = data.get("@odata.nextLink")
 
-    async def _generate_event_chunks(
+    async def _generate_event_entities(
         self,
         client: httpx.AsyncClient,
-        calendar: OutlookCalendarCalendarChunk,
-    ) -> AsyncGenerator[OutlookCalendarEventChunk, None]:
-        """Yield OutlookCalendarEventChunks for each event in the given calendar.
+        calendar: OutlookCalendarCalendarEntity,
+    ) -> AsyncGenerator[OutlookCalendarEventEntity, None]:
+        """Yield OutlookCalendarEventEntities for each event in the given calendar.
 
         Endpoint:
           GET /me/calendars/{calendar_id}/events
@@ -122,7 +122,7 @@ class OutlookCalendarSource(BaseSource):
                         else None
                     )
 
-                yield OutlookCalendarEventChunk(
+                yield OutlookCalendarEventEntity(
                     source_name="outlook_calendar",
                     entity_id=ev["id"],
                     breadcrumbs=[cal_breadcrumb],
@@ -152,13 +152,13 @@ class OutlookCalendarSource(BaseSource):
             # Handle pagination
             next_url = data.get("@odata.nextLink")
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all chunks from Outlook Calendar: Calendars and Events."""
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all entities from Outlook Calendar: Calendars and Events."""
         async with httpx.AsyncClient() as client:
             # 1) Get the user's calendars
-            async for calendar_chunk in self._generate_calendar_chunks(client):
-                yield calendar_chunk
+            async for calendar_entity in self._generate_calendar_entities(client):
+                yield calendar_entity
 
                 # 2) For each calendar, get and yield its events
-                async for event_chunk in self._generate_event_chunks(client, calendar_chunk):
-                    yield event_chunk
+                async for event_entity in self._generate_event_entities(client, calendar_entity):
+                    yield event_entity

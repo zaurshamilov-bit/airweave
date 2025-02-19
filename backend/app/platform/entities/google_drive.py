@@ -1,11 +1,11 @@
-"""Google Drive chunk schemas.
+"""Google Drive entity schemas.
 
 Based on the Google Drive API reference (readonly scopes),
-we define chunk schemas for:
+we define entity schemas for:
  - Drive objects (e.g., shared drives)
  - File objects (e.g., user-drive files)
 
-They follow a style similar to that of Asana, HubSpot, and Todoist chunk schemas.
+They follow a style similar to that of Asana, HubSpot, and Todoist entity schemas.
 
 References:
     https://developers.google.com/drive/api/v3/reference/drives (Drive)
@@ -17,10 +17,10 @@ from typing import Any, List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class GoogleDriveDriveChunk(BaseChunk):
+class GoogleDriveDriveEntity(BaseEntity):
     """Schema for a Drive resource (shared drive).
 
     Reference:
@@ -44,7 +44,7 @@ class GoogleDriveDriveChunk(BaseChunk):
     )
 
 
-class GoogleDriveFileChunk(BaseChunk):
+class GoogleDriveFileEntity(BaseEntity):
     """Schema for a File resource (in a user's or shared drive).
 
     Reference:

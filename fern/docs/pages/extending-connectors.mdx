@@ -21,7 +21,7 @@ backend/app/platform
     ├── sources/
     │   ├── slack.py
     │   └── ghibli.py # See example implementation below
-    ├── chunks/
+    ├── entities/
     │   ├── slack.py
     │   └── ghibli.py # See example implementation below
     └── destinations/
@@ -35,7 +35,7 @@ backend/app/platform
 
 ## Source Connectors
 
-Source connectors define how data is extracted from various sources and converted into chunks for processing. 
+Source connectors define how data is extracted from various sources and converted into entities for processing. 
 
 [Here](https://github.com/airweave-ai/airweave/blob/main/backend/app/platform/sources/slack.py) is an example of the Slack connector implementation.
 
@@ -46,7 +46,7 @@ class SlackSource(BaseSource):
     """Slack source implementation.
 
     This connector retrieves data from Slack such as Channels, Users, and Messages,
-    then yields them as chunks using their respective Slack chunk schemas.
+    then yields them as entities using their respective Slack entity schemas.
     """
 
     @classmethod
@@ -66,23 +66,23 @@ After you've cloned or forked the Airweave repository, you can create a new sour
 To get a 3rd party connector working, you need to implement the following:
 
 - Source class that extends `BaseSource` and is decorated with `@source`.
-- `generate_chunks`: This method should yield Chunk objects. These can be anything from a JSON object to a PDF document.
+- `generate_entities`: This method should yield Entity objects. These can be anything from a JSON object to a PDF document.
 - `create`: This method should return a SourceConnector instance. 
-- Accompanying `Chunk` schemas. You can find the Slack example [here](https://github.com/airweave-ai/airweave/tree/main/backend/app/platform/chunks/slack.py). This helps Airweave understand how to process the data, and standardize it across your syncs.
+- Accompanying `Entity` schemas. You can find the Slack example [here](https://github.com/airweave-ai/airweave/tree/main/backend/app/platform/entities/slack.py). This helps Airweave understand how to process the data, and standardize it across your syncs.
 
 <Note icon="fa-solid fa-lightbulb">
 If you're using OAuth2 and you would like Airweave to handle the OAuth2 flow for you, you need to implement the `create` so that it takes in an access token and add your integration to the `dev.integrations.yaml` file.  We're working on making this easier in the near future, for now we recommend [reaching out to us!](mailto:support@airweave.ai)
 </Note>
 
 
-Here's an example of a custom source connector implementation. In this example, we're fetching data from the Studio Ghibli API and yielding it as chunks. These chunks are then used to process into your destinations.
+Here's an example of a custom source connector implementation. In this example, we're fetching data from the Studio Ghibli API and yielding it as entities. These entities are then used to process into your destinations.
 
 <CodeBlock title="Custom source connector implementation">
 ```python
 from typing import AsyncGenerator
 import httpx
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
 from app.platform.auth.schemas import AuthType
@@ -91,8 +91,8 @@ from app.platform.auth.schemas import AuthType
 class GhibliSource(BaseSource):
     """Studio Ghibli source implementation.
     
-    This connector fetches film data from the Studio Ghibli API and yields it as chunks.
-    Each chunk represents a Ghibli film with its details.
+    This connector fetches film data from the Studio Ghibli API and yields it as entities.
+    Each entity represents a Ghibli film with its details.
     """
 
     BASE_URL = "https://ghibli.rest/films"
@@ -102,10 +102,10 @@ class GhibliSource(BaseSource):
         """Create a new Ghibli source instance."""
         return cls()
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate chunks from the Ghibli API.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate entities from the Ghibli API.
         
-        Each chunk contains information about a Studio Ghibli film.
+        Each entity contains information about a Studio Ghibli film.
         """
         async with httpx.AsyncClient() as client:
             response = await client.get(self.BASE_URL)
@@ -113,7 +113,7 @@ class GhibliSource(BaseSource):
             films = response.json()
 
             for film in films:
-                yield BaseChunk(
+                yield BaseEntity(
                     source_name="ghibli",
                     entity_id=film["id"],
                     content=film["description"],
@@ -177,30 +177,30 @@ class CustomSourceConnector(SourceConnector):
 
 ## Destination Connectors
 
-Destination connectors handle how processed chunks are stored in your target system.
+Destination connectors handle how processed entities are stored in your target system.
 
 ### Creating a Destination Connector
 
 ```python
 from airweave.connectors import DestinationConnector
-from airweave.types import Chunk, DestinationConfig
+from airweave.types import Entity, DestinationConfig
 
 class CustomDestinationConnector(DestinationConnector):
     def __init__(self, config: DestinationConfig):
         super().__init__(config)
         self.config = config
 
-    async def store_chunks(self, chunks: list[Chunk]):
+    async def store_entities(self, entities: list[Entity]):
         """
-        Store chunks in your destination system
+        Store entities in your destination system
         """
         # Your custom storage logic here
-        for chunk in chunks:
-            await self.store_chunk(chunk)
+        for entity in entities:
+            await self.store_entity(entity)
 
-    async def store_chunk(self, chunk: Chunk):
+    async def store_entity(self, entity: Entity):
         """
-        Store a single chunk
+        Store a single entity
         """
         # Example implementation
         pass
@@ -241,16 +241,16 @@ class CustomDestinationConnector(DestinationConnector):
 ```python
 # sources/api/rest.py
 from airweave.connectors import SourceConnector
-from airweave.types import Chunk
+from airweave.types import Entity
 
 class RestApiSource(SourceConnector):
-    async def generate_chunks(self):
+    async def generate_entities(self):
         async with aiohttp.ClientSession() as session:
             async with session.get(self.config.url) as response:
                 data = await response.json()
 
                 for item in data:
-                    yield Chunk(
+                    yield Entity(
                         content=item["content"],
                         metadata={
                             "source": "rest-api",
@@ -281,14 +281,14 @@ destinations/
 from airweave.connectors import DestinationConnector
 
 class CustomVectorStore(DestinationConnector):
-    async def store_chunks(self, chunks):
-        vectors = await self.get_embeddings(chunks)
+    async def store_entities(self, entities):
+        vectors = await self.get_embeddings(entities)
 
         async with self.client as client:
-            for chunk, vector in zip(chunks, vectors):
+            for entity, vector in zip(entities, vectors):
                 await client.upsert(
                     vector=vector,
-                    metadata=chunk.metadata
+                    metadata=entity.metadata
                 )
 ```
 

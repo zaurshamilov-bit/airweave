@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from app import schemas
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
 class BaseDestination(ABC):
@@ -17,27 +17,27 @@ class BaseDestination(ABC):
 
     @abstractmethod
     async def setup_collection(self, sync_id: UUID) -> None:
-        """Set up the collection for storing chunks."""
+        """Set up the collection for storing entities."""
         pass
 
     @abstractmethod
-    async def insert(self, chunk: BaseChunk) -> None:
-        """Insert a single chunk into the destination."""
+    async def insert(self, entity: BaseEntity) -> None:
+        """Insert a single entity into the destination."""
         pass
 
     @abstractmethod
-    async def bulk_insert(self, chunks: list[BaseChunk]) -> None:
-        """Bulk insert chunks into the destination."""
+    async def bulk_insert(self, entities: list[BaseEntity]) -> None:
+        """Bulk insert entities into the destination."""
         pass
 
     @abstractmethod
-    async def delete(self, db_chunk_id: UUID) -> None:
-        """Delete a single chunk from the destination."""
+    async def delete(self, db_entity_id: UUID) -> None:
+        """Delete a single entity from the destination."""
         pass
 
     @abstractmethod
-    async def bulk_delete(self, chunk_ids: list[str]) -> None:
-        """Bulk delete chunks from the destination."""
+    async def bulk_delete(self, entity_ids: list[str]) -> None:
+        """Bulk delete entities from the destination."""
         pass
 
     @abstractmethod

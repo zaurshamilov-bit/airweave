@@ -27,7 +27,7 @@ class Settings(BaseSettings):
         LOCAL_NGROK_SERVER (Optional[str]): The local ngrok server URL.
         RUN_ALEMBIC_MIGRATIONS (Optional[bool]): Whether to run the alembic migrations.
         RUN_DB_SYNC (Optional[bool]): Whether to run the system sync to process sources,
-            destinations, and chunk types.
+            destinations, and entity types.
         NATIVE_WEAVIATE_HOST (str): The Weaviate host.
         NATIVE_WEAVIATE_PORT (int): The Weaviate port.
         NATIVE_WEAVIATE_GRPC_PORT (int): The Weaviate gRPC port.

@@ -1,4 +1,4 @@
-"""Chunk schema."""
+"""Entity schema."""
 
 from datetime import datetime
 from typing import Optional
@@ -7,8 +7,8 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
-class ChunkBase(BaseModel):
-    """Base schema for Chunk."""
+class EntityBase(BaseModel):
+    """Base schema for Entity."""
 
     sync_job_id: UUID
     sync_id: UUID
@@ -16,19 +16,19 @@ class ChunkBase(BaseModel):
     hash: str
 
     class Config:
-        """Pydantic config for ChunkBase."""
+        """Pydantic config for EntityBase."""
 
         from_attributes = True
 
 
-class ChunkCreate(ChunkBase):
-    """Schema for creating a Chunk object."""
+class EntityCreate(EntityBase):
+    """Schema for creating a Entity object."""
 
     pass
 
 
-class ChunkUpdate(BaseModel):
-    """Schema for updating a Chunk object."""
+class EntityUpdate(BaseModel):
+    """Schema for updating a Entity object."""
 
     sync_job_id: Optional[UUID] = None
     sync_id: Optional[UUID] = None
@@ -36,8 +36,8 @@ class ChunkUpdate(BaseModel):
     hash: Optional[str] = None
 
 
-class ChunkInDBBase(ChunkBase):
-    """Base schema for Chunk stored in DB."""
+class EntityInDBBase(EntityBase):
+    """Base schema for Entity stored in DB."""
 
     id: UUID
     organization_id: UUID
@@ -45,12 +45,12 @@ class ChunkInDBBase(ChunkBase):
     modified_at: datetime
 
     class Config:
-        """Pydantic config for ChunkInDBBase."""
+        """Pydantic config for EntityInDBBase."""
 
         from_attributes = True
 
 
-class Chunk(ChunkInDBBase):
-    """Schema for Chunk."""
+class Entity(EntityInDBBase):
+    """Schema for Entity."""
 
     pass

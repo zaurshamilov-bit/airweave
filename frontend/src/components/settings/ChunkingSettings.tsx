@@ -4,21 +4,21 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Cpu } from "lucide-react";
 
-export function ChunkingSettings() {
+export function EntityingSettings() {
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
           <Cpu className="h-5 w-5 text-primary" />
-          <CardTitle>Chunking Configuration</CardTitle>
+          <CardTitle>Entitying Configuration</CardTitle>
         </div>
         <CardDescription>
-          Configure how your documents are processed and chunked
+          Configure how your documents are processed and entityed
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-4">
-          <Label>Chunk Size (tokens)</Label>
+          <Label>Entity Size (tokens)</Label>
           <Slider 
             defaultValue={[512]} 
             max={2048} 
@@ -32,7 +32,7 @@ export function ChunkingSettings() {
         </div>
 
         <div className="space-y-2">
-          <Label>Chunk Overlap</Label>
+          <Label>Entity Overlap</Label>
           <Slider 
             defaultValue={[50]} 
             max={100} 
@@ -43,7 +43,7 @@ export function ChunkingSettings() {
 
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label>Smart Chunking</Label>
+            <Label>Smart Entitying</Label>
             <div className="text-sm text-muted-foreground">
               Use ML to detect natural break points
             </div>

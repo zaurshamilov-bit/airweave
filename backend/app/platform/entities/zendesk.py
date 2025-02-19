@@ -1,6 +1,6 @@
-"""Zendesk chunk schemas.
+"""Zendesk entity schemas.
 
-Based on the Zendesk Ticketing API (read-only scope), we define chunk schemas for the
+Based on the Zendesk Ticketing API (read-only scope), we define entity schemas for the
 following core objects:
   • Organization
   • User
@@ -20,10 +20,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class ZendeskOrganizationChunk(BaseChunk):
+class ZendeskOrganizationEntity(BaseEntity):
     """Schema for a Zendesk organization.
 
     References:
@@ -50,7 +50,7 @@ class ZendeskOrganizationChunk(BaseChunk):
     archived: bool = Field(False, description="Placeholder for archival state if applicable.")
 
 
-class ZendeskUserChunk(BaseChunk):
+class ZendeskUserEntity(BaseEntity):
     """Schema for a Zendesk user (agent or end user).
 
     References:
@@ -83,7 +83,7 @@ class ZendeskUserChunk(BaseChunk):
     archived: bool = Field(False, description="Placeholder for archival state if applicable.")
 
 
-class ZendeskTicketChunk(BaseChunk):
+class ZendeskTicketEntity(BaseEntity):
     """Schema for a Zendesk ticket.
 
     References:
@@ -127,7 +127,7 @@ class ZendeskTicketChunk(BaseChunk):
     archived: bool = Field(False, description="Placeholder for archival state if applicable.")
 
 
-class ZendeskCommentChunk(BaseChunk):
+class ZendeskCommentEntity(BaseEntity):
     """Schema for a Zendesk comment, typically tied to a specific ticket.
 
     References:

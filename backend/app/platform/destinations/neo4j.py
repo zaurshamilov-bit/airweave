@@ -6,8 +6,8 @@ from uuid import UUID
 from neo4j import AsyncGraphDatabase
 
 from app import schemas
-from app.platform.chunks._base import BaseChunk
 from app.platform.destinations._base import GraphDBDestination
+from app.platform.entities._base import BaseEntity
 
 
 class Neo4jDestination(GraphDBDestination):
@@ -34,44 +34,44 @@ class Neo4jDestination(GraphDBDestination):
     async def setup_collection(self, sync_id: UUID) -> None:
         """Set up the graph by creating necessary constraints.
 
-        For example, a uniqueness constraint on db_chunk_id for Chunk nodes.
+        For example, a uniqueness constraint on db_entity_id for Entity nodes.
         """
-        query = "CREATE CONSTRAINT IF NOT EXISTS FOR (c:Chunk) REQUIRE c.db_chunk_id IS UNIQUE"
+        query = "CREATE CONSTRAINT IF NOT EXISTS FOR (c:Entity) REQUIRE c.db_entity_id IS UNIQUE"
         async with self.driver.session() as session:
             await session.run(query)
 
-    async def insert(self, chunk: BaseChunk) -> None:
-        """Insert a single chunk as a node in Neo4j.
+    async def insert(self, entity: BaseEntity) -> None:
+        """Insert a single entity as a node in Neo4j.
 
-        The chunk is stored as a node with label 'Chunk'.
+        The entity is stored as a node with label 'Entity'.
         """
-        data = chunk.model_dump()
-        query = "CREATE (c:Chunk) SET c = $props"
+        data = entity.model_dump()
+        query = "CREATE (c:Entity) SET c = $props"
         async with self.driver.session() as session:
             await session.run(query, props=data)
 
-    async def bulk_insert(self, chunks: list[BaseChunk]) -> None:
-        """Bulk insert chunks as nodes in Neo4j using UNWIND."""
-        nodes = [chunk.model_dump() for chunk in chunks]
-        query = "UNWIND $nodes as props CREATE (c:Chunk) SET c = props"
+    async def bulk_insert(self, entities: list[BaseEntity]) -> None:
+        """Bulk insert entities as nodes in Neo4j using UNWIND."""
+        nodes = [entity.model_dump() for entity in entities]
+        query = "UNWIND $nodes as props CREATE (c:Entity) SET c = props"
         async with self.driver.session() as session:
             await session.run(query, nodes=nodes)
 
-    async def delete(self, db_chunk_id: UUID) -> None:
-        """Delete a single chunk node from Neo4j identified by its db_chunk_id."""
-        query = "MATCH (c:Chunk {db_chunk_id: $id}) DETACH DELETE c"
+    async def delete(self, db_entity_id: UUID) -> None:
+        """Delete a single entity node from Neo4j identified by its db_entity_id."""
+        query = "MATCH (c:Entity {db_entity_id: $id}) DETACH DELETE c"
         async with self.driver.session() as session:
-            await session.run(query, id=str(db_chunk_id))
+            await session.run(query, id=str(db_entity_id))
 
-    async def bulk_delete(self, chunk_ids: list[str]) -> None:
-        """Bulk delete chunk nodes from Neo4j whose db_chunk_id is in the provided list."""
-        query = "MATCH (c:Chunk) WHERE c.db_chunk_id IN $ids DETACH DELETE c"
+    async def bulk_delete(self, entity_ids: list[str]) -> None:
+        """Bulk delete entity nodes from Neo4j whose db_entity_id is in the provided list."""
+        query = "MATCH (c:Entity) WHERE c.db_entity_id IN $ids DETACH DELETE c"
         async with self.driver.session() as session:
-            await session.run(query, ids=chunk_ids)
+            await session.run(query, ids=entity_ids)
 
     async def search_for_sync_id(self, sync_id: UUID) -> None:
-        """Search for chunk nodes in Neo4j matching a given sync_id."""
-        query = "MATCH (c:Chunk {sync_id: $sync_id}) RETURN c"
+        """Search for entity nodes in Neo4j matching a given sync_id."""
+        query = "MATCH (c:Entity {sync_id: $sync_id}) RETURN c"
         async with self.driver.session() as session:
             result = await session.run(query, sync_id=str(sync_id))
             records = await result.data()

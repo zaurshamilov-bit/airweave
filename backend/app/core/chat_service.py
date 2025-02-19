@@ -71,7 +71,7 @@ class ChatService:
             user (schemas.User): Current user
 
         Yields:
-            AsyncGenerator[ChatCompletionChunk]: Stream of response chunks
+            AsyncGenerator[ChatCompletionChunk]: Stream of response entities
         """
         try:
             chat = await crud.chat.get_with_messages(db=db, id=chat_id, current_user=user)

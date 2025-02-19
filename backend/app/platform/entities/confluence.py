@@ -1,7 +1,7 @@
-"""Confluence chunk schemas.
+"""Confluence entity schemas.
 
 Based on the Confluence Cloud REST API reference (read-only scope), we define
-chunk schemas for the major Confluence objects relevant to our application:
+entity schemas for the major Confluence objects relevant to our application:
  - Space
  - Page
  - Blog Post
@@ -15,7 +15,7 @@ chunk schemas for the major Confluence objects relevant to our application:
 
 Objects that reference a hierarchical relationship (e.g., pages with ancestors,
 whiteboards with ancestors) will represent that hierarchy through a list of
-breadcrumbs (see Breadcrumb in app.platform.chunks._base) rather than nested objects.
+breadcrumbs (see Breadcrumb in app.platform.entities._base) rather than nested objects.
 
 Reference:
     https://developer.atlassian.com/cloud/confluence/rest/v2/intro/
@@ -27,10 +27,10 @@ from typing import Any, Dict, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class ConfluenceSpaceChunk(BaseChunk):
+class ConfluenceSpaceEntity(BaseEntity):
     """Schema for a Confluence Space.
 
     See:
@@ -50,7 +50,7 @@ class ConfluenceSpaceChunk(BaseChunk):
     )
 
 
-class ConfluencePageChunk(BaseChunk):
+class ConfluencePageEntity(BaseEntity):
     """Schema for a Confluence Page.
 
     See:
@@ -69,7 +69,7 @@ class ConfluencePageChunk(BaseChunk):
     )
 
 
-class ConfluenceBlogPostChunk(BaseChunk):
+class ConfluenceBlogPostEntity(BaseEntity):
     """Schema for a Confluence Blog Post.
 
     See:
@@ -90,7 +90,7 @@ class ConfluenceBlogPostChunk(BaseChunk):
     )
 
 
-class ConfluenceCommentChunk(BaseChunk):
+class ConfluenceCommentEntity(BaseEntity):
     """Schema for a Confluence Comment.
 
     See:
@@ -113,7 +113,7 @@ class ConfluenceCommentChunk(BaseChunk):
     status: Optional[str] = Field(None, description="Status of the comment (e.g., 'current').")
 
 
-class ConfluenceDatabaseChunk(BaseChunk):
+class ConfluenceDatabaseEntity(BaseEntity):
     """Schema for a Confluence Database object.
 
     See:
@@ -132,7 +132,7 @@ class ConfluenceDatabaseChunk(BaseChunk):
     status: Optional[str] = Field(None, description="Status of the database content item.")
 
 
-class ConfluenceFolderChunk(BaseChunk):
+class ConfluenceFolderEntity(BaseEntity):
     """Schema for a Confluence Folder object.
 
     See:
@@ -150,7 +150,7 @@ class ConfluenceFolderChunk(BaseChunk):
     status: Optional[str] = Field(None, description="Status of the folder (e.g., 'current').")
 
 
-class ConfluenceLabelChunk(BaseChunk):
+class ConfluenceLabelEntity(BaseEntity):
     """Schema for a Confluence Label object.
 
     See:
@@ -162,7 +162,7 @@ class ConfluenceLabelChunk(BaseChunk):
     owner_id: Optional[str] = Field(None, description="ID of the user or content that owns label.")
 
 
-class ConfluenceTaskChunk(BaseChunk):
+class ConfluenceTaskEntity(BaseEntity):
     """Schema for a Confluence Task object.
 
     For example, tasks extracted from Confluence pages or macros.
@@ -188,7 +188,7 @@ class ConfluenceTaskChunk(BaseChunk):
     )
 
 
-class ConfluenceWhiteboardChunk(BaseChunk):
+class ConfluenceWhiteboardEntity(BaseEntity):
     """Schema for a Confluence Whiteboard object.
 
     See:
@@ -206,7 +206,7 @@ class ConfluenceWhiteboardChunk(BaseChunk):
     status: Optional[str] = Field(None, description="Status of the whiteboard (e.g., 'current').")
 
 
-class ConfluenceCustomContentChunk(BaseChunk):
+class ConfluenceCustomContentEntity(BaseEntity):
     """Schema for a Confluence Custom Content object.
 
     See:

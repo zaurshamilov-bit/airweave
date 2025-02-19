@@ -15,9 +15,9 @@ from app.db.unit_of_work import UnitOfWork
 from app.platform.auth.schemas import AuthType
 from app.platform.auth.services import oauth2_service
 from app.platform.auth.settings import integration_settings
-from app.platform.chunks._base import BaseChunk
 from app.platform.destinations.weaviate import WeaviateDestination
 from app.platform.embedding_models.local_text2vec import LocalText2Vec
+from app.platform.entities._base import BaseEntity
 from app.platform.locator import resource_locator
 from app.platform.sync.context import SyncContext
 from app.platform.sync.pubsub import SyncProgressUpdate, sync_pubsub
@@ -46,7 +46,7 @@ class SyncService:
 
         This method:
         1. Creates a sync context
-        2. Processes chunks from the source
+        2. Processes entities from the source
         3. Handles updates, inserts, and deletions in both DB and destination
         4. Uses batch processing for efficiency
         """
@@ -60,55 +60,55 @@ class SyncService:
 
                 sync_progress_update = SyncProgressUpdate()
 
-                async for chunk in sync_context.source.generate_chunks():
-                    # Enrich chunk with sync context information
-                    chunk = await self._enrich_chunk(chunk, sync_context)
+                async for entity in sync_context.source.generate_entities():
+                    # Enrich entity with sync context information
+                    entity = await self._enrich_entity(entity, sync_context)
 
                     # Calculate hash for deduplication
-                    chunk_hash = chunk.hash()
+                    entity_hash = entity.hash()
 
-                    # Check if chunk exists in DB
-                    db_chunk = await crud.chunk.get_by_entity_and_sync_id(
-                        db, entity_id=chunk.entity_id, sync_id=sync.id
+                    # Check if entity exists in DB
+                    db_entity = await crud.entity.get_by_entity_and_sync_id(
+                        db, entity_id=entity.entity_id, sync_id=sync.id
                     )
 
-                    if db_chunk:
-                        if db_chunk.hash == chunk_hash:
+                    if db_entity:
+                        if db_entity.hash == entity_hash:
                             # No changes, update sync_job_id
-                            await crud.chunk.update_job_id(
-                                db, db_obj=db_chunk, sync_job_id=sync_job.id
+                            await crud.entity.update_job_id(
+                                db, db_obj=db_entity, sync_job_id=sync_job.id
                             )
                             sync_progress_update.already_sync += 1
                         else:
                             # Content changed, update both DB and destination
-                            chunk_update = schemas.ChunkUpdate(
+                            entity_update = schemas.EntityUpdate(
                                 sync_job_id=sync_job.id,
-                                hash=chunk_hash,
+                                hash=entity_hash,
                             )
-                            await crud.chunk.update(
+                            await crud.entity.update(
                                 db,
-                                db_obj=db_chunk,
-                                obj_in=chunk_update,
+                                db_obj=db_entity,
+                                obj_in=entity_update,
                                 organization_id=sync.organization_id,
                             )
-                            await sync_context.destination.delete(db_chunk.id)
-                            await sync_context.destination.insert(chunk)
+                            await sync_context.destination.delete(db_entity.id)
+                            await sync_context.destination.insert(entity)
                             sync_progress_update.updated += 1
                     else:
-                        # New chunk, insert into DB and buffer for destination
-                        chunk_schema = schemas.ChunkCreate(
+                        # New entity, insert into DB and buffer for destination
+                        entity_schema = schemas.EntityCreate(
                             sync_id=sync.id,
                             sync_job_id=sync_job.id,
-                            entity_id=chunk.entity_id,
-                            hash=chunk_hash,
+                            entity_id=entity.entity_id,
+                            hash=entity_hash,
                         )
-                        db_chunk = await crud.chunk.create(
+                        db_entity = await crud.entity.create(
                             db,
-                            obj_in=chunk_schema,
+                            obj_in=entity_schema,
                             organization_id=sync.organization_id,
                         )
-                        chunk.db_chunk_id = db_chunk.id
-                        await sync_context.destination.insert(chunk)
+                        entity.db_entity_id = db_entity.id
+                        await sync_context.destination.insert(entity)
 
                         sync_progress_update.inserted += 1
 
@@ -119,17 +119,17 @@ class SyncService:
                     )
 
             async with get_db_context() as db:
-                # Handle deletions - remove outdated chunks
-                outdated_chunks = await crud.chunk.get_all_outdated(
+                # Handle deletions - remove outdated entities
+                outdated_entities = await crud.entity.get_all_outdated(
                     db, sync_id=sync.id, sync_job_id=sync_job.id
                 )
-                if outdated_chunks:
+                if outdated_entities:
                     # Remove from destination
-                    for chunk in outdated_chunks:
-                        await sync_context.destination.delete(chunk.id)
+                    for entity in outdated_entities:
+                        await sync_context.destination.delete(entity.id)
                         # Remove from database
-                        await crud.chunk.remove(
-                            db, id=chunk.id, organization_id=sync.organization_id
+                        await crud.entity.remove(
+                            db, id=entity.id, organization_id=sync.organization_id
                         )
                         sync_progress_update.deleted += 1
 
@@ -173,22 +173,22 @@ class SyncService:
 
             return sync
 
-    async def _enrich_chunk(
+    async def _enrich_entity(
         self,
-        chunk: BaseChunk,
+        entity: BaseEntity,
         sync_context: SyncContext,
-    ) -> BaseChunk:
-        """Enrich a chunk with information from the sync context."""
-        chunk.source_name = sync_context.source._name
-        chunk.sync_id = sync_context.sync.id
-        chunk.sync_job_id = sync_context.sync_job.id
-        chunk.sync_metadata = sync_context.sync.sync_metadata
+    ) -> BaseEntity:
+        """Enrich a entity with information from the sync context."""
+        entity.source_name = sync_context.source._name
+        entity.sync_id = sync_context.sync.id
+        entity.sync_job_id = sync_context.sync_job.id
+        entity.sync_metadata = sync_context.sync.sync_metadata
         if sync_context.sync.white_label_id:
-            chunk.white_label_user_identifier = sync_context.sync.white_label_user_identifier
-            chunk.white_label_id = sync_context.sync.white_label_id
-            chunk.white_label_name = sync_context.white_label.name
+            entity.white_label_user_identifier = sync_context.sync.white_label_user_identifier
+            entity.white_label_id = sync_context.sync.white_label_id
+            entity.white_label_name = sync_context.white_label.name
 
-        return chunk
+        return entity
 
     async def create_sync_context(
         self,

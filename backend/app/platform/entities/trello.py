@@ -1,19 +1,19 @@
-"""Trello chunk schemas.
+"""Trello entity schemas.
 
-Based on the Trello REST API reference, we define chunk schemas for common
+Based on the Trello REST API reference, we define entity schemas for common
 Trello objects like Organizations, Boards, Lists, Cards, and Members.
-These follow a style similar to our Asana and HubSpot chunk schemas.
+These follow a style similar to our Asana and HubSpot entity schemas.
 """
 
 from datetime import datetime
 from typing import List, Optional
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 from app.platform.sources._base import Relation
 
 
-class TrelloOrganizationChunk(BaseChunk):
-    """Schema for Trello organization (Workspace) chunks."""
+class TrelloOrganizationEntity(BaseEntity):
+    """Schema for Trello organization (Workspace) entities."""
 
     id: str
     display_name: Optional[str] = None
@@ -22,8 +22,8 @@ class TrelloOrganizationChunk(BaseChunk):
     website: Optional[str] = None
 
 
-class TrelloBoardChunk(BaseChunk):
-    """Schema for Trello board chunks."""
+class TrelloBoardEntity(BaseEntity):
+    """Schema for Trello board entities."""
 
     id: str
     name: Optional[str] = None
@@ -36,8 +36,8 @@ class TrelloBoardChunk(BaseChunk):
     date_last_activity: Optional[datetime] = None
 
 
-class TrelloListChunk(BaseChunk):
-    """Schema for Trello list chunks."""
+class TrelloListEntity(BaseEntity):
+    """Schema for Trello list entities."""
 
     id: str
     name: Optional[str] = None
@@ -46,8 +46,8 @@ class TrelloListChunk(BaseChunk):
     subscribed: bool = False
 
 
-class TrelloCardChunk(BaseChunk):
-    """Schema for Trello card chunks."""
+class TrelloCardEntity(BaseEntity):
+    """Schema for Trello card entities."""
 
     id: str
     name: Optional[str] = None
@@ -61,8 +61,8 @@ class TrelloCardChunk(BaseChunk):
     url: Optional[str] = None
 
 
-class TrelloMemberChunk(BaseChunk):
-    """Schema for Trello member chunks."""
+class TrelloMemberEntity(BaseEntity):
+    """Schema for Trello member entities."""
 
     id: str
     avatar_url: Optional[str] = None
@@ -74,8 +74,8 @@ class TrelloMemberChunk(BaseChunk):
     boards: List[str] = []
 
 
-class TrelloActionChunk(BaseChunk):
-    """Schema for Trello action chunks."""
+class TrelloActionEntity(BaseEntity):
+    """Schema for Trello action entities."""
 
     id: str
     action_type: Optional[str] = None
@@ -86,58 +86,58 @@ class TrelloActionChunk(BaseChunk):
 
 RELATIONS = [
     Relation(
-        source_chunk_type=TrelloCardChunk,
+        source_entity_type=TrelloCardEntity,
         source_entity_id_attribute="list_id",
-        target_chunk_type=TrelloListChunk,
+        target_entity_type=TrelloListEntity,
         target_entity_id_attribute="id",
         relation_type="is_in_list",
     ),
     Relation(
-        source_chunk_type=TrelloCardChunk,
+        source_entity_type=TrelloCardEntity,
         source_entity_id_attribute="board_id",
-        target_chunk_type=TrelloBoardChunk,
+        target_entity_type=TrelloBoardEntity,
         target_entity_id_attribute="id",
         relation_type="is_in_board",
     ),
     Relation(
-        source_chunk_type=TrelloCardChunk,
+        source_entity_type=TrelloCardEntity,
         source_entity_id_attribute="member_creator_id",
-        target_chunk_type=TrelloMemberChunk,
+        target_entity_type=TrelloMemberEntity,
         target_entity_id_attribute="id",
         relation_type="is_created_by",
     ),
     Relation(
-        source_chunk_type=TrelloListChunk,
-        target_chunk_type=TrelloBoardChunk,
+        source_entity_type=TrelloListEntity,
+        target_entity_type=TrelloBoardEntity,
         source_entity_id_attribute="board_id",
         target_entity_id_attribute="id",
         relation_type="is_in_board",
     ),
     Relation(
-        source_chunk_type=TrelloBoardChunk,
+        source_entity_type=TrelloBoardEntity,
         source_entity_id_attribute="organization_id",
-        target_chunk_type=TrelloOrganizationChunk,
+        target_entity_type=TrelloOrganizationEntity,
         target_entity_id_attribute="id",
         relation_type="is_in_organization",
     ),
     Relation(
-        source_chunk_type=TrelloMemberChunk,
-        target_chunk_type=TrelloOrganizationChunk,
+        source_entity_type=TrelloMemberEntity,
+        target_entity_type=TrelloOrganizationEntity,
         source_entity_id_attribute="organization_id",
         target_entity_id_attribute="id",
         relation_type="is_in_organization",
     ),
     Relation(
-        source_chunk_type=TrelloMemberChunk,
+        source_entity_type=TrelloMemberEntity,
         source_entity_id_attribute="boards",
-        target_chunk_type=TrelloBoardChunk,
+        target_entity_type=TrelloBoardEntity,
         target_entity_id_attribute="id",
         relation_type="is_member_of_board",
     ),
     Relation(
-        source_chunk_type=TrelloActionChunk,
+        source_entity_type=TrelloActionEntity,
         source_entity_id_attribute="member_creator_id",
-        target_chunk_type=TrelloMemberChunk,
+        target_entity_type=TrelloMemberEntity,
         target_entity_id_attribute="id",
         relation_type="is_created_by",
     ),

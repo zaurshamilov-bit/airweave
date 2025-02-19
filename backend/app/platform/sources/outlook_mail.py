@@ -16,9 +16,9 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk, Breadcrumb
-from app.platform.chunks.outlook_mail import OutlookMailFolderChunk, OutlookMessageChunk
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities.outlook_mail import OutlookMailFolderEntity, OutlookMessageEntity
 from app.platform.sources._base import BaseSource
 
 
@@ -27,8 +27,8 @@ class OutlookMailSource(BaseSource):
     """Outlook Mail source implementation (read-only).
 
     This connector retrieves Outlook mail folders in a hierarchical fashion
-    and yields OutlookMailFolderChunk for each folder. For each folder, it
-    also retrieves email messages and yields OutlookMessageChunk items.
+    and yields OutlookMailFolderEntity for each folder. For each folder, it
+    also retrieves email messages and yields OutlookMessageEntity items.
     """
 
     GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
@@ -53,13 +53,13 @@ class OutlookMailSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_folder_chunks(
+    async def _generate_folder_entities(
         self,
         client: httpx.AsyncClient,
         folder_id: Optional[str] = None,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[OutlookMailFolderChunk, None]:
-        """Recursively generate OutlookMailFolderChunk objects.
+    ) -> AsyncGenerator[OutlookMailFolderEntity, None]:
+        """Recursively generate OutlookMailFolderEntity objects.
 
         Traverses the mail folder hierarchy via Microsoft Graph.
 
@@ -79,8 +79,8 @@ class OutlookMailSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for folder in data.get("value", []):
-                # Yield folder chunk
-                folder_chunk = OutlookMailFolderChunk(
+                # Yield folder entity
+                folder_entity = OutlookMailFolderEntity(
                     source_name="outlook_mail",
                     entity_id=folder["id"],
                     breadcrumbs=parent_breadcrumbs,
@@ -92,49 +92,49 @@ class OutlookMailSource(BaseSource):
                     well_known_name=folder.get("wellKnownName"),
                 )
 
-                yield folder_chunk
+                yield folder_entity
 
                 # Build breadcrumb for this folder
                 folder_breadcrumb = Breadcrumb(
-                    entity_id=folder_chunk.entity_id,
-                    name=folder_chunk.display_name,
+                    entity_id=folder_entity.entity_id,
+                    name=folder_entity.display_name,
                     type="folder",
                 )
 
                 # Recursively yield child folders
-                if folder_chunk.child_folder_count:
-                    async for child_folder_chunk in self._generate_folder_chunks(
+                if folder_entity.child_folder_count:
+                    async for child_folder_entity in self._generate_folder_entities(
                         client,
-                        folder_chunk.entity_id,
+                        folder_entity.entity_id,
                         parent_breadcrumbs + [folder_breadcrumb],
                     ):
-                        yield child_folder_chunk
+                        yield child_folder_entity
 
             # Handle pagination if @odata.nextLink is present
             next_link = data.get("@odata.nextLink")
             url = next_link if next_link else None
 
-    async def _generate_message_chunks(
+    async def _generate_message_entities(
         self,
         client: httpx.AsyncClient,
-        folder_chunk: OutlookMailFolderChunk,
-    ) -> AsyncGenerator[OutlookMessageChunk, None]:
-        """Generate OutlookMessageChunk objects for a given folder.
+        folder_entity: OutlookMailFolderEntity,
+    ) -> AsyncGenerator[OutlookMessageEntity, None]:
+        """Generate OutlookMessageEntity objects for a given folder.
 
         Fetches messages with GET /me/mailFolders/{folderId}/messages.
         """
         folder_breadcrumb = Breadcrumb(
-            entity_id=folder_chunk.entity_id,
-            name=folder_chunk.display_name,
+            entity_id=folder_entity.entity_id,
+            name=folder_entity.display_name,
             type="folder",
         )
-        breadcrumbs = folder_chunk.breadcrumbs + [folder_breadcrumb]
+        breadcrumbs = folder_entity.breadcrumbs + [folder_breadcrumb]
 
-        url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_chunk.entity_id}/messages"
+        url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_entity.entity_id}/messages"
         while url:
             data = await self._get_with_auth(client, url)
             for msg in data.get("value", []):
-                yield OutlookMessageChunk(
+                yield OutlookMessageEntity(
                     source_name="outlook_mail",
                     entity_id=msg["id"],
                     breadcrumbs=breadcrumbs,
@@ -160,19 +160,19 @@ class OutlookMailSource(BaseSource):
             next_link = data.get("@odata.nextLink")
             url = next_link if next_link else None
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate all Outlook mail chunks.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate all Outlook mail entities.
 
-        Yields chunks in the following order:
+        Yields entities in the following order:
           - Mail folders (recursive)
           - Messages in each folder
         """
         async with httpx.AsyncClient() as client:
             # 1) Generate all mail folders (including subfolders)
-            #    and yield them as OutlookMailFolderChunk
-            async for folder_chunk in self._generate_folder_chunks(client):
-                yield folder_chunk
+            #    and yield them as OutlookMailFolderEntity
+            async for folder_entity in self._generate_folder_entities(client):
+                yield folder_entity
 
                 # 2) For each folder, generate and yield messages in that folder
-                async for message_chunk in self._generate_message_chunks(client, folder_chunk):
-                    yield message_chunk
+                async for message_entity in self._generate_message_entities(client, folder_entity):
+                    yield message_entity

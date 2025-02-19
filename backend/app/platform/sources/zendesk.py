@@ -6,9 +6,9 @@ Retrieves data from a user's Zendesk account, focusing on:
  - Tickets
  - Comments
 
-and yields them as chunks using the corresponding Zendesk chunk schemas
-(e.g. ZendeskOrganizationChunk, ZendeskUserChunk, ZendeskTicketChunk,
-and ZendeskCommentChunk).
+and yields them as entities using the corresponding Zendesk entity schemas
+(e.g. ZendeskOrganizationEntity, ZendeskUserEntity, ZendeskTicketEntity,
+and ZendeskCommentEntity).
 
 References:
   https://developer.zendesk.com/api-reference/ticketing/introduction/
@@ -23,14 +23,14 @@ from typing import AsyncGenerator, Dict
 import httpx
 
 from app.platform.auth.schemas import AuthType
-from app.platform.chunks._base import BaseChunk
-from app.platform.chunks.zendesk import (
-    ZendeskCommentChunk,
-    ZendeskOrganizationChunk,
-    ZendeskTicketChunk,
-    ZendeskUserChunk,
-)
 from app.platform.decorators import source
+from app.platform.entities._base import BaseEntity
+from app.platform.entities.zendesk import (
+    ZendeskCommentEntity,
+    ZendeskOrganizationEntity,
+    ZendeskTicketEntity,
+    ZendeskUserEntity,
+)
 from app.platform.sources._base import BaseSource
 
 
@@ -44,8 +44,8 @@ class ZendeskSource(BaseSource):
       - Tickets
       - Comments
 
-    Yields them as the corresponding chunk objects defined in
-    app.platform.chunks.zendesk.
+    Yields them as the corresponding entity objects defined in
+    app.platform.entities.zendesk.
     """
 
     @classmethod
@@ -62,10 +62,10 @@ class ZendeskSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_organization_chunks(
+    async def _generate_organization_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate ZendeskOrganizationChunk objects for each organization in Zendesk.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate ZendeskOrganizationEntity objects for each organization in Zendesk.
 
         GET /api/v2/organizations
         """
@@ -73,7 +73,7 @@ class ZendeskSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for org in data.get("organizations", []):
-                yield ZendeskOrganizationChunk(
+                yield ZendeskOrganizationEntity(
                     source_name="zendesk",
                     entity_id=str(org["id"]),
                     name=org.get("name"),
@@ -92,10 +92,10 @@ class ZendeskSource(BaseSource):
             # Handle pagination
             url = data.get("next_page")
 
-    async def _generate_user_chunks(
+    async def _generate_user_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate ZendeskUserChunk objects for each user in Zendesk.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate ZendeskUserEntity objects for each user in Zendesk.
 
         GET /api/v2/users
         """
@@ -103,7 +103,7 @@ class ZendeskSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for user in data.get("users", []):
-                yield ZendeskUserChunk(
+                yield ZendeskUserEntity(
                     source_name="zendesk",
                     entity_id=str(user["id"]),
                     name=user.get("name"),
@@ -120,10 +120,10 @@ class ZendeskSource(BaseSource):
             # Handle pagination
             url = data.get("next_page")
 
-    async def _generate_ticket_chunks(
+    async def _generate_ticket_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate ZendeskTicketChunk objects for each ticket in Zendesk.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate ZendeskTicketEntity objects for each ticket in Zendesk.
 
         GET /api/v2/tickets
         """
@@ -131,7 +131,7 @@ class ZendeskSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for ticket in data.get("tickets", []):
-                yield ZendeskTicketChunk(
+                yield ZendeskTicketEntity(
                     source_name="zendesk",
                     entity_id=str(ticket["id"]),
                     subject=ticket.get("subject"),
@@ -154,10 +154,10 @@ class ZendeskSource(BaseSource):
             # Handle pagination
             url = data.get("next_page")
 
-    async def _generate_comment_chunks(
+    async def _generate_comment_entities(
         self, client: httpx.AsyncClient, ticket_id: str
-    ) -> AsyncGenerator[BaseChunk, None]:
-        """Generate ZendeskCommentChunk objects for comments on a given ticket.
+    ) -> AsyncGenerator[BaseEntity, None]:
+        """Generate ZendeskCommentEntity objects for comments on a given ticket.
 
         GET /api/v2/tickets/{ticket_id}/comments
         """
@@ -166,7 +166,7 @@ class ZendeskSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for comment in data.get("comments", []):
-                yield ZendeskCommentChunk(
+                yield ZendeskCommentEntity(
                     source_name="zendesk",
                     entity_id=str(comment["id"]),
                     ticket_id=str(ticket_id),
@@ -180,30 +180,30 @@ class ZendeskSource(BaseSource):
                 )
             url = data.get("next_page")
 
-    async def generate_chunks(self) -> AsyncGenerator[BaseChunk, None]:
-        """Generate and yield chunks for Zendesk objects.
+    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+        """Generate and yield entities for Zendesk objects.
 
-        Yields chunks in the following order:
+        Yields entities in the following order:
         - Organizations
         - Users
         - Tickets
           - Comments for each ticket
         """
         async with httpx.AsyncClient() as client:
-            # 1) Yield organization chunks
-            async for org_chunk in self._generate_organization_chunks(client):
-                yield org_chunk
+            # 1) Yield organization entities
+            async for org_entity in self._generate_organization_entities(client):
+                yield org_entity
 
-            # 2) Yield user chunks
-            async for user_chunk in self._generate_user_chunks(client):
-                yield user_chunk
+            # 2) Yield user entities
+            async for user_entity in self._generate_user_entities(client):
+                yield user_entity
 
-            # 3) Yield ticket chunks, then fetch comments for each ticket
-            async for ticket_chunk in self._generate_ticket_chunks(client):
-                yield ticket_chunk
+            # 3) Yield ticket entities, then fetch comments for each ticket
+            async for ticket_entity in self._generate_ticket_entities(client):
+                yield ticket_entity
 
-                # Generate comment chunks for this ticket
-                async for comment_chunk in self._generate_comment_chunks(
-                    client, ticket_chunk.entity_id
+                # Generate comment entities for this ticket
+                async for comment_entity in self._generate_comment_entities(
+                    client, ticket_entity.entity_id
                 ):
-                    yield comment_chunk
+                    yield comment_entity

@@ -205,11 +205,11 @@ async def stream_chat_response(
 
     async def event_generator():
         try:
-            async for chunk in chat_service.generate_streaming_response(
+            async for entity in chat_service.generate_streaming_response(
                 db=db, chat_id=chat_id, user=user
             ):
-                if chunk.choices[0].delta.content is not None:
-                    content = chunk.choices[0].delta.content
+                if entity.choices[0].delta.content is not None:
+                    content = entity.choices[0].delta.content
                     # Properly encode newlines for SSE
                     content = content.replace("\n", "\\n")
                     yield f"data: {content}\n\n"

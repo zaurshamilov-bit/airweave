@@ -12,7 +12,7 @@ from app.core.shared_models import SyncJobStatus
 from app.models._base import OrganizationBase, UserMixin
 
 if TYPE_CHECKING:
-    from app.models.chunk import Chunk
+    from app.models.entity import Entity
     from app.models.sync import Sync
 
 
@@ -30,10 +30,10 @@ class SyncJob(OrganizationBase, UserMixin):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     failed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    chunks_detected: Mapped[int] = mapped_column(Integer, default=0)
-    chunks_inserted: Mapped[int] = mapped_column(Integer, default=0)
-    chunks_deleted: Mapped[int] = mapped_column(Integer, default=0)
-    chunks_skipped: Mapped[int] = mapped_column(Integer, default=0)
+    entities_detected: Mapped[int] = mapped_column(Integer, default=0)
+    entities_inserted: Mapped[int] = mapped_column(Integer, default=0)
+    entities_deleted: Mapped[int] = mapped_column(Integer, default=0)
+    entities_skipped: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     sync: Mapped["Sync"] = relationship(
@@ -42,8 +42,8 @@ class SyncJob(OrganizationBase, UserMixin):
         lazy="noload",
     )
 
-    chunks: Mapped[list["Chunk"]] = relationship(
-        "Chunk",
+    entities: Mapped[list["Entity"]] = relationship(
+        "Entity",
         back_populates="sync_job",
         lazy="noload",
         cascade="all, delete-orphan",

@@ -1,15 +1,15 @@
-"""Notion chunk schemas."""
+"""Notion entity schemas."""
 
 from datetime import datetime
 from typing import List, Optional
 
 from pydantic import Field
 
-from app.platform.chunks._base import BaseChunk
+from app.platform.entities._base import BaseEntity
 
 
-class NotionDatabaseChunk(BaseChunk):
-    """Schema for Notion database chunks."""
+class NotionDatabaseEntity(BaseEntity):
+    """Schema for Notion database entities."""
 
     name: str = Field(description="The name of the database")
     database_id: str = Field(description="The ID of the database")
@@ -22,8 +22,8 @@ class NotionDatabaseChunk(BaseChunk):
     )
 
 
-class NotionPageChunk(BaseChunk):
-    """Schema for Notion page chunks."""
+class NotionPageEntity(BaseEntity):
+    """Schema for Notion page entities."""
 
     page_id: str = Field(description="The ID of the page")
     parent_id: str = Field(description="The ID of the parent page")
@@ -39,8 +39,8 @@ class NotionPageChunk(BaseChunk):
     content: Optional[str] = Field(default=None, description="The content of the page")
 
 
-class NotionBlockChunk(BaseChunk):
-    """Schema for Notion block chunks."""
+class NotionBlockEntity(BaseEntity):
+    """Schema for Notion block entities."""
 
     block_id: str = Field(description="The ID of the block")
     parent_id: str = Field(description="The ID of the parent block")
