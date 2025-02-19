@@ -9,6 +9,9 @@ import { ChevronRight } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 import { SyncPipelineVisual } from "@/components/sync/SyncPipelineVisual";
+import { SyncDagEditor } from "@/components/sync/SyncDagEditor";
+import { SyncUIMetadata } from "@/components/sync/types";
+import { DagDefinition } from "@/components/sync/dag";
 
 /**
  * This component coordinates all user actions (source selection,
@@ -45,10 +48,17 @@ const Sync = () => {
   const updates = useSyncSubscription(syncJobId);
 
   // Add UI metadata state for the pipeline visual
-  const [pipelineMetadata, setPipelineMetadata] = useState<{
-    source: { name: string; shortName: string };
-    destination: { name: string; shortName: string };
+  const [pipelineMetadata, setPipelineMetadata] = useState<SyncUIMetadata | null>(null);
+
+  // Add user info state
+  const [userInfo, setUserInfo] = useState<{
+    userId: string;
+    organizationId: string;
+    userEmail: string;
   } | null>(null);
+
+  // Replace the initialDag state with:
+  const [dag, setDag] = useState<DagDefinition | null>(null);
 
   /**
    * Notify the user if they've just returned from an oauth2 flow.
@@ -70,16 +80,27 @@ const Sync = () => {
     }
   }, [location.search, toast]);
 
+
   /**
    * handleSourceSelect is triggered by SyncDataSourceGrid when the user
    * chooses a data source. We move from step 1 -> 2 to pick vector DB.
    */
   const handleSourceSelect = async (connectionId: string, metadata: { name: string; shortName: string }) => {
     setSelectedSource({ connectionId });
-    setPipelineMetadata(prev => ({
-      source: metadata,
-      destination: { name: "Native Weaviate", shortName: "weaviate_native" }
-    }));
+    if (userInfo) {
+      setPipelineMetadata({
+        source: {
+          ...metadata,
+          type: "source",
+        },
+        destination: {
+          name: "Native Weaviate",
+          shortName: "weaviate_native",
+          type: "destination",
+        },
+        ...userInfo,
+      });
+    }
     setStep(2);
   };
 
@@ -88,83 +109,81 @@ const Sync = () => {
    * We move from step 2 -> 3 to confirm the pipeline.
    */
   const handleVectorDBSelected = async (dbDetails: ConnectionSelection, metadata: { name: string; shortName: string }) => {
-    setSelectedDB(dbDetails);
-    setPipelineMetadata(prev => ({
-      source: prev?.source || { name: "", shortName: "" },
-      destination: dbDetails.isNative 
-        ? { name: "Native Weaviate", shortName: "weaviate_native" }
-        : metadata
-    }));
-    setStep(3);
-  };
-
-  /**
-   * createNewSync calls the backend to create a Sync resource.
-   * We won't run immediately here; we'll call /run afterwards for clarity.
-   */
-  const createNewSync = async () => {
-    if (!selectedSource || !selectedDB) return null;
-
     try {
-      const resp = await apiClient.post("/sync/", {
+      setSelectedDB(dbDetails);
+      if (userInfo) {
+        setPipelineMetadata(prev => prev ? {
+          ...prev,
+          destination: dbDetails.isNative 
+            ? {
+                name: "Native Weaviate",
+                shortName: "weaviate_native",
+                type: "destination",
+              }
+            : {
+                ...metadata,
+                type: "destination",
+              }
+        } : null);
+      }
+
+      if (!selectedSource) {
+        throw new Error("No source selected");
+      }
+
+      // Create sync
+      const syncResp = await apiClient.post("/sync/", {
         name: "Sync from UI",
         source_connection_id: selectedSource.connectionId,
-        // If the user picked a "non-native" DB, we pass it along
-        ...(selectedDB.isNative ? {} : { destination_connection_id: selectedDB.connectionId }),
+        ...(dbDetails.isNative ? {} : { destination_connection_id: dbDetails.connectionId }),
         run_immediately: false
       });
-      if (!resp.ok) {
+
+      if (!syncResp.ok) {
         throw new Error("Failed to create sync");
       }
-      const data = await resp.json();
-      setSyncId(data.id);
-      return data.id as string;
+
+      const syncData = await syncResp.json();
+      const newSyncId = syncData.id;
+      setSyncId(newSyncId);
+
+      // Initialize the DAG
+      const dagResp = await apiClient.get(`/dag/init?sync_id=${newSyncId}`);
+      if (!dagResp.ok) {
+        throw new Error("Failed to initialize DAG");
+      }
+
+      const dagData: DagDefinition = await dagResp.json();
+      setDag(dagData);
+      setStep(3);
     } catch (err: any) {
       toast({
         variant: "destructive",
-        title: "Sync creation failed",
-        description: err.message || String(err)
+        title: "Failed to setup pipeline",
+        description: err.message || String(err),
       });
-      return null;
     }
   };
 
   /**
-   * runSync calls the backend to start a sync job
-   * (POST /sync/{sync_id}/run).
+   * handleStartSync is called when the user clicks the Start Sync button
+   * or when the DAG is saved.
    */
-  const runSync = async (syncIdToRun: string) => {
+  const handleStartSync = async () => {
     try {
-      const resp = await apiClient.post(`/sync/${syncIdToRun}/run`);
+      const resp = await apiClient.post(`/sync/${syncId}/run`);
       if (!resp.ok) {
         throw new Error("Failed to run sync job");
       }
       const data = await resp.json();
-      // Store the job ID so SSE subscription can begin
       setSyncJobId(data.id);
+      setStep(4);
     } catch (err: any) {
       toast({
         variant: "destructive",
         title: "Sync job start failed",
         description: err.message || String(err)
       });
-    }
-  };
-
-  /**
-   * handleStartSync creates the new Sync if necessary,
-   * then runs it, and moves to step 4 for progress updates.
-   */
-  const handleStartSync = async () => {
-    // If we haven't created a sync yet, do so now
-    let createdSyncId = syncId;
-    if (!createdSyncId) {
-      createdSyncId = await createNewSync();
-    }
-
-    if (createdSyncId) {
-      await runSync(createdSyncId);
-      setStep(4);
     }
   };
 
@@ -222,20 +241,29 @@ const Sync = () => {
           </div>
         )}
 
-        {/* Step 3: Confirm and start sync */}
+        {/* Step 3: Configure and start sync */}
         {step === 3 && (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <div>
-              <h2 className="text-2xl font-semibold">Ready to sync?</h2>
+              <h2 className="text-2xl font-semibold">Configure your pipeline</h2>
               <p className="text-muted-foreground mt-2">
-                Your pipeline is configured and ready to start syncing.
+                Add transformers and entities to your pipeline.
               </p>
             </div>
-            <div className="flex justify-center">
-              <Button size="lg" onClick={handleStartSync}>
-                Start Sync
-              </Button>
-            </div>
+            {dag && syncId && (
+              <div className="space-y-8">
+                <SyncDagEditor
+                  syncId={syncId}
+                  initialDag={dag}
+                  onSave={handleStartSync}
+                />
+                <div className="flex flex-col items-center gap-2">
+                  <Button size="lg" onClick={handleStartSync}>
+                    Start Sync
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

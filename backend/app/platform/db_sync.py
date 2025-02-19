@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.core.logging import logger
+from app.models.entity_definition import EntityType
 from app.platform.destinations._base import BaseDestination
 from app.platform.embedding_models._base import BaseEmbeddingModel
 from app.platform.sources._base import BaseSource
@@ -81,17 +82,88 @@ async def _sync_embedding_models(db: AsyncSession, models: list[Type[BaseEmbeddi
     sync_logger.info(f"Synced {len(model_definitions)} embedding models to database.")
 
 
-async def _sync_sources(db: AsyncSession, sources: list[Type[BaseSource]]) -> None:
+async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, list[str]]:
+    """Sync entity definitions with the database based on chunk classes.
+
+    Args:
+        db (AsyncSession): Database session
+
+    Returns:
+        Dict[str, list[str]]: Mapping of chunk names to their entity definition IDs as strings
+    """
+    sync_logger.info("Syncing entity definitions to database.")
+
+    # Get all Python files in the entities directory that aren't base or init files
+    chunk_files = [
+        f
+        for f in os.listdir("app/platform/entities")
+        if f.endswith(".py") and not f.startswith("_")
+    ]
+
+    from app.platform.entities._base import BaseEntity
+
+    entity_definitions = []
+    module_to_entities = {}  # Track which entities belong to which module
+
+    for chunk_file in chunk_files:
+        module_name = chunk_file[:-3]  # Remove .py extension
+        # Import the module to get its chunk classes
+        full_module_name = f"app.platform.entities.{module_name}"
+        module = importlib.import_module(full_module_name)
+
+        # Initialize list for this module's entities
+        module_to_entities[module_name] = []
+
+        # Find all chunk classes (subclasses of BaseEntity) in the module
+        for name, cls in inspect.getmembers(module, inspect.isclass):
+            if issubclass(cls, BaseEntity) and cls != BaseEntity:
+                # Create entity definition
+                entity_def = schemas.EntityDefinitionCreate(
+                    name=name,
+                    description=cls.__doc__ or f"Data from {name}",
+                    type=EntityType.JSON,
+                    schema=cls.model_json_schema(),  # Get the actual schema from the Pydantic model
+                )
+                entity_definitions.append(entity_def)
+                module_to_entities[module_name].append(name)  # Track all entities for this module
+
+    # Sync entities
+    await crud.entity_definition.sync(db, entity_definitions, unique_field="name")
+
+    # Get all entities to build the mapping
+    all_entities = await crud.entity_definition.get_all(db)
+    # Map module names to lists of entity IDs as strings
+    name_to_ids = {
+        module_name: [str(e.id) for e in all_entities if e.name in entity_names]
+        for module_name, entity_names in module_to_entities.items()
+    }
+
+    sync_logger.info(f"Synced {len(entity_definitions)} entity definitions to database.")
+    return name_to_ids
+
+
+async def _sync_sources(
+    db: AsyncSession, sources: list[Type[BaseSource]], entity_id_map: Dict[str, list[str]]
+) -> None:
     """Sync sources with the database.
 
     Args:
         db (AsyncSession): Database session
         sources (list[Type[BaseSource]]): List of source classes
+        entity_id_map (Dict[str, list[str]]): Mapping of chunk names to their entity definition IDs as strings
     """
     sync_logger.info("Syncing sources to database.")
 
     source_definitions = []
     for source_class in sources:
+        # Get the chunk type from the source class name
+        # For example, if source is GoogleDriveSource, look for google_drive chunk
+        source_name = source_class.__name__.replace("Source", "").lower()
+        chunk_name = "_".join(word for word in source_name.split() if word)
+
+        # Get all entity IDs for this source's chunk type (already as strings)
+        output_entity_ids = entity_id_map.get(chunk_name, [])
+
         source_def = schemas.SourceCreate(
             name=source_class._name,
             description=source_class.__doc__,
@@ -99,6 +171,7 @@ async def _sync_sources(db: AsyncSession, sources: list[Type[BaseSource]]) -> No
             auth_config_class=source_class._auth_config_class,
             short_name=source_class._short_name,
             class_name=source_class.__name__,
+            output_entity_definition_ids=output_entity_ids,
         )
         source_definitions.append(source_def)
 
@@ -142,8 +215,11 @@ async def sync_platform_components(platform_dir: str, db: AsyncSession) -> None:
 
     components = _get_decorated_classes(platform_dir)
 
+    # First sync entities to get their IDs
+    entity_id_map = await _sync_entity_definitions(db)
+
     await _sync_embedding_models(db, components["embedding_models"])
-    await _sync_sources(db, components["sources"])
+    await _sync_sources(db, components["sources"], entity_id_map)
     await _sync_destinations(db, components["destinations"])
 
     sync_logger.info("Platform components sync completed.")

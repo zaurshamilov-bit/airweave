@@ -19,6 +19,9 @@ class DestinationBase(BaseModel):
     class_name: str
     auth_type: Optional[AuthType] = None
     auth_config_class: Optional[str] = None
+    input_entity_definition_ids: Optional[list[UUID]] = None
+    organization_id: Optional[UUID] = None
+    config_schema: Optional[dict] = None
 
     class Config:
         """Pydantic config for DestinationBase."""
