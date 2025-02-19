@@ -510,45 +510,56 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
   };
 
   return (
-    <div className="w-full h-[800px] relative border rounded-lg bg-background">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges.map(edge => ({
-          ...edge,
-          data: { onTransformerAdd: handleTransformerAdd }
-        }))}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView
-        className="bg-background rounded-lg"
-        defaultEdgeOptions={{
-          type: 'button',
-        }}
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background />
-        <Controls />
-        <Panel position="top-right" className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={applyLayout}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleSave}
-            disabled={isLoading}
-          >
-            <Save className="w-4 h-4" />
-          </Button>
-        </Panel>
-      </ReactFlow>
+    <div className="w-full space-y-2">
+      <div className="flex items-center gap-2">
+        <h3 className="text-lg font-semibold">Sync DAG Editor</h3>
+        <span className="bg-yellow-500/10 text-yellow-500 text-xs px-2 py-1 rounded-full">Beta</span>
+      </div>
+      <div className="w-full h-[800px] relative border rounded-lg bg-background group">
+        <div className="absolute inset-0 z-50 bg-black/5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="bg-popover text-popover-foreground p-4 rounded-lg shadow-lg max-w-md text-center">
+            <p>The DAG editor is coming soon! Contact us if you want to try it early.</p>
+          </div>
+        </div>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges.map(edge => ({
+            ...edge,
+            data: { onTransformerAdd: handleTransformerAdd }
+          }))}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          fitView
+          className="bg-background rounded-lg pointer-events-none"
+          defaultEdgeOptions={{
+            type: 'button',
+          }}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background />
+          <Controls />
+          <Panel position="top-right" className="flex gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={applyLayout}
+              disabled
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSave}
+            >
+              <Save className="w-4 h-4" />
+            </Button>
+          </Panel>
+        </ReactFlow>
+      </div>
     </div>
   );
 };

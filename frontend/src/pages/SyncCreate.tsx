@@ -257,7 +257,7 @@ const Sync = () => {
                   initialDag={dag}
                   onSave={handleStartSync}
                 />
-                <div className="flex justify-center">
+                <div className="flex flex-col items-center gap-2">
                   <Button size="lg" onClick={handleStartSync}>
                     Start Sync
                   </Button>
