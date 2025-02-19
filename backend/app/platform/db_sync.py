@@ -93,12 +93,14 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, list[str]]:
     """
     sync_logger.info("Syncing entity definitions to database.")
 
-    # Get all Python files in the chunks directory that aren't base or init files
+    # Get all Python files in the entities directory that aren't base or init files
     chunk_files = [
-        f for f in os.listdir("app/platform/chunks") if f.endswith(".py") and not f.startswith("_")
+        f
+        for f in os.listdir("app/platform/entities")
+        if f.endswith(".py") and not f.startswith("_")
     ]
 
-    from app.platform.chunks._base import BaseChunk
+    from app.platform.entities._base import BaseEntity
 
     entity_definitions = []
     module_to_entities = {}  # Track which entities belong to which module
@@ -106,15 +108,15 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, list[str]]:
     for chunk_file in chunk_files:
         module_name = chunk_file[:-3]  # Remove .py extension
         # Import the module to get its chunk classes
-        full_module_name = f"app.platform.chunks.{module_name}"
+        full_module_name = f"app.platform.entities.{module_name}"
         module = importlib.import_module(full_module_name)
 
         # Initialize list for this module's entities
         module_to_entities[module_name] = []
 
-        # Find all chunk classes (subclasses of BaseChunk) in the module
+        # Find all chunk classes (subclasses of BaseEntity) in the module
         for name, cls in inspect.getmembers(module, inspect.isclass):
-            if issubclass(cls, BaseChunk) and cls != BaseChunk:
+            if issubclass(cls, BaseEntity) and cls != BaseEntity:
                 # Create entity definition
                 entity_def = schemas.EntityDefinitionCreate(
                     name=name,

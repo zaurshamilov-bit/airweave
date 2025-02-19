@@ -405,7 +405,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
       id: `chunk-${Date.now()}-1`,
       type: 'entity',
       data: {
-        name: 'Chunk 1',
+        name: 'Entity 1',
       },
       position: { x: 0, y: 0 }, // Will be set by layout
     };
@@ -414,7 +414,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
       id: `chunk-${Date.now()}-2`,
       type: 'entity',
       data: {
-        name: 'Chunk 2',
+        name: 'Entity 2',
       },
       position: { x: 0, y: 0 }, // Will be set by layout
     };
@@ -428,7 +428,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
         target: transformerNode.id,
         type: 'button',
       },
-      // Edges from transformer to chunks (blank type)
+      // Edges from transformer to entities (blank type)
       {
         id: `edge-${Date.now()}-2`,
         source: transformerNode.id,
@@ -441,7 +441,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
         target: chunk2.id,
         type: 'blank',
       },
-      // Edges from chunks to target (button type)
+      // Edges from entities to target (button type)
       {
         id: `edge-${Date.now()}-4`,
         source: chunk1.id,

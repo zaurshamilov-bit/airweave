@@ -1,7 +1,7 @@
 """rename chunk to entity
 
 Revision ID: 0cf098b4c987
-Revises: 1fb5731c172e
+Revises: 3a3c65856c56
 Create Date: 2025-02-19 11:00:39.036935
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "0cf098b4c987"
-down_revision = "1fb5731c172e"
+down_revision = "3a3c65856c56"
 branch_labels = None
 depends_on = None
 

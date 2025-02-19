@@ -13,7 +13,7 @@ const TRANSFORMERS = [
   { 
     id: "text-splitter", 
     name: "Text Splitter", 
-    description: "Split text into chunks",
+    description: "Split text into entities",
     icon: "split"
   },
   { 
