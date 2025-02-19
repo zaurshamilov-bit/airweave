@@ -1,11 +1,11 @@
-"""Schemas for entity definitions and relations."""
+"""Schemas for entity definitions."""
 
 from typing import Dict, List, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.models.entity import EntityType
+from app.models.entity_definition import EntityType
 
 
 class EntityDefinitionBase(BaseModel):
@@ -32,41 +32,6 @@ class EntityDefinitionUpdate(EntityDefinitionBase):
 
 class EntityDefinition(EntityDefinitionBase):
     """Schema for an entity definition."""
-
-    id: UUID
-    organization_id: UUID
-    created_by_email: str
-    modified_by_email: str
-
-    class Config:
-        """Pydantic config."""
-
-        from_attributes = True
-
-
-class EntityRelationBase(BaseModel):
-    """Base schema for entity relation."""
-
-    name: str
-    description: Optional[str] = None
-    from_entity_id: UUID
-    to_entity_id: UUID
-
-
-class EntityRelationCreate(EntityRelationBase):
-    """Schema for creating an entity relation."""
-
-    pass
-
-
-class EntityRelationUpdate(EntityRelationBase):
-    """Schema for updating an entity relation."""
-
-    pass
-
-
-class EntityRelation(EntityRelationBase):
-    """Schema for an entity relation."""
 
     id: UUID
     organization_id: UUID

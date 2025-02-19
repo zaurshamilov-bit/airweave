@@ -34,14 +34,16 @@ from .embedding_model import (
     EmbeddingModelUpdate,
     EmbeddingModelWithConfigFields,
 )
-from .entity import (
+from .entity_definition import (
     EntityDefinition,
     EntityDefinitionCreate,
     EntityDefinitionUpdate,
+    EntityType,
+)
+from .entity_relation import (
     EntityRelation,
     EntityRelationCreate,
     EntityRelationUpdate,
-    EntityType,
 )
 from .integration_credential import (
     IntegrationCredential,

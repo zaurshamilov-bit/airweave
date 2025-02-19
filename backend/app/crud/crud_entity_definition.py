@@ -1,4 +1,4 @@
-"""CRUD operations for entity definitions and relations."""
+"""CRUD operations for entity definitions."""
 
 from typing import List
 from uuid import UUID
@@ -6,22 +6,16 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.entity import EntityDefinition, EntityRelation
-from app.schemas.entity import (
-    EntityDefinitionCreate,
-    EntityDefinitionUpdate,
-    EntityRelationCreate,
-    EntityRelationUpdate,
-)
+from app.models.entity_definition import EntityDefinition
+from app.schemas.entity_definition import EntityDefinitionCreate, EntityDefinitionUpdate
 
-from ._base_organization import CRUDBaseOrganization
 from ._base_system import CRUDBaseSystem
 
 
 class CRUDEntityDefinition(
     CRUDBaseSystem[EntityDefinition, EntityDefinitionCreate, EntityDefinitionUpdate]
 ):
-    """CRUD operations for Entity."""
+    """CRUD operations for Entity Definition."""
 
     async def get_multi_by_ids(
         self, db: AsyncSession, *, ids: List[UUID]
@@ -39,13 +33,4 @@ class CRUDEntityDefinition(
         return list(result.unique().scalars().all())
 
 
-class CRUDEntityRelation(
-    CRUDBaseOrganization[EntityRelation, EntityRelationCreate, EntityRelationUpdate]
-):
-    """CRUD operations for EntityRelation."""
-
-    pass
-
-
 entity_definition = CRUDEntityDefinition(EntityDefinition)
-entity_relation = CRUDEntityRelation(EntityRelation)

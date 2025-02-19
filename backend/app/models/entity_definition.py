@@ -1,4 +1,4 @@
-"""Models for entities."""
+"""Models for entity definitions."""
 
 from enum import Enum
 
@@ -32,15 +32,3 @@ class EntityDefinition(Base):
     __table_args__ = (
         UniqueConstraint("name", "organization_id", name="uq_entity_definition_name_org"),
     )
-
-
-class EntityRelation(Base):
-    """Relation between two entity types."""
-
-    __tablename__ = "entity_relation"
-
-    name = Column(String, nullable=False)
-    description = Column(String)
-    from_entity_definition_id = Column(ForeignKey("entity_definition.id"), nullable=False)
-    to_entity_definition_id = Column(ForeignKey("entity_definition.id"), nullable=False)
-    organization_id = Column(ForeignKey("organization.id"), nullable=True)

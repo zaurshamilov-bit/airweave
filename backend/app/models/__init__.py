@@ -7,7 +7,8 @@ from .connection import Connection
 from .dag import DagEdge, DagNode, SyncDagDefinition
 from .destination import Destination
 from .embedding_model import EmbeddingModel
-from .entity import EntityDefinition, EntityRelation, EntityType
+from .entity_definition import EntityDefinition
+from .entity_relation import EntityRelation
 from .integration_credential import IntegrationCredential
 from .organization import Organization
 from .source import Source
@@ -29,7 +30,6 @@ __all__ = [
     "EmbeddingModel",
     "EntityDefinition",
     "EntityRelation",
-    "EntityType",
     "IntegrationCredential",
     "Organization",
     "Source",

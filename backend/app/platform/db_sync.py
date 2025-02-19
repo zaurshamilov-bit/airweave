@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.core.logging import logger
-from app.models.entity import EntityType
+from app.models.entity_definition import EntityType
 from app.platform.destinations._base import BaseDestination
 from app.platform.embedding_models._base import BaseEmbeddingModel
 from app.platform.sources._base import BaseSource

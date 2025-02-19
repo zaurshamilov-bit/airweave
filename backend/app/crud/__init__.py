@@ -7,7 +7,8 @@ from .crud_connection import connection
 from .crud_dag import sync_dag_definition
 from .crud_destination import destination
 from .crud_embedding_model import embedding_model
-from .crud_entity import entity_definition, entity_relation
+from .crud_entity_definition import entity_definition
+from .crud_entity_relation import entity_relation
 from .crud_integration_credential import integration_credential
 from .crud_organization import organization
 from .crud_source import source

@@ -6,93 +6,87 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import crud, schemas
 from app.api import deps
-from app.crud.crud_entity import entity_definition, entity_relation
 from app.models.user import User
-from app.schemas.entity import (
-    EntityDefinition,
-    EntityDefinitionCreate,
-    EntityDefinitionUpdate,
-    EntityRelation,
-    EntityRelationCreate,
-    EntityRelationUpdate,
-)
 
 router = APIRouter()
 
 
-@router.get("/definitions/", response_model=List[EntityDefinition])
+@router.get("/definitions/", response_model=List[schemas.EntityDefinition])
 async def list_entity_definitions(
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-) -> List[EntityDefinition]:
+) -> List[schemas.EntityDefinition]:
     """List all entity definitions for the current user's organization."""
-    return await entity_definition.get_multi_by_organization(
+    return await crud.entity_definition.get_multi_by_organization(
         db, organization_id=current_user.organization_id
     )
 
 
-@router.post("/definitions/", response_model=EntityDefinition)
+@router.post("/definitions/", response_model=schemas.EntityDefinition)
 async def create_entity_definition(
-    definition: EntityDefinitionCreate,
+    definition: schemas.EntityDefinitionCreate,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-) -> EntityDefinition:
+) -> schemas.EntityDefinition:
     """Create a new entity definition."""
-    return await entity_definition.create(db, obj_in=definition, user=current_user)
+    return await crud.entity_definition.create(db, obj_in=definition, user=current_user)
 
 
-@router.put("/definitions/{definition_id}", response_model=EntityDefinition)
+@router.put("/definitions/{definition_id}", response_model=schemas.EntityDefinition)
 async def update_entity_definition(
     definition_id: UUID,
-    definition: EntityDefinitionUpdate,
+    definition: schemas.EntityDefinitionUpdate,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-) -> EntityDefinition:
+) -> schemas.EntityDefinition:
     """Update an entity definition."""
-    db_obj = await entity_definition.get(db, id=definition_id)
-    return await entity_definition.update(db, db_obj=db_obj, obj_in=definition, user=current_user)
+    db_obj = await crud.entity_definition.get(db, id=definition_id)
+    return await crud.entity_definition.update(
+        db, db_obj=db_obj, obj_in=definition, user=current_user
+    )
 
 
-@router.get("/relations/", response_model=List[EntityRelation])
+@router.get("/relations/", response_model=List[schemas.EntityRelation])
 async def list_entity_relations(
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-) -> List[EntityRelation]:
+) -> List[schemas.EntityRelation]:
     """List all entity relations for the current user's organization."""
-    return await entity_relation.get_multi_by_organization(
+    return await crud.entity_relation.get_multi_by_organization(
         db, organization_id=current_user.organization_id
     )
 
 
-@router.post("/relations/", response_model=EntityRelation)
+@router.post("/relations/", response_model=schemas.EntityRelation)
 async def create_entity_relation(
-    relation: EntityRelationCreate,
+    relation: schemas.EntityRelationCreate,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-) -> EntityRelation:
+) -> schemas.EntityRelation:
     """Create a new entity relation."""
-    return await entity_relation.create(db, obj_in=relation, user=current_user)
+    return await crud.entity_relation.create(db, obj_in=relation, user=current_user)
 
 
-@router.put("/relations/{relation_id}", response_model=EntityRelation)
+@router.put("/relations/{relation_id}", response_model=schemas.EntityRelation)
 async def update_entity_relation(
     relation_id: UUID,
-    relation: EntityRelationUpdate,
+    relation: schemas.EntityRelationUpdate,
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-) -> EntityRelation:
+) -> schemas.EntityRelation:
     """Update an entity relation."""
-    db_obj = await entity_relation.get(db, id=relation_id)
-    return await entity_relation.update(db, db_obj=db_obj, obj_in=relation, user=current_user)
+    db_obj = await crud.entity_relation.get(db, id=relation_id)
+    return await crud.entity_relation.update(db, db_obj=db_obj, obj_in=relation, user=current_user)
 
 
-@router.post("/definitions/by-ids/", response_model=List[EntityDefinition])
+@router.post("/definitions/by-ids/", response_model=List[schemas.EntityDefinition])
 async def get_entity_definitions_by_ids(
     ids: List[UUID],
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-) -> List[EntityDefinition]:
+) -> List[schemas.EntityDefinition]:
     """Get multiple entity definitions by their IDs.
 
     Args:
@@ -103,4 +97,4 @@ async def get_entity_definitions_by_ids(
     Returns:
         List of entity definitions matching the provided IDs
     """
-    return await entity_definition.get_multi_by_ids(db, ids=ids)
+    return await crud.entity_definition.get_multi_by_ids(db, ids=ids)
