@@ -221,7 +221,7 @@ class GoogleCalendarSource(BaseSource):
         """
         async with httpx.AsyncClient() as client:
             # 1) Get the user's calendarList
-            #    For each item, yield a CalendarList entity and store in memory for subsequent calls.
+            #    For each item, yield a CalendarList entity and store in memory for subsequent calls
             calendar_list_entries: List[GoogleCalendarListEntity] = []
             async for cal_list_entity in self._generate_calendar_list_entities(client):
                 yield cal_list_entity

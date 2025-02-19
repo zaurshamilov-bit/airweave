@@ -26,8 +26,8 @@ integrations:
     url: "https://accounts.google.com/o/oauth2/auth"
     backend_url: "https://oauth2.googleapis.com/token"
     grant_type: "authorization_code"
-    client_id: ${GOOGLE_GMAIL_CLIENT_ID}
-    client_secret: ${GOOGLE_GMAIL_CLIENT_SECRET}
+    client_id: "502433363466-d8ruvkdb3nkafulj63tnenn8iud31sks.apps.googleusercontent.com"
+    client_secret: "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"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
     scope: "https://www.googleapis.com/auth/gmail.readonly"
@@ -40,8 +40,8 @@ integrations:
     url: "https://accounts.google.com/o/oauth2/auth"
     backend_url: "https://oauth2.googleapis.com/token"
     grant_type: "authorization_code"
-    client_id: ${GOOGLE_CALENDAR_CLIENT_ID}
-    client_secret: ${GOOGLE_CALENDAR_CLIENT_SECRET}
+    client_id: "818502206676-21n4c60uj6ptrakgboqmfn24rv9jfrln.apps.googleusercontent.com"
+    client_secret: "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"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
     scope: "https://www.googleapis.com/auth/calendar.events.public.readonly https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.calendars.readonly https://www.googleapis.com/auth/calendar.events.owned.readonly https://www.googleapis.com/auth/calendar.events.readonly"
@@ -54,8 +54,8 @@ integrations:
     url: "https://accounts.google.com/o/oauth2/auth"
     backend_url: "https://oauth2.googleapis.com/token"
     grant_type: "authorization_code"
-    client_id: 308188756994-6pluda2abpu45q91ccg82qve5j69mpk5.apps.googleusercontent.com
-    client_secret: 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
+    client_id: "308188756994-6pluda2abpu45q91ccg82qve5j69mpk5.apps.googleusercontent.com"
+    client_secret: "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"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
     scope: "https://www.googleapis.com/auth/docs https://www.googleapis.com/auth/drive.photos.readonly https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.metadata https://www.googleapis.com/auth/drive.metadata.readonly https://www.googleapis.com/auth/gmail.readonly"
@@ -85,6 +85,19 @@ integrations:
     client_credential_location: "body"
     scope: "read write"
 
+  jira:
+    auth_type: "oauth2_with_refresh_rotating"
+    url: "https://auth.atlassian.com/authorize"
+    backend_url: "https://auth.atlassian.com/oauth/token"
+    grant_type: "authorization_code"
+    client_id: "..."
+    client_secret: "..."
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read"
+    additional_frontend_params:
+      response_mode: "query"
+
   monday:
     auth_type: "oauth2"
     url: "https://auth.monday.com/oauth2/authorize"
@@ -107,6 +120,19 @@ integrations:
     client_credential_location: "header"
     additional_frontend_params:
       owner: "user"
+
+  outlook_calendar:
+    auth_type: "oauth2_with_refresh_rotating"
+    url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+    backend_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+    grant_type: "authorization_code"
+    client_id: "96771052-39e1-4c35-ae43-683c48b44294"
+    client_secret: "nlV8Q~smmzr13Ikr0o3TEDbKGZFRnTRxWRHIycZE"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "offline_access https://graph.microsoft.com/User.Read https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/Calendars.Read.Shared"
+    additional_frontend_params:
+      response_mode: "query"
 
   outlook_mail:
     auth_type: "oauth2_with_refresh_rotating"
