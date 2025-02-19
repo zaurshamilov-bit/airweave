@@ -5,7 +5,7 @@ from typing import AsyncGenerator, Optional
 from uuid import UUID
 
 from openai import AsyncOpenAI
-from openai.types.chat import ChatCompletionEntity
+from openai.types.chat import ChatCompletionChunk
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
@@ -62,7 +62,7 @@ class ChatService:
         db: AsyncSession,
         chat_id: UUID,
         user: schemas.User,
-    ) -> AsyncGenerator[ChatCompletionEntity, None]:
+    ) -> AsyncGenerator[ChatCompletionChunk, None]:
         """Generate a streaming AI response.
 
         Args:
@@ -71,7 +71,7 @@ class ChatService:
             user (schemas.User): Current user
 
         Yields:
-            AsyncGenerator[ChatCompletionEntity]: Stream of response entities
+            AsyncGenerator[ChatCompletionChunk]: Stream of response entities
         """
         try:
             chat = await crud.chat.get_with_messages(db=db, id=chat_id, current_user=user)
