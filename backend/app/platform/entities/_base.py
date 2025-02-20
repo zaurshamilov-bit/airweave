@@ -1,6 +1,7 @@
 """Entity schemas."""
 
 import hashlib
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Type, TypeVar
 from uuid import UUID, uuid4
 
@@ -130,3 +131,43 @@ class PolymorphicEntity(BaseEntity):
 
 
 T = TypeVar("T", bound=PolymorphicEntity)
+
+
+class FileEntity(BaseEntity):
+    """Base schema for file entities."""
+
+    file_id: str = Field(..., description="ID of the file in the source system")
+    name: str = Field(..., description="Name of the file")
+    mime_type: Optional[str] = Field(None, description="MIME type of the file")
+    size: Optional[int] = Field(None, description="Size of the file in bytes")
+    download_url: Optional[str] = Field(None, description="URL to download the file")
+    created_at: Optional[datetime] = Field(None, description="When the file was created")
+    modified_at: Optional[datetime] = Field(None, description="When the file was last modified")
+
+    # File handling fields - set by file handler
+    file_uuid: Optional[UUID] = Field(None, description="UUID assigned by the file manager")
+    local_path: Optional[str] = Field(
+        None, description="Temporary local path if file is downloaded"
+    )
+    checksum: Optional[str] = Field(None, description="File checksum/hash if available")
+    total_size: Optional[int] = Field(None, description="Total size of the file in bytes")
+
+    def hash(self) -> str:
+        """Hash the file entity.
+
+        For files, we use a combination of metadata and checksum if available.
+        If no checksum is available, we fall back to the parent hash method.
+        """
+        if self.checksum:
+            # If we have a checksum, use it as the primary hash component
+            hash_input = {
+                "file_id": self.file_id,
+                "name": self.name,
+                "size": self.size,
+                "checksum": self.checksum,
+                "modified_at": self.modified_at,
+            }
+            return hashlib.sha256(str(hash_input).encode()).hexdigest()
+
+        # Fall back to parent hash method if no checksum
+        return super().hash()

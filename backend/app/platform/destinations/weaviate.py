@@ -148,6 +148,10 @@ class WeaviateDestination(VectorDBDestination):
             embedding_model=self.embedding_model,
         ) as service:
             collection = await service.get_weaviate_collection(self.collection_name)
+            # Serialize non-primitive types to JSON strings
+            for key, value in data_object.items():
+                if isinstance(value, (dict, list)) and key != "breadcrumbs":
+                    data_object[key] = json.dumps(value)
             await collection.data.insert(data_object, uuid=entity.db_entity_id)
 
     async def bulk_insert(self, entities: list[BaseEntity]) -> None:
@@ -166,11 +170,11 @@ class WeaviateDestination(VectorDBDestination):
             objects_to_insert = []
             for entity in entities:
                 entity_data = entity.model_dump()
-                if "sync_metadata" in entity_data and isinstance(
-                    entity_data["sync_metadata"], dict
-                ):
-                    entity_data["sync_metadata"] = json.dumps(entity_data["sync_metadata"])
 
+                # Serialize non-primitive types to JSON strings
+                for key, value in entity_data.items():
+                    if isinstance(value, (dict, list)):
+                        entity_data[key] = json.dumps(value)
                 data_object = weaviate.classes.data.DataObject(
                     uuid=entity.db_entity_id,
                     properties=entity_data,

@@ -17,7 +17,7 @@ from app.platform.auth.services import oauth2_service
 from app.platform.auth.settings import integration_settings
 from app.platform.destinations.weaviate import WeaviateDestination
 from app.platform.embedding_models.local_text2vec import LocalText2Vec
-from app.platform.entities._base import BaseEntity
+from app.platform.file_handlers.file_manager import file_manager
 from app.platform.locator import resource_locator
 from app.platform.sync.context import SyncContext
 from app.platform.sync.pubsub import SyncProgressUpdate, sync_pubsub
@@ -42,27 +42,16 @@ class SyncService:
         sync_job: schemas.SyncJob,
         current_user: schemas.User,
     ) -> schemas.Sync:
-        """Run a sync.
-
-        This method:
-        1. Creates a sync context
-        2. Processes entities from the source
-        3. Handles updates, inserts, and deletions in both DB and destination
-        4. Uses batch processing for efficiency
-        """
+        """Run a sync."""
         try:
             async with get_db_context() as db:
                 sync_context = await self.create_sync_context(db, sync, sync_job, current_user)
 
                 logger.info(f"Starting job with id {sync_context.sync_job.id}.")
 
-                # TODO: Implement microbatch processing
-
                 sync_progress_update = SyncProgressUpdate()
 
                 async for entity in sync_context.source.generate_entities():
-                    # Enrich entity with sync context information
-                    entity = await self._enrich_entity(entity, sync_context)
 
                     # Calculate hash for deduplication
                     entity_hash = entity.hash()
@@ -152,6 +141,9 @@ class SyncService:
                 sync_progress_update.is_failed = True
                 await sync_pubsub.publish(sync_job.id, sync_progress_update)
 
+                # Clean up any downloaded files
+                file_manager.cleanup_job(sync_job.id)
+
                 return sync
 
         async with get_db_context() as db:
@@ -171,24 +163,10 @@ class SyncService:
             sync_progress_update.is_complete = True
             await sync_pubsub.publish(sync_job.id, sync_progress_update)
 
+            # Clean up downloaded files after successful completion
+            file_manager.cleanup_job(sync_job.id)
+
             return sync
-
-    async def _enrich_entity(
-        self,
-        entity: BaseEntity,
-        sync_context: SyncContext,
-    ) -> BaseEntity:
-        """Enrich a entity with information from the sync context."""
-        entity.source_name = sync_context.source._name
-        entity.sync_id = sync_context.sync.id
-        entity.sync_job_id = sync_context.sync_job.id
-        entity.sync_metadata = sync_context.sync.sync_metadata
-        if sync_context.sync.white_label_id:
-            entity.white_label_user_identifier = sync_context.sync.white_label_user_identifier
-            entity.white_label_id = sync_context.sync.white_label_id
-            entity.white_label_name = sync_context.white_label.name
-
-        return entity
 
     async def create_sync_context(
         self,

@@ -1,11 +1,11 @@
 """Asana entity schemas."""
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import BaseEntity, FileEntity
 
 
 class AsanaWorkspaceEntity(BaseEntity):
@@ -110,3 +110,21 @@ class AsanaCommentEntity(BaseEntity):
     liked: bool = False
     type: str = "comment"  # 'comment' or 'system'
     previews: List[Dict] = Field(default_factory=list)
+
+
+class AsanaFileEntity(FileEntity):
+    """Schema for Asana file attachments.
+
+    Reference:
+        https://developers.asana.com/reference/getattachment
+    """
+
+    task_gid: str = Field(..., description="GID of the task this file is attached to")
+    task_name: str = Field(..., description="Name of the task this file is attached to")
+    resource_type: str = Field(..., description="Type of the attachment resource")
+    host: Optional[str] = Field(None, description="Service hosting the attachment")
+    parent: Optional[Dict[str, Any]] = Field(
+        None, description="Parent resource the attachment is on"
+    )
+    view_url: Optional[str] = Field(None, description="URL to view the attachment")
+    permanent: bool = Field(False, description="Whether this is a permanent attachment")
