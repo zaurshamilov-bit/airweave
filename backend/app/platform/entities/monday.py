@@ -9,10 +9,10 @@ from typing import Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class MondayBoardEntity(BaseEntity):
+class MondayBoardEntity(ChunkEntity):
     """Schema for Monday Board objects.
 
     https://developer.monday.com/api-reference/reference/boards
@@ -47,7 +47,7 @@ class MondayBoardEntity(BaseEntity):
     )
 
 
-class MondayGroupEntity(BaseEntity):
+class MondayGroupEntity(ChunkEntity):
     """Schema for Monday Group objects.
 
     Groups are collections of items (rows) within a board.
@@ -68,7 +68,7 @@ class MondayGroupEntity(BaseEntity):
     )
 
 
-class MondayColumnEntity(BaseEntity):
+class MondayColumnEntity(ChunkEntity):
     """Schema for Monday Column objects.
 
     Columns define the structure of data on a Monday board.
@@ -91,7 +91,7 @@ class MondayColumnEntity(BaseEntity):
     archived: bool = Field(False, description="Whether this column is archived or hidden.")
 
 
-class MondayItemEntity(BaseEntity):
+class MondayItemEntity(ChunkEntity):
     """Schema for Monday Item objects (rows on a board).
 
     https://developer.monday.com/api-reference/reference/boards
@@ -115,7 +115,7 @@ class MondayItemEntity(BaseEntity):
     updated_at: Optional[datetime] = Field(None, description="When the item was last updated.")
 
 
-class MondaySubitemEntity(BaseEntity):
+class MondaySubitemEntity(ChunkEntity):
     """Schema for Monday Subitem objects.
 
     Subitems are items nested under a parent item, often in a dedicated 'Subitems' column.
@@ -142,7 +142,7 @@ class MondaySubitemEntity(BaseEntity):
     updated_at: Optional[datetime] = Field(None, description="When the subitem was last updated.")
 
 
-class MondayUpdateEntity(BaseEntity):
+class MondayUpdateEntity(ChunkEntity):
     """Schema for Monday Update objects.
 
     monday.com updates add notes and discussions to items outside of their column data.

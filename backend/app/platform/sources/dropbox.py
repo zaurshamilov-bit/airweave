@@ -6,7 +6,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.dropbox import (
     DropboxAccountEntity,
     DropboxFileEntity,
@@ -67,7 +67,7 @@ class DropboxSource(BaseSource):
 
     async def _generate_account_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate Dropbox account-level entities.
 
         Args:
@@ -91,7 +91,7 @@ class DropboxSource(BaseSource):
         self,
         client: httpx.AsyncClient,
         account_breadcrumb: Breadcrumb,
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate folder entities for a given Dropbox account.
 
         Args:
@@ -118,7 +118,7 @@ class DropboxSource(BaseSource):
         self,
         client: httpx.AsyncClient,
         folder_breadcrumbs: List[Breadcrumb],
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate file entities within a given folder.
 
         Args:
@@ -144,7 +144,7 @@ class DropboxSource(BaseSource):
             sharing_info={},
         )
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Dropbox.
 
         Yields:

@@ -24,7 +24,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 from app.platform.entities.zendesk import (
     ZendeskCommentEntity,
     ZendeskOrganizationEntity,
@@ -64,7 +64,7 @@ class ZendeskSource(BaseSource):
 
     async def _generate_organization_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ZendeskOrganizationEntity objects for each organization in Zendesk.
 
         GET /api/v2/organizations
@@ -94,7 +94,7 @@ class ZendeskSource(BaseSource):
 
     async def _generate_user_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ZendeskUserEntity objects for each user in Zendesk.
 
         GET /api/v2/users
@@ -122,7 +122,7 @@ class ZendeskSource(BaseSource):
 
     async def _generate_ticket_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ZendeskTicketEntity objects for each ticket in Zendesk.
 
         GET /api/v2/tickets
@@ -156,7 +156,7 @@ class ZendeskSource(BaseSource):
 
     async def _generate_comment_entities(
         self, client: httpx.AsyncClient, ticket_id: str
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ZendeskCommentEntity objects for comments on a given ticket.
 
         GET /api/v2/tickets/{ticket_id}/comments
@@ -180,7 +180,7 @@ class ZendeskSource(BaseSource):
                 )
             url = data.get("next_page")
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate and yield entities for Zendesk objects.
 
         Yields entities in the following order:

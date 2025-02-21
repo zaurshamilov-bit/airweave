@@ -7,7 +7,7 @@ import httpx
 from app.core.logging import logger
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.asana import (
     AsanaCommentEntity,
     AsanaFileEntity,
@@ -70,7 +70,7 @@ class AsanaSource(BaseSource):
 
     async def _generate_workspace_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate workspace entities."""
         workspaces_data = await self._get_with_auth(
             client, "https://app.asana.com/api/1.0/workspaces"
@@ -90,7 +90,7 @@ class AsanaSource(BaseSource):
 
     async def _generate_project_entities(
         self, client: httpx.AsyncClient, workspace: Dict, workspace_breadcrumb: Breadcrumb
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate project entities for a workspace."""
         projects_data = await self._get_with_auth(
             client, f"https://app.asana.com/api/1.0/workspaces/{workspace['gid']}/projects"
@@ -129,7 +129,7 @@ class AsanaSource(BaseSource):
 
     async def _generate_section_entities(
         self, client: httpx.AsyncClient, project: Dict, project_breadcrumbs: List[Breadcrumb]
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate section entities for a project."""
         sections_data = await self._get_with_auth(
             client, f"https://app.asana.com/api/1.0/projects/{project['gid']}/sections"
@@ -152,7 +152,7 @@ class AsanaSource(BaseSource):
         project: Dict,
         section: Optional[Dict] = None,
         breadcrumbs: List[Breadcrumb] = None,
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate task entities for a project or section."""
         url = (
             f"https://app.asana.com/api/1.0/sections/{section['gid']}/tasks"
@@ -212,7 +212,7 @@ class AsanaSource(BaseSource):
 
     async def _generate_comment_entities(
         self, client: httpx.AsyncClient, task: Dict, task_breadcrumbs: List[Breadcrumb]
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate comment entities for a task."""
         stories_data = await self._get_with_auth(
             client, f"https://app.asana.com/api/1.0/tasks/{task['gid']}/stories"
@@ -246,7 +246,7 @@ class AsanaSource(BaseSource):
         client: httpx.AsyncClient,
         task: Dict,
         task_breadcrumbs: List[Breadcrumb],
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate file attachment entities for a task."""
         attachments_data = await self._get_with_auth(
             client, f"https://app.asana.com/api/1.0/tasks/{task['gid']}/attachments"
@@ -292,7 +292,7 @@ class AsanaSource(BaseSource):
             else:
                 yield file_entity
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Asana."""
         async with httpx.AsyncClient() as client:
             async for workspace_entity in self._generate_workspace_entities(client):

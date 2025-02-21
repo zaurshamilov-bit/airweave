@@ -10,7 +10,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from app.core.logging import logger
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.notion import (
     NotionBlockEntity,
     NotionDatabaseEntity,
@@ -300,7 +300,7 @@ class NotionSource(BaseSource):
             last_edited_time=block.get("last_edited_time"),
         )
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Notion.
 
         Instead of traversing a hierarchy, we use Notion's search endpoint to get:

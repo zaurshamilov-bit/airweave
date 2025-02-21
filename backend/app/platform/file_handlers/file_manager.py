@@ -8,7 +8,7 @@ from uuid import uuid4
 import aiofiles
 
 from app.core.logging import logger
-from app.platform.entities._base import BaseEntity, FileEntity
+from app.platform.entities._base import FileEntity
 
 
 class FileManager:
@@ -89,7 +89,7 @@ class FileManager:
 file_manager = FileManager()
 
 
-async def handle_file_entity(file_entity: FileEntity, stream: AsyncIterator[bytes]) -> BaseEntity:
+async def handle_file_entity(file_entity: FileEntity, stream: AsyncIterator[bytes]) -> FileEntity:
     """Utility function to handle a file entity with its stream.
 
     This is a convenience function that can be used directly in source implementations.

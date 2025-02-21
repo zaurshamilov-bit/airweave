@@ -20,7 +20,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 from app.platform.entities.google_drive import GoogleDriveDriveEntity, GoogleDriveFileEntity
 from app.platform.sources._base import BaseSource
 
@@ -73,7 +73,7 @@ class GoogleDriveSource(BaseSource):
 
     async def _generate_drive_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate GoogleDriveDriveEntity objects for each shared drive."""
         async for drive_obj in self._list_drives(client):
             yield GoogleDriveDriveEntity(
@@ -173,19 +173,19 @@ class GoogleDriveSource(BaseSource):
 
     async def _generate_file_entities_in_drive(
         self, client: httpx.AsyncClient, drive_id: str
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate GoogleDriveFileEntity objects for each file in a shared drive."""
         async for file_obj in self._list_files_in_drive(client, drive_id):
             yield self._build_file_entity(file_obj)
 
     async def _generate_file_entities_in_my_drive(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate GoogleDriveFileEntity objects for each file in the user's My Drive."""
         async for file_obj in self._list_files_in_my_drive(client):
             yield self._build_file_entity(file_obj)
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all Google Drive entities.
 
         Yields entities in the following order:

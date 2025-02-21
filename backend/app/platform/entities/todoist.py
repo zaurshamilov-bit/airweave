@@ -9,10 +9,10 @@ from typing import List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class TodoistProjectEntity(BaseEntity):
+class TodoistProjectEntity(ChunkEntity):
     """Schema for Todoist project entities."""
 
     name: str = Field(..., description="The name of the project")
@@ -28,7 +28,7 @@ class TodoistProjectEntity(BaseEntity):
     parent_id: Optional[str] = Field(None, description="ID of the parent project if nested")
 
 
-class TodoistSectionEntity(BaseEntity):
+class TodoistSectionEntity(ChunkEntity):
     """Schema for Todoist section entities."""
 
     name: str = Field(..., description="The name of the section")
@@ -36,7 +36,7 @@ class TodoistSectionEntity(BaseEntity):
     order: int = Field(0, description="Section order in the project")
 
 
-class TodoistTaskEntity(BaseEntity):
+class TodoistTaskEntity(ChunkEntity):
     """Schema for Todoist task entities."""
 
     content: str = Field(..., description="The task content/title")
@@ -68,7 +68,7 @@ class TodoistTaskEntity(BaseEntity):
     url: Optional[str] = Field(None, description="URL to access the task")
 
 
-class TodoistCommentEntity(BaseEntity):
+class TodoistCommentEntity(ChunkEntity):
     """Schema for Todoist comment entities."""
 
     task_id: str = Field(..., description="ID of the task this comment belongs to")

@@ -6,7 +6,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 from app.platform.entities.intercom import (
     IntercomCompanyEntity,
     IntercomContactEntity,
@@ -50,7 +50,7 @@ class IntercomSource(BaseSource):
 
     async def _generate_contact_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate Contact entities from Intercom.
 
         Using the Contacts endpoint:
@@ -81,7 +81,7 @@ class IntercomSource(BaseSource):
 
     async def _generate_company_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate Company entities from Intercom.
 
         Using the Companies endpoint:
@@ -113,7 +113,7 @@ class IntercomSource(BaseSource):
 
     async def _generate_conversation_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate Conversation entities from Intercom.
 
         Using the Conversations endpoint:
@@ -141,7 +141,7 @@ class IntercomSource(BaseSource):
 
     async def _generate_ticket_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate Ticket entities from Intercom.
 
         Using a hypothetical Tickets endpoint:
@@ -171,7 +171,7 @@ class IntercomSource(BaseSource):
             next_link = pages.get("next")
             url = next_link if next_link else None
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Intercom.
 
         Yields:

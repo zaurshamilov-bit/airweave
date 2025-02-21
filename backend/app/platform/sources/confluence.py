@@ -23,7 +23,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.confluence import (
     ConfluenceBlogPostEntity,
     ConfluenceCommentEntity,
@@ -127,7 +127,7 @@ class ConfluenceSource(BaseSource):
 
     async def _generate_blog_post_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ConfluenceBlogPostEntity objects."""
         url = "https://your-domain.atlassian.net/wiki/api/v2/blogposts?limit=50"
         while url:
@@ -152,7 +152,7 @@ class ConfluenceSource(BaseSource):
 
     async def _generate_comment_entities(
         self, client: httpx.AsyncClient, content_id: str, parent_breadcrumbs: List[Breadcrumb]
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ConfluenceCommentEntity objects for a given content (page, blog, etc.).
 
         For example:
@@ -185,7 +185,7 @@ class ConfluenceSource(BaseSource):
     # For example:
     async def _generate_label_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ConfluenceLabelEntity objects."""
         # The Confluence v2 REST API for labels is still evolving; example endpoint:
         url = "https://your-domain.atlassian.net/wiki/api/v2/labels?limit=50"
@@ -208,7 +208,7 @@ class ConfluenceSource(BaseSource):
 
     async def _generate_database_entities(
         self, client: httpx.AsyncClient, space_key: str, space_breadcrumb: Breadcrumb
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ConfluenceDatabaseEntity objects for a given space."""
         url = f"https://your-domain.atlassian.net/wiki/api/v2/spaces/{space_key}/databases?limit=50"
         while url:
@@ -231,7 +231,7 @@ class ConfluenceSource(BaseSource):
 
     async def _generate_folder_entities(
         self, client: httpx.AsyncClient, space_key: str, space_breadcrumb: Breadcrumb
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ConfluenceFolderEntity objects for a given space."""
         url = f"https://your-domain.atlassian.net/wiki/api/v2/spaces/{space_key}/folders?limit=50"
         while url:
@@ -251,7 +251,7 @@ class ConfluenceSource(BaseSource):
             next_link = data.get("_links", {}).get("next")
             url = f"https://your-domain.atlassian.net{next_link}" if next_link else None
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:  # noqa: C901
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:  # noqa: C901
         """Generate all Confluence content."""
         async with httpx.AsyncClient() as client:
             # 1) Yield all spaces (top-level)

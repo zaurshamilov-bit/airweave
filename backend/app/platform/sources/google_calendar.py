@@ -21,7 +21,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.google_calendar import (
     GoogleCalendarCalendarEntity,
     GoogleCalendarEventEntity,
@@ -210,7 +210,7 @@ class GoogleCalendarSource(BaseSource):
             busy=busy_ranges,
         )
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all Google Calendar entities.
 
         Yields entities in the following order:

@@ -6,7 +6,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.trello import (
     TrelloActionEntity,
     TrelloBoardEntity,
@@ -60,7 +60,7 @@ class TrelloSource(BaseSource):
 
     async def _generate_organization_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate TrelloOrganizationEntity objects for each organization (workspace).
 
         GET /members/me/organizations
@@ -82,7 +82,7 @@ class TrelloSource(BaseSource):
         client: httpx.AsyncClient,
         org_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate TrelloBoardEntity objects for each board under a given organization.
 
         GET /organizations/{id}/boards
@@ -117,7 +117,7 @@ class TrelloSource(BaseSource):
         client: httpx.AsyncClient,
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate TrelloListEntity objects for each list in a board.
 
         GET /boards/{id}/lists
@@ -148,7 +148,7 @@ class TrelloSource(BaseSource):
         client: httpx.AsyncClient,
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate TrelloCardEntity objects for each card in a board.
 
         GET /boards/{id}/cards
@@ -188,7 +188,7 @@ class TrelloSource(BaseSource):
         client: httpx.AsyncClient,
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate TrelloMemberEntity objects for each member of a board.
 
         GET /boards/{id}/members
@@ -222,7 +222,7 @@ class TrelloSource(BaseSource):
         client: httpx.AsyncClient,
         board_id: str,
         parent_breadcrumbs: Optional[List[Breadcrumb]] = None,
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate TrelloActionEntity objects for a board.
 
         GET /boards/{id}/actions
@@ -249,7 +249,7 @@ class TrelloSource(BaseSource):
                 data=action.get("data"),
             )
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Trello.
 
         Organizations, Boards, Lists, Cards, Members, and Actions.

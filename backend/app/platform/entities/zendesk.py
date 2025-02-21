@@ -20,10 +20,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class ZendeskOrganizationEntity(BaseEntity):
+class ZendeskOrganizationEntity(ChunkEntity):
     """Schema for a Zendesk organization.
 
     References:
@@ -50,7 +50,7 @@ class ZendeskOrganizationEntity(BaseEntity):
     archived: bool = Field(False, description="Placeholder for archival state if applicable.")
 
 
-class ZendeskUserEntity(BaseEntity):
+class ZendeskUserEntity(ChunkEntity):
     """Schema for a Zendesk user (agent or end user).
 
     References:
@@ -83,7 +83,7 @@ class ZendeskUserEntity(BaseEntity):
     archived: bool = Field(False, description="Placeholder for archival state if applicable.")
 
 
-class ZendeskTicketEntity(BaseEntity):
+class ZendeskTicketEntity(ChunkEntity):
     """Schema for a Zendesk ticket.
 
     References:
@@ -127,7 +127,7 @@ class ZendeskTicketEntity(BaseEntity):
     archived: bool = Field(False, description="Placeholder for archival state if applicable.")
 
 
-class ZendeskCommentEntity(BaseEntity):
+class ZendeskCommentEntity(ChunkEntity):
     """Schema for a Zendesk comment, typically tied to a specific ticket.
 
     References:

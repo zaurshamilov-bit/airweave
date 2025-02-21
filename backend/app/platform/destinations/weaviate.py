@@ -14,7 +14,7 @@ from app.platform.decorators import destination
 from app.platform.destinations._base import VectorDBDestination
 from app.platform.embedding_models._adapters import WeaviateModelAdapter
 from app.platform.embedding_models._base import BaseEmbeddingModel
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 from app.vector_db.weaviate_service import WeaviateService
 
 
@@ -136,7 +136,7 @@ class WeaviateDestination(VectorDBDestination):
                     raise
                 self.collection = await service.get_weaviate_collection(self.collection_name)
 
-    async def insert(self, entity: BaseEntity) -> None:
+    async def insert(self, entity: ChunkEntity) -> None:
         """Insert a single entity into Weaviate."""
         # Transform entities into the format Weaviate expects
         data_object = entity.model_dump()
@@ -154,7 +154,7 @@ class WeaviateDestination(VectorDBDestination):
                     data_object[key] = json.dumps(value)
             await collection.data.insert(data_object, uuid=entity.db_entity_id)
 
-    async def bulk_insert(self, entities: list[BaseEntity]) -> None:
+    async def bulk_insert(self, entities: list[ChunkEntity]) -> None:
         """Bulk insert entities into Weaviate."""
         if not entities or not self.embedding_model:
             return

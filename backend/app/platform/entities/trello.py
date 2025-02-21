@@ -8,11 +8,11 @@ These follow a style similar to our Asana and HubSpot entity schemas.
 from datetime import datetime
 from typing import List, Optional
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 from app.platform.sources._base import Relation
 
 
-class TrelloOrganizationEntity(BaseEntity):
+class TrelloOrganizationEntity(ChunkEntity):
     """Schema for Trello organization (Workspace) entities."""
 
     id: str
@@ -22,7 +22,7 @@ class TrelloOrganizationEntity(BaseEntity):
     website: Optional[str] = None
 
 
-class TrelloBoardEntity(BaseEntity):
+class TrelloBoardEntity(ChunkEntity):
     """Schema for Trello board entities."""
 
     id: str
@@ -36,7 +36,7 @@ class TrelloBoardEntity(BaseEntity):
     date_last_activity: Optional[datetime] = None
 
 
-class TrelloListEntity(BaseEntity):
+class TrelloListEntity(ChunkEntity):
     """Schema for Trello list entities."""
 
     id: str
@@ -46,7 +46,7 @@ class TrelloListEntity(BaseEntity):
     subscribed: bool = False
 
 
-class TrelloCardEntity(BaseEntity):
+class TrelloCardEntity(ChunkEntity):
     """Schema for Trello card entities."""
 
     id: str
@@ -61,7 +61,7 @@ class TrelloCardEntity(BaseEntity):
     url: Optional[str] = None
 
 
-class TrelloMemberEntity(BaseEntity):
+class TrelloMemberEntity(ChunkEntity):
     """Schema for Trello member entities."""
 
     id: str
@@ -74,7 +74,7 @@ class TrelloMemberEntity(BaseEntity):
     boards: List[str] = []
 
 
-class TrelloActionEntity(BaseEntity):
+class TrelloActionEntity(ChunkEntity):
     """Schema for Trello action entities."""
 
     id: str

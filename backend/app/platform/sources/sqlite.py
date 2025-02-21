@@ -12,7 +12,7 @@ import aiosqlite
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, PolymorphicEntity
+from app.platform.entities._base import ChunkEntity, PolymorphicEntity
 from app.platform.sources._base import BaseSource
 
 # Mapping of SQLite types to Python types
@@ -152,7 +152,7 @@ class SQLiteSource(BaseSource):
             tables = await cursor.fetchall()
             return [table[0] for table in tables]
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate entities for all tables."""
         try:
             await self._connect()

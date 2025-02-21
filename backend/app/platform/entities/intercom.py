@@ -8,10 +8,10 @@ These follow a style similar to our Asana and HubSpot entity schemas.
 from datetime import datetime
 from typing import Optional
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class IntercomContactEntity(BaseEntity):
+class IntercomContactEntity(ChunkEntity):
     """Schema for Intercom contact entities."""
 
     role: Optional[str] = None  # e.g. "user" or "lead"
@@ -25,7 +25,7 @@ class IntercomContactEntity(BaseEntity):
     archived: bool = False
 
 
-class IntercomCompanyEntity(BaseEntity):
+class IntercomCompanyEntity(ChunkEntity):
     """Schema for Intercom company entities."""
 
     name: Optional[str] = None
@@ -40,7 +40,7 @@ class IntercomCompanyEntity(BaseEntity):
     archived: bool = False
 
 
-class IntercomConversationEntity(BaseEntity):
+class IntercomConversationEntity(ChunkEntity):
     """Schema for Intercom conversation entities."""
 
     conversation_id: str
@@ -51,7 +51,7 @@ class IntercomConversationEntity(BaseEntity):
     archived: bool = False
 
 
-class IntercomTicketEntity(BaseEntity):
+class IntercomTicketEntity(ChunkEntity):
     """Schema for Intercom ticket entities."""
 
     subject: Optional[str] = None

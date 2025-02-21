@@ -17,7 +17,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.jira import (
     JiraCommentEntity,
     JiraIssueEntity,
@@ -234,7 +234,7 @@ class JiraSource(BaseSource):
             if start_at >= total:
                 break
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Jira: Statuses, Projects, Issues, Comments."""
         # TODO: Make this dynamic from user env.
         # In practice, you would determine your Jira Cloud base URL or site URL.

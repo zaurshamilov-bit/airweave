@@ -17,7 +17,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.outlook_mail import OutlookMailFolderEntity, OutlookMessageEntity
 from app.platform.sources._base import BaseSource
 
@@ -160,7 +160,7 @@ class OutlookMailSource(BaseSource):
             next_link = data.get("@odata.nextLink")
             url = next_link if next_link else None
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all Outlook mail entities.
 
         Yields entities in the following order:

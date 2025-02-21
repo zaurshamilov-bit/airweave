@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from app import schemas
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
 class BaseDestination(ABC):
@@ -21,12 +21,12 @@ class BaseDestination(ABC):
         pass
 
     @abstractmethod
-    async def insert(self, entity: BaseEntity) -> None:
+    async def insert(self, entity: ChunkEntity) -> None:
         """Insert a single entity into the destination."""
         pass
 
     @abstractmethod
-    async def bulk_insert(self, entities: list[BaseEntity]) -> None:
+    async def bulk_insert(self, entities: list[ChunkEntity]) -> None:
         """Bulk insert entities into the destination."""
         pass
 

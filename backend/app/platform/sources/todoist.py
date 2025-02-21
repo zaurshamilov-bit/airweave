@@ -6,7 +6,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.todoist import (
     TodoistCommentEntity,
     TodoistProjectEntity,
@@ -202,7 +202,7 @@ class TodoistSource(BaseSource):
                 posted_at=comment["posted_at"],
             )
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Todoist: Projects, Sections, Tasks, and Comments.
 
         For each project:

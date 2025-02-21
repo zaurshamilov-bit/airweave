@@ -10,10 +10,10 @@ from typing import Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class SlackChannelEntity(BaseEntity):
+class SlackChannelEntity(ChunkEntity):
     """Schema for Slack channel entities."""
 
     channel_id: str
@@ -30,7 +30,7 @@ class SlackChannelEntity(BaseEntity):
     purpose: Optional[Dict] = None
 
 
-class SlackUserEntity(BaseEntity):
+class SlackUserEntity(ChunkEntity):
     """Schema for Slack user entities."""
 
     user_id: str
@@ -49,7 +49,7 @@ class SlackUserEntity(BaseEntity):
     )
 
 
-class SlackMessageEntity(BaseEntity):
+class SlackMessageEntity(ChunkEntity):
     """Schema for Slack message entities."""
 
     channel_id: str

@@ -18,10 +18,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class GoogleCalendarCalendarEntity(BaseEntity):
+class GoogleCalendarCalendarEntity(ChunkEntity):
     """Schema for a Google Calendar object (the underlying calendar resource).
 
     See: https://developers.google.com/calendar/api/v3/reference/calendars
@@ -34,7 +34,7 @@ class GoogleCalendarCalendarEntity(BaseEntity):
     time_zone: Optional[str] = Field(None, description="The time zone of the calendar.")
 
 
-class GoogleCalendarListEntity(BaseEntity):
+class GoogleCalendarListEntity(ChunkEntity):
     """Schema for a CalendarList entry, i.e., how the user sees a calendar.
 
     See: https://developers.google.com/calendar/api/v3/reference/calendarList
@@ -61,7 +61,7 @@ class GoogleCalendarListEntity(BaseEntity):
     deleted: bool = Field(False, description="Flag to indicate if this calendar has been deleted.")
 
 
-class GoogleCalendarEventEntity(BaseEntity):
+class GoogleCalendarEventEntity(ChunkEntity):
     """Schema for a Google Calendar Event.
 
     See: https://developers.google.com/calendar/api/v3/reference/events
@@ -138,7 +138,7 @@ class GoogleCalendarEventEntity(BaseEntity):
     event_type: Optional[str] = Field(None, description="Event type. E.g., 'default' or 'focus'.")
 
 
-class GoogleCalendarFreeBusyEntity(BaseEntity):
+class GoogleCalendarFreeBusyEntity(ChunkEntity):
     """Schema for a FreeBusy response entity for a given calendar.
 
     See: https://developers.google.com/calendar/api/v3/reference/freebusy

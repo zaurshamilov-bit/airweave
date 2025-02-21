@@ -7,7 +7,7 @@ from neo4j import AsyncGraphDatabase
 
 from app import schemas
 from app.platform.destinations._base import GraphDBDestination
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
 class Neo4jDestination(GraphDBDestination):
@@ -40,7 +40,7 @@ class Neo4jDestination(GraphDBDestination):
         async with self.driver.session() as session:
             await session.run(query)
 
-    async def insert(self, entity: BaseEntity) -> None:
+    async def insert(self, entity: ChunkEntity) -> None:
         """Insert a single entity as a node in Neo4j.
 
         The entity is stored as a node with label 'Entity'.
@@ -50,7 +50,7 @@ class Neo4jDestination(GraphDBDestination):
         async with self.driver.session() as session:
             await session.run(query, props=data)
 
-    async def bulk_insert(self, entities: list[BaseEntity]) -> None:
+    async def bulk_insert(self, entities: list[ChunkEntity]) -> None:
         """Bulk insert entities as nodes in Neo4j using UNWIND."""
         nodes = [entity.model_dump() for entity in entities]
         query = "UNWIND $nodes as props CREATE (c:Entity) SET c = props"

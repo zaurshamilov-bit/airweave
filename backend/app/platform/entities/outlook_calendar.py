@@ -6,7 +6,7 @@ we define entity schemas for:
   • Event
 
 They follow a style similar to the existing entity schemas, inheriting entity_id from
-BaseEntity to store the Microsoft Graph unique identifier for each object.
+ChunkEntity to store the Microsoft Graph unique identifier for each object.
 
 Reference:
   https://learn.microsoft.com/en-us/graph/api/resources/calendar?view=graph-rest-1.0
@@ -18,10 +18,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class OutlookCalendarCalendarEntity(BaseEntity):
+class OutlookCalendarCalendarEntity(ChunkEntity):
     """Schema for an Outlook Calendar object.
 
     The inherited entity_id field stores the calendar's Microsoft Graph ID.
@@ -49,7 +49,7 @@ class OutlookCalendarCalendarEntity(BaseEntity):
     )
 
 
-class OutlookCalendarEventEntity(BaseEntity):
+class OutlookCalendarEventEntity(ChunkEntity):
     """Schema for an Outlook Calendar Event object.
 
     The inherited entity_id field stores the event's Microsoft Graph ID.

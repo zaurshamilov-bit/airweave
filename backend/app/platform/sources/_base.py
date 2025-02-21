@@ -5,7 +5,7 @@ from typing import Any, AsyncGenerator, Optional
 
 from pydantic import BaseModel
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
 class BaseSource:
@@ -23,7 +23,7 @@ class BaseSource:
         pass
 
     @abstractmethod
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate entities for the source."""
         pass
 
@@ -31,8 +31,8 @@ class BaseSource:
 class Relation(BaseModel):
     """A relation between two entities."""
 
-    source_entity_type: type[BaseEntity]
+    source_entity_type: type[ChunkEntity]
     source_entity_id_attribute: str
-    target_entity_type: type[BaseEntity]
+    target_entity_type: type[ChunkEntity]
     target_entity_id_attribute: str
     relation_type: str

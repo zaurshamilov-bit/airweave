@@ -14,10 +14,10 @@ from typing import List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class GithubRepoEntity(BaseEntity):
+class GithubRepoEntity(ChunkEntity):
     """Schema for a GitHub repository.
 
     References:
@@ -50,7 +50,7 @@ class GithubRepoEntity(BaseEntity):
     disabled: bool = Field(False, description="Whether the repository is disabled in GitHub.")
 
 
-class GithubContentEntity(BaseEntity):
+class GithubContentEntity(ChunkEntity):
     """Schema for a GitHub repository's content (file, directory, submodule, etc.).
 
     References:

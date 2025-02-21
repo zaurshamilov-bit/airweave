@@ -2,7 +2,7 @@
 
 import hashlib
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Type
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, create_model
@@ -75,7 +75,13 @@ class BaseEntity(BaseModel):
         return hashlib.sha256(str(sanitized_data).encode()).hexdigest()
 
 
-class PolymorphicEntity(BaseEntity):
+class ChunkEntity(BaseEntity):
+    """Base class for entities that are storable and embeddable chunks of data."""
+
+    pass
+
+
+class PolymorphicEntity(ChunkEntity):
     """Base class for dynamically generated entities.
 
     This class serves as the base for entities that are created at runtime,
@@ -130,10 +136,7 @@ class PolymorphicEntity(BaseEntity):
         )
 
 
-T = TypeVar("T", bound=PolymorphicEntity)
-
-
-class FileEntity(BaseEntity):
+class FileEntity(ChunkEntity):
     """Base schema for file entities."""
 
     file_id: str = Field(..., description="ID of the file in the source system")
