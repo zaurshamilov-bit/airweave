@@ -1,8 +1,7 @@
 """Entity schemas."""
 
 import hashlib
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, create_model
@@ -81,6 +80,18 @@ class ChunkEntity(BaseEntity):
     pass
 
 
+class ParentEntity(BaseEntity):
+    """Base class for entities that are parents of other entities."""
+
+    pass
+
+
+class ChildEntity(BaseEntity):
+    """Base class for subentities of a parent entity."""
+
+    parent_entity_id: str = Field(..., description="ID of the parent entity")
+
+
 class PolymorphicEntity(ChunkEntity):
     """Base class for dynamically generated entities.
 
@@ -136,7 +147,7 @@ class PolymorphicEntity(ChunkEntity):
         )
 
 
-class FileEntity(ChunkEntity):
+class FileEntity(BaseEntity):
     """Base schema for file entities."""
 
     file_id: str = Field(..., description="ID of the file in the source system")
@@ -144,8 +155,6 @@ class FileEntity(ChunkEntity):
     mime_type: Optional[str] = Field(None, description="MIME type of the file")
     size: Optional[int] = Field(None, description="Size of the file in bytes")
     download_url: Optional[str] = Field(None, description="URL to download the file")
-    created_at: Optional[datetime] = Field(None, description="When the file was created")
-    modified_at: Optional[datetime] = Field(None, description="When the file was last modified")
 
     # File handling fields - set by file handler
     file_uuid: Optional[UUID] = Field(None, description="UUID assigned by the file manager")
@@ -158,19 +167,82 @@ class FileEntity(ChunkEntity):
     def hash(self) -> str:
         """Hash the file entity.
 
-        For files, we use a combination of metadata and checksum if available.
-        If no checksum is available, we fall back to the parent hash method.
+        For files, we try the following strategies in order:
+        1. If local_path is available, compute hash from actual file contents
+        2. If checksum is available, use it as part of metadata hash
+        3. Fall back to parent hash method using all metadata
         """
-        if self.checksum:
-            # If we have a checksum, use it as the primary hash component
-            hash_input = {
-                "file_id": self.file_id,
-                "name": self.name,
-                "size": self.size,
-                "checksum": self.checksum,
-                "modified_at": self.modified_at,
-            }
-            return hashlib.sha256(str(hash_input).encode()).hexdigest()
+        if self.local_path:
+            # If we have the actual file, compute hash from its contents
+            try:
+                with open(self.local_path, "rb") as f:
+                    content = f.read()
+                    return hashlib.sha256(content).hexdigest()
+            except Exception:
+                # If file read fails, fall through to next method
+                pass
+        else:
+            raise ValueError("File has no local path")
 
-        # Fall back to parent hash method if no checksum
-        return super().hash()
+    @classmethod
+    def create_parent_child_models(cls) -> Tuple[Type["ParentEntity"], Type["ChildEntity"]]:
+        """Create parent and child entity models for this file entity.
+
+        This method dynamically generates two models:
+        1. A parent model that inherits all fields from the source FileEntity subclass
+           and represents the complete file metadata from the source system
+        2. A child model that represents a chunk of the file's content with standardized
+           fields for vector/graph DB storage
+
+        Returns:
+            A tuple of (ParentEntityClass, ChildEntityClass)
+        """
+        # Get the class name prefix (e.g., "AsanaFile" from "AsanaFileEntity")
+        class_name_prefix = cls.__name__.replace("Entity", "")
+
+        # For parent, get all fields from the source FileEntity subclass
+        parent_fields = {}
+        for name, field in cls.model_fields.items():
+            if name not in BaseEntity.model_fields:  # Skip base entity fields
+                parent_fields[name] = (field.annotation, field)
+
+        parent_model = create_model(
+            f"{class_name_prefix}Parent", __base__=ParentEntity, **parent_fields
+        )
+
+        # For child, create standardized fields for vector/graph DB storage
+        child_fields = {
+            "parent_id": (UUID, Field(..., description="ID of the parent entity")),
+            "parent_source_entity_id": (
+                str,
+                Field(..., description="ID of the parent entity in the source"),
+            ),
+            "md_title": (Optional[str], Field(None, description="Title or heading of the chunk")),
+            "md_content": (str, Field(..., description="The actual content of the chunk")),
+            "md_type": (
+                str,
+                Field(..., description="Type of content (e.g., paragraph, table, list)"),
+            ),
+            "metadata": (
+                Dict[str, Any],
+                Field(default_factory=dict, description="Additional metadata about the chunk"),
+            ),
+            "md_position": (
+                Optional[int],
+                Field(None, description="Position of this chunk in the document"),
+            ),
+            "md_parent_title": (
+                Optional[str],
+                Field(None, description="Title of the parent document"),
+            ),
+            "md_parent_url": (
+                Optional[str],
+                Field(None, description="URL of the parent document if available"),
+            ),
+        }
+
+        child_model = create_model(
+            f"{class_name_prefix}Child", __base__=ChildEntity, **child_fields
+        )
+
+        return parent_model, child_model

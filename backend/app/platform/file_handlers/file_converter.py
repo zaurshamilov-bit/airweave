@@ -4,9 +4,17 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from markitdown import MarkItDown
-
+from app.core.config import settings
 from app.core.logging import logger
+
+from .async_markitdown import AsyncMarkItDown
+
+openai_client = None
+
+if settings.OPENAI_API_KEY:
+    from openai import AsyncOpenAI
+
+    openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
 class FileConverter:
@@ -26,14 +34,20 @@ class FileConverter:
         ".csv",
         ".json",
         ".xml",
-        # ".zip", TODO: Needs more handling for edge cases
+        ".png",
+        ".jpg",
+        ".jpeg",
     }
 
-    def __init__(self):
+    def __init__(self, llm_client: Optional[AsyncOpenAI] = None):
         """Initialize converter with optional configuration."""
-        self.md_converter = MarkItDown()
+        self.llm_client = llm_client
+        self.md_converter = AsyncMarkItDown(
+            llm_client=self.llm_client,
+            llm_model="gpt-4o-mini",
+        )
 
-    def convert_to_markdown(self, file_path: str) -> Optional[str]:
+    async def convert_to_markdown(self, file_path: str) -> Optional[str]:
         """Converts a given file to markdown text using MarkItDown."""
         if not self._is_supported(file_path):
             return None
@@ -43,7 +57,9 @@ class FileConverter:
             return None
 
         try:
-            md_content = self.md_converter.convert(file_path).text_content
+            # Run the synchronous convert method in a thread pool
+            result = await self.md_converter.convert(file_path)
+            md_content = result.text_content
             if md_content.startswith("[ERROR]"):
                 logger.error(f"Error converting file to markdown: {md_content}")
                 return None
@@ -68,4 +84,4 @@ class FileConverter:
     #   llm_model (e.g., gpt-4o)
 
 
-file_converter = FileConverter()
+file_converter = FileConverter(llm_client=openai_client)

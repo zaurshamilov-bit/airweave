@@ -3,6 +3,8 @@
 from typing import AsyncGenerator, Dict, List, Optional
 
 import httpx
+from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity.asyncio import AsyncRetrying
 
 from app.core.logging import logger
 from app.platform.auth.schemas import AuthType
@@ -52,21 +54,30 @@ class AsanaSource(BaseSource):
         Yields:
             Chunks of the file content
         """
-        # For S3 pre-signed URLs, we don't need the Asana auth header
+        retryer = AsyncRetrying(
+            retry=retry_if_exception_type(httpx.HTTPError),
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            stop=stop_after_attempt(3),
+        )
+
+        # For Asana API URLs we need the Asana auth header
+        # For S3 pre-signed URLs we use the URL as-is since auth is in the URL
         headers = {}
-        if not url.startswith("https://asana-user-private"):
+        if url.startswith("https://app.asana.com/"):
             headers["Authorization"] = f"Bearer {self.access_token}"
 
-        try:
-            async with client.stream(
-                "GET", url, headers=headers, follow_redirects=True  # Follow any redirects
-            ) as response:
-                response.raise_for_status()
-                async for chunk in response.aiter_bytes():
-                    yield chunk
-        except Exception as e:
-            logger.error(f"Error streaming file from URL {url}: {str(e)}")
-            raise
+        async for attempt in retryer:
+            with attempt:
+                try:
+                    async with client.stream(
+                        "GET", url, headers=headers, follow_redirects=True  # Follow any redirects
+                    ) as response:
+                        response.raise_for_status()
+                        async for chunk in response.aiter_bytes():
+                            yield chunk
+                except Exception as e:
+                    logger.error(f"Error streaming file from URL {url}: {str(e)}")
+                    raise
 
     async def _generate_workspace_entities(
         self, client: httpx.AsyncClient

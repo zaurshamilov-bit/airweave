@@ -1,6 +1,8 @@
 """Module for data synchronization."""
 
+import asyncio
 from datetime import datetime
+from typing import List
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,10 +19,12 @@ from app.platform.auth.services import oauth2_service
 from app.platform.auth.settings import integration_settings
 from app.platform.destinations.weaviate import WeaviateDestination
 from app.platform.embedding_models.local_text2vec import LocalText2Vec
+from app.platform.entities._base import FileEntity, SubEntity
 from app.platform.file_handlers.file_manager import file_manager
 from app.platform.locator import resource_locator
 from app.platform.sync.context import SyncContext
 from app.platform.sync.pubsub import SyncProgressUpdate, sync_pubsub
+from app.platform.transformers.default_file_chunker import file_chunker
 
 
 class SyncService:
@@ -29,7 +33,7 @@ class SyncService:
     async def create(
         self,
         db: AsyncSession,
-        sync: schemas.SyncCreate,
+        sync: schemas.Sync,
         current_user: schemas.User,
         uow: UnitOfWork,
     ) -> schemas.Sync:
@@ -46,13 +50,14 @@ class SyncService:
         try:
             async with get_db_context() as db:
                 sync_context = await self.create_sync_context(db, sync, sync_job, current_user)
-
                 logger.info(f"Starting job with id {sync_context.sync_job.id}.")
-
                 sync_progress_update = SyncProgressUpdate()
 
-                async for entity in sync_context.source.generate_entities():
+                # Buffer for collecting file entities
+                file_buffer: List[FileEntity] = []
+                BATCH_SIZE = 5  # Process 5 files concurrently
 
+                async for entity in sync_context.source.generate_entities():
                     # Calculate hash for deduplication
                     entity_hash = entity.hash()
 
@@ -60,6 +65,29 @@ class SyncService:
                     db_entity = await crud.entity.get_by_entity_and_sync_id(
                         db, entity_id=entity.entity_id, sync_id=sync.id
                     )
+
+                    if isinstance(entity, FileEntity):
+                        file_buffer.append(entity)
+
+                        # When buffer reaches batch size, process files concurrently
+                        if len(file_buffer) >= BATCH_SIZE:
+                            # Create tasks for concurrent processing
+                            tasks = []
+                            for file in file_buffer:
+                                task = asyncio.create_task(self._process_file(file))
+                                tasks.append(task)
+
+                            # Wait for all tasks to complete and process results
+                            for result in await asyncio.gather(*tasks, return_exceptions=True):
+                                if isinstance(result, Exception):
+                                    logger.error(f"Error processing file: {str(result)}")
+                                    continue
+                                if result:
+                                    # Process the result
+                                    pass
+
+                            # Clear the buffer after processing
+                            file_buffer.clear()
 
                     if db_entity:
                         if db_entity.hash == entity_hash:
@@ -98,14 +126,28 @@ class SyncService:
                         )
                         entity.db_entity_id = db_entity.id
                         await sync_context.destination.insert(entity)
-
                         sync_progress_update.inserted += 1
 
                     # Publish partial progress using job_id
-                    await sync_pubsub.publish(
-                        sync_job.id,
-                        sync_progress_update,
-                    )
+                    await sync_pubsub.publish(sync_job.id, sync_progress_update)
+
+                # Process any remaining files in the buffer
+                if file_buffer:
+                    tasks = []
+                    for file in file_buffer:
+                        task = asyncio.create_task(self._process_file(file))
+                        tasks.append(task)
+
+                    # Wait for all tasks to complete and process results
+                    for result in await asyncio.gather(*tasks, return_exceptions=True):
+                        if isinstance(result, Exception):
+                            logger.error(f"Error processing file: {str(result)}")
+                            continue
+                        if result:
+                            # Process the result
+                            pass
+
+                    file_buffer.clear()
 
             async with get_db_context() as db:
                 # Handle deletions - remove outdated entities
@@ -344,6 +386,17 @@ class SyncService:
             return oauth2_service.generate_auth_url_for_trello(client_id=white_label.client_id)
 
         return oauth2_service.generate_auth_url(white_label_settings)
+
+    async def _process_file(self, file: FileEntity) -> list[FileEntity | SubEntity]:
+        """Process a single file entity using the file chunker."""
+        entities: list[FileEntity | SubEntity] = []
+        try:
+            async for entity in file_chunker(file):
+                entities.append(entity)
+        except Exception as e:
+            logger.error(f"Error processing file {file.name}: {str(e)}")
+            return None
+        return entities
 
 
 sync_service = SyncService()
