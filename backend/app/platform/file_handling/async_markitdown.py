@@ -7,11 +7,22 @@ import os
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Union
+from pathlib import Path
+from typing import Any, Dict, Optional, Set, Union
 
 import pandas as pd
 import pptx
 from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+from app.core.config import settings
+from app.core.logging import logger
+
+# Initialize OpenAI client if API key is available
+openai_client = None
+if settings.OPENAI_API_KEY:
+    from openai import AsyncOpenAI
+
+    openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
 class AsyncDocumentConverterResult:
@@ -249,6 +260,25 @@ class AsyncImageConverter(AsyncDocumentConverter):
 class AsyncMarkItDown:
     """Async implementation of MarkItDown for PPTX, XLSX and Image files."""
 
+    SUPPORTED_EXTENSIONS: Set[str] = {
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".ppt",
+        ".pptx",
+        ".xls",
+        ".xlsx",
+        ".html",
+        ".htm",
+        ".txt",
+        ".csv",
+        ".json",
+        ".xml",
+        ".png",
+        ".jpg",
+        ".jpeg",
+    }
+
     def __init__(self, llm_client: Optional[Any] = None, llm_model: Optional[str] = None):
         """Initialize the AsyncMarkItDown converter."""
         self._llm_client = llm_client
@@ -265,6 +295,13 @@ class AsyncMarkItDown:
         Returns:
             AsyncDocumentConverterResult containing the markdown text
         """
+        if not self._is_supported(file_path):
+            raise ValueError(f"Unsupported file type: {Path(file_path).suffix}")
+
+        if not os.path.exists(file_path):
+            logger.warning(f"File not found: {file_path}")
+            raise FileNotFoundError(f"File not found: {file_path}")
+
         # Get file extension
         _, extension = os.path.splitext(file_path)
         if not extension:
@@ -286,7 +323,19 @@ class AsyncMarkItDown:
                     result.file_path = file_path  # Add file path to result
                     return result
             except Exception as e:
-                print(f"Error converting with {converter.__class__.__name__}: {str(e)}")
+                logger.error(f"Error converting with {converter.__class__.__name__}: {str(e)}")
                 continue
 
         raise ValueError(f"No converter found for file type: {extension}")
+
+    def _is_supported(self, file_path: str) -> bool:
+        """Check if the file extension is supported."""
+        ext = Path(file_path).suffix.lower()
+        if ext not in self.SUPPORTED_EXTENSIONS:
+            logger.warning(f"Unsupported file extension: {ext} for file: {file_path}")
+            return False
+        return True
+
+
+# Create singleton instance
+markitdown = AsyncMarkItDown(llm_client=openai_client, llm_model="gpt-4o-mini")

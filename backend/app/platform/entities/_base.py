@@ -19,7 +19,6 @@ class BaseEntity(BaseModel):
     """Base entity schema."""
 
     # Set in connector
-    entity_id: UUID = Field(default_factory=uuid4, description="Unique ID of the entity.")
     entity_id: str = Field(
         ..., description="ID of the entity this entity represents in the source."
     )
@@ -77,19 +76,15 @@ class BaseEntity(BaseModel):
 class ChunkEntity(BaseEntity):
     """Base class for entities that are storable and embeddable chunks of data."""
 
-    pass
+    parent_db_entity_id: Optional[UUID] = Field(
+        None, description="ID of the parent entity in the DB."
+    )
 
 
 class ParentEntity(BaseEntity):
     """Base class for entities that are parents of other entities."""
 
     pass
-
-
-class ChildEntity(BaseEntity):
-    """Base class for subentities of a parent entity."""
-
-    parent_entity_id: str = Field(..., description="ID of the parent entity")
 
 
 class PolymorphicEntity(ChunkEntity):
@@ -154,7 +149,7 @@ class FileEntity(BaseEntity):
     name: str = Field(..., description="Name of the file")
     mime_type: Optional[str] = Field(None, description="MIME type of the file")
     size: Optional[int] = Field(None, description="Size of the file in bytes")
-    download_url: Optional[str] = Field(None, description="URL to download the file")
+    download_url: str = Field(..., description="URL to download the file")
 
     # File handling fields - set by file handler
     file_uuid: Optional[UUID] = Field(None, description="UUID assigned by the file manager")
@@ -185,38 +180,37 @@ class FileEntity(BaseEntity):
             raise ValueError("File has no local path")
 
     @classmethod
-    def create_parent_child_models(cls) -> Tuple[Type["ParentEntity"], Type["ChildEntity"]]:
-        """Create parent and child entity models for this file entity.
+    def create_parent_chunk_models(cls) -> Tuple[Type["ParentEntity"], Type["ChunkEntity"]]:
+        """Create parent and chunk entity models for this file entity.
 
         This method dynamically generates two models:
         1. A parent model that inherits all fields from the source FileEntity subclass
            and represents the complete file metadata from the source system
-        2. A child model that represents a chunk of the file's content with standardized
+        2. A chunk model that represents a chunk of the file's content with standardized
            fields for vector/graph DB storage
 
         Returns:
-            A tuple of (ParentEntityClass, ChildEntityClass)
+            A tuple of (ParentEntityClass, ChunkEntityClass)
         """
         # Get the class name prefix (e.g., "AsanaFile" from "AsanaFileEntity")
         class_name_prefix = cls.__name__.replace("Entity", "")
 
         # For parent, get all fields from the source FileEntity subclass
-        parent_fields = {}
+        parent_fields = {
+            "number_of_chunks": (
+                int,
+                Field(default=0, description="Number of chunks of this file"),
+            ),
+        }
         for name, field in cls.model_fields.items():
-            if name not in BaseEntity.model_fields:  # Skip base entity fields
-                parent_fields[name] = (field.annotation, field)
+            parent_fields[name] = (field.annotation, field)
 
         parent_model = create_model(
             f"{class_name_prefix}Parent", __base__=ParentEntity, **parent_fields
         )
 
-        # For child, create standardized fields for vector/graph DB storage
-        child_fields = {
-            "parent_id": (UUID, Field(..., description="ID of the parent entity")),
-            "parent_source_entity_id": (
-                str,
-                Field(..., description="ID of the parent entity in the source"),
-            ),
+        # For chunk, create standardized fields for vector/graph DB storage
+        chunk_fields = {
             "md_title": (Optional[str], Field(None, description="Title or heading of the chunk")),
             "md_content": (str, Field(..., description="The actual content of the chunk")),
             "md_type": (
@@ -241,8 +235,8 @@ class FileEntity(BaseEntity):
             ),
         }
 
-        child_model = create_model(
-            f"{class_name_prefix}Child", __base__=ChildEntity, **child_fields
+        chunk_model = create_model(
+            f"{class_name_prefix}Chunk", __base__=ChunkEntity, **chunk_fields
         )
 
-        return parent_model, child_model
+        return parent_model, chunk_model

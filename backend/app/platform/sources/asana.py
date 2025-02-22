@@ -18,7 +18,7 @@ from app.platform.entities.asana import (
     AsanaTaskEntity,
     AsanaWorkspaceEntity,
 )
-from app.platform.file_handlers.file_manager import handle_file_entity
+from app.platform.file_handling.file_manager import handle_file_entity
 from app.platform.sources._base import BaseSource
 
 
@@ -299,9 +299,9 @@ class AsanaSource(BaseSource):
                     yield await handle_file_entity(file_entity, file_stream)
                 except Exception as e:
                     logger.error(f"Error handling file {file_entity.name}: {str(e)}")
-                    yield file_entity
+                    continue
             else:
-                yield file_entity
+                continue
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Asana."""

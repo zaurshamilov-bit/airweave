@@ -2,7 +2,6 @@
 
 import asyncio
 from datetime import datetime
-from typing import List
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,8 +18,8 @@ from app.platform.auth.services import oauth2_service
 from app.platform.auth.settings import integration_settings
 from app.platform.destinations.weaviate import WeaviateDestination
 from app.platform.embedding_models.local_text2vec import LocalText2Vec
-from app.platform.entities._base import FileEntity, SubEntity
-from app.platform.file_handlers.file_manager import file_manager
+from app.platform.entities._base import ChunkEntity, FileEntity
+from app.platform.file_handling.file_manager import file_manager
 from app.platform.locator import resource_locator
 from app.platform.sync.context import SyncContext
 from app.platform.sync.pubsub import SyncProgressUpdate, sync_pubsub
@@ -54,8 +53,8 @@ class SyncService:
                 sync_progress_update = SyncProgressUpdate()
 
                 # Buffer for collecting file entities
-                file_buffer: List[FileEntity] = []
-                BATCH_SIZE = 5  # Process 5 files concurrently
+                file_buffer: list[FileEntity] = []
+                BATCH_SIZE = 1  # Process 5 files concurrently
 
                 async for entity in sync_context.source.generate_entities():
                     # Calculate hash for deduplication
@@ -387,9 +386,9 @@ class SyncService:
 
         return oauth2_service.generate_auth_url(white_label_settings)
 
-    async def _process_file(self, file: FileEntity) -> list[FileEntity | SubEntity]:
+    async def _process_file(self, file: FileEntity) -> list[FileEntity | ChunkEntity]:
         """Process a single file entity using the file chunker."""
-        entities: list[FileEntity | SubEntity] = []
+        entities: list[FileEntity | ChunkEntity] = []
         try:
             async for entity in file_chunker(file):
                 entities.append(entity)

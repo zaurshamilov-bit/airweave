@@ -28,7 +28,7 @@ class FileManager:
         stream: AsyncIterator[bytes],
         entity: FileEntity,
         chunk_size: int = 8192,
-    ) -> FileEntity:
+    ) -> FileEntity | None:
         """Process a file entity by saving its stream and enriching the entity.
 
         Args:
@@ -74,6 +74,7 @@ class FileManager:
             # Clean up partial file if it exists
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+            raise e
 
         return entity
 
