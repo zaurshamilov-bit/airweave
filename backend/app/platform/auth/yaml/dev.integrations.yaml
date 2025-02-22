@@ -90,13 +90,16 @@ integrations:
     url: "https://auth.atlassian.com/authorize"
     backend_url: "https://auth.atlassian.com/oauth/token"
     grant_type: "authorization_code"
-    client_id: "..."
-    client_secret: "..."
+    client_id: "7lFX0y5haMd9zKxhRQYgMjyea2vQK0e9"
+    client_secret: "ATOArWeIv8iRAfTohMGdb8GMJ3dSpCWn2nkKxYVdUoofTPXrVHJ4QXTr7c38JIJIcNIt6E64D598"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
-    scope: "read"
+    scope: "read:jira-user read:jira-work offline_access manage:jira-project manage:jira-configuration"
     additional_frontend_params:
+      audience: "api.atlassian.com"
+      prompt: "consent"
       response_mode: "query"
+      state: "YOUR_USER_BOUND_VALUE"
 
   monday:
     auth_type: "oauth2"

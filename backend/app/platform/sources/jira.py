@@ -15,6 +15,7 @@ from typing import Any, AsyncGenerator
 
 import httpx
 
+from app.core.logging import logger
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
 from app.platform.entities._base import BaseEntity, Breadcrumb
@@ -40,11 +41,71 @@ class JiraSource(BaseSource):
     The Jira entity schemas are defined in entities/jira.py.
     """
 
+    @staticmethod
+    async def _get_accessible_resources(access_token: str) -> list[dict]:
+        """Get the list of accessible Atlassian resources for this token.
+
+        Args:
+            access_token: The OAuth access token
+
+        Returns:
+            list[dict]: List of accessible resources, each containing 'id' and 'url' keys
+        """
+        async with httpx.AsyncClient() as client:
+            headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+            try:
+                response = await client.get(
+                    "https://api.atlassian.com/oauth/token/accessible-resources", headers=headers
+                )
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
+                logger.error(f"Error getting accessible resources: {str(e)}")
+                return []
+
+    @staticmethod
+    async def _extract_cloud_info(access_token: str) -> tuple[str, str]:
+        """Extract the Atlassian Cloud instance URL and ID using the OAuth 2.0 accessible-resources endpoint.
+
+        Args:
+            access_token: The OAuth access token
+
+        Returns:
+            tuple[str, str]: The cloud instance URL and cloud instance ID
+        """
+        try:
+            resources = await JiraSource._get_accessible_resources(access_token)
+
+            if not resources:
+                logger.warning("No accessible resources found")
+                return "https://api.atlassian.com", ""
+
+            # Use the first available resource
+            # In most cases, there will only be one resource
+            resource = resources[0]
+            cloud_url = resource.get("url", "https://api.atlassian.com").rstrip("/")
+            cloud_id = resource.get("id", "")
+
+            if not cloud_url or not cloud_id:
+                logger.warning("Missing URL or ID in accessible resources")
+                return "https://api.atlassian.com", ""
+
+            return cloud_url, cloud_id
+
+        except Exception as e:
+            logger.error(f"Error extracting cloud info: {str(e)}")
+            return "https://api.atlassian.com", ""
+
     @classmethod
     async def create(cls, access_token: str) -> "JiraSource":
         """Create a new Jira source instance."""
         instance = cls()
         instance.access_token = access_token
+        instance.base_url, instance.cloud_id = await cls._extract_cloud_info(access_token)
+        logger.info(
+            f"Initialized Jira source with base URL: {instance.base_url} "
+            f"and cloud ID: {instance.cloud_id}"
+        )
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Any:
@@ -52,8 +113,24 @@ class JiraSource(BaseSource):
 
         By default, we're using OAuth 2.0 with refresh tokens for authentication.
         """
-        headers = {"Authorization": f"Bearer {self.access_token}", "Accept": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Accept": "application/json",
+            "X-Atlassian-Token": "no-check",  # Required for CSRF protection
+        }
+
+        # Add cloud instance ID if available
+        if self.cloud_id:
+            headers["X-Cloud-ID"] = self.cloud_id
+
+        logger.debug(f"Making request to {url} with headers: {headers}")
         response = await client.get(url, headers=headers)
+
+        if not response.is_success:
+            logger.error(f"Request failed with status {response.status_code}")
+            logger.error(f"Response headers: {dict(response.headers)}")
+            logger.error(f"Response body: {response.text}")
+
         response.raise_for_status()
         return response.json()
 
@@ -68,7 +145,7 @@ class JiraSource(BaseSource):
         url = f"{base_url}/rest/api/3/status"
         data = await self._get_with_auth(client, url)
 
-        # This endpoint returns a list of status objects directly.
+        # This endpoint returns a list of status objects directly
         for status in data:
             yield JiraStatusEntity(
                 source_name="jira",
@@ -235,29 +312,31 @@ class JiraSource(BaseSource):
                 break
 
     async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
-        """Generate all entities from Jira: Statuses, Projects, Issues, Comments."""
-        # TODO: Make this dynamic from user env.
-        # In practice, you would determine your Jira Cloud base URL or site URL.
-        # This may come from the user's settings or environment. Here's an example pattern:
-        base_url = "https://your-domain.atlassian.net"
+        """Generate all entities from Jira: Statuses, Projects, Issues, Comments.
 
+        This method is called by the sync service to generate entities for the source.
+
+        Yields:
+        -------
+            AsyncGenerator[BaseEntity, None]: An asynchronous generator of BaseEntity objects
+        """
         async with httpx.AsyncClient() as client:
             # 1) Generate (and yield) all Statuses
-            async for status_entity in self._generate_status_entities(client, base_url):
+            async for status_entity in self._generate_status_entities(client, self.base_url):
                 yield status_entity
 
             # 2) Generate (and yield) all Projects
-            async for project_entity in self._generate_project_entities(client, base_url):
+            async for project_entity in self._generate_project_entities(client, self.base_url):
                 yield project_entity
 
                 # 3) Generate (and yield) all Issues for each Project
                 async for issue_entity in self._generate_issue_entities(
-                    client, base_url, project_entity
+                    client, self.base_url, project_entity
                 ):
                     yield issue_entity
 
                     # 4) Generate (and yield) Comments for each Issue
                     async for comment_entity in self._generate_comment_entities(
-                        client, base_url, issue_entity
+                        client, self.base_url, issue_entity
                     ):
                         yield comment_entity
