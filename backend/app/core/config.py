@@ -72,7 +72,6 @@ class Settings(BaseSettings):
         Returns:
         -------
             PostgresDsn: The assembled SQLAlchemy async database URI.
-
         """
         if isinstance(v, str):
             return v
