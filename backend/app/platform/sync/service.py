@@ -1,7 +1,5 @@
 """Module for data synchronization."""
 
-import asyncio
-from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,8 +8,6 @@ from app import crud, schemas
 from app.core import credentials
 from app.core.exceptions import NotFoundException
 from app.core.logging import logger
-from app.core.shared_models import SyncJobStatus
-from app.db.session import get_db_context
 from app.db.unit_of_work import UnitOfWork
 from app.platform.auth.schemas import AuthType
 from app.platform.auth.services import oauth2_service
@@ -19,10 +15,10 @@ from app.platform.auth.settings import integration_settings
 from app.platform.destinations.weaviate import WeaviateDestination
 from app.platform.embedding_models.local_text2vec import LocalText2Vec
 from app.platform.entities._base import ChunkEntity, FileEntity
-from app.platform.file_handling.file_manager import file_manager
 from app.platform.locator import resource_locator
 from app.platform.sync.context import SyncContext
-from app.platform.sync.pubsub import SyncProgressUpdate, sync_pubsub
+from app.platform.sync.pubsub import sync_pubsub
+from app.platform.sync.router import EntityRouter
 from app.platform.transformers.default_file_chunker import file_chunker
 
 
@@ -45,167 +41,59 @@ class SyncService:
         sync_job: schemas.SyncJob,
         current_user: schemas.User,
     ) -> schemas.Sync:
-        """Run a sync."""
-        try:
-            async with get_db_context() as db:
-                sync_context = await self.create_sync_context(db, sync, sync_job, current_user)
-                logger.info(f"Starting job with id {sync_context.sync_job.id}.")
-                sync_progress_update = SyncProgressUpdate()
+        """Run a sync with the new DAG-based routing."""
+        async with AsyncSession() as db:
+            # Get DAG definition
+            dag = await crud.sync_dag_definition.get(
+                db=db, id=sync.dag_id, current_user=current_user
+            )
+            if not dag:
+                raise ValueError("No DAG definition found")
 
-                # Buffer for collecting file entities
-                file_buffer: list[FileEntity] = []
-                BATCH_SIZE = 1  # Process 5 files concurrently
+            # Initialize router
+            router = EntityRouter(
+                dag=dag, db=db, sync_id=sync.id, organization_id=sync.organization_id
+            )
 
-                async for entity in sync_context.source.generate_entities():
-                    # Calculate hash for deduplication
-                    entity_hash = entity.hash()
+            # Get source node and initialize source
+            source_node = self._get_source_node(dag)
+            source = await self._initialize_source(source_node)
 
-                    # Check if entity exists in DB
-                    db_entity = await crud.entity.get_by_entity_and_sync_id(
-                        db, entity_id=entity.entity_id, sync_id=sync.id
-                    )
+            # Initialize progress tracking
+            sync_progress = SyncProgress()
 
-                    if isinstance(entity, FileEntity):
-                        file_buffer.append(entity)
-
-                        # When buffer reaches batch size, process files concurrently
-                        if len(file_buffer) >= BATCH_SIZE:
-                            # Create tasks for concurrent processing
-                            tasks = []
-                            for file in file_buffer:
-                                task = asyncio.create_task(self._process_file(file))
-                                tasks.append(task)
-
-                            # Wait for all tasks to complete and process results
-                            for result in await asyncio.gather(*tasks, return_exceptions=True):
-                                if isinstance(result, Exception):
-                                    logger.error(f"Error processing file: {str(result)}")
-                                    continue
-                                if result:
-                                    # Process the result
-                                    pass
-
-                            # Clear the buffer after processing
-                            file_buffer.clear()
-
-                    if db_entity:
-                        if db_entity.hash == entity_hash:
-                            # No changes, update sync_job_id
-                            await crud.entity.update_job_id(
-                                db, db_obj=db_entity, sync_job_id=sync_job.id
-                            )
-                            sync_progress_update.already_sync += 1
-                        else:
-                            # Content changed, update both DB and destination
-                            entity_update = schemas.EntityUpdate(
-                                sync_job_id=sync_job.id,
-                                hash=entity_hash,
-                            )
-                            await crud.entity.update(
-                                db,
-                                db_obj=db_entity,
-                                obj_in=entity_update,
-                                organization_id=sync.organization_id,
-                            )
-                            await sync_context.destination.delete(db_entity.id)
-                            await sync_context.destination.insert(entity)
-                            sync_progress_update.updated += 1
-                    else:
-                        # New entity, insert into DB and buffer for destination
-                        entity_schema = schemas.EntityCreate(
-                            sync_id=sync.id,
-                            sync_job_id=sync_job.id,
-                            entity_id=entity.entity_id,
-                            hash=entity_hash,
-                        )
+            # Stream and process entities
+            async for entity in source.generate_entities():
+                async for result in router.process_entity(source_node, entity):
+                    # Update progress based on action
+                    if result.action == "insert":
+                        sync_progress.inserted += 1
+                        # Create new DB entity
                         db_entity = await crud.entity.create(
-                            db,
-                            obj_in=entity_schema,
+                            db=db,
+                            obj_in=schemas.EntityCreate(
+                                sync_id=sync.id,
+                                entity_id=result.entity.entity_id,
+                                hash=result.entity.hash,
+                            ),
                             organization_id=sync.organization_id,
                         )
-                        entity.db_entity_id = db_entity.id
-                        await sync_context.destination.insert(entity)
-                        sync_progress_update.inserted += 1
+                        # Update entity with DB ID
+                        result.entity.db_entity_id = db_entity.id
 
-                    # Publish partial progress using job_id
-                    await sync_pubsub.publish(sync_job.id, sync_progress_update)
-
-                # Process any remaining files in the buffer
-                if file_buffer:
-                    tasks = []
-                    for file in file_buffer:
-                        task = asyncio.create_task(self._process_file(file))
-                        tasks.append(task)
-
-                    # Wait for all tasks to complete and process results
-                    for result in await asyncio.gather(*tasks, return_exceptions=True):
-                        if isinstance(result, Exception):
-                            logger.error(f"Error processing file: {str(result)}")
-                            continue
-                        if result:
-                            # Process the result
-                            pass
-
-                    file_buffer.clear()
-
-            async with get_db_context() as db:
-                # Handle deletions - remove outdated entities
-                outdated_entities = await crud.entity.get_all_outdated(
-                    db, sync_id=sync.id, sync_job_id=sync_job.id
-                )
-                if outdated_entities:
-                    # Remove from destination
-                    for entity in outdated_entities:
-                        await sync_context.destination.delete(entity.id)
-                        # Remove from database
-                        await crud.entity.remove(
-                            db, id=entity.id, organization_id=sync.organization_id
+                    elif result.action == "update":
+                        sync_progress.updated += 1
+                        # Update existing DB entity
+                        await crud.entity.update(
+                            db=db,
+                            db_obj=result.db_entity,
+                            obj_in=schemas.EntityUpdate(hash=result.entity.hash),
                         )
-                        sync_progress_update.deleted += 1
+                        # Update entity with DB ID
+                        result.entity.db_entity_id = result.db_entity.id
 
-                    # Publish partial progress using job_id
-                    await sync_pubsub.publish(
-                        sync_job.id,
-                        sync_progress_update,
-                    )
-
-        except Exception as e:
-            logger.error(f"An error occurred while syncing: {str(e)}", exc_info=True)
-            async with get_db_context() as db:
-                sync_job_db = await crud.sync_job.get(db, sync_job.id, current_user)
-                sync_job_schema = schemas.SyncJobUpdate.model_validate(sync_job_db)
-                sync_job_schema.status = SyncJobStatus.FAILED
-                sync_job_schema.failed_at = datetime.now()
-                sync_job_schema.error = str(e)
-
-                await crud.sync_job.update(db, sync_job_db, sync_job_schema, current_user)
-                sync_progress_update.is_failed = True
-                await sync_pubsub.publish(sync_job.id, sync_progress_update)
-
-                # Clean up any downloaded files
-                file_manager.cleanup_job(sync_job.id)
-
-                return sync
-
-        async with get_db_context() as db:
-            sync_job_db = await crud.sync_job.get(db, sync_job.id, current_user)
-            sync_job_schema = schemas.SyncJobUpdate.model_validate(
-                sync_job_db, from_attributes=True
-            )
-            sync_job_schema.status = SyncJobStatus.COMPLETED
-            sync_job_schema.completed_at = datetime.now()
-            try:
-                await crud.sync_job.update(
-                    db, db_obj=sync_job_db, obj_in=sync_job_schema, current_user=current_user
-                )
-            except Exception as e:
-                logger.error(f"An error occured while updating the sync job: {e}")
-
-            sync_progress_update.is_complete = True
-            await sync_pubsub.publish(sync_job.id, sync_progress_update)
-
-            # Clean up downloaded files after successful completion
-            file_manager.cleanup_job(sync_job.id)
+                    # Publish progress
+                    await sync_pubsub.publish(sync_job.id, sync_progress)
 
             return sync
 
