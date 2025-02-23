@@ -65,7 +65,7 @@ class JiraSource(BaseSource):
 
     @staticmethod
     async def _extract_cloud_info(access_token: str) -> tuple[str, str]:
-        """Extract the Atlassian Cloud instance URL and ID using the OAuth 2.0 accessible-resources endpoint.
+        """Extract the Atlassian Cloud URL and ID from OAuth 2.0 accessible-resources.
 
         Args:
             access_token: The OAuth access token
