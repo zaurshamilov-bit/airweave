@@ -1,6 +1,7 @@
 """Module for data synchronization."""
 
-from uuid import UUID
+import asyncio
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +12,6 @@ from app.core.logging import logger
 from app.db.unit_of_work import UnitOfWork
 from app.platform.auth.schemas import AuthType
 from app.platform.auth.services import oauth2_service
-from app.platform.auth.settings import integration_settings
 from app.platform.destinations.weaviate import WeaviateDestination
 from app.platform.embedding_models.local_text2vec import LocalText2Vec
 from app.platform.entities._base import ChunkEntity, FileEntity
@@ -33,12 +33,15 @@ class SyncService:
         uow: UnitOfWork,
     ) -> schemas.Sync:
         """Create a new sync."""
-        return await crud.sync.create(db=db, obj_in=sync, current_user=current_user, uow=uow)
+        sync = await crud.sync.create(db=db, obj_in=sync, current_user=current_user, uow=uow)
+        dag = await crud.sync_dag.
+        return sync
 
     async def run(
         self,
         sync: schemas.Sync,
         sync_job: schemas.SyncJob,
+        dag: schemas.SyncDag,
         current_user: schemas.User,
     ) -> schemas.Sync:
         """Run a sync with the new DAG-based routing."""
@@ -234,45 +237,6 @@ class SyncService:
         return await WeaviateDestination.create(
             sync.id, embedding_model
         )  # TODO: Handle other destinations
-
-    async def generate_white_label_auth_url(
-        self,
-        db: AsyncSession,
-        white_label_id: UUID,
-        current_user: schemas.User,
-    ) -> str:
-        """Generate OAuth2 authorization URL for a white label integration."""
-        # Get white label config
-        white_label = await crud.white_label.get(db, white_label_id, current_user)
-        if not white_label:
-            raise NotFoundException("White label integration not found")
-
-        # Get source settings
-        source = await crud.source.get_by_short_name(db, white_label.source_id)
-        if not source:
-            raise NotFoundException("Source not found")
-
-        # Get integration settings
-        settings = integration_settings.get_integration_settings(source.short_name)
-        if not settings:
-            raise NotFoundException("Integration settings not found")
-
-        if source.auth_type not in [
-            AuthType.oauth2,
-            AuthType.oauth2_with_refresh,
-            AuthType.oauth2_with_refresh_rotating,
-        ]:
-            raise ValueError("Source does not support OAuth2")
-
-        # Override OAuth2 settings with white label config
-        white_label_settings = settings.model_copy()
-        white_label_settings.client_id = white_label.client_id
-
-        # Generate auth URL using the white label client ID
-        if white_label.source_id == "trello":
-            return oauth2_service.generate_auth_url_for_trello(client_id=white_label.client_id)
-
-        return oauth2_service.generate_auth_url(white_label_settings)
 
     async def _process_file(self, file: FileEntity) -> list[FileEntity | ChunkEntity]:
         """Process a single file entity using the file chunker."""

@@ -16,7 +16,7 @@ export interface DagEdge {
   to_node_id: string;
 }
 
-export interface DagDefinition {
+export interface Dag {
   id: string;
   name: string;
   description?: string;

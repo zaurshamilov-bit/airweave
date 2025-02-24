@@ -12,29 +12,27 @@ from app.crud._base import CRUDBase
 from app.models.dag import (
     DagEdge,
     DagNode,
-    SyncDagDefinition,
+    SyncDag,
 )
 from app.schemas.dag import (
-    SyncDagDefinitionCreate,
-    SyncDagDefinitionUpdate,
+    SyncDagCreate,
+    SyncDagUpdate,
 )
 
 
-class CRUDSyncDagDefinition(
-    CRUDBase[SyncDagDefinition, SyncDagDefinitionCreate, SyncDagDefinitionUpdate]
-):
-    """CRUD operations for SyncDagDefinition."""
+class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
+    """CRUD operations for SyncDag."""
 
     async def create_with_nodes_and_edges(
         self,
         db: AsyncSession,
         *,
-        obj_in: SyncDagDefinitionCreate,
+        obj_in: SyncDagCreate,
         current_user: schemas.User,
-    ) -> SyncDagDefinition:
+    ) -> SyncDag:
         """Create a DAG with its nodes and edges."""
         # Create the base DAG object
-        db_obj = SyncDagDefinition(
+        db_obj = SyncDag(
             name=obj_in.name,
             description=obj_in.description,
             sync_id=obj_in.sync_id,
@@ -75,11 +73,11 @@ class CRUDSyncDagDefinition(
 
         # Reload with relationships
         result = await db.execute(
-            select(SyncDagDefinition)
-            .where(SyncDagDefinition.id == db_obj.id)
+            select(SyncDag)
+            .where(SyncDag.id == db_obj.id)
             .options(
-                selectinload(SyncDagDefinition.nodes),
-                selectinload(SyncDagDefinition.edges),
+                selectinload(SyncDag.nodes),
+                selectinload(SyncDag.edges),
             )
         )
         return result.scalar_one()
@@ -88,10 +86,10 @@ class CRUDSyncDagDefinition(
         self,
         db: AsyncSession,
         *,
-        db_obj: SyncDagDefinition,
-        obj_in: SyncDagDefinitionUpdate,
+        db_obj: SyncDag,
+        obj_in: SyncDagUpdate,
         current_user: schemas.User,
-    ) -> SyncDagDefinition:
+    ) -> SyncDag:
         """Update a DAG with its nodes and edges."""
         # Update DAG fields
         db_obj = await self.update(db, db_obj=db_obj, obj_in=obj_in, current_user=current_user)
@@ -134,11 +132,11 @@ class CRUDSyncDagDefinition(
 
         # Reload with relationships
         result = await db.execute(
-            select(SyncDagDefinition)
-            .where(SyncDagDefinition.id == db_obj.id)
+            select(SyncDag)
+            .where(SyncDag.id == db_obj.id)
             .options(
-                selectinload(SyncDagDefinition.nodes),
-                selectinload(SyncDagDefinition.edges),
+                selectinload(SyncDag.nodes),
+                selectinload(SyncDag.edges),
             )
         )
         return result.scalar_one()
@@ -149,20 +147,20 @@ class CRUDSyncDagDefinition(
         *,
         sync_id: UUID,
         current_user: schemas.User,
-    ) -> Optional[SyncDagDefinition]:
+    ) -> Optional[SyncDag]:
         """Get a DAG by sync ID."""
         result = await db.execute(
-            select(SyncDagDefinition)
+            select(SyncDag)
             .where(
-                SyncDagDefinition.sync_id == sync_id,
-                SyncDagDefinition.organization_id == current_user.organization_id,
+                SyncDag.sync_id == sync_id,
+                SyncDag.organization_id == current_user.organization_id,
             )
             .options(
-                selectinload(SyncDagDefinition.nodes),
-                selectinload(SyncDagDefinition.edges),
+                selectinload(SyncDag.nodes),
+                selectinload(SyncDag.edges),
             )
         )
         return result.scalar_one_or_none()
 
 
-sync_dag_definition = CRUDSyncDagDefinition(SyncDagDefinition)
+sync_dag = CRUDSyncDag(SyncDag)

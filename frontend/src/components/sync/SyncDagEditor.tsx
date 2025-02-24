@@ -27,7 +27,7 @@ import { ButtonEdge } from "./edges/ButtonEdge";
 import { BlankEdge } from "./edges/BlankEdge";
 import dagre from "dagre";
 import { 
-  DagDefinition, 
+  Dag, 
   FlowNode, 
   FlowEdge,
   toFlowNodes,
@@ -52,7 +52,7 @@ const edgeTypes = {
 
 interface SyncDagEditorProps {
   syncId: string;
-  initialDag?: DagDefinition;
+  initialDag?: Dag;
   onSave?: () => void;
 }
 
@@ -322,7 +322,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
         // Otherwise fetch from API
         const resp = await apiClient.get(`/sync/${syncId}/dag`);
         if (!resp.ok) throw new Error("Failed to load DAG");
-        const data: DagDefinition = await resp.json();
+        const data: Dag = await resp.json();
         
         const flowNodes = toFlowNodes(data.nodes);
         const initialEdges = data.edges.map(edge => {
@@ -481,7 +481,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      const dagData: DagDefinition = {
+      const dagData: Dag = {
         id: initialDag?.id || '',
         name: initialDag?.name || "DAG from UI",
         description: initialDag?.description || "Created via DAG editor",

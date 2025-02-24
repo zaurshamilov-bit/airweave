@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
-from app.schemas.dag import DagEdgeCreate, DagNodeCreate, SyncDagDefinitionCreate
+from app.schemas.dag import DagEdgeCreate, DagNodeCreate, SyncDagCreate
 
 
 class DagService:
@@ -18,7 +18,7 @@ class DagService:
         *,
         sync_id: UUID,
         current_user: schemas.User,
-    ) -> schemas.SyncDagDefinitionCreate:
+    ) -> schemas.SyncDagCreate:
         """Create an initial DAG with source, entities, and destination."""
         ## Get sync
         sync = await crud.sync.get(db, id=sync_id, current_user=current_user)
@@ -114,18 +114,18 @@ class DagService:
                 )
             )
 
-        sync_dag_definition_create = SyncDagDefinitionCreate(
+        sync_dag_create = SyncDagCreate(
             name=f"DAG for {sync.name}",
             sync_id=sync_id,
             nodes=nodes,
             edges=edges,
         )
 
-        sync_dag_definition = await crud.sync_dag_definition.create_with_nodes_and_edges(
-            db, obj_in=sync_dag_definition_create, current_user=current_user
+        sync_dag = await crud.sync_dag.create_with_nodes_and_edges(
+            db, obj_in=sync_dag_create, current_user=current_user
         )
 
-        return schemas.SyncDagDefinition.model_validate(sync_dag_definition, from_attributes=True)
+        return schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
 
 
 dag_service = DagService()
