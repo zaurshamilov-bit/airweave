@@ -1,17 +1,13 @@
 """Default file transformer."""
 
-from typing import AsyncGenerator
-
 from app.core.logging import logger
 from app.platform.decorators import transformer
 from app.platform.entities._base import ChunkEntity, FileEntity, ParentEntity
 from app.platform.file_handling.async_markitdown import markitdown
 
 
-@transformer(name="File Chunker", short_name="file_chunker")
-async def file_chunker(
-    file: FileEntity,
-) -> AsyncGenerator[ParentEntity | ChunkEntity, None]:
+@transformer(name="File Chunker")
+async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
     """Default file chunker that converts files to markdown chunks.
 
     This transformer:
@@ -23,10 +19,11 @@ async def file_chunker(
     Args:
         file: The FileEntity to process
 
-    Yields:
-        ParentEntity | ChildEntity: The processed chunks
+    Returns:
+        list[ParentEntity | ChunkEntity]: The processed chunks
     """
     file_class = type(file)
+    produced_entities = []
 
     # Get the specific parent/child models for this file entity type
     FileParentClass, FileChunkClass = file_class.create_parent_chunk_models()
@@ -55,7 +52,7 @@ async def file_chunker(
             }
         )
         parent = FileParentClass(**file_data)
-        yield parent
+        produced_entities.append(parent)
 
         for i, chunk in enumerate(chunks):
             if not chunk.strip():
@@ -74,11 +71,13 @@ async def file_chunker(
                     "total_chunks": len(chunks),
                 },
             )
-            yield chunk
+            produced_entities.append(chunk)
 
     except Exception as e:
         logger.error(f"Error processing file {file.name}: {str(e)}")
-        return
+        raise e
+
+    return produced_entities
 
 
 def _split_by_headers(content: str, max_chunk_size: int) -> list[str]:

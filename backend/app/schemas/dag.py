@@ -33,6 +33,7 @@ class DagNodeBase(BaseModel):
     # One of these will be set based on type
     connection_id: Optional[UUID] = None
     entity_definition_id: Optional[UUID] = None
+    transformer_id: Optional[UUID] = None
 
 
 class DagNodeCreate(DagNodeBase):
@@ -164,6 +165,17 @@ class SyncDag(SyncDagBase):
             if edge.to_node_id == node_id:
                 edges.append(edge)
         return edges
+
+    def get_source_node(self) -> DagNode:
+        """Get the source node."""
+        for node in self.nodes:
+            if node.type == NodeType.source:
+                return node
+        raise ValueError("No source node found")
+
+    def get_destination_nodes(self) -> list[DagNode]:
+        """Get all destination nodes."""
+        return [node for node in self.nodes if node.type == NodeType.destination]
 
     class Config:
         """Pydantic config."""

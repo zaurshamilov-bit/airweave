@@ -1,17 +1,22 @@
 """DAG router."""
 
-from typing import Optional
+from typing import Callable, Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.platform.entities._base import BaseEntity
 from app.schemas.dag import DagNode, NodeType, SyncDag
 
 
 class SyncDAGRouter:
     """Routes entities through the DAG based on producer and entity type."""
 
-    def __init__(self, dag: SyncDag):
+    def __init__(
+        self,
+        dag: SyncDag,
+        transformers: list[Callable[[BaseEntity], list[BaseEntity]]],
+    ):
         """Initialize the DAG router."""
         # Store DAG structure
         self.dag = dag
@@ -64,6 +69,31 @@ class SyncDAGRouter:
                     )
 
         return route_map
+
+    async def process_entity(self, producer_id: UUID, entity: BaseEntity) -> list[BaseEntity]:
+        """Route an entity to its next destinations based on DAG structure."""
+        route_key = (producer_id, entity.entity_definition_id)
+        if route_key not in self.route:
+            raise ValueError(f"No route found for entity {entity.entity_definition_id}")
+
+        consumer_id = self.route[route_key]
+
+        # If the entity is sent to a destination, return it
+        if consumer_id is None:
+            return [entity]
+
+        # Get the consumer node
+        consumer = self.dag.get_node(consumer_id)
+
+        # Apply the transformer
+        transformed_entities = await self._apply_transformer(consumer, entity)
+
+        # Route the transformed entities
+        result_entities = []
+        for transformed_entity in transformed_entities:
+            result_entities.extend(await self.process_entity(consumer_id, transformed_entity))
+
+        return result_entities
 
     def _get_if_node_is_destination(self, node: DagNode) -> bool:
         """Get if a node is a destination."""
