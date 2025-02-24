@@ -91,10 +91,10 @@ integrations:
     backend_url: "https://auth.atlassian.com/oauth/token"
     grant_type: "authorization_code"
     client_id: "7lFX0y5haMd9zKxhRQYgMjyea2vQK0e9"
-    client_secret: "ATOArWeIv8iRAfTohMGdb8GMJ3dSpCWn2nkKxYVdUoofTPXrVHJ4QXTr7c38JIJIcNIt6E64D598"
+    client_secret: "ATOAXmVgegutoBHTY1VHg38DzjUu0F82Z-o0e55tZ7YcNnr2cMxKp87lBnyzz-_0B7v2BC2EDA70"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
-    scope: "read:jira-user read:jira-work offline_access manage:jira-project manage:jira-configuration"
+    scope: "read offline_access manage:jira-configuration manage:jira-project read:jira-user read:jira-work read:workflow:jira read:application-role:jira read:avatar:jira read:group:jira read:issue-type:jira read:issue-type-hierarchy:jira read:user:jira read:project:jira read:project-category:jira read:project.component:jira read:project.property:jira read:project-version:jira read:workflow:jira"
     additional_frontend_params:
       audience: "api.atlassian.com"
       prompt: "consent"

@@ -5,7 +5,6 @@ entity schemas for the major Jira objects relevant to our application:
  - Project
  - Issue
  - Comment
- - Status
 
 These schemas follow the patterns established by other integrations
 (e.g., Asana, Todoist, HubSpot, Confluence). Each schema subclass extends
@@ -49,21 +48,6 @@ class JiraProjectEntity(BaseEntity):
     )
     description: Optional[str] = Field(None, description="Description of the project.")
     archived: bool = Field(False, description="Indicates if this project is archived.")
-
-
-class JiraStatusEntity(BaseEntity):
-    """Schema for a Jira Status.
-
-    See:
-      https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-status-get
-      (Status APIs in Jira Cloud)
-    """
-
-    name: str = Field(..., description="Name of the status (e.g., 'To Do', 'In Progress').")
-    category: Optional[str] = Field(
-        None, description="Category for the status (e.g., 'To Do', 'Done')."
-    )
-    description: Optional[str] = Field(None, description="Description or help text for the status.")
 
 
 class JiraIssueEntity(BaseEntity):

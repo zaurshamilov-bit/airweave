@@ -4,7 +4,6 @@ Retrieves data (read-only) from a user's Jira Cloud instance:
  - Projects
  - Issues (within each project)
  - Comments (within each issue)
- - Statuses (global list)
 
 References:
     https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/
@@ -23,7 +22,6 @@ from app.platform.entities.jira import (
     JiraCommentEntity,
     JiraIssueEntity,
     JiraProjectEntity,
-    JiraStatusEntity,
 )
 from app.platform.sources._base import BaseSource
 
@@ -33,7 +31,6 @@ class JiraSource(BaseSource):
     """Jira source implementation (read-only).
 
     This connector retrieves hierarchical data from Jira's REST API:
-      - Statuses (global list)
       - Projects
       - Issues (within each project)
       - Comments (within each issue)
@@ -64,48 +61,43 @@ class JiraSource(BaseSource):
                 return []
 
     @staticmethod
-    async def _extract_cloud_info(access_token: str) -> tuple[str, str]:
-        """Extract the Atlassian Cloud URL and ID from OAuth 2.0 accessible-resources.
+    async def _extract_cloud_id(access_token: str) -> tuple[str, str]:
+        """Extract the Atlassian Cloud ID from OAuth 2.0 accessible-resources.
 
         Args:
             access_token: The OAuth access token
 
         Returns:
-            tuple[str, str]: The cloud instance URL and cloud instance ID
+            cloud_id (str): The cloud instance ID
         """
         try:
             resources = await JiraSource._get_accessible_resources(access_token)
 
             if not resources:
                 logger.warning("No accessible resources found")
-                return "https://api.atlassian.com", ""
+                return ""
 
             # Use the first available resource
             # In most cases, there will only be one resource
             resource = resources[0]
-            cloud_url = resource.get("url", "https://api.atlassian.com").rstrip("/")
             cloud_id = resource.get("id", "")
 
-            if not cloud_url or not cloud_id:
-                logger.warning("Missing URL or ID in accessible resources")
-                return "https://api.atlassian.com", ""
-
-            return cloud_url, cloud_id
+            if not cloud_id:
+                logger.warning("Missing ID in accessible resources")
+            return cloud_id
 
         except Exception as e:
-            logger.error(f"Error extracting cloud info: {str(e)}")
-            return "https://api.atlassian.com", ""
+            logger.error(f"Error extracting cloud ID: {str(e)}")
+            return ""
 
     @classmethod
     async def create(cls, access_token: str) -> "JiraSource":
         """Create a new Jira source instance."""
         instance = cls()
         instance.access_token = access_token
-        instance.base_url, instance.cloud_id = await cls._extract_cloud_info(access_token)
-        logger.info(
-            f"Initialized Jira source with base URL: {instance.base_url} "
-            f"and cloud ID: {instance.cloud_id}"
-        )
+        instance.cloud_id = await cls._extract_cloud_id(access_token)
+        instance.base_url = f"https://api.atlassian.com/ex/jira/{instance.cloud_id}"
+        logger.info(f"Initialized Jira source with base URL: {instance.base_url}")
         return instance
 
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Any:
@@ -134,50 +126,46 @@ class JiraSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    async def _generate_status_entities(
-        self, client: httpx.AsyncClient, base_url: str
-    ) -> AsyncGenerator[JiraStatusEntity, None]:
-        """Generate JiraStatusEntity objects.
-
-        Endpoint:
-            GET /rest/api/3/status
-        """
-        url = f"{base_url}/rest/api/3/status"
-        data = await self._get_with_auth(client, url)
-
-        # This endpoint returns a list of status objects directly
-        for status in data:
-            yield JiraStatusEntity(
-                source_name="jira",
-                entity_id=status["id"],
-                name=status.get("name", ""),
-                category=status.get("statusCategory", {}).get("name"),
-                description=status.get("description"),
-            )
-
     async def _generate_project_entities(
         self, client: httpx.AsyncClient, base_url: str
     ) -> AsyncGenerator[JiraProjectEntity, None]:
         """Generate JiraProjectEntity objects.
 
         Endpoint:
-            GET /rest/api/3/project
-        """
-        url = f"{base_url}/rest/api/3/project"
-        data = await self._get_with_auth(client, url)
+            GET /rest/api/3/project/search
 
-        # This endpoint returns a list of projects.
-        for project in data:
-            yield JiraProjectEntity(
-                source_name="jira",
-                entity_id=project["id"],
-                breadcrumbs=[],  # top-level object, no parent
-                project_key=project["key"],
-                name=project.get("name"),
-                project_type=project.get("projectTypeKey"),
-                lead=project.get("lead"),
-                description=project.get("description"),
-                archived=project.get("archived", False),
+        Source: https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-projects/#api-rest-api-3-project-search-get
+        """
+        search_api_path = "/rest/api/3/project/search"
+        max_results = 50
+        project_search_url = f"{base_url}{search_api_path}?maxResults={max_results}"
+
+        while True:
+            data = await self._get_with_auth(client, project_search_url)
+
+            # This endpoint returns a list of projects.
+            projects = data.get("values", [])
+            for project in projects:
+                yield JiraProjectEntity(
+                    source_name="jira",
+                    entity_id=project["id"],
+                    breadcrumbs=[],  # top-level object, no parent
+                    project_key=project["key"],
+                    name=project.get("name"),
+                    project_type=project.get("projectTypeKey"),
+                    lead=project.get("lead"),
+                    description=project.get("description"),
+                    archived=project.get("archived", False),
+                )
+
+            # Handle pagination
+            if data.get("isLast", True):
+                break
+
+            start_at = data.get("startAt", 0)
+            next_start = start_at + max_results
+            project_search_url = (
+                f"{base_url}{search_api_path}?startAt={next_start}&maxResults={max_results}"
             )
 
     async def _generate_comment_entities(
@@ -239,47 +227,52 @@ class JiraSource(BaseSource):
     ) -> AsyncGenerator[JiraIssueEntity, None]:
         """Generate JiraIssueEntity for each issue in the given project.
 
-        We use the Search endpoint with JQL to get issues belonging to the project.
+        We use the JQL Search endpoint to get issues belonging to the project.
         Endpoint:
-            GET /rest/api/3/search?jql=project=<PROJECT_KEY>
-        We'll handle pagination by checking total, startAt, maxResults from the response.
-        After we fetch an issue, we can optionally parse watchers, labels, etc.
+            GET /rest/api/3/search/jql?jql=project=<PROJECT_KEY>
         """
-        start_at = 0
-        max_results = 50
         project_key = project.project_key
+        next_page_token = None
 
         while True:
+            # Construct the search URL with JQL query
             search_url = (
-                f"{base_url}/rest/api/3/search"
+                f"{base_url}/rest/api/3/search/jql"
                 f"?jql=project={project_key}"
-                f"&startAt={start_at}"
-                f"&maxResults={max_results}"
-                # Expand watchers, names, etc. if desired:
                 f"&expand=names,watcher"
             )
+
+            # Add pagination token if we have one
+            if next_page_token:
+                search_url += f"&nextPageToken={next_page_token}"
+
             data = await self._get_with_auth(client, search_url)
 
             issues = data.get("issues", [])
-            total = data.get("total", 0)
 
             for issue_data in issues:
                 fields = issue_data.get("fields", {})
-                # We can gather watchers from a watchers field or by a separate call if needed.
-                watchers_info = {}
-                if "watches" in fields:
-                    watchers_info = fields["watches"].get("watchers", [])
-                else:
-                    # If watchers info is not included, we can optionally fetch watchers separately.
-                    watchers_info = []  # or call watchers endpoint, omitted here for brevity.
 
-                # We can also parse votes from fields if present (fields["votes"]).
-                votes_info = None
-                if "votes" in fields:
-                    votes_info = fields["votes"].get("votes")
+                # Safely get nested values
+                resolution = fields.get("resolution")
+                resolution_name = resolution.get("name") if resolution else None
 
-                # Grab labels from fields if present
-                labels_info = fields.get("labels", [])
+                status = fields.get("status", {})
+                status_name = status.get("name") if status else None
+
+                priority = fields.get("priority", {})
+                priority_name = priority.get("name") if priority else None
+
+                issue_type = fields.get("issuetype", {})
+                issue_type_name = issue_type.get("name") if issue_type else None
+
+                # Handle watchers safely
+                watches = fields.get("watches", {})
+                watchers_info = watches.get("watchers", []) if watches else []
+
+                # Handle votes safely
+                votes = fields.get("votes", {})
+                votes_count = votes.get("votes", 0) if votes else 0
 
                 yield JiraIssueEntity(
                     source_name="jira",
@@ -292,27 +285,31 @@ class JiraSource(BaseSource):
                     issue_key=issue_data["key"],
                     summary=fields.get("summary"),
                     description=fields.get("description"),
-                    status=fields.get("status", {}).get("name"),
-                    priority=fields.get("priority", {}).get("name"),
-                    issue_type=fields.get("issuetype", {}).get("name"),
+                    status=status_name,
+                    priority=priority_name,
+                    issue_type=issue_type_name,
                     assignee=fields.get("assignee"),
                     reporter=fields.get("reporter"),
-                    resolution=fields.get("resolution", {}).get("name"),
+                    resolution=resolution_name,
                     created_at=fields.get("created"),
                     updated_at=fields.get("updated"),
                     resolved_at=fields.get("resolutiondate"),
-                    labels=labels_info,
-                    watchers=watchers_info if isinstance(watchers_info, list) else [],
-                    votes=votes_info if isinstance(votes_info, int) else None,
-                    archived=False,  # Jira doesn't provide an archived field for issues by default
+                    labels=fields.get("labels", []),
+                    watchers=watchers_info,
+                    votes=votes_count,
+                    archived=False,
                 )
 
-            start_at += max_results
-            if start_at >= total:
+            # Check if there are more pages
+            next_page_token = data.get("nextPageToken")
+            if not next_page_token:
                 break
 
     async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
-        """Generate all entities from Jira: Statuses, Projects, Issues, Comments.
+        """Generate all entities from Jira in hierarchical order:
+        1. Projects (top-level)
+        2. Issues (belonging to each project)
+        3. Comments (belonging to each issue)
 
         This method is called by the sync service to generate entities for the source.
 
@@ -321,21 +318,17 @@ class JiraSource(BaseSource):
             AsyncGenerator[BaseEntity, None]: An asynchronous generator of BaseEntity objects
         """
         async with httpx.AsyncClient() as client:
-            # 1) Generate (and yield) all Statuses
-            async for status_entity in self._generate_status_entities(client, self.base_url):
-                yield status_entity
-
-            # 2) Generate (and yield) all Projects
+            # 1) Generate (and yield) all Projects
             async for project_entity in self._generate_project_entities(client, self.base_url):
                 yield project_entity
 
-                # 3) Generate (and yield) all Issues for each Project
+                # 2) Generate (and yield) all Issues for each Project
                 async for issue_entity in self._generate_issue_entities(
                     client, self.base_url, project_entity
                 ):
                     yield issue_entity
 
-                    # 4) Generate (and yield) Comments for each Issue
+                    # 3) Generate (and yield) Comments for each Issue
                     async for comment_entity in self._generate_comment_entities(
                         client, self.base_url, issue_entity
                     ):
