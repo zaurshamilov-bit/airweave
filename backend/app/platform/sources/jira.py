@@ -237,9 +237,7 @@ class JiraSource(BaseSource):
         while True:
             # Construct the search URL with JQL query
             search_url = (
-                f"{base_url}/rest/api/3/search/jql"
-                f"?jql=project={project_key}"
-                f"&expand=names,watcher"
+                f"{base_url}/rest/api/3/search/jql?jql=project={project_key}&expand=names,watcher"
             )
 
             # Add pagination token if we have one
