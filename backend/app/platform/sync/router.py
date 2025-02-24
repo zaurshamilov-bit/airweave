@@ -1,127 +1,93 @@
-from typing import AsyncGenerator, Dict, List, Set, Tuple
+"""DAG router."""
+
+from typing import Optional
 from uuid import UUID
 
-from app.crud import crud_entity
-from app.db.session import AsyncSession
-from app.platform.entities._base import BaseEntity
-from app.schemas.dag import DagNode, SyncDagDefinition
-from app.schemas.entity import Entity as DbEntity
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.schemas.dag import DagNode, NodeType, SyncDag
 
 
-class EntityProcessingResult:
-    """Result of processing an entity through a node."""
+class SyncDAGRouter:
+    """Routes entities through the DAG based on producer and entity type."""
 
-    def __init__(
-        self,
-        entity: BaseEntity,
-        db_entity: DbEntity | None = None,
-        action: Literal["insert", "update", "skip"] = "insert",
-    ):
-        self.entity = entity
-        self.db_entity = db_entity
-        self.action = action
-
-
-class EntityRouter:
-    def __init__(
-        self, dag: SyncDagDefinition, db: AsyncSession, sync_id: UUID, organization_id: UUID
-    ):
+    def __init__(self, dag: SyncDag):
+        """Initialize the DAG router."""
+        # Store DAG structure
         self.dag = dag
-        self.db = db
-        self.sync_id = sync_id
-        self.organization_id = organization_id
-        self.entity_routes = self._build_routes()
-        self.processed_entities: Set[str] = set()  # Track processed entity_ids
+        # Build routing maps
+        self.route = self._build_execution_route()
 
-    def _build_routes(self) -> Dict[Tuple[UUID, str], List[DagNode]]:
-        """Build routing table mapping (producer_id, entity_type) to next nodes"""
-        routes = {}
-        for node in self.dag.nodes:
-            if node.type == "entity":
-                producers = self._get_producers(node)
-                consumers = self._get_consumers(node)
+    def _build_execution_route(
+        self, db: AsyncSession
+    ) -> dict[tuple[UUID, UUID], list[Optional[UUID]]]:
+        """Construct an execution route for the DAG.
 
-                for producer in producers:
-                    key = (producer.id, node.entity_definition_id)
-                    routes[key] = consumers
-        return routes
+        Maps a tuple of a producer node id with a entity definition id to a consumer node id.
 
-    async def process_entity(
-        self,
-        producer_node: DagNode,
-        entity: BaseEntity,
-    ) -> AsyncGenerator[EntityProcessingResult, None]:
-        """Process an entity through the DAG, handling versioning and routing.
-        Yields EntityProcessingResult for each processed entity.
+        If the entity is sent to a destination, the route is set to None, this stops the entity
+        from being routed further.
         """
-        # Skip if we've already processed this entity
-        if entity.entity_id in self.processed_entities:
-            return
+        route_map = {}
+        for node in self.dag.nodes:
+            if node.type == NodeType.entity:
 
-        self.processed_entities.add(entity.entity_id)
+                edge_inwards = self.dag.get_edges_to_node(node.id)
 
-        # Check version and get processing action
-        db_entity = await self._check_version(entity)
+                # Get the producer node
+                producer = edge_inwards[0].from_node_id
 
-        # Create processing result for initial entity
-        result = EntityProcessingResult(
-            entity=entity,
-            db_entity=db_entity,
-            action=(
-                "skip"
-                if db_entity and db_entity.hash == entity.hash
-                else "update" if db_entity else "insert"
-            ),
-        )
+                edges_outwards = self.dag.get_edges_from_node(node.id)
 
-        # Always yield the initial entity result
-        yield result
+                # It's only allowed to have multiple consumers if the entity is sent to destinations
+                if len(edges_outwards) > 1:
+                    consumer_nodes = [
+                        self.dag.get_node(edge.from_node_id) for edge in edges_outwards
+                    ]
+                    if any(
+                        consumer_node.type != NodeType.destination
+                        for consumer_node in consumer_nodes
+                    ):
+                        raise ValueError(
+                            f"Entity node {node.id} has multiple outbound edges"
+                            "to non-destination nodes."
+                        )
+                    # Setting to None stops the entity from being routed further
+                    route_map[(producer, node.entity_definition_id)] = None
+                elif len(edges_outwards) == 1 and self._get_if_node_is_destination(
+                    edges_outwards[0].to_node_id
+                ):
+                    route_map[(producer, node.entity_definition_id)] = None
+                else:
+                    raise ValueError(
+                        f"Entity node {node.id} has no outbound edges to a destination."
+                    )
 
-        # Find and process through next nodes
-        route_key = (producer_node.id, entity.__class__.__name__)
-        next_nodes = self.entity_routes.get(route_key, [])
+        return route_map
 
-        for node in next_nodes:
-            # Process through node (transformer or destination)
-            async for processed_result in self._process_through_node(node, result):
-                yield processed_result
+    def _get_if_node_is_destination(self, node: DagNode) -> bool:
+        """Get if a node is a destination."""
+        return node.type == NodeType.destination
 
-    async def _check_version(self, entity: BaseEntity) -> DbEntity | None:
-        """Check if entity exists and get its current version."""
-        return await crud_entity.get_by_entity_id(
-            self.db,
-            entity_id=entity.entity_id,
-            sync_id=self.sync_id,
-            organization_id=self.organization_id,
-        )
+        # async def route_entity(self, producer_id: UUID, entity: BaseEntity):
+        #     """Route an entity to its next destinations based on DAG structure."""
+        #     # Find matching routes
+        #     route_key = (producer_id, entity.entity_definition_id)
+        #     if route_key not in self.entity_routes:
+        #         return None
 
-    async def _process_through_node(
-        self,
-        node: DagNode,
-        input_result: EntityProcessingResult,
-    ) -> AsyncGenerator[EntityProcessingResult, None]:
-        """Process an entity through a node (transformer or destination)"""
-        if node.type == "transformer":
-            transformer = self._get_transformer(node)
-            # Transform entity and yield results
-            async for transformed_entity in transformer.transform(input_result.entity):
-                # Check version for transformed entity
-                db_entity = await self._check_version(transformed_entity)
-                yield EntityProcessingResult(
-                    entity=transformed_entity,
-                    db_entity=db_entity,
-                    action=(
-                        "skip"
-                        if db_entity and db_entity.hash == transformed_entity.hash
-                        else "update" if db_entity else "insert"
-                    ),
-                )
+        #     consumers = self.entity_routes[route_key]
+        #     results = []
 
-        elif node.type == "destination":
-            destination = self._get_destination(node)
-            # Process based on action
-            if input_result.action == "insert":
-                await destination.insert(input_result.entity)
-            elif input_result.action == "update":
-                await destination.update(input_result.entity)
-            # Skip if action is "skip"
+        #     for consumer in consumers:
+        #         if consumer.type == "transformer":
+        #             # Transform entity
+        #             transformed = await self._apply_transformer(consumer, entity)
+        #             # Route transformed entities
+        #             for new_entity in transformed:
+        #                 results.extend(await self.route_entity(consumer.id, new_entity))
+        #         elif consumer.type == "destination":
+        #             # Send to destination
+        #             results.append(("destination", consumer, entity))
+
+        # return results
