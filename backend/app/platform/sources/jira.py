@@ -306,7 +306,8 @@ class JiraSource(BaseSource):
                 break
 
     async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
-        """Generate all entities from Jira in hierarchical order:
+        """Generate all entities from Jira in hierarchical order.
+
         1. Projects (top-level)
         2. Issues (belonging to each project)
         3. Comments (belonging to each issue)
