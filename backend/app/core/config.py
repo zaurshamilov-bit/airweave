@@ -69,7 +69,7 @@ class Settings(BaseSettings):
             v (Optional[str]): The value of the SQLALCHEMY_DATABASE_URI setting.
             info (ValidationInfo): The validation context containing all field values.
 
-        Returns:
+        Returns: 
         -------
             PostgresDsn: The assembled SQLAlchemy async database URI.
         """
