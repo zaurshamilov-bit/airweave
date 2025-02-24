@@ -3,9 +3,11 @@
 import importlib
 import inspect
 import os
-from typing import Dict, Type
+from typing import Callable, Dict, Type, Union
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing_extensions import get_type_hints
 
 from app import crud, schemas
 from app.core.logging import logger
@@ -17,16 +19,21 @@ from app.platform.sources._base import BaseSource
 sync_logger = logger.with_prefix("Platform sync: ").with_context(component="platform_sync")
 
 
-def _get_decorated_classes(directory: str) -> Dict[str, list[Type]]:
-    """Scan directory for decorated classes (sources, destinations, embedding models).
+def _get_decorated_classes(directory: str) -> Dict[str, list[Type | Callable]]:
+    """Scan directory for decorated classes and functions.
 
     Args:
         directory (str): The directory to scan.
 
     Returns:
-        Dict[str, list[Type]]: Dictionary of decorated classes by type.
+        Dict[str, list[Type | Callable]]: Dictionary of decorated classes and functions by type.
     """
-    components = {"sources": [], "destinations": [], "embedding_models": []}
+    components = {
+        "sources": [],
+        "destinations": [],
+        "embedding_models": [],
+        "transformers": [],
+    }
 
     base_package = directory.replace("/", ".")
 
@@ -44,6 +51,8 @@ def _get_decorated_classes(directory: str) -> Dict[str, list[Type]]:
             full_module_name = f"{base_package}.{module_path}"
 
             module = importlib.import_module(full_module_name)
+
+            # Scan for classes
             for _, cls in inspect.getmembers(module, inspect.isclass):
                 if getattr(cls, "_is_source", False):
                     components["sources"].append(cls)
@@ -51,6 +60,11 @@ def _get_decorated_classes(directory: str) -> Dict[str, list[Type]]:
                     components["destinations"].append(cls)
                 elif getattr(cls, "_is_embedding_model", False):
                     components["embedding_models"].append(cls)
+
+            # Scan for transformer functions
+            for _, func in inspect.getmembers(module, inspect.isfunction):
+                if getattr(func, "_is_transformer", False):
+                    components["transformers"].append(func)
 
     return components
 
@@ -82,41 +96,59 @@ async def _sync_embedding_models(db: AsyncSession, models: list[Type[BaseEmbeddi
     sync_logger.info(f"Synced {len(model_definitions)} embedding models to database.")
 
 
-async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, list[str]]:
+async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, dict]:
     """Sync entity definitions with the database based on chunk classes.
 
     Args:
         db (AsyncSession): Database session
 
     Returns:
-        Dict[str, list[str]]: Mapping of chunk names to their entity definition IDs as strings
+        Dict[str, dict]: Mapping of entity names to their details:
+            - ids: list[str] - UUIDs of entity definitions
+            - class_name: str - Full class name of the entity
     """
     sync_logger.info("Syncing entity definitions to database.")
 
     # Get all Python files in the entities directory that aren't base or init files
-    chunk_files = [
+    entity_files = [
         f
         for f in os.listdir("app/platform/entities")
-        if f.endswith(".py") and not f.startswith("_")
+        if f.endswith(".py") and not f.startswith("__")
     ]
 
     from app.platform.entities._base import BaseEntity
 
     entity_definitions = []
-    module_to_entities = {}  # Track which entities belong to which module
+    entity_registry = {}  # Track all entities system-wide
 
-    for chunk_file in chunk_files:
-        module_name = chunk_file[:-3]  # Remove .py extension
+    for entity_file in entity_files:
+        module_name = entity_file[:-3]  # Remove .py extension
         # Import the module to get its chunk classes
         full_module_name = f"app.platform.entities.{module_name}"
         module = importlib.import_module(full_module_name)
 
-        # Initialize list for this module's entities
-        module_to_entities[module_name] = []
-
         # Find all chunk classes (subclasses of BaseEntity) in the module
         for name, cls in inspect.getmembers(module, inspect.isclass):
-            if issubclass(cls, BaseEntity) and cls != BaseEntity:
+            # Check if it's a subclass of BaseEntity (but not BaseEntity itself)
+            # AND the class is actually defined in this module (not imported)
+            if (
+                issubclass(cls, BaseEntity)
+                and cls != BaseEntity
+                and cls.__module__ == full_module_name
+            ):
+
+                if name in entity_registry:
+                    raise ValueError(
+                        f"Duplicate entity name '{name}' found in {full_module_name}. "
+                        f"Already registered from {entity_registry[name]['module']}"
+                    )
+
+                # Register the entity
+                entity_registry[name] = {
+                    "class_name": f"{cls.__module__}.{cls.__name__}",
+                    "module": full_module_name,
+                }
+
                 # Create entity definition
                 entity_def = schemas.EntityDefinitionCreate(
                     name=name,
@@ -125,21 +157,24 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, list[str]]:
                     schema=cls.model_json_schema(),  # Get the actual schema from the Pydantic model
                 )
                 entity_definitions.append(entity_def)
-                module_to_entities[module_name].append(name)  # Track all entities for this module
 
     # Sync entities
     await crud.entity_definition.sync(db, entity_definitions, unique_field="name")
 
     # Get all entities to build the mapping
     all_entities = await crud.entity_definition.get_all(db)
-    # Map module names to lists of entity IDs as strings
-    name_to_ids = {
-        module_name: [str(e.id) for e in all_entities if e.name in entity_names]
-        for module_name, entity_names in module_to_entities.items()
+
+    # Create final mapping with both IDs and class names
+    entity_map = {
+        name: {
+            "ids": [str(e.id) for e in all_entities if e.name == name],
+            "class_name": details["class_name"],
+        }
+        for name, details in entity_registry.items()
     }
 
     sync_logger.info(f"Synced {len(entity_definitions)} entity definitions to database.")
-    return name_to_ids
+    return entity_map
 
 
 async def _sync_sources(
@@ -204,8 +239,93 @@ async def _sync_destinations(db: AsyncSession, destinations: list[Type[BaseDesti
     sync_logger.info(f"Synced {len(destination_definitions)} destinations to database.")
 
 
+def _get_type_names(type_hint) -> list[str]:
+    """Extract type names from a type hint, handling Union types correctly.
+
+    Args:
+        type_hint: The type hint to extract names from
+
+    Returns:
+        list[str]: List of type names
+    """
+    # Handle Union types (both typing.Union and types.UnionType (|))
+    if hasattr(type_hint, "__origin__"):
+        if type_hint.__origin__ is Union or str(type_hint.__origin__) == "typing.Union":
+            return [t.__name__ for t in type_hint.__args__]
+        if str(type_hint.__origin__) == "|":  # Python 3.10+ Union type
+            return [t.__name__ for t in type_hint.__args__]
+        if type_hint.__origin__ is list:
+            # For list types, process the inner type
+            return _get_type_names(type_hint.__args__[0])
+        # Handle other generic types
+        return [type_hint.__args__[0].__name__]
+
+    # Handle UnionType at the base level (Python 3.10+ |)
+    if str(type(type_hint)) == "<class 'types.UnionType'>":
+        return [t.__name__ for t in type_hint.__args__]
+
+    # Handle simple types
+    return [type_hint.__name__]
+
+
+async def _sync_transformers(
+    db: AsyncSession, transformers: list[Callable], entity_map: Dict[str, dict]
+) -> None:
+    """Sync transformers with the database.
+
+    Args:
+        db (AsyncSession): Database session
+        transformers (list[Callable]): List of transformer functions
+        entity_map (Dict[str, dict]): Mapping of entity names to their details
+    """
+    sync_logger.info("Syncing transformers to database.")
+
+    transformer_definitions = []
+    for transformer_func in transformers:
+        # Get type hints for input/output
+        type_hints = get_type_hints(transformer_func)
+
+        # Get input type from first parameter
+        first_param = next(iter(inspect.signature(transformer_func).parameters.values()))
+        input_type = type_hints[first_param.name]
+        input_type_name = input_type.__name__
+
+        if input_type_name not in entity_map:
+            raise ValueError(
+                f"Transformer {transformer_func._name} has unknown input type {input_type_name}"
+            )
+
+        # Get output types from return annotation
+        return_type = type_hints["return"]
+        output_types = _get_type_names(return_type)
+
+        # Validate output types
+        for type_name in output_types:
+            if type_name not in entity_map:
+                raise ValueError(
+                    f"Transformer {transformer_func._name} has unknown output type {type_name}"
+                )
+
+        transformer_def = schemas.TransformerCreate(
+            name=transformer_func._name,
+            description=transformer_func.__doc__,
+            method_name=transformer_func.__name__,
+            auth_type=getattr(transformer_func, "_auth_type", None),
+            auth_config_class=getattr(transformer_func, "_auth_config_class", None),
+            config_schema=getattr(transformer_func, "_config_schema", {}),
+            input_entity_definition_ids=[UUID(id) for id in entity_map[input_type_name]["ids"]],
+            output_entity_definition_ids=[
+                UUID(id) for type_name in output_types for id in entity_map[type_name]["ids"]
+            ],
+        )
+        transformer_definitions.append(transformer_def)
+
+    await crud.transformer.sync(db, transformer_definitions, unique_field="method_name")
+    sync_logger.info(f"Synced {len(transformer_definitions)} transformers to database.")
+
+
 async def sync_platform_components(platform_dir: str, db: AsyncSession) -> None:
-    """Sync all platform components (embedding models, sources, destinations) with the database.
+    """Sync all platform components with the database.
 
     Args:
         platform_dir (str): Directory containing platform components
@@ -221,5 +341,6 @@ async def sync_platform_components(platform_dir: str, db: AsyncSession) -> None:
     await _sync_embedding_models(db, components["embedding_models"])
     await _sync_sources(db, components["sources"], entity_id_map)
     await _sync_destinations(db, components["destinations"])
+    await _sync_transformers(db, components["transformers"], entity_id_map)
 
     sync_logger.info("Platform components sync completed.")

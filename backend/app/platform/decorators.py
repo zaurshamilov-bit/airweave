@@ -1,7 +1,7 @@
 """Decorators for the platform integrations."""
 
 from functools import wraps
-from typing import Any, AsyncGenerator, Callable, Optional, TypeVar
+from typing import Callable, Optional, TypeVar
 
 from app.platform.auth.schemas import AuthType
 from app.platform.entities._base import ChunkEntity
@@ -115,9 +115,9 @@ U = TypeVar("U", bound=ChunkEntity)
 
 def transformer(
     name: str,
-    short_name: str,
     auth_type: Optional[AuthType] = None,
     auth_config_class: Optional[str] = None,
+    config_schema: Optional[dict] = None,
 ) -> Callable[[Callable], Callable]:
     """Method decorator to mark a function as an Airweave transformer.
 
@@ -126,6 +126,7 @@ def transformer(
         short_name (str): The short name of the transformer.
         auth_type (AuthType, optional): The authentication type.
         auth_config_class (str, optional): The auth config class.
+        config_schema (dict, optional): Configuration schema for the transformer.
 
     Returns:
         Callable: The decorated function.
@@ -133,19 +134,17 @@ def transformer(
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        async def wrapper(
-            entity: Any, credentials: Optional[Any] = None
-        ) -> AsyncGenerator[Any, None]:
-            async for transformed in func(entity):
-                yield transformed
+        async def wrapper(*args, **kwargs):
+            return await func(*args, **kwargs)
 
         # Add transformer metadata
         wrapper._is_transformer = True
         wrapper._name = name
-        wrapper._short_name = short_name
         wrapper._auth_type = auth_type
         wrapper._auth_config_class = auth_config_class
+        wrapper._config_schema = config_schema or {}
         wrapper.__doc__ = func.__doc__
+        wrapper._method_name = func.__name__
 
         return wrapper
 

@@ -1,7 +1,7 @@
 """Resource locator for platform resources."""
 
 import importlib
-from typing import Type
+from typing import Callable, Type
 
 from app import schemas
 from app.platform.configs._base import BaseConfig
@@ -15,11 +15,12 @@ PLATFORM_PATH = "app.platform"
 class ResourceLocator:
     """Resource locator for platform resources.
 
-    Gets the following classes:
+    Gets the following:
     - embedding models
     - destinations
     - sources
     - configs
+    - transformers
     """
 
     @staticmethod
@@ -74,6 +75,19 @@ class ResourceLocator:
         module = importlib.import_module(f"{PLATFORM_PATH}.configs.auth")
         auth_config_class = getattr(module, auth_config_class)
         return auth_config_class
+
+    @staticmethod
+    def get_transformer(transformer: schemas.Transformer) -> Callable:
+        """Get the transformer function.
+
+        Args:
+            transformer (schemas.Transformer): Transformer schema
+
+        Returns:
+            Callable: Transformer function
+        """
+        module = importlib.import_module(f"{PLATFORM_PATH}.transformers.{transformer.short_name}")
+        return getattr(module, transformer.function_name)
 
 
 resource_locator = ResourceLocator()
