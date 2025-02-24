@@ -20,7 +20,7 @@ def check_db():
 check_db()
 "
 
-# Run migrations using our existing Alembic setup
+# Run migrations using our existing Alembic setup 
 echo "Running database migrations..."
 cd /app && poetry run alembic upgrade head
 
