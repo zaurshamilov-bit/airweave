@@ -31,7 +31,7 @@ class SyncDagDefinition(OrganizationBase, UserMixin):
 
     name = Column(String, nullable=False)
     description = Column(String)
-    sync_id = Column(UUID, ForeignKey("sync.id"), nullable=False)
+    sync_id = Column(UUID, ForeignKey("sync.id", ondelete="CASCADE"), nullable=False)
 
     __table_args__ = (UniqueConstraint("sync_id", name="uq_sync_dag_def_sync_id"),)
 
@@ -48,7 +48,7 @@ class DagNode(OrganizationBase, UserMixin):
 
     __tablename__ = "dag_node"
 
-    dag_id = Column(UUID, ForeignKey("sync_dag_definition.id"), nullable=False)
+    dag_id = Column(UUID, ForeignKey("sync_dag_definition.id", ondelete="CASCADE"), nullable=False)
     type = Column(String, nullable=False)  # source, destination, transformer, entity
     name = Column(String, nullable=False)
     config = Column(JSON)  # Configuration for sources, destinations, transformers
@@ -80,9 +80,9 @@ class DagEdge(OrganizationBase, UserMixin):
 
     __tablename__ = "dag_edge"
 
-    dag_id = Column(UUID, ForeignKey("sync_dag_definition.id"), nullable=False)
-    from_node_id = Column(UUID, ForeignKey("dag_node.id"), nullable=False)
-    to_node_id = Column(UUID, ForeignKey("dag_node.id"), nullable=False)
+    dag_id = Column(UUID, ForeignKey("sync_dag_definition.id", ondelete="CASCADE"), nullable=False)
+    from_node_id = Column(UUID, ForeignKey("dag_node.id", ondelete="CASCADE"), nullable=False)
+    to_node_id = Column(UUID, ForeignKey("dag_node.id", ondelete="CASCADE"), nullable=False)
 
     # Relationships
     dag = relationship("SyncDagDefinition", back_populates="edges", lazy="noload")
