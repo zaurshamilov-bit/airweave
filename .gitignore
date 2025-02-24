@@ -12,5 +12,3 @@ test_sync_stream.py
 
 backend/.coverage
 backend/local.py
-
-.vs/
