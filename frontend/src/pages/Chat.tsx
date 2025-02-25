@@ -23,6 +23,11 @@ import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
+interface Chat {
+  id: string;
+  modified_at: string;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -30,10 +35,10 @@ interface Message {
   id: number;
 }
 
-
 function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const { toast } = useToast();
   const location = useLocation();
@@ -86,9 +91,12 @@ function Chat() {
       if (!chatId) return;
       try {
         setIsLoading(true);
+        setError(null);
         const resp = await apiClient.get(`/chat/${chatId}`);
         
-        console.log("Loading chat data:", resp); // Debug log
+        if (!resp.ok) {
+          throw new Error(`Failed to load chat: ${resp.statusText}`);
+        }
         
         // Handle the response data directly
         const chatData = await resp.json();
@@ -100,16 +108,14 @@ function Chat() {
           role: m.role || 'user',
           content: m.content,
           attachments: m.attachments || [],
-          id: Date.now(),
+          id: m.id || Date.now(),
         })));
       } catch (error) {
         console.error("Failed to load chat:", error);
-        if (error.response) {
-          console.error("Error response:", error.response);
-        }
+        setError(error.message || "Failed to load chat. Please try again.");
         toast({
           title: "Error",
-          description: "Failed to load chat. Please try again.",
+          description: error.message || "Failed to load chat. Please try again.",
           variant: "destructive",
         });
         // Only navigate away if it's a 404
@@ -141,11 +147,21 @@ function Chat() {
 
       try {
         // Add user message
-        const userMessage = { role: "user", content, id: Date.now() };
+        const userMessage: Message = { 
+          role: "user", 
+          content, 
+          id: Date.now(),
+          attachments: attachments 
+        };
         setMessages(prev => [...prev, userMessage]);
 
         // Create assistant message placeholder
-        const assistantMessage = { role: "assistant", content: "", id: Date.now() + 1 };
+        const assistantMessage: Message = { 
+          role: "assistant", 
+          content: "", 
+          id: Date.now() + 1,
+          attachments: [] 
+        };
         setMessages(prev => [...prev, assistantMessage]);
 
         // Send user message to backend
@@ -338,7 +354,14 @@ function Chat() {
     <div className="flex h-full">
       <ChatSidebar onCreateChat={() => setShowCreateDialog(true)} />
       <div className="flex-1 flex flex-col">
-        {showCreateDialog ? (
+        {error ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <h2 className="text-lg font-semibold text-red-600">Error</h2>
+              <p className="text-gray-600">{error}</p>
+            </div>
+          </div>
+        ) : showCreateDialog ? (
           <CreateChatDialog 
             open={showCreateDialog}
             preselectedSyncId={location.state?.preselectedSyncId}
@@ -352,7 +375,7 @@ function Chat() {
           <>
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((message, index) => (
-                <div key={index} className={cn(
+                <div key={message.id} className={cn(
                   "flex",
                   message.role === "user" ? "justify-end" : "justify-start"
                 )}>
