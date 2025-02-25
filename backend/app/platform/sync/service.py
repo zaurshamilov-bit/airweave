@@ -20,7 +20,10 @@ class SyncService:
     ) -> schemas.Sync:
         """Create a new sync."""
         sync = await crud.sync.create(db=db, obj_in=sync, current_user=current_user, uow=uow)
-        await dag_service.create_initial_dag(db, sync.id, current_user)
+        await uow.session.flush()
+        await dag_service.create_initial_dag(
+            db=db, sync_id=sync.id, current_user=current_user, uow=uow
+        )
         return sync
 
     async def run(

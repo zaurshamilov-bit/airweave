@@ -148,7 +148,7 @@ const Sync = () => {
       setSyncId(newSyncId);
 
       // Initialize the DAG
-      const dagResp = await apiClient.get(`/dag/init?sync_id=${newSyncId}`);
+      const dagResp = await apiClient.get(`/sync/${newSyncId}/dag`);
       if (!dagResp.ok) {
         throw new Error("Failed to initialize DAG");
       }

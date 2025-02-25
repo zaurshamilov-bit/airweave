@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
+from app.db.unit_of_work import UnitOfWork
 from app.schemas.dag import DagEdgeCreate, DagNodeCreate, SyncDagCreate
 
 
@@ -18,17 +19,21 @@ class DagService:
         *,
         sync_id: UUID,
         current_user: schemas.User,
-    ) -> schemas.SyncDagCreate:
+        uow: UnitOfWork,
+    ) -> schemas.SyncDag:
         """Create an initial DAG with source, entities, and destination."""
         ## Get sync
         sync = await crud.sync.get(db, id=sync_id, current_user=current_user)
+
+        if not sync:
+            raise Exception(f"Sync for {sync_id} not found")
 
         ## Get entities from the source
         source_connection = await crud.connection.get(
             db, id=sync.source_connection_id, current_user=current_user
         )
         if not source_connection:
-            raise HTTPException(status_code=404, detail="Source connection not found")
+            raise Exception(f"Source connection for {sync.source_connection_id} not found")
 
         source = await crud.source.get_by_short_name(db, short_name=source_connection.short_name)
         output_entity_definition_ids = source.output_entity_definition_ids
@@ -122,7 +127,7 @@ class DagService:
         )
 
         sync_dag = await crud.sync_dag.create_with_nodes_and_edges(
-            db, obj_in=sync_dag_create, current_user=current_user
+            db, obj_in=sync_dag_create, current_user=current_user, uow=uow
         )
 
         return schemas.SyncDag.model_validate(sync_dag, from_attributes=True)

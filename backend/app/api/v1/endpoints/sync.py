@@ -275,3 +275,16 @@ async def subscribe_sync_job(job_id: UUID, user=Depends(deps.get_user)) -> Strea
             "X-Accel-Buffering": "no",  # Important for nginx
         },
     )
+
+
+@router.get("/{sync_id}/dag", response_model=schemas.SyncDag)
+async def get_sync_dag(
+    sync_id: UUID,
+    db: AsyncSession = Depends(deps.get_db),
+    user: schemas.User = Depends(deps.get_user),
+) -> schemas.SyncDag:
+    """Get the DAG for a specific sync."""
+    dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, current_user=user)
+    if not dag:
+        raise HTTPException(status_code=404, detail=f"DAG for sync {sync_id} not found")
+    return dag

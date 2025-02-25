@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app import schemas
 from app.crud._base import CRUDBase
+from app.db.unit_of_work import UnitOfWork
 from app.models.dag import (
     DagEdge,
     DagNode,
@@ -29,6 +30,7 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
         *,
         obj_in: SyncDagCreate,
         current_user: schemas.User,
+        uow: Optional[UnitOfWork] = None,
     ) -> SyncDag:
         """Create a DAG with its nodes and edges."""
         # Create the base DAG object
@@ -68,8 +70,9 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
             )
             db.add(db_edge)
 
-        await db.commit()
-        await db.refresh(db_obj)
+        if not uow:
+            await db.commit()
+            await db.refresh(db_obj)
 
         # Reload with relationships
         result = await db.execute(
