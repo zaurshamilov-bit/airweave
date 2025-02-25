@@ -85,6 +85,22 @@ integrations:
     client_credential_location: "body"
     scope: "read write"
 
+  jira:
+    auth_type: "oauth2_with_refresh_rotating"
+    url: "https://auth.atlassian.com/authorize"
+    backend_url: "https://auth.atlassian.com/oauth/token"
+    grant_type: "authorization_code"
+    client_id: ${JIRA_CLIENT_ID}
+    client_secret: ${JIRA_CLIENT_SECRET}
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read offline_access manage:jira-configuration manage:jira-project read:jira-user read:jira-work read:workflow:jira read:application-role:jira read:avatar:jira read:group:jira read:issue-type:jira read:issue-type-hierarchy:jira read:user:jira read:project:jira read:project-category:jira read:project.component:jira read:project.property:jira read:project-version:jira read:workflow:jira"
+    additional_frontend_params:
+      audience: "api.atlassian.com"
+      prompt: "consent"
+      response_mode: "query"
+      state: "YOUR_USER_BOUND_VALUE"
+
   monday:
     auth_type: "oauth2"
     url: "https://auth.monday.com/oauth2/authorize"
