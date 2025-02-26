@@ -17,10 +17,11 @@ References:
     https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-spaces/
 """
 
-from typing import AsyncGenerator, Dict, List
+from typing import Any, AsyncGenerator, List
 
 import httpx
 
+from app.core.logging import logger
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
 from app.platform.entities._base import BaseEntity, Breadcrumb
@@ -52,19 +53,91 @@ class ConfluenceSource(BaseSource):
       - (Optionally) Database, Folder, etc.
     """
 
+    @staticmethod
+    async def _get_accessible_resources(access_token: str) -> list[dict]:
+        """Get the list of accessible Atlassian resources for this token.
+
+        Args:
+            access_token: The OAuth access token
+
+        Returns:
+            list[dict]: List of accessible resources, each containing 'id' and 'url' keys
+        """
+        async with httpx.AsyncClient() as client:
+            headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+            try:
+                response = await client.get(
+                    "https://api.atlassian.com/oauth/token/accessible-resources", headers=headers
+                )
+                response.raise_for_status()
+                return response.json()
+            except Exception as e:
+                logger.error(f"Error getting accessible resources: {str(e)}")
+                return []
+
+    @staticmethod
+    async def _extract_cloud_id(access_token: str) -> tuple[str, str]:
+        """Extract the Atlassian Cloud ID from OAuth 2.0 accessible-resources.
+
+        Args:
+            access_token: The OAuth access token
+
+        Returns:
+            cloud_id (str): The cloud instance ID
+        """
+        try:
+            resources = await ConfluenceSource._get_accessible_resources(access_token)
+
+            if not resources:
+                logger.warning("No accessible resources found")
+                return ""
+
+            # Use the first available resource
+            # In most cases, there will only be one resource
+            resource = resources[0]
+            cloud_id = resource.get("id", "")
+
+            if not cloud_id:
+                logger.warning("Missing ID in accessible resources")
+            return cloud_id
+
+        except Exception as e:
+            logger.error(f"Error extracting cloud ID: {str(e)}")
+            return ""
+
     @classmethod
     async def create(cls, access_token: str) -> "ConfluenceSource":
         """Create a new Confluence source instance."""
         instance = cls()
         instance.access_token = access_token
+        instance.cloud_id = await cls._extract_cloud_id(access_token)
+        instance.base_url = f"https://api.atlassian.com/ex/confluence/{instance.cloud_id}"
+        logger.info(f"Initialized Confluence source with base URL: {instance.base_url}")
         return instance
 
-    async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict:
-        """Make an authenticated GET request to the Confluence REST API v2."""
-        response = await client.get(
-            url,
-            headers={"Authorization": f"Bearer {self.access_token}"},
-        )
+    async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Any:
+        """Make an authenticated GET request to the Confluence REST API using the provided URL.
+
+        By default, we're using OAuth 2.0 with refresh tokens for authentication.
+        """
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Accept": "application/json",
+            "X-Atlassian-Token": "no-check",  # Required for CSRF protection
+        }
+
+        # Add cloud instance ID if available
+        if self.cloud_id:
+            headers["X-Cloud-ID"] = self.cloud_id
+
+        logger.debug(f"Making request to {url} with headers: {headers}")
+        response = await client.get(url, headers=headers)
+
+        if not response.is_success:
+            logger.error(f"Request failed with status {response.status_code}")
+            logger.error(f"Response headers: {dict(response.headers)}")
+            logger.error(f"Response body: {response.text}")
+
         response.raise_for_status()
         return response.json()
 
