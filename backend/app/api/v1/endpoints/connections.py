@@ -149,7 +149,7 @@ async def connect_integration(
             )
 
         # For AuthType.none sources, we don't need integration credentials
-        if integration.auth_type == AuthType.none:
+        if integration.auth_type == AuthType.none or integration.auth_type is None:
             # Create connection directly without integration credential
             connection_data = {
                 "name": name if name else f"Connection to {integration.name}",

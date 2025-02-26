@@ -6,7 +6,10 @@ from app.platform.auth.schemas import AuthType
 
 
 def source(
-    name: str, short_name: str, auth_type: AuthType, auth_config_class: Optional[str] = None
+    name: str,
+    short_name: str,
+    auth_type: Optional[AuthType] = None,
+    auth_config_class: Optional[str] = None,
 ) -> Callable[[type], type]:
     """Class decorator to mark a class as representing an Airweave source.
 

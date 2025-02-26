@@ -229,7 +229,7 @@ class SyncService:
 
         source_class = resource_locator.get_source(source_model)
 
-        if source_model.auth_type == AuthType.none:
+        if source_model.auth_type == AuthType.none or source_model.auth_type is None:
             return await source_class.create()
 
         if source_model.auth_type in [
