@@ -101,20 +101,11 @@ class DagService:
             )
         nodes.append(destination_node)
 
-        # Create edges from entities to destination (or source to destination if no entities)
-        if entity_definitions:
-            for node in nodes[1:-1]:  # Skip source and destination nodes
-                edges.append(
-                    DagEdgeCreate(
-                        from_node_id=node.id,
-                        to_node_id=destination_node_id,
-                    )
-                )
-        else:
-            # Direct edge from source to destination if no entities
+        # Create edges from entities to destination
+        for node in nodes[1:-1]:  # Skip source and destination nodes
             edges.append(
                 DagEdgeCreate(
-                    from_node_id=source_node_id,
+                    from_node_id=node.id,
                     to_node_id=destination_node_id,
                 )
             )

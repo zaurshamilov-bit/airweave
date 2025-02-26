@@ -103,9 +103,9 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, dict]:
         db (AsyncSession): Database session
 
     Returns:
-        Dict[str, dict]: Mapping of entity names to their details:
-            - ids: list[str] - UUIDs of entity definitions
-            - class_name: str - Full class name of the entity
+        Dict[str, dict]: Mapping of module names to their entity details:
+            - entity_ids: list[str] - UUIDs of entity definitions for this module
+            - entity_classes: list[str] - Full class names of the entities in this module
     """
     sync_logger.info("Syncing entity definitions to database.")
 
@@ -120,9 +120,17 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, dict]:
 
     entity_definitions = []
     entity_registry = {}  # Track all entities system-wide
+    module_registry = {}  # Track entities by module
 
     for entity_file in entity_files:
         module_name = entity_file[:-3]  # Remove .py extension
+        # Initialize module entry if not exists
+        if module_name not in module_registry:
+            module_registry[module_name] = {
+                "entity_classes": [],
+                "entity_names": [],
+            }
+
         # Import the module to get its chunk classes
         full_module_name = f"app.platform.entities.{module_name}"
         module = importlib.import_module(full_module_name)
@@ -146,8 +154,14 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, dict]:
                 # Register the entity
                 entity_registry[name] = {
                     "class_name": f"{cls.__module__}.{cls.__name__}",
-                    "module": full_module_name,
+                    "module": module_name,
                 }
+
+                # Add to module registry
+                module_registry[module_name]["entity_classes"].append(
+                    f"{cls.__module__}.{cls.__name__}"
+                )
+                module_registry[module_name]["entity_names"].append(name)
 
                 # Create entity definition
                 entity_def = schemas.EntityDefinitionCreate(
@@ -164,40 +178,43 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, dict]:
     # Get all entities to build the mapping
     all_entities = await crud.entity_definition.get_all(db)
 
-    # Create final mapping with both IDs and class names
-    entity_map = {
-        name: {
-            "ids": [str(e.id) for e in all_entities if e.name == name],
-            "class_name": details["class_name"],
-        }
-        for name, details in entity_registry.items()
-    }
+    # Create a mapping of entity names to their IDs
+    entity_id_map = {e.name: str(e.id) for e in all_entities}
+
+    # Add entity IDs to the module registry
+    for module_name, module_info in module_registry.items():
+        entity_ids = [
+            entity_id_map[name] for name in module_info["entity_names"] if name in entity_id_map
+        ]
+        module_registry[module_name]["entity_ids"] = entity_ids
 
     sync_logger.info(f"Synced {len(entity_definitions)} entity definitions to database.")
-    return entity_map
+    return module_registry
 
 
 async def _sync_sources(
-    db: AsyncSession, sources: list[Type[BaseSource]], entity_id_map: Dict[str, list[str]]
+    db: AsyncSession, sources: list[Type[BaseSource]], module_entity_map: Dict[str, dict]
 ) -> None:
     """Sync sources with the database.
 
     Args:
         db (AsyncSession): Database session
         sources (list[Type[BaseSource]]): List of source classes
-        entity_id_map (Dict[str, list[str]]): Mapping of chunk names to their entity definition IDs as strings
+        module_entity_map (Dict[str, dict]): Mapping of module names to their entity details
     """
     sync_logger.info("Syncing sources to database.")
 
     source_definitions = []
     for source_class in sources:
-        # Get the chunk type from the source class name
-        # For example, if source is GoogleDriveSource, look for google_drive chunk
-        source_name = source_class.__name__.replace("Source", "").lower()
-        chunk_name = "_".join(word for word in source_name.split() if word)
+        # Get the source's short name (e.g., "slack" for SlackSource)
+        source_module_name = source_class._short_name
 
-        # Get all entity IDs for this source's chunk type (already as strings)
-        output_entity_ids = entity_id_map.get(chunk_name, [])
+        # Get entity IDs for this module
+        output_entity_ids = []
+        if source_module_name in module_entity_map:
+            output_entity_ids = [
+                UUID(id) for id in module_entity_map[source_module_name].get("entity_ids", [])
+            ]
 
         source_def = schemas.SourceCreate(
             name=source_class._name,
@@ -269,16 +286,40 @@ def _get_type_names(type_hint) -> list[str]:
 
 
 async def _sync_transformers(
-    db: AsyncSession, transformers: list[Callable], entity_map: Dict[str, dict]
+    db: AsyncSession, transformers: list[Callable], module_entity_map: Dict[str, dict]
 ) -> None:
     """Sync transformers with the database.
 
     Args:
         db (AsyncSession): Database session
         transformers (list[Callable]): List of transformer functions
-        entity_map (Dict[str, dict]): Mapping of entity names to their details
+        module_entity_map (Dict[str, dict]): Mapping of module names to their entity details
     """
     sync_logger.info("Syncing transformers to database.")
+
+    # Create a reverse mapping from class name to entity ID
+    entity_class_to_id_map = {}
+    for module_info in module_entity_map.values():
+        for i, class_name in enumerate(module_info.get("entity_classes", [])):
+            entity_name = module_info["entity_names"][i]
+            # Find the entity ID for this class
+            for entity_id in module_info.get("entity_ids", []):
+                if (
+                    entity_name
+                    == module_info["entity_names"][module_info["entity_classes"].index(class_name)]
+                ):
+                    if class_name not in entity_class_to_id_map:
+                        entity_class_to_id_map[class_name] = []
+                    entity_class_to_id_map[class_name].append(entity_id)
+
+    # Also create a mapping from entity name to entity ID
+    entity_name_to_id_map = {}
+    for module_info in module_entity_map.values():
+        for i, name in enumerate(module_info.get("entity_names", [])):
+            if i < len(module_info.get("entity_ids", [])):
+                if name not in entity_name_to_id_map:
+                    entity_name_to_id_map[name] = []
+                entity_name_to_id_map[name].append(module_info["entity_ids"][i])
 
     transformer_definitions = []
     for transformer_func in transformers:
@@ -290,7 +331,7 @@ async def _sync_transformers(
         input_type = type_hints[first_param.name]
         input_type_name = input_type.__name__
 
-        if input_type_name not in entity_map:
+        if input_type_name not in entity_name_to_id_map:
             raise ValueError(
                 f"Transformer {transformer_func._name} has unknown input type {input_type_name}"
             )
@@ -301,7 +342,7 @@ async def _sync_transformers(
 
         # Validate output types
         for type_name in output_types:
-            if type_name not in entity_map:
+            if type_name not in entity_name_to_id_map:
                 raise ValueError(
                     f"Transformer {transformer_func._name} has unknown output type {type_name}"
                 )
@@ -313,9 +354,9 @@ async def _sync_transformers(
             auth_type=getattr(transformer_func, "_auth_type", None),
             auth_config_class=getattr(transformer_func, "_auth_config_class", None),
             config_schema=getattr(transformer_func, "_config_schema", {}),
-            input_entity_definition_ids=[UUID(id) for id in entity_map[input_type_name]["ids"]],
+            input_entity_definition_ids=[UUID(id) for id in entity_name_to_id_map[input_type_name]],
             output_entity_definition_ids=[
-                UUID(id) for type_name in output_types for id in entity_map[type_name]["ids"]
+                UUID(id) for type_name in output_types for id in entity_name_to_id_map[type_name]
             ],
         )
         transformer_definitions.append(transformer_def)
@@ -336,11 +377,11 @@ async def sync_platform_components(platform_dir: str, db: AsyncSession) -> None:
     components = _get_decorated_classes(platform_dir)
 
     # First sync entities to get their IDs
-    entity_id_map = await _sync_entity_definitions(db)
+    module_entity_map = await _sync_entity_definitions(db)
 
     await _sync_embedding_models(db, components["embedding_models"])
-    await _sync_sources(db, components["sources"], entity_id_map)
+    await _sync_sources(db, components["sources"], module_entity_map)
     await _sync_destinations(db, components["destinations"])
-    await _sync_transformers(db, components["transformers"], entity_id_map)
+    await _sync_transformers(db, components["transformers"], module_entity_map)
 
     sync_logger.info("Platform components sync completed.")
