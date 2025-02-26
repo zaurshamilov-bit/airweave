@@ -14,6 +14,7 @@ def check_db():
     password = os.getenv('POSTGRES_PASSWORD', 'airweave1234!')
     host = os.getenv('POSTGRES_HOST', 'db')
     db = os.getenv('POSTGRES_DB', 'airweave')
+    port = os.getenv('POSTGRES_PORT', '5432')
     engine = create_engine(f'postgresql://{user}:{password}@{host}/{db}')
     engine.connect()
 
