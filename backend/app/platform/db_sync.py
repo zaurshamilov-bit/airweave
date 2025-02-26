@@ -169,6 +169,8 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, dict]:
                     description=cls.__doc__ or f"Data from {name}",
                     type=EntityType.JSON,
                     schema=cls.model_json_schema(),  # Get the actual schema from the Pydantic model
+                    module_name=module_name,
+                    class_name=cls.__name__,
                 )
                 entity_definitions.append(entity_def)
 
@@ -285,21 +287,27 @@ def _get_type_names(type_hint) -> list[str]:
     return [type_hint.__name__]
 
 
-async def _sync_transformers(
-    db: AsyncSession, transformers: list[Callable], module_entity_map: Dict[str, dict]
-) -> None:
-    """Sync transformers with the database.
+def _build_entity_mappings(module_entity_map: Dict[str, dict]) -> tuple[dict, dict]:
+    """Build mappings from class names and entity names to entity IDs.
 
     Args:
-        db (AsyncSession): Database session
-        transformers (list[Callable]): List of transformer functions
-        module_entity_map (Dict[str, dict]): Mapping of module names to their entity details
-    """
-    sync_logger.info("Syncing transformers to database.")
+        module_entity_map: Mapping of module names to their entity details
 
+    Returns:
+        tuple: (entity_class_to_id_map, entity_name_to_id_map)
+    """
     # Create a reverse mapping from class name to entity ID
     entity_class_to_id_map = {}
+    # Create a mapping from entity name to entity ID
+    entity_name_to_id_map = {}
+
     for module_info in module_entity_map.values():
+        for i, name in enumerate(module_info.get("entity_names", [])):
+            if i < len(module_info.get("entity_ids", [])):
+                if name not in entity_name_to_id_map:
+                    entity_name_to_id_map[name] = []
+                entity_name_to_id_map[name].append(module_info["entity_ids"][i])
+
         for i, class_name in enumerate(module_info.get("entity_classes", [])):
             entity_name = module_info["entity_names"][i]
             # Find the entity ID for this class
@@ -312,54 +320,79 @@ async def _sync_transformers(
                         entity_class_to_id_map[class_name] = []
                     entity_class_to_id_map[class_name].append(entity_id)
 
-    # Also create a mapping from entity name to entity ID
-    entity_name_to_id_map = {}
-    for module_info in module_entity_map.values():
-        for i, name in enumerate(module_info.get("entity_names", [])):
-            if i < len(module_info.get("entity_ids", [])):
-                if name not in entity_name_to_id_map:
-                    entity_name_to_id_map[name] = []
-                entity_name_to_id_map[name].append(module_info["entity_ids"][i])
+    return entity_class_to_id_map, entity_name_to_id_map
 
-    transformer_definitions = []
-    for transformer_func in transformers:
-        # Get type hints for input/output
-        type_hints = get_type_hints(transformer_func)
 
-        # Get input type from first parameter
-        first_param = next(iter(inspect.signature(transformer_func).parameters.values()))
-        input_type = type_hints[first_param.name]
-        input_type_name = input_type.__name__
+def _create_transformer_definition(
+    transformer_func: Callable, entity_name_to_id_map: dict
+) -> schemas.TransformerCreate:
+    """Create a transformer definition from a transformer function.
 
-        if input_type_name not in entity_name_to_id_map:
+    Args:
+        transformer_func: The transformer function
+        entity_name_to_id_map: Mapping from entity names to entity IDs
+
+    Returns:
+        schemas.TransformerCreate: The transformer definition
+    """
+    # Get type hints for input/output
+    type_hints = get_type_hints(transformer_func)
+
+    # Get input type from first parameter
+    first_param = next(iter(inspect.signature(transformer_func).parameters.values()))
+    input_type = type_hints[first_param.name]
+    input_type_name = input_type.__name__
+
+    if input_type_name not in entity_name_to_id_map:
+        raise ValueError(
+            f"Transformer {transformer_func._name} has unknown input type {input_type_name}"
+        )
+
+    # Get output types from return annotation
+    return_type = type_hints["return"]
+    output_types = _get_type_names(return_type)
+
+    # Validate output types
+    for type_name in output_types:
+        if type_name not in entity_name_to_id_map:
             raise ValueError(
-                f"Transformer {transformer_func._name} has unknown input type {input_type_name}"
+                f"Transformer {transformer_func._name} has unknown output type {type_name}"
             )
 
-        # Get output types from return annotation
-        return_type = type_hints["return"]
-        output_types = _get_type_names(return_type)
+    return schemas.TransformerCreate(
+        name=transformer_func._name,
+        description=transformer_func.__doc__,
+        method_name=transformer_func.__name__,
+        module_name=transformer_func.__module__,
+        auth_type=getattr(transformer_func, "_auth_type", None),
+        auth_config_class=getattr(transformer_func, "_auth_config_class", None),
+        config_schema=getattr(transformer_func, "_config_schema", {}),
+        input_entity_definition_ids=[UUID(id) for id in entity_name_to_id_map[input_type_name]],
+        output_entity_definition_ids=[
+            UUID(id) for type_name in output_types for id in entity_name_to_id_map[type_name]
+        ],
+    )
 
-        # Validate output types
-        for type_name in output_types:
-            if type_name not in entity_name_to_id_map:
-                raise ValueError(
-                    f"Transformer {transformer_func._name} has unknown output type {type_name}"
-                )
 
-        transformer_def = schemas.TransformerCreate(
-            name=transformer_func._name,
-            description=transformer_func.__doc__,
-            method_name=transformer_func.__name__,
-            auth_type=getattr(transformer_func, "_auth_type", None),
-            auth_config_class=getattr(transformer_func, "_auth_config_class", None),
-            config_schema=getattr(transformer_func, "_config_schema", {}),
-            input_entity_definition_ids=[UUID(id) for id in entity_name_to_id_map[input_type_name]],
-            output_entity_definition_ids=[
-                UUID(id) for type_name in output_types for id in entity_name_to_id_map[type_name]
-            ],
-        )
-        transformer_definitions.append(transformer_def)
+async def _sync_transformers(
+    db: AsyncSession, transformers: list[Callable], module_entity_map: Dict[str, dict]
+) -> None:
+    """Sync transformers with the database.
+
+    Args:
+        db (AsyncSession): Database session
+        transformers (list[Callable]): List of transformer functions
+        module_entity_map (Dict[str, dict]): Mapping of module names to their entity details
+    """
+    sync_logger.info("Syncing transformers to database.")
+
+    # Build entity mappings
+    _, entity_name_to_id_map = _build_entity_mappings(module_entity_map)
+
+    # Create transformer definitions
+    transformer_definitions = [
+        _create_transformer_definition(func, entity_name_to_id_map) for func in transformers
+    ]
 
     await crud.transformer.sync(db, transformer_definitions, unique_field="method_name")
     sync_logger.info(f"Synced {len(transformer_definitions)} transformers to database.")

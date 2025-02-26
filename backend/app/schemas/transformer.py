@@ -12,6 +12,7 @@ class TransformerBase(BaseModel):
     name: str
     description: Optional[str] = None
     method_name: str
+    module_name: str
     input_entity_definition_ids: List[str]
     output_entity_definition_ids: List[str]
     config_schema: Dict = Field(default_factory=dict)

@@ -86,8 +86,8 @@ class ResourceLocator:
         Returns:
             Callable: Transformer function
         """
-        module = importlib.import_module(f"{PLATFORM_PATH}.transformers.{transformer.short_name}")
-        return getattr(module, transformer.function_name)
+        module = importlib.import_module(transformer.module_name)
+        return getattr(module, transformer.method_name)
 
 
 resource_locator = ResourceLocator()

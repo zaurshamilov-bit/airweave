@@ -20,38 +20,57 @@ from app.platform.sync.router import SyncDAGRouter
 
 
 class SyncContext:
-    """Context container for a sync."""
+    """Context container for a sync.
+
+    Contains all the necessary components for a sync:
+    - source - the source instance
+    - destination - the destination instance (still assumes single destination)
+    - embedding model - the embedding model used for the sync
+    - transformers - a dictionary of transformer callables
+    - sync - the main sync object
+    - sync job - the sync job that is created for the sync
+    - dag - the DAG that is created for the sync
+    - progress - the progress tracker, interfaces with PubSub
+    - router - the DAG router
+    - white label (optional)
+    """
 
     source: BaseSource
     destination: BaseDestination  # still assumes single destination
     embedding_model: BaseEmbeddingModel
+    transformers: dict[str, callable]
     sync: schemas.Sync
     sync_job: schemas.SyncJob
-    white_label: Optional[schemas.WhiteLabel] = None
+    dag: schemas.SyncDag
     progress: SyncProgress
     router: SyncDAGRouter
-    dag: schemas.SyncDag
+
+    white_label: Optional[schemas.WhiteLabel] = None
 
     def __init__(
         self,
         source: BaseSource,
         destination: BaseDestination,  # still assumes single destination
         embedding_model: BaseEmbeddingModel,
+        transformers: dict[str, callable],
         sync: schemas.Sync,
         sync_job: schemas.SyncJob,
         dag: schemas.SyncDag,
+        progress: SyncProgress,
+        router: SyncDAGRouter,
         white_label: Optional[schemas.WhiteLabel] = None,
     ):
         """Initialize the sync context."""
         self.source = source
         self.destination = destination
         self.embedding_model = embedding_model
+        self.transformers = transformers
         self.sync = sync
         self.sync_job = sync_job
-        self.white_label = white_label
         self.dag = dag
-        self.progress = SyncProgress(sync_job.id)
-        self.router = SyncDAGRouter(dag)
+        self.progress = progress
+        self.router = router
+        self.white_label = white_label
 
 
 class SyncContextFactory:
@@ -70,17 +89,23 @@ class SyncContextFactory:
         """Create a sync context."""
         source = await cls._create_source_instance(db, sync, current_user)
         embedding_model = cls._get_embedding_model(sync)
-        destination = await cls._get_destination(sync, embedding_model)
+        destination = await cls._create_destination_instance(sync, embedding_model)
+        transformers = await cls._get_transformer_callables(db, sync)
+        entity_map = await cls._get_entity_map(db, sync)
 
-        transformer = cls._get_transformer(sync)
+        progress = SyncProgress(sync_job.id)
+        router = SyncDAGRouter(dag)
 
         return SyncContext(
             source=source,
             destination=destination,
             embedding_model=embedding_model,
+            transformers=transformers,
             sync=sync,
             sync_job=sync_job,
             dag=dag,
+            progress=progress,
+            router=router,
             white_label=white_label,
         )
 
@@ -199,12 +224,44 @@ class SyncContextFactory:
         return LocalText2Vec()  # TODO: Handle other embedding models
 
     @classmethod
-    async def _get_destination(
+    async def _create_destination_instance(
         cls, sync: schemas.Sync, embedding_model: BaseEmbeddingModel
     ) -> BaseDestination:
-        """Get destination instance."""
+        """Create destination instance."""
         if not sync.destination_connection_id:
             return await WeaviateDestination.create(sync.id, embedding_model)
         return await WeaviateDestination.create(
             sync.id, embedding_model
         )  # TODO: Handle other destinations
+
+    @classmethod
+    async def _get_transformer_callables(
+        cls, db: AsyncSession, sync: schemas.Sync
+    ) -> dict[str, callable]:
+        """Get transformers instance."""
+        transformers = {}
+
+        transformer_functions = await crud.transformer.get_all(db)
+        for transformer in transformer_functions:
+            transformers[transformer.method_name] = resource_locator.get_transformer(transformer)
+        return transformers
+
+    @classmethod
+    async def _get_entity_definition_map(
+        cls, db: AsyncSession, sync: schemas.Sync
+    ) -> dict[str, type[schemas.EntityDefinition]]:
+        """Get entity definition map.
+
+        Loops over all nodes in the DAG and returns a dictionary of entity definition ids to
+        entity definitions.
+        """
+        entity_map = {}
+
+        entity_definitions = await crud.entity_definition.get_all(db)
+
+        for entity_definition in entity_definitions:
+            entity_map[entity_definition.class_name] = entity_definition
+
+        for node in sync.dag.nodes:
+            entity_map[node.entity_definition_id] = node.entity_type
+        return entity_map

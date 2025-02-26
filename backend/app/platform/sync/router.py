@@ -1,9 +1,7 @@
 """DAG router."""
 
-from typing import Callable, Optional
+from typing import Optional
 from uuid import UUID
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.platform.entities._base import BaseEntity
 from app.schemas.dag import DagNode, NodeType, SyncDag
@@ -15,17 +13,12 @@ class SyncDAGRouter:
     def __init__(
         self,
         dag: SyncDag,
-        transformers: list[Callable[[BaseEntity], list[BaseEntity]]],
     ):
         """Initialize the DAG router."""
-        # Store DAG structure
         self.dag = dag
-        # Build routing maps
         self.route = self._build_execution_route()
 
-    def _build_execution_route(
-        self, db: AsyncSession
-    ) -> dict[tuple[UUID, UUID], list[Optional[UUID]]]:
+    def _build_execution_route(self) -> dict[tuple[UUID, UUID], list[Optional[UUID]]]:
         """Construct an execution route for the DAG.
 
         Maps a tuple of a producer node id with a entity definition id to a consumer node id.
@@ -60,7 +53,7 @@ class SyncDAGRouter:
                     # Setting to None stops the entity from being routed further
                     route_map[(producer, node.entity_definition_id)] = None
                 elif len(edges_outwards) == 1 and self._get_if_node_is_destination(
-                    edges_outwards[0].to_node_id
+                    self.dag.get_node(edges_outwards[0].to_node_id)
                 ):
                     route_map[(producer, node.entity_definition_id)] = None
                 else:
@@ -71,7 +64,14 @@ class SyncDAGRouter:
         return route_map
 
     async def process_entity(self, producer_id: UUID, entity: BaseEntity) -> list[BaseEntity]:
-        """Route an entity to its next destinations based on DAG structure."""
+        """Route an entity to its next destinations based on DAG structure.
+
+        Returning condition:
+        - If the entity is sent to a destination, return it, so the orchestrator can send it to the
+          destinations
+        - If the entity is sent to a transformer, return the transformed entities, so the next
+          transformer can be called until the entity is sent to a destination
+        """
         route_key = (producer_id, entity.entity_definition_id)
         if route_key not in self.route:
             raise ValueError(f"No route found for entity {entity.entity_definition_id}")
@@ -98,26 +98,3 @@ class SyncDAGRouter:
     def _get_if_node_is_destination(self, node: DagNode) -> bool:
         """Get if a node is a destination."""
         return node.type == NodeType.destination
-
-        # async def route_entity(self, producer_id: UUID, entity: BaseEntity):
-        #     """Route an entity to its next destinations based on DAG structure."""
-        #     # Find matching routes
-        #     route_key = (producer_id, entity.entity_definition_id)
-        #     if route_key not in self.entity_routes:
-        #         return None
-
-        #     consumers = self.entity_routes[route_key]
-        #     results = []
-
-        #     for consumer in consumers:
-        #         if consumer.type == "transformer":
-        #             # Transform entity
-        #             transformed = await self._apply_transformer(consumer, entity)
-        #             # Route transformed entities
-        #             for new_entity in transformed:
-        #                 results.extend(await self.route_entity(consumer.id, new_entity))
-        #         elif consumer.type == "destination":
-        #             # Send to destination
-        #             results.append(("destination", consumer, entity))
-
-        # return results

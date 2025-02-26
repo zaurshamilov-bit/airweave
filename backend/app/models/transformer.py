@@ -28,6 +28,7 @@ class Transformer(Base):
     name = Column(String, nullable=False)
     description = Column(String)
     method_name = Column(String, nullable=False)
+    module_name = Column(String, nullable=False)
 
     # List of entity definition IDs this transformer can input/output
     input_entity_definition_ids = Column(StringListJSON, nullable=False)

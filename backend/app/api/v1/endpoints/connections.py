@@ -18,7 +18,7 @@ from app.platform.auth.schemas import AuthType
 from app.platform.auth.services import oauth2_service
 from app.platform.auth.settings import integration_settings
 from app.platform.locator import resource_locator
-from app.platform.sync.service import sync_service
+from app.platform.sync.orchestrator import sync_service
 from app.schemas.connection import ConnectionCreate, ConnectionStatus
 
 router = APIRouter()
