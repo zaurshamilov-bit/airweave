@@ -9,6 +9,22 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
 
+  confluence:
+    auth_type: "oauth2_with_refresh_rotating"
+    url: "https://auth.atlassian.com/authorize"
+    backend_url: "https://auth.atlassian.com/oauth/token"
+    grant_type: "authorization_code"
+    client_id: "YxVuVBMcAYq1HBko5SSO6rdIoyHWEfWj"
+    client_secret: "ATOA2js0_pWvPROjHjINcMTafJG7CBYMEYg2NfggcS45UX1n09_DZrR76v3Lkdvh0jlA3FCA7D54"
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read offline_access read:confluence-space.summary read:confluence-props manage:confluence-configuration read:confluence-content.all read:confluence-content.summary search:confluence read:confluence-content.permission read:confluence-user read:confluence-groups readonly:content.attachment:confluence read:content:confluence read:content-details:confluence read:space-details:confluence read:page:confluence read:blogpost:confluence read:custom-content:confluence read:comment:confluence read:template:confluence read:label:confluence read:relation:confluence read:space:confluence read:space.property:confluence read:content.metadata:confluence read:task:confluence read:whiteboard:confluence read:database:confluence read:folder:confluence"
+    additional_frontend_params:
+      audience: "api.atlassian.com"
+      prompt: "consent"
+      response_mode: "query"
+      state: "YOUR_USER_BOUND_VALUE"
+
   dropbox:
     auth_type: "oauth2_with_refresh"
     url: "https://www.dropbox.com/oauth2/authorize"
