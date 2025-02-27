@@ -349,7 +349,7 @@ class JiraSource(BaseSource):
         """
         async with httpx.AsyncClient() as client:
             # 1) Generate (and yield) all Projects
-            async for project_entity in self._generate_project_entities(client, self.base_url):
+            async for project_entity in self._generate_project_entities(client):
                 yield project_entity
 
                 # 2) Generate (and yield) all Issues for each Project
