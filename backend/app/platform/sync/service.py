@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.core.dag_service import dag_service
+from app.core.logging import logger
+from app.db.session import get_db_context
 from app.db.unit_of_work import UnitOfWork
 from app.platform.sync.context import SyncContextFactory
 from app.platform.sync.orchestrator import sync_orchestrator
@@ -29,12 +31,21 @@ class SyncService:
 
     async def run(
         self,
-        db: AsyncSession,
         sync: schemas.Sync,
         sync_job: schemas.SyncJob,
         dag: schemas.SyncDag,
         current_user: schemas.User,
     ) -> schemas.Sync:
         """Run a sync."""
-        sync_context = await SyncContextFactory.create(db, sync, sync_job, dag, current_user)
-        return await sync_orchestrator.run(sync_context)
+        try:
+            async with get_db_context() as db:
+                sync_context = await SyncContextFactory.create(
+                    db, sync, sync_job, dag, current_user
+                )
+            return await sync_orchestrator.run(sync_context)
+        except Exception as e:
+            logger.error(f"Error during sync: {e}")
+            raise e
+
+
+sync_service = SyncService()

@@ -1,28 +1,25 @@
 """Module for data synchronization."""
 
 import asyncio
-from typing import Any, List
+from typing import Any
 
 from app import crud, schemas
 from app.core.logging import logger
 from app.db.session import get_db_context
-from app.platform.sync.buffered_generator import BufferedStreamGenerator
 from app.platform.sync.context import SyncContext
+from app.platform.sync.stream import AsyncSourceStream
+
+MAX_WORKERS: int = 5
 
 
 class SyncOrchestrator:
     """Main service for data synchronization."""
 
-    async def run(
-        self,
-        sync_context: SyncContext,
-        max_workers: int = 5,
-    ) -> schemas.Sync:
-        """Run a sync with the new DAG-based routing.
+    async def run(self, sync_context: SyncContext) -> schemas.Sync:
+        """Run a sync with full async processing.
 
         Args:
             sync_context: The sync context
-            max_workers: Maximum number of concurrent workers
         """
         try:
             async with get_db_context() as db:
@@ -30,53 +27,138 @@ class SyncOrchestrator:
                 source_node = sync_context.dag.get_source_node()
 
                 # Create a semaphore to limit concurrent tasks
-                semaphore = asyncio.Semaphore(max_workers)
+                semaphore = asyncio.Semaphore(MAX_WORKERS)
 
-                # Create buffered stream generator
-                buffered_stream = BufferedStreamGenerator(sync_context.source.generate_entities())
+                # Create async stream and use it as a context manager
+                async with AsyncSourceStream(sync_context.source.generate_entities()) as stream:
+                    try:
+                        # Process entities as they come in, with controlled concurrency
+                        pending_tasks = set()
 
-                # Start the producer
-                await buffered_stream.start()
+                        # Process entities as they come in from the stream
+                        async for entity in stream.get_entities():
+                            # Create task for this entity
+                            task = asyncio.create_task(
+                                self._process_entity_with_semaphore(
+                                    semaphore, entity, source_node, sync_context, db
+                                )
+                            )
+                            # Store the original entity with the task for error reporting
+                            task.entity = entity
+                            pending_tasks.add(task)
 
-                try:
-                    # Process chunks in parallel with controlled concurrency
-                    async for chunk in buffered_stream.get_chunks():
-                        async with semaphore:
-                            await self._process_chunk(chunk, source_node, sync_context, db)
-                finally:
-                    # Ensure we stop the producer
-                    await buffered_stream.stop()
-                    await sync_context.progress.finalize()
+                            # Set up proper completion callback with error handling
+                            def task_done_callback(completed_task):
+                                pending_tasks.discard(completed_task)
+                                # Handle any exceptions
+                                if not completed_task.cancelled() and completed_task.exception():
+                                    entity_id = getattr(
+                                        completed_task.entity, "entity_id", "unknown"
+                                    )
+                                    logger.error(
+                                        f"Task for entity {entity_id} failed: "
+                                        f"{completed_task.exception()}"
+                                    )
+
+                            task.add_done_callback(task_done_callback)
+
+                            # If we have too many pending tasks, wait for some to complete
+                            if len(pending_tasks) >= MAX_WORKERS * 2:
+                                done, pending = await asyncio.wait(
+                                    pending_tasks,
+                                    return_when=asyncio.FIRST_COMPLETED,
+                                    timeout=0.5,
+                                )
+
+                                # Process completed tasks and handle errors
+                                for completed_task in done:
+                                    try:
+                                        await completed_task
+                                    except Exception as e:
+                                        entity_id = getattr(
+                                            getattr(completed_task, "entity", None),
+                                            "entity_id",
+                                            "unknown",
+                                        )
+                                        logger.error(f"Entity {entity_id} processing error: {e}")
+                                        # Re-raise critical exceptions
+                                        if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                                            raise
+
+                        # Wait for any remaining tasks with proper error handling
+                        if pending_tasks:
+                            logger.info(f"Waiting for {len(pending_tasks)} remaining tasks")
+                            while pending_tasks:
+                                wait_tasks = list(pending_tasks)[: MAX_WORKERS * 2]
+                                done, pending_tasks_remaining = await asyncio.wait(
+                                    wait_tasks,
+                                    return_when=asyncio.ALL_COMPLETED,
+                                    timeout=10,
+                                )
+
+                                # Update pending tasks
+                                for task in wait_tasks:
+                                    pending_tasks.discard(task)
+
+                                # Add back any tasks that didn't complete
+                                pending_tasks.update(pending_tasks_remaining)
+
+                                # Check for exceptions
+                                for completed_task in done:
+                                    try:
+                                        await completed_task
+                                    except Exception as e:
+                                        entity_id = getattr(
+                                            getattr(completed_task, "entity", None),
+                                            "entity_id",
+                                            "unknown",
+                                        )
+                                        logger.error(f"Entity {entity_id} processing error: {e}")
+                                        # Re-raise critical exceptions
+                                        if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                                            raise
+
+                    except Exception as e:
+                        logger.error(f"Error during sync: {e}")
+                        raise
+                    finally:
+                        # Ensure we finalize progress
+                        await sync_context.progress.finalize()
 
                 # Publish final progress
                 await sync_context.progress.finalize()
                 return sync_context.sync
+
         except Exception as e:
             logger.error(f"Error during sync: {e}")
-            raise e
+            raise
 
-    async def _process_chunk(
-        self, entities: List[Any], source_node: Any, sync_context: SyncContext, db: Any
-    ) -> List[Any]:
-        """Process a chunk of entities in parallel.
+    async def _process_entity_with_semaphore(
+        self,
+        semaphore: asyncio.Semaphore,
+        entity: Any,
+        source_node: Any,
+        sync_context: SyncContext,
+        db: Any,
+    ) -> Any:
+        """Process a single entity with semaphore control.
 
         Args:
-            entities: List of entities to process
+            semaphore: Semaphore to control concurrency
+            entity: Entity to process
             source_node: The source node from the DAG
             sync_context: The sync context
             db: Database session
 
         Returns:
-            List of processed results
+            Processed result
         """
-        tasks = []
-        for entity in entities:
-            tasks.append(self._process_entity(entity, source_node, sync_context, db))
-        return await asyncio.gather(*tasks)
+        async with semaphore:
+            return await self._process_entity(entity, source_node, sync_context, db)
 
     async def _process_entity(
         self, entity: Any, source_node: Any, sync_context: SyncContext, db: Any
-    ) -> List[Any]:
+    ) -> Any:
         """Process a single entity through the DAG.
 
         Args:
@@ -88,7 +170,7 @@ class SyncOrchestrator:
         Returns:
             List of processed results
         """
-        processed_entities = await sync_context.router.process_entity(source_node, entity)
+        processed_entities = await sync_context.router.process_entity(source_node.id, entity)
         results = []
 
         for processed_entity in processed_entities:

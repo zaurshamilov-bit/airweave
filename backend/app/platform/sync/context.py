@@ -1,6 +1,8 @@
 """Module for sync context."""
 
+import importlib
 from typing import Optional
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +15,7 @@ from app.platform.destinations._base import BaseDestination
 from app.platform.destinations.weaviate import WeaviateDestination
 from app.platform.embedding_models._base import BaseEmbeddingModel
 from app.platform.embedding_models.local_text2vec import LocalText2Vec
+from app.platform.entities._base import BaseEntity
 from app.platform.locator import resource_locator
 from app.platform.sources._base import BaseSource
 from app.platform.sync.pubsub import SyncProgress
@@ -44,6 +47,7 @@ class SyncContext:
     dag: schemas.SyncDag
     progress: SyncProgress
     router: SyncDAGRouter
+    entity_map: dict[type[BaseEntity], UUID]
 
     white_label: Optional[schemas.WhiteLabel] = None
 
@@ -58,6 +62,7 @@ class SyncContext:
         dag: schemas.SyncDag,
         progress: SyncProgress,
         router: SyncDAGRouter,
+        entity_map: dict[type[BaseEntity], UUID],
         white_label: Optional[schemas.WhiteLabel] = None,
     ):
         """Initialize the sync context."""
@@ -70,6 +75,7 @@ class SyncContext:
         self.dag = dag
         self.progress = progress
         self.router = router
+        self.entity_map = entity_map
         self.white_label = white_label
 
 
@@ -91,10 +97,10 @@ class SyncContextFactory:
         embedding_model = cls._get_embedding_model(sync)
         destination = await cls._create_destination_instance(sync, embedding_model)
         transformers = await cls._get_transformer_callables(db, sync)
-        entity_map = await cls._get_entity_map(db, sync)
+        entity_map = await cls._get_entity_definition_map(db)
 
         progress = SyncProgress(sync_job.id)
-        router = SyncDAGRouter(dag)
+        router = SyncDAGRouter(dag, entity_map)
 
         return SyncContext(
             source=source,
@@ -106,6 +112,7 @@ class SyncContextFactory:
             dag=dag,
             progress=progress,
             router=router,
+            entity_map=entity_map,
             white_label=white_label,
         )
 
@@ -247,21 +254,21 @@ class SyncContextFactory:
         return transformers
 
     @classmethod
-    async def _get_entity_definition_map(
-        cls, db: AsyncSession, sync: schemas.Sync
-    ) -> dict[str, type[schemas.EntityDefinition]]:
+    async def _get_entity_definition_map(cls, db: AsyncSession) -> dict[type[BaseEntity], UUID]:
         """Get entity definition map.
 
-        Loops over all nodes in the DAG and returns a dictionary of entity definition ids to
-        entity definitions.
-        """
-        entity_map = {}
+        Map entity class to entity definition id.
 
+        Example key-value pair:
+            <class 'app.platform.entities.trello.TrelloBoard'>: entity_definition_id
+        """
         entity_definitions = await crud.entity_definition.get_all(db)
 
+        entity_definition_map = {}
         for entity_definition in entity_definitions:
-            entity_map[entity_definition.class_name] = entity_definition
+            full_module_name = f"app.platform.entities.{entity_definition.module_name}"
+            module = importlib.import_module(full_module_name)
+            entity_class = getattr(module, entity_definition.class_name)
+            entity_definition_map[entity_class] = entity_definition.id
 
-        for node in sync.dag.nodes:
-            entity_map[node.entity_definition_id] = node.entity_type
-        return entity_map
+        return entity_definition_map

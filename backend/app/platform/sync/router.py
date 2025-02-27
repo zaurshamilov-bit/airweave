@@ -13,9 +13,11 @@ class SyncDAGRouter:
     def __init__(
         self,
         dag: SyncDag,
+        entity_map: dict[type[BaseEntity], UUID],
     ):
         """Initialize the DAG router."""
         self.dag = dag
+        self.entity_map = entity_map
         self.route = self._build_execution_route()
 
     def _build_execution_route(self) -> dict[tuple[UUID, UUID], list[Optional[UUID]]]:
@@ -72,9 +74,10 @@ class SyncDAGRouter:
         - If the entity is sent to a transformer, return the transformed entities, so the next
           transformer can be called until the entity is sent to a destination
         """
-        route_key = (producer_id, entity.entity_definition_id)
+        entity_definition_id = self.entity_map[type(entity)]
+        route_key = (producer_id, entity_definition_id)
         if route_key not in self.route:
-            raise ValueError(f"No route found for entity {entity.entity_definition_id}")
+            raise ValueError(f"No route found for entity {entity_definition_id}")
 
         consumer_id = self.route[route_key]
 
@@ -91,7 +94,9 @@ class SyncDAGRouter:
         # Route the transformed entities
         result_entities = []
         for transformed_entity in transformed_entities:
-            result_entities.extend(await self.process_entity(consumer_id, transformed_entity))
+            result_entities.extend(
+                await self.process_entity(consumer_id, transformed_entity, self.entity_map)
+            )
 
         return result_entities
 

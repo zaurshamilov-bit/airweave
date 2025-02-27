@@ -271,6 +271,12 @@ class AsanaSource(BaseSource):
 
             attachment_detail = attachment_response.get("data")
 
+            if "download_url" not in attachment_detail:
+                logger.warning(
+                    f"No download URL found for attachment {attachment['gid']} in task {task['gid']}"
+                )
+                continue
+
             # Create the file entity with metadata
             file_entity = AsanaFileEntity(
                 source_name="asana",
@@ -293,15 +299,8 @@ class AsanaSource(BaseSource):
                 permanent=attachment_detail.get("permanent", False),
             )
 
-            if file_entity.download_url:
-                try:
-                    file_stream = self._stream_file(client, file_entity.download_url)
-                    yield await handle_file_entity(file_entity, file_stream)
-                except Exception as e:
-                    logger.error(f"Error handling file {file_entity.name}: {str(e)}")
-                    continue
-            else:
-                continue
+            file_stream = self._stream_file(client, file_entity.download_url)
+            yield await handle_file_entity(file_entity, file_stream)
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Asana."""
