@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -56,6 +56,8 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
   const [sources, setSources] = useState<Source[]>([]);
   const [connections, setConnections] = useState<LocalConnection[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { toast } = useToast();
 
@@ -118,6 +120,22 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
     })();
   }, []);
 
+  // Add keyboard shortcut handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Command+K (Mac) or Control+K (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   /**
    * Generate a quick map to see if a short_name is connected
    * to any SourceConnection.
@@ -162,12 +180,20 @@ export const SyncDataSourceGrid = ({ onSelect }: SyncDataSourceGridProps) => {
       <div className="relative">
         <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
         <Input
+          ref={searchInputRef}
           placeholder="Search apps..."
           value={search}
           disabled={isLoading}
           onChange={(e) => setSearch(e.target.value)}
+          onFocus={() => setIsSearchFocused(true)}
+          onBlur={() => setIsSearchFocused(false)}
           className="pl-9"
         />
+        {!isSearchFocused && (
+          <div className="absolute right-3 top-3 text-xs text-muted-foreground pointer-events-none">
+            ⌘K
+          </div>
+        )}
       </div>
       <TooltipProvider>
         {!filteredSources.length && !isLoading && (
