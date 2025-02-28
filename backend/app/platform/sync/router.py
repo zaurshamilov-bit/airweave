@@ -103,3 +103,7 @@ class SyncDAGRouter:
     def _get_if_node_is_destination(self, node: DagNode) -> bool:
         """Get if a node is a destination."""
         return node.type == NodeType.destination
+
+    def _apply_transformer(self, consumer: DagNode, entity: BaseEntity) -> list[BaseEntity]:
+        """Apply the transformer to the entity."""
+        return [entity]
