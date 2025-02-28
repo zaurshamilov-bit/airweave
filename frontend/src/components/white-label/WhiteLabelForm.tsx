@@ -37,6 +37,7 @@ interface WhiteLabelResponse {
   id: string;
   name: string;
   source_id: string;
+  source_short_name: string;
   redirect_url: string;
   client_id: string;
 }
@@ -90,7 +91,9 @@ export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
           throw new Error(`Failed to load data sources. Status: ${response.status}`);
         }
         const data = await response.json();
-        setSources(data);
+        // Sort sources alphabetically by name
+        const sortedData = [...data].sort((a, b) => a.name.localeCompare(b.name));
+        setSources(sortedData);
       } catch (err: any) {
         setError(err.message);
       }
