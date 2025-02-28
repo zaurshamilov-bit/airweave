@@ -66,7 +66,7 @@ class SyncDAGRouter:
         return route_map
 
     async def process_entity(self, producer_id: UUID, entity: BaseEntity) -> list[BaseEntity]:
-        """Route an entity to its next destinations based on DAG structure.
+        """Route an entity to its next consumer based on DAG structure.
 
         Returning condition:
         - If the entity is sent to a destination, return it, so the orchestrator can send it to the

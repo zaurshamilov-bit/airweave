@@ -1,10 +1,19 @@
 """Entity schemas."""
 
 import hashlib
+from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, create_model
+
+
+class DestinationAction(str, Enum):
+    """Action for an entity."""
+
+    INSERT = "insert"
+    UPDATE = "update"
+    KEEP = "keep"
 
 
 class Breadcrumb(BaseModel):

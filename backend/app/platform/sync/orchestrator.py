@@ -3,9 +3,12 @@
 import asyncio
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app import crud, schemas
 from app.core.logging import logger
 from app.db.session import get_db_context
+from app.platform.entities._base import BaseEntity, DestinationAction
 from app.platform.sync.context import SyncContext
 from app.platform.sync.stream import AsyncSourceStream
 
@@ -157,9 +160,11 @@ class SyncOrchestrator:
             return await self._process_entity(entity, source_node, sync_context, db)
 
     async def _process_entity(
-        self, entity: Any, source_node: Any, sync_context: SyncContext, db: Any
-    ) -> Any:
+        self, entity: Any, source_node: Any, sync_context: SyncContext, db: AsyncSession
+    ) -> tuple[list[BaseEntity], DestinationAction]:
         """Process a single entity through the DAG.
+
+        Figure out if the entity should be inserted, updated or kept.
 
         Args:
             entity: Entity to process
@@ -170,18 +175,32 @@ class SyncOrchestrator:
         Returns:
             List of processed results
         """
+        action: DestinationAction = None
+
+        # Check if the entity already exists in the database
+        db_entity = await crud.entity.get_by_entity_and_sync_id(
+            db=db, entity_id=entity.entity_id, sync_id=sync_context.sync.id
+        )
+
+        if db_entity:
+            # Check if the entity has been updated
+            if db_entity.hash != entity.hash:
+                # Entity has been updated, so we need to update it
+                action = DestinationAction.UPDATE
+            else:
+                # Entity is the same, so we keep it
+                action = DestinationAction.KEEP
+        else:
+            # Entity does not exist in the database, so we need to insert it
+            action = DestinationAction.INSERT
+
         processed_entities = await sync_context.router.process_entity(source_node.id, entity)
-        results = []
 
-        for processed_entity in processed_entities:
-            result = await self._handle_entity_action(processed_entity, sync_context, db)
-            results.append(result)
-
-        return results
+        return processed_entities, action
 
     async def _handle_entity_action(
-        self, processed_entity: Any, sync_context: SyncContext, db: Any
-    ) -> Any:
+        self, processed_entity: BaseEntity, sync_context: SyncContext, db: Any
+    ) -> BaseEntity:
         """Handle entity based on its action (insert or update).
 
         Args:
