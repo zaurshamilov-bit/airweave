@@ -107,7 +107,6 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
         db: AsyncSession,
         db_obj: ModelType,
         obj_in: UpdateSchemaType,
-        organization_id: UUID,
         uow: Optional[UnitOfWork] = None,
     ) -> ModelType:
         """Update an existing object in db for a given schema type and organization context.

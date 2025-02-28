@@ -41,6 +41,11 @@ class BaseDestination(ABC):
         pass
 
     @abstractmethod
+    async def bulk_delete_by_parent_id(self, parent_id: UUID) -> None:
+        """Bulk delete entities from the destination by parent ID and entity ID."""
+        pass
+
+    @abstractmethod
     async def search_for_sync_id(self, sync_id: UUID) -> None:
         """Search for a sync_id in the destination."""
         pass

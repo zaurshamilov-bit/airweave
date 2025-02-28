@@ -1,6 +1,7 @@
 """Entity schemas."""
 
 import hashlib
+import json
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type
 from uuid import UUID, uuid4
@@ -56,6 +57,10 @@ class BaseEntity(BaseModel):
     white_label_id: Optional[UUID] = Field(None, description="White label ID.")
     white_label_name: Optional[str] = Field(None, description="White label name.")
 
+    parent_entity_id: Optional[str] = Field(
+        None, description="ID of the parent entity in the source."
+    )
+
     class Config:
         """Pydantic config."""
 
@@ -81,13 +86,40 @@ class BaseEntity(BaseModel):
         sanitized_data = sanitize_dict(data)
         return hashlib.sha256(str(sanitized_data).encode()).hexdigest()
 
+    def to_storage_dict(self, exclude_fields: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Convert entity to a dictionary suitable for storage in vector databases.
+
+        This method handles serialization of complex types (dicts, lists) to JSON strings,
+        except for specific fields that should remain as objects (like breadcrumbs).
+
+        Args:
+            exclude_fields: Optional list of field names to exclude from serialization
+
+        Returns:
+            Dict with all fields properly serialized for storage
+        """
+        # Start with the full model dump
+        data = self.model_dump()
+
+        # Remove excluded fields
+        if exclude_fields:
+            for field in exclude_fields:
+                if field in data:
+                    del data[field]
+
+        # Fields that should remain as objects and not be JSON serialized
+        object_fields = {"breadcrumbs"}
+
+        # Serialize complex types to JSON strings, except for specified object fields
+        for key, value in data.items():
+            if key not in object_fields and isinstance(value, (dict, list)):
+                data[key] = json.dumps(value)
+
+        return data
+
 
 class ChunkEntity(BaseEntity):
     """Base class for entities that are storable and embeddable chunks of data."""
-
-    parent_db_entity_id: Optional[UUID] = Field(
-        None, description="ID of the parent entity in the DB."
-    )
 
 
 class ParentEntity(BaseEntity):

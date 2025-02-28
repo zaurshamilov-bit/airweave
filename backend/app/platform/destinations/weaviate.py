@@ -1,6 +1,5 @@
 """Weaviate destination implementation."""
 
-import json
 from uuid import UUID
 
 import weaviate
@@ -52,7 +51,7 @@ class WeaviateDestination(VectorDBDestination):
         instance.embedding_model = embedding_model
 
         # Get credentials for sync_id
-        credentials = await cls.get_credentials(sync_id)
+        credentials = await cls.get_credentials()
         if credentials:
             instance.cluster_url = credentials.cluster_url
             instance.api_key = credentials.api_key
@@ -64,14 +63,15 @@ class WeaviateDestination(VectorDBDestination):
         await instance.setup_collection(sync_id)
         return instance
 
-    async def get_credentials(sync_id: UUID) -> WeaviateAuthConfig | None:
-        """Get credentials for sync_id.
+    @classmethod
+    async def get_credentials(cls) -> WeaviateAuthConfig | None:
+        """Get credentials for the destination from the user.
 
         Args:
-            sync_id (UUID): The ID of the sync.
+            user (schemas.User): The user to get credentials for.
 
         Returns:
-            WeaviateAuthCredentials | None: The credentials for the sync.
+            WeaviateAuthConfig | None: The credentials for the destination.
         """
         # TODO: Implement this
         return None
@@ -138,8 +138,8 @@ class WeaviateDestination(VectorDBDestination):
 
     async def insert(self, entity: ChunkEntity) -> None:
         """Insert a single entity into Weaviate."""
-        # Transform entities into the format Weaviate expects
-        data_object = entity.model_dump()
+        # Use the entity's to_storage_dict method to get properly serialized data
+        data_object = entity.to_storage_dict()
 
         # Insert into Weaviate
         async with WeaviateService(
@@ -148,10 +148,6 @@ class WeaviateDestination(VectorDBDestination):
             embedding_model=self.embedding_model,
         ) as service:
             collection = await service.get_weaviate_collection(self.collection_name)
-            # Serialize non-primitive types to JSON strings
-            for key, value in data_object.items():
-                if isinstance(value, (dict, list)) and key != "breadcrumbs":
-                    data_object[key] = json.dumps(value)
             await collection.data.insert(data_object, uuid=entity.db_entity_id)
 
     async def bulk_insert(self, entities: list[ChunkEntity]) -> None:
@@ -169,12 +165,9 @@ class WeaviateDestination(VectorDBDestination):
             # Transform entities into the format Weaviate expects for uuid and properties
             objects_to_insert = []
             for entity in entities:
-                entity_data = entity.model_dump()
+                # Use the entity's to_storage_dict method to get properly serialized data
+                entity_data = entity.to_storage_dict()
 
-                # Serialize non-primitive types to JSON strings
-                for key, value in entity_data.items():
-                    if isinstance(value, (dict, list)):
-                        entity_data[key] = json.dumps(value)
                 data_object = weaviate.classes.data.DataObject(
                     uuid=entity.db_entity_id,
                     properties=entity_data,
@@ -184,8 +177,8 @@ class WeaviateDestination(VectorDBDestination):
             # Bulk insert using modern client
             response = await collection.data.insert_many(objects_to_insert)
 
-            if response.errors:
-                raise Exception("Errors during bulk insert: %s", response.errors)
+            if response.errors != {}:
+                raise Exception("Errors during bulk insert: %s", str(response.errors))
 
     async def delete(self, db_entity_id: UUID) -> None:
         """Delete a single entity from Weaviate.
@@ -201,13 +194,13 @@ class WeaviateDestination(VectorDBDestination):
             collection = await service.get_weaviate_collection(self.collection_name)
             await collection.data.delete_by_id(uuid=db_entity_id)
 
-    async def bulk_delete(self, db_entity_ids: list[UUID]) -> None:
+    async def bulk_delete(self, entity_ids: list[str]) -> None:
         """Bulk delete entities from Weaviate.
 
         Args:
-            db_entity_ids (List[UUID]): The IDs of the entities to delete.
+            entity_ids (list[str]): The IDs of the entities to delete.
         """
-        if not db_entity_ids:
+        if not entity_ids:
             return
 
         async with WeaviateService(
@@ -217,21 +210,51 @@ class WeaviateDestination(VectorDBDestination):
         ) as service:
             collection = await service.get_weaviate_collection(self.collection_name)
 
-            for db_entity_id in db_entity_ids:
+            for entity_id in entity_ids:
                 try:
-                    # Delete using deterministic UUID
-                    await collection.objects.delete(uuid=f"{db_entity_id}_{self.sync_id}")
+                    # Delete the entity by UUID
+                    await collection.data.delete_by_id(uuid=entity_id)
                 except Exception as e:
                     if "not found" not in str(e).lower():
                         raise
 
-    async def search_for_sync_id(self, text: str, sync_id: UUID) -> list[dict]:
-        """Search with text and sync_id.
+    async def bulk_delete_by_parent_id(self, parent_id: str, sync_id: str) -> None:
+        """Bulk delete entities from Weaviate by parent ID and optionally sync ID.
+
+        This deletes all entities that have the specified parent_entity_id and sync_id.
 
         Args:
-            text (str): The text to search for.
-            sync_id (UUID): The sync_id to search for.
+            parent_id (str): The parent ID to delete children for.
+            sync_id (str, optional): The sync ID.
         """
+        if not self.embedding_model or not parent_id:
+            return
+
+        async with WeaviateService(
+            weaviate_cluster_url=self.cluster_url,
+            weaviate_api_key=self.api_key,
+            embedding_model=self.embedding_model,
+        ) as service:
+            collection = await service.get_weaviate_collection(self.collection_name)
+
+            # In v4, the & operator is used for AND operations between filters
+            where_filter = Filter.by_property("parent_entity_id").equal(
+                parent_id
+            ) & Filter.by_property("sync_id").equal(sync_id)
+
+            # Delete all matching entities
+            await collection.data.delete_many(where=where_filter)
+
+    async def search_for_sync_id(self, sync_id: UUID) -> list[dict]:
+        """Search for a sync_id in the destination.
+
+        Args:
+            sync_id (UUID): The sync_id to search for.
+
+        Returns:
+            list[dict]: The search results.
+        """
+        # This method searches for entities with the specified sync_id
         async with WeaviateService(
             weaviate_cluster_url=self.cluster_url,
             weaviate_api_key=self.api_key,
@@ -239,13 +262,12 @@ class WeaviateDestination(VectorDBDestination):
         ) as service:
             collection: Collection = await service.get_weaviate_collection(self.collection_name)
 
-            # Create a proper filter using the Filter class
-            results = await collection.query.near_text(
-                query=text,
-                limit=10,
-                filters=Filter.by_property("sync_id").equal(str(sync_id)),  # Proper filter syntax
+            # Create a proper filter to find all entities with this sync_id
+            results = await collection.query.fetch_objects(
+                filters=Filter.by_property("sync_id").equal(str(sync_id)), limit=100
             )
-            return results
+
+            return results.objects if results and hasattr(results, "objects") else []
 
     @staticmethod
     def _sanitize_collection_name(collection_name: UUID) -> str:

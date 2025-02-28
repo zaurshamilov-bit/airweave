@@ -84,6 +84,9 @@ class SyncPubSub:
             self.topics[job_id].remove_subscriber(queue)
 
 
+PUBLISH_THRESHOLD = 5
+
+
 class SyncProgress:
     """Tracks sync progress and automatically publishes updates."""
 
@@ -92,7 +95,7 @@ class SyncProgress:
         self.job_id = job_id
         self.stats = SyncProgressUpdate()
         self._last_published = 0
-        self._publish_threshold = 100
+        self._publish_threshold = PUBLISH_THRESHOLD
 
     def __getattr__(self, name: str) -> int:
         """Get counter value for any stat."""

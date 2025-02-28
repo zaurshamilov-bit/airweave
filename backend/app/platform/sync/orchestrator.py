@@ -1,7 +1,6 @@
 """Module for data synchronization."""
 
 import asyncio
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +11,7 @@ from app.platform.entities._base import BaseEntity, DestinationAction
 from app.platform.sync.context import SyncContext
 from app.platform.sync.stream import AsyncSourceStream
 
-MAX_WORKERS: int = 5
+MAX_WORKERS: int = 20
 
 
 class SyncOrchestrator:
@@ -92,7 +91,10 @@ class SyncOrchestrator:
             # Create task for this entity
             task = asyncio.create_task(
                 self._process_entity_with_semaphore(
-                    semaphore, entity, source_node, sync_context, db
+                    semaphore,
+                    entity,
+                    source_node,
+                    sync_context,
                 )
             )
             # Store the original entity with the task for error reporting
@@ -196,8 +198,7 @@ class SyncOrchestrator:
         entity: BaseEntity,
         source_node: schemas.DagNode,
         sync_context: SyncContext,
-        db: AsyncSession,
-    ) -> Any:
+    ) -> tuple[list[BaseEntity], DestinationAction]:
         """Process a single entity with semaphore control.
 
         Args:
@@ -205,31 +206,39 @@ class SyncOrchestrator:
             entity: Entity to process
             source_node: The source node from the DAG
             sync_context: The sync context
-            db: Database session
 
         Returns:
-            Processed result
+            Tuple of (processed entities, action)
         """
         async with semaphore:
-            # First determine the entity action (without processing through DAG)
-            db_entity, action = await self._determine_entity_action(entity, sync_context, db)
+            # Create a new session for this task
+            async with get_db_context() as task_db:
+                # First determine the entity action (without processing through DAG)
+                db_entity, action = await self._determine_entity_action(
+                    entity, sync_context, task_db
+                )
 
-            # If the action is KEEP, we can skip further processing
-            if action == DestinationAction.KEEP:
-                return [], action
+                # If the action is KEEP, we can skip further processing
+                if action == DestinationAction.KEEP:
+                    # Update progress counter for KEEP action
+                    await sync_context.progress.increment("already_sync", 1)
+                    return [], action
 
-            # Process the entity through the DAG
-            processed_entities = await sync_context.router.process_entity(source_node.id, entity)
+                # Process the entity through the DAG
+                processed_entities = await sync_context.router.process_entity(
+                    source_node.id, entity
+                )
 
-            # Persist the processed entities
-            for processed_entity in processed_entities:
-                await self._persist_entity(processed_entity, db_entity, action, sync_context, db)
+                # Persist the parent entity and its processed children
+                await self._persist_entities(
+                    entity, processed_entities, db_entity, action, sync_context, task_db
+                )
 
-            return processed_entities, action
+                return processed_entities, action
 
     async def _determine_entity_action(
         self, entity: BaseEntity, sync_context: SyncContext, db: AsyncSession
-    ) -> tuple[Any, DestinationAction]:
+    ) -> tuple[schemas.Entity, DestinationAction]:
         """Determine what action should be taken for an entity.
 
         Args:
@@ -247,7 +256,7 @@ class SyncOrchestrator:
 
         if db_entity:
             # Check if the entity has been updated
-            if db_entity.hash != entity.hash:
+            if db_entity.hash != entity.hash():
                 # Entity has been updated, so we need to update it
                 action = DestinationAction.UPDATE
             else:
@@ -259,61 +268,86 @@ class SyncOrchestrator:
 
         return db_entity, action
 
-    async def _persist_entity(
+    async def _persist_entities(
         self,
-        processed_entity: BaseEntity,
-        db_entity: Any,
+        parent_entity: BaseEntity,
+        processed_entities: list[BaseEntity],
+        db_entity: schemas.Entity,
         action: DestinationAction,
         sync_context: SyncContext,
         db: AsyncSession,
     ) -> None:
-        """Persist the entity to the database and destination.
+        """Persist the parent entity and its processed children.
 
         Args:
-            processed_entity: The processed entity
+            parent_entity: The parent entity
+            processed_entities: List of processed entities
             db_entity: Existing database entity if any
             action: The action to take (INSERT, UPDATE, KEEP)
             sync_context: The sync context
             db: Database session
         """
-        # Update the entity with its action
-        processed_entity.action = action.value.lower()
+        # No processing needed for KEEP action
+        if action == DestinationAction.KEEP:
+            # Update the progress for kept entities
+            await sync_context.progress.increment(already_sync=1)
+            return
 
+        if len(processed_entities) == 0:
+            raise ValueError("No processed entities to persist")
+
+        # Prepare the processed entities
+        for processed_entity in processed_entities:
+            # Set parent entity ID if not already set
+            if (
+                not hasattr(processed_entity, "parent_entity_id")
+                or not processed_entity.parent_entity_id
+            ):
+                processed_entity.parent_entity_id = parent_entity.entity_id
+
+        # Handle database operations for the parent entity
         if action == DestinationAction.INSERT:
             # Insert into database
             new_db_entity = await crud.entity.create(
                 db=db,
                 obj_in=schemas.EntityCreate(
                     sync_id=sync_context.sync.id,
-                    entity_id=processed_entity.entity_id,
-                    hash=processed_entity.hash,
+                    entity_id=parent_entity.entity_id,
+                    hash=parent_entity.hash(),  # compute hash on the entity
+                    sync_job_id=sync_context.sync_job.id,
                 ),
                 organization_id=sync_context.sync.organization_id,
             )
-            processed_entity.db_entity_id = new_db_entity.id
-            sync_context.progress.inserted += 1
+            parent_entity.db_entity_id = new_db_entity.id
+            await sync_context.progress.increment("inserted", 1)
 
-            # Insert into destination if available
-            if hasattr(sync_context, "destination") and sync_context.destination:
-                await sync_context.destination.insert(processed_entity)
+            # Insert all child entities into destination
+
+            await sync_context.destination.bulk_insert(processed_entities)
 
         elif action == DestinationAction.UPDATE:
             # Update in database
             await crud.entity.update(
                 db=db,
                 db_obj=db_entity,
-                obj_in=schemas.EntityUpdate(hash=processed_entity.hash),
+                obj_in=schemas.EntityUpdate(
+                    hash=parent_entity.hash(),  # compute hash on the entity
+                ),
             )
-            processed_entity.db_entity_id = db_entity.id
-            sync_context.progress.updated += 1
+            parent_entity.db_entity_id = db_entity.id
 
-            # Update in destination if available
-            if hasattr(sync_context, "destination") and sync_context.destination:
-                # For destinations, an update is usually delete + insert
-                await sync_context.destination.delete(db_entity.id)
-                await sync_context.destination.insert(processed_entity)
+            # For destination, we need to handle the update scenario:
+            # 1. Delete existing parent and children
+            # 2. Insert the new processed entities
 
-        # For KEEP action, we don't need to do anything
+            await sync_context.destination.bulk_delete_by_parent_id(
+                parent_entity.entity_id, sync_context.sync.id
+            )
+
+            # Insert new processed entities
+            await sync_context.destination.bulk_insert(processed_entities)
+
+            await sync_context.progress.increment("updated", 1)
 
 
 sync_orchestrator = SyncOrchestrator()

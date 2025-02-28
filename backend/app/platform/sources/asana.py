@@ -271,7 +271,10 @@ class AsanaSource(BaseSource):
 
             attachment_detail = attachment_response.get("data")
 
-            if "download_url" not in attachment_detail:
+            if (
+                "download_url" not in attachment_detail
+                or attachment_detail.get("download_url") is None
+            ):
                 logger.warning(
                     f"No download URL found for attachment {attachment['gid']} in task {task['gid']}"
                 )
