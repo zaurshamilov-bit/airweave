@@ -33,7 +33,6 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
         return
 
     try:
-
         # Convert file to markdown
         result = await markitdown.convert(file.local_path)
 

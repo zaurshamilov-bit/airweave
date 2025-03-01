@@ -220,9 +220,9 @@ class MySQLSource(BaseSource):
                     for table in tables:
                         # Create entity class if not already created
                         if f"{schema}.{table}" not in self.entity_classes:
-                            self.entity_classes[f"{schema}.{table}"] = (
-                                await self._create_entity_class(schema, table)
-                            )
+                            self.entity_classes[
+                                f"{schema}.{table}"
+                            ] = await self._create_entity_class(schema, table)
 
                         entity_class = self.entity_classes[f"{schema}.{table}"]
 

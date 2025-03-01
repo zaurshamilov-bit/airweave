@@ -35,7 +35,6 @@ class SyncDAGRouter:
         route_map = {}
         for node in self.dag.nodes:
             if node.type == NodeType.entity:
-
                 edge_inwards = self.dag.get_edges_to_node(node.id)
 
                 # Get the producer node

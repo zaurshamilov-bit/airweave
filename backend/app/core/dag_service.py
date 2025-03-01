@@ -32,9 +32,11 @@ class DagService:
         file_chunker = await self._get_file_chunker(db)
 
         # Get source connection and entity definitions
-        source, source_connection, entity_definitions = (
-            await self._get_source_and_entity_definitions(db, sync, current_user)
-        )
+        (
+            source,
+            source_connection,
+            entity_definitions,
+        ) = await self._get_source_and_entity_definitions(db, sync, current_user)
 
         # Get or create destination
         destination, destination_connection = await self._get_destination(db, sync, current_user)

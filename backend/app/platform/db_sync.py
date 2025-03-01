@@ -19,6 +19,36 @@ from app.platform.sources._base import BaseSource
 sync_logger = logger.with_prefix("Platform sync: ").with_context(component="platform_sync")
 
 
+def _process_module_classes(module, components: Dict[str, list[Type | Callable]]) -> None:
+    """Process classes in a module and add them to the components dictionary.
+
+    Args:
+        module: The module to process
+        components: Dictionary to add components to
+    """
+    # Scan for classes
+    for _, cls in inspect.getmembers(module, inspect.isclass):
+        if getattr(cls, "_is_source", False):
+            components["sources"].append(cls)
+        elif getattr(cls, "_is_destination", False):
+            components["destinations"].append(cls)
+        elif getattr(cls, "_is_embedding_model", False):
+            components["embedding_models"].append(cls)
+
+
+def _process_module_functions(module, components: Dict[str, list[Type | Callable]]) -> None:
+    """Process functions in a module and add them to the components dictionary.
+
+    Args:
+        module: The module to process
+        components: Dictionary to add components to
+    """
+    # Scan for transformer functions
+    for _, func in inspect.getmembers(module, inspect.isfunction):
+        if getattr(func, "_is_transformer", False):
+            components["transformers"].append(func)
+
+
 def _get_decorated_classes(directory: str) -> Dict[str, list[Type | Callable]]:
     """Scan directory for decorated classes and functions.
 
@@ -50,21 +80,12 @@ def _get_decorated_classes(directory: str) -> Dict[str, list[Type | Callable]]:
             module_path = os.path.join(relative_path, filename[:-3]).replace("/", ".")
             full_module_name = f"{base_package}.{module_path}"
 
-            module = importlib.import_module(full_module_name)
-
-            # Scan for classes
-            for _, cls in inspect.getmembers(module, inspect.isclass):
-                if getattr(cls, "_is_source", False):
-                    components["sources"].append(cls)
-                elif getattr(cls, "_is_destination", False):
-                    components["destinations"].append(cls)
-                elif getattr(cls, "_is_embedding_model", False):
-                    components["embedding_models"].append(cls)
-
-            # Scan for transformer functions
-            for _, func in inspect.getmembers(module, inspect.isfunction):
-                if getattr(func, "_is_transformer", False):
-                    components["transformers"].append(func)
+            try:
+                module = importlib.import_module(full_module_name)
+                _process_module_classes(module, components)
+                _process_module_functions(module, components)
+            except ImportError as e:
+                sync_logger.warning(f"Failed to import {full_module_name}: {e}")
 
     return components
 
@@ -144,7 +165,6 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, dict]:
                 and cls != BaseEntity
                 and cls.__module__ == full_module_name
             ):
-
                 if name in entity_registry:
                     raise ValueError(
                         f"Duplicate entity name '{name}' found in {full_module_name}. "

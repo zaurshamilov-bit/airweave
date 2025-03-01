@@ -123,7 +123,7 @@ class SyncOrchestrator:
         # Handle any exceptions
         if not completed_task.cancelled() and completed_task.exception():
             entity_id = getattr(completed_task.entity, "entity_id", "unknown")
-            logger.error(f"Task for entity {entity_id} failed: " f"{completed_task.exception()}")
+            logger.error(f"Task for entity {entity_id} failed: {completed_task.exception()}")
 
     async def _wait_for_tasks(
         self, pending_tasks: set, return_when: asyncio.Future, timeout: float

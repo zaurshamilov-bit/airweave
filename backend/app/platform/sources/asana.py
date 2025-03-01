@@ -70,7 +70,10 @@ class AsanaSource(BaseSource):
             with attempt:
                 try:
                     async with client.stream(
-                        "GET", url, headers=headers, follow_redirects=True  # Follow any redirects
+                        "GET",
+                        url,
+                        headers=headers,
+                        follow_redirects=True,  # Follow any redirects
                     ) as response:
                         response.raise_for_status()
                         async for chunk in response.aiter_bytes():
@@ -264,7 +267,6 @@ class AsanaSource(BaseSource):
         )
 
         for attachment in attachments_data.get("data", []):
-
             attachment_response = await self._get_with_auth(
                 client, f"https://app.asana.com/api/1.0/attachments/{attachment['gid']}"
             )
@@ -276,7 +278,8 @@ class AsanaSource(BaseSource):
                 or attachment_detail.get("download_url") is None
             ):
                 logger.warning(
-                    f"No download URL found for attachment {attachment['gid']} in task {task['gid']}"
+                    f"No download URL found for attachment {attachment['gid']} "
+                    f"in task {task['gid']}"
                 )
                 continue
 
