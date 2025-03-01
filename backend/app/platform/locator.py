@@ -7,6 +7,7 @@ from app import schemas
 from app.platform.configs._base import BaseConfig
 from app.platform.destinations._base import BaseDestination
 from app.platform.embedding_models._base import BaseEmbeddingModel
+from app.platform.entities._base import BaseEntity
 from app.platform.sources._base import BaseSource
 
 PLATFORM_PATH = "app.platform"
@@ -88,6 +89,21 @@ class ResourceLocator:
         """
         module = importlib.import_module(transformer.module_name)
         return getattr(module, transformer.method_name)
+
+    @staticmethod
+    def get_entity_definition(entity_definition: schemas.EntityDefinition) -> Type[BaseEntity]:
+        """Get the entity definition class.
+
+        Args:
+            entity_definition (schemas.EntityDefinition): Entity definition schema
+
+        Returns:
+            Type[BaseEntity]: Entity definition class
+        """
+        module = importlib.import_module(
+            f"{PLATFORM_PATH}.entities.{entity_definition.module_name}"
+        )
+        return getattr(module, entity_definition.class_name)
 
 
 resource_locator = ResourceLocator()

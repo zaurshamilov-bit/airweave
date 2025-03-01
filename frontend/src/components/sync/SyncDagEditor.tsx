@@ -25,6 +25,7 @@ import { DestinationNode } from "./nodes/DestinationNode";
 import { EntityNode } from "./nodes/EntityNode";
 import { ButtonEdge } from "./edges/ButtonEdge";
 import { BlankEdge } from "./edges/BlankEdge";
+import { NonPlussableEdge } from "./edges/NonPlussableEdge";
 import dagre from "dagre";
 import { 
   Dag, 
@@ -48,6 +49,7 @@ const nodeTypes: NodeTypes = {
 const edgeTypes = {
   button: ButtonEdge,
   blank: BlankEdge,
+  nonplussable: NonPlussableEdge,
 };
 
 interface SyncDagEditorProps {
@@ -249,13 +251,26 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
 };
 
 // Helper to determine edge type based on connection
-const getEdgeType = (sourceNode: FlowNode, targetNode: FlowNode): 'button' | 'blank' => {
+const getEdgeType = (sourceNode: FlowNode, targetNode: FlowNode): 'button' | 'blank' | 'nonplussable' => {
   // Sources to entities and transformers to entities use blank edges
   if (
     (sourceNode.type === 'source' && targetNode.type === 'entity') ||
     (sourceNode.type === 'transformer' && targetNode.type === 'entity')
   ) {
     return 'blank';
+  }
+  
+  // File entities to transformers use nonplussable edges
+  if (sourceNode.type === 'entity' && targetNode.type === 'transformer') {
+    // Check if the source is a file entity by looking for common file entity naming patterns
+    const fileEntityPatterns = ['File', 'PDF', 'Document', 'Attachment'];
+    const isFileEntity = fileEntityPatterns.some(pattern => 
+      sourceNode.data.name.includes(pattern)
+    );
+    
+    if (isFileEntity) {
+      return 'nonplussable';
+    }
   }
   
   // All other connections use button edges
@@ -371,7 +386,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
         }
         
         // Set the appropriate edge type
-        const edgeType = getEdgeType(sourceNode, targetNode);
+        const edgeType = getEdgeType(sourceNode as FlowNode, targetNode as FlowNode);
         setEdges((eds) => addEdge({ ...params, type: edgeType }, eds));
       }
     },

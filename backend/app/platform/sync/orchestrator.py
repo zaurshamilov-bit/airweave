@@ -212,11 +212,9 @@ class SyncOrchestrator:
         """
         async with semaphore:
             # Create a new session for this task
-            async with get_db_context() as task_db:
+            async with get_db_context() as db:
                 # First determine the entity action (without processing through DAG)
-                db_entity, action = await self._determine_entity_action(
-                    entity, sync_context, task_db
-                )
+                db_entity, action = await self._determine_entity_action(entity, sync_context, db)
 
                 # If the action is KEEP, we can skip further processing
                 if action == DestinationAction.KEEP:
@@ -226,12 +224,14 @@ class SyncOrchestrator:
 
                 # Process the entity through the DAG
                 processed_entities = await sync_context.router.process_entity(
-                    source_node.id, entity
+                    db=db,
+                    producer_id=source_node.id,
+                    entity=entity,
                 )
 
                 # Persist the parent entity and its processed children
                 await self._persist_entities(
-                    entity, processed_entities, db_entity, action, sync_context, task_db
+                    entity, processed_entities, db_entity, action, sync_context, db
                 )
 
                 return processed_entities, action

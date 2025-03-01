@@ -24,6 +24,7 @@ from app.core.logging import logger
 from app.db.init_db import init_db
 from app.db.session import AsyncSessionLocal
 from app.platform.db_sync import sync_platform_components
+from app.platform.entities._base import ensure_file_entity_models
 
 
 @asynccontextmanager
@@ -35,6 +36,8 @@ async def lifespan(app: FastAPI):
             logger.info("Running alembic migrations...")
             subprocess.run(["alembic", "upgrade", "head"], check=True)
         if settings.RUN_DB_SYNC:
+            # Ensure all FileEntity subclasses have their parent and chunk models created
+            ensure_file_entity_models()
             await sync_platform_components("app/platform", db)
         await init_db(db)
     yield

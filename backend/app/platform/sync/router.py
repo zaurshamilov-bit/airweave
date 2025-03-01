@@ -3,7 +3,11 @@
 from typing import Optional
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app import crud
 from app.platform.entities._base import BaseEntity
+from app.platform.locator import resource_locator
 from app.schemas.dag import DagNode, NodeType, SyncDag
 
 
@@ -59,13 +63,13 @@ class SyncDAGRouter:
                 ):
                     route_map[(producer, node.entity_definition_id)] = None
                 else:
-                    raise ValueError(
-                        f"Entity node {node.id} has no outbound edges to a destination."
-                    )
+                    route_map[(producer, node.entity_definition_id)] = edges_outwards[0].to_node_id
 
         return route_map
 
-    async def process_entity(self, producer_id: UUID, entity: BaseEntity) -> list[BaseEntity]:
+    async def process_entity(
+        self, db: AsyncSession, producer_id: UUID, entity: BaseEntity
+    ) -> list[BaseEntity]:
         """Route an entity to its next consumer based on DAG structure.
 
         Returning condition:
@@ -89,7 +93,7 @@ class SyncDAGRouter:
         consumer = self.dag.get_node(consumer_id)
 
         # Apply the transformer
-        transformed_entities = await self._apply_transformer(consumer, entity)
+        transformed_entities = await self._apply_transformer(db, consumer, entity)
 
         # Route the transformed entities
         result_entities = []
@@ -104,6 +108,16 @@ class SyncDAGRouter:
         """Get if a node is a destination."""
         return node.type == NodeType.destination
 
-    def _apply_transformer(self, consumer: DagNode, entity: BaseEntity) -> list[BaseEntity]:
+    async def _apply_transformer(
+        self, db: AsyncSession, consumer: DagNode, entity: BaseEntity
+    ) -> list[BaseEntity]:
         """Apply the transformer to the entity."""
-        return [entity]
+        if consumer.transformer_id:
+            transformer = await crud.transformer.get(
+                db,
+                id=consumer.transformer_id,
+            )
+            transformer_callable = resource_locator.get_transformer(transformer)
+            return await transformer_callable(entity)
+        else:
+            raise ValueError(f"No transformer found for node {consumer.id}")

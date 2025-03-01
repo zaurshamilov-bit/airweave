@@ -1,7 +1,10 @@
 """Entity schemas."""
 
 import hashlib
+import importlib
 import json
+import os
+import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type
 from uuid import UUID, uuid4
@@ -183,6 +186,10 @@ class PolymorphicEntity(ChunkEntity):
         )
 
 
+# Registry to track which FileEntity subclasses have had their models created
+_file_entity_models_created = set()
+
+
 class FileEntity(BaseEntity):
     """Base schema for file entities."""
 
@@ -250,6 +257,9 @@ class FileEntity(BaseEntity):
             f"{class_name_prefix}Parent", __base__=ParentEntity, **parent_fields
         )
 
+        # Set module name to match the source entity's module
+        parent_model.__module__ = cls.__module__
+
         # For chunk, create standardized fields for vector/graph DB storage
         chunk_fields = {
             "md_title": (Optional[str], Field(None, description="Title or heading of the chunk")),
@@ -280,4 +290,73 @@ class FileEntity(BaseEntity):
             f"{class_name_prefix}Chunk", __base__=ChunkEntity, **chunk_fields
         )
 
+        # Set module name to match the source entity's module
+        chunk_model.__module__ = cls.__module__
+
+        # Add docstrings to the models
+        parent_model.__doc__ = (
+            f"Parent entity for {class_name_prefix} files. Generated from {cls.__name__}."
+        )
+        chunk_model.__doc__ = (
+            f"Chunk entity for {class_name_prefix} files. Generated from {cls.__name__}."
+        )
+
+        # Register models in the module they belong to
+        module = sys.modules[cls.__module__]
+        setattr(module, parent_model.__name__, parent_model)
+        setattr(module, chunk_model.__name__, chunk_model)
+
+        # Mark this class as having had its models created
+        _file_entity_models_created.add(cls)
+
         return parent_model, chunk_model
+
+
+def ensure_file_entity_models():
+    """Ensure that all FileEntity subclasses have their parent and chunk models created.
+
+    This function can be called at runtime to make sure all FileEntity subclasses
+    have had their parent and chunk models created and registered in their modules.
+    """
+    # First, proactively import all entity modules
+    entity_files = [
+        f
+        for f in os.listdir("app/platform/entities")
+        if f.endswith(".py") and not f.startswith("__")
+    ]
+
+    for entity_file in entity_files:
+        module_name = entity_file[:-3]  # Remove .py extension
+        full_module_name = f"app.platform.entities.{module_name}"
+        try:
+            importlib.import_module(full_module_name)
+        except Exception as e:
+            print(f"Error importing entity module {full_module_name}: {e}")
+
+    # Now check all loaded modules for FileEntity subclasses
+    for _, module in list(sys.modules.items()):
+        # Skip modules that don't have __dict__ attribute
+        if not hasattr(module, "__dict__"):
+            continue
+
+        if not module.__name__.startswith("app.platform"):
+            continue
+
+        # Look for FileEntity subclasses in the module
+        for _, cls in list(module.__dict__.items()):
+            # Check if it's a class and a subclass of FileEntity (but not FileEntity itself)
+            if (
+                isinstance(cls, type)
+                and issubclass(cls, FileEntity)
+                and cls is not FileEntity
+                and cls not in _file_entity_models_created
+            ):
+                try:
+                    # Create parent and chunk models
+                    parent_model, chunk_model = cls.create_parent_chunk_models()
+                    print(
+                        "Runtime: Auto-generated parent and chunk models for "
+                        f"{cls.__name__} in {cls.__module__}"
+                    )
+                except Exception as e:
+                    print(f"Runtime: Error creating models for {cls.__name__}: {e}")
