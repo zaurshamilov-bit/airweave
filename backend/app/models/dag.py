@@ -48,7 +48,7 @@ class DagNode(OrganizationBase, UserMixin):
 
     __tablename__ = "dag_node"
 
-    dag_id = Column(UUID, ForeignKey("sync_dag_definition.id", ondelete="CASCADE"), nullable=False)
+    dag_id = Column(UUID, ForeignKey("sync_dag.id", ondelete="CASCADE"), nullable=False)
     type = Column(String, nullable=False)  # source, destination, transformer, entity
     name = Column(String, nullable=False)
     config = Column(JSON)  # Configuration for sources, destinations, transformers
@@ -81,7 +81,7 @@ class DagEdge(OrganizationBase, UserMixin):
 
     __tablename__ = "dag_edge"
 
-    dag_id = Column(UUID, ForeignKey("sync_dag_definition.id", ondelete="CASCADE"), nullable=False)
+    dag_id = Column(UUID, ForeignKey("sync_dag.id", ondelete="CASCADE"), nullable=False)
     from_node_id = Column(UUID, ForeignKey("dag_node.id", ondelete="CASCADE"), nullable=False)
     to_node_id = Column(UUID, ForeignKey("dag_node.id", ondelete="CASCADE"), nullable=False)
 

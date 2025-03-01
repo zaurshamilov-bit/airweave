@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import ChunkEntity
+from app.platform.entities._base import BaseEntity, ChunkEntity
 
 
 class JiraProjectEntity(ChunkEntity):

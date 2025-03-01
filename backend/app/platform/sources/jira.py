@@ -17,7 +17,7 @@ import httpx
 from app.core.logging import logger
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import Breadcrumb, ChunkEntity
+from app.platform.entities._base import BaseEntity, Breadcrumb
 from app.platform.entities.jira import (
     JiraCommentEntity,
     JiraIssueEntity,
