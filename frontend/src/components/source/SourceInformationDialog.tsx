@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { getAppIconUrl } from "@/lib/utils/icons";
+import { useTheme } from "@/lib/theme-provider";
 
 interface SourceInformationDialogProps {
   open: boolean;
@@ -23,16 +24,20 @@ export function SourceInformationDialog({
   shortName,
   description,
 }: SourceInformationDialogProps) {
+  const { resolvedTheme } = useTheme();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <img 
-              src={getAppIconUrl(shortName)} 
-              alt={`${name} icon`}
-              className="w-8 h-8"
-            />
+            <div className="w-8 h-8 flex items-center justify-center">
+              <img 
+                src={getAppIconUrl(shortName, resolvedTheme)} 
+                alt={`${name} icon`}
+                className="w-6 h-6"
+              />
+            </div>
             <div>
               <DialogTitle>{name}</DialogTitle>
               <DialogDescription>{description}</DialogDescription>

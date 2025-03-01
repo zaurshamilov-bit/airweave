@@ -9,6 +9,22 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
 
+  confluence:
+    auth_type: "oauth2_with_refresh_rotating"
+    url: "https://auth.atlassian.com/authorize"
+    backend_url: "https://auth.atlassian.com/oauth/token"
+    grant_type: "authorization_code"
+    client_id: ${CONFLUENCE_CLIENT_ID}
+    client_secret: ${CONFLUENCE_CLIENT_SECRET}
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read offline_access read:confluence-space.summary read:confluence-props manage:confluence-configuration read:confluence-content.all read:confluence-content.summary search:confluence read:confluence-content.permission read:confluence-user read:confluence-groups readonly:content.attachment:confluence read:content:confluence read:content-details:confluence read:space-details:confluence read:page:confluence read:blogpost:confluence read:custom-content:confluence read:comment:confluence read:template:confluence read:label:confluence read:relation:confluence read:space:confluence read:space.property:confluence read:content.metadata:confluence read:task:confluence read:whiteboard:confluence read:database:confluence read:folder:confluence"
+    additional_frontend_params:
+      audience: "api.atlassian.com"
+      prompt: "consent"
+      response_mode: "query"
+      state: "YOUR_USER_BOUND_VALUE"
+
   dropbox:
     auth_type: "oauth2_with_refresh"
     url: "https://www.dropbox.com/oauth2/authorize"
@@ -84,6 +100,22 @@ integrations:
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
     scope: "read write"
+
+  jira:
+    auth_type: "oauth2_with_refresh_rotating"
+    url: "https://auth.atlassian.com/authorize"
+    backend_url: "https://auth.atlassian.com/oauth/token"
+    grant_type: "authorization_code"
+    client_id: ${JIRA_CLIENT_ID}
+    client_secret: ${JIRA_CLIENT_SECRET}
+    content_type: "application/x-www-form-urlencoded"
+    client_credential_location: "body"
+    scope: "read offline_access manage:jira-configuration manage:jira-project read:jira-user read:jira-work read:workflow:jira read:application-role:jira read:avatar:jira read:group:jira read:issue-type:jira read:issue-type-hierarchy:jira read:user:jira read:project:jira read:project-category:jira read:project.component:jira read:project.property:jira read:project-version:jira read:workflow:jira"
+    additional_frontend_params:
+      audience: "api.atlassian.com"
+      prompt: "consent"
+      response_mode: "query"
+      state: "YOUR_USER_BOUND_VALUE"
 
   monday:
     auth_type: "oauth2"

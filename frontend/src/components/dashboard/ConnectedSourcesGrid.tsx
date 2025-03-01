@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Settings2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getAppIconUrl } from "@/lib/utils/icons";
+import { useTheme } from "@/lib/theme-provider";
 
 const mockSources = [
   { id: "1", name: "Notion", type: "notion", status: "active", lastSync: "2h ago" },
@@ -12,6 +13,7 @@ const mockSources = [
 
 export function ConnectedSourcesGrid() {
   const navigate = useNavigate();
+  const { resolvedTheme } = useTheme();
 
   return (
     <Card>
@@ -33,11 +35,13 @@ export function ConnectedSourcesGrid() {
               key={source.id}
               className="flex items-center space-x-4 rounded-lg border p-4"
             >
-              <img
-                src={getAppIconUrl(source.type)}
-                alt={source.name}
-                className="h-8 w-8"
-              />
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <img
+                  src={getAppIconUrl(source.type, resolvedTheme)}
+                  alt={source.name}
+                  className="w-6 h-6"
+                />
+              </div>
               <div className="flex-1 space-y-1">
                 <p className="text-sm font-medium leading-none">{source.name}</p>
                 <p className="text-sm text-muted-foreground">

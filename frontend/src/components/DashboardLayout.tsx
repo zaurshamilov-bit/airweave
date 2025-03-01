@@ -12,9 +12,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useTheme } from "@/lib/theme-provider";
 
 const DashboardLayout = () => {
   const location = useLocation();
+  const { resolvedTheme } = useTheme();
+  
+  // Determine which logo to use based on theme
+  const logoSrc = resolvedTheme === "dark" ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg";
 
   const isRouteActive = (path: string) => {
     if (path === "/white-label") {
@@ -118,7 +123,7 @@ const DashboardLayout = () => {
               <div className="flex h-16 items-center px-6">
                 <Link to="/" className="flex items-center">
                   <img 
-                    src="/logo-and-lettermark.svg" 
+                    src={logoSrc} 
                     alt="Airweave" 
                     className="h-6 pr-4"
                   />
@@ -170,7 +175,7 @@ const DashboardLayout = () => {
               className="flex items-center transition-transform duration-200 hover:scale-105"
             >
               <img 
-                src="/logo-and-lettermark.svg" 
+                src={logoSrc} 
                 alt="Airweave" 
                 className="h-8 pr-4"
               />

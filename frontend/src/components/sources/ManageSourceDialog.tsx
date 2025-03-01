@@ -12,6 +12,7 @@ import { useState } from "react";
 import { Connection } from "@/types";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { ConnectionsList } from "./ConnectionsList";
+import { useTheme } from "@/lib/theme-provider";
 
 interface ManageSourceDialogProps {
   open: boolean;
@@ -36,6 +37,7 @@ export function ManageSourceDialog({
 }: ManageSourceDialogProps) {
   const [search, setSearch] = useState("");
   const [selectedTab, setSelectedTab] = useState("information");
+  const { resolvedTheme } = useTheme();
 
   const filteredConnections = existingConnections.filter(conn => 
     conn.name.toLowerCase().includes(search.toLowerCase())
@@ -46,11 +48,13 @@ export function ManageSourceDialog({
       <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <img 
-              src={getAppIconUrl(shortName)} 
-              alt={`${name} icon`}
-              className="w-8 h-8"
-            />
+            <div className="w-8 h-8 flex items-center justify-center">
+              <img 
+                src={getAppIconUrl(shortName, resolvedTheme)} 
+                alt={`${name} icon`}
+                className="w-6 h-6"
+              />
+            </div>
             <div>
               <DialogTitle>{name}</DialogTitle>
               <DialogDescription>Manage your {name} integration</DialogDescription>

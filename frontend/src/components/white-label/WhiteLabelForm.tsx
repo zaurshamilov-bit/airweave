@@ -22,6 +22,7 @@ import * as z from "zod";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { getAppIconUrl } from "@/lib/utils/icons";
+import { useTheme } from "@/lib/theme-provider";
 
 interface ISource {
   id: string;
@@ -37,6 +38,7 @@ interface WhiteLabelResponse {
   id: string;
   name: string;
   source_id: string;
+  source_short_name: string;
   redirect_url: string;
   client_id: string;
 }
@@ -79,6 +81,7 @@ export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
   const [loading, setLoading] = useState(false);
   const [sources, setSources] = useState<ISource[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const { resolvedTheme } = useTheme();
 
   // Fetch available sources for the dropdown
   useEffect(() => {
@@ -90,7 +93,9 @@ export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
           throw new Error(`Failed to load data sources. Status: ${response.status}`);
         }
         const data = await response.json();
-        setSources(data);
+        // Sort sources alphabetically by name
+        const sortedData = [...data].sort((a, b) => a.name.localeCompare(b.name));
+        setSources(sortedData);
       } catch (err: any) {
         setError(err.message);
       }
@@ -239,9 +244,9 @@ export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
                         <div className="flex items-center gap-2">
                           <div className="w-5 h-5 shrink-0 flex items-center justify-center">
                             <img
-                              src={getAppIconUrl(field.value)}
-                              alt=""
-                              className="w-4 h-4"
+                              src={getAppIconUrl(field.value, resolvedTheme)}
+                              alt={field.value}
+                              className="h-6 w-6"
                             />
                           </div>
                           {sources.find(s => s.short_name === field.value)?.name}
@@ -260,9 +265,9 @@ export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
                           <div className="flex items-center gap-2">
                             <div className="w-5 h-5 shrink-0 flex items-center justify-center">
                               <img
-                                src={getAppIconUrl(src.short_name)}
-                                alt=""
-                                className="w-4 h-4"
+                                src={getAppIconUrl(src.short_name, resolvedTheme)}
+                                alt={src.short_name}
+                                className="h-6 w-6"
                               />
                             </div>
                             {src.name}

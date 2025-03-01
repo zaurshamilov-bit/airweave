@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { SecuritySettings } from "@/components/settings/SecuritySettings";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
+import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 
 const Settings = () => {
   const handleSave = () => {
@@ -19,8 +20,9 @@ const Settings = () => {
       </div>
       
       <Tabs defaultValue="organization" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+        <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
           <TabsTrigger value="organization">Organization</TabsTrigger>
+          <TabsTrigger value="appearance">Appearance</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
@@ -28,6 +30,10 @@ const Settings = () => {
         <div className="max-w-4xl">
           <TabsContent value="organization" className="mt-6">
             <OrganizationSettings />
+          </TabsContent>
+
+          <TabsContent value="appearance" className="mt-6">
+            <AppearanceSettings />
           </TabsContent>
 
           <TabsContent value="security" className="mt-6">

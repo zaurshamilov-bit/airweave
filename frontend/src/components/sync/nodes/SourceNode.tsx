@@ -5,9 +5,11 @@ import { apiClient } from "@/lib/api";
 import { Connection } from "@/components/sync/dag";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/use-toast";
+import { useTheme } from "@/lib/theme-provider";
 
 export const SourceNode = memo(({ data, selected, ...props }: NodeProps) => {
   const [connection, setConnection] = useState<Connection | null>(null);
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     const fetchConnection = async () => {
@@ -48,7 +50,7 @@ export const SourceNode = memo(({ data, selected, ...props }: NodeProps) => {
         />
         <div className="w-16 h-16 flex items-center justify-center">
           <img 
-            src={getAppIconUrl(connection?.short_name || data.shortName)} 
+            src={getAppIconUrl(connection?.short_name || data.shortName, resolvedTheme)} 
             alt={connection?.name || data.name}
             className="w-12 h-12 object-contain"
           />

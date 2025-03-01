@@ -12,6 +12,8 @@ const GRID_COLUMNS = 8;
 async function generateAppGrid() {
   const files = fs.readdirSync(APPS_DIR)
     .filter(file => file.endsWith('.svg'))
+    // Exclude light versions of icons
+    .filter(file => !file.endsWith('-light.svg'))
     .sort();
 
   const rows = [];

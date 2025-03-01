@@ -96,24 +96,50 @@
 
 .sidebar-nav-item {
   @apply relative transition-all duration-200 ease-in-out;
+}
+
+.light .sidebar-nav-item {
   background: linear-gradient(109.6deg, rgba(223,234,247,0.1) 11.2%, rgba(244,248,252,0.1) 91.1%);
 }
 
-.sidebar-nav-item:hover {
+.light .sidebar-nav-item:hover {
   @apply transform scale-[1.02];
   background: linear-gradient(109.6deg, rgba(223,234,247,0.2) 11.2%, rgba(244,248,252,0.2) 91.1%);
 }
 
-.sidebar-nav-item.active {
+.light .sidebar-nav-item.active {
   background: linear-gradient(109.6deg, rgba(223,234,247,0.3) 11.2%, rgba(244,248,252,0.3) 91.1%);
 }
 
-.sidebar-nav-item::before {
+.light .sidebar-nav-item::before {
   content: '';
   @apply absolute inset-0 rounded-md opacity-0 transition-opacity duration-200;
   background: linear-gradient(109.6deg, rgba(223,234,247,0.4) 11.2%, rgba(244,248,252,0.4) 91.1%);
 }
 
-.sidebar-nav-item:hover::before {
+.light .sidebar-nav-item:hover::before {
+  @apply opacity-100;
+}
+
+.dark .sidebar-nav-item {
+  background: linear-gradient(109.6deg, rgba(30,30,35,0.1) 11.2%, rgba(35,35,40,0.1) 91.1%);
+}
+
+.dark .sidebar-nav-item:hover {
+  @apply transform scale-[1.02];
+  background: linear-gradient(109.6deg, rgba(30,30,35,0.2) 11.2%, rgba(35,35,40,0.2) 91.1%);
+}
+
+.dark .sidebar-nav-item.active {
+  background: linear-gradient(109.6deg, rgba(30,30,35,0.3) 11.2%, rgba(35,35,40,0.3) 91.1%);
+}
+
+.dark .sidebar-nav-item::before {
+  content: '';
+  @apply absolute inset-0 rounded-md opacity-0 transition-opacity duration-200;
+  background: linear-gradient(109.6deg, rgba(30,30,35,0.4) 11.2%, rgba(35,35,40,0.4) 91.1%);
+}
+
+.dark .sidebar-nav-item:hover::before {
   @apply opacity-100;
 }

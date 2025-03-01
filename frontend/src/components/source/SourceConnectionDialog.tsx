@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { Play, Trash2, Settings2 } from "lucide-react";
+import { useTheme } from "@/lib/theme-provider";
 
 interface Connection {
   id: string;
@@ -38,16 +39,20 @@ export function SourceConnectionDialog({
   onSync,
   onDelete,
 }: SourceConnectionDialogProps) {
+  const { resolvedTheme } = useTheme();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <img 
-              src={getAppIconUrl(shortName)} 
-              alt={`${name} icon`}
-              className="w-8 h-8"
-            />
+            <div className="w-8 h-8 flex items-center justify-center">
+              <img 
+                src={getAppIconUrl(shortName, resolvedTheme)} 
+                alt={`${name} icon`}
+                className="w-6 h-6"
+              />
+            </div>
             <div>
               <DialogTitle>Manage {name} Connections</DialogTitle>
               <DialogDescription>
