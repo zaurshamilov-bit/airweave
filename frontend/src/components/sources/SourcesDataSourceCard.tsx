@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Connection } from "@/types";
 import { CircleDot } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/lib/theme-provider";
 
 interface SourcesDataSourceCardProps {
   shortName: string;
@@ -25,7 +26,7 @@ export function SourcesDataSourceCard({
   connections,
 }: SourcesDataSourceCardProps) {
   const [showManageDialog, setShowManageDialog] = useState(false);
-
+  const { resolvedTheme } = useTheme();
   const activeConnections = connections.filter(conn => conn.status === "active");
 
   return (
@@ -36,7 +37,7 @@ export function SourcesDataSourceCard({
             <div className="flex items-start space-x-3 flex-1 min-w-0">
               <div className="w-8 h-8 shrink-0 flex items-center justify-center">
                 <img 
-                  src={getAppIconUrl(shortName)} 
+                  src={getAppIconUrl(shortName, resolvedTheme)} 
                   alt={`${name} icon`}
                   className="w-6 h-6"
                 />

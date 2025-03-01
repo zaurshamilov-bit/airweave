@@ -36,6 +36,7 @@ import { ChatInfoSidebarProps } from "./types";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "@/lib/api";
+import { useTheme } from "@/lib/theme-provider";
 
 const AVAILABLE_MODELS = [
   { id: "gpt-4o", name: "GPT-4o" },
@@ -56,6 +57,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const navigate = useNavigate();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     setModelSettings(chatInfo.model_settings);
@@ -218,7 +220,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <img 
-                                src={getAppIconUrl(chatInfo.sync.source_connection.short_name)} 
+                                src={getAppIconUrl(chatInfo.sync.source_connection.short_name, resolvedTheme)} 
                                 alt={chatInfo.sync.source_connection.source?.name}
                                 className="h-5 w-5"
                               />

@@ -19,6 +19,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { apiClient } from "@/lib/api";
 import { AddSourceWizard } from "./AddSourceWizard";
+import { useTheme } from "@/lib/theme-provider";
 
 interface Connection {
   id: string;
@@ -56,6 +57,7 @@ export function SyncDataSourceCard({
   const [open, setOpen] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const { toast } = useToast();
+  const { resolvedTheme } = useTheme();
 
   useEffect(() => {
     const sortedConnections = [...connections].sort((a, b) => 
@@ -131,13 +133,15 @@ export function SyncDataSourceCard({
 
   return (
     <>
-      <Card className="w-full min-h-[240px] flex flex-col justify-between overflow-hidden">
+      <Card className={cn(
+        "w-full min-h-[240px] flex flex-col justify-between overflow-hidden"
+      )}>
         <CardHeader className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start space-x-3 flex-1 min-w-0">
               <div className="w-8 h-8 shrink-0 flex items-center justify-center">
                 <img 
-                  src={getAppIconUrl(shortName)} 
+                  src={getAppIconUrl(shortName, resolvedTheme)} 
                   alt={`${name} icon`}
                   className="w-6 h-6"
                 />
@@ -236,7 +240,6 @@ export function SyncDataSourceCard({
           onComplete={handleWizardComplete}
           shortName={shortName}
           name={name}
-          authType={authType}
         />
       )}
     </>

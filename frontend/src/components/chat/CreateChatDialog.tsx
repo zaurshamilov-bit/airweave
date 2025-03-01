@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { format } from "date-fns";
 import { Database } from "lucide-react";
+import { useTheme } from "@/lib/theme-provider";
 
 interface SyncInfo {
   id: string;
@@ -38,6 +39,7 @@ export function CreateChatDialog({
   const [syncId, setSyncId] = useState<string>("");
   const [chatName, setChatName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const { resolvedTheme } = useTheme();
 
   // Reset and load data when dialog opens
   useEffect(() => {
@@ -140,7 +142,8 @@ export function CreateChatDialog({
                         <div className="flex items-center gap-2">
                           <img
                             src={getAppIconUrl(
-                              syncs.find(s => s.id === syncId)?.source_connection?.short_name || 'default'
+                              syncs.find(s => s.id === syncId)?.source_connection?.short_name || 'default',
+                              resolvedTheme
                             )}
                             className="h-5 w-5"
                             alt="Source"
@@ -179,7 +182,7 @@ export function CreateChatDialog({
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <img
-                          src={getAppIconUrl(s.source_connection?.short_name || 'default')}
+                          src={getAppIconUrl(s.source_connection?.short_name || 'default', resolvedTheme)}
                           className="h-5 w-5"
                           alt={s.source_connection?.name || 'Source'}
                         />

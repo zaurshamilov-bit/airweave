@@ -9,10 +9,16 @@ import {
   SheetTitle,
   SheetTrigger
 } from "@/components/ui/sheet";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useTheme } from "@/lib/theme-provider";
 
 export const Header = () => {
   const [open, setOpen] = React.useState(false);
   const navigate = useNavigate();
+  const { resolvedTheme } = useTheme();
+  
+  // Determine which logo to use based on theme
+  const logoSrc = resolvedTheme === "dark" ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg";
 
   const handleGetStarted = () => {
     navigate("/login");
@@ -25,7 +31,7 @@ export const Header = () => {
         <div className="flex items-center space-x-2">
           <Link to="/" className="flex items-center space-x-2">
             <img 
-              src="/logo-and-lettermark.svg" 
+              src={logoSrc} 
               alt="Airweave" 
               className="h-8"
             />
@@ -60,6 +66,9 @@ export const Header = () => {
                 >
                   Vector Sync
                 </Link>
+                <div className="pt-4">
+                  <ThemeToggle />
+                </div>
               </div>
             </SheetContent>
           </Sheet>
@@ -79,6 +88,7 @@ export const Header = () => {
           >
             Vector Sync
           </Link>
+          <ThemeToggle />
         </nav>
 
         {/* "Get Started" button remains visible on all screens */}
