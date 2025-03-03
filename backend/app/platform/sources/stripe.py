@@ -19,6 +19,7 @@ Then, we yield them as entities using the respective entity schemas defined in e
 from typing import AsyncGenerator
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
@@ -69,6 +70,7 @@ class StripeSource(BaseSource):
         instance.access_token = access_token
         return instance
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> dict:
         """Make an authenticated GET request to the Stripe API.
 
