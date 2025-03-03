@@ -66,6 +66,47 @@ class SyncDAGRouter:
 
         return route_map
 
+    def _get_entity_definition_id(self, entity_type: type) -> UUID:
+        """Get entity definition ID for a given entity type.
+
+        This method first tries to find the exact type in the entity map.
+        If not found, it tries to find a matching class by name and module.
+        This handles dynamically created classes like Parent and Chunk models.
+
+        Args:
+            entity_type: The entity type to look up
+
+        Returns:
+            The entity definition ID
+
+        Raises:
+            ValueError: If no matching entity definition is found
+        """
+        # First try direct lookup
+        if entity_type in self.entity_map:
+            return self.entity_map[entity_type]
+
+        # For dynamically created classes, try to find by name pattern and module
+        entity_name = entity_type.__name__
+        entity_module = entity_type.__module__
+
+        # Handle Parent and Chunk classes
+        base_name = None
+        if entity_name.endswith("Parent"):
+            base_name = entity_name.replace("Parent", "Entity")
+        elif entity_name.endswith("Chunk"):
+            base_name = entity_name.replace("Chunk", "Entity")
+
+        if base_name:
+            # Look for the base entity class in the same module
+            for cls, definition_id in self.entity_map.items():
+                if cls.__name__ == base_name and cls.__module__ == entity_module:
+                    # Cache the result for future lookups
+                    self.entity_map[entity_type] = definition_id
+                    return definition_id
+
+        raise ValueError(f"No entity definition found for {entity_type}")
+
     async def process_entity(
         self, db: AsyncSession, producer_id: UUID, entity: BaseEntity
     ) -> list[BaseEntity]:
@@ -77,16 +118,12 @@ class SyncDAGRouter:
         - If the entity is sent to a transformer, return the transformed entities, so the next
           transformer can be called until the entity is sent to a destination
         """
-        entity_definition_id = self.entity_map[type(entity)]
+        entity_definition_id = self._get_entity_definition_id(type(entity))
         route_key = (producer_id, entity_definition_id)
-        if route_key not in self.route:
-            raise ValueError(f"No route found for entity {entity_definition_id}")
+        if route_key not in self.route or self.route[route_key] is None:
+            return [entity]
 
         consumer_id = self.route[route_key]
-
-        # If the entity is sent to a destination, return it
-        if consumer_id is None:
-            return [entity]
 
         # Get the consumer node
         consumer = self.dag.get_node(consumer_id)
@@ -97,9 +134,7 @@ class SyncDAGRouter:
         # Route the transformed entities
         result_entities = []
         for transformed_entity in transformed_entities:
-            result_entities.extend(
-                await self.process_entity(consumer_id, transformed_entity, self.entity_map)
-            )
+            result_entities.extend(await self.process_entity(db, consumer_id, transformed_entity))
 
         return result_entities
 

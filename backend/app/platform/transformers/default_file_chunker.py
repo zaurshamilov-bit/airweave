@@ -59,6 +59,7 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
 
             chunk = FileChunkClass(
                 name=f"{file.name} - Chunk {i + 1}",
+                entity_id=file.entity_id,
                 parent_entity_id=parent.entity_id,
                 parent_db_entity_id=parent.db_entity_id,
                 md_content=chunk,
@@ -80,29 +81,63 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
 
 
 def _split_by_headers(content: str, max_chunk_size: int) -> list[str]:
-    """Split content by headers and size limits."""
+    """Split content by headers only when necessary due to size constraints."""
+    if not content.strip():
+        return []
+
+    # If content is already small enough, return it as a single chunk
+    if len(content) <= max_chunk_size:
+        return [content]
+
+    # Otherwise, split at major headers (# or ##) when needed
     chunks = []
+    lines = content.split("\n")
     current_chunk = []
     current_size = 0
 
-    for line in content.split("\n"):
-        if (line.startswith("#") and current_size > 0) or current_size >= max_chunk_size:
-            if current_chunk:
-                chunks.append("\n".join(current_chunk))
+    for line in lines:
+        line_size = len(line) + 1  # +1 for newline
+
+        # Only split at major headers (# or ##) when the chunk is getting large
+        is_major_header = line.startswith("# ") or line.startswith("## ")
+        should_split = is_major_header and current_size > max_chunk_size * 0.5 and current_size > 0
+
+        # Always split if we've exceeded the max size
+        if current_size + line_size > max_chunk_size:
+            should_split = True
+
+        if should_split and current_chunk:
+            chunks.append("\n".join(current_chunk))
             current_chunk = []
             current_size = 0
 
         current_chunk.append(line)
-        current_size += len(line) + 1
+        current_size += line_size
 
+    # Add the final chunk
     if current_chunk:
         chunks.append("\n".join(current_chunk))
+
     return chunks
 
 
-def _split_into_chunks(content: str, max_chunk_size: int = 5000) -> list[str]:
-    """Split markdown content into logical chunks."""
+def _split_into_chunks(content: str, max_chunk_size: int = 5000) -> list[str]:  # noqa: C901
+    """Split content into chunks, trying to preserve semantic coherence.
+
+    This function is deliberately conservative about splitting, preferring to keep
+    related content together when possible.
+    """
+    if not content.strip():
+        return []
+
+    # If content is small enough, return it as a single chunk
+    if len(content) <= max_chunk_size:
+        return [content]
+
+    # Try to split by headers first
     chunks = _split_by_headers(content, max_chunk_size)
+
+    # If we still have chunks that are too large, split them further
     final_chunks = []
 
     for chunk in chunks:
@@ -110,20 +145,55 @@ def _split_into_chunks(content: str, max_chunk_size: int = 5000) -> list[str]:
             final_chunks.append(chunk)
             continue
 
-        # Split oversized chunks by paragraphs
-        paragraphs = chunk.split("\n\n")
+        # For oversized chunks, split by paragraphs as a last resort
+        paragraphs = []
+        current_para = []
+        is_in_code_block = False
+
+        # Identify paragraphs while preserving code blocks
+        for line in chunk.split("\n"):
+            # Track code block state
+            if line.strip().startswith("```"):
+                is_in_code_block = not is_in_code_block
+
+            # Only create paragraph breaks when not in a code block
+            if not line.strip() and not is_in_code_block and current_para:
+                paragraphs.append("\n".join(current_para))
+                current_para = []
+                continue
+
+            current_para.append(line)
+
+        # Add the last paragraph
+        if current_para:
+            paragraphs.append("\n".join(current_para))
+
+        # Create chunks from paragraphs, being conservative about splitting
         current_chunk = []
         current_size = 0
 
         for para in paragraphs:
-            if current_size + len(para) > max_chunk_size and current_chunk:
+            para_size = len(para) + 2  # +2 for paragraph separator
+
+            # If adding this paragraph would exceed the limit, start a new chunk
+            if current_size + para_size > max_chunk_size and current_chunk:
                 final_chunks.append("\n\n".join(current_chunk))
                 current_chunk = []
                 current_size = 0
 
-            current_chunk.append(para)
-            current_size += len(para) + 2
+            # If a single paragraph is too large, we have no choice but to include it as is
+            if para_size > max_chunk_size:
+                if current_chunk:
+                    final_chunks.append("\n\n".join(current_chunk))
+                    current_chunk = []
+                    current_size = 0
+                final_chunks.append(para)
+                continue
 
+            current_chunk.append(para)
+            current_size += para_size
+
+        # Add the final chunk
         if current_chunk:
             final_chunks.append("\n\n".join(current_chunk))
 
