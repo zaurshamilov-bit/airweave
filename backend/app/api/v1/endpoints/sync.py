@@ -179,7 +179,6 @@ async def run_sync(
     sync_dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, current_user=user)
     sync_dag_schema = schemas.SyncDag.model_validate(sync_dag)
 
-    # Pass user_id instead of the user object to avoid session binding issues
     user_schema = schemas.User.model_validate(user)
 
     # will be swapped for redis queue
