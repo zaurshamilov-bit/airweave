@@ -223,8 +223,7 @@ async def _sync_sources(
     -----
         db (AsyncSession): Database session
         sources (list[Type[BaseSource]]): List of source classes
-        entity_id_map (Dict[str, list[str]]): Mapping of chunk names to their entity definition IDs
-            as strings
+        module_entity_map (Dict[str, dict]): Mapping of module names to entity definitions
     """
     sync_logger.info("Syncing sources to database.")
 

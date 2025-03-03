@@ -295,7 +295,7 @@ class AsyncPdfConverter(AsyncDocumentConverter):
                 for i, page in enumerate(reader.pages):
                     page_text = page.extract_text()
                     if page_text:
-                        md_content += f"\n\n## Page {i+1}\n\n{page_text}\n"
+                        md_content += f"\n\n## Page {i + 1}\n\n{page_text}\n"
         except ImportError:
             # Fall back to pdfminer.six if PyPDF2 is not available
             try:
@@ -315,7 +315,9 @@ class AsyncPdfConverter(AsyncDocumentConverter):
                     else:
                         return AsyncDocumentConverterResult(
                             title=None,
-                            text_content="PDF conversion requires PyPDF2, pdfminer.six, or pdftotext.",
+                            text_content=(
+                                "PDF conversion requires PyPDF2, pdfminer.six, or pdftotext."
+                            ),
                         )
                 except Exception as e:
                     logger.error(f"Error converting PDF with external tools: {str(e)}")
@@ -326,6 +328,91 @@ class AsyncPdfConverter(AsyncDocumentConverter):
 
 class AsyncDocxConverter(AsyncDocumentConverter):
     """Converts DOCX files to Markdown using python-docx or mammoth."""
+
+    async def _convert_with_python_docx(self, local_path: str) -> tuple[str, Optional[str]]:
+        """Convert DOCX using python-docx library.
+
+        Args:
+            local_path: Path to the DOCX file
+
+        Returns:
+            Tuple of (markdown_content, title)
+        """
+        import docx
+
+        md_content = ""
+        title = None
+
+        doc = docx.Document(local_path)
+
+        # Try to extract title from core properties
+        if doc.core_properties.title:
+            title = doc.core_properties.title
+
+        # Process paragraphs
+        for para in doc.paragraphs:
+            if para.text:
+                # Check if it's a heading
+                if para.style.name.startswith("Heading"):
+                    level = (
+                        int(para.style.name.replace("Heading", ""))
+                        if para.style.name != "Heading"
+                        else 1
+                    )
+                    md_content += f"\n{'#' * level} {para.text}\n"
+                else:
+                    md_content += f"{para.text}\n\n"
+
+        # Process tables
+        for table in doc.tables:
+            md_table = []
+            # Add header row
+            header_row = []
+            for cell in table.rows[0].cells:
+                header_row.append(cell.text.strip())
+            md_table.append("| " + " | ".join(header_row) + " |")
+            md_table.append("|" + "|".join(["---" for _ in header_row]) + "|")
+
+            # Add data rows
+            for row in table.rows[1:]:
+                cells = [cell.text.strip() for cell in row.cells]
+                md_table.append("| " + " | ".join(cells) + " |")
+
+            md_content += "\n" + "\n".join(md_table) + "\n\n"
+
+        return md_content, title
+
+    async def _convert_with_mammoth(self, local_path: str) -> str:
+        """Convert DOCX using mammoth library.
+
+        Args:
+            local_path: Path to the DOCX file
+
+        Returns:
+            Markdown content
+        """
+        import mammoth
+
+        with open(local_path, "rb") as docx_file:
+            result = mammoth.convert_to_markdown(docx_file)
+            return result.value
+
+    async def _convert_with_pandoc(self, local_path: str) -> str:
+        """Convert DOCX using pandoc.
+
+        Args:
+            local_path: Path to the DOCX file
+
+        Returns:
+            Markdown content
+        """
+        if not shutil.which("pandoc"):
+            raise RuntimeError("Pandoc is not installed")
+
+        with tempfile.NamedTemporaryFile(suffix=".md") as temp_file:
+            subprocess.run(["pandoc", local_path, "-o", temp_file.name], check=True)
+            with open(temp_file.name, "r") as f:
+                return f.read()
 
     async def convert(
         self, local_path: str, **kwargs: Any
@@ -348,69 +435,27 @@ class AsyncDocxConverter(AsyncDocumentConverter):
 
         try:
             # Try using python-docx first
-            import docx
-
-            doc = docx.Document(local_path)
-
-            # Try to extract title from core properties
-            if doc.core_properties.title:
-                title = doc.core_properties.title
-
-            # Process paragraphs
-            for para in doc.paragraphs:
-                if para.text:
-                    # Check if it's a heading
-                    if para.style.name.startswith("Heading"):
-                        level = (
-                            int(para.style.name.replace("Heading", ""))
-                            if para.style.name != "Heading"
-                            else 1
-                        )
-                        md_content += f"\n{'#' * level} {para.text}\n"
-                    else:
-                        md_content += f"{para.text}\n\n"
-
-            # Process tables
-            for table in doc.tables:
-                md_table = []
-                # Add header row
-                header_row = []
-                for cell in table.rows[0].cells:
-                    header_row.append(cell.text.strip())
-                md_table.append("| " + " | ".join(header_row) + " |")
-                md_table.append("|" + "|".join(["---" for _ in header_row]) + "|")
-
-                # Add data rows
-                for row in table.rows[1:]:
-                    cells = [cell.text.strip() for cell in row.cells]
-                    md_table.append("| " + " | ".join(cells) + " |")
-
-                md_content += "\n" + "\n".join(md_table) + "\n\n"
-
-        except ImportError:
-            # Fall back to mammoth if python-docx is not available
             try:
-                import mammoth
-
-                with open(local_path, "rb") as docx_file:
-                    result = mammoth.convert_to_markdown(docx_file)
-                    md_content = result.value
+                md_content, title = await self._convert_with_python_docx(local_path)
             except ImportError:
-                # If neither library is available, try using pandoc
+                # Fall back to mammoth if python-docx is not available
                 try:
-                    if shutil.which("pandoc"):
-                        with tempfile.NamedTemporaryFile(suffix=".md") as temp_file:
-                            subprocess.run(["pandoc", local_path, "-o", temp_file.name], check=True)
-                            with open(temp_file.name, "r") as f:
-                                md_content = f.read()
-                    else:
+                    md_content = await self._convert_with_mammoth(local_path)
+                except ImportError:
+                    # If neither library is available, try using pandoc
+                    try:
+                        md_content = await self._convert_with_pandoc(local_path)
+                    except Exception as e:
+                        logger.error(f"Error converting DOCX with external tools: {str(e)}")
                         return AsyncDocumentConverterResult(
                             title=None,
-                            text_content="DOCX conversion requires python-docx, mammoth, or pandoc.",
+                            text_content=(
+                                "DOCX conversion requires python-docx, mammoth, or pandoc."
+                            ),
                         )
-                except Exception as e:
-                    logger.error(f"Error converting DOCX with external tools: {str(e)}")
-                    return None
+        except Exception as e:
+            logger.error(f"Error converting DOCX: {str(e)}")
+            return None
 
         return AsyncDocumentConverterResult(title=title, text_content=md_content.strip())
 
@@ -497,7 +542,9 @@ class AsyncHtmlConverter(AsyncDocumentConverter):
                     except ImportError:
                         return AsyncDocumentConverterResult(
                             title=None,
-                            text_content="HTML conversion requires html2text, pandoc, or BeautifulSoup.",
+                            text_content=(
+                                "HTML conversion requires html2text, pandoc, or BeautifulSoup."
+                            ),
                         )
             except Exception as e:
                 logger.error(f"Error converting HTML with external tools: {str(e)}")
@@ -508,6 +555,64 @@ class AsyncHtmlConverter(AsyncDocumentConverter):
 
 class AsyncTextConverter(AsyncDocumentConverter):
     """Converts plain text files to Markdown."""
+
+    async def _convert_csv_to_markdown(self, local_path: str) -> str:
+        """Convert CSV file to markdown table.
+
+        Args:
+            local_path: Path to the CSV file
+
+        Returns:
+            Markdown table content
+        """
+        import csv
+
+        md_content = ""
+        csv_data = []
+
+        with open(local_path, "r", encoding="utf-8") as csv_file:
+            csv_reader = csv.reader(csv_file)
+            for row in csv_reader:
+                csv_data.append(row)
+
+        if csv_data:
+            # Create header
+            md_content += "| " + " | ".join(csv_data[0]) + " |\n"
+            md_content += "|" + "|".join(["---" for _ in csv_data[0]]) + "|\n"
+
+            # Add data rows
+            for row in csv_data[1:]:
+                md_content += "| " + " | ".join(row) + " |\n"
+
+        return md_content
+
+    async def _convert_json_to_markdown(self, content: str) -> str:
+        """Convert JSON content to formatted markdown.
+
+        Args:
+            content: JSON content as string
+
+        Returns:
+            Formatted markdown content
+        """
+        import json
+
+        parsed_json = json.loads(content)
+        return "```json\n" + json.dumps(parsed_json, indent=2) + "\n```"
+
+    async def _convert_xml_to_markdown(self, content: str) -> str:
+        """Convert XML content to formatted markdown.
+
+        Args:
+            content: XML content as string
+
+        Returns:
+            Formatted markdown content
+        """
+        import xml.dom.minidom
+
+        parsed_xml = xml.dom.minidom.parseString(content)
+        return "```xml\n" + parsed_xml.toprettyxml() + "\n```"
 
     async def convert(
         self, local_path: str, **kwargs: Any
@@ -529,57 +634,46 @@ class AsyncTextConverter(AsyncDocumentConverter):
         title = None
 
         try:
-            with open(local_path, "r", encoding="utf-8") as file:
-                content = file.read()
-
             # For CSV files, convert to markdown table
             if extension.lower() == ".csv":
                 try:
-                    import csv
-
-                    csv_data = []
-                    with open(local_path, "r", encoding="utf-8") as csv_file:
-                        csv_reader = csv.reader(csv_file)
-                        for row in csv_reader:
-                            csv_data.append(row)
-
-                    if csv_data:
-                        # Create header
-                        md_content += "| " + " | ".join(csv_data[0]) + " |\n"
-                        md_content += "|" + "|".join(["---" for _ in csv_data[0]]) + "|\n"
-
-                        # Add data rows
-                        for row in csv_data[1:]:
-                            md_content += "| " + " | ".join(row) + " |\n"
+                    md_content = await self._convert_csv_to_markdown(local_path)
                 except Exception as e:
                     logger.error(f"Error converting CSV to markdown table: {str(e)}")
-                    md_content = content  # Fallback to raw content
+                    # Fallback to raw content
+                    with open(local_path, "r", encoding="utf-8") as file:
+                        md_content = file.read()
 
             # For JSON files, pretty print
             elif extension.lower() == ".json":
                 try:
-                    import json
-
-                    parsed_json = json.loads(content)
-                    md_content = "```json\n" + json.dumps(parsed_json, indent=2) + "\n```"
+                    with open(local_path, "r", encoding="utf-8") as file:
+                        content = file.read()
+                    md_content = await self._convert_json_to_markdown(content)
                 except Exception as e:
                     logger.error(f"Error formatting JSON: {str(e)}")
-                    md_content = "```\n" + content + "\n```"  # Fallback to raw content
+                    # Fallback to raw content
+                    with open(local_path, "r", encoding="utf-8") as file:
+                        content = file.read()
+                    md_content = "```\n" + content + "\n```"
 
             # For XML files, pretty print
             elif extension.lower() == ".xml":
                 try:
-                    import xml.dom.minidom
-
-                    parsed_xml = xml.dom.minidom.parseString(content)
-                    md_content = "```xml\n" + parsed_xml.toprettyxml() + "\n```"
+                    with open(local_path, "r", encoding="utf-8") as file:
+                        content = file.read()
+                    md_content = await self._convert_xml_to_markdown(content)
                 except Exception as e:
                     logger.error(f"Error formatting XML: {str(e)}")
-                    md_content = "```\n" + content + "\n```"  # Fallback to raw content
+                    # Fallback to raw content
+                    with open(local_path, "r", encoding="utf-8") as file:
+                        content = file.read()
+                    md_content = "```\n" + content + "\n```"
 
             # For plain text, just use the content
             else:
-                md_content = content
+                with open(local_path, "r", encoding="utf-8") as file:
+                    md_content = file.read()
 
         except Exception as e:
             logger.error(f"Error reading text file: {str(e)}")
