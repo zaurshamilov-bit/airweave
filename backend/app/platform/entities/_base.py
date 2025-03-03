@@ -31,7 +31,7 @@ class Breadcrumb(BaseModel):
 class BaseEntity(BaseModel):
     """Base entity schema."""
 
-    # Set in connector
+    # Set in source connector
     entity_id: str = Field(
         ..., description="ID of the entity this entity represents in the source."
     )

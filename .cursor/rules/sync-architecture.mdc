@@ -1,0 +1,77 @@
+---
+description: Description of the sync architecrture. Useful if interfacing with or editing something inside the core sync folder.
+globs: backend/app/platform/sync/*.py
+alwaysApply: false
+---
+# Airweave Sync Architecture
+
+## Overview
+
+The sync module in Airweave orchestrates the flow of data from sources to destinations using a highly concurrent, asynchronous architecture. It transforms source data into entities to store in the destinations.
+
+## Core Components
+
+### SyncService
+Entry point for sync operations that handles:
+- Creating new syncs with initial DAG setup
+- Running sync jobs by initializing the context and delegating to the orchestrator
+
+### SyncContext
+Container for all resources needed during sync:
+- Source and destination instances
+- Embedding model for vectorization
+- Transformers for data manipulation
+- DAG for routing entities
+- Progress tracking with PubSub integration
+- Constructed by the SyncContextFactory
+
+### SyncOrchestrator
+Manages the synchronization workflow:
+- Processes entity streams with controlled concurrency (up to 20 workers)
+- Routes entities through transformers based on DAG structure
+- Determines actions (insert/update/delete) for each entity
+- Persists entities to destinations with proper metadata
+
+### AsyncSourceStream
+Implements efficient entity streaming with backpressure:
+- Separates producer (source) from consumer (processing)
+- Uses async queues to buffer data between operations
+- Handles graceful error propagation and resource cleanup
+
+### SyncDAGRouter
+Routes entities through the transformation pipeline:
+- Maps source entities to appropriate transformers based on DAG
+- Applies transformations and tracks entity lineage
+- Directs processed entities to destinations
+
+### SyncProgress
+Tracks and reports sync progress:
+- Counts inserts, updates, deletes, and skips
+- Publishes real-time progress updates via PubSub
+- Handles completion and failure states
+
+## Data Flow
+
+1. **Initialization**: 
+   - Create SyncContext with all necessary resources
+   - Set up DAG routing and progress tracking
+
+2. **Entity Generation**:
+   - Source produces entities via async generator
+   - Entities flow through AsyncSourceStream with backpressure control
+
+3. **Concurrent Processing**:
+   - Each entity is processed by worker tasks with semaphore limits
+   - DAG Router determines transformations to apply
+   - Hash-based change detection determines required actions (insert/update/delete)
+
+4. **Destination Writing**:
+   - Processed entities are written to vector databases
+   - Progress updates are published throughout the process
+
+5. **Finalization**:
+   - All pending tasks are awaited
+   - Final statistics are published
+   - Resources are cleaned up
+
+This architecture enables efficient processing of large datasets with optimal resource usage and real-time progress reporting.

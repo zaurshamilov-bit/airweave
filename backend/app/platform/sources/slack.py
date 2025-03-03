@@ -3,6 +3,7 @@
 from typing import AsyncGenerator, Dict, Optional
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
@@ -30,6 +31,7 @@ class SlackSource(BaseSource):
         instance.access_token = access_token
         return instance
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict] = None
     ) -> Dict:

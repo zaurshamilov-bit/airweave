@@ -1,0 +1,38 @@
+---
+description: Useful if trying to understand something in the frontend.
+globs: frontend
+alwaysApply: false
+---
+# Airweave Frontend Guidelines
+
+## Tech Stack & Structure
+- React 18 + TypeScript + Vite
+- TailwindCSS with ShadCN UI components
+- Radix UI primitives with Lucide icons
+- File-based routing with React Router
+- Pages → `src/pages/`, Components → `src/components/`
+
+## Component Patterns
+- Use TypeScript for all components with proper interfaces
+- Prefer functional components with hooks
+- Shared UI components in `components/ui/`
+- Domain-specific components in named directories
+- Use props spreading with explicit typing
+
+## Styling Approach
+- TailwindCSS with class variance authority (cva)
+- Use `cn()` utility for class name merging
+- Consistent theming with CSS variables
+- Component variants defined with cva
+
+## API & Data Fetching
+- Use apiClient from `src/lib/api.ts`
+- Relative endpoint paths (no `/api/v1` prefix)
+- React Query for data fetching and caching
+- Proper error handling with toast notifications
+
+## State Management
+- React Query for server state
+- React Context for global UI state
+- Local state with `useState`/`useReducer` hooks
+- Custom hooks in `src/hooks/` for shared logic

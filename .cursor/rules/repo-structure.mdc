@@ -1,0 +1,50 @@
+---
+description: Description of repo structure.
+globs: 
+alwaysApply: true
+---
+# Airweave Repository Structure
+
+```
+airweave/
+├── backend/                      # Python FastAPI backend
+│   ├── app/                      # Main application code
+│   │   ├── api/                  # API endpoints
+│   │   │   └── v1/               # API v1 routes
+│   │   │       └── endpoints/    # Individual API endpoint modules
+│   │   ├── core/                 # Core functionality and config
+│   │   ├── crud/                 # Database CRUD operations
+│   │   ├── db/                   # Database connection and models
+│   │   ├── models/               # Pydantic models
+│   │   ├── platform/             # Platform-specific code
+│   │   │   ├── auth/             # Authentication handlers
+│   │   │   ├── destinations/     # Vector DB destinations
+│   │   │   ├── embedding_models/ # Embedding models
+│   │   │   ├── entities/         # Entity definitions
+│   │   │   ├── sources/          # Source connectors
+│   │   │   ├── sync/             # Sync job handling (core components)
+│   │   │   └── transformers/     # Data transformers (decorated methods)
+│   │   ├── schemas/              # Schema definitions
+│   ├── alembic/                  # Database migrations
+│   └── pyproject.toml            # Python dependencies
+│
+├── frontend/                     # React/TypeScript frontend
+│   ├── src/                      # Source code
+│   │   ├── components/           # React components
+│   │   ├── config/               # Configuration
+│   │   ├── hooks/                # React hooks
+│   │   ├── lib/                  # Utility libraries
+│   │   ├── pages/                # Page components
+│   │   ├── styles/               # CSS styles
+│   │   └── types/                # TypeScript type definitions
+│   ├── public/                   # Static assets
+│   └── package.json              # JavaScript dependencies
+│
+├── docker-compose.yml            # Main Docker Compose config
+├── docker-compose.dev.yml        # Development Docker Compose config
+├── start.sh                      # Startup script
+└── .env/.env.example             # Environment variables
+```
+
+
+### Important: whenever a folder is created or removed, edit it here.

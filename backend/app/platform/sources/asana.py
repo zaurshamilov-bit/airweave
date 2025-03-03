@@ -3,7 +3,7 @@
 from typing import AsyncGenerator, Dict, List, Optional
 
 import httpx
-from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 from tenacity.asyncio import AsyncRetrying
 
 from app.core.logging import logger
@@ -33,6 +33,7 @@ class AsanaSource(BaseSource):
         instance.access_token = access_token
         return instance
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict:
         """Make authenticated GET request to Asana API."""
         response = await client.get(
