@@ -6,6 +6,7 @@ import mimetypes
 import os
 import shutil
 import subprocess
+import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Dict, Optional, Set, Union
@@ -257,6 +258,336 @@ class AsyncImageConverter(AsyncDocumentConverter):
         return response.choices[0].message.content
 
 
+class AsyncPdfConverter(AsyncDocumentConverter):
+    """Converts PDF files to Markdown using PyPDF2 or pdfminer.six if available."""
+
+    async def convert(
+        self, local_path: str, **kwargs: Any
+    ) -> Union[None, AsyncDocumentConverterResult]:
+        """Convert a PDF file to markdown.
+
+        Args:
+            local_path: Path to the PDF file
+            **kwargs: Additional arguments passed to converters
+
+        Returns:
+            AsyncDocumentConverterResult containing the markdown text
+        """
+        extension = kwargs.get("file_extension", "")
+        if extension.lower() != ".pdf":
+            return None
+
+        md_content = ""
+        title = None
+
+        try:
+            # Try using PyPDF2 first
+            import PyPDF2
+
+            with open(local_path, "rb") as file:
+                reader = PyPDF2.PdfReader(file)
+
+                # Try to extract title from metadata
+                if reader.metadata and hasattr(reader.metadata, "title"):
+                    title = reader.metadata.title
+
+                # Extract text from each page
+                for i, page in enumerate(reader.pages):
+                    page_text = page.extract_text()
+                    if page_text:
+                        md_content += f"\n\n## Page {i+1}\n\n{page_text}\n"
+        except ImportError:
+            # Fall back to pdfminer.six if PyPDF2 is not available
+            try:
+                from pdfminer.high_level import extract_text
+
+                text = extract_text(local_path)
+                md_content = text
+            except ImportError:
+                # If neither library is available, use subprocess to call external tools
+                try:
+                    # Try pdftotext if available
+                    if shutil.which("pdftotext"):
+                        result = subprocess.run(
+                            ["pdftotext", local_path, "-"], capture_output=True, text=True
+                        )
+                        md_content = result.stdout
+                    else:
+                        return AsyncDocumentConverterResult(
+                            title=None,
+                            text_content="PDF conversion requires PyPDF2, pdfminer.six, or pdftotext.",
+                        )
+                except Exception as e:
+                    logger.error(f"Error converting PDF with external tools: {str(e)}")
+                    return None
+
+        return AsyncDocumentConverterResult(title=title, text_content=md_content.strip())
+
+
+class AsyncDocxConverter(AsyncDocumentConverter):
+    """Converts DOCX files to Markdown using python-docx or mammoth."""
+
+    async def convert(
+        self, local_path: str, **kwargs: Any
+    ) -> Union[None, AsyncDocumentConverterResult]:
+        """Convert a DOCX file to markdown.
+
+        Args:
+            local_path: Path to the DOCX file
+            **kwargs: Additional arguments passed to converters
+
+        Returns:
+            AsyncDocumentConverterResult containing the markdown text
+        """
+        extension = kwargs.get("file_extension", "")
+        if extension.lower() != ".docx":
+            return None
+
+        md_content = ""
+        title = None
+
+        try:
+            # Try using python-docx first
+            import docx
+
+            doc = docx.Document(local_path)
+
+            # Try to extract title from core properties
+            if doc.core_properties.title:
+                title = doc.core_properties.title
+
+            # Process paragraphs
+            for para in doc.paragraphs:
+                if para.text:
+                    # Check if it's a heading
+                    if para.style.name.startswith("Heading"):
+                        level = (
+                            int(para.style.name.replace("Heading", ""))
+                            if para.style.name != "Heading"
+                            else 1
+                        )
+                        md_content += f"\n{'#' * level} {para.text}\n"
+                    else:
+                        md_content += f"{para.text}\n\n"
+
+            # Process tables
+            for table in doc.tables:
+                md_table = []
+                # Add header row
+                header_row = []
+                for cell in table.rows[0].cells:
+                    header_row.append(cell.text.strip())
+                md_table.append("| " + " | ".join(header_row) + " |")
+                md_table.append("|" + "|".join(["---" for _ in header_row]) + "|")
+
+                # Add data rows
+                for row in table.rows[1:]:
+                    cells = [cell.text.strip() for cell in row.cells]
+                    md_table.append("| " + " | ".join(cells) + " |")
+
+                md_content += "\n" + "\n".join(md_table) + "\n\n"
+
+        except ImportError:
+            # Fall back to mammoth if python-docx is not available
+            try:
+                import mammoth
+
+                with open(local_path, "rb") as docx_file:
+                    result = mammoth.convert_to_markdown(docx_file)
+                    md_content = result.value
+            except ImportError:
+                # If neither library is available, try using pandoc
+                try:
+                    if shutil.which("pandoc"):
+                        with tempfile.NamedTemporaryFile(suffix=".md") as temp_file:
+                            subprocess.run(["pandoc", local_path, "-o", temp_file.name], check=True)
+                            with open(temp_file.name, "r") as f:
+                                md_content = f.read()
+                    else:
+                        return AsyncDocumentConverterResult(
+                            title=None,
+                            text_content="DOCX conversion requires python-docx, mammoth, or pandoc.",
+                        )
+                except Exception as e:
+                    logger.error(f"Error converting DOCX with external tools: {str(e)}")
+                    return None
+
+        return AsyncDocumentConverterResult(title=title, text_content=md_content.strip())
+
+
+class AsyncHtmlConverter(AsyncDocumentConverter):
+    """Converts HTML files to Markdown using html2text."""
+
+    async def convert(
+        self, local_path: str, **kwargs: Any
+    ) -> Union[None, AsyncDocumentConverterResult]:
+        """Convert an HTML file to markdown.
+
+        Args:
+            local_path: Path to the HTML file
+            **kwargs: Additional arguments passed to converters
+
+        Returns:
+            AsyncDocumentConverterResult containing the markdown text
+        """
+        extension = kwargs.get("file_extension", "")
+        if extension.lower() not in [".html", ".htm"]:
+            return None
+
+        md_content = ""
+        title = None
+
+        try:
+            # Try using html2text
+            import html2text
+
+            with open(local_path, "r", encoding="utf-8") as file:
+                html_content = file.read()
+
+            # Try to extract title
+            import re
+
+            title_match = re.search(
+                r"<title>(.*?)</title>", html_content, re.IGNORECASE | re.DOTALL
+            )
+            if title_match:
+                title = title_match.group(1).strip()
+
+            # Convert to markdown
+            h = html2text.HTML2Text()
+            h.ignore_links = False
+            h.ignore_images = False
+            h.ignore_tables = False
+            md_content = h.handle(html_content)
+
+        except ImportError:
+            # Fall back to pandoc if html2text is not available
+            try:
+                if shutil.which("pandoc"):
+                    with tempfile.NamedTemporaryFile(suffix=".md") as temp_file:
+                        subprocess.run(
+                            [
+                                "pandoc",
+                                local_path,
+                                "-f",
+                                "html",
+                                "-t",
+                                "markdown",
+                                "-o",
+                                temp_file.name,
+                            ],
+                            check=True,
+                        )
+                        with open(temp_file.name, "r") as f:
+                            md_content = f.read()
+                else:
+                    # Simple fallback using BeautifulSoup
+                    try:
+                        from bs4 import BeautifulSoup
+
+                        with open(local_path, "r", encoding="utf-8") as file:
+                            soup = BeautifulSoup(file.read(), "html.parser")
+
+                        # Try to extract title
+                        if soup.title:
+                            title = soup.title.string
+
+                        # Extract text
+                        md_content = soup.get_text()
+                    except ImportError:
+                        return AsyncDocumentConverterResult(
+                            title=None,
+                            text_content="HTML conversion requires html2text, pandoc, or BeautifulSoup.",
+                        )
+            except Exception as e:
+                logger.error(f"Error converting HTML with external tools: {str(e)}")
+                return None
+
+        return AsyncDocumentConverterResult(title=title, text_content=md_content.strip())
+
+
+class AsyncTextConverter(AsyncDocumentConverter):
+    """Converts plain text files to Markdown."""
+
+    async def convert(
+        self, local_path: str, **kwargs: Any
+    ) -> Union[None, AsyncDocumentConverterResult]:
+        """Convert a text file to markdown.
+
+        Args:
+            local_path: Path to the text file
+            **kwargs: Additional arguments passed to converters
+
+        Returns:
+            AsyncDocumentConverterResult containing the markdown text
+        """
+        extension = kwargs.get("file_extension", "")
+        if extension.lower() not in [".txt", ".csv", ".json", ".xml"]:
+            return None
+
+        md_content = ""
+        title = None
+
+        try:
+            with open(local_path, "r", encoding="utf-8") as file:
+                content = file.read()
+
+            # For CSV files, convert to markdown table
+            if extension.lower() == ".csv":
+                try:
+                    import csv
+
+                    csv_data = []
+                    with open(local_path, "r", encoding="utf-8") as csv_file:
+                        csv_reader = csv.reader(csv_file)
+                        for row in csv_reader:
+                            csv_data.append(row)
+
+                    if csv_data:
+                        # Create header
+                        md_content += "| " + " | ".join(csv_data[0]) + " |\n"
+                        md_content += "|" + "|".join(["---" for _ in csv_data[0]]) + "|\n"
+
+                        # Add data rows
+                        for row in csv_data[1:]:
+                            md_content += "| " + " | ".join(row) + " |\n"
+                except Exception as e:
+                    logger.error(f"Error converting CSV to markdown table: {str(e)}")
+                    md_content = content  # Fallback to raw content
+
+            # For JSON files, pretty print
+            elif extension.lower() == ".json":
+                try:
+                    import json
+
+                    parsed_json = json.loads(content)
+                    md_content = "```json\n" + json.dumps(parsed_json, indent=2) + "\n```"
+                except Exception as e:
+                    logger.error(f"Error formatting JSON: {str(e)}")
+                    md_content = "```\n" + content + "\n```"  # Fallback to raw content
+
+            # For XML files, pretty print
+            elif extension.lower() == ".xml":
+                try:
+                    import xml.dom.minidom
+
+                    parsed_xml = xml.dom.minidom.parseString(content)
+                    md_content = "```xml\n" + parsed_xml.toprettyxml() + "\n```"
+                except Exception as e:
+                    logger.error(f"Error formatting XML: {str(e)}")
+                    md_content = "```\n" + content + "\n```"  # Fallback to raw content
+
+            # For plain text, just use the content
+            else:
+                md_content = content
+
+        except Exception as e:
+            logger.error(f"Error reading text file: {str(e)}")
+            return None
+
+        return AsyncDocumentConverterResult(title=title, text_content=md_content.strip())
+
+
 class AsyncMarkItDown:
     """Async implementation of MarkItDown for PPTX, XLSX and Image files."""
 
@@ -283,7 +614,15 @@ class AsyncMarkItDown:
         """Initialize the AsyncMarkItDown converter."""
         self._llm_client = llm_client
         self._llm_model = llm_model
-        self._converters = [AsyncPptxConverter(), AsyncXlsxConverter(), AsyncImageConverter()]
+        self._converters = [
+            AsyncPptxConverter(),
+            AsyncXlsxConverter(),
+            AsyncImageConverter(),
+            AsyncPdfConverter(),
+            AsyncDocxConverter(),
+            AsyncHtmlConverter(),
+            AsyncTextConverter(),
+        ]
 
     async def convert(self, file_path: str, **kwargs: Any) -> AsyncDocumentConverterResult:
         """Convert a file to markdown format.
