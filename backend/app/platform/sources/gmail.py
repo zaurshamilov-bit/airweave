@@ -18,7 +18,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.gmail import (
     GmailDraftEntity,
     GmailLabelEntity,
@@ -73,7 +73,7 @@ class GmailSource(BaseSource):
 
     async def _generate_thread_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate GmailThreadEntity objects.
 
         For each thread, generate GmailMessageEntity objects.
@@ -415,7 +415,7 @@ class GmailSource(BaseSource):
                 break
             params["pageToken"] = next_page_token
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all Gmail entities: Labels, Threads (Messages), Drafts."""
         async with httpx.AsyncClient() as client:
             # 1) Generate label entities

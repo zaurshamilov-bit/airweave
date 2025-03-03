@@ -27,10 +27,10 @@ from typing import Any, Dict, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class ConfluenceSpaceEntity(BaseEntity):
+class ConfluenceSpaceEntity(ChunkEntity):
     """Schema for a Confluence Space.
 
     See:
@@ -50,7 +50,7 @@ class ConfluenceSpaceEntity(BaseEntity):
     )
 
 
-class ConfluencePageEntity(BaseEntity):
+class ConfluencePageEntity(ChunkEntity):
     """Schema for a Confluence Page.
 
     See:
@@ -69,7 +69,7 @@ class ConfluencePageEntity(BaseEntity):
     )
 
 
-class ConfluenceBlogPostEntity(BaseEntity):
+class ConfluenceBlogPostEntity(ChunkEntity):
     """Schema for a Confluence Blog Post.
 
     See:
@@ -90,7 +90,7 @@ class ConfluenceBlogPostEntity(BaseEntity):
     )
 
 
-class ConfluenceCommentEntity(BaseEntity):
+class ConfluenceCommentEntity(ChunkEntity):
     """Schema for a Confluence Comment.
 
     See:
@@ -113,7 +113,7 @@ class ConfluenceCommentEntity(BaseEntity):
     status: Optional[str] = Field(None, description="Status of the comment (e.g., 'current').")
 
 
-class ConfluenceDatabaseEntity(BaseEntity):
+class ConfluenceDatabaseEntity(ChunkEntity):
     """Schema for a Confluence Database object.
 
     See:
@@ -132,7 +132,7 @@ class ConfluenceDatabaseEntity(BaseEntity):
     status: Optional[str] = Field(None, description="Status of the database content item.")
 
 
-class ConfluenceFolderEntity(BaseEntity):
+class ConfluenceFolderEntity(ChunkEntity):
     """Schema for a Confluence Folder object.
 
     See:
@@ -150,7 +150,7 @@ class ConfluenceFolderEntity(BaseEntity):
     status: Optional[str] = Field(None, description="Status of the folder (e.g., 'current').")
 
 
-class ConfluenceLabelEntity(BaseEntity):
+class ConfluenceLabelEntity(ChunkEntity):
     """Schema for a Confluence Label object.
 
     See:
@@ -162,7 +162,7 @@ class ConfluenceLabelEntity(BaseEntity):
     owner_id: Optional[str] = Field(None, description="ID of the user or content that owns label.")
 
 
-class ConfluenceTaskEntity(BaseEntity):
+class ConfluenceTaskEntity(ChunkEntity):
     """Schema for a Confluence Task object.
 
     For example, tasks extracted from Confluence pages or macros.
@@ -188,7 +188,7 @@ class ConfluenceTaskEntity(BaseEntity):
     )
 
 
-class ConfluenceWhiteboardEntity(BaseEntity):
+class ConfluenceWhiteboardEntity(ChunkEntity):
     """Schema for a Confluence Whiteboard object.
 
     See:
@@ -206,7 +206,7 @@ class ConfluenceWhiteboardEntity(BaseEntity):
     status: Optional[str] = Field(None, description="Status of the whiteboard (e.g., 'current').")
 
 
-class ConfluenceCustomContentEntity(BaseEntity):
+class ConfluenceCustomContentEntity(ChunkEntity):
     """Schema for a Confluence Custom Content object.
 
     See:

@@ -7,7 +7,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 from app.platform.entities.slack import (
     SlackChannelEntity,
     SlackMessageEntity,
@@ -56,7 +56,7 @@ class SlackSource(BaseSource):
 
     async def _generate_channel_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate SlackChannelEntity objects from Slack using conversations.list.
 
         Endpoint: https://slack.com/api/conversations.list
@@ -95,7 +95,7 @@ class SlackSource(BaseSource):
 
     async def _generate_user_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate SlackUserEntity objects from Slack using users.list.
 
         Endpoint: https://slack.com/api/users.list
@@ -132,7 +132,7 @@ class SlackSource(BaseSource):
 
     async def _generate_message_entities(
         self, client: httpx.AsyncClient, channel_id: str
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate SlackMessageEntity objects for a given channel using conversations.history.
 
         Endpoint: https://slack.com/api/conversations.history
@@ -168,7 +168,7 @@ class SlackSource(BaseSource):
                 break
             params["cursor"] = next_cursor
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Slack.
 
         Channels, Users, and Messages.

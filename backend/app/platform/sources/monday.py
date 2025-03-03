@@ -11,7 +11,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.monday import (
     MondayBoardEntity,
     MondayColumnEntity,
@@ -406,7 +406,7 @@ class MondaySource(BaseSource):
                 assets=upd.get("assets", []),
             )
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all Monday.com entities in a style similar to other connectors.
 
         Yields Monday.com entities in the following order:

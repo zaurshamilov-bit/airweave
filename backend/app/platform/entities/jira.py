@@ -8,7 +8,7 @@ entity schemas for the major Jira objects relevant to our application:
 
 These schemas follow the patterns established by other integrations
 (e.g., Asana, Todoist, HubSpot, Confluence). Each schema subclass extends
-BaseEntity and includes relevant fields for that Jira entity.
+ChunkEntity and includes relevant fields for that Jira entity.
 
 Later iterations could include support for the following objects:
 - Attachments
@@ -27,10 +27,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import BaseEntity, ChunkEntity
 
 
-class JiraProjectEntity(BaseEntity):
+class JiraProjectEntity(ChunkEntity):
     """Schema for a Jira Project.
 
     See:
@@ -92,7 +92,7 @@ class JiraIssueEntity(BaseEntity):
     archived: bool = Field(False, description="Indicates if this issue has been archived.")
 
 
-class JiraCommentEntity(BaseEntity):
+class JiraCommentEntity(ChunkEntity):
     """Schema for a Jira Comment.
 
     See:

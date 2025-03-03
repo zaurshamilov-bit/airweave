@@ -11,7 +11,7 @@ import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 import { SyncPipelineVisual } from "@/components/sync/SyncPipelineVisual";
 import { SyncDagEditor } from "@/components/sync/SyncDagEditor";
 import { SyncUIMetadata } from "@/components/sync/types";
-import { DagDefinition } from "@/components/sync/dag";
+import { Dag } from "@/components/sync/dag";
 
 /**
  * This component coordinates all user actions (source selection,
@@ -58,7 +58,7 @@ const Sync = () => {
   } | null>(null);
 
   // Replace the initialDag state with:
-  const [dag, setDag] = useState<DagDefinition | null>(null);
+  const [dag, setDag] = useState<Dag | null>(null);
 
   /**
    * Notify the user if they've just returned from an oauth2 flow.
@@ -148,12 +148,12 @@ const Sync = () => {
       setSyncId(newSyncId);
 
       // Initialize the DAG
-      const dagResp = await apiClient.get(`/dag/init?sync_id=${newSyncId}`);
+      const dagResp = await apiClient.get(`/sync/${newSyncId}/dag`);
       if (!dagResp.ok) {
         throw new Error("Failed to initialize DAG");
       }
 
-      const dagData: DagDefinition = await dagResp.json();
+      const dagData: Dag = await dagResp.json();
       setDag(dagData);
       setStep(3);
     } catch (err: any) {

@@ -19,10 +19,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 
 
-class OutlookMailFolderEntity(BaseEntity):
+class OutlookMailFolderEntity(ChunkEntity):
     """Schema for an Outlook mail folder.
 
     See:
@@ -47,7 +47,7 @@ class OutlookMailFolderEntity(BaseEntity):
     )
 
 
-class OutlookMessageEntity(BaseEntity):
+class OutlookMessageEntity(ChunkEntity):
     """Schema for an Outlook message.
 
     See:

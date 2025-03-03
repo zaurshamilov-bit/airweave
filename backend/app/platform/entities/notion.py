@@ -5,10 +5,10 @@ from typing import List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class NotionDatabaseEntity(BaseEntity):
+class NotionDatabaseEntity(ChunkEntity):
     """Schema for Notion database entities."""
 
     name: str = Field(description="The name of the database")
@@ -22,7 +22,7 @@ class NotionDatabaseEntity(BaseEntity):
     )
 
 
-class NotionPageEntity(BaseEntity):
+class NotionPageEntity(ChunkEntity):
     """Schema for Notion page entities."""
 
     page_id: str = Field(description="The ID of the page")
@@ -39,7 +39,7 @@ class NotionPageEntity(BaseEntity):
     content: Optional[str] = Field(default=None, description="The content of the page")
 
 
-class NotionBlockEntity(BaseEntity):
+class NotionBlockEntity(ChunkEntity):
     """Schema for Notion block entities."""
 
     block_id: str = Field(description="The ID of the block")

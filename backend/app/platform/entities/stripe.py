@@ -6,7 +6,7 @@ Payment Intents, Balance, Balance Transactions, Events, Payouts, Payment Methods
 and Refunds.
 
 These schemas follow the same style as other connectors (e.g., Asana, HubSpot, Todoist),
-where each entity class inherits from our BaseEntity and adds relevant fields with
+where each entity class inherits from our ChunkEntity and adds relevant fields with
 shared or per-resource metadata as needed.
 """
 
@@ -15,10 +15,10 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class StripeBalanceEntity(BaseEntity):
+class StripeBalanceEntity(ChunkEntity):
     """Schema for Stripe Balance resource.
 
     https://stripe.com/docs/api/balance/balance_object
@@ -45,7 +45,7 @@ class StripeBalanceEntity(BaseEntity):
     livemode: bool = Field(False, description="Whether this balance is in live mode (vs test mode)")
 
 
-class StripeBalanceTransactionEntity(BaseEntity):
+class StripeBalanceTransactionEntity(ChunkEntity):
     """Schema for Stripe Balance Transaction resource.
 
     https://stripe.com/docs/api/balance_transactions
@@ -77,7 +77,7 @@ class StripeBalanceTransactionEntity(BaseEntity):
     )
 
 
-class StripeChargeEntity(BaseEntity):
+class StripeChargeEntity(ChunkEntity):
     """Schema for Stripe Charge entities.
 
     https://stripe.com/docs/api/charges
@@ -103,7 +103,7 @@ class StripeChargeEntity(BaseEntity):
     )
 
 
-class StripeCustomerEntity(BaseEntity):
+class StripeCustomerEntity(ChunkEntity):
     """Schema for Stripe Customer entities.
 
     https://stripe.com/docs/api/customers
@@ -129,7 +129,7 @@ class StripeCustomerEntity(BaseEntity):
     )
 
 
-class StripeEventEntity(BaseEntity):
+class StripeEventEntity(ChunkEntity):
     """Schema for Stripe Event resource.
 
     https://stripe.com/docs/api/events
@@ -156,7 +156,7 @@ class StripeEventEntity(BaseEntity):
     )
 
 
-class StripeInvoiceEntity(BaseEntity):
+class StripeInvoiceEntity(ChunkEntity):
     """Schema for Stripe Invoice entities.
 
     https://stripe.com/docs/api/invoices
@@ -190,7 +190,7 @@ class StripeInvoiceEntity(BaseEntity):
     )
 
 
-class StripePaymentIntentEntity(BaseEntity):
+class StripePaymentIntentEntity(ChunkEntity):
     """Schema for Stripe PaymentIntent entities.
 
     https://stripe.com/docs/api/payment_intents
@@ -216,7 +216,7 @@ class StripePaymentIntentEntity(BaseEntity):
     )
 
 
-class StripePaymentMethodEntity(BaseEntity):
+class StripePaymentMethodEntity(ChunkEntity):
     """Schema for Stripe PaymentMethod resource.
 
     https://stripe.com/docs/api/payment_methods
@@ -242,7 +242,7 @@ class StripePaymentMethodEntity(BaseEntity):
     )
 
 
-class StripePayoutEntity(BaseEntity):
+class StripePayoutEntity(ChunkEntity):
     """Schema for Stripe Payout resource.
 
     https://stripe.com/docs/api/payouts
@@ -275,7 +275,7 @@ class StripePayoutEntity(BaseEntity):
     )
 
 
-class StripeRefundEntity(BaseEntity):
+class StripeRefundEntity(ChunkEntity):
     """Schema for Stripe Refund resource.
 
     https://stripe.com/docs/api/refunds
@@ -304,7 +304,7 @@ class StripeRefundEntity(BaseEntity):
     )
 
 
-class StripeSubscriptionEntity(BaseEntity):
+class StripeSubscriptionEntity(ChunkEntity):
     """Schema for Stripe Subscription entities.
 
     https://stripe.com/docs/api/subscriptions

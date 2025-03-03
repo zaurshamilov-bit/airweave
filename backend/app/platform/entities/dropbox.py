@@ -5,10 +5,10 @@ from typing import Dict, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class DropboxAccountEntity(BaseEntity):
+class DropboxAccountEntity(ChunkEntity):
     """Schema for Dropbox account-level entities (e.g., user or team info).
 
     For MVP purposes, store minimal fields such as account ID, display name, and email.
@@ -21,7 +21,7 @@ class DropboxAccountEntity(BaseEntity):
     is_team: bool = False  # Flag to indicate if this relates to a Dropbox Business/Team
 
 
-class DropboxFolderEntity(BaseEntity):
+class DropboxFolderEntity(ChunkEntity):
     """Schema for Dropbox folder entities.
 
     Mirrors folder metadata (like path, IDs, etc.).
@@ -35,7 +35,7 @@ class DropboxFolderEntity(BaseEntity):
     is_team_folder: bool = False
 
 
-class DropboxFileEntity(BaseEntity):
+class DropboxFileEntity(ChunkEntity):
     """Schema for Dropbox file entities.
 
     Includes core file metadata like file ID, path, size, timestamps.

@@ -15,10 +15,10 @@ from typing import List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class GmailLabelEntity(BaseEntity):
+class GmailLabelEntity(ChunkEntity):
     """Schema for Gmail label entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.labels
@@ -34,7 +34,7 @@ class GmailLabelEntity(BaseEntity):
     )
 
 
-class GmailThreadEntity(BaseEntity):
+class GmailThreadEntity(ChunkEntity):
     """Schema for Gmail thread entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.threads
@@ -47,7 +47,7 @@ class GmailThreadEntity(BaseEntity):
     last_message_date: Optional[datetime] = Field(None, description="Date of the last message")
 
 
-class GmailMessageEntity(BaseEntity):
+class GmailMessageEntity(ChunkEntity):
     """Schema for Gmail message entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.messages
@@ -68,7 +68,7 @@ class GmailMessageEntity(BaseEntity):
     size_estimate: Optional[int] = Field(None, description="Estimated size in bytes")
 
 
-class GmailDraftEntity(BaseEntity):
+class GmailDraftEntity(ChunkEntity):
     """Schema for Gmail draft entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.drafts

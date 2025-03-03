@@ -3,7 +3,7 @@
 from typing import Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 
 class TransformerBase(BaseModel):
@@ -11,9 +11,25 @@ class TransformerBase(BaseModel):
 
     name: str
     description: Optional[str] = None
-    input_entity_definition_ids: List[UUID]
-    output_entity_definition_ids: List[UUID]
-    config_schema: Dict
+    method_name: str
+    module_name: str
+    input_entity_definition_ids: List[str]
+    output_entity_definition_ids: List[str]
+    config_schema: Dict = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def convert_uuids_to_strings(cls, data: dict) -> dict:
+        """Convert UUID lists to string lists."""
+        if isinstance(data.get("input_entity_definition_ids", []), list):
+            data["input_entity_definition_ids"] = [
+                str(x) for x in data["input_entity_definition_ids"]
+            ]
+        if isinstance(data.get("output_entity_definition_ids", []), list):
+            data["output_entity_definition_ids"] = [
+                str(x) for x in data["output_entity_definition_ids"]
+            ]
+        return data
 
 
 class TransformerCreate(TransformerBase):

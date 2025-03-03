@@ -1,14 +1,14 @@
 """Asana entity schemas."""
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity, FileEntity
 
 
-class AsanaWorkspaceEntity(BaseEntity):
+class AsanaWorkspaceEntity(ChunkEntity):
     """Schema for Asana workspace entities."""
 
     name: str
@@ -18,7 +18,7 @@ class AsanaWorkspaceEntity(BaseEntity):
     permalink_url: Optional[str] = None
 
 
-class AsanaProjectEntity(BaseEntity):
+class AsanaProjectEntity(ChunkEntity):
     """Schema for Asana project entities."""
 
     name: str
@@ -47,7 +47,7 @@ class AsanaProjectEntity(BaseEntity):
     permalink_url: Optional[str] = None
 
 
-class AsanaSectionEntity(BaseEntity):
+class AsanaSectionEntity(ChunkEntity):
     """Schema for Asana section entities."""
 
     name: str
@@ -56,7 +56,7 @@ class AsanaSectionEntity(BaseEntity):
     projects: List[Dict] = Field(default_factory=list)  # Deprecated but included for compatibility
 
 
-class AsanaTaskEntity(BaseEntity):
+class AsanaTaskEntity(ChunkEntity):
     """Schema for Asana task entities."""
 
     name: str
@@ -94,7 +94,7 @@ class AsanaTaskEntity(BaseEntity):
     workspace: Optional[Dict] = None
 
 
-class AsanaCommentEntity(BaseEntity):
+class AsanaCommentEntity(ChunkEntity):
     """Schema for Asana comment/story entities."""
 
     task_gid: str
@@ -110,3 +110,21 @@ class AsanaCommentEntity(BaseEntity):
     liked: bool = False
     type: str = "comment"  # 'comment' or 'system'
     previews: List[Dict] = Field(default_factory=list)
+
+
+class AsanaFileEntity(FileEntity):
+    """Schema for Asana file attachments.
+
+    Reference:
+        https://developers.asana.com/reference/getattachment
+    """
+
+    task_gid: str = Field(..., description="GID of the task this file is attached to")
+    task_name: str = Field(..., description="Name of the task this file is attached to")
+    resource_type: str = Field(..., description="Type of the attachment resource")
+    host: Optional[str] = Field(None, description="Service hosting the attachment")
+    parent: Optional[Dict[str, Any]] = Field(
+        None, description="Parent resource the attachment is on"
+    )
+    view_url: Optional[str] = Field(None, description="URL to view the attachment")
+    permanent: bool = Field(False, description="Whether this is a permanent attachment")

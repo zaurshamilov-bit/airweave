@@ -24,10 +24,10 @@ class NodeType(str, Enum):
     ENTITY = "entity"
 
 
-class SyncDagDefinition(OrganizationBase, UserMixin):
+class SyncDag(OrganizationBase, UserMixin):
     """Definition of a sync DAG."""
 
-    __tablename__ = "sync_dag_definition"
+    __tablename__ = "sync_dag"
 
     name = Column(String, nullable=False)
     description = Column(String)
@@ -48,7 +48,7 @@ class DagNode(OrganizationBase, UserMixin):
 
     __tablename__ = "dag_node"
 
-    dag_id = Column(UUID, ForeignKey("sync_dag_definition.id", ondelete="CASCADE"), nullable=False)
+    dag_id = Column(UUID, ForeignKey("sync_dag.id", ondelete="CASCADE"), nullable=False)
     type = Column(String, nullable=False)  # source, destination, transformer, entity
     name = Column(String, nullable=False)
     config = Column(JSON)  # Configuration for sources, destinations, transformers
@@ -56,9 +56,10 @@ class DagNode(OrganizationBase, UserMixin):
     # Reference to the definition (one of these will be set based on type)
     connection_id = Column(UUID, ForeignKey("connection.id"), nullable=True)
     entity_definition_id = Column(UUID, ForeignKey("entity_definition.id"), nullable=True)
+    transformer_id = Column(UUID, ForeignKey("transformer.id"), nullable=True)
 
     # Relationships
-    dag = relationship("SyncDagDefinition", back_populates="nodes", lazy="noload")
+    dag = relationship("SyncDag", back_populates="nodes", lazy="noload")
     outgoing_edges = relationship(
         "DagEdge",
         foreign_keys="[DagEdge.from_node_id]",
@@ -80,12 +81,12 @@ class DagEdge(OrganizationBase, UserMixin):
 
     __tablename__ = "dag_edge"
 
-    dag_id = Column(UUID, ForeignKey("sync_dag_definition.id", ondelete="CASCADE"), nullable=False)
+    dag_id = Column(UUID, ForeignKey("sync_dag.id", ondelete="CASCADE"), nullable=False)
     from_node_id = Column(UUID, ForeignKey("dag_node.id", ondelete="CASCADE"), nullable=False)
     to_node_id = Column(UUID, ForeignKey("dag_node.id", ondelete="CASCADE"), nullable=False)
 
     # Relationships
-    dag = relationship("SyncDagDefinition", back_populates="edges", lazy="noload")
+    dag = relationship("SyncDag", back_populates="edges", lazy="noload")
     from_node = relationship(
         "DagNode",
         primaryjoin="DagEdge.from_node_id==DagNode.id",

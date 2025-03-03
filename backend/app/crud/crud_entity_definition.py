@@ -32,5 +32,12 @@ class CRUDEntityDefinition(
         result = await db.execute(select(self.model).where(self.model.id.in_(ids)))
         return list(result.unique().scalars().all())
 
+    async def get_by_entity_class_name(
+        self, db: AsyncSession, *, entity_class_name: str
+    ) -> EntityDefinition:
+        """Get an entity definition by its entity class name."""
+        result = await db.execute(select(self.model).where(self.model.name == entity_class_name))
+        return result.scalar_one_or_none()
+
 
 entity_definition = CRUDEntityDefinition(EntityDefinition)

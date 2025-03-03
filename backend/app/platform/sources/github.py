@@ -23,7 +23,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.github import GithubContentEntity, GithubRepoEntity
 from app.platform.sources._base import BaseSource
 
@@ -175,7 +175,7 @@ class GithubSource(BaseSource):
 
     async def _generate_content_entities(
         self, client: httpx.AsyncClient, repo: GithubRepoEntity
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate content entities for a given repository.
 
         Walks through the hierarchy of directories/files on the default branch.
@@ -197,7 +197,7 @@ class GithubSource(BaseSource):
         ):
             yield content_entity
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate and yield entities for GitHub objects.
 
         Yields entities in the following order:

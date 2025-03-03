@@ -7,10 +7,10 @@ HubSpot objects like Contacts, Companies, Deals, and Tickets.
 from datetime import datetime
 from typing import Optional
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class HubspotContactEntity(BaseEntity):
+class HubspotContactEntity(ChunkEntity):
     """Schema for HubSpot contact entities."""
 
     first_name: Optional[str] = None
@@ -23,7 +23,7 @@ class HubspotContactEntity(BaseEntity):
     archived: bool = False
 
 
-class HubspotCompanyEntity(BaseEntity):
+class HubspotCompanyEntity(ChunkEntity):
     """Schema for HubSpot company entities."""
 
     name: Optional[str] = None
@@ -39,7 +39,7 @@ class HubspotCompanyEntity(BaseEntity):
     archived: bool = False
 
 
-class HubspotDealEntity(BaseEntity):
+class HubspotDealEntity(ChunkEntity):
     """Schema for HubSpot deal entities."""
 
     deal_name: Optional[str] = None
@@ -52,7 +52,7 @@ class HubspotDealEntity(BaseEntity):
     archived: bool = False
 
 
-class HubspotTicketEntity(BaseEntity):
+class HubspotTicketEntity(ChunkEntity):
     """Schema for HubSpot ticket entities."""
 
     subject: Optional[str] = None

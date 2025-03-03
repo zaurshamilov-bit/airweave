@@ -25,9 +25,10 @@ import { DestinationNode } from "./nodes/DestinationNode";
 import { EntityNode } from "./nodes/EntityNode";
 import { ButtonEdge } from "./edges/ButtonEdge";
 import { BlankEdge } from "./edges/BlankEdge";
+import { NonPlussableEdge } from "./edges/NonPlussableEdge";
 import dagre from "dagre";
 import { 
-  DagDefinition, 
+  Dag, 
   FlowNode, 
   FlowEdge,
   toFlowNodes,
@@ -48,11 +49,12 @@ const nodeTypes: NodeTypes = {
 const edgeTypes = {
   button: ButtonEdge,
   blank: BlankEdge,
+  nonplussable: NonPlussableEdge,
 };
 
 interface SyncDagEditorProps {
   syncId: string;
-  initialDag?: DagDefinition;
+  initialDag?: Dag;
   onSave?: () => void;
 }
 
@@ -249,13 +251,26 @@ const getLayoutedElements = (nodes: FlowNode[], edges: FlowEdge[]) => {
 };
 
 // Helper to determine edge type based on connection
-const getEdgeType = (sourceNode: FlowNode, targetNode: FlowNode): 'button' | 'blank' => {
+const getEdgeType = (sourceNode: FlowNode, targetNode: FlowNode): 'button' | 'blank' | 'nonplussable' => {
   // Sources to entities and transformers to entities use blank edges
   if (
     (sourceNode.type === 'source' && targetNode.type === 'entity') ||
     (sourceNode.type === 'transformer' && targetNode.type === 'entity')
   ) {
     return 'blank';
+  }
+  
+  // File entities to transformers use nonplussable edges
+  if (sourceNode.type === 'entity' && targetNode.type === 'transformer') {
+    // Check if the source is a file entity by looking for common file entity naming patterns
+    const fileEntityPatterns = ['File', 'PDF', 'Document', 'Attachment'];
+    const isFileEntity = fileEntityPatterns.some(pattern => 
+      sourceNode.data.name.includes(pattern)
+    );
+    
+    if (isFileEntity) {
+      return 'nonplussable';
+    }
   }
   
   // All other connections use button edges
@@ -322,7 +337,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
         // Otherwise fetch from API
         const resp = await apiClient.get(`/sync/${syncId}/dag`);
         if (!resp.ok) throw new Error("Failed to load DAG");
-        const data: DagDefinition = await resp.json();
+        const data: Dag = await resp.json();
         
         const flowNodes = toFlowNodes(data.nodes);
         const initialEdges = data.edges.map(edge => {
@@ -371,7 +386,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
         }
         
         // Set the appropriate edge type
-        const edgeType = getEdgeType(sourceNode, targetNode);
+        const edgeType = getEdgeType(sourceNode as FlowNode, targetNode as FlowNode);
         setEdges((eds) => addEdge({ ...params, type: edgeType }, eds));
       }
     },
@@ -481,7 +496,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      const dagData: DagDefinition = {
+      const dagData: Dag = {
         id: initialDag?.id || '',
         name: initialDag?.name || "DAG from UI",
         description: initialDag?.description || "Created via DAG editor",

@@ -6,16 +6,19 @@ import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 from tenacity.asyncio import AsyncRetrying
 
+from app.core.logging import logger
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.asana import (
     AsanaCommentEntity,
+    AsanaFileEntity,
     AsanaProjectEntity,
     AsanaSectionEntity,
     AsanaTaskEntity,
     AsanaWorkspaceEntity,
 )
+from app.platform.file_handling.file_manager import handle_file_entity
 from app.platform.sources._base import BaseSource
 
 
@@ -40,9 +43,49 @@ class AsanaSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
+    async def _stream_file(
+        self, client: httpx.AsyncClient, url: str
+    ) -> AsyncGenerator[bytes, None]:
+        """Stream a file from Asana with authentication.
+
+        Args:
+            client: The HTTPX client
+            url: The file download URL
+
+        Yields:
+            Chunks of the file content
+        """
+        retryer = AsyncRetrying(
+            retry=retry_if_exception_type(httpx.HTTPError),
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            stop=stop_after_attempt(3),
+        )
+
+        # For Asana API URLs we need the Asana auth header
+        # For S3 pre-signed URLs we use the URL as-is since auth is in the URL
+        headers = {}
+        if url.startswith("https://app.asana.com/"):
+            headers["Authorization"] = f"Bearer {self.access_token}"
+
+        async for attempt in retryer:
+            with attempt:
+                try:
+                    async with client.stream(
+                        "GET",
+                        url,
+                        headers=headers,
+                        follow_redirects=True,  # Follow any redirects
+                    ) as response:
+                        response.raise_for_status()
+                        async for chunk in response.aiter_bytes():
+                            yield chunk
+                except Exception as e:
+                    logger.error(f"Error streaming file from URL {url}: {str(e)}")
+                    raise
+
     async def _generate_workspace_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate workspace entities."""
         workspaces_data = await self._get_with_auth(
             client, "https://app.asana.com/api/1.0/workspaces"
@@ -62,7 +105,7 @@ class AsanaSource(BaseSource):
 
     async def _generate_project_entities(
         self, client: httpx.AsyncClient, workspace: Dict, workspace_breadcrumb: Breadcrumb
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate project entities for a workspace."""
         projects_data = await self._get_with_auth(
             client, f"https://app.asana.com/api/1.0/workspaces/{workspace['gid']}/projects"
@@ -101,7 +144,7 @@ class AsanaSource(BaseSource):
 
     async def _generate_section_entities(
         self, client: httpx.AsyncClient, project: Dict, project_breadcrumbs: List[Breadcrumb]
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate section entities for a project."""
         sections_data = await self._get_with_auth(
             client, f"https://app.asana.com/api/1.0/projects/{project['gid']}/sections"
@@ -124,7 +167,7 @@ class AsanaSource(BaseSource):
         project: Dict,
         section: Optional[Dict] = None,
         breadcrumbs: List[Breadcrumb] = None,
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate task entities for a project or section."""
         url = (
             f"https://app.asana.com/api/1.0/sections/{section['gid']}/tasks"
@@ -184,7 +227,7 @@ class AsanaSource(BaseSource):
 
     async def _generate_comment_entities(
         self, client: httpx.AsyncClient, task: Dict, task_breadcrumbs: List[Breadcrumb]
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate comment entities for a task."""
         stories_data = await self._get_with_auth(
             client, f"https://app.asana.com/api/1.0/tasks/{task['gid']}/stories"
@@ -213,7 +256,60 @@ class AsanaSource(BaseSource):
                 previews=story.get("previews", []),
             )
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def _generate_file_entities(
+        self,
+        client: httpx.AsyncClient,
+        task: Dict,
+        task_breadcrumbs: List[Breadcrumb],
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Generate file attachment entities for a task."""
+        attachments_data = await self._get_with_auth(
+            client, f"https://app.asana.com/api/1.0/tasks/{task['gid']}/attachments"
+        )
+
+        for attachment in attachments_data.get("data", []):
+            attachment_response = await self._get_with_auth(
+                client, f"https://app.asana.com/api/1.0/attachments/{attachment['gid']}"
+            )
+
+            attachment_detail = attachment_response.get("data")
+
+            if (
+                "download_url" not in attachment_detail
+                or attachment_detail.get("download_url") is None
+            ):
+                logger.warning(
+                    f"No download URL found for attachment {attachment['gid']} "
+                    f"in task {task['gid']}"
+                )
+                continue
+
+            # Create the file entity with metadata
+            file_entity = AsanaFileEntity(
+                source_name="asana",
+                entity_id=attachment_detail["gid"],
+                breadcrumbs=task_breadcrumbs,
+                file_id=attachment["gid"],
+                name=attachment_detail.get("name"),
+                mime_type=attachment_detail.get("mime_type"),
+                size=attachment_detail.get("size"),
+                total_size=attachment_detail.get("size"),  # Set total_size from API response
+                download_url=attachment_detail.get("download_url"),
+                created_at=attachment_detail.get("created_at"),
+                modified_at=attachment_detail.get("modified_at"),
+                task_gid=task["gid"],
+                task_name=task["name"],
+                resource_type=attachment_detail.get("resource_type"),
+                host=attachment_detail.get("host"),
+                parent=attachment_detail.get("parent"),
+                view_url=attachment_detail.get("view_url"),
+                permanent=attachment_detail.get("permanent", False),
+            )
+
+            file_stream = self._stream_file(client, file_entity.download_url)
+            yield await handle_file_entity(file_entity, file_stream)
+
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Asana."""
         async with httpx.AsyncClient() as client:
             async for workspace_entity in self._generate_workspace_entities(client):
@@ -240,7 +336,7 @@ class AsanaSource(BaseSource):
                     async for section_entity in self._generate_section_entities(
                         client,
                         {"gid": project_entity.entity_id},
-                        project_breadcrumbs,  # Pass full project breadcrumbs
+                        project_breadcrumbs,
                     ):
                         yield section_entity
 
@@ -249,12 +345,50 @@ class AsanaSource(BaseSource):
                             client,
                             {"gid": project_entity.entity_id},
                             {"gid": section_entity.entity_id, "name": section_entity.name},
-                            project_breadcrumbs,  # Pass project breadcrumbs
+                            project_breadcrumbs,
                         ):
                             yield task_entity
 
+                            # Generate file attachments for the task
+                            task_breadcrumb = Breadcrumb(
+                                entity_id=task_entity.entity_id,
+                                name=task_entity.name,
+                                type="task",
+                            )
+                            task_breadcrumbs = [*project_breadcrumbs, task_breadcrumb]
+
+                            async for file_entity in self._generate_file_entities(
+                                client,
+                                {
+                                    "gid": task_entity.entity_id,
+                                    "name": task_entity.name,
+                                },
+                                task_breadcrumbs,
+                            ):
+                                yield file_entity
+
                     # Generate tasks not in any section
                     async for task_entity in self._generate_task_entities(
-                        client, {"gid": project_entity.entity_id}, breadcrumbs=project_breadcrumbs
+                        client,
+                        {"gid": project_entity.entity_id},
+                        breadcrumbs=project_breadcrumbs,
                     ):
                         yield task_entity
+
+                        # Generate file attachments for the task
+                        task_breadcrumb = Breadcrumb(
+                            entity_id=task_entity.entity_id,
+                            name=task_entity.name,
+                            type="task",
+                        )
+                        task_breadcrumbs = [*project_breadcrumbs, task_breadcrumb]
+
+                        async for file_entity in self._generate_file_entities(
+                            client,
+                            {
+                                "gid": task_entity.entity_id,
+                                "name": task_entity.name,
+                            },
+                            task_breadcrumbs,
+                        ):
+                            yield file_entity

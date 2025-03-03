@@ -5,7 +5,7 @@ we define entity schemas for the following core objects:
   • Drive
   • DriveItem
 
-Each schema inherits from BaseEntity, which already provides an entity_id field to
+Each schema inherits from ChunkEntity, which already provides an entity_id field to
 store the OneDrive object's unique ID (e.g., drive.id or driveItem.id).
 
 References:
@@ -17,10 +17,10 @@ from typing import Any, Dict, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class OneDriveDriveEntity(BaseEntity):
+class OneDriveDriveEntity(ChunkEntity):
     """Schema for a OneDrive Drive object.
 
     The inherited entity_id stores the drive's unique ID. Additional key fields come
@@ -50,7 +50,7 @@ class OneDriveDriveEntity(BaseEntity):
     )
 
 
-class OneDriveDriveItemEntity(BaseEntity):
+class OneDriveDriveItemEntity(ChunkEntity):
     """Schema for a OneDrive DriveItem object (file or folder).
 
     The inherited entity_id stores the DriveItem's unique ID. Many fields are optional

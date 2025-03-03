@@ -3,7 +3,7 @@
 from .crud_api_key import api_key
 from .crud_chat import chat
 from .crud_connection import connection
-from .crud_dag import sync_dag_definition
+from .crud_dag import sync_dag
 from .crud_destination import destination
 from .crud_embedding_model import embedding_model
 from .crud_entity import entity
@@ -33,7 +33,7 @@ __all__ = [
     "organization",
     "source",
     "sync",
-    "sync_dag_definition",
+    "sync_dag",
     "sync_job",
     "transformer",
     "user",

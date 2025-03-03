@@ -84,5 +84,45 @@ class SyncPubSub:
             self.topics[job_id].remove_subscriber(queue)
 
 
+PUBLISH_THRESHOLD = 5
+
+
+class SyncProgress:
+    """Tracks sync progress and automatically publishes updates."""
+
+    def __init__(self, job_id: UUID):
+        """Initialize the SyncProgress instance."""
+        self.job_id = job_id
+        self.stats = SyncProgressUpdate()
+        self._last_published = 0
+        self._publish_threshold = PUBLISH_THRESHOLD
+
+    def __getattr__(self, name: str) -> int:
+        """Get counter value for any stat."""
+        return getattr(self.stats, name)
+
+    async def increment(self, stat_name: str, amount: int = 1) -> None:
+        """Increment a counter and trigger update if threshold reached."""
+        current_value = getattr(self.stats, stat_name, 0)
+        setattr(self.stats, stat_name, current_value + amount)
+
+        total_ops = sum(
+            [self.stats.inserted, self.stats.updated, self.stats.deleted, self.stats.already_sync]
+        )
+
+        if total_ops - self._last_published >= self._publish_threshold:
+            await self._publish()
+            self._last_published = total_ops
+
+    async def _publish(self) -> None:
+        """Publish current progress."""
+        await sync_pubsub.publish(self.job_id, self.stats)
+
+    async def finalize(self, is_complete: bool = True) -> None:
+        """Publish final progress."""
+        self.stats.is_complete = is_complete
+        await self._publish()
+
+
 # Create a global instance for the entire app
 sync_pubsub = SyncPubSub()

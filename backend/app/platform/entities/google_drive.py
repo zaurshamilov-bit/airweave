@@ -17,10 +17,10 @@ from typing import Any, List, Optional
 
 from pydantic import Field
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 
 
-class GoogleDriveDriveEntity(BaseEntity):
+class GoogleDriveDriveEntity(ChunkEntity):
     """Schema for a Drive resource (shared drive).
 
     Reference:
@@ -44,7 +44,7 @@ class GoogleDriveDriveEntity(BaseEntity):
     )
 
 
-class GoogleDriveFileEntity(BaseEntity):
+class GoogleDriveFileEntity(ChunkEntity):
     """Schema for a File resource (in a user's or shared drive).
 
     Reference:

@@ -167,17 +167,24 @@ async def run_sync(
         sync_job (schemas.SyncJob): The sync job
     """
     sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
-    sync_schema = schemas.Sync.model_validate(sync)
-
     if not sync:
         raise HTTPException(status_code=404, detail="Sync not found")
+
+    sync_schema = schemas.Sync.model_validate(sync)
 
     sync_job_in = schemas.SyncJobCreate(sync_id=sync_id)
     sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_in, current_user=user)
     sync_job_schema = schemas.SyncJob.model_validate(sync_job)
 
+    sync_dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, current_user=user)
+    sync_dag_schema = schemas.SyncDag.model_validate(sync_dag)
+
+    user_schema = schemas.User.model_validate(user)
+
     # will be swapped for redis queue
-    background_tasks.add_task(sync_service.run, sync_schema, sync_job_schema, user)
+    background_tasks.add_task(
+        sync_service.run, sync_schema, sync_job_schema, sync_dag_schema, user_schema
+    )
 
     return sync_job
 
@@ -275,3 +282,16 @@ async def subscribe_sync_job(job_id: UUID, user=Depends(deps.get_user)) -> Strea
             "X-Accel-Buffering": "no",  # Important for nginx
         },
     )
+
+
+@router.get("/{sync_id}/dag", response_model=schemas.SyncDag)
+async def get_sync_dag(
+    sync_id: UUID,
+    db: AsyncSession = Depends(deps.get_db),
+    user: schemas.User = Depends(deps.get_user),
+) -> schemas.SyncDag:
+    """Get the DAG for a specific sync."""
+    dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, current_user=user)
+    if not dag:
+        raise HTTPException(status_code=404, detail=f"DAG for sync {sync_id} not found")
+    return dag

@@ -18,7 +18,7 @@ import httpx
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity, Breadcrumb
+from app.platform.entities._base import Breadcrumb, ChunkEntity
 from app.platform.entities.outlook_calendar import (
     OutlookCalendarCalendarEntity,
     OutlookCalendarEventEntity,
@@ -152,7 +152,7 @@ class OutlookCalendarSource(BaseSource):
             # Handle pagination
             next_url = data.get("@odata.nextLink")
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Outlook Calendar: Calendars and Events."""
         async with httpx.AsyncClient() as client:
             # 1) Get the user's calendars

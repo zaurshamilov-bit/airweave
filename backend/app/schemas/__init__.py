@@ -15,9 +15,9 @@ from .dag import (
     DagEdgeCreate,
     DagNode,
     DagNodeCreate,
-    SyncDagDefinition,
-    SyncDagDefinitionCreate,
-    SyncDagDefinitionUpdate,
+    SyncDag,
+    SyncDagCreate,
+    SyncDagUpdate,
 )
 from .destination import (
     Destination,

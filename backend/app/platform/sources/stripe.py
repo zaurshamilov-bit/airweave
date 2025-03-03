@@ -23,7 +23,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.platform.auth.schemas import AuthType
 from app.platform.decorators import source
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 from app.platform.entities.stripe import (
     StripeBalanceEntity,
     StripeBalanceTransactionEntity,
@@ -83,7 +83,7 @@ class StripeSource(BaseSource):
 
     async def _generate_balance_entity(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Retrieve the current account balance (single object) from.
 
         GET https://api.stripe.com/v1/balance
@@ -103,7 +103,7 @@ class StripeSource(BaseSource):
 
     async def _generate_balance_transaction_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Retrieve balance transactions in a paginated loop from.
 
         GET https://api.stripe.com/v1/balance_transactions
@@ -140,7 +140,7 @@ class StripeSource(BaseSource):
 
     async def _generate_charge_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Retrieve a list of charges.
 
           GET https://api.stripe.com/v1/charges
@@ -177,7 +177,7 @@ class StripeSource(BaseSource):
 
     async def _generate_customer_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Retrieve a list of customers.
 
         GET https://api.stripe.com/v1/customers
@@ -213,7 +213,7 @@ class StripeSource(BaseSource):
 
     async def _generate_event_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Retrieve a list of events.
 
         GET https://api.stripe.com/v1/events
@@ -246,7 +246,7 @@ class StripeSource(BaseSource):
 
     async def _generate_invoice_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Retrieve a list of invoices.
 
         GET https://api.stripe.com/v1/invoices
@@ -283,7 +283,7 @@ class StripeSource(BaseSource):
 
     async def _generate_payment_intent_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Retrieve a list of payment intents.
 
         GET https://api.stripe.com/v1/payment_intents
@@ -316,7 +316,7 @@ class StripeSource(BaseSource):
 
     async def _generate_payment_method_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Retrieve a list of payment methods for the account or for a specific customer.
 
         The typical GET is: https://api.stripe.com/v1/payment_methods?customer=<id>&type=<type>
@@ -347,7 +347,7 @@ class StripeSource(BaseSource):
 
     async def _generate_payout_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Retrieve a list of payouts.
 
         GET https://api.stripe.com/v1/payouts
@@ -382,7 +382,7 @@ class StripeSource(BaseSource):
 
     async def _generate_refund_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Retrieve a list of refunds.
 
         GET https://api.stripe.com/v1/refunds
@@ -416,7 +416,7 @@ class StripeSource(BaseSource):
 
     async def _generate_subscription_entities(
         self, client: httpx.AsyncClient
-    ) -> AsyncGenerator[BaseEntity, None]:
+    ) -> AsyncGenerator[ChunkEntity, None]:
         """Retrieve a list of subscriptions.
 
         GET https://api.stripe.com/v1/subscriptions
@@ -448,7 +448,7 @@ class StripeSource(BaseSource):
                 last_id = data["data"][-1]["id"]
                 url = f"{base_url}&starting_after={last_id}"
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:  # noqa: C901
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:  # noqa: C901
         """Generate all Stripe entities.
 
         - Balance

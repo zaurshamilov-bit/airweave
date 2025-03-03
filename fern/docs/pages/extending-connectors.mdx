@@ -82,7 +82,7 @@ Here's an example of a custom source connector implementation. In this example, 
 from typing import AsyncGenerator
 import httpx
 
-from app.platform.entities._base import BaseEntity
+from app.platform.entities._base import ChunkEntity
 from app.platform.decorators import source
 from app.platform.sources._base import BaseSource
 from app.platform.auth.schemas import AuthType
@@ -102,7 +102,7 @@ class GhibliSource(BaseSource):
         """Create a new Ghibli source instance."""
         return cls()
 
-    async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate entities from the Ghibli API.
         
         Each entity contains information about a Studio Ghibli film.
@@ -113,7 +113,7 @@ class GhibliSource(BaseSource):
             films = response.json()
 
             for film in films:
-                yield BaseEntity(
+                yield ChunkEntity(
                     source_name="ghibli",
                     entity_id=film["id"],
                     content=film["description"],
