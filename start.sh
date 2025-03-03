@@ -39,3 +39,5 @@ echo "Using command: $COMPOSE_CMD"
 
 # Now run the appropriate Docker Compose command
 $COMPOSE_CMD up -d
+
+echo "Services started! Frontend is available at http://localhost:8080"
