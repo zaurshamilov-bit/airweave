@@ -187,6 +187,35 @@ async def not_found_exception_handler(request: Request, exc: NotFoundException) 
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Global exception handler to catch all unhandled exceptions.
+
+    Args:
+    ----
+        request (Request): The incoming request that triggered the exception.
+        exc (Exception): The exception object that was raised.
+
+    Returns:
+    -------
+        JSONResponse: A 500 Internal Server Error response that includes the exception details.
+    """
+    logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
+
+    # When LOCAL_CURSOR_DEVELOPMENT is enabled, include stack trace in the response
+    if settings.LOCAL_CURSOR_DEVELOPMENT:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": str(exc),
+                "stacktrace": traceback.format_exc(),
+                "type": exc.__class__.__name__,
+            },
+        )
+
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
