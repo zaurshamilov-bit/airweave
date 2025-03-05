@@ -622,9 +622,7 @@ async def get_connections_by_short_name(
     -------
         HTTPException: If no connections are found
     """
-    connections = await crud.connection.get_all_by_short_name(
-        db=db, short_name=short_name, current_user=user
-    )
+    connections = await crud.connection.get_all_by_short_name(db=db, short_name=short_name)
 
     if not connections:
         raise HTTPException(

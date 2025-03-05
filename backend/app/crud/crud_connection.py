@@ -9,7 +9,6 @@ from sqlalchemy.orm import selectinload
 from app.crud._base import CRUDBase
 from app.models.connection import Connection, IntegrationType
 from app.schemas.connection import ConnectionCreate, ConnectionStatus, ConnectionUpdate
-from app.schemas.user import User
 
 
 class CRUDConnection(CRUDBase[Connection, ConnectionCreate, ConnectionUpdate]):
@@ -42,27 +41,32 @@ class CRUDConnection(CRUDBase[Connection, ConnectionCreate, ConnectionUpdate]):
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
-    async def get_all_by_short_name(
-        self, db: AsyncSession, short_name: str, current_user: User
-    ) -> list[Connection]:
+    async def get_all_by_short_name(self, db: AsyncSession, short_name: str) -> list[Connection]:
         """Get all connections for a specific source by short_name.
+
+        This method is only available when LOCAL_CURSOR_DEVELOPMENT is enabled.
 
         Args:
         -----
             db: The database session
             short_name: The short name of the source/destination/etc.
-            current_user: The user requesting the connections
 
         Returns:
         --------
             list[Connection]: List of connections with the given short name
         """
+        from app.core.config import settings
+
+        if not settings.LOCAL_CURSOR_DEVELOPMENT:
+            raise ValueError(
+                "This method is only available when LOCAL_CURSOR_DEVELOPMENT is enabled"
+            )
+
         stmt = (
             select(Connection)
             .options(selectinload(Connection.integration_credential))
             .where(
                 Connection.short_name == short_name,
-                Connection.organization_id == current_user.organization_id,
             )
         )
         result = await db.execute(stmt)

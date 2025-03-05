@@ -7,13 +7,11 @@ This server provides endpoints for testing source integrations with Airweave:
 
 import asyncio
 import logging
-import time
 import traceback
-from typing import Any
+from typing import Any, Dict
 
 import httpx
-import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 from mcp.server.fastmcp import FastMCP
 
 # Configure logging
@@ -24,42 +22,53 @@ logging.basicConfig(
 logger = logging.getLogger("sync-test-mcp-server")
 
 # Constants
-BACKEND_URL = "http://localhost:8001"  # Backend service URL for local development
-CONNECTION_CHECK_TIMEOUT = 300  # 5 minutes
-CONNECTION_CHECK_INTERVAL = 5  # 5 seconds
+DEFAULT_BACKEND_URL = "http://localhost:8001"  # Backend service URL for local development
 MAX_RETRIES = 3
 
 # Create MCP server
-mcp = FastMCP("Sync Test MCP Server")
+mcp = FastMCP(
+    name="Sync Test MCP Server",
+    instructions="This server provides tools for testing Airweave source integrations.",
+)
 
 
-async def check_connection_status(short_name: str) -> dict[str, Any]:
+async def check_connection_status(short_name: str) -> Dict[str, Any]:
     """Check if a source connection is established for the given short_name."""
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             response = await client.get(
-                f"{BACKEND_URL}/api/v1/connections/by-short-name/{short_name}"
+                f"{DEFAULT_BACKEND_URL}/connections/by-short-name/{short_name}"
             )
             response.raise_for_status()
-            return {"status": "success", "connection_found": True, "data": response.json()}
+            return {
+                "status": "success",
+                "connection_found": True,
+                "message": f"Connection found for source {short_name}!",
+            }
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
                 return {
-                    "status": "pending",
+                    "status": "error",
                     "connection_found": False,
-                    "message": f"No connection found for source: {short_name}",
+                    "message": f"No connection detected for source {short_name}",
                 }
             return {
                 "status": "error",
                 "connection_found": False,
                 "error": str(e),
                 "status_code": e.response.status_code,
+                "message": f"No connection detected for source {short_name}",
             }
         except Exception as e:
-            return {"status": "error", "connection_found": False, "error": str(e)}
+            return {
+                "status": "error",
+                "connection_found": False,
+                "error": str(e),
+                "message": f"No connection detected for source {short_name}",
+            }
 
 
-async def run_sync_for_source(short_name: str) -> dict[str, Any]:
+async def run_sync_for_source(short_name: str) -> Dict[str, Any]:
     """Run a sync for the given source short_name."""
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
@@ -67,7 +76,7 @@ async def run_sync_for_source(short_name: str) -> dict[str, Any]:
                 try:
                     # Call the test-sync endpoint
                     response = await client.post(
-                        f"{BACKEND_URL}/api/v1/cursor-dev/test-sync/{short_name}"
+                        f"{DEFAULT_BACKEND_URL}/cursor-dev/test-sync/{short_name}"
                     )
                     response.raise_for_status()
                     return {"status": "success", "data": response.json()}
@@ -102,52 +111,30 @@ async def run_sync_for_source(short_name: str) -> dict[str, Any]:
 
 @mcp.tool(
     "Check Connection",
-    "Check if a source connection is established. This will poll the backend until a connection is found or timeout is reached.",
+    "Check if a source connection is established.",
 )
-async def check_connection(short_name: str) -> dict[str, Any]:
+async def check_connection(short_name: str) -> Dict[str, Any]:
     """Check if a source connection is established.
 
     Args:
         short_name: The short name of the source to check
 
     Returns:
-        A dictionary containing the connection status and details
+        A dictionary containing the connection status and message
     """
     logger.info(f"Checking connection for source: {short_name}")
 
-    start_time = time.time()
-    while time.time() - start_time < CONNECTION_CHECK_TIMEOUT:
-        result = await check_connection_status(short_name)
+    result = await check_connection_status(short_name)
 
-        if result["status"] == "success" and result["connection_found"]:
-            logger.info(f"Connection found for source: {short_name}")
-            return result
-
-        if result["status"] == "error":
-            logger.error(f"Error checking connection: {result['error']}")
-            if "status_code" in result and result["status_code"] != 404:
-                # If it's a server error not a 404, return it
-                return result
-
-        logger.info(
-            f"Connection not found for source: {short_name}, retrying in {CONNECTION_CHECK_INTERVAL} seconds"
-        )
-        await asyncio.sleep(CONNECTION_CHECK_INTERVAL)
-
-    # Timeout reached
-    logger.warning(f"Timeout reached waiting for connection: {short_name}")
-    return {
-        "status": "timeout",
-        "connection_found": False,
-        "message": f"Timeout waiting for connection: {short_name}",
-    }
+    # Just return the result directly, which now includes the appropriate message
+    return result
 
 
 @mcp.tool(
     "Run Sync",
     "Run a sync for a source integration. This will first check if a connection exists, then run the sync.",
 )
-async def run_sync(short_name: str) -> dict[str, Any]:
+async def run_sync(short_name: str) -> Dict[str, Any]:
     """Run a sync for a source integration.
 
     Args:
@@ -163,7 +150,9 @@ async def run_sync(short_name: str) -> dict[str, Any]:
     if connection_result["status"] != "success" or not connection_result["connection_found"]:
         return {
             "status": "error",
-            "error": f"No connection found for source: {short_name}",
+            "error": connection_result.get(
+                "message", f"No connection found for source: {short_name}"
+            ),
             "message": "Please ensure a connection is established before running a sync",
         }
 
@@ -171,17 +160,3 @@ async def run_sync(short_name: str) -> dict[str, Any]:
     result = await run_sync_for_source(short_name)
     logger.info(f"Sync result for {short_name}: {result['status']}")
     return result
-
-
-def main() -> None:
-    """Run the MCP server."""
-    # Create a FastAPI app that mounts the MCP router
-    app = FastAPI(title="Sync Test MCP Server")
-    mcp.mount_to_app(app)
-
-    # Start the server
-    uvicorn.run(app, host="0.0.0.0", port=8100, log_level="info")
-
-
-if __name__ == "__main__":
-    main()

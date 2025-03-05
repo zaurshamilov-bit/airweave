@@ -23,7 +23,6 @@ async def check_connection_status(
     *,
     db: AsyncSession = Depends(deps.get_db),
     short_name: str,
-    user: schemas.User = Depends(deps.get_admin_user),
 ) -> List[schemas.Connection]:
     """Check if a source connection exists for the given short_name.
 
@@ -48,9 +47,7 @@ async def check_connection_status(
         )
 
     # Find source connections for the given short_name
-    connections = await crud.connection.get_all_by_short_name(
-        db=db, short_name=short_name, current_user=user
-    )
+    connections = await crud.connection.get_all_by_short_name(db=db, short_name=short_name)
 
     # Filter for SOURCE connections only
     source_connections = [
@@ -72,7 +69,7 @@ async def test_sync(
     db: AsyncSession = Depends(deps.get_db),
     short_name: str,
     background_tasks: BackgroundTasks,
-    user: schemas.User = Depends(deps.get_admin_user),
+    user: schemas.User = Depends(deps.get_user),
 ) -> schemas.SyncJob:
     """Run a sync for a specific source by short_name.
 
@@ -102,9 +99,7 @@ async def test_sync(
         )
 
     # Find a source connection for the given short_name
-    connections = await crud.connection.get_all_by_short_name(
-        db=db, short_name=short_name, current_user=user
-    )
+    connections = await crud.connection.get_all_by_short_name(db=db, short_name=short_name)
 
     # Filter for SOURCE connections only
     source_connections = [
