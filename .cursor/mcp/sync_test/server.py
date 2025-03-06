@@ -46,7 +46,7 @@ async def check_connection(short_name: str) -> Dict[str, Any]:
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             response = await client.get(
-                f"{DEFAULT_BACKEND_URL}/connections/by-short-name/{short_name}"
+                f"{DEFAULT_BACKEND_URL}/cursor-dev/connections/status/{short_name}"
             )
             response.raise_for_status()
             return {
@@ -99,7 +99,7 @@ async def run_sync(short_name: str) -> Dict[str, Any]:
         try:
             # Check connection first
             connection_response = await client.get(
-                f"{DEFAULT_BACKEND_URL}/connections/by-short-name/{short_name}"
+                f"{DEFAULT_BACKEND_URL}/cursor-dev/connections/status/{short_name}"
             )
             connection_response.raise_for_status()
         except httpx.HTTPStatusError as e:

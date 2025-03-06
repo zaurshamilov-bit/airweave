@@ -595,38 +595,3 @@ async def get_oauth2_white_label_auth_url(
     except Exception as e:
         logger.error(f"Failed to generate auth URL for white label: {e}")
         raise HTTPException(status_code=400, detail="Failed to generate auth URL") from e
-
-
-@router.get(
-    "/by-short-name/{short_name}",
-    response_model=list[schemas.Connection],
-)
-async def get_connections_by_short_name(
-    short_name: str,
-    db: AsyncSession = Depends(deps.get_db),
-    user: schemas.User = Depends(deps.get_user),
-) -> list[schemas.Connection]:
-    """Get all connections for a specific source by short_name.
-
-    Args:
-    -----
-        short_name: The short name of the source
-        db: The database session
-        user: The current user
-
-    Returns:
-    --------
-        list[schemas.Connection]: List of connections for the given short name
-
-    Raises:
-    -------
-        HTTPException: If no connections are found
-    """
-    connections = await crud.connection.get_all_by_short_name(db=db, short_name=short_name)
-
-    if not connections:
-        raise HTTPException(
-            status_code=404, detail=f"No connections found for source with short_name: {short_name}"
-        )
-
-    return connections

@@ -10,8 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.api import deps
-from app.core.shared_models import IntegrationType
+from app.core.shared_models import ConnectionStatus, IntegrationType
 from app.db.unit_of_work import UnitOfWork
+from app.platform.auth.settings import integration_settings
 from app.platform.sync.service import sync_service
 
 router = APIRouter()
@@ -36,6 +37,19 @@ async def check_connection_status(
         List[schemas.Connection]: List of source connections for the given short_name
 
     """
+    try:
+        integration_settings.get_by_short_name(short_name)
+    except Exception as e:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Integration {short_name} not found in the integration settings. "
+                "Please add the client id and client secret for the integration in the "
+                "backend/app/platform/auth/yaml/dev.integrations.yaml file, then restart the "
+                "backend server and make a connection through the UI."
+            ),
+        ) from e
+
     # Find source connections for the given short_name
     connections = await crud.connection.get_all_by_short_name(db=db, short_name=short_name)
 
@@ -86,54 +100,35 @@ async def test_sync(
         conn for conn in connections if conn.integration_type == IntegrationType.SOURCE
     ]
 
-    if not source_connections:
+    # Filter for active source connections
+    active_source_connections = [
+        conn for conn in source_connections if conn.status == ConnectionStatus.ACTIVE
+    ]
+
+    if not active_source_connections:
         raise HTTPException(
             status_code=404,
-            detail=f"No source connections found for source with short_name: {short_name}",
+            detail=f"No active source connections found for source with short_name: {short_name}",
         )
 
     # Use the first available connection
-    source_connection = source_connections[0]
+    source_connection = active_source_connections[0]
 
-    # Find a sync for this source connection or create one if not found
-    syncs = await crud.sync.get_all_for_source_connection(
-        db=db, source_connection_id=source_connection.id, current_user=user
-    )
-
-    if syncs:
-        sync = syncs[0]
-    else:
-        # Create a new sync
-        async with UnitOfWork(db) as uow:
-            # Find the default destination for testing
-            destination_connections = await crud.connection.get_active_by_integration_type(
-                db=db,
-                integration_type=IntegrationType.DESTINATION,
-                organization_id=user.organization_id,
-            )
-
-            if not destination_connections:
-                raise HTTPException(status_code=404, detail="No destination connections found")
-
-            # Create a sync using the first destination found
-            sync_in = schemas.SyncCreate(
-                name=f"Test Sync for {short_name}",
-                source_connection_id=source_connection.id,
-                destination_connection_id=destination_connections[0].id,
-                enabled=True,
-                schedule="manual",
-            )
-
-            sync = await sync_service.create(
-                db=db, sync=sync_in.to_base(), current_user=user, uow=uow
-            )
-            await uow.session.flush()
-
-    # Run the sync
+    # Create a new sync
     async with UnitOfWork(db) as uow:
+        # Create a sync using the first destination found
+        sync_in = schemas.SyncCreate(
+            name=f"Test Sync for {short_name}",
+            source_connection_id=source_connection.id,
+        )
+
+        sync = await sync_service.create(db=db, sync=sync_in.to_base(), current_user=user, uow=uow)
+        await uow.session.flush()
+
         # Create a sync job
         sync_job_in = schemas.SyncJobCreate(sync_id=sync.id)
         sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_in, current_user=user, uow=uow)
+        await uow.session.flush()  # Flush to ensure created_at and modified_at are populated
 
         # Get the DAG
         sync_dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync.id, current_user=user)
@@ -144,8 +139,6 @@ async def test_sync(
         sync_dag_schema = schemas.SyncDag.model_validate(sync_dag)
         user_schema = schemas.User.model_validate(user)
 
-        sync_run = sync_service.run(sync_schema, sync_job_schema, sync_dag_schema, user_schema)
+    sync_run = await sync_service.run(sync_schema, sync_job_schema, sync_dag_schema, user_schema)
 
-        await uow.session.flush()
-
-    return schemas.SyncJob.model_validate(sync_job)
+    return sync_job_schema
