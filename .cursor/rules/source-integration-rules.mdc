@@ -27,7 +27,7 @@ Create a complete source integration for {your source} in the following steps
 
 ## 1. Extract necessary information
 
-1. Find out which authentication type is best for this type of source integration, if OAuth2, which type? With refresh? With rotating refresh?
+1. Find out which authentication type is best for this type of source integration, if OAuth2, which type? You can choose between: `oauth2`, `oauth2_with_refresh` and `oauth2_with_refresh_rotating`?
 2. Find out which entities are most important. List them, along with their (optional and primary key) attributes
 3. Find out the relations between these entities. List them along with named foreign key relations.
 
@@ -257,9 +257,9 @@ There are two tools
 
 There are essentially three outcomes:
 
-1. You test the connection and it returns that the user must still handle something. Pause the execution and prompt the user to fix it. If the problem is about the integrations yaml, check out [integrations-yaml.mdc](mdc:.cursor/rules/integrations-yaml.mdc). In case of OAuth2: look into the docs which scoped we need. Add the yaml instance. to `dev.integrations.yaml`. Then `docker-compose down && docker-compose up -d` as . If the problem is that there is no connection, ask the user to add one.
+1. You test the connection and it returns that the user must still handle something. Pause the execution and prompt the user to fix it. If the problem is about the integrations yaml, check out [integrations-yaml.mdc](mdc:.cursor/rules/integrations-yaml.mdc). In case of OAuth2: look into the docs which scoped we need. Add the yaml instance. to `dev.integrations.yaml`. Then `docker-compose down && docker-compose up -d` as there is no hot reload for non-python files. If the problem is that there is no connection, ask the user to add one. Once done, retest the connection using mcp!
 
-2. The connection works, and you try the sync, but it fails. You will receive a stacktrace from the problem. You must now fix it, and retry to sync, until it works. No need for docker here, as hot reload is turned on for python files.
+2. The connection works, and you try the sync, but it fails. You will receive a stacktrace from the problem. You must now fix it, and retry to sync, until it works.
 
 3. The sync works! You can now create a branch, commit and push.
 
