@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud, schemas
 from app.api import deps
-from app.core.config import settings
 from app.core.shared_models import IntegrationType
 from app.db.unit_of_work import UnitOfWork
 from app.platform.sync.service import sync_service
@@ -36,16 +35,7 @@ async def check_connection_status(
     --------
         List[schemas.Connection]: List of source connections for the given short_name
 
-    Raises:
-    -------
-        HTTPException: If the endpoint is not enabled or no connections are found
     """
-    if not settings.LOCAL_CURSOR_DEVELOPMENT:
-        raise HTTPException(
-            status_code=404,
-            detail="This endpoint is only available when LOCAL_CURSOR_DEVELOPMENT is enabled",
-        )
-
     # Find source connections for the given short_name
     connections = await crud.connection.get_all_by_short_name(db=db, short_name=short_name)
 
@@ -87,17 +77,7 @@ async def test_sync(
     Returns:
     --------
         schemas.SyncJob: The created sync job
-
-    Raises:
-    -------
-        HTTPException: If no source connection is found for the short_name
     """
-    if not settings.LOCAL_CURSOR_DEVELOPMENT:
-        raise HTTPException(
-            status_code=404,
-            detail="This endpoint is only available when LOCAL_CURSOR_DEVELOPMENT is enabled",
-        )
-
     # Find a source connection for the given short_name
     connections = await crud.connection.get_all_by_short_name(db=db, short_name=short_name)
 
@@ -164,10 +144,7 @@ async def test_sync(
         sync_dag_schema = schemas.SyncDag.model_validate(sync_dag)
         user_schema = schemas.User.model_validate(user)
 
-        # Run the sync in background
-        background_tasks.add_task(
-            sync_service.run, sync_schema, sync_job_schema, sync_dag_schema, user_schema
-        )
+        sync_run = sync_service.run(sync_schema, sync_job_schema, sync_dag_schema, user_schema)
 
         await uow.session.flush()
 
