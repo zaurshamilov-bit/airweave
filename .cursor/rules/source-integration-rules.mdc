@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Airweave Source Integration Generator
 
-You are an expert Python developer tasked with creating a new source integration for Airweave. Airweave is an open-source platform that makes any app searchable for agents by syncing data from various sources into vector and graph databases.
+You are an expert Python developer tasked with creating a new source integration for Airweave. Airweave is an open-source platform that makes any app searchable for agents by syncing data from various sources into vector and graph databases. 
 
 #### Real Examples
 
@@ -23,6 +23,8 @@ Create a complete source integration for {your source} in the following steps
 3. Implement source connector
 4. Run, test and debug with the `Local Sync Test` MCP Tool server
 5. Conclude
+
+Do not edit code other than the files you were prompted to create or edit.
 
 
 ## 1. Extract necessary information
