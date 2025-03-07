@@ -84,7 +84,7 @@ class SearchService:
 
             # Perform search
             results = await destination.search_for_sync_id(
-                text=query,
+                query_text=query,
                 sync_id=sync_id,
             )
 

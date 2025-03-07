@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         FIRST_SUPERUSER (str): The email address of the first superuser.
         FIRST_SUPERUSER_PASSWORD (str): The password of the first superuser.
         ENCRYPTION_KEY (str): The encryption key.
-        POSTGRES_SERVER (str): The PostgreSQL server hostname.
+        POSTGRES_HOST (str): The PostgreSQL server hostname.
         POSTGRES_DB (str): The PostgreSQL database name.
         POSTGRES_USER (str): The PostgreSQL username.
         POSTGRES_PASSWORD (str): The PostgreSQL password.
@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     ENCRYPTION_KEY: str
 
-    POSTGRES_SERVER: str
+    POSTGRES_HOST: str
     POSTGRES_DB: str = "airweave"
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
@@ -74,6 +74,7 @@ class Settings(BaseSettings):
         Returns:
         -------
             PostgresDsn: The assembled SQLAlchemy async database URI.
+
         """
         if isinstance(v, str):
             return v
@@ -81,7 +82,7 @@ class Settings(BaseSettings):
         if info.data.get("LOCAL_DEVELOPMENT"):
             host = "localhost"
         else:
-            host = info.data.get("POSTGRES_SERVER")
+            host = info.data.get("POSTGRES_HOST")
 
         return PostgresDsn.build(
             scheme="postgresql+asyncpg",

@@ -138,19 +138,52 @@ class ConfluenceSource(BaseSource):
             logger.error(f"Response headers: {dict(response.headers)}")
             logger.error(f"Response body: {response.text}")
 
+            # Special handling for scope-related errors
+            if response.status_code == 401:
+                error_body = response.json() if response.text else {}
+                error_message = error_body.get("message", "")
+
+                if (
+                    "scope" in error_message.lower()
+                    or "x-failure-category" in response.headers
+                    and "SCOPE" in response.headers.get("x-failure-category", "")
+                ):
+                    logger.error(
+                        "OAuth scope error. The token doesn't have the required permissions."
+                    )
+                    logger.error(
+                        "Please verify that your OAuth app has the correct scopes configured."
+                    )
+                    raise ValueError(f"OAuth scope error: {error_message}.")
+
         response.raise_for_status()
         return response.json()
 
     async def _generate_space_entities(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[ConfluenceSpaceEntity, None]:
-        """Generate ConfluenceSpaceEntity objects."""
-        url = "https://your-domain.atlassian.net/wiki/api/v2/spaces?limit=50"
+        """Generate ConfluenceSpaceEntity objects.
+
+        This method generates ConfluenceSpaceEntity objects for all spaces in the user's Confluence
+            instance. It uses cursor-based pagination to retrieve all spaces.
+
+        Source: https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-space/#api-spaces-get
+
+        Args:
+        -----
+            client: The HTTP client to use for the request
+
+        Returns:
+        --------
+            AsyncGenerator[ConfluenceSpaceEntity, None]: An asynchronous generator of
+                ConfluenceSpaceEntity objects
+        """
+        limit = 50
+        url = f"{self.base_url}/wiki/api/v2/spaces?limit={limit}"
         while url:
             data = await self._get_with_auth(client, url)
             for space in data.get("results", []):
                 yield ConfluenceSpaceEntity(
-                    source_name="confluence",
                     entity_id=space["id"],
                     breadcrumbs=[],  # top-level object
                     space_key=space["key"],
@@ -162,30 +195,44 @@ class ConfluenceSource(BaseSource):
                     created_at=space.get("createdAt"),
                     updated_at=space.get("updatedAt"),
                 )
+
             # Cursor-based pagination (check for next link)
             next_link = data.get("_links", {}).get("next")
-            if next_link:
-                # _links.next is usually a relative path; build a full URL if needed
-                url = f"https://your-domain.atlassian.net{next_link}"
-            else:
-                url = None
+            url = f"{self.base_url}{next_link}" if next_link else None
 
     async def _generate_page_entities(
-        self, client: httpx.AsyncClient, space_key: str, space_breadcrumb: Breadcrumb
+        self, client: httpx.AsyncClient, space_id: str, space_breadcrumb: Breadcrumb
     ) -> AsyncGenerator[ConfluencePageEntity, None]:
-        """Generate ConfluencePageEntity objects for a space (optionally also retrieve children)."""
-        url = f"https://your-domain.atlassian.net/wiki/api/v2/spaces/{space_key}/content/page?limit=50"
+        """Generate ConfluencePageEntity objects for a space (optionally also retrieve children).
+
+        This method generates ConfluencePageEntity objects for a space (optionally also retrieve
+            children).
+
+        Source: https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-page/#api-spaces-id-pages-get
+
+        Args:
+        -----
+            client: The HTTP client to use for the request
+            space_id: The id of the space to retrieve pages from
+            space_breadcrumb: The breadcrumb for the space
+
+        Returns:
+        --------
+            AsyncGenerator[ConfluencePageEntity, None]: An asynchronous generator of
+                ConfluencePageEntity objects
+        """
+        limit = 50
+        url = f"{self.base_url}/wiki/api/v2/spaces/{space_id}/content/page?limit={limit}"
         while url:
             data = await self._get_with_auth(client, url)
             for page in data.get("results", []):
                 page_breadcrumbs = [space_breadcrumb]
                 yield ConfluencePageEntity(
-                    source_name="confluence",
                     entity_id=page["id"],
                     breadcrumbs=page_breadcrumbs,
                     content_id=page["id"],
                     title=page.get("title"),
-                    space_key=space_key,
+                    space_id=page.get("spaceId"),
                     body=page.get("body", {}).get("storage", {}).get("value"),
                     version=page.get("version", {}).get("number"),
                     status=page.get("status"),
@@ -196,23 +243,23 @@ class ConfluenceSource(BaseSource):
                 # or recursively fetch child pages if you need deeper nesting.
 
             next_link = data.get("_links", {}).get("next")
-            url = f"https://your-domain.atlassian.net{next_link}" if next_link else None
+            url = f"{self.base_url}{next_link}" if next_link else None
 
     async def _generate_blog_post_entities(
-        self, client: httpx.AsyncClient
+        self, client: httpx.AsyncClient, space_id: str, space_breadcrumb: Breadcrumb
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ConfluenceBlogPostEntity objects."""
-        url = "https://your-domain.atlassian.net/wiki/api/v2/blogposts?limit=50"
+        limit = 50
+        url = f"{self.base_url}/wiki/api/v2/spaces/{space_id}/content/blogpost?limit={limit}"
         while url:
             data = await self._get_with_auth(client, url)
             for blog in data.get("results", []):
                 yield ConfluenceBlogPostEntity(
-                    source_name="confluence",
                     entity_id=blog["id"],
-                    breadcrumbs=[],  # or possibly attach space breadcrumb if needed
+                    breadcrumbs=[space_breadcrumb],
                     content_id=blog["id"],
                     title=blog.get("title"),
-                    space_key=blog.get("spaceId"),
+                    space_id=blog.get("spaceId"),
                     body=(blog.get("body", {}).get("storage", {}).get("value")),
                     version=blog.get("version", {}).get("number"),
                     status=blog.get("status"),
@@ -221,26 +268,26 @@ class ConfluenceSource(BaseSource):
                 )
 
             next_link = data.get("_links", {}).get("next")
-            url = f"https://your-domain.atlassian.net{next_link}" if next_link else None
+            url = f"{self.base_url}{next_link}" if next_link else None
 
     async def _generate_comment_entities(
-        self, client: httpx.AsyncClient, content_id: str, parent_breadcrumbs: List[Breadcrumb]
+        self, client: httpx.AsyncClient, page_id: str, parent_breadcrumbs: List[Breadcrumb]
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ConfluenceCommentEntity objects for a given content (page, blog, etc.).
 
         For example:
-          GET /wiki/api/v2/pages/{content_id}/child/comment
+          GET /wiki/api/v2/pages/{page_id}/inline-comments
         or
-          GET /wiki/api/v2/blogposts/{content_id}/child/comment
+          GET /wiki/api/v2/blogposts/{blog_id}/inline-comments
         depending on the content type.
         """
         # Example: retrieving comments for a page
-        url = f"https://your-domain.atlassian.net/wiki/api/v2/pages/{content_id}/child/comment?limit=50"
+        limit = 50
+        url = f"{self.base_url}/wiki/api/v2/pages/{page_id}/inline-comments?limit={limit}"
         while url:
             data = await self._get_with_auth(client, url)
             for comment in data.get("results", []):
                 yield ConfluenceCommentEntity(
-                    source_name="confluence",
                     entity_id=comment["id"],
                     breadcrumbs=parent_breadcrumbs,
                     content_id=comment["id"],
@@ -252,7 +299,7 @@ class ConfluenceSource(BaseSource):
                     status=comment.get("status"),
                 )
             next_link = data.get("_links", {}).get("next")
-            url = f"https://your-domain.atlassian.net{next_link}" if next_link else None
+            url = f"{self.base_url}{next_link}" if next_link else None
 
     # You can define similar methods for label, task, whiteboard, custom content, etc.
     # For example:
@@ -266,7 +313,6 @@ class ConfluenceSource(BaseSource):
             data = await self._get_with_auth(client, url)
             for label_obj in data.get("results", []):
                 yield ConfluenceLabelEntity(
-                    source_name="confluence",
                     entity_id=label_obj["id"],
                     breadcrumbs=[],
                     name=label_obj.get("name", ""),
@@ -288,7 +334,6 @@ class ConfluenceSource(BaseSource):
             data = await self._get_with_auth(client, url)
             for database in data.get("results", []):
                 yield ConfluenceDatabaseEntity(
-                    source_name="confluence",
                     entity_id=database["id"],
                     breadcrumbs=[space_breadcrumb],
                     content_id=database["id"],
@@ -303,26 +348,25 @@ class ConfluenceSource(BaseSource):
             url = f"https://your-domain.atlassian.net{next_link}" if next_link else None
 
     async def _generate_folder_entities(
-        self, client: httpx.AsyncClient, space_key: str, space_breadcrumb: Breadcrumb
+        self, client: httpx.AsyncClient, space_id: str, space_breadcrumb: Breadcrumb
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ConfluenceFolderEntity objects for a given space."""
-        url = f"https://your-domain.atlassian.net/wiki/api/v2/spaces/{space_key}/folders?limit=50"
+        url = f"{self.base_url}/wiki/api/v2/spaces/{space_id}/content/folder?limit=50"
         while url:
             data = await self._get_with_auth(client, url)
             for folder in data.get("results", []):
                 yield ConfluenceFolderEntity(
-                    source_name="confluence",
                     entity_id=folder["id"],
                     breadcrumbs=[space_breadcrumb],
                     content_id=folder["id"],
                     title=folder.get("title"),
-                    space_key=space_key,
+                    space_key=space_id,
                     created_at=folder.get("createdAt"),
                     updated_at=folder.get("updatedAt"),
                     status=folder.get("status"),
                 )
             next_link = data.get("_links", {}).get("next")
-            url = f"https://your-domain.atlassian.net{next_link}" if next_link else None
+            url = f"{self.base_url}{next_link}" if next_link else None
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:  # noqa: C901
         """Generate all Confluence content."""
@@ -340,7 +384,7 @@ class ConfluenceSource(BaseSource):
                 # 2) For each space, yield pages and their children
                 async for page_entity in self._generate_page_entities(
                     client,
-                    space_key=space_entity.space_key,
+                    space_id=space_entity.entity_id,
                     space_breadcrumb=space_breadcrumb,
                 ):
                     yield page_entity
@@ -353,6 +397,7 @@ class ConfluenceSource(BaseSource):
                             type="page",
                         ),
                     ]
+                    # 3) For each page, yield comments
                     async for comment_entity in self._generate_comment_entities(
                         client,
                         content_id=page_entity.content_id,
@@ -360,50 +405,53 @@ class ConfluenceSource(BaseSource):
                     ):
                         yield comment_entity
 
-                # 3) For each space, yield databases
-                async for database_entity in self._generate_database_entities(
-                    client,
-                    space_key=space_entity.space_key,
-                    space_breadcrumb=space_breadcrumb,
+                # 4) For each space, yield databases
+                # async for database_entity in self._generate_database_entities(
+                #     client,
+                #     space_key=space_entity.entity_id,
+                #     space_breadcrumb=space_breadcrumb,
+                # ):
+                #     yield database_entity
+
+                # 5) For each space, yield folders
+                # async for folder_entity in self._generate_folder_entities(
+                #     client,
+                #     space_key=space_entity.entity_id,
+                #     space_breadcrumb=space_breadcrumb,
+                # ):
+                #     yield folder_entity
+
+                # 6) For each space, yield blog posts and their comments
+                async for blog_entity in self._generate_blog_post_entities(
+                    client, space_id=space_entity.entity_id
                 ):
-                    yield database_entity
+                    yield blog_entity
 
-                # 4) For each space, yield folders
-                async for folder_entity in self._generate_folder_entities(
-                    client,
-                    space_key=space_entity.space_key,
-                    space_breadcrumb=space_breadcrumb,
-                ):
-                    yield folder_entity
+                    # blog_breadcrumb = Breadcrumb(
+                    #     entity_id=blog_entity.entity_id,
+                    #     name=blog_entity.title or "",
+                    #     type="blogpost",
+                    # )
+                    # async for comment_entity in self._generate_comment_entities(
+                    #     client,
+                    #     content_id=blog_entity.entity_id,
+                    #     parent_breadcrumbs=[blog_breadcrumb],
+                    # ):
+                    #     yield comment_entity
 
-            # 5) Yield blog posts and their comments
-            async for blog_entity in self._generate_blog_post_entities(client):
-                yield blog_entity
+                # TODO: Add support for labels, tasks, whiteboards, custom content
+                # # 7) Yield labels (global or any label scope)
+                # async for label_entity in self._generate_label_entities(client):
+                #     yield label_entity
 
-                blog_breadcrumb = Breadcrumb(
-                    entity_id=blog_entity.entity_id,
-                    name=blog_entity.title or "",
-                    type="blogpost",
-                )
-                async for comment_entity in self._generate_comment_entities(
-                    client,
-                    blog_entity.content_id,
-                    [blog_breadcrumb],
-                ):
-                    yield comment_entity
+                # # 8) Yield tasks
+                # async for task_entity in self._generate_task_entities(client):
+                #     yield task_entity
 
-            # 6) Yield labels (global or any label scope)
-            async for label_entity in self._generate_label_entities(client):
-                yield label_entity
+                # # 9) Yield whiteboards
+                # async for whiteboard_entity in self._generate_whiteboard_entities(client):
+                #     yield whiteboard_entity
 
-            # 7) Yield tasks
-            async for task_entity in self._generate_task_entities(client):
-                yield task_entity
-
-            # 8) Yield whiteboards
-            async for whiteboard_entity in self._generate_whiteboard_entities(client):
-                yield whiteboard_entity
-
-            # 9) Yield custom content
-            async for custom_content_entity in self._generate_custom_content_entities(client):
-                yield custom_content_entity
+                # # 10) Yield custom content
+                # async for custom_content_entity in self._generate_custom_content_entities(client):
+                #     yield custom_content_entity

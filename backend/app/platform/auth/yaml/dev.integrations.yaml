@@ -18,7 +18,7 @@ integrations:
     client_secret: "ATOA2js0_pWvPROjHjINcMTafJG7CBYMEYg2NfggcS45UX1n09_DZrR76v3Lkdvh0jlA3FCA7D54"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
-    scope: "read offline_access read:confluence-space.summary read:confluence-props manage:confluence-configuration read:confluence-content.all read:confluence-content.summary search:confluence read:confluence-content.permission read:confluence-user read:confluence-groups readonly:content.attachment:confluence read:content:confluence read:content-details:confluence read:space-details:confluence read:page:confluence read:blogpost:confluence read:custom-content:confluence read:comment:confluence read:template:confluence read:label:confluence read:relation:confluence read:space:confluence read:space.property:confluence read:content.metadata:confluence read:task:confluence read:whiteboard:confluence read:database:confluence read:folder:confluence"
+    scope: "offline_access read:content:confluence read:page:confluence read:space:confluence read:user:confluence read:comment:confluence read:attachment:confluence read:configuration:confluence"
     additional_frontend_params:
       audience: "api.atlassian.com"
       prompt: "consent"

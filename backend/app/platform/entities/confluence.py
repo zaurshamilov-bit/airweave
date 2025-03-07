@@ -59,7 +59,7 @@ class ConfluencePageEntity(ChunkEntity):
 
     content_id: Optional[str] = Field(None, description="Actual Confluence page ID.")
     title: Optional[str] = Field(None, description="Title of the page.")
-    space_key: Optional[str] = Field(None, description="Key of the space this page belongs to.")
+    space_id: Optional[str] = Field(None, description="ID of the space this page belongs to.")
     body: Optional[str] = Field(None, description="HTML body or excerpt of the page.")
     version: Optional[int] = Field(None, description="Page version number.")
     status: Optional[str] = Field(None, description="Status of the page (e.g., 'current').")
@@ -78,7 +78,7 @@ class ConfluenceBlogPostEntity(ChunkEntity):
 
     content_id: Optional[str] = Field(None, description="Actual Confluence blog post ID.")
     title: Optional[str] = Field(None, description="Title of the blog post.")
-    space_key: Optional[str] = Field(None, description="Key of the space this blog post is in.")
+    space_id: Optional[str] = Field(None, description="ID of the space this blog post is in.")
     body: Optional[str] = Field(None, description="HTML body of the blog post.")
     version: Optional[int] = Field(None, description="Blog post version number.")
     status: Optional[str] = Field(None, description="Status of the blog post (e.g., 'current').")
