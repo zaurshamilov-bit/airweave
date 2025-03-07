@@ -76,6 +76,51 @@ Airweave is a monorepo with:
 - **Frontend**: We use [ESLint](https://eslint.org/) and follow TypeScript best practices
 - Pre-commit hooks will automatically check your code before committing
 
+## Adding a Source Integration
+
+Adding a new source integration to Airweave is straightforward, especially when using the Cursor AI agent. Airweave's architecture makes it easy to connect to new data sources with minimal configuration.
+
+### Using Cursor AI for Source Integration
+
+Adding a source with Cursor should be pretty easy. Follow these steps:
+
+1. **Read the documentation**
+   - Review the [Airweave documentation on extending connectors](https://docs.airweave.ai/extending-connectors)
+   - Examine existing source implementations like Slack (`backend/app/platform/sources/slack.py` and `backend/app/platform/entities/slack.py`)
+
+2. **Add your API reference to Cursor**
+   - Attach the API documentation for the service you're integrating
+
+3. **Reference the documentation in Cursor**
+   - In the Cursor agent window, reference the docs by typing `@your-docs`
+   - Also reference our Cursor rules with `@source-integration-rules.mdc`
+
+4. **Explain your integration plan**
+   - Tell Cursor which entities you'd like to integrate
+   - Describe the relationships between these entities
+
+5. **Let Cursor generate the integration code**
+   - Cursor will help generate both the entity schemas and source connector code
+   - Review and refine the generated code as needed
+
+6. **Test your integration**
+   - Use the MCP tools to test your connection and run a sync
+
+If you need help with your source integration, reach out to us on [Discord](https://discord.com/invite/484HY9Ehxt).
+
+### Source Integration Structure
+
+A complete source integration consists of:
+
+1. **Entity Schemas** (`backend/app/platform/entities/your_service.py`)
+   - Define the data structures for each entity type
+   - Extend from base classes like `BaseEntity`, `ChunkEntity`, or `FileEntity`
+
+2. **Source Connector** (`backend/app/platform/sources/your_service.py`)
+   - Implement authentication and API communication
+   - Create entity generators for each resource type
+   - Handle pagination, error retries, and file processing if needed
+
 ### Pull Request Process
 
 1. Ensure your fork is up to date with the upstream repository
