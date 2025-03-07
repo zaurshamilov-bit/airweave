@@ -9,7 +9,7 @@ Thank you for your interest in contributing to Airweave! This document provides 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
 - Python 3.11+ (for backend development)
 - Node.js 20+ (for frontend development)
-- [Visual Studio Code](https://code.visualstudio.com/) (recommended for optimal development experience)
+- [Cursor](https://www.cursor.com/) (recommended for optimal development experience)
 
 ### Open Source Development Workflow
 
@@ -80,31 +80,44 @@ Airweave is a monorepo with:
 
 Adding a new source integration to Airweave is straightforward, especially when using the Cursor AI agent. Airweave's architecture makes it easy to connect to new data sources with minimal configuration.
 
-### Using Cursor AI for Source Integration
+### Using Cursor AI and Local MCP for Source Integration
 
-Adding a source with Cursor should be pretty easy. Follow these steps:
+Adding a source with Cursor should be pretty easy. Follow these steps to automate 95% of the work:
+
 
 1. **Read the documentation**
    - Review the [Airweave documentation on extending connectors](https://docs.airweave.ai/extending-connectors)
    - Examine existing source implementations like Slack (`backend/app/platform/sources/slack.py` and `backend/app/platform/entities/slack.py`)
 
-2. **Add your API reference to Cursor**
-   - Attach the API documentation for the service you're integrating
+2. **Add your API reference or OpenAPI spec to Cursor**
+   - Find the API Reference of the source you'd like to integrate.
+   - Go to Cursor Settings > Features > Docs > + Add New Doc
+   - Add the API refrence URL.
 
-3. **Reference the documentation in Cursor**
-   - In the Cursor agent window, reference the docs by typing `@your-docs`
+   If you have an OpenAPI spec instead, simply add it to the folder.
+
+3. **Start Model Context Protocol Testing Server (Optional)**
+   You can allow Cursor to immediately test connections and synchronizations with your source if you allow it. In order to do this, you must do the following steps:
+   - Set `LOCAL_CURSOR_DEVELOPMENT=true` in `.env `
+   - Run the MCP server `python .cursor/mcp/sync_test/server.py`
+   - Navigate to Cursor Settings > MCP > Add New MCP Server
+   - Give a name, like "Run Sync Test Server", choose "SSE" and put in `http://localhost:8002/sse` as URL.
+
+   Visit [MCP README](https://github.com/airweave-ai/airweave/blob/main/.cursor/mcp/sync_test/README.md) to read more info.
+
+4. **Explain your integration plan to Cursor Agent**
+   - Describe what you want your Cursor Agent to do.
+   - Reference the newly added API reference or OpenAPI spec: `@your-docs` or `@your-openapi-spec`
    - Also reference our Cursor rules with `@source-integration-rules.mdc`
 
-4. **Explain your integration plan**
-   - Tell Cursor which entities you'd like to integrate
-   - Describe the relationships between these entities
+   Example: `Write the source integration for Microsoft Teams with (@microsoft-teams-docs) and @source-integration-rules.mdc`
 
 5. **Let Cursor generate the integration code**
    - Cursor will help generate both the entity schemas and source connector code
    - Review and refine the generated code as needed
 
 6. **Test your integration**
-   - Use the MCP tools to test your connection and run a sync
+   - Use the MCP tools to test your connection and run a sync. Read the []
 
 If you need help with your source integration, reach out to us on [Discord](https://discord.com/invite/484HY9Ehxt).
 
@@ -163,7 +176,6 @@ Example: `feat(sources): add support for Notion API`
 
 If you have any questions or need assistance, please:
 - Open an issue for discussion
-- Refer to existing documentation
-- Contact the maintainers through appropriate channels
+- Contact us directly!
 
 Thank you for contributing to Airweave!
