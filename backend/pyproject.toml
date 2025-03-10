@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Make any app searchable - Universal search and agent integration tool"
 authors = ["Rauf Akdemir <rauf@airweave.ai>", "Lennert Jansen <lennert@airweave.ai>"]
 readme = "README.md"
-packages = [{include = "airweave"}]
+packages = [{include = "app"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
