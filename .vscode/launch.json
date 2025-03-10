@@ -28,26 +28,23 @@
             }
         },
         {
-            "name": "Pytest Debug",
+            "name": "Python: Debug Test Method",
             "type": "debugpy",
             "request": "launch",
             "purpose": ["debug-test"],
-            "python": "${command:python.interpreterPath}",
             "console": "integratedTerminal",
-            "program": "${workspaceFolder}/venv/bin/pytest",
-            "args": [
-                "${relativeFile}"
-            ],
+            "justMyCode": false,
             "cwd": "${workspaceFolder}/backend",
-            "preLaunchTask": "start-docker-services",
-            "postDebugTask": "stop-docker-services",
-            "envFile": "${workspaceFolder}/.env"
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend"
+            },
+            "python": "${workspaceFolder}/backend/venv/bin/python3"
         },
         {
             "name": "Python: Current Script with CWD",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}", 
+            "program": "${file}",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/backend",
             "justMyCode": true

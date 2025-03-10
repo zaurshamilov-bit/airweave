@@ -6,6 +6,15 @@
     "python.testing.pytestEnabled": true,
     "python.testing.cwd": "${workspaceFolder}/backend",
     "python.analysis.extraPaths": ["${workspaceFolder}/backend"],
+    "python.defaultInterpreterPath": "${workspaceFolder}/backend/venv/bin/python3",
+    "python.testing.pytestPath": "${workspaceFolder}/backend/venv/bin/pytest",
+    "python.testing.autoTestDiscoverOnSaveEnabled": true,
+    "python.debugOptions": [
+        "RedirectOutput",
+        "DebugStdLib",
+        "ShowReturnValue",
+        "Django"
+    ],
     "black-formatter.args": [
         "--line-length",
         "100"
