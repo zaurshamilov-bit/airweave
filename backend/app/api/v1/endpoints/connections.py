@@ -43,6 +43,8 @@ async def get_connection(
         schemas.Connection: The connection.
     """
     connection = await crud.connection.get(db, id=connection_id, current_user=user)
+    if not connection:
+        raise HTTPException(status_code=404, detail="Connection not found")
     return connection
 
 
