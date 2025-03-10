@@ -1,6 +1,6 @@
 """E2E tests for Source Connection operations."""
 
-import uuid
+import os
 
 import pytest
 import requests
@@ -11,10 +11,10 @@ def source_connection_data():
     """Fixture to provide test source connection data."""
     # Include both connection name and credential information in config_fields
     return {
-        "name": f"Test Source Connection {uuid.uuid4()}",
+        "name": "Test Source Connection",
         "config_fields": {
             # Add required configuration fields for Stripe (StripeAuthConfig)
-            "api_key": f"test-api-key-{uuid.uuid4()}",
+            "api_key": os.getenv("STRIPE_API_KEY"),
         },
     }
 
