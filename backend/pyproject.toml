@@ -112,5 +112,11 @@ docstring-code-format = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
-addopts = "-v --cov=airweave --cov-report=term-missing"
+addopts = "-v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml"
+markers = [
+    "unit: mark a test as a unit test",
+    "integration: mark a test as an integration test",
+    "e2e: mark a test as an end-to-end test",
+    "slow: mark a test as slow running"
+]
 extend-exclude = ["backend (old, neena, only for inspiration)"]

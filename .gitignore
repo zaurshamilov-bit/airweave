@@ -14,3 +14,4 @@ backend/.coverage
 backend/local.py
 
 .vs/
+backend/coverage.xml
