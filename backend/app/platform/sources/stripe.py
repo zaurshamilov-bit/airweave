@@ -22,6 +22,7 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.platform.auth.schemas import AuthType
+from app.platform.configs.auth import StripeAuthConfig
 from app.platform.decorators import source
 from app.platform.entities._base import ChunkEntity
 from app.platform.entities.stripe import (
@@ -59,15 +60,15 @@ class StripeSource(BaseSource):
       - /v1/refunds
       - /v1/subscriptions
 
-    Each resource endpoint may use Stripe’s pagination (has_more + starting_after) to
+    Each resource endpoint may use Stripe's pagination (has_more + starting_after) to
     retrieve all objects. Fields are mapped to the entity schemas defined in entities/stripe.py.
     """
 
     @classmethod
-    async def create(cls, access_token: str) -> "StripeSource":
+    async def create(cls, stripe_auth_config: StripeAuthConfig) -> "StripeSource":
         """Create a new Stripe source instance."""
         instance = cls()
-        instance.access_token = access_token
+        instance.api_key = stripe_auth_config.api_key
         return instance
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
@@ -75,9 +76,13 @@ class StripeSource(BaseSource):
         """Make an authenticated GET request to the Stripe API.
 
         The `url` should be a fully qualified endpoint (e.g., 'https://api.stripe.com/v1/customers').
+
+        Stripe uses Basic authentication with the API key as the username and no password.
+        See: https://docs.stripe.com/api/authentication
         """
-        headers = {"Authorization": f"Bearer {self.access_token}"}
-        response = await client.get(url, headers=headers)
+        # Use Basic authentication with the API key as the username and no password
+        auth = httpx.BasicAuth(username=self.api_key, password="")
+        response = await client.get(url, auth=auth)
         response.raise_for_status()
         return response.json()
 
@@ -91,6 +96,10 @@ class StripeSource(BaseSource):
         """
         url = "https://api.stripe.com/v1/balance"
         data = await self._get_with_auth(client, url)
+
+        # Create the entity with the raw data structures from Stripe
+        # This avoids any issues with nested dictionaries like source_types
+        # We don't manually extract nested fields but pass them directly as they are
         yield StripeBalanceEntity(
             entity_id="balance",  # Arbitrary ID since there's only one balance resource
             available=data.get("available", []),
@@ -114,6 +123,8 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for txn in data.get("data", []):
+                # Pass the fee_details and other potentially complex fields directly
+                # without attempting to transform them
                 yield StripeBalanceTransactionEntity(
                     entity_id=txn["id"],
                     amount=txn.get("amount"),
@@ -150,6 +161,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for charge in data.get("data", []):
+                # Pass metadata and other complex fields as is
                 yield StripeChargeEntity(
                     entity_id=charge["id"],
                     amount=charge.get("amount"),
@@ -186,6 +198,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for cust in data.get("data", []):
+                # Handle metadata as a complex field
                 yield StripeCustomerEntity(
                     entity_id=cust["id"],
                     email=cust.get("email"),
@@ -221,6 +234,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for evt in data.get("data", []):
+                # Events have complex nested data and request fields
                 yield StripeEventEntity(
                     entity_id=evt["id"],
                     event_type=evt.get("type"),
@@ -253,6 +267,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for inv in data.get("data", []):
+                # Handle metadata as a complex field
                 yield StripeInvoiceEntity(
                     entity_id=inv["id"],
                     customer_id=inv.get("customer"),
@@ -289,6 +304,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for pi in data.get("data", []):
+                # Handle metadata as a complex field
                 yield StripePaymentIntentEntity(
                     entity_id=pi["id"],
                     amount=pi.get("amount"),
@@ -323,11 +339,15 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for pm in data.get("data", []):
+                # Handle nested card data and billing_details as complex fields
                 yield StripePaymentMethodEntity(
                     entity_id=pm["id"],
                     type=pm.get("type"),
                     billing_details=pm.get("billing_details", {}),
                     customer_id=pm.get("customer"),
+                    card=pm.get("card"),
+                    created_at=pm.get("created"),
+                    metadata=pm.get("metadata", {}),
                 )
 
             has_more = data.get("has_more")
@@ -351,6 +371,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for payout in data.get("data", []):
+                # Handle metadata as a complex field
                 yield StripePayoutEntity(
                     entity_id=payout["id"],
                     amount=payout.get("amount"),
@@ -385,6 +406,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for refund in data.get("data", []):
+                # Handle metadata as a complex field
                 yield StripeRefundEntity(
                     entity_id=refund["id"],
                     amount=refund.get("amount"),
@@ -418,6 +440,7 @@ class StripeSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for sub in data.get("data", []):
+                # Handle metadata as a complex field
                 yield StripeSubscriptionEntity(
                     entity_id=sub["id"],
                     customer_id=sub.get("customer"),

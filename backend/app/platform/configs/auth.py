@@ -52,7 +52,12 @@ class ODBCAuthConfig(AuthConfig):
 class StripeAuthConfig(AuthConfig):
     """Stripe authentication credentials schema."""
 
-    api_key: str = Field(title="API Key", description="The API key for the Stripe account")
+    api_key: str = Field(
+        title="API Key",
+        description="The API key for the Stripe account. Should start with 'sk_test_' for test mode"
+        " or 'sk_live_' for live mode.",
+        pattern="^sk_(test|live)_[A-Za-z0-9]+$",
+    )
 
 
 class BaseDatabaseAuthConfig(AuthConfig):

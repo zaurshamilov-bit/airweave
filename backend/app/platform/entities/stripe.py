@@ -11,7 +11,7 @@ shared or per-resource metadata as needed.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
@@ -25,20 +25,21 @@ class StripeBalanceEntity(ChunkEntity):
     """
 
     # Lists of objects describing funds in various currency amounts.
-    # Each object typically contains {"amount": <int>, "currency": <str>, ...}
-    available: List[Dict[str, Union[int, str]]] = Field(
+    # Each object typically contains {"amount": <int>, "currency": <str>,
+    # "source_types": {"card": <int>}, ...}
+    available: List[Dict[str, Any]] = Field(
         default_factory=list,
         description="Funds that are available to be paid out, broken down by currency",
     )
-    pending: List[Dict[str, Union[int, str]]] = Field(
+    pending: List[Dict[str, Any]] = Field(
         default_factory=list,
         description="Funds not yet available, broken down by currency",
     )
-    instant_available: Optional[List[Dict[str, Union[int, str]]]] = Field(
+    instant_available: Optional[List[Dict[str, Any]]] = Field(
         None,
         description="Funds available for Instant Payouts (if enabled)",
     )
-    connect_reserved: Optional[List[Dict[str, Union[int, str]]]] = Field(
+    connect_reserved: Optional[List[Dict[str, Any]]] = Field(
         None,
         description="Funds reserved for connected accounts (if using Connect)",
     )
@@ -58,7 +59,7 @@ class StripeBalanceTransactionEntity(ChunkEntity):
     )
     description: Optional[str] = Field(None, description="Text description of the transaction")
     fee: Optional[int] = Field(None, description="Fees (in cents) taken from this transaction")
-    fee_details: List[Dict[str, Union[str, int]]] = Field(
+    fee_details: List[Dict[str, Any]] = Field(
         default_factory=list,
         description="Detailed breakdown of fees (type, amount, application, etc.)",
     )
@@ -98,7 +99,7 @@ class StripeChargeEntity(ChunkEntity):
         None, description="ID of the Invoice this charge is linked to (if any)"
     )
     # Example: { "reason": "Purchase of widget" }
-    metadata: Dict[str, str] = Field(
+    metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Set of key-value pairs attached to the charge"
     )
 
@@ -124,7 +125,7 @@ class StripeCustomerEntity(ChunkEntity):
         False, description="Whether the customer has any unpaid/overdue invoices"
     )
     invoice_prefix: Optional[str] = Field(None, description="Prefix for the customer's invoices")
-    metadata: Dict[str, str] = Field(
+    metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Set of key-value pairs attached to the customer"
     )
 
@@ -184,7 +185,7 @@ class StripeInvoiceEntity(ChunkEntity):
     )
     paid: bool = Field(False, description="Whether the invoice has been fully paid")
     currency: Optional[str] = Field(None, description="Three-letter ISO currency code (e.g. 'usd')")
-    metadata: Dict[str, str] = Field(
+    metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Set of key-value pairs that can be attached to the invoice",
     )
@@ -211,7 +212,7 @@ class StripePaymentIntentEntity(ChunkEntity):
     customer_id: Optional[str] = Field(
         None, description="ID of the Customer this PaymentIntent is for (if any)"
     )
-    metadata: Dict[str, str] = Field(
+    metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Set of key-value pairs attached to the PaymentIntent"
     )
 
@@ -236,7 +237,7 @@ class StripePaymentMethodEntity(ChunkEntity):
         ),
     )
     created_at: Optional[datetime] = Field(None, description="When the PaymentMethod was created")
-    metadata: Dict[str, str] = Field(
+    metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Set of key-value pairs that can be attached to the PaymentMethod",
     )
@@ -269,7 +270,7 @@ class StripePayoutEntity(ChunkEntity):
     statement_descriptor: Optional[str] = Field(
         None, description="Extra information to be displayed on the user's bank statement"
     )
-    metadata: Dict[str, str] = Field(
+    metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Set of key-value pairs that can be attached to the payout",
     )
@@ -298,7 +299,7 @@ class StripeRefundEntity(ChunkEntity):
     payment_intent_id: Optional[str] = Field(
         None, description="ID of the PaymentIntent being refunded (if applicable)"
     )
-    metadata: Dict[str, str] = Field(
+    metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Set of key-value pairs that can be attached to the refund",
     )
@@ -331,7 +332,7 @@ class StripeSubscriptionEntity(ChunkEntity):
     created_at: Optional[datetime] = Field(
         None, description="When the subscription was first created"
     )
-    metadata: Dict[str, str] = Field(
+    metadata: Dict[str, Any] = Field(
         default_factory=dict,
         description="Set of key-value pairs attached to the subscription",
     )
