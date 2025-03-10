@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import schemas
 from app.crud._base import CRUDBase
+from app.db.unit_of_work import UnitOfWork
 from app.models.connection import Connection
 from app.models.sync import Sync
 from app.schemas.sync import SyncCreate, SyncUpdate
@@ -102,6 +103,37 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
             )
             for sync, connection in rows
         ]
+
+    async def remove_all_for_connection(
+        self, db: AsyncSession, connection_id: UUID, current_user: schemas.User, uow: UnitOfWork
+    ) -> list[Sync]:
+        """Remove all syncs for a connection.
+
+        Args:
+            db (AsyncSession): The database session
+            connection_id (UUID): The ID of the connection
+            current_user (schemas.User): The current user
+            uow (UnitOfWork): The unit of work
+        Returns:
+            list[Sync]: The removed syncs
+        """
+        stmt = (
+            select(Sync)
+            .where(
+                (Sync.source_connection_id == connection_id)
+                | (Sync.destination_connection_id == connection_id)
+            )
+            .where(Sync.organization_id == current_user.organization_id)
+        )
+        result = await db.execute(stmt)
+        syncs = result.scalars().unique().all()
+
+        removed_syncs = []
+        for sync in syncs:
+            removed_sync = await self.remove(db, id=sync.id, current_user=current_user, uow=uow)
+            removed_syncs.append(removed_sync)
+
+        return removed_syncs
 
 
 sync = CRUDSync(Sync)
