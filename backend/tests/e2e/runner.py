@@ -20,24 +20,14 @@ class E2ETestRunner:
     is delegated to the DockerComposeManager.
     """
 
-    def __init__(
-        self, compose_file: str = "docker/docker-compose.test.yml", use_minimal: bool = False
-    ):
+    def __init__(self, compose_file: str = "docker/docker-compose.test.yml"):
         """Initialize the E2E test runner.
 
         Args:
             compose_file: Path to the docker-compose file for testing, relative to tests directory
-            use_minimal: If True, only start the database and backend services
         """
-        # Create a unique project name for this test run
-        project_name = (
-            f"airweave-e2e-{int(subprocess.check_output(['date', '+%s']).decode().strip())}"
-        )
-
         # Initialize the Docker Compose manager
-        self.docker = DockerComposeManager(
-            compose_file=compose_file, project_name=project_name, minimal_services=use_minimal
-        )
+        self.docker = DockerComposeManager(compose_file=compose_file)
 
         logger.info(f"Initialized E2E test runner with compose file: {compose_file}")
 
@@ -56,7 +46,8 @@ class E2ETestRunner:
         """Stop all services after tests."""
         logger.info("Stopping services")
         try:
-            self.docker.stop(remove_volumes=True)
+            # Don't remove volumes by default to enable reuse
+            self.docker.stop(remove_volumes=False)
         except Exception as e:
             logger.error(f"Error during service teardown: {e}")
             raise

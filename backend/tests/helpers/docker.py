@@ -14,6 +14,9 @@ from requests.exceptions import RequestException
 
 logger = logging.getLogger(__name__)
 
+# Use a static project name for all test runs to enable container reuse
+DEFAULT_PROJECT_NAME = "airweave-test-env"
+
 
 class DockerComposeManager:
     """A manager for Docker Compose environments in tests.
@@ -25,15 +28,13 @@ class DockerComposeManager:
     def __init__(
         self,
         compose_file: str = "docker/docker-compose.test.yml",
-        project_name: Optional[str] = None,
         env_vars: Optional[Dict[str, str]] = None,
-        minimal_services: bool = False,
+        minimal_services: Optional[bool] = False,
     ):
         """Initialize a Docker Compose manager.
 
         Args:
             compose_file: Path to the docker-compose file, relative to tests directory
-            project_name: Optional project name for docker-compose
             env_vars: Optional environment variables to pass to docker-compose
             minimal_services: If True, only start essential services like databases
         """
@@ -47,7 +48,7 @@ class DockerComposeManager:
         if not os.path.exists(self.compose_file):
             raise FileNotFoundError(f"Compose file not found: {self.compose_file}")
 
-        self.project_name = project_name or f"airweave-test-{int(time.time())}"
+        # Use the provided project name or the default static one
         self.env_vars = env_vars or {}
         self.minimal_services = minimal_services
 
@@ -59,8 +60,63 @@ class DockerComposeManager:
 
         logger.info(
             f"Initialized Docker Compose manager with file: {self.compose_file} "
-            f"(project: {self.project_name})"
+            f"(project: {DEFAULT_PROJECT_NAME})"
         )
+
+    def _are_services_running(self, services: Optional[List[str]] = None) -> bool:
+        """Check if the specified services are already running.
+
+        Args:
+            services: List of services to check, or None to check all services
+
+        Returns:
+            True if all services are running, False otherwise
+        """
+        os.chdir(self.tests_dir)
+        try:
+            # Get list of running containers for this project
+            cmd = [
+                "docker-compose",
+                "-f",
+                self.compose_file,
+                "-p",
+                DEFAULT_PROJECT_NAME,
+                "ps",
+                "-q",
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            container_ids = [cid for cid in result.stdout.strip().split("\n") if cid]
+
+            if not container_ids:
+                return False
+
+            # If no specific services were requested, just check if any containers are running
+            if not services:
+                return len(container_ids) > 0
+
+            # Check if the specific services are running
+            running_services = []
+            for container_id in container_ids:
+                inspect_cmd = [
+                    "docker",
+                    "inspect",
+                    "--format",
+                    "{{.Config.Labels.com.docker.compose.service}}",
+                    container_id,
+                ]
+                service_result = subprocess.run(
+                    inspect_cmd, capture_output=True, text=True, check=True
+                )
+                service_name = service_result.stdout.strip()
+                running_services.append(service_name)
+
+            # Check if all requested services are running
+            return all(service in running_services for service in services)
+        except Exception as e:
+            logger.debug(f"Error checking if services are running: {e}")
+            return False
+        finally:
+            os.chdir(self.cwd)
 
     def start(self, services: Optional[List[str]] = None, wait_for_services: bool = True) -> None:
         """Start services using docker-compose.
@@ -70,6 +126,22 @@ class DockerComposeManager:
                 minimal_services setting.
             wait_for_services: Whether to wait for services to be ready
         """
+        # Determine which services to start
+        if services is None and self.minimal_services:
+            # Start only essential services (postgres and backend)
+            services = ["postgres", "backend"]
+            logger.info("Using minimal services (postgres and backend)...")
+
+        # Check if services are already running
+        if self._are_services_running(services):
+            logger.info("Services are already running, skipping startup")
+            self.is_running = True
+
+            # Still wait for services to be ready if requested
+            if wait_for_services:
+                self.wait_for_services()
+            return
+
         logger.info(f"Starting services with docker-compose file: {self.compose_file}")
 
         # Change to tests directory
@@ -81,16 +153,18 @@ class DockerComposeManager:
             env.update(self.env_vars)
 
             # Build command
-            cmd = ["docker-compose", "-f", self.compose_file, "-p", self.project_name, "up", "-d"]
+            cmd = [
+                "docker-compose",
+                "-f",
+                self.compose_file,
+                "-p",
+                DEFAULT_PROJECT_NAME,
+                "up",
+                "-d",
+            ]
 
-            # Determine which services to start
-            if services is None and self.minimal_services:
-                # Start only essential services (postgres and backend)
-                logger.info("Starting minimal services (postgres and backend)...")
-                services = ["postgres", "backend"]
-                cmd.extend(services)
-            elif services:
-                # Start specified services
+            # Add services to command if specified
+            if services:
                 logger.info(f"Starting specific services: {', '.join(services)}...")
                 cmd.extend(services)
             else:
@@ -98,14 +172,8 @@ class DockerComposeManager:
                 logger.info("Starting all services...")
 
             # Execute command
-            # First, pull the images to ensure they're up to date
-            logger.info("Pulling Docker images...")
-            pull_cmd = ["docker-compose", "-f", self.compose_file, "-p", self.project_name, "pull"]
-            if services:
-                pull_cmd.extend(services)
-            subprocess.run(pull_cmd, check=True, env=env)
-
-            # Then start the services
+            # Skip pulling images to use cached versions
+            logger.info("Starting services (using cached images)...")
             subprocess.run(cmd, check=True, env=env)
             self.is_running = True
 
@@ -118,7 +186,7 @@ class DockerComposeManager:
             # Try to collect logs to help diagnose the issue
             try:
                 logs = subprocess.run(
-                    ["docker-compose", "-f", self.compose_file, "-p", self.project_name, "logs"],
+                    ["docker-compose", "-f", self.compose_file, "-p", DEFAULT_PROJECT_NAME, "logs"],
                     capture_output=True,
                     text=True,
                     check=False,
@@ -141,30 +209,42 @@ class DockerComposeManager:
             logger.info("Services are not running, nothing to stop")
             return
 
-        logger.info("Stopping Docker Compose services")
+        # For test environment reuse, don't actually stop the services
+        # Just mark them as not running for this instance
+        logger.info("Marking services as stopped (but keeping containers running for reuse)")
+        self.is_running = False
 
-        # Change to tests directory
-        os.chdir(self.tests_dir)
+        # If explicitly asked to remove volumes, then actually stop the services
+        if remove_volumes:
+            logger.info("Removing volumes requested, stopping services completely")
+            # Change to tests directory
+            os.chdir(self.tests_dir)
 
-        try:
-            # Build command
-            cmd = ["docker-compose", "-f", self.compose_file, "-p", self.project_name, "down"]
+            try:
+                # Build command
+                cmd = [
+                    "docker-compose",
+                    "-f",
+                    self.compose_file,
+                    "-p",
+                    DEFAULT_PROJECT_NAME,
+                    "down",
+                ]
 
-            # Add volume cleanup if requested
-            if remove_volumes:
-                cmd.append("-v")
+                # Add volume cleanup if requested
+                if remove_volumes:
+                    cmd.append("-v")
 
-            # Execute command
-            subprocess.run(cmd, check=True)
-            self.is_running = False
-            logger.info("All services have been stopped")
+                # Execute command
+                subprocess.run(cmd, check=True)
+                logger.info("All services have been stopped")
 
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Error stopping Docker Compose: {e}")
-            raise
-        finally:
-            # Change back to original working directory
-            os.chdir(self.cwd)
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Error stopping Docker Compose: {e}")
+                raise
+            finally:
+                # Change back to original working directory
+                os.chdir(self.cwd)
 
     def _check_service_health(self, service):
         """Check if a single service is healthy.
@@ -212,7 +292,7 @@ class DockerComposeManager:
                         "-f",
                         self.compose_file,
                         "-p",
-                        self.project_name,
+                        DEFAULT_PROJECT_NAME,
                         "ps",
                         "-q",
                     ],
@@ -348,7 +428,7 @@ class DockerComposeManager:
                     "-f",
                     self.compose_file,
                     "-p",
-                    self.project_name,
+                    DEFAULT_PROJECT_NAME,
                     "logs",
                     service_name,
                 ],
@@ -390,7 +470,7 @@ class DockerComposeManager:
                     "-f",
                     self.compose_file,
                     "-p",
-                    self.project_name,
+                    DEFAULT_PROJECT_NAME,
                     "exec",
                     "-T",
                     service_name,

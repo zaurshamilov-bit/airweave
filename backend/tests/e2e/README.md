@@ -94,7 +94,7 @@ For faster test runs, the E2E environment can be started in "minimal mode":
 @pytest.fixture(scope="module")
 def e2e_environment() -> Generator[E2ETestRunner, None, None]:
     # Create runner with minimal mode (postgres and backend only)
-    runner = E2ETestRunner(use_minimal=True)
+    _runner = E2ETestRunner()
     # ...
 ```
 
