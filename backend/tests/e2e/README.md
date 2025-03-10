@@ -126,3 +126,36 @@ If tests fail, you can:
 ## CI/CD Integration
 
 These tests are integrated into the CI/CD pipeline in GitHub Actions. See the workflow configuration in `.github/workflows/test.yml` for details.
+
+# E2E Testing with Hot Reloading
+
+This directory contains end-to-end tests for the Airweave backend. The tests use Docker Compose to set up a test environment with all required services.
+
+## Hot Reloading
+
+The test environment now supports hot reloading for faster development cycles. When you make changes to the backend code, the server will automatically reload without requiring a full container rebuild.
+
+### How it works
+
+1. The backend container uses a development Dockerfile (`Dockerfile.dev`) that mounts the backend code as a volume
+2. Uvicorn is started with the `--reload` flag to watch for file changes
+3. The DockerComposeManager only rebuilds the container when explicitly requested
+
+### Usage
+
+#### Normal usage (with hot reloading)
+
+```bash
+# Run tests normally - hot reloading is enabled by default
+pytest backend/tests/e2e/
+```
+### Benefits
+
+- **Faster development cycles**: No need to wait for container rebuilds between code changes
+- **Immediate feedback**: Changes to the backend code are reflected immediately
+- **Selective rebuilding**: Only rebuild the container when necessary (e.g., after changing dependencies)
+
+### Limitations
+
+- Changes to the Dockerfile or dependencies still require a full rebuild
+- The hot reloading only works for Python code, not for other files like static assets

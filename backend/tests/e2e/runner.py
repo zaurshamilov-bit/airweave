@@ -4,8 +4,6 @@ This module provides utilities to run end-to-end tests with docker-compose.
 """
 
 import logging
-import subprocess
-from typing import List
 
 from ..helpers.docker import DockerComposeManager
 
@@ -31,12 +29,22 @@ class E2ETestRunner:
 
         logger.info(f"Initialized E2E test runner with compose file: {compose_file}")
 
-    def setup(self) -> None:
-        """Start all services for E2E tests."""
+    def setup(self, force_rebuild: bool = False) -> None:
+        """Start all services for E2E tests.
+
+        Args:
+            force_rebuild: If True, force rebuild the backend container
+        """
         logger.info("Starting services for E2E tests")
         try:
-            self.docker.start()
+            # Set environment variable for force rebuild if needed
+            if force_rebuild:
+                logger.info("Force rebuild enabled for backend container")
+                self.docker.start(force_rebuild=True)
+            else:
+                self.docker.start()
             logger.info("All services are running and ready")
+
         except Exception as e:
             logger.error(f"Error during service startup: {e}")
             self.teardown()  # Clean up any started services
@@ -51,62 +59,3 @@ class E2ETestRunner:
         except Exception as e:
             logger.error(f"Error during service teardown: {e}")
             raise
-
-    def execute_command(self, command: List[str]) -> subprocess.CompletedProcess:
-        """Execute a command on the host machine.
-
-        This is a pass-through to docker.run_host_command.
-
-        Args:
-            command: Command to execute
-
-        Returns:
-            A CompletedProcess instance with the command result
-        """
-        return self.docker.run_host_command(command)
-
-    def get_container_logs(self, service_name: str) -> str:
-        """Get logs from a container.
-
-        Args:
-            service_name: Name of the service to get logs from
-
-        Returns:
-            Container logs as a string
-        """
-        return self.docker.get_container_logs(service_name)
-
-    def exec_in_container(self, service_name: str, command: List[str]) -> str:
-        """Execute a command inside a running container.
-
-        Args:
-            service_name: Name of the service
-            command: Command to execute
-
-        Returns:
-            Command output as a string
-        """
-        return self.docker.execute_command(service_name, command)
-
-    def get_service_url(self, service_name: str, port: int) -> str:
-        """Get URL for a service.
-
-        Args:
-            service_name: Name of the service
-            port: Port number
-
-        Returns:
-            URL for the service
-        """
-        return self.docker.get_service_url(service_name, port)
-
-    def get_connection_string(self, service_name: str = "postgres") -> str:
-        """Get database connection string.
-
-        Args:
-            service_name: Name of the database service
-
-        Returns:
-            SQLAlchemy connection string
-        """
-        return self.docker.get_connection_string(service_name)

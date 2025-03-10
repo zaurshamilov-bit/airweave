@@ -17,14 +17,8 @@ _runner = None
 def e2e_environment() -> Generator[E2ETestRunner, None, None]:
     """Set up and tear down the E2E test environment.
 
-    This fixture:
-    1. Starts all services using docker-compose.test.yml (or reuses existing ones)
-    2. Waits for services to be ready
-    3. Yields the runner for additional operations
-    4. Keeps services running for future test runs
-
-    Yields:
-        The E2ETestRunner instance for additional operations
+    This fixture starts all required services using docker-compose
+    and tears them down after all tests are complete.
     """
     global _runner
 
@@ -48,4 +42,4 @@ def e2e_environment() -> Generator[E2ETestRunner, None, None]:
 @pytest.fixture(scope="session")
 def e2e_api_url() -> str:
     """Return the base URL for API requests in E2E tests."""
-    return "http://localhost:8001/"
+    return "http://localhost:8003/"

@@ -7,7 +7,7 @@ import logging
 import os
 import subprocess
 import time
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
 import requests
 from requests.exceptions import RequestException
@@ -48,15 +48,18 @@ class DockerComposeManager:
         if not os.path.exists(self.compose_file):
             raise FileNotFoundError(f"Compose file not found: {self.compose_file}")
 
-        # Use the provided project name or the default static one
-        self.env_vars = env_vars or {}
-        self.minimal_services = minimal_services
-
-        # Store working directory
+        # Store current working directory
         self.cwd = os.getcwd()
 
-        # Flag to track if services are running
+        self.env_vars = env_vars or {}
+        self.minimal_services = minimal_services
         self.is_running = False
+        self.managed_services = []
+
+        try:
+            subprocess.run(["docker-compose", "--version"], check=True, capture_output=True)
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            raise RuntimeError(f"Docker Compose not available: {e}") from e
 
         logger.info(
             f"Initialized Docker Compose manager with file: {self.compose_file} "
@@ -118,42 +121,53 @@ class DockerComposeManager:
         finally:
             os.chdir(self.cwd)
 
-    def start(self, services: Optional[List[str]] = None, wait_for_services: bool = True) -> None:
-        """Start services using docker-compose.
-
-        Args:
-            services: Optional list of specific services to start. If None, will use
-                minimal_services setting.
-            wait_for_services: Whether to wait for services to be ready
-        """
-        # Determine which services to start
-        if services is None and self.minimal_services:
-            # Start only essential services (postgres and backend)
-            services = ["postgres", "backend"]
-            logger.info("Using minimal services (postgres and backend)...")
-
-        # Check if services are already running
-        if self._are_services_running(services):
-            logger.info("Services are already running, skipping startup")
-            self.is_running = True
-
-            # Still wait for services to be ready if requested
-            if wait_for_services:
-                self.wait_for_services()
+    def start(
+        self,
+        services: Optional[List[str]] = None,
+        wait_for_services: bool = True,
+        force_rebuild: bool = False,
+    ) -> None:
+        """Start Docker Compose services."""
+        if self.is_running:
+            logger.info("Services are already running")
             return
 
-        logger.info(f"Starting services with docker-compose file: {self.compose_file}")
-
-        # Change to tests directory
-        os.chdir(self.tests_dir)
-
         try:
-            # Set environment variables
             env = os.environ.copy()
-            env.update(self.env_vars)
+            env["COMPOSE_PROJECT_NAME"] = DEFAULT_PROJECT_NAME
 
-            # Build command
-            cmd = [
+            if force_rebuild:
+                # Build the backend container with no cache
+                logger.info("Force rebuilding backend container...")
+                build_cmd = [
+                    "docker-compose",
+                    "-f",
+                    self.compose_file,
+                    "-p",
+                    DEFAULT_PROJECT_NAME,
+                    "build",
+                    "--no-cache",
+                    "backend",
+                ]
+                subprocess.run(build_cmd, check=True, env=env)
+
+                # Stop and remove any existing backend container
+                logger.info("Removing any existing backend container...")
+                rm_cmd = [
+                    "docker-compose",
+                    "-f",
+                    self.compose_file,
+                    "-p",
+                    DEFAULT_PROJECT_NAME,
+                    "rm",
+                    "-f",
+                    "backend",
+                ]
+                subprocess.run(rm_cmd, check=True, env=env)
+
+            # Start services
+            logger.info(f"Starting {'all' if not services else 'specified'} services...")
+            start_cmd = [
                 "docker-compose",
                 "-f",
                 self.compose_file,
@@ -162,41 +176,23 @@ class DockerComposeManager:
                 "up",
                 "-d",
             ]
-
-            # Add services to command if specified
             if services:
-                logger.info(f"Starting specific services: {', '.join(services)}...")
-                cmd.extend(services)
-            else:
-                # Start all services
-                logger.info("Starting all services...")
+                start_cmd.extend(services)
 
-            # Execute command
-            # Skip pulling images to use cached versions
-            logger.info("Starting services (using cached images)...")
-            subprocess.run(cmd, check=True, env=env)
+            subprocess.run(start_cmd, check=True, env=env)
             self.is_running = True
 
-            # Wait for services to be ready
+            # Wait for services to be ready if requested
             if wait_for_services:
                 self.wait_for_services()
 
+            logger.info("Services started successfully")
+
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error starting Docker Compose: {e}")
-            # Try to collect logs to help diagnose the issue
-            try:
-                logs = subprocess.run(
-                    ["docker-compose", "-f", self.compose_file, "-p", DEFAULT_PROJECT_NAME, "logs"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                ).stdout
-                logger.error(f"Container logs:\n{logs}")
-            except Exception as ex:
-                logger.error(f"Failed to get logs: {ex}")
+            logger.error(f"Docker command failed: {e}")
             raise
         finally:
-            # Change back to original working directory
+            # Change back to original directory
             os.chdir(self.cwd)
 
     def stop(self, remove_volumes: bool = True) -> None:
@@ -209,19 +205,41 @@ class DockerComposeManager:
             logger.info("Services are not running, nothing to stop")
             return
 
-        # For test environment reuse, don't actually stop the services
-        # Just mark them as not running for this instance
-        logger.info("Marking services as stopped (but keeping containers running for reuse)")
-        self.is_running = False
+        # Change to tests directory
+        os.chdir(self.tests_dir)
 
-        # If explicitly asked to remove volumes, then actually stop the services
-        if remove_volumes:
-            logger.info("Removing volumes requested, stopping services completely")
-            # Change to tests directory
-            os.chdir(self.tests_dir)
+        try:
+            # Only stop the backend service by default, keeping other services cached
+            if "backend" in self.managed_services or not self.managed_services:
+                logger.info("Stopping backend service...")
+                stop_cmd = [
+                    "docker-compose",
+                    "-f",
+                    self.compose_file,
+                    "-p",
+                    DEFAULT_PROJECT_NAME,
+                    "stop",
+                    "backend",
+                ]
+                subprocess.run(stop_cmd, check=True)
 
-            try:
-                # Build command
+                # Remove the backend container
+                rm_cmd = [
+                    "docker-compose",
+                    "-f",
+                    self.compose_file,
+                    "-p",
+                    DEFAULT_PROJECT_NAME,
+                    "rm",
+                    "-f",
+                    "backend",
+                ]
+                subprocess.run(rm_cmd, check=True)
+                logger.info("Backend service has been stopped")
+
+            # If explicitly asked to remove volumes, then stop all services
+            if remove_volumes:
+                logger.info("Removing volumes requested, stopping all services completely")
                 cmd = [
                     "docker-compose",
                     "-f",
@@ -229,22 +247,21 @@ class DockerComposeManager:
                     "-p",
                     DEFAULT_PROJECT_NAME,
                     "down",
+                    "-v",
                 ]
-
-                # Add volume cleanup if requested
-                if remove_volumes:
-                    cmd.append("-v")
-
-                # Execute command
                 subprocess.run(cmd, check=True)
-                logger.info("All services have been stopped")
+                logger.info("All services have been stopped and volumes removed")
+            else:
+                logger.info("Cached services are kept running for future test runs")
 
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Error stopping Docker Compose: {e}")
-                raise
-            finally:
-                # Change back to original working directory
-                os.chdir(self.cwd)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error stopping Docker Compose: {e}")
+            raise
+        finally:
+            # Change back to original working directory
+            os.chdir(self.cwd)
+            # Mark services as not running for this instance
+            self.is_running = False
 
     def _check_service_health(self, service):
         """Check if a single service is healthy.
@@ -342,7 +359,7 @@ class DockerComposeManager:
         health_checks = [
             {
                 "name": "backend",
-                "url": "http://localhost:8001/health",
+                "url": "http://localhost:8003/health",
                 "expected_status": 200,
             }
         ]
@@ -380,136 +397,3 @@ class DockerComposeManager:
                     error_msg += f"\n--- Container {container_id} ---\n{container_logs}\n"
 
             raise TimeoutError(error_msg)
-
-    def get_service_url(self, service_name: str, port: int) -> str:
-        """Get the URL for a service.
-
-        Args:
-            service_name: Name of the service in docker-compose
-            port: Port number to connect to
-
-        Returns:
-            URL for the service (http://localhost:port)
-        """
-        return f"http://localhost:{port}"
-
-    def get_connection_string(self, service_name: str = "postgres") -> str:
-        """Get a database connection string for the specified service.
-
-        Args:
-            service_name: Name of the database service
-
-        Returns:
-            SQLAlchemy connection string
-        """
-        # Default connection strings for common services
-        if service_name == "postgres":
-            return "postgresql+asyncpg://test:test@localhost:5433/test_db"
-        elif service_name == "neo4j":
-            return "neo4j://localhost:7688"
-        else:
-            raise ValueError(f"Unknown service: {service_name}")
-
-    def get_container_logs(self, service_name: str) -> str:
-        """Get logs for a specific service.
-
-        Args:
-            service_name: Name of the service in docker-compose
-
-        Returns:
-            Container logs as a string
-        """
-        logger.info(f"Getting logs for service: {service_name}")
-        os.chdir(self.tests_dir)
-        try:
-            logs = subprocess.run(
-                [
-                    "docker-compose",
-                    "-f",
-                    self.compose_file,
-                    "-p",
-                    DEFAULT_PROJECT_NAME,
-                    "logs",
-                    service_name,
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            ).stdout
-            return logs
-        except Exception as e:
-            logger.error(f"Failed to get logs: {e}")
-            return f"Failed to get logs: {e}"
-        finally:
-            os.chdir(self.cwd)
-
-    def execute_command(self, service_name: str, command: Union[str, List[str]]) -> str:
-        """Execute a command in a running service container.
-
-        Args:
-            service_name: Name of the service in docker-compose
-            command: Command to execute
-
-        Returns:
-            Command output as a string
-        """
-        logger.info(
-            f"Executing in {service_name}: "
-            f"{' '.join(command) if isinstance(command, list) else command}"
-        )
-        os.chdir(self.tests_dir)
-        try:
-            if isinstance(command, list):
-                cmd = command
-            else:
-                cmd = [command]
-
-            output = subprocess.run(
-                [
-                    "docker-compose",
-                    "-f",
-                    self.compose_file,
-                    "-p",
-                    DEFAULT_PROJECT_NAME,
-                    "exec",
-                    "-T",
-                    service_name,
-                ]
-                + cmd,
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout
-            return output
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Command failed: {e}")
-            logger.error(f"Error output: {e.stderr}")
-            raise
-        finally:
-            os.chdir(self.cwd)
-
-    def run_host_command(self, command: List[str]) -> subprocess.CompletedProcess:
-        """Execute a command on the host machine.
-
-        This is for commands that should run on the host, not in containers.
-
-        Args:
-            command: Command to execute
-
-        Returns:
-            A CompletedProcess instance with the command result
-        """
-        logger.info(f"Executing host command: {' '.join(command)}")
-
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        if result.returncode != 0:
-            logger.warning(f"Command failed with exit code {result.returncode}")
-            logger.warning(f"Command stderr: {result.stderr}")
-
-        return result
