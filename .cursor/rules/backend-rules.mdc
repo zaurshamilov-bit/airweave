@@ -38,7 +38,7 @@ Detail: `short_name` is a globally unique identifier used throughout the system,
 - **Entities** (`platform/entities/`): Core search objects that flow through the system
 
 ### Sync Architecture
-If necesssary (like editing ), refer [sync-architecture.mdc](mdc:.cursor/rules/sync-architecture.mdc). 
+If necesssary (like editing ), refer [sync-architecture.mdc](mdc:.cursor/rules/sync-architecture.mdc).
 
 ### Infrastructure
 - **Config** (`core/config.py`): Environment-based configuration
@@ -76,7 +76,6 @@ If necesssary (like editing ), refer [sync-architecture.mdc](mdc:.cursor/rules/s
 - Background processing with Redis workers (upcoming)
 
 ### API Convention
-- RESTful endpoints in `api/v1/endpoints/`
+- RESTful endpoints in `api/v1/endpoints/` -> the version is not part of the endpoint. It's just host.com/{endpoint}
 - Consistent response structures
 - One router per resource type
-- Versioned paths are not in `api/v1/`

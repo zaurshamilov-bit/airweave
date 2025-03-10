@@ -107,7 +107,7 @@ jobs:
               exit 1
             fi
 
-            if curl -s http://localhost:8001/api/v1/health | grep -q "ok"; then
+            if curl -s http://localhost:8001/health | grep -q "ok"; then
               echo "Backend is ready!"
               break
             fi

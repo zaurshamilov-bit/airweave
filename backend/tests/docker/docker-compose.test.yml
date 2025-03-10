@@ -2,64 +2,130 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:14
+    image: postgres:16
     environment:
-      - POSTGRES_USER=test
-      - POSTGRES_PASSWORD=test
-      - POSTGRES_DB=test_db
+      - POSTGRES_USER=airweave
+      - POSTGRES_PASSWORD=airweave1234!
+      - POSTGRES_DB=airweave
     ports:
       - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U test" ]
+      test: [ "CMD-SHELL", "pg_isready -U airweave" ]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  text2vec-transformers:
+    image: semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
+    ports:
+      - "8002:8080"
+    environment:
+      ENABLE_CUDA: 0
+      WORKERS_PER_NODE: 1
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   weaviate:
-    image: semitechnologies/weaviate:1.19.6
+    image: semitechnologies/weaviate:1.24.1
     ports:
       - "8088:8080"
+      - "50052:50051"
     environment:
       - QUERY_DEFAULTS_LIMIT=25
       - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
-      - DEFAULT_VECTORIZER_MODULE=none
+      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
+      - DEFAULT_VECTORIZER_MODULE=text2vec-transformers
+      - ENABLE_MODULES=text2vec-transformers,text2vec-openai,text2vec-cohere,text2vec-huggingface
+      - TRANSFORMERS_INFERENCE_API=http://text2vec-transformers:8080
       - CLUSTER_HOSTNAME=node1
+      - LOG_LEVEL=trace
+      - CONSOLE_LOGGER=true
+      - LOG_FORMAT=text
+      - GRPC_PORT=50051
+    depends_on:
+      - text2vec-transformers
+    volumes:
+      - weaviate_data:/var/lib/weaviate
     healthcheck:
       test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8080/v1/.well-known/ready" ]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 3
+      start_period: 30s
 
   neo4j:
-    image: neo4j:5.9.0
+    image: neo4j:latest
     ports:
       - "7475:7474"
       - "7688:7687"
     environment:
       - NEO4J_AUTH=neo4j/password
+    volumes:
+      - neo4j_data:/data
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:7474" ]
-      interval: 5s
-      timeout: 5s
+      test: ["CMD", "neo4j-admin", "database", "info"]
+      interval: 10s
+      timeout: 10s
       retries: 5
 
   backend:
     build:
-      context: ./backend
+      context: ../../../backend
       dockerfile: Dockerfile
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       weaviate:
         condition: service_healthy
       neo4j:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql+asyncpg://test:test@postgres:5432/test_db
+      - DATABASE_URL=postgresql+asyncpg://airweave:airweave1234!@postgres:5432/airweave
+      - REDIS_HOST=redis
+      - WEAVIATE_HOST=weaviate
       - WEAVIATE_URL=http://weaviate:8080
-      - NEO4J_URI=neo4j://neo4j:7687
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
       - NEO4J_USERNAME=neo4j
       - NEO4J_PASSWORD=password
       - TESTING=true
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=airweave
+      - POSTGRES_PASSWORD=airweave1234!
+      - POSTGRES_DB=airweave
+      - FIRST_SUPERUSER=admin@example.com
+      - FIRST_SUPERUSER_PASSWORD=admin
+      - ENCRYPTION_KEY="SpgLrrEEgJ/7QdhSMSvagL1juEY5eoyCG0tZN7OSQV0="
     ports:
-      - "8001:8000" # Different port from the main application
+      - "8001:8001" # Match the port mapping from the main docker-compose.yml
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 5s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+  weaviate_data:
+  neo4j_data:

@@ -189,8 +189,9 @@ class DockerComposeManager:
                 )
                 return False
             return True
-        except RequestException:
+        except RequestException as e:
             logger.debug(f"Service {service_name} not ready: connection failed")
+            logger.debug(f"Error: {e}")
             return False
 
     def _collect_container_logs(self):
@@ -261,7 +262,7 @@ class DockerComposeManager:
         health_checks = [
             {
                 "name": "backend",
-                "url": "http://localhost:8001/api/v1/health",
+                "url": "http://localhost:8001/health",
                 "expected_status": 200,
             }
         ]

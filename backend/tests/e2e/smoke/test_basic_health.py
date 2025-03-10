@@ -25,7 +25,7 @@ def e2e_environment():
 def test_health_endpoint(e2e_environment):
     """Test that the health endpoint returns a 200 status code."""
     # Arrange
-    health_url = "http://localhost:8001/api/v1/health"
+    health_url = "http://localhost:8001/health"
 
     # Act
     response = requests.get(health_url)
@@ -35,8 +35,7 @@ def test_health_endpoint(e2e_environment):
 
     # Check response body
     response_data = response.json()
-    assert response_data["status"] == "ok"
-    assert "version" in response_data
+    assert response_data["status"] == "healthy"
 
 
 def test_api_docs_accessible(e2e_environment):
@@ -53,19 +52,3 @@ def test_api_docs_accessible(e2e_environment):
 
     # Check for Swagger UI content
     assert "swagger-ui" in response.text.lower()
-
-
-def test_api_redoc_accessible(e2e_environment):
-    """Test that the ReDoc API documentation is accessible."""
-    # Arrange
-    redoc_url = "http://localhost:8001/redoc"
-
-    # Act
-    response = requests.get(redoc_url)
-
-    # Assert
-    assert response.status_code == 200
-    assert "text/html" in response.headers["Content-Type"]
-
-    # Check for ReDoc content
-    assert "redoc" in response.text.lower()

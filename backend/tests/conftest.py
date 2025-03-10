@@ -42,7 +42,7 @@ def skip_if_no_db():
     """Skip tests that require a database if connection is not available."""
     # Use a test database URL, trying the environment first, then fallback to localhost
     test_db_url = os.environ.get(
-        "TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/test_db"
+        "TEST_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/airweave"
     )
 
     # Parse the URL to get the connection details
