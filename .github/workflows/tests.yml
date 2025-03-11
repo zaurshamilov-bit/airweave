@@ -31,13 +31,16 @@ jobs:
       - name: Run all tests
         env:
           ENCRYPTION_KEY: "SpgLrrEEgJ/7QdhSMSvagL1juEY5eoyCG0tZN7OSQV0=" # This is just a dummy key
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }} # Used for e2e sync tests
+          FIRST_SUPERUSER: admin@airweave.ai
+          FIRST_SUPERUSER_PASSWORD: airweave1234!
           POSTGRES_USER: airweave
-          POSTGRES_PASSWORD: airweave1234!
           POSTGRES_DB: airweave
           POSTGRES_HOST: localhost
+          POSTGRES_PASSWORD: airweave1234!
           POSTGRES_PORT: 5432
+          PROJECT_NAME: airweave
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }} # Used for e2e sync tests
         run: |
           cd backend
           poetry run pytest tests/
