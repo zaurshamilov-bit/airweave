@@ -44,4 +44,11 @@ jobs:
           STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }} # Used for e2e sync tests
         run: |
           cd backend
-          poetry run pytest tests/
+          poetry run pytest tests/ --cov=app --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage.xml
+          fail_ci_if_error: false
+          verbose: true
