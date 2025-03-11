@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud.crud_source import source as crud_source
-from app.models.source import Source
-from app.schemas.source import SourceCreate
+from airweave.crud.crud_source import source as crud_source
+from airweave.models.source import Source
+from airweave.schemas.source import SourceCreate
 
 
 @pytest.mark.unit

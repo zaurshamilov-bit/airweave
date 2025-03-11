@@ -53,7 +53,7 @@ poetry run pytest tests/integration
 poetry run pytest tests/e2e
 
 # Run with coverage report
-poetry run pytest --cov=app --cov-report=term-missing
+poetry run pytest --cov=app--cov-report=term-missing
 
 # Run a specific test file
 poetry run pytest tests/unit/crud/test_source.py

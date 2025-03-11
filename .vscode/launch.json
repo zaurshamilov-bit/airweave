@@ -12,7 +12,7 @@
                 "127.0.0.1",
                 "--port",
                 "8001",
-                "app.main:app"
+                "airweave.main:app"
             ],
             "cwd": "${workspaceFolder}/backend",
             "console": "integratedTerminal",
@@ -53,7 +53,7 @@
             "name": "ARQ Worker",
             "type": "debugpy",
             "request": "launch",
-            "module": "app.arq.runner",
+            "module": "airweave.arq.runner",
             "python": "${command:python.interpreterPath}",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/backend",

@@ -14,7 +14,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models._base import Base
+from airweave.models._base import Base
 
 
 # This fixture is needed for pytest-asyncio

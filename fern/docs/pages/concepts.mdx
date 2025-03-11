@@ -15,34 +15,34 @@ We're here to help! If you have any questions or feedback, please [contact us](m
 ## Data Sources
 
 <Frame background="subtle" caption="Selecting data sources">
-  <img 
-    src="../assets/images/sources-overview.png" 
+  <img
+    src="../assets/images/sources-overview.png"
     alt="Airweave Data Sources Overview"
   />
 </Frame>
 
 Data source connectors are the entry points for your information into Airweave. We
-support a [wide range of sources](https://github.com/airweave-ai/airweave/tree/main/backend/app/platform/sources) to ensure you can connect all your valuable data.
+support a [wide range of sources](https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources) to ensure you can connect all your valuable data.
 
 ### Supported Source Types
 
 <Tabs>
   <Tab title="APIs">
-    Connect to external services through their REST APIs: 
+    Connect to external services through their REST APIs:
     - Enterprise tools like Slack and Gmail
     - Custom internal APIs
     - Third-party service integrations
   </Tab>
   <Tab title="Databases">
-    Direct integration with your existing data stores: 
+    Direct integration with your existing data stores:
     - SQL databases (PostgreSQL, MySQL, etc.)
     - NoSQL databases (MongoDB, DynamoDB)
     - Time-series databases
   </Tab>
   <Tab title="File Systems (coming soon)">
-    Process documents and files from: 
-    - Local file systems 
-    - Cloud storage (S3, GCS, Azure Blob) 
+    Process documents and files from:
+    - Local file systems
+    - Cloud storage (S3, GCS, Azure Blob)
     - Network-attached storage (SFTP)
   </Tab>
   <Tab title="Web Content (coming soon)">
@@ -63,8 +63,8 @@ Your processed data is stored in vector databases optimized for semantic search 
 You can either use the native Weaviate database, or connect to an existing database of your choice.
 
 <Frame background="subtle" caption="Selecting destinations">
-  <img  
-    src="../assets/images/destinations-overview.png" 
+  <img
+    src="../assets/images/destinations-overview.png"
     alt="Destinations Overview"
   />
 </Frame>
@@ -86,8 +86,8 @@ During ingestion, entities are hashed and version-tracked in the Airweave databa
 Every entity in Airweave inherits from a base structure that ensures consistency and searchability:
 
 <CodeBlock title="Base Entity Structure">
-```python 
-class BaseEntity(BaseModel): 
+```python
+class BaseEntity(BaseModel):
   """Base class for all entities."""
   entity_id: str # Unique identifier from platform
   breadcrumbs: list[Breadcrumb] # Tracks ancestry/hierarchy
@@ -110,7 +110,7 @@ class SlackMessageEntity(ChunkEntity):
 
 
 ## Synchronization
-A syncrhonization in Airweave orchestrates sync jobs and scopes your data in the target destination. 
+A syncrhonization in Airweave orchestrates sync jobs and scopes your data in the target destination.
 
 This may be only one sync job if triggered manually or via API.
 
@@ -118,8 +118,8 @@ Sync jobs bring together a source connection with a destination, ensuring your d
 
 
 <Frame background="subtle" caption="Sync overview of a manually triggered sync">
-  <img 
-    src="../assets/images/sync-overview.png" 
+  <img
+    src="../assets/images/sync-overview.png"
     alt="Sync Overview in UI"
   />
 </Frame>
@@ -164,12 +164,12 @@ Refer to the [Sync API Reference](/api-reference/sync/create-sync) for more info
 
 
 ### White Labeling Authentication
-White labeling allows you to integrate 3rd party OAuth2 authentication with Airweave. This way you can use Airweave to pull your users data into your own application, without having to deal 
+White labeling allows you to integrate 3rd party OAuth2 authentication with Airweave. This way you can use Airweave to pull your users data into your own application, without having to deal
 with OAuth2 authentication or storing user credentials.
 
 <Frame background="subtle" caption="White Labeling Authentication">
-  <img 
-    src="../assets/images/white-label-configuration.png" 
+  <img
+    src="../assets/images/white-label-configuration.png"
     alt="White Labeling Overview"
   />
 </Frame>

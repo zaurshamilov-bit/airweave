@@ -27,8 +27,8 @@ current_dir = Path(__file__).parent.parent.absolute()
 if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
-from app.core.config import settings  # Import settings
-from app.models._base import Base  # noqa
+from airweave.core.config import settings  # Import settings
+from airweave.models._base import Base  # noqa
 
 target_metadata = Base.metadata
 

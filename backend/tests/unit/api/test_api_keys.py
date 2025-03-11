@@ -5,8 +5,8 @@ from uuid import UUID
 
 import pytest
 
-from app.api.v1.endpoints.api_keys import create_api_key, read_api_key
-from app.schemas import APIKey, APIKeyCreate, APIKeyWithPlainKey, User
+from airweave.api.v1.endpoints.api_keys import create_api_key, read_api_key
+from airweave.schemas import APIKey, APIKeyCreate, APIKeyWithPlainKey, User
 
 
 @pytest.fixture

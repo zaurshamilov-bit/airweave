@@ -1,18 +1,18 @@
 ---
 description: Use if you're writing a new source connection.
-globs: 
+globs:
 alwaysApply: false
 ---
 
 # Airweave Source Integration Generator
 
-You are an expert Python developer tasked with creating a new source integration for Airweave. Airweave is an open-source platform that makes any app searchable for agents by syncing data from various sources into vector and graph databases. 
+You are an expert Python developer tasked with creating a new source integration for Airweave. Airweave is an open-source platform that makes any app searchable for agents by syncing data from various sources into vector and graph databases.
 
 #### Real Examples
 
-- **Slack**: Multi-resource API with channels, users, and messages [slack.py](mdc:backend/app/platform/sources/slack.py) [slack.py](mdc:backend/app/platform/entities/slack.py)
-- **Stripe**: Complex pagination with many resource types [stripe.py](mdc:backend/app/platform/sources/stripe.py) [stripe.py](mdc:backend/app/platform/entities/stripe.py)
-- **Asana**: Hierarchical data with file handling capabilities [asana.py](mdc:backend/app/platform/sources/asana.py) [asana.py](mdc:backend/app/platform/entities/asana.py)
+- **Slack**: Multi-resource API with channels, users, and messages [slack.py](mdc:backend/airweave/platform/sources/slack.py) [slack.py](mdc:backend/airweave/platform/entities/slack.py)
+- **Stripe**: Complex pagination with many resource types [stripe.py](mdc:backend/airweave/platform/sources/stripe.py) [stripe.py](mdc:backend/airweave/platform/entities/stripe.py)
+- **Asana**: Hierarchical data with file handling capabilities [asana.py](mdc:backend/airweave/platform/sources/asana.py) [asana.py](mdc:backend/airweave/platform/entities/asana.py)
 
 ## Your Task
 
@@ -35,9 +35,9 @@ Do not edit code other than the files you were prompted to create or edit.
 
 ## 2. Define Entity Schemas
 
-For each data type from your API, create a corresponding entity schema in `backend/app/platform/entities/your_service.py`:
+For each data type from your API, create a corresponding entity schema in `backend/airweave/platform/entities/your_service.py`:
 
-It extends from [_base.py](mdc:backend/app/platform/entities/_base.py) the BaseEntity, ChunkyEntity or FileEntity.
+It extends from [_base.py](mdc:backend/airweave/platform/entities/_base.py) the BaseEntity, ChunkyEntity or FileEntity.
 
 ```python
 class Breadcrumb(BaseModel):
@@ -81,7 +81,7 @@ class FileEntity(BaseEntity):
 ```python
 class YourServiceEntity(ChunkEntity):
     """Schema for your service entity."""
-    
+
     name: Optional[str] = None                  # Entity name
     some_count: int                             # Some count in entity
     created_at: datetime                        # created_at field
@@ -92,15 +92,15 @@ The `entity_id` usually is just the id of the item in the API. If not, find a pr
 
 ## 3. Implement Source Connector
 
-Create your source implementation in `backend/app/platform/sources/your_service.py`:
+Create your source implementation in `backend/airweave/platform/sources/your_service.py`:
 
 ```python
 @source("Display Name", "your_service", AuthType.oauth2)
 class YourServiceSource(BaseSource):
     """Your service source implementation."""
-    
+
     BASE_URL = "https://api.yourservice.com/v1"
-    
+
     @classmethod
     async def create(cls, access_token: str) -> "YourServiceSource":
         """Create a new source instance with authentication."""
@@ -114,20 +114,20 @@ class YourServiceSource(BaseSource):
         response = await client.get(url, headers=headers, params=params)
         response.raise_for_status()
         return response.json()
-    
+
     async def _generate_resource_entities(self, client: httpx.AsyncClient) -> AsyncGenerator[ChunkEntity, None]:
         """Generate entities from a specific resource type."""
         url = f"{self.BASE_URL}/resources"
-        
+
         # Handle pagination (if needed)
         next_cursor = None
         while True:
             params = {"limit": 100}
             if next_cursor:
                 params["cursor"] = next_cursor
-                
+
             response = await self._get_with_auth(client, url, params)
-            
+
             for item in response.get("items", []):
                 yield YourServiceEntity(
                     entity_id=item["id"],
@@ -135,19 +135,19 @@ class YourServiceSource(BaseSource):
                     created_at=datetime.fromisoformat(item.get("created", "")),
                     content=item.get("description", ""),
                 )
-            
+
             # Check if there are more pages
             next_cursor = response.get("next_cursor")
             if not next_cursor:
                 break
-    
+
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Main entry point to generate all entities."""
         async with httpx.AsyncClient() as client:
             # Generate entities for each resource type
             async for entity in self._generate_resource_entities(client):
                 yield entity
-            
+
             # Add additional resource generators as needed
             # async for entity in self._generate_other_resource_entities(client):
             #     yield entity
@@ -164,7 +164,7 @@ class YourServiceSource(BaseSource):
           wait=wait_exponential(multiplier=1, min=2, max=10),
           stop=stop_after_attempt(3),
       )
-      
+
       async for attempt in retryer:
           with attempt:
               try:
@@ -187,11 +187,11 @@ class YourServiceSource(BaseSource):
           # First generate parent entities
           async for workspace_entity in self._generate_workspace_entities(client):
               yield workspace_entity
-              
+
               # Then generate child entities with breadcrumbs
               async for project_entity in self._generate_project_entities(
-                  client, 
-                  {"gid": workspace_entity.entity_id}, 
+                  client,
+                  {"gid": workspace_entity.entity_id},
                   workspace_breadcrumb
               ):
                   yield project_entity
@@ -205,7 +205,7 @@ class YourServiceSource(BaseSource):
       name=workspace_entity.name,
       type="workspace",
   )
-  
+
   # Pass parent breadcrumbs to child entities
   project_breadcrumbs = [workspace_breadcrumb, project_breadcrumb]
   ```
@@ -219,7 +219,7 @@ class YourServiceSource(BaseSource):
           wait=wait_exponential(multiplier=1, min=2, max=10),
           stop=stop_after_attempt(3),
       )
-      
+
       async for attempt in retryer:
           with attempt:
               try:
@@ -243,7 +243,7 @@ class YourServiceSource(BaseSource):
       size=file_data.get("size"),
       download_url=file_data.get("download_url"),
   )
-  
+
   # Stream the file and hand off the stream.
   file_stream = self._stream_file(client, file_entity.download_url)
   yield await handle_file_entity(file_entity, file_stream)
@@ -264,6 +264,3 @@ There are essentially three outcomes:
 2. The connection works, and you try the sync, but it fails. You will receive a stacktrace from the problem. You must now fix it, and retry to sync, until it works.
 
 3. The sync works! You can now create a branch, commit and push.
-
-
-

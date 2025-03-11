@@ -14,7 +14,7 @@ backend_dir = project_root / "backend"
 sys.path.append(str(backend_dir))
 os.chdir(backend_dir)  # Change working directory to backend
 
-from app.main import app
+from airweave.main import app
 
 
 def generate_openapi():
