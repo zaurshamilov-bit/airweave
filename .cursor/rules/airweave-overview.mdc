@@ -1,6 +1,6 @@
 ---
 description: General overview of Airweave.
-globs: 
+globs: **/*
 alwaysApply: true
 ---
 # Airweave Overview
