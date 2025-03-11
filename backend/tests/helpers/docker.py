@@ -7,7 +7,7 @@ import logging
 import os
 import subprocess
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import requests
 from requests.exceptions import RequestException
@@ -56,15 +56,37 @@ class DockerComposeManager:
         self.is_running = False
         self.managed_services = []
 
-        try:
-            subprocess.run(["docker-compose", "--version"], check=True, capture_output=True)
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            raise RuntimeError(f"Docker Compose not available: {e}") from e
+        # Determine which Docker Compose command to use
+        self.compose_cmd, self.compose_version = self._get_docker_compose_command()
 
         logger.info(
             f"Initialized Docker Compose manager with file: {self.compose_file} "
-            f"(project: {DEFAULT_PROJECT_NAME})"
+            f"(project: {DEFAULT_PROJECT_NAME}, using {self.compose_cmd} v{self.compose_version})"
         )
+
+    def _get_docker_compose_command(self) -> Tuple[List[str], str]:
+        """Determine which Docker Compose command to use.
+
+        Returns:
+            A tuple containing the command as a list and the version string
+        """
+        # Try docker compose (v2) first
+        try:
+            result = subprocess.run(
+                ["docker", "compose", "version"], check=True, capture_output=True, text=True
+            )
+            version = result.stdout.strip()
+            return ["docker", "compose"], version
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # Try docker-compose (v1) next
+            try:
+                result = subprocess.run(
+                    ["docker-compose", "--version"], check=True, capture_output=True, text=True
+                )
+                version = result.stdout.strip()
+                return ["docker-compose"], version
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                raise RuntimeError(f"Docker Compose not available: {e}") from e
 
     def _are_services_running(self, services: Optional[List[str]] = None) -> bool:
         """Check if the specified services are already running.
@@ -79,7 +101,7 @@ class DockerComposeManager:
         try:
             # Get list of running containers for this project
             cmd = [
-                "docker-compose",
+                *self.compose_cmd,
                 "-f",
                 self.compose_file,
                 "-p",
@@ -140,7 +162,7 @@ class DockerComposeManager:
                 # Build the backend container with no cache
                 logger.info("Force rebuilding backend container...")
                 build_cmd = [
-                    "docker-compose",
+                    *self.compose_cmd,
                     "-f",
                     self.compose_file,
                     "-p",
@@ -154,7 +176,7 @@ class DockerComposeManager:
                 # Stop and remove any existing backend container
                 logger.info("Removing any existing backend container...")
                 rm_cmd = [
-                    "docker-compose",
+                    *self.compose_cmd,
                     "-f",
                     self.compose_file,
                     "-p",
@@ -168,7 +190,7 @@ class DockerComposeManager:
             # Start services
             logger.info(f"Starting {'all' if not services else 'specified'} services...")
             start_cmd = [
-                "docker-compose",
+                *self.compose_cmd,
                 "-f",
                 self.compose_file,
                 "-p",
@@ -213,7 +235,7 @@ class DockerComposeManager:
             if "backend" in self.managed_services or not self.managed_services:
                 logger.info("Stopping backend service...")
                 stop_cmd = [
-                    "docker-compose",
+                    *self.compose_cmd,
                     "-f",
                     self.compose_file,
                     "-p",
@@ -225,7 +247,7 @@ class DockerComposeManager:
 
                 # Remove the backend container
                 rm_cmd = [
-                    "docker-compose",
+                    *self.compose_cmd,
                     "-f",
                     self.compose_file,
                     "-p",
@@ -241,7 +263,7 @@ class DockerComposeManager:
             if remove_volumes:
                 logger.info("Removing volumes requested, stopping all services completely")
                 cmd = [
-                    "docker-compose",
+                    *self.compose_cmd,
                     "-f",
                     self.compose_file,
                     "-p",
@@ -292,57 +314,47 @@ class DockerComposeManager:
             return False
 
     def _collect_container_logs(self):
-        """Collect logs from all containers.
+        """Collect logs from all containers for debugging.
 
         Returns:
-            dict: Dictionary of container ID to logs
+            Dict mapping container IDs to their logs
         """
-        logs = {}
         os.chdir(self.tests_dir)
-
         try:
-            # Get logs for all containers
-            container_list = (
-                subprocess.run(
-                    [
-                        "docker-compose",
-                        "-f",
-                        self.compose_file,
-                        "-p",
-                        DEFAULT_PROJECT_NAME,
-                        "ps",
-                        "-q",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                .stdout.strip()
-                .split("\n")
-            )
+            # Get list of running containers for this project
+            cmd = [
+                *self.compose_cmd,
+                "-f",
+                self.compose_file,
+                "-p",
+                DEFAULT_PROJECT_NAME,
+                "ps",
+                "-q",
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            container_ids = [cid for cid in result.stdout.strip().split("\n") if cid]
 
-            for container_id in container_list:
-                if container_id:
-                    # Run inspect but don't use the result
-                    _ = subprocess.run(
-                        ["docker", "inspect", container_id],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    ).stdout
-                    container_logs = subprocess.run(
-                        ["docker", "logs", container_id],
-                        capture_output=True,
-                        text=True,
-                        check=False,
-                    ).stdout
-                    logs[container_id] = container_logs
+            if not container_ids:
+                return {}
+
+            # Collect logs for each container
+            logs = {}
+            for cid in container_ids:
+                if not cid:
+                    continue
+                try:
+                    log_cmd = ["docker", "logs", cid]
+                    log_result = subprocess.run(log_cmd, capture_output=True, text=True, check=True)
+                    logs[cid] = log_result.stdout
+                except subprocess.CalledProcessError:
+                    logs[cid] = "Failed to collect logs"
+
+            return logs
         except Exception as e:
-            logger.error(f"Failed to get logs: {e}")
+            logger.error(f"Error collecting container logs: {e}")
+            return {}
         finally:
             os.chdir(self.cwd)
-
-        return logs
 
     def wait_for_services(self, timeout: int = 120) -> None:
         """Wait for all services to be ready.
