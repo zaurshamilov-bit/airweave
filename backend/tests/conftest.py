@@ -16,6 +16,17 @@ from sqlalchemy.orm import sessionmaker
 
 from airweave.models._base import Base
 
+# Import all fixtures so they are automatically available for all tests
+from tests.fixtures.common import (  # noqa
+    app,
+    mock_background_tasks,
+    mock_db,
+    mock_sync,
+    mock_sync_dag,
+    mock_sync_job,
+    mock_user,
+)
+
 
 # This fixture is needed for pytest-asyncio
 @pytest.fixture(scope="session")

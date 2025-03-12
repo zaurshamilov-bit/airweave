@@ -1,9 +1,10 @@
 """Sync model."""
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
-from sqlalchemy import JSON, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.core.shared_models import SyncStatus
@@ -30,6 +31,9 @@ class Sync(OrganizationBase, UserMixin):
         ForeignKey("connection.id"), nullable=True
     )
     cron_schedule: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    next_scheduled_run: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     white_label_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("white_label.id"), nullable=True
     )
