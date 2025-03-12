@@ -4,8 +4,8 @@ from uuid import UUID
 
 import pytest
 
-from app.api.v1.endpoints.users import read_user
-from app.schemas import User
+from airweave.api.v1.endpoints.users import read_user
+from airweave.schemas import User
 
 
 @pytest.fixture

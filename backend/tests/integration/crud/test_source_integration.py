@@ -10,8 +10,8 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud.crud_source import source as crud_source
-from app.schemas.source import SourceCreate, SourceUpdate
+from airweave.crud.crud_source import source as crud_source
+from airweave.schemas.source import SourceCreate, SourceUpdate
 
 logger = logging.getLogger(__name__)
 

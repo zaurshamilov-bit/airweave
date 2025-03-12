@@ -27,4 +27,4 @@ cd /app && poetry run alembic upgrade head
 
 # Start application with hot reloading enabled
 echo "Starting application with hot reloading..."
-poetry run uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload --reload-dir /app/app
+poetry run uvicorn airweave.main:app --host 0.0.0.0 --port 8001 --reload --reload-dir /app/airweave

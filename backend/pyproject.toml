@@ -3,7 +3,7 @@ name = "airweave"
 version = "0.1.0"
 description = "Make any app searchable - Universal search and agent integration tool"
 authors = ["Rauf Akdemir <rauf@airweave.ai>", "Lennert Jansen <lennert@airweave.ai>"]
-packages = [{include = "app"}]
+packages = [{include = "airweave"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -111,7 +111,7 @@ docstring-code-format = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
-addopts = "-v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml"
+addopts = "-v --cov=airweave --cov-report=term-missing --cov-report=xml:coverage.xml"
 markers = [
     "unit: mark a test as a unit test",
     "integration: mark a test as an integration test",

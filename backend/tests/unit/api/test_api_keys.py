@@ -5,8 +5,8 @@ from uuid import UUID
 
 import pytest
 
-from app.api.v1.endpoints.api_keys import create_api_key, read_api_key
-from app.schemas import APIKey, APIKeyCreate, APIKeyWithPlainKey, User
+from airweave.api.v1.endpoints.api_keys import create_api_key, read_api_key
+from airweave.schemas import APIKey, APIKeyCreate, APIKeyWithPlainKey, User
 
 
 @pytest.fixture
@@ -79,7 +79,7 @@ async def test_create_api_key(mock_user, mock_api_key_create, mock_api_key_with_
 
     # Mock the crud.api_key.create_with_user function
     with patch(
-        "app.crud.api_key.create_with_user", return_value=mock_api_key_with_plain_key
+        "airweave.crud.api_key.create_with_user", return_value=mock_api_key_with_plain_key
     ) as mock_create:
         # Call the function
         result = await create_api_key(
@@ -107,7 +107,7 @@ async def test_read_api_key(mock_user, mock_api_key):
     mock_db = AsyncMock()
 
     # Mock the crud.api_key.get function
-    with patch("app.crud.api_key.get", return_value=mock_api_key) as mock_get:
+    with patch("airweave.crud.api_key.get", return_value=mock_api_key) as mock_get:
         # Call the function
         result = await read_api_key(
             db=mock_db,

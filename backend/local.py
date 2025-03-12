@@ -6,20 +6,19 @@ import uuid
 import weaviate.classes as wvc
 from weaviate.collections import Collection
 
-from app import schemas
-from app.platform.destinations.weaviate import WeaviateDestination
-from app.platform.embedding_models.local_text2vec import LocalText2Vec
-from app.platform.sources._base import BaseSource
-from app.platform.sources.asana import AsanaSource
-from app.platform.sources.notion import NotionSource
-from app.vector_db.weaviate_service import WeaviateService
+from airweave import schemas
+from airweave.platform.destinations.weaviate import WeaviateDestination
+from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
+from airweave.platform.sources._base import BaseSource
+from airweave.platform.sources.asana import AsanaSource
+from airweave.platform.sources.notion import NotionSource
+from airweave.vector_db.weaviate_service import WeaviateService
 
 
 async def process_source_chunks(
     source: BaseSource, weaviate_dest: WeaviateDestination, buffer_size: int = 50
 ):
-    """Helper to fetch chunks from a given source connector and optionally insert them into Weaviate in bulk.
-    """
+    """Helper to fetch chunks from a given source connector and optionally insert them into Weaviate in bulk."""
     chunks_buffer = []
     async for chunk in source.generate_chunks():
         chunks_buffer.append(chunk)
@@ -128,7 +127,7 @@ async def main():
     # Test Dropbox Source Connector
     # -------------------------------------------------------------------------
     print("=== Testing Dropbox Connector ===")
-    from app.platform.sources.dropbox import DropboxSource
+    from airweave.platform.sources.dropbox import DropboxSource
 
     dropbox_source = await DropboxSource.create(user, sync_id)
     dropbox_chunks = await process_source_chunks(dropbox_source, weaviate_dest, buffer_size=50)

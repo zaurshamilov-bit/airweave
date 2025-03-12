@@ -87,7 +87,7 @@ Adding a source with Cursor should be pretty easy. Follow these steps to automat
 
 1. **Read the documentation**
    - Review the [Airweave documentation on extending connectors](https://docs.airweave.ai/extending-connectors)
-   - Examine existing source implementations like Slack (`backend/app/platform/sources/slack.py` and `backend/app/platform/entities/slack.py`)
+   - Examine existing source implementations like Slack (`backend/airweave/platform/sources/slack.py` and `backend/airweave/platform/entities/slack.py`)
 
 2. **Add your API reference or OpenAPI spec to Cursor**
    - Find the API Reference of the source you'd like to integrate.
@@ -125,11 +125,11 @@ If you need help with your source integration, reach out to us on [Discord](http
 
 A complete source integration consists of:
 
-1. **Entity Schemas** (`backend/app/platform/entities/your_service.py`)
+1. **Entity Schemas** (`backend/airweave/platform/entities/your_service.py`)
    - Define the data structures for each entity type
    - Extend from base classes like `BaseEntity`, `ChunkEntity`, or `FileEntity`
 
-2. **Source Connector** (`backend/app/platform/sources/your_service.py`)
+2. **Source Connector** (`backend/airweave/platform/sources/your_service.py`)
    - Implement authentication and API communication
    - Create entity generators for each resource type
    - Handle pagination, error retries, and file processing if needed

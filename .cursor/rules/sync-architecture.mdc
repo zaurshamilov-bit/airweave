@@ -1,6 +1,6 @@
 ---
 description: Description of the sync architecrture. Useful if interfacing with or editing something inside the core sync folder.
-globs: backend/app/platform/sync/*.py
+globs: backend/airweave/platform/sync/*.py
 alwaysApply: false
 ---
 # Airweave Sync Architecture
@@ -52,7 +52,7 @@ Tracks and reports sync progress:
 
 ## Data Flow
 
-1. **Initialization**: 
+1. **Initialization**:
    - Create SyncContext with all necessary resources
    - Set up DAG routing and progress tracking
 

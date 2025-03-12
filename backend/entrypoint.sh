@@ -21,10 +21,10 @@ def check_db():
 check_db()
 "
 
-# Run migrations using our existing Alembic setup 
+# Run migrations using our existing Alembic setup
 echo "Running database migrations..."
 cd /app && poetry run alembic upgrade head
 
 # Start application
 echo "Starting application..."
-poetry run uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload 
+poetry run uvicorn airweave.main:app --host 0.0.0.0 --port 8001 --reload

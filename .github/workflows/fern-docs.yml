@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "backend/app/api/**/*.py" # API endpoint changes
+      - "backend/airweave/api/**/*.py" # API endpoint changes
       - "fern/**" # Fern config changes
       - ".github/workflows/fern-docs.yml" # Workflow file changes
 

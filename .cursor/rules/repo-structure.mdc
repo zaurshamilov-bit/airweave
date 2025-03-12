@@ -1,6 +1,6 @@
 ---
 description: Description of repo structure.
-globs: 
+globs:
 alwaysApply: true
 ---
 # Airweave Repository Structure
@@ -8,7 +8,7 @@ alwaysApply: true
 ```
 airweave/
 ├── backend/                      # Python FastAPI backend
-│   ├── app/                      # Main application code
+│   ├── airweave/                 # Multi-service backend code
 │   │   ├── api/                  # API endpoints
 │   │   │   └── v1/               # API v1 routes
 │   │   │       └── endpoints/    # Individual API endpoint modules
