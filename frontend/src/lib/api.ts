@@ -16,7 +16,7 @@ export const apiClient = {
   async get<T>(endpoint: string, params?: Record<string, any>): ApiResponse<T> {
     const url = new URL(`${API_CONFIG.baseURL}${endpoint}`);
     if (params) {
-      Object.entries(params).forEach(([key, value]) => 
+      Object.entries(params).forEach(([key, value]) =>
         url.searchParams.append(key, value)
       );
     }
@@ -30,7 +30,7 @@ export const apiClient = {
   async post<T>(endpoint: string, data?: any, params?: Record<string, string>): ApiResponse<T> {
     const url = new URL(`${API_CONFIG.baseURL}${endpoint}`);
     if (params) {
-      Object.entries(params).forEach(([key, value]) => 
+      Object.entries(params).forEach(([key, value]) =>
         url.searchParams.append(key, value)
       );
     }
@@ -45,7 +45,7 @@ export const apiClient = {
   async put<T>(endpoint: string, params?: Record<string, string>, data?: any): ApiResponse<T> {
     const url = new URL(`${API_CONFIG.baseURL}${endpoint}`);
     if (params) {
-      Object.entries(params).forEach(([key, value]) => 
+      Object.entries(params).forEach(([key, value]) =>
         url.searchParams.append(key, value)
       );
     }
@@ -57,10 +57,25 @@ export const apiClient = {
     });
   },
 
+  async patch<T>(endpoint: string, data?: any, params?: Record<string, string>): ApiResponse<T> {
+    const url = new URL(`${API_CONFIG.baseURL}${endpoint}`);
+    if (params) {
+      Object.entries(params).forEach(([key, value]) =>
+        url.searchParams.append(key, value)
+      );
+    }
+
+    return await fetch(url.toString(), {
+      method: 'PATCH',
+      headers: API_CONFIG.headers,
+      body: JSON.stringify(data),
+    });
+  },
+
   async delete<T>(endpoint: string, params?: Record<string, string>): ApiResponse<T> {
     const url = new URL(`${API_CONFIG.baseURL}${endpoint}`);
     if (params) {
-      Object.entries(params).forEach(([key, value]) => 
+      Object.entries(params).forEach(([key, value]) =>
         url.searchParams.append(key, value)
       );
     }

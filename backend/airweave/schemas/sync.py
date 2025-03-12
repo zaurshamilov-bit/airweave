@@ -20,9 +20,11 @@ class SyncBase(BaseModel):
     destination_connection_id: Optional[UUID] = None
     embedding_model_connection_id: Optional[UUID] = None
     cron_schedule: Optional[str] = None  # Actual cron expression
+    next_scheduled_run: Optional[datetime] = None
     white_label_id: Optional[UUID] = None
     white_label_user_identifier: Optional[str] = None
     sync_metadata: Optional[dict] = None
+    status: Optional[SyncStatus] = SyncStatus.ACTIVE
 
     @field_validator("cron_schedule")
     def validate_cron_schedule(cls, v: str) -> str:
@@ -75,6 +77,7 @@ class SyncUpdate(BaseModel):
     destination_connection_id: Optional[UUID] = None
     embedding_model_connection_id: Optional[UUID] = None
     cron_schedule: Optional[str] = None
+    next_scheduled_run: Optional[datetime] = None
     white_label_id: Optional[UUID] = None
     white_label_user_identifier: Optional[str] = None
     sync_metadata: Optional[dict] = None

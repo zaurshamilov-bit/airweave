@@ -25,6 +25,7 @@ from airweave.db.init_db import init_db
 from airweave.db.session import AsyncSessionLocal
 from airweave.platform.db_sync import sync_platform_components
 from airweave.platform.entities._base import ensure_file_entity_models
+from airweave.platform.scheduler import platform_scheduler
 
 
 @asynccontextmanager
@@ -40,8 +41,15 @@ async def lifespan(app: FastAPI):
             ensure_file_entity_models()
             await sync_platform_components("airweave/platform", db)
         await init_db(db)
+
+    # Start the sync scheduler
+    await platform_scheduler.start()
+
     yield
+
     # Shutdown
+    # Stop the sync scheduler
+    await platform_scheduler.stop()
 
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url="/openapi.json", lifespan=lifespan)
