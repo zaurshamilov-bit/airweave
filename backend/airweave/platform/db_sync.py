@@ -188,7 +188,7 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, dict]:
                     name=name,
                     description=cls.__doc__ or f"Data from {name}",
                     type=EntityType.JSON,
-                    schema=cls.model_json_schema(),  # Get the actual schema from the Pydantic model
+                    entity_schema=cls.model_json_schema(),  # Get the actual schema
                     module_name=module_name,
                     class_name=cls.__name__,
                 )
