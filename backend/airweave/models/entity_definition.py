@@ -24,7 +24,7 @@ class EntityDefinition(Base):
     description = Column(String)
     type = Column(SQLEnum(EntityType), nullable=False)
     # For files: list of extensions, for JSON: JSON schema
-    schema = Column(JSON, nullable=False)
+    entity_schema = Column(JSON, nullable=False)
     parent_id = Column(ForeignKey("entity_definition.id"), nullable=True)
     module_name = Column(String, nullable=False)
     class_name = Column(String, nullable=False)
