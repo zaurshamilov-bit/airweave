@@ -1,7 +1,7 @@
 """Rename schema column
 
 Revision ID: 456789abcdef
-Revises:
+Revises: 2a6c65061d05
 Create Date: 2025-03-13 13:00:00.000000
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "456789abcdef"
-down_revision = None  # Update this to point to your last migration
+down_revision = "2a6c65061d05"
 branch_labels = None
 depends_on = None
 
