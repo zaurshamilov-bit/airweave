@@ -29,7 +29,12 @@ class CRUDSyncJob(CRUDBase[SyncJob, SyncJobCreate, SyncJobUpdate]):
         sync_id: UUID,
     ) -> SyncJob | None:
         """Get the most recent job for a specific sync."""
-        stmt = select(SyncJob).where(SyncJob.sync_id == sync_id).order_by(SyncJob.created_at.desc())
+        stmt = (
+            select(SyncJob)
+            .where(SyncJob.sync_id == sync_id)
+            .order_by(SyncJob.created_at.desc())
+            .limit(1)
+        )
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
