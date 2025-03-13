@@ -10,7 +10,7 @@ import SyncTableView from "./SyncTableView";
 
 const Dashboard = () => {
   const handleDiscordClick = () => {
-    window.open("https://discord.gg/5pmkuZHX", "_blank");
+    window.open("https://discord.com/invite/484HY9Ehxt", "_blank");
   };
 
   return (
