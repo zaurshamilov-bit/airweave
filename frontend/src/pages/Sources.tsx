@@ -1,5 +1,5 @@
 import { Header } from "@/components/Header";
-import { UnifiedDataSourceGrid } from "@/components/sources/UnifiedDataSourceGrid";
+import { UnifiedDataSourceGrid } from "@/components/data-sources/UnifiedDataSourceGrid";
 import { ManageSourceDialog } from "@/components/sources/ManageSourceDialog";
 
 const Sources = () => {

@@ -13,6 +13,8 @@ interface Source {
   description?: string | null;
   short_name: string;
   auth_type?: string | null;
+  labels?: string[];
+  output_entity_definition_ids?: string[]; // This will be used for entity count
 }
 
 export interface UnifiedDataSourceGridProps {
@@ -264,7 +266,7 @@ export function UnifiedDataSourceGrid({
         {isLoading ? (
           <div className="text-sm text-muted-foreground">Loading sources...</div>
         ) : (
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredSources.map((source) => {
               const sourceConnections = getConnectionsForSource(source.short_name);
               const isConnected = shortNameIsConnected(source.short_name);
@@ -290,6 +292,8 @@ export function UnifiedDataSourceGrid({
                   status={isConnected ? "connected" : "disconnected"}
                   connections={sourceConnections}
                   authType={source.auth_type}
+                  labels={source.labels || []}
+                  entityCount={source.output_entity_definition_ids?.length || 0}
                   mode={mode}
                   onInfoClick={undefined} // Implement if needed
                   onSelect={mode === "select" ? (connectionId) => handleSelectConnection(connectionId, source) : undefined}

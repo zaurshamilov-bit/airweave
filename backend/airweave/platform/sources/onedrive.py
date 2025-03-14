@@ -33,7 +33,7 @@ from airweave.platform.sources._base import BaseSource
     "OneDrive",
     "onedrive",
     AuthType.oauth2_with_refresh,
-    labels=["File Storage", "Document Management"],
+    labels=["File Storage"],
 )
 class OneDriveSource(BaseSource):
     """OneDrive source implementation (read-only)."""
