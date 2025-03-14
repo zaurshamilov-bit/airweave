@@ -1,5 +1,6 @@
 import { Header } from "@/components/Header";
-import { SourcesDataSourceGrid } from "@/components/sources/SourcesDataSourceGrid";
+import { UnifiedDataSourceGrid } from "@/components/sources/UnifiedDataSourceGrid";
+import { ManageSourceDialog } from "@/components/sources/ManageSourceDialog";
 
 const Sources = () => {
   return (
@@ -9,7 +10,25 @@ const Sources = () => {
           <h2 className="text-3xl font-bold tracking-tight">Data Sources</h2>
           <p className="text-muted-foreground">Connect your favorite tools and start syncing data.</p>
         </div>
-        <SourcesDataSourceGrid />
+
+        <UnifiedDataSourceGrid
+          mode="manage"
+          renderSourceDialog={(source, options) => (
+            <ManageSourceDialog
+              open={options.isOpen}
+              onOpenChange={options.onOpenChange}
+              name={source.name}
+              shortName={source.short_name}
+              description={source.description || ""}
+              onConnect={() => {
+                console.log(`Connecting to ${source.name}`);
+                // Add your connection logic here if needed
+              }}
+              existingConnections={options.connections}
+              isLoading={false}
+            />
+          )}
+        />
       </div>
     </div>
   );

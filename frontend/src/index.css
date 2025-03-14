@@ -97,7 +97,7 @@
     --card-foreground: 210 40% 98%;
 
     /* Popover with transparency */
-    --popover: 222.2 84% 4.9% / 0.8;
+    --popover: 222.2 84% 4.9% / 0.92;
     --popover-solid: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
 
