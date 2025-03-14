@@ -1,7 +1,7 @@
 """Base source class."""
 
 from abc import abstractmethod
-from typing import Any, AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, ClassVar, List, Optional
 
 from pydantic import BaseModel
 
@@ -10,6 +10,9 @@ from airweave.platform.entities._base import ChunkEntity
 
 class BaseSource:
     """Base source class."""
+
+    # Class variables for integration metadata
+    _labels: ClassVar[List[str]] = []
 
     @classmethod
     @abstractmethod

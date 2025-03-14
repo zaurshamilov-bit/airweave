@@ -1,7 +1,7 @@
 """Source schema."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, field_serializer, field_validator
@@ -19,14 +19,15 @@ class SourceBase(BaseModel):
     auth_config_class: Optional[str] = None
     short_name: str
     class_name: str
-    output_entity_definition_ids: Optional[list[UUID]] = None
+    output_entity_definition_ids: Optional[List[UUID]] = None
     organization_id: Optional[UUID] = None
     config_schema: Optional[dict] = None
+    labels: Optional[List[str]] = None
 
     @field_serializer("output_entity_definition_ids")
     def serialize_output_entity_definition_ids(
-        self, output_entity_definition_ids: Optional[list[UUID]]
-    ) -> Optional[list[str]]:
+        self, output_entity_definition_ids: Optional[List[UUID]]
+    ) -> Optional[List[str]]:
         """Convert UUID list to string list during serialization."""
         if output_entity_definition_ids is None:
             return None
@@ -34,7 +35,7 @@ class SourceBase(BaseModel):
 
     @field_validator("output_entity_definition_ids", mode="before")
     @classmethod
-    def validate_output_entity_definition_ids(cls, value: Any) -> Optional[list[UUID]]:
+    def validate_output_entity_definition_ids(cls, value: Any) -> Optional[List[UUID]]:
         """Convert string list to UUID list during deserialization."""
         if value is None:
             return None

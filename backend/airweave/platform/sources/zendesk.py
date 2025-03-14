@@ -34,7 +34,7 @@ from airweave.platform.entities.zendesk import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Zendesk", "zendesk", AuthType.oauth2_with_refresh)
+@source("Zendesk", "zendesk", AuthType.oauth2_with_refresh, labels=["Customer Service", "Support"])
 class ZendeskSource(BaseSource):
     """Zendesk source implementation (read-only).
 

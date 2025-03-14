@@ -22,7 +22,7 @@ from airweave.platform.file_handling.file_manager import handle_file_entity
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Asana", "asana", AuthType.oauth2_with_refresh)
+@source("Asana", "asana", AuthType.oauth2_with_refresh, labels=["Project Management"])
 class AsanaSource(BaseSource):
     """Asana source implementation."""
 

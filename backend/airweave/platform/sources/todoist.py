@@ -16,7 +16,7 @@ from airweave.platform.entities.todoist import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Todoist", "todoist", AuthType.oauth2)
+@source("Todoist", "todoist", AuthType.oauth2, labels=["Productivity", "Task Management"])
 class TodoistSource(BaseSource):
     """Todoist source implementation.
 

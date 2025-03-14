@@ -25,7 +25,12 @@ from airweave.platform.entities.google_drive import GoogleDriveDriveEntity, Goog
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Google Drive", "google_drive", AuthType.oauth2_with_refresh)
+@source(
+    "Google Drive",
+    "google_drive",
+    AuthType.oauth2_with_refresh,
+    labels=["File Storage", "Document Management"],
+)
 class GoogleDriveSource(BaseSource):
     """Google Drive source implementation (read-only).
 

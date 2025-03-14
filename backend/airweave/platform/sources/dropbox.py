@@ -15,7 +15,12 @@ from airweave.platform.entities.dropbox import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Dropbox", "dropbox", AuthType.oauth2_with_refresh)
+@source(
+    "Dropbox",
+    "dropbox",
+    AuthType.oauth2_with_refresh,
+    labels=["File Storage", "Document Management"],
+)
 class DropboxSource(BaseSource):
     """Dropbox source implementation."""
 

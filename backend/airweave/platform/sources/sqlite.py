@@ -47,7 +47,7 @@ SQLITE_TYPE_MAP = {
 }
 
 
-@source("SQLite", "sqlite", AuthType.config_class, "SQLiteAuthConfig")
+@source("SQLite", "sqlite", AuthType.config_class, "SQLiteAuthConfig", labels=["Database"])
 class SQLiteSource(BaseSource):
     """SQLite source implementation.
 
