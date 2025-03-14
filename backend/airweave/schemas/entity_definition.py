@@ -36,9 +36,7 @@ class EntityDefinition(EntityDefinitionBase):
     """Schema for an entity definition."""
 
     id: UUID
-    organization_id: UUID
-    created_by_email: str
-    modified_by_email: str
+    organization_id: Optional[UUID] = None
 
     class Config:
         """Pydantic config."""
