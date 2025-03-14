@@ -23,14 +23,6 @@ const Dashboard = () => {
               Overview of your data synchronization status
             </p>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleDiscordClick}
-            className="gap-2"
-          >
-            <MessageSquare className="h-4 w-4" />
-            Join Discord
-          </Button>
         </div>
 
         <DashboardStats />
@@ -40,7 +32,7 @@ const Dashboard = () => {
           <ConnectedDestinationsGrid />
         </div>
 
-        <div className="bg-background rounded-lg border">
+        <div className="rounded-lg border pt-4">
           <SyncTableView />
         </div>
 

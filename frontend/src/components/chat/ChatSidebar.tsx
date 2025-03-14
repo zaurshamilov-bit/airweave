@@ -155,8 +155,8 @@ export const ChatSidebar = ({ onCreateChat }: ChatSidebarProps) => {
                   variant="ghost"
                   className={cn(
                     "w-full justify-start text-left space-x-2 h-auto py-3",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    chatId === chat.id && "bg-accent text-accent-foreground"
+                    "hover:bg-muted hover:text-accent-foreground",
+                    chatId === chat.id && "bg-muted text-accent-foreground"
                   )}
                   onClick={() => navigate(`/chat/${chat.id}`)}
                 >

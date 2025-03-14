@@ -47,8 +47,8 @@ export function SourceConnectionDialog({
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 flex items-center justify-center">
-              <img 
-                src={getAppIconUrl(shortName, resolvedTheme)} 
+              <img
+                src={getAppIconUrl(shortName, resolvedTheme)}
                 alt={`${name} icon`}
                 className="w-6 h-6"
               />
@@ -83,10 +83,10 @@ export function SourceConnectionDialog({
                           Last sync: {connection.lastSync}
                         </div>
                       )}
-                      <Badge 
+                      <Badge
                         variant={
-                          connection.status === "active" ? "default" : 
-                          connection.status === "error" ? "destructive" : 
+                          connection.status === "active" ? "default" :
+                          connection.status === "error" ? "destructive" :
                           "secondary"
                         }
                       >
