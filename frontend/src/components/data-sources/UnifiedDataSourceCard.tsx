@@ -182,89 +182,87 @@ export function UnifiedDataSourceCard({
 
           {/* Connection dropdown or manage button */}
           <div className="flex justify-center w-full">
-            {status === "connected" ? (
-              mode === "manage" ? (
+            {mode === "manage" ? (
+              <Button
+                variant="default"
+                className="h-9 px-4 transition-colors bg-primary/75 w-full"
+                size="sm"
+                onClick={handleManageSource}
+              >
+                <span className="text-sm truncate max-w-[240px]">
+                  Manage Source
+                </span>
+              </Button>
+            ) : status === "connected" ? (
+              <div className="flex w-full justify-center">
                 <Button
                   variant="default"
-                  className="h-9 px-4 transition-colors bg-primary/75 w-full"
+                  className="h-9 px-4 transition-colors rounded-r-none bg-primary/75"
                   size="sm"
-                  onClick={handleManageSource}
+                  onClick={() => {
+                    if (mostRecentConnection && onSelect) {
+                      onSelect(mostRecentConnection.id);
+                    }
+                  }}
                 >
                   <span className="text-sm truncate max-w-[240px]">
-                    Manage Source
+                    {mostRecentConnection?.name || "Connection"}
                   </span>
                 </Button>
-              ) : (
-                <div className="flex w-full justify-center">
-                  <Button
-                    variant="default"
-                    className="h-9 px-4 transition-colors rounded-r-none bg-primary/75"
-                    size="sm"
-                    onClick={() => {
-                      if (mostRecentConnection && onSelect) {
-                        onSelect(mostRecentConnection.id);
-                      }
+                <DropdownMenu open={open} onOpenChange={setOpen}>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="default"
+                      className="h-9 px-2 transition-colors rounded-l-none border-l border-primary-foreground/10 bg-primary/75"
+                      size="sm"
+                    >
+                      <ChevronsUpDown className="h-3.5 w-3.5 opacity-70" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-[280px]"
+                    style={{
+                      maxHeight: '300px',
+                      overflowY: 'auto'
                     }}
                   >
-                    <span className="text-sm truncate max-w-[240px]">
-                      {mostRecentConnection?.name || "Connection"}
-                    </span>
-                  </Button>
-                  <DropdownMenu open={open} onOpenChange={setOpen}>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="default"
-                        className="h-9 px-2 transition-colors rounded-l-none border-l border-primary-foreground/10 bg-primary/75"
-                        size="sm"
-                      >
-                        <ChevronsUpDown className="h-3.5 w-3.5 opacity-70" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="w-[280px]"
-                      style={{
-                        maxHeight: '300px',
-                        overflowY: 'auto'
-                      }}
+                    <DropdownMenuItem
+                      className="cursor-pointer"
+                      onClick={handleAddNewConnection}
                     >
-                      <DropdownMenuItem
-                        className="cursor-pointer"
-                        onClick={handleAddNewConnection}
-                      >
-                        <span className="font-medium text-primary">Add new connection</span>
-                      </DropdownMenuItem>
+                      <span className="font-medium text-primary">Add new connection</span>
+                    </DropdownMenuItem>
 
-                      {connections.length > 0 && <DropdownMenuSeparator />}
+                    {connections.length > 0 && <DropdownMenuSeparator />}
 
-                      {[...connections]
-                        .sort((a, b) => {
-                          return new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime();
-                        })
-                        .map((connection) => (
-                          <DropdownMenuItem
-                            key={connection.id}
-                            className="cursor-pointer"
-                            onClick={() => handleConnectionSelect(connection.id)}
-                          >
-                            <div className="flex items-center justify-between w-full">
-                              <div className="flex flex-col">
-                                <span className="font-medium">{connection.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  ID: {connection.id}
-                                </span>
-                              </div>
-                              {selectedConnectionId === connection.id && (
-                                <Check className="h-4 w-4 text-primary ml-2" />
-                              )}
+                    {[...connections]
+                      .sort((a, b) => {
+                        return new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime();
+                      })
+                      .map((connection) => (
+                        <DropdownMenuItem
+                          key={connection.id}
+                          className="cursor-pointer"
+                          onClick={() => handleConnectionSelect(connection.id)}
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{connection.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                ID: {connection.id}
+                              </span>
                             </div>
-                          </DropdownMenuItem>
-                        ))
-                      }
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )
+                            {selectedConnectionId === connection.id && (
+                              <Check className="h-4 w-4 text-primary ml-2" />
+                            )}
+                          </div>
+                        </DropdownMenuItem>
+                      ))
+                    }
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             ) : (
               <Button
                 variant="outline"

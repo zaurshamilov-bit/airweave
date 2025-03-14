@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -63,6 +63,46 @@ export function UnifiedDataSourceGrid({
 
   const { toast } = useToast();
 
+  /**
+   * Handle initiating a connection
+   */
+  const handleInitiateConnection = useCallback(async (source: Source) => {
+    if (source.auth_type === "none" || source.auth_type?.startsWith("basic") || source.auth_type?.startsWith("api_key")) {
+      // Open dialog for manual configuration
+      setActiveSourceForDialog(source);
+      setDialogOpen(true);
+    } else if (source.auth_type?.startsWith("oauth2")) {
+      // Initiate OAuth flow
+      if (handleOAuth) {
+        await handleOAuth(source.short_name);
+      } else {
+        // Default OAuth handler
+        try {
+          // Store the current path for redirect after OAuth
+          localStorage.setItem("oauth_return_url", window.location.pathname);
+
+          const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${source.short_name}`);
+          if (!resp.ok) {
+            throw new Error("Failed to retrieve auth URL");
+          }
+          const authUrl = await resp.text();
+          const cleanUrl = authUrl.replace(/^"|"$/g, ''); // Remove surrounding quotes
+          window.location.href = cleanUrl;
+        } catch (err: any) {
+          toast({
+            variant: "destructive",
+            title: "Failed to initiate OAuth2",
+            description: err.message ?? String(err),
+          });
+        }
+      }
+    } else {
+      // Default to dialog for unknown auth types
+      setActiveSourceForDialog(source);
+      setDialogOpen(true);
+    }
+  }, [handleOAuth, toast, setActiveSourceForDialog, setDialogOpen]);
+
   const fetchSources = async () => {
     try {
       const resp = await apiClient.get("/sources/list");
@@ -111,7 +151,26 @@ export function UnifiedDataSourceGrid({
       await fetchConnections();
       setIsLoading(false);
     })();
-  }, []);
+  }, []); // Empty dependency array for initial data fetch
+
+  // Separate useEffect for event listener
+  useEffect(() => {
+    // Add event listener for custom connection initiation
+    const handleInitiateConnectionEvent = (event: CustomEvent) => {
+      const { source } = event.detail;
+      if (source) {
+        handleInitiateConnection(source);
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('initiate-connection', handleInitiateConnectionEvent as EventListener);
+
+    // Clean up
+    return () => {
+      document.removeEventListener('initiate-connection', handleInitiateConnectionEvent as EventListener);
+    };
+  }, [handleInitiateConnection]); // Add handleInitiateConnection to the dependency array
 
   // Add keyboard shortcut handler
   useEffect(() => {
@@ -154,43 +213,6 @@ export function UnifiedDataSourceGrid({
         name: source.name,
         shortName: source.short_name
       });
-    }
-  };
-
-  /**
-   * Handle initiating a connection
-   */
-  const handleInitiateConnection = async (source: Source) => {
-    if (source.auth_type === "none" || source.auth_type?.startsWith("basic") || source.auth_type?.startsWith("api_key")) {
-      // Open dialog for manual configuration
-      setActiveSourceForDialog(source);
-      setDialogOpen(true);
-    } else if (source.auth_type?.startsWith("oauth2")) {
-      // Initiate OAuth flow
-      if (handleOAuth) {
-        await handleOAuth(source.short_name);
-      } else {
-        // Default OAuth handler
-        try {
-          const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${source.short_name}`);
-          if (!resp.ok) {
-            throw new Error("Failed to retrieve auth URL");
-          }
-          const authUrl = await resp.text();
-          const cleanUrl = authUrl.replace(/^"|"$/g, ''); // Remove surrounding quotes
-          window.location.href = cleanUrl;
-        } catch (err: any) {
-          toast({
-            variant: "destructive",
-            title: "Failed to initiate OAuth2",
-            description: err.message ?? String(err),
-          });
-        }
-      }
-    } else {
-      // Default to dialog for unknown auth types
-      setActiveSourceForDialog(source);
-      setDialogOpen(true);
     }
   };
 
@@ -297,7 +319,7 @@ export function UnifiedDataSourceGrid({
                   mode={mode}
                   onInfoClick={undefined} // Implement if needed
                   onSelect={mode === "select" ? (connectionId) => handleSelectConnection(connectionId, source) : undefined}
-                  onAddConnection={mode === "select" ? () => handleInitiateConnection(source) : undefined}
+                  onAddConnection={() => handleInitiateConnection(source)}
                   onManage={mode === "manage" ? () => handleManageSource(source) : undefined}
                   renderDialogs={undefined} // Handled at the grid level
                 />
