@@ -15,7 +15,7 @@ const LABEL_COLORS: Record<string, { bg: string; text: string; border: string }>
   "Productivity": { bg: "bg-green-500/5", text: "text-green-600/60", border: "border-green-500/20" },
   "Calendar": { bg: "bg-emerald-500/5", text: "text-emerald-500/60", border: "border-emerald-500/20" },
   "Task Management": { bg: "bg-lime-500/5", text: "text-lime-600/60", border: "border-lime-500/20" },
-  "Project Management": { bg: "bg-teal-500/5", text: "text-teal-500/60", border: "border-teal-500/20" },
+  "Project Management": { bg: "bg-teal-500/5", text: "text-teal-500/70", border: "border-teal-500/20" },
   "Issue Tracking": { bg: "bg-cyan-500/5", text: "text-cyan-600/60", border: "border-cyan-500/20" },
 
   // Knowledge and documents

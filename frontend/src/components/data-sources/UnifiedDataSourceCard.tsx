@@ -107,7 +107,7 @@ export function UnifiedDataSourceCard({
         {/* Auth type badge positioned absolutely in top right */}
         {authType && (
           <div className="absolute top-3 right-3 z-10">
-            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-50 dark:bg-gray-900 font-medium text-muted-foreground">
+            <span className="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-900 font-medium text-muted-foreground">
               {authType.includes("oauth2") ? "OAUTH2" : authType.replace(/_/g, " ").toUpperCase()}
             </span>
           </div>
@@ -159,76 +159,97 @@ export function UnifiedDataSourceCard({
         <CardFooter className="p-4 pt-2 flex flex-col gap-3 mt-auto h-[110px]">
           <div className="flex w-full justify-between items-center">
             {/* Entity count with box icon */}
-            <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground pb-2">
               <div className="flex items-center gap-1.5">
                 <Box className="w-4 h-4" />
-                <span>{entityCount} entities</span>
+                <span>{entityCount === 0 ? "Entities calculated at sync" : `${entityCount} entities`}</span>
               </div>
             </div>
           </div>
 
           {/* Connection dropdown */}
           <div className="flex justify-center w-full">
-            <DropdownMenu open={open} onOpenChange={setOpen}>
-              <DropdownMenuTrigger asChild>
+            {status === "connected" ? (
+              <div className="flex w-full justify-center">
                 <Button
-                  variant="outline"
-                  className="h-9 px-4 transition-colors"
+                  variant="default"
+                  className="h-9 px-4 transition-colors rounded-r-none bg-primary/75"
                   size="sm"
+                  onClick={() => {
+                    if (mostRecentConnection && onSelect) {
+                      onSelect(mostRecentConnection.id);
+                    }
+                  }}
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm truncate max-w-[200px]">
-                      {status === "connected"
-                        ? (mostRecentConnection?.name || "Connection")
-                        : "Connection"}
-                    </span>
-                    <ChevronsUpDown className="h-3.5 w-3.5 opacity-70" />
-                  </div>
+                  <span className="text-sm truncate max-w-[240px]">
+                    {mostRecentConnection?.name || "Connection"}
+                  </span>
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="w-[280px]"
-                style={{
-                  maxHeight: '300px',
-                  overflowY: 'auto'
-                }}
-              >
-                <DropdownMenuItem
-                  className="cursor-pointer"
-                  onClick={handleAddNewConnection}
-                >
-                  <span className="font-medium text-primary">Add new connection</span>
-                </DropdownMenuItem>
-
-                {connections.length > 0 && <DropdownMenuSeparator />}
-
-                {[...connections]
-                  .sort((a, b) => {
-                    return new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime();
-                  })
-                  .map((connection) => (
-                    <DropdownMenuItem
-                      key={connection.id}
-                      className="cursor-pointer"
-                      onClick={() => handleConnectionSelect(connection.id)}
+                <DropdownMenu open={open} onOpenChange={setOpen}>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="default"
+                      className="h-9 px-2 transition-colors rounded-l-none border-l border-primary-foreground/10 bg-primary/75"
+                      size="sm"
                     >
-                      <div className="flex items-center justify-between w-full">
-                        <div className="flex flex-col">
-                          <span className="font-medium">{connection.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            ID: {connection.id}
-                          </span>
-                        </div>
-                        {selectedConnectionId === connection.id && (
-                          <Check className="h-4 w-4 text-primary ml-2" />
-                        )}
-                      </div>
+                      <ChevronsUpDown className="h-3.5 w-3.5 opacity-70" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-[280px]"
+                    style={{
+                      maxHeight: '300px',
+                      overflowY: 'auto'
+                    }}
+                  >
+                    <DropdownMenuItem
+                      className="cursor-pointer"
+                      onClick={handleAddNewConnection}
+                    >
+                      <span className="font-medium text-primary">Add new connection</span>
                     </DropdownMenuItem>
-                  ))
-                }
-              </DropdownMenuContent>
-            </DropdownMenu>
+
+                    {connections.length > 0 && <DropdownMenuSeparator />}
+
+                    {[...connections]
+                      .sort((a, b) => {
+                        return new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime();
+                      })
+                      .map((connection) => (
+                        <DropdownMenuItem
+                          key={connection.id}
+                          className="cursor-pointer"
+                          onClick={() => handleConnectionSelect(connection.id)}
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{connection.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                ID: {connection.id}
+                              </span>
+                            </div>
+                            {selectedConnectionId === connection.id && (
+                              <Check className="h-4 w-4 text-primary ml-2" />
+                            )}
+                          </div>
+                        </DropdownMenuItem>
+                      ))
+                    }
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                className="h-9 px-4 transition-colors hover:bg-primary/75 hover:text-white duration-300"
+                onClick={handleAddNewConnection}
+              >
+                <span className="text-sm truncate max-w-[240px]">
+                  + Add connection
+                </span>
+              </Button>
+            )}
           </div>
         </CardFooter>
       </Card>
