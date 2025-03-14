@@ -26,7 +26,12 @@ from airweave.platform.entities.outlook_calendar import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Outlook Calendar", "outlook_calendar", AuthType.oauth2_with_refresh)
+@source(
+    "Outlook Calendar",
+    "outlook_calendar",
+    AuthType.oauth2_with_refresh,
+    labels=["Productivity", "Calendar"],
+)
 class OutlookCalendarSource(BaseSource):
     """Outlook Calendar source implementation (read-only)."""
 

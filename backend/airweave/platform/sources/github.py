@@ -28,7 +28,7 @@ from airweave.platform.entities.github import GithubContentEntity, GithubRepoEnt
 from airweave.platform.sources._base import BaseSource
 
 
-@source("GitHub", "github", AuthType.oauth2_with_refresh)
+@source("GitHub", "github", AuthType.oauth2_with_refresh, labels=["Code"])
 class GithubSource(BaseSource):
     """GitHub source implementation (read-only)."""
 

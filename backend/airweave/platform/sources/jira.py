@@ -26,7 +26,9 @@ from airweave.platform.entities.jira import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Jira", "jira", AuthType.oauth2_with_refresh)
+@source(
+    "Jira", "jira", AuthType.oauth2_with_refresh, labels=["Project Management", "Issue Tracking"]
+)
 class JiraSource(BaseSource):
     """Jira source implementation (read-only).
 

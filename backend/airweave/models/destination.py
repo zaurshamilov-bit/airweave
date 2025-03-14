@@ -27,6 +27,7 @@ class Destination(Base):
     input_entity_definition_ids: Mapped[Optional[JSON]] = mapped_column(JSON, nullable=False)
     config_schema: Mapped[Optional[JSON]] = mapped_column(JSON, nullable=False)
     organization_id = Column(ForeignKey("organization.id"), nullable=True)
+    labels: Mapped[list[str]] = mapped_column(JSON, nullable=True, default=list)
 
     # Back-reference to connections
     connections: Mapped[list["Connection"]] = relationship(

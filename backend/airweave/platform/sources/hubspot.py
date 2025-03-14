@@ -16,7 +16,7 @@ from airweave.platform.entities.hubspot import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("HubSpot", "hubspot", AuthType.oauth2_with_refresh)
+@source("HubSpot", "hubspot", AuthType.oauth2_with_refresh, labels=["CRM", "Marketing"])
 class HubspotSource(BaseSource):
     """HubSpot source implementation.
 

@@ -41,7 +41,7 @@ ORACLE_TYPE_MAP = {
 }
 
 
-@source("Oracle", "oracle", AuthType.config_class, "OracleAuthConfig")
+@source("Oracle", "oracle", AuthType.config_class, "OracleAuthConfig", labels=["Database"])
 class OracleSource(BaseSource):
     """Oracle source implementation.
 
