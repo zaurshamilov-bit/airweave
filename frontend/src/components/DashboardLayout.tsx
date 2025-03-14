@@ -9,12 +9,14 @@ import {
   Tag,
   Menu,
   MessageSquare,
+  Bot,
   BookOpen,
   ExternalLink,
   Sun,
   Moon,
   Monitor,
-  Check
+  Check,
+  Box
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -22,6 +24,8 @@ import { useTheme } from "@/lib/theme-provider";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { GradientBackground, GradientCard } from "@/components/ui/gradient-background";
+import { DiscordIcon } from "@/components/ui/discord-icon";
+import { cn } from "@/lib/utils";
 
 const DashboardLayout = () => {
   const location = useLocation();
@@ -29,6 +33,13 @@ const DashboardLayout = () => {
 
   // Determine which logo to use based on theme
   const logoSrc = resolvedTheme === "dark" ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg";
+
+  // Add array of routes that should be non-scrollable
+  const nonScrollableRoutes = ['/chat', '/chat/'];
+
+  // Check if current route should be non-scrollable
+  const isNonScrollable = nonScrollableRoutes.some(route =>
+    location.pathname === route || location.pathname.startsWith('/chat/'));
 
   const isRouteActive = (path: string) => {
     if (path === "/white-label") {
@@ -59,9 +70,9 @@ const DashboardLayout = () => {
       icon: LayoutDashboard,
     },
     {
-      name: "Chat playground",
+      name: "Chat Playground",
       href: "/chat",
-      icon: MessageSquare,
+      icon: Bot,
     },
   ];
 
@@ -74,7 +85,7 @@ const DashboardLayout = () => {
     {
       name: "Sources",
       href: "/sources",
-      icon: Database,
+      icon: Box,
     },
     {
       name: "Destinations",
@@ -178,8 +189,8 @@ const DashboardLayout = () => {
           </div>
 
           {/* Desktop Sidebar */}
-          <div className="hidden w-64 lg:block fixed h-screen left-1 top-1 transition-all duration-300 ease-in-out z-20 shadow-sm border-r border-border/30">
-            <div className="flex h-14 items-center px-6">
+          <div className="hidden w-64 lg:block fixed h-screen pl-2 pt-1 transition-all duration-300 ease-in-out z-20 shadow-sm border-r ">
+            <div className="flex h-14 items-center px-4">
               <Link
                 to="/"
                 className="flex items-center transition-transform duration-200"
@@ -227,13 +238,27 @@ const DashboardLayout = () => {
             </nav>
           </div>
 
-          {/* Main content with scrollable area that includes the header */}
+          {/* Main content with conditionally scrollable area */}
           <div className="w-full lg:pl-64 flex flex-col h-screen">
-            <div className="flex-1 overflow-auto">
+            <div className={cn(
+              "flex-1",
+              isNonScrollable ? "overflow-hidden" : "overflow-auto"
+            )}>
               {/* Top Navigation Bar - Now inside the scrollable area */}
-              <header className="h-16 sticky pr-2">
-                <div className="flex justify-end items-center h-full px-4">
+                <header className={`h-16 sticky top-0 pr-2 backdrop-blur-sm z-10 ${resolvedTheme === 'dark' ? 'bg-black/20' : 'bg-background-alpha-10'}`}>
+
+                <div className="flex justify-end items-center h-full px-6">
                   <nav className="flex items-center space-x-4">
+                    {/* Discord icon */}
+                    <a
+                      href="https://discord.com/invite/484HY9Ehxt"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-md"
+                    >
+                    <DiscordIcon size={22}/>
+                    </a>
+
                     {/* Get a demo button */}
                     <a
                       href="https://cal.com/lennert-airweave/quick-chat"
@@ -251,11 +276,11 @@ const DashboardLayout = () => {
                     {/* Theme Switcher */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="rounded-md h-8 w-8 bg-background-alpha-40">
+                        <Button variant="ghost" size="icon" className="rounded-md h-8 w-8 hover:bg-background-alpha-40 text-muted-foreground">
                           {resolvedTheme === 'dark' ? (
-                            <Moon className="h-4 w-4" />
+                            <Moon className="h-6 w-6" />
                           ) : (
-                            <Sun className="h-4 w-4" />
+                            <Sun className="h-6 w-6" />
                           )}
                         </Button>
                       </DropdownMenuTrigger>
@@ -296,7 +321,10 @@ const DashboardLayout = () => {
                 </div>
               </header>
 
-              <div className="pb-8 pr-4 h-full">
+              <div className={cn(
+                "h-[calc(100%-4rem)]",
+                isNonScrollable ? "overflow-hidden" : "pb-8"
+              )}>
                   <Outlet />
               </div>
             </div>

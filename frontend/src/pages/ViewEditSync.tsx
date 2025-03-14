@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
-import { 
-  ArrowLeft, 
-  Calendar, 
-  Clock, 
-  Database, 
-  Edit2, 
+import {
+  ArrowLeft,
+  Calendar,
+  Clock,
+  Database,
+  Edit2,
   Trash2,
-  ArrowRight 
+  ArrowRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -63,7 +63,7 @@ const ViewEditSync = () => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        
+
         // Fetch sync details
         const syncResponse = await apiClient.get(`/sync/${id}`);
         const syncData: SyncDetails = await syncResponse.json();
@@ -164,7 +164,7 @@ const ViewEditSync = () => {
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="container mx-auto pb-8 space-y-8">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
@@ -186,7 +186,7 @@ const ViewEditSync = () => {
             <Edit2 className="mr-2 h-4 w-4" />
             Edit
           </Button>
-          <Button 
+          <Button
             variant="destructive"
             onClick={() => setShowDeleteDialog(true)}
           >
@@ -198,29 +198,29 @@ const ViewEditSync = () => {
 
       <SyncMetadata sync={syncDetails} />
       <SyncPipelineVisual sync={syncDetails} />
-      <SyncJobsTable 
-        syncId={id || ''} 
+      <SyncJobsTable
+        syncId={id || ''}
         onTotalRunsChange={(total) => setTotalRuns(total)}
         onJobSelect={handleJobSelect}
       />
-      
-      <Dialog 
-        open={!!selectedJobId} 
+
+      <Dialog
+        open={!!selectedJobId}
         onOpenChange={(open) => !open && setSelectedJobId(null)}
       >
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Sync Progress</DialogTitle>
           </DialogHeader>
-          <SyncProgress 
-            syncId={id || null} 
-            syncJobId={selectedJobId} 
+          <SyncProgress
+            syncId={id || null}
+            syncJobId={selectedJobId}
           />
         </DialogContent>
       </Dialog>
-      
-      <DeleteSyncDialog 
-        open={showDeleteDialog} 
+
+      <DeleteSyncDialog
+        open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
         onConfirm={handleDelete}
       />

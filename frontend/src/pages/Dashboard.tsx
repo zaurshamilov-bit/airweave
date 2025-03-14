@@ -14,7 +14,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto pb-8">
       <div className="space-y-8">
         <div className="flex justify-between items-center">
           <div>

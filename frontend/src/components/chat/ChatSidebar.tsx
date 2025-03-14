@@ -51,22 +51,22 @@ export const ChatSidebar = ({ onCreateChat }: ChatSidebarProps) => {
       setIsLoading(true);
       const response = await apiClient.get("/chat");
       const data = await response.json();
-      
+
       // Enhance chats with source connection info
       const enhancedChats = await Promise.all(
         data.map(async (chat: Chat) => {
           if (!chat.sync_id) return chat;
-          
+
           try {
             // Get sync details
             const syncResponse = await apiClient.get(`/sync/${chat.sync_id}`);
             const syncData = await syncResponse.json();
-            
+
             if (syncData.source_connection_id) {
               // Get source connection details
               const sourceConnResponse = await apiClient.get(`/connections/detail/${syncData.source_connection_id}`);
               const sourceConnData = await sourceConnResponse.json();
-              
+
               return {
                 ...chat,
                 source_connection: {
@@ -78,11 +78,11 @@ export const ChatSidebar = ({ onCreateChat }: ChatSidebarProps) => {
           } catch (err) {
             console.error(`Failed to get sync info for chat ${chat.id}:`, err);
           }
-          
+
           return chat;
         })
       );
-      
+
       setChats(enhancedChats);
     } catch (error) {
       console.error("Failed to load chats:", error);
@@ -110,7 +110,7 @@ export const ChatSidebar = ({ onCreateChat }: ChatSidebarProps) => {
   }
 
   return (
-    <div className="w-[300px] h-full border-r bg-muted/10">
+    <div className="w-[300px] h-full border-r border-border/40 bg-background-alpha-0">
       <div className="p-4 space-y-4">
         <CreateChatDialog
           open={createDialogOpen}
@@ -161,8 +161,8 @@ export const ChatSidebar = ({ onCreateChat }: ChatSidebarProps) => {
                   onClick={() => navigate(`/chat/${chat.id}`)}
                 >
                   {chat.source_connection?.short_name ? (
-                    <img 
-                      src={getAppIconUrl(chat.source_connection.short_name, resolvedTheme)} 
+                    <img
+                      src={getAppIconUrl(chat.source_connection.short_name, resolvedTheme)}
                       alt={chat.source_connection.name || "Source"}
                       className="h-4 w-4 shrink-0"
                     />
@@ -174,8 +174,8 @@ export const ChatSidebar = ({ onCreateChat }: ChatSidebarProps) => {
                       {chat.name || "Untitled Chat"}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {chat.messages?.[chat.messages.length - 1]?.content || 
-                       chat.description || 
+                      {chat.messages?.[chat.messages.length - 1]?.content ||
+                       chat.description ||
                        "No messages yet"}
                     </p>
                   </div>

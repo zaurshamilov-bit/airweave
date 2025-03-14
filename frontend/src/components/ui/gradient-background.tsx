@@ -26,7 +26,7 @@ export function GradientBackground({
     if (resolvedTheme === 'dark') {
       return "from-black via-black to-background-alpha-20";
     } else {
-      return "from-background-alpha-60 via-background-alpha-40 to-background-white";
+      return "from-background-alpha-40 via-background-alpha-40 to-background-white";
     }
   };
 

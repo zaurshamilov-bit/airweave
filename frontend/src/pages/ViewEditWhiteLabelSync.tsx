@@ -53,7 +53,7 @@ const ViewEditWhiteLabelSync = () => {
   };
 
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="container mx-auto pb-8 space-y-8">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
@@ -75,7 +75,7 @@ const ViewEditWhiteLabelSync = () => {
             <Edit2 className="mr-2 h-4 w-4" />
             Edit
           </Button>
-          <Button 
+          <Button
             variant="destructive"
             onClick={() => setShowDeleteDialog(true)}
           >
@@ -88,8 +88,8 @@ const ViewEditWhiteLabelSync = () => {
       <SyncMetadata sync={mockWhiteLabelSyncDetails} />
       <SyncPipelineVisual sync={mockWhiteLabelSyncDetails} />
       <SyncJobsTable syncId={id || ''} />
-      <DeleteSyncDialog 
-        open={showDeleteDialog} 
+      <DeleteSyncDialog
+        open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
         onConfirm={handleDelete}
       />

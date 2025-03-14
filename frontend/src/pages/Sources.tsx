@@ -3,7 +3,7 @@ import { SourcesDataSourceGrid } from "@/components/sources/SourcesDataSourceGri
 
 const Sources = () => {
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto pb-8">
       <div className="space-y-8">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Data Sources</h2>

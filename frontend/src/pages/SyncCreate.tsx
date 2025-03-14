@@ -201,7 +201,7 @@ const Sync = () => {
       }
 
       // First, update the sync status to active
-      const updateResp = await apiClient.put(`/sync/${syncId}`, {
+      const updateResp = await apiClient.patch(`/sync/${syncId}`, {
         status: "active"
       });
 
@@ -246,7 +246,7 @@ const Sync = () => {
   };
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto pb-8">
       <div className="mx-auto">
         {/* Step + progress bar */}
         <div className="mb-8">

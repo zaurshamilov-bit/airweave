@@ -1,20 +1,20 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
   DialogTrigger,
   DialogDescription,
   DialogFooter,
@@ -70,7 +70,7 @@ const SyncTableView = () => {
 
   const confirmDelete = async () => {
     if (!syncToDelete) return;
-    
+
     try {
       await apiClient.delete(`/sync/${syncToDelete.id}?delete_data=${deleteData}`);
       setSyncs(syncs.filter(sync => sync.id !== syncToDelete.id));
@@ -83,7 +83,7 @@ const SyncTableView = () => {
     }
   };
 
-  const filteredSyncs = syncs?.filter(sync => 
+  const filteredSyncs = syncs?.filter(sync =>
     sync.name.toLowerCase().includes(search.toLowerCase()) ||
     (sync.cron_schedule || "").toLowerCase().includes(search.toLowerCase())
   ) ?? [];
@@ -101,17 +101,17 @@ const SyncTableView = () => {
     const formattedDate = formatRelative(date, new Date());
     // Capitalize first letter and format time if it's today/yesterday
     const formatted = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
-    
+
     // If it's today/yesterday, append the time
     if (formatted.startsWith('Today') || formatted.startsWith('Yesterday')) {
       return `${formatted} at ${format(date, 'HH:mm')}`;
     }
-    
+
     return formatted;
   };
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto pb-8">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold">Synchronizations</h1>
@@ -146,7 +146,7 @@ const SyncTableView = () => {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8">
+                <TableCell colSpan={5} className="text-center pb-8">
                   <div className="flex items-center justify-center text-muted-foreground">
                     Loading...
                   </div>
@@ -154,7 +154,7 @@ const SyncTableView = () => {
               </TableRow>
             ) : filteredSyncs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8">
+                <TableCell colSpan={5} className="text-center pb-8">
                   <div className="flex flex-col items-center justify-center text-muted-foreground">
                     <p>No synchronizations found</p>
                     <p className="text-sm">Try adjusting your search terms</p>
@@ -163,7 +163,7 @@ const SyncTableView = () => {
               </TableRow>
             ) : (
               filteredSyncs.map((sync) => (
-                <TableRow 
+                <TableRow
                   key={sync.id}
                   className="cursor-pointer hover:bg-muted/50 transition-colors"
                   onClick={(e) => {
@@ -205,8 +205,8 @@ const SyncTableView = () => {
         </Table>
       </div>
 
-      <Dialog 
-        open={!!syncToDelete} 
+      <Dialog
+        open={!!syncToDelete}
         onOpenChange={(open) => {
           if (!open) {
             setSyncToDelete(null);
@@ -218,11 +218,11 @@ const SyncTableView = () => {
           <DialogHeader>
             <DialogTitle className="text-xl">Delete Sync</DialogTitle>
             <DialogDescription className="pt-3">
-              Are you sure you want to delete <span className="font-medium text-foreground">{syncToDelete?.name}</span>? 
+              Are you sure you want to delete <span className="font-medium text-foreground">{syncToDelete?.name}</span>?
               <p className="mt-2 text-destructive dark:text-red-400">This action cannot be undone.</p>
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div className="items-top flex space-x-2">
               <Checkbox

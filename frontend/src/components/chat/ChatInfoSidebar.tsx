@@ -50,7 +50,7 @@ const badgeVariants = {
   inactive: "bg-gray-50 text-gray-600 border-gray-200",
 };
 
-export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarProps) {
+export function ChatInfoSidebar({ chatInfo, onUpdateSettings, className }: ChatInfoSidebarProps) {
   const [modelSettings, setModelSettings] = useState<ModelSettings>(chatInfo.model_settings);
   const [modelName, setModelName] = useState<string>(chatInfo.model_name);
   const { toast } = useToast();
@@ -68,7 +68,9 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
     setModelName(newModelName);
     try {
       // Update model_name at root level
-      await onUpdateSettings({ model_name: newModelName });
+      await onUpdateSettings({
+        model_name: newModelName
+      } as any);
     } catch (error) {
       toast({
         title: "Error",
@@ -81,15 +83,17 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
   const handleSettingChange = (key: keyof ModelSettings, value: number | string) => {
     const newSettings = { ...modelSettings, [key]: value };
     setModelSettings(newSettings);
-    
+
     if (saveTimeout) {
       clearTimeout(saveTimeout);
     }
-    
+
     const timeout = setTimeout(async () => {
       try {
         // Update model_settings separately
-        await onUpdateSettings({ model_settings: newSettings });
+        await onUpdateSettings({
+          model_settings: newSettings
+        } as any);
       } catch (error) {
         toast({
           title: "Error",
@@ -98,7 +102,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
         });
       }
     }, 500);
-    
+
     setSaveTimeout(timeout);
   };
 
@@ -133,8 +137,8 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
             <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
               Cancel
             </Button>
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={() => {
                 setShowDeleteDialog(false);
                 void handleDelete();
@@ -146,12 +150,12 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
         </DialogContent>
       </Dialog>
 
-      <div className="w-[350px] border-l bg-background">
+      <div className={cn("w-[350px] border-l bg-background", className)}>
         <div className="p-4 border-b flex items-center justify-between">
           <h2 className="font-semibold">Chat Settings</h2>
           <div className="flex items-center gap-2">
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => setShowDeleteDialog(true)}
               className="h-8 w-8 text-muted-foreground hover:text-destructive"
@@ -161,8 +165,8 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
             <Settings2 className="h-4 w-4 text-muted-foreground" />
           </div>
         </div>
-        
-        <ScrollArea className="h-[calc(100vh-65px)]">
+
+        <ScrollArea className="h-[calc(100%-65px)]">
           <div className="p-4 space-y-6">
             {/* Chat Details Section */}
             <div className="space-y-4">
@@ -195,9 +199,9 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-medium">{chatInfo.sync.name}</span>
-                        <Badge 
+                        <Badge
                           className={cn(
-                            "text-[10px] font-medium px-2 py-0.5 border", 
+                            "text-[10px] font-medium px-2 py-0.5 border",
                             chatInfo.sync.status === 'active' ? badgeVariants.active : badgeVariants.inactive
                           )}
                         >
@@ -219,8 +223,8 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <img 
-                                src={getAppIconUrl(chatInfo.sync.source_connection.short_name, resolvedTheme)} 
+                              <img
+                                src={getAppIconUrl(chatInfo.sync.source_connection.short_name, resolvedTheme)}
                                 alt={chatInfo.sync.source_connection.source?.name}
                                 className="h-5 w-5"
                               />
@@ -228,7 +232,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                             </div>
                             <div className="flex items-center gap-2">
                               {chatInfo.sync.source_connection.source?.app_url && (
-                                <a 
+                                <a
                                   href={chatInfo.sync.source_connection.source.app_url}
                                   target="_blank"
                                   rel="noopener noreferrer"
@@ -237,9 +241,9 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                                   <LinkIcon className="h-3 w-3" />
                                 </a>
                               )}
-                              <Badge 
+                              <Badge
                                 className={cn(
-                                  "text-[10px] font-medium px-2 py-0.5 border", 
+                                  "text-[10px] font-medium px-2 py-0.5 border",
                                   chatInfo.sync.source_connection.status === 'active' ? badgeVariants.active : badgeVariants.inactive
                                 )}
                               >
@@ -262,10 +266,10 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                       <Label className="text-xs text-muted-foreground">Destination</Label>
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
-                          <img 
+                          <img
                             src={getDestinationIconUrl(
                               chatInfo.sync.destination_connection?.short_name || "weaviate_native"
-                            )} 
+                            )}
                             alt={chatInfo.sync.destination_connection?.destination?.name || "Native Weaviate"}
                             className="h-5 w-5"
                           />
@@ -281,7 +285,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                             </div>
                             <div className="space-y-1">
                               <Label className="text-xs text-muted-foreground">Status</Label>
-                              <Badge 
+                              <Badge
                                 className={cn(
                                   "text-[10px] font-medium px-2 py-0.5 border",
                                   chatInfo.sync.destination_connection.status === 'active' ? badgeVariants.active : badgeVariants.inactive
@@ -404,4 +408,4 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
       </div>
     </>
   );
-} 
+}
