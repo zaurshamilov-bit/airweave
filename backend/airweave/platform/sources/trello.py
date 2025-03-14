@@ -18,7 +18,7 @@ from airweave.platform.entities.trello import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Trello", "trello", AuthType.trello_auth)
+@source("Trello", "trello", AuthType.trello_auth, labels=["Project Management"])
 class TrelloSource(BaseSource):
     """Trello source implementation.
 

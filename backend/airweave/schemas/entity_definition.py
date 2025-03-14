@@ -14,7 +14,7 @@ class EntityDefinitionBase(BaseModel):
     name: str
     description: Optional[str] = None
     type: EntityType
-    schema: Union[List[str], Dict]  # List of extensions for files, JSON schema for JSON
+    entity_schema: Union[List[str], Dict]  # List of extensions for files, JSON schema for JSON
     parent_id: Optional[UUID] = None
     module_name: str
     class_name: str

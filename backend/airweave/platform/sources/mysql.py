@@ -42,7 +42,7 @@ MYSQL_TYPE_MAP = {
 }
 
 
-@source("MySQL", "mysql", AuthType.config_class, "MySQLAuthConfig")
+@source("MySQL", "mysql", AuthType.config_class, "MySQLAuthConfig", labels=["Database"])
 class MySQLSource(BaseSource):
     """MySQL source implementation.
 

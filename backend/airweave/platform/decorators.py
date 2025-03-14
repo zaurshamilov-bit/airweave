@@ -1,7 +1,7 @@
 """Decorators for the platform integrations."""
 
 from functools import wraps
-from typing import Callable, Optional, TypeVar
+from typing import Callable, List, Optional, TypeVar
 
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.entities._base import ChunkEntity
@@ -12,6 +12,7 @@ def source(
     short_name: str,
     auth_type: Optional[AuthType] = None,
     auth_config_class: Optional[str] = None,
+    labels: Optional[List[str]] = None,
 ) -> Callable[[type], type]:
     """Class decorator to mark a class as representing an Airweave source.
 
@@ -21,6 +22,7 @@ def source(
         short_name (str): The short name of the source.
         auth_type (AuthType): The authentication type of the source.
         auth_config_class (Optional[str]): The authentication config class of the source.
+        labels (Optional[List[str]]): Labels categorizing this source (e.g., "CRM", "Database").
 
     Returns:
     -------
@@ -34,6 +36,7 @@ def source(
         cls._short_name = short_name
         cls._auth_type = auth_type
         cls._auth_config_class = auth_config_class
+        cls._labels = labels or []
         return cls
 
     return decorator
@@ -44,6 +47,7 @@ def destination(
     short_name: str,
     auth_type: Optional[AuthType] = None,
     auth_config_class: Optional[str] = None,
+    labels: Optional[List[str]] = None,
 ) -> Callable[[type], type]:
     """Class decorator to mark a class as representing an Airweave destination.
 
@@ -53,6 +57,7 @@ def destination(
         short_name (str): The short name of the destination.
         auth_type (AuthType): The authentication type of the destination.
         auth_config_class (str): The authentication config class of the destination.
+        labels (Optional[List[str]]): Labels categorizing this destination (e.g., "Vector", "Graph")
 
     Returns:
     -------
@@ -66,6 +71,7 @@ def destination(
         cls._short_name = short_name
         cls._auth_type = auth_type
         cls._auth_config_class = auth_config_class
+        cls._labels = labels or []
         return cls
 
     return decorator

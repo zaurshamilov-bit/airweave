@@ -1,7 +1,7 @@
 """Destination schema."""
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -19,9 +19,10 @@ class DestinationBase(BaseModel):
     class_name: str
     auth_type: Optional[AuthType] = None
     auth_config_class: Optional[str] = None
-    input_entity_definition_ids: Optional[list[UUID]] = None
+    input_entity_definition_ids: Optional[List[UUID]] = None
     organization_id: Optional[UUID] = None
     config_schema: Optional[dict] = None
+    labels: Optional[List[str]] = None
 
     class Config:
         """Pydantic config for DestinationBase."""
