@@ -13,6 +13,7 @@ from .integration_credential import IntegrationCredential
 from .organization import Organization
 from .source import Source
 from .sync import Sync
+from .sync_connection import SyncConnection
 from .sync_job import SyncJob
 from .transformer import Transformer
 from .user import User
@@ -34,6 +35,7 @@ __all__ = [
     "Organization",
     "Source",
     "Sync",
+    "SyncConnection",
     "SyncDag",
     "SyncJob",
     "Transformer",

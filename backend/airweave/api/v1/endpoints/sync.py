@@ -108,8 +108,6 @@ async def create_sync(
             sync_job_schema = schemas.SyncJob.model_validate(sync_job)
             background_tasks.add_task(sync_service.run, sync_schema, sync_job_schema, user)
         await uow.commit()
-        await uow.session.refresh(sync)
-
     return sync
 
 
@@ -166,7 +164,7 @@ async def run_sync(
     --------
         sync_job (schemas.SyncJob): The sync job
     """
-    sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
+    sync = await crud.sync.get(db=db, id=sync_id, current_user=user, with_connections=True)
     if not sync:
         raise HTTPException(status_code=404, detail="Sync not found")
 
