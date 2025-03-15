@@ -117,9 +117,11 @@ const DashboardLayout = () => {
       to={item.href}
       className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 ease-in-out ${
         isActive
-          ? "bg-primary/10 text-primary"
+          ? item.isSpecial
+            ? "bg-gradient-to-r from-primary-300/90 to-secondary-300/90 dark:from-primary-700/70 dark:to-secondary-700/70 text-primary-900 dark:text-primary-100 shadow-sm"
+            : "bg-primary/10 text-primary"
           : item.isSpecial
-          ? "bg-gradient-to-r r from-secondary-200/70 to-primary-200/70  text-secondary-900 bg-opacity-60 hover:bg-opacity-90 transform hover:shadow-sm transition-all duration-200 ease-in-out py-2 "
+          ? "bg-gradient-to-r from-primary-300/70 to-secondary-300/70 dark:from-primary-500/50 dark:to-secondary-400/50 text-primary-800 dark:text-primary-100 shadow-sm hover:from-primary-400/80 hover:to-secondary-400/80 dark:hover:from-primary-400/60 dark:hover:to-secondary-300/60 hover:shadow transition-all duration-200 ease-in-out"
           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
       }`}
     >
