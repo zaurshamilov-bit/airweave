@@ -22,7 +22,9 @@ from airweave.platform.entities.outlook_mail import OutlookMailFolderEntity, Out
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Outlook Mail", "outlook_mail", AuthType.oauth2_with_refresh)
+@source(
+    "Outlook Mail", "outlook_mail", AuthType.oauth2_with_refresh, labels=["Communication", "Email"]
+)
 class OutlookMailSource(BaseSource):
     """Outlook Mail source implementation (read-only).
 

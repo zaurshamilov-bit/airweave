@@ -13,6 +13,10 @@ import { SyncDagEditor } from "@/components/sync/SyncDagEditor";
 import { SyncUIMetadata } from "@/components/sync/types";
 import { Dag } from "@/components/sync/dag";
 import { NATIVE_TEXT2VEC_UUID, NATIVE_WEAVIATE_UUID } from "@/constants/nativeConnections";
+import { SyncOverview } from "@/components/sync/SyncOverview";
+import { SyncSchedule, SyncScheduleConfig, buildCronExpression } from "@/components/sync/SyncSchedule";
+import { isValidCronExpression } from "@/components/sync/CronExpressionInput";
+import { Separator } from "@/components/ui/separator";
 
 /**
  * This component coordinates all user actions (source selection,
@@ -60,6 +64,14 @@ const Sync = () => {
 
   // Replace the initialDag state with:
   const [dag, setDag] = useState<Dag | null>(null);
+
+  // Schedule configuration
+  const [scheduleConfig, setScheduleConfig] = useState<SyncScheduleConfig>({
+    type: "one-time",
+    frequency: "daily",
+    hour: 9,
+    minute: 0
+  });
 
   /**
    * Notify the user if they've just returned from an oauth2 flow.
@@ -115,7 +127,7 @@ const Sync = () => {
       if (userInfo) {
         setPipelineMetadata(prev => prev ? {
           ...prev,
-          destination: dbDetails.isNative 
+          destination: dbDetails.isNative
             ? {
                 name: "Native Weaviate",
                 shortName: "weaviate_native",
@@ -175,7 +187,38 @@ const Sync = () => {
    */
   const handleStartSync = async () => {
     try {
-      const resp = await apiClient.post(`/sync/${syncId}/run`);
+      // Validate the cron expression if it's a custom frequency
+      if (
+        scheduleConfig.type === "scheduled" &&
+        scheduleConfig.frequency === "custom" &&
+        scheduleConfig.cronExpression
+      ) {
+        if (!isValidCronExpression(scheduleConfig.cronExpression)) {
+          toast({
+            variant: "destructive",
+            title: "Invalid cron expression",
+            description: "Please fix the cron expression before starting the sync."
+          });
+          return;
+        }
+      }
+
+      // First, update the sync status to active
+      const updateResp = await apiClient.put(`/sync/${syncId}`, {
+        status: "active"
+      });
+
+      if (!updateResp.ok) {
+        throw new Error("Failed to activate sync");
+      }
+
+      // Build schedule parameters based on configuration
+      const scheduleParams = scheduleConfig.type === "scheduled" ? buildScheduleParams() : {};
+
+      const resp = await apiClient.post(`/sync/${syncId}/run`, {
+        ...scheduleParams
+      });
+
       if (!resp.ok) {
         throw new Error("Failed to run sync job");
       }
@@ -189,6 +232,20 @@ const Sync = () => {
         description: err.message || String(err)
       });
     }
+  };
+
+  /**
+   * Helper function to build schedule parameters based on the current configuration
+   */
+  const buildScheduleParams = () => {
+    if (scheduleConfig.type !== "scheduled") return {};
+
+    const cronExp = buildCronExpression(scheduleConfig);
+
+    return {
+      scheduled: true,
+      schedule: cronExp
+    };
   };
 
   return (
@@ -249,18 +306,34 @@ const Sync = () => {
         {step === 3 && (
           <div className="space-y-8">
             <div>
-              <h2 className="text-2xl font-semibold">Configure your pipeline</h2>
+              <h2 className="text-2xl font-semibold">
+                Configure your sync
+              </h2>
               <p className="text-muted-foreground mt-2">
-                Add transformers and entities to your pipeline.
+                Customize your sync to meet your needs.
               </p>
             </div>
             {dag && syncId && (
               <div className="space-y-8">
-                <SyncDagEditor
+                {/* Add the sync overview component */}
+                <SyncOverview syncMetadata={pipelineMetadata} />
+
+                {/* Add the sync schedule component */}
+                <SyncSchedule
+                  value={scheduleConfig}
+                  onChange={setScheduleConfig}
                   syncId={syncId}
-                  initialDag={dag}
-                  onSave={handleStartSync}
                 />
+
+
+                <div>
+                  <SyncDagEditor
+                    syncId={syncId}
+                    initialDag={dag}
+                    onSave={handleStartSync}
+                  />
+                </div>
+
                 <div className="flex flex-col items-center gap-2">
                   <Button size="lg" onClick={handleStartSync}>
                     Start Sync

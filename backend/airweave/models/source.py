@@ -28,6 +28,7 @@ class Source(Base):
     # List of entity IDs this source can output
     output_entity_definition_ids = Column(JSON, nullable=False)
     config_schema = Column(JSON, nullable=False)  # JSON Schema for configuration
+    labels: Mapped[list[str]] = mapped_column(JSON, nullable=True, default=list)
 
     __table_args__ = (UniqueConstraint("name", "organization_id", name="uq_source_name_org"),)
 

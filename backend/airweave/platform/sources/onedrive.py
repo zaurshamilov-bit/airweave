@@ -29,7 +29,12 @@ from airweave.platform.entities.onedrive import OneDriveDriveEntity, OneDriveDri
 from airweave.platform.sources._base import BaseSource
 
 
-@source("OneDrive", "onedrive", AuthType.oauth2_with_refresh)
+@source(
+    "OneDrive",
+    "onedrive",
+    AuthType.oauth2_with_refresh,
+    labels=["File Storage", "Document Management"],
+)
 class OneDriveSource(BaseSource):
     """OneDrive source implementation (read-only)."""
 

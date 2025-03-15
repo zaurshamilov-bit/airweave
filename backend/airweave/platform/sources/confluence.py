@@ -37,7 +37,12 @@ from airweave.platform.entities.confluence import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Confluence", "confluence", AuthType.oauth2_with_refresh)
+@source(
+    "Confluence",
+    "confluence",
+    AuthType.oauth2_with_refresh,
+    labels=["Knowledge Base", "Documentation"],
+)
 class ConfluenceSource(BaseSource):
     """Confluence source implementation, retrieving content in a hierarchical fashion.
 

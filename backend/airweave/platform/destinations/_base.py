@@ -1,6 +1,7 @@
 """Base destination classes."""
 
 from abc import ABC, abstractmethod
+from typing import ClassVar, List
 from uuid import UUID
 
 from airweave import schemas
@@ -9,6 +10,9 @@ from airweave.platform.entities._base import ChunkEntity
 
 class BaseDestination(ABC):
     """Common base destination class. This is the umbrella interface for all destinations."""
+
+    # Class variables for integration metadata
+    _labels: ClassVar[List[str]] = []
 
     @abstractmethod
     async def create(self, user: schemas.User) -> None:

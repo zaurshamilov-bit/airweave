@@ -293,3 +293,32 @@ async def get_sync_dag(
     if not dag:
         raise HTTPException(status_code=404, detail=f"DAG for sync {sync_id} not found")
     return dag
+
+
+@router.patch("/{sync_id}", response_model=schemas.Sync)
+async def update_sync(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    sync_id: UUID,
+    sync_update: schemas.SyncUpdate = Body(...),
+    user: schemas.User = Depends(deps.get_user),
+) -> schemas.Sync:
+    """Update a sync configuration.
+
+    Args:
+    -----
+        db: The database session
+        sync_id: The ID of the sync to update
+        sync_update: The sync update data
+        user: The current user
+
+    Returns:
+    --------
+        sync (schemas.Sync): The updated sync
+    """
+    sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
+    if not sync:
+        raise HTTPException(status_code=404, detail="Sync not found")
+
+    updated_sync = await crud.sync.update(db=db, db_obj=sync, obj_in=sync_update, current_user=user)
+    return updated_sync

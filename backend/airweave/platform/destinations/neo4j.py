@@ -6,10 +6,12 @@ from uuid import UUID
 from neo4j import AsyncGraphDatabase
 
 from airweave import schemas
+from airweave.platform.decorators import destination
 from airweave.platform.destinations._base import GraphDBDestination
 from airweave.platform.entities._base import ChunkEntity
 
 
+@destination("Neo4j", "neo4j", labels=["Graph"])
 class Neo4jDestination(GraphDBDestination):
     """Neo4j destination implementation."""
 

@@ -17,7 +17,7 @@ from airweave.platform.entities._base import ChunkEntity
 from airweave.vector_db.weaviate_service import WeaviateService
 
 
-@destination("Weaviate", "weaviate", AuthType.config_class, "WeaviateAuthConfig")
+@destination("Weaviate", "weaviate", AuthType.config_class, "WeaviateAuthConfig", labels=["Vector"])
 class WeaviateDestination(VectorDBDestination):
     """Weaviate destination implementation."""
 
