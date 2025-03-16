@@ -47,7 +47,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         # Validate user permissions
         self._validate_if_user_has_permission(
             sync, current_user
-        )  # NB: raises airweave.core.exceptions.PermissionException if user doesnt have permission
+        )  # NB: raises airweave.core.exceptions.PermissionException if user doesn't have permission
         return sync
 
     async def get_all_for_user(
