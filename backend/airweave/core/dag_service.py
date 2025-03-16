@@ -52,9 +52,10 @@ class DagService:
         ) = await self._get_source_and_entity_definitions(db, sync, current_user)
 
         # Get or create destinations
-        destinations, destination_connections = (
-            await self._get_destinations_and_destination_connections(db, sync, current_user)
-        )
+        (
+            destinations,
+            destination_connections,
+        ) = await self._get_destinations_and_destination_connections(db, sync, current_user)
 
         # Initialize DAG components
         nodes: List[DagNodeCreate] = []

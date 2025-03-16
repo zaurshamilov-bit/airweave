@@ -47,7 +47,7 @@ def test_sync_operations(e2e_environment, e2e_api_url, source_connection_data, s
     5. Gets the sync DAG
     6. Deletes the sync
     """
-    # Step 1: Create a new integration credential
+    # Step 1: Create a source connection
     create_connection_response = requests.post(
         f"{e2e_api_url}/connections/connect/source/stripe", json=source_connection_data
     )
