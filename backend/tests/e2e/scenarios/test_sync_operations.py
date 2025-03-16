@@ -51,18 +51,18 @@ def test_sync_operations(e2e_environment, e2e_api_url, source_connection_data, s
     create_connection_response = requests.post(
         f"{e2e_api_url}/connections/connect/source/stripe", json=source_connection_data
     )
-    assert (
-        create_connection_response.status_code == 200
-    ), f"Failed to create connection: {create_connection_response.text}"
+    assert create_connection_response.status_code == 200, (
+        f"Failed to create connection: {create_connection_response.text}"
+    )
 
     # Update the sync data with the source connection ID
     sync_data["source_connection_id"] = create_connection_response.json()["id"]
 
     # Step 2: Create a new sync
     create_sync_response = requests.post(f"{e2e_api_url}/sync/", json=sync_data)
-    assert (
-        create_sync_response.status_code == 200
-    ), f"Failed to create sync: {create_sync_response.text}"
+    assert create_sync_response.status_code == 200, (
+        f"Failed to create sync: {create_sync_response.text}"
+    )
 
     # Extract the sync ID from the response
     sync = create_sync_response.json()
@@ -95,9 +95,9 @@ def test_sync_operations(e2e_environment, e2e_api_url, source_connection_data, s
 
     # Step 6: List sync jobs
     list_jobs_response = requests.get(f"{e2e_api_url}/sync/{sync_id}/jobs")
-    assert (
-        list_jobs_response.status_code == 200
-    ), f"Failed to list sync jobs: {list_jobs_response.text}"
+    assert list_jobs_response.status_code == 200, (
+        f"Failed to list sync jobs: {list_jobs_response.text}"
+    )
     jobs = list_jobs_response.json()
     assert len(jobs) >= 1
     assert any(job["id"] == job_id for job in jobs)
