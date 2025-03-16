@@ -134,6 +134,7 @@ You can configure your own vector database in the app UI or via the API.
 - **Databases**:
   - [PostgreSQL](https://www.postgresql.org/) for relational data
   - Vector database (your choice, e.g. Chroma, Milvus, Pinecone, Qdrant, Weaviate, etc.)  + (upcoming batteries-included vector DB)
+  - (upcoming) Graph database (natively supported Neo4j)
 - **Asynchronous Tasks**: [ARQ](https://arq-docs.helpmanual.io/) Redis for background workers
 
 ---
