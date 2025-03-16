@@ -30,7 +30,7 @@ def sync_data():
         "description": "Test sync created by E2E test",
         "source_connection_id": None,  # Will be created during test
         "destination_connection_ids": [],  # Will be populated during test
-        "embedding_model_connection_id": None,  # Will use default embedding model
+        "embedding_model_connection_id": str(uuid.uuid4()),  # Provide a valid UUID string
         "run_immediately": False,
         "schedule": None,
     }

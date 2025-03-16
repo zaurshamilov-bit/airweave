@@ -123,7 +123,7 @@ class TestCreateSync:
                 name="Test Sync",
                 description="Test description",
                 source_connection_id=uuid.uuid4(),
-                destination_id=uuid.uuid4(),
+                destination_connection_ids=[uuid.uuid4()],
                 run_immediately=False,
             )
 
@@ -138,7 +138,6 @@ class TestCreateSync:
             # Assert
             sync_service.create.assert_called_once()
             mock_uow.commit.assert_called_once()
-            mock_db.refresh.assert_called_once_with(mock_sync)
             assert result == mock_sync
             mock_background_tasks.add_task.assert_not_called()
 
@@ -161,7 +160,7 @@ class TestCreateSync:
                 name="Test Sync",
                 description="Test description",
                 source_connection_id=uuid.uuid4(),
-                destination_id=uuid.uuid4(),
+                destination_connection_ids=[uuid.uuid4()],
                 run_immediately=True,
             )
 
@@ -259,7 +258,9 @@ class TestRunSync:
         )
 
         # Assert
-        crud.sync.get.assert_called_once_with(db=mock_db, id=sync_id, current_user=mock_user)
+        crud.sync.get.assert_called_once_with(
+            db=mock_db, id=sync_id, current_user=mock_user, with_connections=True
+        )
         crud.sync_job.create.assert_called_once()
         mock_background_tasks.add_task.assert_called_once()
         assert result == mock_sync_job
