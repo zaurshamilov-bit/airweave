@@ -351,9 +351,9 @@ class SyncOrchestrator:
             parent_entity.db_entity_id = new_db_entity.id
             await sync_context.progress.increment("inserted", 1)
 
-            # Insert all child entities into destination
-
-            await sync_context.destination.bulk_insert(processed_entities)
+            # Insert all child entities into all destinations
+            for destination in sync_context.destinations:
+                await destination.bulk_insert(processed_entities)
 
         elif action == DestinationAction.UPDATE:
             # Update in database
@@ -366,16 +366,16 @@ class SyncOrchestrator:
             )
             parent_entity.db_entity_id = db_entity.id
 
-            # For destination, we need to handle the update scenario:
+            # For each destination, we need to handle the update scenario:
             # 1. Delete existing parent and children
             # 2. Insert the new processed entities
+            for destination in sync_context.destinations:
+                await destination.bulk_delete_by_parent_id(
+                    parent_entity.entity_id, sync_context.sync.id
+                )
 
-            await sync_context.destination.bulk_delete_by_parent_id(
-                parent_entity.entity_id, sync_context.sync.id
-            )
-
-            # Insert new processed entities
-            await sync_context.destination.bulk_insert(processed_entities)
+                # Insert new processed entities
+                await destination.bulk_insert(processed_entities)
 
             await sync_context.progress.increment("updated", 1)
 

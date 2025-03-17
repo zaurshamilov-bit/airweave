@@ -3,12 +3,12 @@
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
+from sqlalchemy import CheckConstraint, ForeignKey, String
 from sqlalchemy import Enum as SQLAlchemyEnum
-from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.core.shared_models import ConnectionStatus, IntegrationType
-from airweave.models._base import OrganizationBase, UserMixin
+from airweave.models._base import Base
 
 if TYPE_CHECKING:
     from airweave.models.destination import Destination
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from airweave.models.source import Source
 
 
-class Connection(OrganizationBase, UserMixin):
+class Connection(Base):
     """Connection model to manage relationships between integrations and their credentials."""
 
     __tablename__ = "connection"
@@ -29,6 +29,9 @@ class Connection(OrganizationBase, UserMixin):
     status: Mapped[ConnectionStatus] = mapped_column(
         SQLAlchemyEnum(ConnectionStatus), default=ConnectionStatus.ACTIVE
     )
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organization.id"), nullable=True)
+    created_by_email: Mapped[str] = mapped_column(String, nullable=True)
+    modified_by_email: Mapped[str] = mapped_column(String, nullable=True)
 
     # Foreign keys
     integration_credential_id: Mapped[Optional[UUID]] = mapped_column(
@@ -63,4 +66,17 @@ class Connection(OrganizationBase, UserMixin):
         foreign_keys=[short_name],
         viewonly=True,
         lazy="noload",
+    )
+
+    __table_args__ = (
+        # Enforce that organization_id, created_by_email, and modified_by_email are not null
+        # except for the specific native connections
+        CheckConstraint(
+            """
+            (short_name IN ('weaviate_native', 'neo4j_native', 'local_text2vec'))
+            OR 
+            (organization_id IS NOT NULL AND created_by_email IS NOT NULL AND modified_by_email IS NOT NULL)
+            """,
+            name="ck_connection_native_or_complete",
+        ),
     )

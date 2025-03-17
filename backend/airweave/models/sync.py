@@ -12,6 +12,7 @@ from airweave.models._base import OrganizationBase, UserMixin
 
 if TYPE_CHECKING:
     from airweave.models.entity import Entity
+    from airweave.models.sync_connection import SyncConnection
     from airweave.models.sync_job import SyncJob
 
 
@@ -22,14 +23,7 @@ class Sync(OrganizationBase, UserMixin):
 
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    source_connection_id: Mapped[UUID] = mapped_column(ForeignKey("connection.id"), nullable=False)
-    destination_connection_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("connection.id"), nullable=True
-    )
     status: Mapped[SyncStatus] = mapped_column(default=SyncStatus.ACTIVE)
-    embedding_model_connection_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("connection.id"), nullable=True
-    )
     cron_schedule: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     next_scheduled_run: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -50,6 +44,14 @@ class Sync(OrganizationBase, UserMixin):
 
     entities: Mapped[list["Entity"]] = relationship(
         "Entity",
+        back_populates="sync",
+        lazy="noload",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    sync_connections: Mapped[list["SyncConnection"]] = relationship(
+        "SyncConnection",
         back_populates="sync",
         lazy="noload",
         cascade="all, delete-orphan",

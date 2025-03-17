@@ -12,6 +12,7 @@ import { SyncPipelineVisual } from "@/components/sync/SyncPipelineVisual";
 import { SyncDagEditor } from "@/components/sync/SyncDagEditor";
 import { SyncUIMetadata } from "@/components/sync/types";
 import { Dag } from "@/components/sync/dag";
+import { NATIVE_TEXT2VEC_UUID, NATIVE_WEAVIATE_UUID } from "@/constants/nativeConnections";
 import { SyncOverview } from "@/components/sync/SyncOverview";
 import { SyncSchedule, SyncScheduleConfig, buildCronExpression } from "@/components/sync/SyncSchedule";
 import { isValidCronExpression } from "@/components/sync/CronExpressionInput";
@@ -147,9 +148,11 @@ const Sync = () => {
       const syncResp = await apiClient.post("/sync/", {
         name: "Sync from UI",
         source_connection_id: selectedSource.connectionId,
-        ...(dbDetails.isNative ? {} : { destination_connection_id: dbDetails.connectionId }),
-        run_immediately: false,
-        status: "inactive"
+        destination_connection_ids: dbDetails.isNative 
+          ? [NATIVE_WEAVIATE_UUID] // Use constant for Native Weaviate UUID
+          : [dbDetails.connectionId],
+        embedding_model_connection_id: NATIVE_TEXT2VEC_UUID, // Use constant for Text2Vec UUID
+        run_immediately: false
       });
 
       if (!syncResp.ok) {

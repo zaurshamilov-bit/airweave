@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core.config import settings
+from airweave.db.init_db_native import init_db_with_native_connections
 
 
 async def init_db(db: AsyncSession) -> None:
@@ -13,6 +14,9 @@ async def init_db(db: AsyncSession) -> None:
     ----
         db (AsyncSession): The database session.
     """
+    # First initialize native connections
+    await init_db_with_native_connections(db)
+
     organization = await crud.organization.get_by_name(db, name=settings.FIRST_SUPERUSER)
     if not organization:
         organization_in = schemas.OrganizationCreate(

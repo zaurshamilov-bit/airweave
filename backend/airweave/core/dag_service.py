@@ -1,6 +1,7 @@
 """DAG service."""
 
-from typing import Dict, List, Optional, Set, Tuple, Type
+from collections import Counter
+from typing import Dict, List, Set, Tuple, Type
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -10,7 +11,7 @@ from airweave import crud, schemas
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.platform.entities._base import BaseEntity, ChunkEntity, FileEntity, ParentEntity
 from airweave.platform.locator import resource_locator
-from airweave.schemas.dag import DagEdgeCreate, DagNodeCreate, SyncDagCreate
+from airweave.schemas.dag import DagEdgeCreate, DagNodeCreate, NodeType, SyncDagCreate
 
 
 class DagService:
@@ -24,7 +25,19 @@ class DagService:
         current_user: schemas.User,
         uow: UnitOfWork,
     ) -> schemas.SyncDag:
-        """Create an initial DAG with source, entities, and destination."""
+        """Create an initial DAG with source, entities, and destination.
+
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            sync_id (UUID): The ID of the sync to create the DAG for.
+            current_user (schemas.User): The current user.
+            uow (UnitOfWork): The unit of work.
+
+        Returns:
+        -------
+            schemas.SyncDag: The created DAG.
+        """
         # Get sync and validate
         sync = await self._get_and_validate_sync(db, sync_id, current_user)
 
@@ -38,8 +51,11 @@ class DagService:
             entity_definitions,
         ) = await self._get_source_and_entity_definitions(db, sync, current_user)
 
-        # Get or create destination
-        destination, destination_connection = await self._get_destination(db, sync, current_user)
+        # Get or create destinations
+        (
+            destinations,
+            destination_connections,
+        ) = await self._get_destinations_and_destination_connections(db, sync, current_user)
 
         # Initialize DAG components
         nodes: List[DagNodeCreate] = []
@@ -48,27 +64,35 @@ class DagService:
 
         # Create source and destination nodes
         source_node_id = uuid4()
-        destination_node_id = uuid4()
+        # Store destination node IDs in a list
+        destination_node_ids = []
 
         # Add source node
         nodes.append(
             DagNodeCreate(
                 id=source_node_id,
-                type="source",
+                type=NodeType.source,
                 name=source.name,
                 connection_id=source_connection.id,
             )
         )
 
-        # Add destination node
-        nodes.append(
-            DagNodeCreate(
-                id=destination_node_id,
-                type="destination",
-                name=destination.name,
-                connection_id=destination_connection.id if destination_connection else None,
+        # Add destination nodes - create a unique ID for each destination
+        for destination, destination_connection in zip(
+            destinations, destination_connections, strict=True
+        ):
+            # Generate a unique ID for each destination
+            dest_node_id = uuid4()
+            destination_node_ids.append(dest_node_id)
+
+            nodes.append(
+                DagNodeCreate(
+                    id=dest_node_id,  # Use the unique ID
+                    type=NodeType.destination,
+                    name=destination.name,
+                    connection_id=destination_connection.id,
+                )
             )
-        )
 
         # Process entity definitions
         for entity_definition_id, entity_data in entity_definitions.items():
@@ -81,6 +105,13 @@ class DagService:
 
             # Handle file entities
             if issubclass(entity_class, FileEntity):
+                # If we have multiple destinations, use the first one for simplicity
+                # This could be enhanced to connect to all destinations if needed
+                destination_node_id = destination_node_ids[0] if destination_node_ids else None
+
+                if not destination_node_id:
+                    raise ValueError("No destination node ID available for file entity processing")
+
                 await self._process_file_entity(
                     db=db,
                     entity_class=entity_class,
@@ -98,7 +129,7 @@ class DagService:
                 nodes.append(
                     DagNodeCreate(
                         id=entity_node_id,
-                        type="entity",
+                        type=NodeType.entity,
                         name=entity_definition.name,
                         entity_definition_id=entity_definition_id,
                     )
@@ -112,13 +143,14 @@ class DagService:
                     )
                 )
 
-                # Connect entity to destination
-                edges.append(
-                    DagEdgeCreate(
-                        from_node_id=entity_node_id,
-                        to_node_id=destination_node_id,
+                # Connect entity to all destination nodes
+                for dest_node_id in destination_node_ids:
+                    edges.append(
+                        DagEdgeCreate(
+                            from_node_id=entity_node_id,
+                            to_node_id=dest_node_id,
+                        )
                     )
-                )
 
         # Create and return the DAG
         sync_dag_create = SyncDagCreate(
@@ -128,17 +160,70 @@ class DagService:
             edges=edges,
         )
 
-        sync_dag = await crud.sync_dag.create_with_nodes_and_edges(
-            db, obj_in=sync_dag_create, current_user=current_user, uow=uow
-        )
+        try:
+            from airweave.core.logging import logger
 
-        return schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+            logger.info(
+                f"Creating DAG for sync {sync.name} with {len(nodes)} nodes and {len(edges)} edges"
+            )
+
+            sync_dag = await crud.sync_dag.create_with_nodes_and_edges(
+                db, obj_in=sync_dag_create, current_user=current_user, uow=uow
+            )
+            logger.info(f"Successfully created DAG with ID {sync_dag.id}")
+            return schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+        except Exception as e:
+            # Log the error for debugging
+            from airweave.core.logging import logger
+
+            logger.error(f"Error creating DAG: {e}")
+
+            # Log node and edge details for debugging
+            logger.error(f"Total nodes: {len(nodes)}, Total edges: {len(edges)}")
+
+            # Check for any duplicate node IDs which could cause issues
+            node_ids = [node.id for node in nodes]
+            duplicate_ids = {id: count for id, count in Counter(node_ids).items() if count > 1}
+            if duplicate_ids:
+                logger.error(f"Found duplicate node IDs: {duplicate_ids}")
+
+            # Log edge relationships to verify they point to valid nodes
+            edge_relationships = [(edge.from_node_id, edge.to_node_id) for edge in edges]
+
+            # Check for edges referencing non-existent nodes
+            node_id_set = set(node_ids)
+            invalid_edges = []
+            for from_id, to_id in edge_relationships:
+                if from_id not in node_id_set:
+                    invalid_edges.append(f"Edge from_node_id {from_id} not in nodes")
+                if to_id not in node_id_set:
+                    invalid_edges.append(f"Edge to_node_id {to_id} not in nodes")
+
+            if invalid_edges:
+                logger.error(f"Found invalid edges: {invalid_edges}")
+
+            raise
 
     async def _get_and_validate_sync(
         self, db: AsyncSession, sync_id: UUID, current_user: schemas.User
     ) -> schemas.Sync:
-        """Get and validate sync exists."""
-        sync = await crud.sync.get(db, id=sync_id, current_user=current_user)
+        """Get and validate that the sync exists.
+
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            sync_id (UUID): The ID of the sync to get.
+            current_user (schemas.User): The current user.
+
+        Returns:
+        -------
+            schemas.Sync: The sync.
+
+        Raises:
+        ------
+            Exception: If the sync is not found.
+        """
+        sync = await crud.sync.get(db, id=sync_id, current_user=current_user, with_connections=True)
         if not sync:
             raise Exception(f"Sync for {sync_id} not found")
         return sync
@@ -180,24 +265,47 @@ class DagService:
 
         return source, source_connection, entity_definitions_dict
 
-    async def _get_destination(
+    async def _get_destinations_and_destination_connections(
         self, db: AsyncSession, sync: schemas.Sync, current_user: schemas.User
-    ) -> Tuple[schemas.Destination, Optional[schemas.Connection]]:
-        """Get or create destination."""
-        if sync.destination_connection_id:
-            destination_connection = await crud.connection.get(
-                db, id=sync.destination_connection_id, current_user=current_user
-            )
-            if not destination_connection:
-                raise HTTPException(status_code=404, detail="Destination connection not found")
+    ) -> Tuple[List[schemas.Destination], List[schemas.Connection]]:
+        """Get or create destinations and destination connections.
 
-            destination = await crud.destination.get_by_short_name(
-                db, short_name=destination_connection.short_name
-            )
-            return destination, destination_connection
-        else:
-            destination = await crud.destination.get_by_short_name(db, short_name="weaviate_native")
-            return destination, None
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            sync (schemas.Sync): The sync to get the destinations and destination connections for.
+            current_user (schemas.User): The current user.
+
+        Returns:
+        -------
+            Tuple[List[schemas.Destination], List[schemas.Connection]]: The destinations and
+                destination connections.
+
+        Raises:
+        ------
+            HTTPException: If a destination or destination connection is not found.
+        """
+        # Initialize lists
+        destinations = []
+        destination_connections = []
+
+        # Get destinations and destination connections
+        if sync.destination_connection_ids:
+            for destination_connection_id in sync.destination_connection_ids:
+                destination_connection = await crud.connection.get(
+                    db, id=destination_connection_id, current_user=current_user
+                )
+                if not destination_connection:
+                    raise HTTPException(status_code=404, detail="Destination connection not found")
+                destination_connections.append(destination_connection)
+
+                destination = await crud.destination.get_by_short_name(
+                    db, short_name=destination_connection.short_name
+                )
+                if not destination:
+                    raise HTTPException(status_code=404, detail="Destination not found")
+                destinations.append(destination)
+        return destinations, destination_connections
 
     async def _process_file_entity(
         self,
@@ -223,18 +331,27 @@ class DagService:
             db, chunk_entity_class
         )
 
+        # Validate that we have the necessary entity definitions
+        if not parent_entity_definition or not chunk_entity_definition:
+            from airweave.core.logging import logger
+
+            logger.error(f"Missing entity definitions for {entity_class.__name__}")
+            if not parent_entity_definition:
+                logger.error(f"Missing parent entity definition for {parent_entity_class.__name__}")
+            if not chunk_entity_definition:
+                logger.error(f"Missing chunk entity definition for {chunk_entity_class.__name__}")
+            raise ValueError(f"Missing entity definitions for {entity_class.__name__}")
+
         # Mark parent and chunk entity definitions as processed
-        if parent_entity_definition:
-            processed_entity_ids.add(parent_entity_definition.id)
-        if chunk_entity_definition:
-            processed_entity_ids.add(chunk_entity_definition.id)
+        processed_entity_ids.add(parent_entity_definition.id)
+        processed_entity_ids.add(chunk_entity_definition.id)
 
         # Create file entity node
         file_node_id = uuid4()
         nodes.append(
             DagNodeCreate(
                 id=file_node_id,
-                type="entity",
+                type=NodeType.entity,
                 name=entity_definition.name,
                 entity_definition_id=entity_definition.id,
             )
@@ -245,7 +362,7 @@ class DagService:
         nodes.append(
             DagNodeCreate(
                 id=chunker_node_id,
-                type="transformer",
+                type=NodeType.transformer,
                 name=file_chunker.name,
                 transformer_id=file_chunker.id,
             )
@@ -256,7 +373,7 @@ class DagService:
         nodes.append(
             DagNodeCreate(
                 id=parent_node_id,
-                type="entity",
+                type=NodeType.entity,
                 name=parent_entity_definition.name,
                 entity_definition_id=parent_entity_definition.id,
             )
@@ -267,7 +384,7 @@ class DagService:
         nodes.append(
             DagNodeCreate(
                 id=chunk_node_id,
-                type="entity",
+                type=NodeType.entity,
                 name=chunk_entity_definition.name,
                 entity_definition_id=chunk_entity_definition.id,
             )

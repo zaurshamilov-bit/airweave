@@ -104,6 +104,7 @@ async def _sync_embedding_models(db: AsyncSession, models: list[Type[BaseEmbeddi
         model_def = schemas.EmbeddingModelCreate(
             name=model_class._name,
             short_name=model_class._short_name,
+            class_name=model_class.__name__,
             description=model_class.__doc__,
             provider=model_class._provider,
             model_name=model_class._model_name,
