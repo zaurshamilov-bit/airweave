@@ -26,6 +26,7 @@ import { format, formatRelative, parseISO } from "date-fns";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Define types based on backend schemas
 interface Sync {
@@ -37,12 +38,31 @@ interface Sync {
   white_label_user_identifier: string | null;
 }
 
+interface SyncJob {
+  id: string;
+  sync_id: string;
+  sync_name: string;
+  status: "pending" | "running" | "completed" | "failed";
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+  stats: {
+    processed_items: number;
+    total_items: number;
+  };
+}
+
+type ActiveTab = "syncs" | "jobs";
+
 const SyncTableView = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("syncs");
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [syncs, setSyncs] = useState<Sync[]>([]);
+  const [syncJobs, setSyncJobs] = useState<SyncJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isJobsLoading, setIsJobsLoading] = useState(true);
   const [syncToDelete, setSyncToDelete] = useState<Sync | null>(null);
   const [deleteData, setDeleteData] = useState(false);
 
@@ -61,6 +81,23 @@ const SyncTableView = () => {
     };
 
     fetchSyncs();
+  }, []);
+
+  // Fetch sync jobs
+  useEffect(() => {
+    const fetchSyncJobs = async () => {
+      try {
+        const response = await apiClient.get("/sync/jobs");
+        const data = await response.json();
+        setSyncJobs(data);
+      } catch (error) {
+        toast.error("Failed to fetch sync jobs");
+      } finally {
+        setIsJobsLoading(false);
+      }
+    };
+
+    fetchSyncJobs();
   }, []);
 
   // Update delete handler
@@ -88,6 +125,11 @@ const SyncTableView = () => {
     (sync.cron_schedule || "").toLowerCase().includes(search.toLowerCase())
   ) ?? [];
 
+  const filteredSyncJobs = syncJobs?.filter(job =>
+    job.sync_name.toLowerCase().includes(search.toLowerCase()) ||
+    job.status.toLowerCase().includes(search.toLowerCase())
+  ) ?? [];
+
   // Helper function to format cron schedule
   const formatCronSchedule = (cronSchedule: string | null) => {
     if (!cronSchedule) return "No schedule";
@@ -95,8 +137,9 @@ const SyncTableView = () => {
     return cronSchedule;
   };
 
-  // Add this helper function
-  const formatDateTime = (dateStr: string) => {
+  // Helper function for date formatting
+  const formatDateTime = (dateStr: string | null) => {
+    if (!dateStr) return "-";
     const date = parseISO(dateStr);
     const formattedDate = formatRelative(date, new Date());
     // Capitalize first letter and format time if it's today/yesterday
@@ -108,6 +151,40 @@ const SyncTableView = () => {
     }
 
     return formatted;
+  };
+
+  // Get status badge for sync jobs
+  const getStatusBadge = (status: string) => {
+    let bgColor = "";
+    let textColor = "";
+
+    switch (status) {
+      case "running":
+        bgColor = "bg-blue-100 dark:bg-blue-900/40";
+        textColor = "text-blue-800 dark:text-blue-300";
+        break;
+      case "completed":
+        bgColor = "bg-green-100 dark:bg-green-900/40";
+        textColor = "text-green-800 dark:text-green-300";
+        break;
+      case "failed":
+        bgColor = "bg-red-100 dark:bg-red-900/40";
+        textColor = "text-red-800 dark:text-red-300";
+        break;
+      case "pending":
+        bgColor = "bg-yellow-100 dark:bg-yellow-900/40";
+        textColor = "text-yellow-800 dark:text-yellow-300";
+        break;
+      default:
+        bgColor = "bg-gray-100 dark:bg-gray-800";
+        textColor = "text-gray-800 dark:text-gray-300";
+    }
+
+    return (
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${bgColor} ${textColor}`}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </span>
+    );
   };
 
   return (
@@ -122,87 +199,185 @@ const SyncTableView = () => {
       </div>
 
       <div className="bg-background rounded-lg border">
+        <div className="flex border-b">
+          <button
+            className={cn(
+              "px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              activeTab === "syncs"
+                ? "bg-background text-foreground border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setActiveTab("syncs")}
+          >
+            Syncs
+          </button>
+          <button
+            className={cn(
+              "px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+              activeTab === "jobs"
+                ? "bg-background text-foreground border-b-2 border-primary"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setActiveTab("jobs")}
+          >
+            Sync Jobs
+          </button>
+        </div>
+
         <div className="p-4 border-b">
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search synchronizations..."
+              placeholder={`Search ${activeTab === "syncs" ? "synchronizations" : "sync jobs"}...`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
             />
           </div>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Schedule</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead>White Label</TableHead>
-              <TableHead className="w-[50px]">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
+
+        {activeTab === "syncs" ? (
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="text-center pb-8">
-                  <div className="flex items-center justify-center text-muted-foreground">
-                    Loading...
-                  </div>
-                </TableCell>
+                <TableHead>Name</TableHead>
+                <TableHead>Schedule</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>White Label</TableHead>
+                <TableHead className="w-[50px]">Actions</TableHead>
               </TableRow>
-            ) : filteredSyncs.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center pb-8">
-                  <div className="flex flex-col items-center justify-center text-muted-foreground">
-                    <p>No synchronizations found</p>
-                    <p className="text-sm">Try adjusting your search terms</p>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredSyncs.map((sync) => (
-                <TableRow
-                  key={sync.id}
-                  className="cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={(e) => {
-                    if ((e.target as HTMLElement).closest('button')) return;
-                    navigate(`/sync/${sync.id}`);
-                  }}
-                >
-                  <TableCell className="font-medium">{sync.name}</TableCell>
-                  <TableCell>{formatCronSchedule(sync.cron_schedule)}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDateTime(sync.created_at)}
-                  </TableCell>
-                  <TableCell>
-                    {sync.white_label_id ? (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                        {sync.white_label_user_identifier}
-                      </span>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteSync(sync);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center pb-8">
+                    <div className="flex items-center justify-center text-muted-foreground">
+                      Loading...
+                    </div>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : filteredSyncs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center pb-8">
+                    <div className="flex flex-col items-center justify-center text-muted-foreground">
+                      <p>No synchronizations found</p>
+                      <p className="text-sm">Try adjusting your search terms</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredSyncs.map((sync) => (
+                  <TableRow
+                    key={sync.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest('button')) return;
+                      navigate(`/sync/${sync.id}`);
+                    }}
+                  >
+                    <TableCell className="font-medium">{sync.name}</TableCell>
+                    <TableCell>{formatCronSchedule(sync.cron_schedule)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatDateTime(sync.created_at)}
+                    </TableCell>
+                    <TableCell>
+                      {sync.white_label_id ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                          {sync.white_label_user_identifier}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteSync(sync);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Sync Name</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Started</TableHead>
+                <TableHead>Completed</TableHead>
+                <TableHead>Progress</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isJobsLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center pb-8">
+                    <div className="flex items-center justify-center text-muted-foreground">
+                      Loading...
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : filteredSyncJobs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center pb-8">
+                    <div className="flex flex-col items-center justify-center text-muted-foreground">
+                      <p>No sync jobs found</p>
+                      <p className="text-sm">Try adjusting your search terms</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredSyncJobs.map((job) => (
+                  <TableRow
+                    key={job.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => navigate(`/sync/${job.sync_id}/job/${job.id}`)}
+                  >
+                    <TableCell className="font-medium">{job.sync_name}</TableCell>
+                    <TableCell>{getStatusBadge(job.status)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatDateTime(job.started_at)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatDateTime(job.completed_at)}
+                    </TableCell>
+                    <TableCell>
+                      {job.stats ? (
+                        <div className="flex items-center space-x-2">
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                            <div
+                              className="bg-primary h-2.5 rounded-full"
+                              style={{
+                                width: `${job.stats.total_items > 0
+                                  ? Math.min(Math.round((job.stats.processed_items / job.stats.total_items) * 100), 100)
+                                  : 0}%`
+                              }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {job.stats.processed_items}/{job.stats.total_items}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        )}
       </div>
 
       <Dialog
