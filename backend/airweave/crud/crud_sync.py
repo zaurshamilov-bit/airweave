@@ -3,6 +3,7 @@
 from typing import Optional
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +40,9 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         """
         # Get the sync without any connections
         sync = await super().get(db, id=id, current_user=current_user)
+
+        if not sync:
+            raise HTTPException(status_code=404, detail="Sync not found")
 
         if with_connections:
             # Enrich the sync with all its connections
