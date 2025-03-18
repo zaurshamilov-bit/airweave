@@ -198,32 +198,35 @@ const SyncTableView = () => {
         </div>
       </div>
 
+      <div className="flex space-x-1 p-1 rounded-md mb-4 w-fit">
+        <Button
+          variant={activeTab === "syncs" ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setActiveTab("syncs")}
+          className={cn(
+            "rounded-sm text-sm",
+            activeTab === "syncs"
+              ? "shadow-sm bg-slate-200 dark:bg-muted hover:bg-slate-200 dark:hover:bg-muted hover:text-foreground text-foreground"
+              : "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
+          )}
+        >
+          Syncs
+        </Button>
+        <Button
+          variant={activeTab === "jobs" ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setActiveTab("jobs")}
+          className={cn(
+            "rounded-sm text-sm",
+            activeTab === "jobs"
+              ? "shadow-sm bg-slate-200 dark:bg-muted hover:bg-slate-200 dark:hover:bg-muted hover:text-foreground text-foreground"
+              : "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
+          )}
+        >
+          Sync Jobs
+        </Button>
+      </div>
       <div className="bg-background rounded-lg border">
-        <div className="flex border-b">
-          <button
-            className={cn(
-              "px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              activeTab === "syncs"
-                ? "bg-background text-foreground border-b-2 border-primary"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            onClick={() => setActiveTab("syncs")}
-          >
-            Syncs
-          </button>
-          <button
-            className={cn(
-              "px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-              activeTab === "jobs"
-                ? "bg-background text-foreground border-b-2 border-primary"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            onClick={() => setActiveTab("jobs")}
-          >
-            Sync Jobs
-          </button>
-        </div>
-
         <div className="p-4 border-b">
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />

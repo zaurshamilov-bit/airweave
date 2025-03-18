@@ -14,7 +14,6 @@ import { Dag } from "@/components/sync/dag";
 import { SyncOverview } from "@/components/sync/SyncOverview";
 import { SyncSchedule, SyncScheduleConfig, buildCronExpression } from "@/components/sync/SyncSchedule";
 import { isValidCronExpression } from "@/components/sync/CronExpressionInput";
-import { Separator } from "@/components/ui/separator";
 import { UnifiedDataSourceGrid } from "@/components/data-sources/UnifiedDataSourceGrid";
 import { AddSourceWizard } from "@/components/sync/AddSourceWizard";
 
