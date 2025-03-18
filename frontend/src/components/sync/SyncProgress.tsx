@@ -27,6 +27,7 @@ export const SyncProgress = ({ syncId, syncJobId, onClose, isLive = false, start
   const navigate = useNavigate();
   const updates = useSyncSubscription(syncJobId);
   const latestUpdate = updates[updates.length - 1];
+  const isRunning = !latestUpdate?.is_complete && (isLive || false);
 
   // Compute our four values
   const inserted = latestUpdate?.inserted || 0;
@@ -60,8 +61,13 @@ export const SyncProgress = ({ syncId, syncJobId, onClose, isLive = false, start
   // If this is a live view used in the main UI, we use a different layout
   if (isLive) {
     return (
-      <Card className="w-full max-w-none bg-card shadow-sm">
-        <CardHeader className="pb-2">
+      <Card className={`w-full max-w-none bg-card shadow-sm relative overflow-hidden ${isRunning ? 'live-pulsing-bg' : ''}`}>
+        {/* Pulsing background effect when running */}
+        {isRunning && (
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 animate-pulse-slow pointer-events-none" />
+        )}
+
+        <CardHeader className="pb-2 relative z-10">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <div className="relative">
@@ -77,7 +83,7 @@ export const SyncProgress = ({ syncId, syncJobId, onClose, isLive = false, start
           <CardDescription>Processing and embedding your data</CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 relative z-10">
           {/* Normalized multi-segment progress bar */}
           <div className="relative w-full h-3 bg-secondary/20 rounded-md overflow-hidden">
             <div

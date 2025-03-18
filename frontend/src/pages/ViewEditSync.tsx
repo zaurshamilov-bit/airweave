@@ -31,6 +31,7 @@ import { SyncProgress } from "@/components/sync/SyncProgress";
 import { Badge } from "@/components/ui/badge";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { getDestinationIconUrl } from "@/lib/utils/icons";
+import "./sync-progress.css"; // Import custom CSS for animations
 
 interface SyncDetails {
   id: string;
@@ -364,7 +365,7 @@ const ViewEditSync = () => {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Sync Overview - 3/4 width */}
           <div className="lg:col-span-3">
-            <Card className="p-5 border rounded-lg bg-card">
+            <Card className="p-5 border rounded-lg bg-card h-full">
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Sync Overview</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
@@ -558,7 +559,7 @@ const ViewEditSync = () => {
 
           {/* Last Sync info - 1/4 width */}
           <div className="lg:col-span-1">
-            <Card className="p-5 border rounded-lg bg-card overflow-hidden relative group">
+            <Card className="p-5 border rounded-lg bg-card overflow-hidden relative group h-full flex flex-col">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium">Last Sync</h3>
                 {lastSync && (
@@ -566,7 +567,7 @@ const ViewEditSync = () => {
                     variant="ghost"
                     size="sm"
                     onClick={viewLastSyncJob}
-                    className="text-primary hover:text-primary hover:bg-primary/5"
+                    className="hover:bg-muted"
                   >
                     <Eye className="h-4 w-4 mr-1" />
                     View
@@ -575,7 +576,7 @@ const ViewEditSync = () => {
               </div>
 
               {lastSync ? (
-                <div className="space-y-4">
+                <div className="space-y-4 flex-grow">
                   <div className="flex items-center">
                     <div className={`w-10 h-10 mr-3 rounded-full flex items-center justify-center`}>
                       <Clock className={`w-5 h-5 text-blue-500/80`} />
@@ -643,12 +644,12 @@ const ViewEditSync = () => {
                   )}
                 </div>
               ) : (
-                <div className="text-center py-6 text-muted-foreground">
+                <div className="text-center py-6 text-muted-foreground flex-grow flex flex-col justify-center">
                   <p>No sync jobs have been run yet.</p>
                   <Button
                     onClick={handleRunSync}
                     variant="outline"
-                    className="mt-3 transition-colors hover:bg-primary/75 hover:text-white duration-300"
+                    className="mt-3"
                     disabled={isRunningSync}
                   >
                     Run First Sync
@@ -661,7 +662,7 @@ const ViewEditSync = () => {
 
         {/* Live Sync Progress View - Only shown when sync is running */}
         {lastSync && (lastSync.status === "running" || lastSync.status === "pending") && (
-          <div className="border rounded-lg overflow-hidden">
+          <div className="rounded-lg overflow-hidden">
             <SyncProgress
               syncId={id || null}
               syncJobId={lastSync.id}
