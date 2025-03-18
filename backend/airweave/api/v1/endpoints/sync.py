@@ -47,6 +47,31 @@ async def list_syncs(
     return syncs
 
 
+@router.get("/jobs", response_model=list[schemas.SyncJob])
+async def list_all_jobs(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    skip: int = 0,
+    limit: int = 100,
+    user: schemas.User = Depends(deps.get_user),
+) -> list[schemas.SyncJob]:
+    """List all sync jobs across all syncs.
+
+    Args:
+    -----
+        db: The database session
+        skip: The number of jobs to skip
+        limit: The number of jobs to return
+        user: The current user
+
+    Returns:
+    --------
+        list[schemas.SyncJob]: A list of all sync jobs
+    """
+    jobs = await crud.sync_job.get_all_jobs(db=db, skip=skip, limit=limit, current_user=user)
+    return jobs
+
+
 @router.get("/{sync_id}", response_model=schemas.Sync)
 async def get_sync(
     *,
@@ -215,7 +240,7 @@ async def list_sync_jobs(
     return await crud.sync_job.get_all_by_sync_id(db=db, sync_id=sync_id)
 
 
-@router.get("/job/{job_id}", response_model=schemas.SyncJob)
+@router.get("/{sync_id}/job/{job_id}", response_model=schemas.SyncJob)
 async def get_sync_job(
     *,
     db: AsyncSession = Depends(deps.get_db),
