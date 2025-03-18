@@ -100,6 +100,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
   const { resolvedTheme } = useTheme();
   const [copiedPython, setCopiedPython] = useState(false);
   const [copiedNode, setCopiedNode] = useState(false);
+  const [apiDialogTab, setApiDialogTab] = useState<"rest" | "python" | "node">("rest");
 
   // Track if we're currently updating search type to prevent feedback loops
   const [isUpdatingSearchType, setIsUpdatingSearchType] = useState(false);
@@ -413,30 +414,67 @@ console.log(data);`;
               Use these endpoints to access this search functionality programmatically.
             </DialogDescription>
           </DialogHeader>
+
           <div className="space-y-6 py-4 max-h-[70vh] overflow-y-auto">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">REST API Endpoint</h3>
-                <Badge variant="outline" className="text-xs">POST</Badge>
-              </div>
-              <div className="rounded-md bg-muted p-3 overflow-x-auto">
-                <code className="text-xs font-mono text-primary break-all">
-                  {getApiEndpoints().restUrl}
-                </code>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Make a POST request to this endpoint with your search query in the body.
-              </p>
+            {/* Tabs */}
+            <div className="flex space-x-1 p-1 rounded-md mb-4 w-fit">
+              <Button
+                variant={apiDialogTab === "rest" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setApiDialogTab("rest")}
+                className={cn(
+                  "rounded-sm text-sm",
+                  apiDialogTab === "rest"
+                    ? "shadow-sm bg-slate-200 dark:bg-muted hover:bg-slate-200 dark:hover:bg-muted hover:text-foreground text-foreground"
+                    : "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
+                )}
+              >
+                REST API
+              </Button>
+              <Button
+                variant={apiDialogTab === "python" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setApiDialogTab("python")}
+                className={cn(
+                  "rounded-sm text-sm",
+                  apiDialogTab === "python"
+                    ? "shadow-sm bg-slate-200 dark:bg-muted hover:bg-slate-200 dark:hover:bg-muted hover:text-foreground text-foreground"
+                    : "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
+                )}
+              >
+                Python
+              </Button>
+              <Button
+                variant={apiDialogTab === "node" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setApiDialogTab("node")}
+                className={cn(
+                  "rounded-sm text-sm",
+                  apiDialogTab === "node"
+                    ? "shadow-sm bg-slate-200 dark:bg-muted hover:bg-slate-200 dark:hover:bg-muted hover:text-foreground text-foreground"
+                    : "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
+                )}
+              >
+                Node.js
+              </Button>
             </div>
 
-            <Separator />
-
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Python Example</h3>
-              <div className="rounded-md overflow-hidden">
-                <div className="relative">
+            {/* Tab Content */}
+            {apiDialogTab === "rest" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium">REST API Endpoint</h3>
+                  <Badge variant="outline" className="text-xs">POST</Badge>
+                </div>
+                <div className="rounded-md bg-muted p-3 overflow-x-auto">
+                  <code className="text-xs font-mono text-primary break-all">
+                    {getApiEndpoints().restUrl}
+                  </code>
+                </div>
+                <div className="space-y-3 mt-4">
+                  <h4 className="text-sm font-medium">Request Body</h4>
                   <SyntaxHighlighter
-                    language="python"
+                    language="json"
                     style={resolvedTheme === 'dark' ? materialOceanic : prism}
                     customStyle={{
                       fontSize: '0.75rem',
@@ -447,60 +485,106 @@ console.log(data);`;
                     wrapLongLines={false}
                     showLineNumbers={true}
                   >
-                    {getApiEndpoints().pythonSnippet}
+{`{
+  "model_name": "${modelName}",
+  "model_settings": {
+    "temperature": ${modelSettings.temperature || 0.7},
+    "max_tokens": ${modelSettings.max_tokens || 1000},
+    "top_p": ${modelSettings.top_p || 1.0},
+    "frequency_penalty": ${modelSettings.frequency_penalty || 0},
+    "presence_penalty": ${modelSettings.presence_penalty || 0},
+    "search_type": "${modelSettings.search_type || 'vector'}"
+  },
+  "system_prompt": "${systemPrompt.replace(/"/g, '\\"')}",
+  "query": "Your search query here"
+}`}
                   </SyntaxHighlighter>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="absolute top-2 right-2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                    onClick={() => handleCopyCode(getApiEndpoints().pythonSnippet, 'python')}
-                  >
-                    {copiedPython ?
-                      <Check className="h-4 w-4" /> :
-                      <Copy className="h-4 w-4" />
-                    }
-                  </Button>
                 </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Make a POST request to this endpoint with your search query in the body.
+                </p>
               </div>
-            </div>
+            )}
 
-            <Separator />
+            {apiDialogTab === "python" && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Python Example</h3>
+                <div className="rounded-md overflow-hidden">
+                  <div className="relative">
+                    <SyntaxHighlighter
+                      language="python"
+                      style={resolvedTheme === 'dark' ? materialOceanic : prism}
+                      customStyle={{
+                        fontSize: '0.75rem',
+                        borderRadius: '0.375rem',
+                        margin: 0,
+                        padding: '1rem',
+                      }}
+                      wrapLongLines={false}
+                      showLineNumbers={true}
+                    >
+                      {getApiEndpoints().pythonSnippet}
+                    </SyntaxHighlighter>
 
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Node.js Example</h3>
-              <div className="rounded-md overflow-hidden">
-                <div className="relative">
-                  <SyntaxHighlighter
-                    language="javascript"
-                    style={resolvedTheme === 'dark' ? materialOceanic : prism}
-                    customStyle={{
-                      fontSize: '0.75rem',
-                      borderRadius: '0.375rem',
-                      margin: 0,
-                      padding: '1rem',
-                    }}
-                    wrapLongLines={false}
-                    showLineNumbers={true}
-                  >
-                    {getApiEndpoints().nodeSnippet}
-                  </SyntaxHighlighter>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="absolute top-2 right-2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                    onClick={() => handleCopyCode(getApiEndpoints().nodeSnippet, 'node')}
-                  >
-                    {copiedNode ?
-                      <Check className="h-4 w-4" /> :
-                      <Copy className="h-4 w-4" />
-                    }
-                  </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute top-2 right-2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleCopyCode(getApiEndpoints().pythonSnippet, 'python')}
+                    >
+                      {copiedPython ?
+                        <Check className="h-4 w-4" /> :
+                        <Copy className="h-4 w-4" />
+                      }
+                    </Button>
+                  </div>
                 </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Use this code snippet to call the search API with Python's requests library.
+                </p>
               </div>
-            </div>
+            )}
+
+            {apiDialogTab === "node" && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Node.js Example</h3>
+                <div className="rounded-md overflow-hidden">
+                  <div className="relative">
+                    <SyntaxHighlighter
+                      language="javascript"
+                      style={resolvedTheme === 'dark' ? materialOceanic : prism}
+                      customStyle={{
+                        fontSize: '0.75rem',
+                        borderRadius: '0.375rem',
+                        margin: 0,
+                        padding: '1rem',
+                      }}
+                      wrapLongLines={false}
+                      showLineNumbers={true}
+                    >
+                      {getApiEndpoints().nodeSnippet}
+                    </SyntaxHighlighter>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute top-2 right-2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleCopyCode(getApiEndpoints().nodeSnippet, 'node')}
+                    >
+                      {copiedNode ?
+                        <Check className="h-4 w-4" /> :
+                        <Copy className="h-4 w-4" />
+                      }
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Use this code snippet to call the search API with JavaScript's fetch API.
+                </p>
+              </div>
+            )}
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowApiDialog(false)}>
               Close
