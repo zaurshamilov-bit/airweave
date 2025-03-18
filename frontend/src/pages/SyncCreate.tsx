@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { toast, useToast } from "@/components/ui/use-toast";
-import { SyncDataSourceGrid } from "@/components/sync/SyncDataSourceGrid";
 import { VectorDBSelector } from "@/components/VectorDBSelector";
 import { SyncProgress } from "@/components/sync/SyncProgress";
 import { Button } from "@/components/ui/button";
@@ -16,7 +15,8 @@ import { NATIVE_TEXT2VEC_UUID, NATIVE_WEAVIATE_UUID } from "@/constants/nativeCo
 import { SyncOverview } from "@/components/sync/SyncOverview";
 import { SyncSchedule, SyncScheduleConfig, buildCronExpression } from "@/components/sync/SyncSchedule";
 import { isValidCronExpression } from "@/components/sync/CronExpressionInput";
-import { Separator } from "@/components/ui/separator";
+import { UnifiedDataSourceGrid } from "@/components/data-sources/UnifiedDataSourceGrid";
+import { AddSourceWizard } from "@/components/sync/AddSourceWizard";
 
 /**
  * This component coordinates all user actions (source selection,
@@ -204,7 +204,7 @@ const Sync = () => {
       }
 
       // First, update the sync status to active
-      const updateResp = await apiClient.put(`/sync/${syncId}`, {
+      const updateResp = await apiClient.patch(`/sync/${syncId}`, {
         status: "active"
       });
 
@@ -249,7 +249,7 @@ const Sync = () => {
   };
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto pb-8">
       <div className="mx-auto">
         {/* Step + progress bar */}
         <div className="mb-8">
@@ -287,7 +287,19 @@ const Sync = () => {
               <h2 className="text-2xl font-semibold">Choose your data source</h2>
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </div>
-            <SyncDataSourceGrid onSelect={handleSourceSelect} />
+            <UnifiedDataSourceGrid
+              mode="select"
+              onSelectConnection={handleSourceSelect}
+              renderSourceDialog={(source, options) => (
+                <AddSourceWizard
+                  open={options.isOpen}
+                  onOpenChange={options.onOpenChange}
+                  onComplete={options.onComplete}
+                  shortName={source.short_name}
+                  name={source.name}
+                />
+              )}
+            />
           </div>
         )}
 

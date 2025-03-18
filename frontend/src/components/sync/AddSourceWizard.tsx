@@ -31,12 +31,12 @@ interface SourceDetails {
   };
 }
 
-export const AddSourceWizard = ({ 
-  open, 
-  onOpenChange, 
+export const AddSourceWizard = ({
+  open,
+  onOpenChange,
   onComplete,
   shortName,
-  name 
+  name
 }: AddSourceWizardProps) => {
   const [step, setStep] = useState(1);
   const [sourceDetails, setSourceDetails] = useState<SourceDetails | null>(null);
@@ -72,7 +72,7 @@ export const AddSourceWizard = ({
       }
       const data = await response.json();
       setSourceDetails(data);
-      
+
       if (data.config_fields?.fields) {
         const initialConfig: Record<string, string> = {};
         data.config_fields.fields.forEach((field: ConfigField) => {
@@ -97,11 +97,11 @@ export const AddSourceWizard = ({
         `/connections/connect/source/${shortName}`,
         config
       );
-      
+
       if (!response.ok) {
         throw new Error("Failed to create connection");
       }
-      
+
       const data = await response.json();
       toast.success("Connection created successfully!");
       onComplete(data.id);
@@ -175,7 +175,7 @@ export const AddSourceWizard = ({
           {step === 1 && (
             <div className="space-y-6 animate-in slide-in-from-right">
               {isLoading ? (
-                <div className="flex items-center justify-center py-8">
+                <div className="flex items-center justify-center">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               ) : sourceDetails ? (
@@ -212,7 +212,7 @@ export const AddSourceWizard = ({
                           id={field.name}
                           type={field.type === "string" ? "text" : field.type}
                           value={config.config_fields[field.name] || ""}
-                          onChange={(e) => 
+                          onChange={(e) =>
                             setConfig({
                               ...config,
                               config_fields: {
@@ -228,7 +228,7 @@ export const AddSourceWizard = ({
                   </div>
                 </>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="text-center text-muted-foreground">
                   Failed to load configuration. Please try again.
                 </div>
               )}
@@ -272,9 +272,9 @@ export const AddSourceWizard = ({
             </Button>
           )}
           {step === 1 ? (
-            <Button 
-              className="ml-auto" 
-              onClick={handleNext} 
+            <Button
+              className="ml-auto"
+              onClick={handleNext}
               disabled={isLoading}
             >
               Next <ArrowRight className="ml-2 h-4 w-4" />
@@ -302,4 +302,4 @@ export const AddSourceWizard = ({
       </DialogContent>
     </Dialog>
   );
-}; 
+};

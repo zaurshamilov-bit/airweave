@@ -104,6 +104,31 @@ class Sync(SyncInDBBase):
     pass
 
 
+class SyncWithoutConnections(BaseModel):
+    """Schema for Sync without connections."""
+
+    name: str
+    description: Optional[str] = None
+    cron_schedule: Optional[str] = None
+    next_scheduled_run: Optional[datetime] = None
+    status: SyncStatus
+    white_label_id: Optional[UUID] = None
+    white_label_user_identifier: Optional[str] = None
+    sync_metadata: Optional[dict] = None
+
+    id: UUID
+    organization_id: UUID
+    created_at: datetime
+    modified_at: datetime
+    created_by_email: EmailStr
+    modified_by_email: EmailStr
+
+    class Config:
+        """Pydantic config."""
+
+        from_attributes = True
+
+
 class SyncWithSourceConnection(SyncInDBBase):
     """Schema for Sync with source connection."""
 

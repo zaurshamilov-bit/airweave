@@ -69,6 +69,7 @@ export interface ChatInfo {
 export interface ChatInfoSidebarProps {
   chatInfo: ChatInfo;
   onUpdateSettings: (settings: Partial<ModelSettings>) => Promise<void>;
+  className?: string;
 }
 
 export interface Source {

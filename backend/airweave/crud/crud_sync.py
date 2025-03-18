@@ -1,5 +1,6 @@
 """CRUD operations for syncs."""
 
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, models, schemas
 from airweave.core.exceptions import NotFoundException
-from airweave.core.shared_models import IntegrationType
+from airweave.core.shared_models import IntegrationType, SyncStatus
 from airweave.crud._base import CRUDBase
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.connection import Connection
@@ -27,8 +28,14 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         id: UUID,
         current_user: schemas.User,
         with_connections: bool = True,
-    ) -> models.Sync:
-        """Get the "naked" sync by ID without any connections.
+    ) -> models.Sync | schemas.Sync:
+        """Get the sync by ID.
+
+        If with_connections is True, the sync will be enriched with all its connections,
+        and returned as a schemas.Sync object.
+
+        If with_connections is False, the sync will not be enriched with any connections,
+        and returned as a models.Sync object.
 
         Args:
             db (AsyncSession): The database session
@@ -46,7 +53,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
 
         if with_connections:
             # Enrich the sync with all its connections
-            sync = await self.enrich_sync_with_connections(db, sync=sync, current_user=current_user)
+            sync = await self.enrich_sync_with_connections(db, sync=sync)
 
         # Validate user permissions
         self._validate_if_user_has_permission(
@@ -88,63 +95,143 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         return syncs
 
     async def enrich_sync_with_connections(
-        self, db: AsyncSession, sync: models.Sync, current_user: schemas.User
+        self, db: AsyncSession, sync: models.Sync
     ) -> schemas.Sync:
         """Enrich a sync with all its connections.
 
         Args:
             db (AsyncSession): The database session
             sync (models.Sync): The sync
-            current_user (schemas.User): The current user
 
         Returns:
             schemas.Sync: The sync with its connections
         """
-        # Get all connections for the sync
+        # Simply use the enricher_for_all method with a single sync
+        enriched_syncs = await self.enricher_for_all(db, [sync])
+
+        # Return the first (and only) result
+        return enriched_syncs[0] if enriched_syncs else None
+
+    async def enricher_for_all(
+        self, db: AsyncSession, syncs: list[models.Sync]
+    ) -> list[schemas.Sync]:
+        """Efficiently enrich multiple syncs with their connections in a single query.
+
+        This method retrieves all connections for all syncs in a single database query,
+        making it much more efficient than processing each sync individually.
+
+        Args:
+            db (AsyncSession): The database session
+            syncs (list[models.Sync]): The list of syncs to enrich
+
+        Returns:
+            list[schemas.Sync]: The list of enriched syncs
+        """
+        if not syncs:
+            return []
+
+        # Get all sync IDs
+        sync_ids = [sync.id for sync in syncs]
+
+        # Run a single query to get all connections for all syncs
         stmt = (
             select(Connection, SyncConnection)
             .join(SyncConnection, Connection.id == SyncConnection.connection_id)
-            .where(SyncConnection.sync_id == sync.id)
+            .where(SyncConnection.sync_id.in_(sync_ids))
         )
         result = await db.execute(stmt)
-        connections = [conn for conn, _ in result.unique().all()]
+        all_connections = result.unique().all()
 
-        # Categorize connections based on their type
-        source_connection = None
-        destination_connections = []
-        embedding_model_connection = None
+        # Create a mapping of sync_id to its connections
+        sync_connections = {}
+        for connection, sync_connection in all_connections:
+            sync_id = sync_connection.sync_id
+            if sync_id not in sync_connections:
+                sync_connections[sync_id] = {
+                    "source": None,
+                    "destinations": [],
+                    "embedding_model": None,
+                }
 
-        for conn in connections:
-            if conn.integration_type == IntegrationType.SOURCE:
-                source_connection = schemas.Connection.model_validate(conn)
-            elif conn.integration_type == IntegrationType.DESTINATION:
-                destination_connections.append(schemas.Connection.model_validate(conn))
-            elif conn.integration_type == IntegrationType.EMBEDDING_MODEL:
-                embedding_model_connection = schemas.Connection.model_validate(conn)
+            # Categorize the connection based on its type
+            if connection.integration_type == IntegrationType.SOURCE:
+                sync_connections[sync_id]["source"] = schemas.Connection.model_validate(connection)
+            elif connection.integration_type == IntegrationType.DESTINATION:
+                sync_connections[sync_id]["destinations"].append(
+                    schemas.Connection.model_validate(connection)
+                )
+            elif connection.integration_type == IntegrationType.EMBEDDING_MODEL:
+                sync_connections[sync_id]["embedding_model"] = schemas.Connection.model_validate(
+                    connection
+                )
 
-        # Extract connection IDs for the base schema fields
-        source_connection_id = source_connection.id if source_connection else None
-        destination_connection_ids = [conn.id for conn in destination_connections]
-        embedding_model_connection_id = (
-            embedding_model_connection.id if embedding_model_connection else None
+        # Create enriched sync objects
+        enriched_syncs = []
+        for sync in syncs:
+            # Prepare the data dictionary with all fields
+            sync_dict = {**sync.__dict__}
+            if "_sa_instance_state" in sync_dict:
+                sync_dict.pop("_sa_instance_state")
+
+            # Get connections for this sync
+            connections = sync_connections.get(
+                sync.id, {"source": None, "destinations": [], "embedding_model": None}
+            )
+
+            # Add connection IDs
+            source = connections["source"]
+            sync_dict["source_connection_id"] = source.id if source else None
+
+            destinations = connections["destinations"]
+            sync_dict["destination_connection_ids"] = [dest.id for dest in destinations]
+
+            embedding_model = connections["embedding_model"]
+            sync_dict["embedding_model_connection_id"] = (
+                embedding_model.id if embedding_model else None
+            )
+
+            # Create the enriched sync
+            enriched_syncs.append(schemas.Sync.model_validate(sync_dict))
+
+        return enriched_syncs
+
+    async def get_all(self, db: AsyncSession) -> list[schemas.Sync]:
+        """Get all syncs.
+
+        Args:
+            db (AsyncSession): The database session
+            current_user (Optional[schemas.User]): The current user
+
+        Returns:
+            list[Sync | schemas.Sync]: The syncs, enriched if current_user is provided
+        """
+        stmt = select(Sync)
+        result = await db.execute(stmt)
+        syncs = result.scalars().unique().all()
+
+        # Enrich syncs if current_user is provided
+        return await self.enricher_for_all(db, syncs)
+
+    async def get_all_with_schedule(self, db: AsyncSession) -> list[schemas.SyncWithoutConnections]:
+        """Get all syncs with a schedule that are due to run.
+
+        Returns:
+            list[schemas.SyncWithoutConnections]: The syncs without connections
+        """
+        now = datetime.now(timezone.utc)
+        stmt = select(Sync).where(
+            (Sync.status == SyncStatus.ACTIVE)
+            & (Sync.cron_schedule.is_not(None))
+            & ((Sync.next_scheduled_run <= now) | (Sync.next_scheduled_run.is_(None)))
         )
+        result = await db.execute(stmt)
+        syncs = result.scalars().unique().all()
 
-        # Prepare the data dictionary with all fields
-        sync_dict = {**sync.__dict__}
-        if "_sa_instance_state" in sync_dict:
-            sync_dict.pop("_sa_instance_state")
-
-        # Add connection IDs
-        sync_dict["source_connection_id"] = source_connection_id
-        sync_dict["destination_connection_ids"] = destination_connection_ids
-        sync_dict["embedding_model_connection_id"] = embedding_model_connection_id
-
-        # Construct the response with full connections
-        return schemas.Sync.model_validate(sync_dict)
+        return [schemas.SyncWithoutConnections.model_validate(sync) for sync in syncs]
 
     async def get_all_for_white_label(
         self, db: AsyncSession, white_label_id: UUID, current_user: schemas.User
-    ) -> list[Sync]:
+    ) -> list[schemas.Sync]:
         """Get sync by white label ID.
 
         Args:
@@ -153,18 +240,22 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
             current_user (schemas.User): The current user
 
         Returns:
-            list[Sync]: The syncs
+            list[schemas.Sync]: The enriched syncs
         """
         stmt = select(Sync).where(Sync.white_label_id == white_label_id)
         result = await db.execute(stmt)
         syncs = result.scalars().unique().all()
+
+        # Validate permissions for each sync
         for sync in syncs:
             self._validate_if_user_has_permission(sync, current_user)
-        return syncs
+
+        # Enrich all syncs in a single efficient query
+        return await self.enricher_for_all(db, syncs)
 
     async def get_all_for_source_connection(
         self, db: AsyncSession, source_connection_id: UUID, current_user: schemas.User
-    ) -> list[Sync]:
+    ) -> list[schemas.Sync]:
         """Get all syncs for a source connection.
 
         Args:
@@ -172,7 +263,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
             source_connection_id (UUID): The ID of the source connection
             current_user (schemas.User): The current user
         Returns:
-            list[Sync]: The syncs
+            list[schemas.Sync]: The enriched syncs
         """
         # Use the SyncConnection join table to find syncs with the given source connection
         stmt = (
@@ -186,14 +277,16 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         result = await db.execute(stmt)
         syncs = result.scalars().unique().all()
 
+        # Validate permissions for each sync
         for sync in syncs:
             self._validate_if_user_has_permission(sync, current_user)
 
-        return syncs
+        # Enrich all syncs in a single efficient query
+        return await self.enricher_for_all(db, syncs)
 
     async def get_all_for_destination_connection(
         self, db: AsyncSession, destination_connection_id: UUID, current_user: schemas.User
-    ) -> list[Sync]:
+    ) -> list[schemas.Sync]:
         """Get all syncs for a destination connection.
 
         Args:
@@ -202,7 +295,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
             current_user (schemas.User): The current user
 
         Returns:
-            list[Sync]: The syncs
+            list[schemas.Sync]: The enriched syncs
         """
         # Use the SyncConnection join table to find syncs with the given destination connection
         stmt = (
@@ -216,10 +309,12 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         result = await db.execute(stmt)
         syncs = result.scalars().unique().all()
 
+        # Validate permissions for each sync
         for sync in syncs:
             self._validate_if_user_has_permission(sync, current_user)
 
-        return syncs
+        # Enrich all syncs in a single efficient query
+        return await self.enricher_for_all(db, syncs)
 
     async def get_all_syncs_join_with_source_connection(
         self, db: AsyncSession, current_user: schemas.User
@@ -235,6 +330,9 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         """
         # First, get all syncs for the user
         syncs = await super().get_all_for_user(db, current_user)
+
+        # Enrich all syncs efficiently
+        enriched_syncs = await self.enricher_for_all(db, syncs)
 
         # Get all source connections for these syncs using the SyncConnection join table
         stmt = (
@@ -252,17 +350,12 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
             sync.id: schemas.Connection.model_validate(connection) for sync, connection, _ in rows
         }
 
-        # Enrich each sync with its connections
+        # Create SyncWithSourceConnection objects
         result_syncs = []
-        for sync in syncs:
-            # Enrich the sync with all its connections
-            enriched_sync = await self.enrich_sync_with_connections(db, sync, current_user)
-
-            # Create the SyncWithSourceConnection object
+        for sync in enriched_syncs:
             if sync.id in sync_to_source_connection:
-                # The enriched_sync is already a schemas.Sync object, so we can use it directly
                 sync_with_source = schemas.SyncWithSourceConnection(
-                    **enriched_sync.model_dump(),
+                    **sync.model_dump(),
                     source_connection=sync_to_source_connection[sync.id],
                 )
                 result_syncs.append(sync_with_source)

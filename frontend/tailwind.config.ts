@@ -24,6 +24,31 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+
+        // Add solid background variants
+        "background-solid": "hsl(var(--background-solid))",
+        "background-alpha": {
+          10: "hsl(var(--background-alpha-10))",
+          20: "hsl(var(--background-alpha-20))",
+          30: "hsl(var(--background-alpha-30))",
+          40: "hsl(var(--background-alpha-40))",
+          50: "hsl(var(--background-alpha-50))",
+          60: "hsl(var(--background-alpha-60))",
+          70: "hsl(var(--background-alpha-70))",
+          80: "hsl(var(--background-alpha-80))",
+          90: "hsl(var(--background-alpha-90))",
+        },
+
+        // Add solid card variant
+        card: "hsl(var(--card))",
+        "card-solid": "hsl(var(--card-solid))",
+        "card-foreground": "hsl(var(--card-foreground))",
+
+        // Add solid popover variant
+        popover: "hsl(var(--popover))",
+        "popover-solid": "hsl(var(--popover-solid))",
+        "popover-foreground": "hsl(var(--popover-foreground))",
+
         primary: {
           DEFAULT: "#0066FF",
           foreground: "#FFFFFF",
@@ -46,21 +71,33 @@ export default {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
+
+        // Add solid muted variant
         muted: {
           DEFAULT: "hsl(var(--muted))",
+          solid: "hsl(var(--muted-solid))",
           foreground: "hsl(var(--muted-foreground))",
         },
+
+        // Add solid accent variant
         accent: {
           DEFAULT: "hsl(var(--accent))",
+          solid: "hsl(var(--accent-solid))",
           foreground: "hsl(var(--accent-foreground))",
         },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+
+        // Add sidebar variants
+        sidebar: {
+          background: "hsl(var(--sidebar-background))",
+          "background-solid": "hsl(var(--sidebar-background-solid))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          primary: "hsl(var(--sidebar-primary))",
+          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
+          accent: "hsl(var(--sidebar-accent))",
+          "accent-solid": "hsl(var(--sidebar-accent-solid))",
+          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
+          border: "hsl(var(--sidebar-border))",
+          ring: "hsl(var(--sidebar-ring))",
         },
       },
       borderRadius: {
@@ -86,6 +123,9 @@ export default {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         float: "float 3s ease-in-out infinite",
+      },
+      backdropBlur: {
+        xs: '2px',
       },
     },
   },

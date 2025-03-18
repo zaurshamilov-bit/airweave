@@ -10,11 +10,11 @@ import SyncTableView from "./SyncTableView";
 
 const Dashboard = () => {
   const handleDiscordClick = () => {
-    window.open("https://discord.gg/5pmkuZHX", "_blank");
+    window.open("https://discord.com/invite/484HY9Ehxt", "_blank");
   };
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto pb-8">
       <div className="space-y-8">
         <div className="flex justify-between items-center">
           <div>
@@ -23,14 +23,6 @@ const Dashboard = () => {
               Overview of your data synchronization status
             </p>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleDiscordClick}
-            className="gap-2"
-          >
-            <MessageSquare className="h-4 w-4" />
-            Join Discord
-          </Button>
         </div>
 
         <DashboardStats />
@@ -40,7 +32,7 @@ const Dashboard = () => {
           <ConnectedDestinationsGrid />
         </div>
 
-        <div className="bg-background rounded-lg border">
+        <div className="rounded-lg border pt-4">
           <SyncTableView />
         </div>
 

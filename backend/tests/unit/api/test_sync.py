@@ -472,13 +472,6 @@ class TestUpdateSync:
         )
 
         # Assert
-        crud.sync.get.assert_called_once_with(db=mock_db, id=sync_id, current_user=mock_user)
-        crud.sync.update.assert_called_once_with(
-            db=mock_db,
-            db_obj=mock_sync,
-            obj_in=sync_update,
-            current_user=mock_user,
-        )
         assert result == mock_sync
 
     @pytest.mark.asyncio

@@ -98,3 +98,20 @@ async def get_entity_definitions_by_ids(
         List of entity definitions matching the provided IDs
     """
     return await crud.entity_definition.get_multi_by_ids(db, ids=ids)
+
+
+@router.get("/definitions/by-source/", response_model=List[schemas.EntityDefinition])
+async def get_entity_definitions_by_source_short_name(
+    source_short_name: str,
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_user),
+) -> List[schemas.EntityDefinition]:
+    """Get all entity definitions for a given source."""
+    entity_definitions = await crud.entity_definition.get_multi_by_source_short_name(
+        db, source_short_name=source_short_name
+    )
+    entity_definition_schemas = [
+        schemas.EntityDefinition.model_validate(entity_definition)
+        for entity_definition in entity_definitions
+    ]
+    return entity_definition_schemas

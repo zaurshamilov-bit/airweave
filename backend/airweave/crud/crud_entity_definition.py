@@ -39,5 +39,15 @@ class CRUDEntityDefinition(
         result = await db.execute(select(self.model).where(self.model.name == entity_class_name))
         return result.scalar_one_or_none()
 
+    async def get_multi_by_source_short_name(
+        self, db: AsyncSession, *, source_short_name: str
+    ) -> List[EntityDefinition]:
+        """Get all entity definitions for a given source."""
+        result = await db.execute(
+            select(self.model).where(self.model.module_name == source_short_name)
+        )
+        entity_definitions = result.unique().scalars().all()
+        return entity_definitions
+
 
 entity_definition = CRUDEntityDefinition(EntityDefinition)

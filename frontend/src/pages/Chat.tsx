@@ -16,12 +16,13 @@ import {
 } from "@/components/ui/select";
 import { API_CONFIG, apiClient } from "@/lib/api";
 import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
 import { CreateChatDialog } from "@/components/chat/CreateChatDialog";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useTheme } from "@/lib/theme-provider";
+
 
 interface Chat {
   id: string;
@@ -46,7 +47,7 @@ function Chat() {
   const [chatInfo, setChatInfo] = useState<ChatInfo | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [isOpenAIKeySet, setIsOpenAIKeySet] = useState<boolean | null>(null);
-
+  const { resolvedTheme } = useTheme();
   // If you're using a route param like /chat/:chatId
   const { chatId } = useParams<{ chatId: string }>();
 
@@ -61,7 +62,7 @@ function Chat() {
         if (chats && chats.length > 0) {
           // If we don't have a chatId, navigate to the most recent chat
           if (!chatId) {
-            const mostRecentChat = chats.sort((a: Chat, b: Chat) => 
+            const mostRecentChat = chats.sort((a: Chat, b: Chat) =>
               new Date(b.modified_at).getTime() - new Date(a.modified_at).getTime()
             )[0];
             navigate(`/chat/${mostRecentChat.id}`);
@@ -93,17 +94,17 @@ function Chat() {
         setIsLoading(true);
         setError(null);
         const resp = await apiClient.get(`/chat/${chatId}`);
-        
+
         if (!resp.ok) {
           throw new Error(`Failed to load chat: ${resp.statusText}`);
         }
-        
+
         // Handle the response data directly
         const chatData = await resp.json();
-        
+
         // Ensure messages is an array, even if empty
         const messages = chatData.messages || [];
-        
+
         setMessages(messages.map((m: any) => ({
           role: m.role || 'user',
           content: m.content,
@@ -147,20 +148,20 @@ function Chat() {
 
       try {
         // Add user message
-        const userMessage: Message = { 
-          role: "user", 
-          content, 
+        const userMessage: Message = {
+          role: "user",
+          content,
           id: Date.now(),
-          attachments: attachments 
+          attachments: attachments
         };
         setMessages(prev => [...prev, userMessage]);
 
         // Create assistant message placeholder
-        const assistantMessage: Message = { 
-          role: "assistant", 
-          content: "", 
+        const assistantMessage: Message = {
+          role: "assistant",
+          content: "",
           id: Date.now() + 1,
-          attachments: [] 
+          attachments: []
         };
         setMessages(prev => [...prev, assistantMessage]);
 
@@ -172,7 +173,7 @@ function Chat() {
 
         // Start stream
         const eventSource = new EventSource(`${API_CONFIG.baseURL}/chat/${chatId}/stream`);
-        
+
         eventSource.onmessage = (event) => {
           if (event.data === '[DONE]' || event.data === '[ERROR]') {
             eventSource.close();
@@ -237,7 +238,7 @@ function Chat() {
       // Get chat info
       const chatResponse = await apiClient.get(`/chat/${chatId}`);
       const chatData = await chatResponse.json();
-      
+
       // Get sync info
       const syncResponse = await apiClient.get(`/sync/${chatData.sync_id}`);
       const syncData = await syncResponse.json();
@@ -245,7 +246,7 @@ function Chat() {
       // Get source connection
       const sourceConnResponse = await apiClient.get(`/connections/detail/${syncData.source_connection_id}`);
       const sourceConnData = await sourceConnResponse.json();
-      
+
       // Get source details
       const sourceResponse = await apiClient.get(`/sources/detail/${sourceConnData.short_name}`);
       const sourceData = await sourceResponse.json();
@@ -253,15 +254,15 @@ function Chat() {
       // Get destination connection and details if exists
       let destinationConnData = null;
       let destinationData = null;
-      
+
       if (syncData.destination_connection_id) {
         const destConnResponse = await apiClient.get(`/connections/detail/${syncData.destination_connection_id}`);
         destinationConnData = await destConnResponse.json();
-        
+
         const destResponse = await apiClient.get(`/destinations/detail/${destinationConnData.short_name}`);
         destinationData = await destResponse.json();
       }
-      
+
       // Combine all the data
       setChatInfo({
         ...chatData,
@@ -284,11 +285,11 @@ function Chat() {
 
   const handleUpdateSettings = async (settings: Partial<ModelSettings>) => {
     if (!chatId) return;
-      
+
     const response = await apiClient.put(`/chat/${chatId}`, undefined, {
       model_settings: settings,  // Pass undefined for params, then the data
     });
-    
+
     if (response.ok) {
       await loadChatInfo();
     } else {
@@ -302,11 +303,11 @@ function Chat() {
 
   // Check location state for create dialog and preselected sync
   useEffect(() => {
-    const state = location.state as { 
+    const state = location.state as {
       showCreateDialog?: boolean;
       preselectedSyncId?: string;
     };
-    
+
     if (state?.showCreateDialog) {
       setShowCreateDialog(true);
     }
@@ -331,17 +332,17 @@ function Chat() {
   // Add this dialog component before the main return
   if (isOpenAIKeySet === false) {
     return (
-      <Dialog 
-        open={true} 
+      <Dialog
+        open={true}
         onOpenChange={() => navigate('/dashboard')}
       >
         <DialogContent onEscapeKeyDown={() => navigate('/dashboard')} onInteractOutside={() => navigate('/dashboard')}>
           <DialogHeader>
             <DialogTitle>OpenAI API key required</DialogTitle>
             <DialogDescription>
-              Please add your OpenAI API key to the .env file to continue using the chat functionality. 
+              Please add your OpenAI API key to the .env file to continue using the chat functionality.
               <br />
-              <br />  
+              <br />
               Find the .env file in the root of the project and add the following: OPENAI_API_KEY=your_openai_api_key
             </DialogDescription>
           </DialogHeader>
@@ -351,7 +352,7 @@ function Chat() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className={`flex h-full border-t ${resolvedTheme === 'dark' ? 'border-border/60' : 'border-border/80'} overflow-hidden`}>
       <ChatSidebar onCreateChat={() => setShowCreateDialog(true)} />
       <div className="flex-1 flex flex-col">
         {error ? (
@@ -362,7 +363,7 @@ function Chat() {
             </div>
           </div>
         ) : showCreateDialog ? (
-          <CreateChatDialog 
+          <CreateChatDialog
             open={showCreateDialog}
             preselectedSyncId={location.state?.preselectedSyncId}
             onOpenChange={setShowCreateDialog}

@@ -29,7 +29,7 @@ from airweave.platform.sources._base import BaseSource
     "Google Drive",
     "google_drive",
     AuthType.oauth2_with_refresh,
-    labels=["File Storage", "Document Management"],
+    labels=["File Storage"],
 )
 class GoogleDriveSource(BaseSource):
     """Google Drive source implementation (read-only).

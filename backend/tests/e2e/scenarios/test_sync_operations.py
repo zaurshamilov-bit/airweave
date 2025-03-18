@@ -107,7 +107,9 @@ def test_sync_operations(e2e_environment, e2e_api_url, source_connection_data, s
     assert any(job["id"] == job_id for job in jobs)
 
     # Get specific job details - Note: The API requires sync_id as a query parameter
-    get_job_response = requests.get(f"{e2e_api_url}/sync/job/{job_id}", params={"sync_id": sync_id})
+    get_job_response = requests.get(
+        f"{e2e_api_url}/sync/{sync_id}/job/{job_id}", params={"sync_id": sync_id}
+    )
     assert get_job_response.status_code == 200, f"Failed to get sync job: {get_job_response.text}"
     retrieved_job = get_job_response.json()
     assert retrieved_job["id"] == job_id

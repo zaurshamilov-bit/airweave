@@ -32,8 +32,8 @@ export function SourceInformationDialog({
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 flex items-center justify-center">
-              <img 
-                src={getAppIconUrl(shortName, resolvedTheme)} 
+              <img
+                src={getAppIconUrl(shortName, resolvedTheme)}
                 alt={`${name} icon`}
                 className="w-6 h-6"
               />
@@ -73,9 +73,9 @@ export function SourceInformationDialog({
             <p className="text-sm text-muted-foreground">
               For more information about this integration, visit our documentation:
             </p>
-            <a 
-              href={`https://docs.airweave.io/integrations/${shortName}`} 
-              target="_blank" 
+            <a
+              href={`https://docs.airweave.io/integrations/${shortName}`}
+              target="_blank"
               rel="noopener noreferrer"
               className="text-sm text-primary hover:underline"
             >

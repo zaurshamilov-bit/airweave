@@ -47,6 +47,31 @@ async def list_syncs(
     return syncs
 
 
+@router.get("/jobs", response_model=list[schemas.SyncJob])
+async def list_all_jobs(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    skip: int = 0,
+    limit: int = 100,
+    user: schemas.User = Depends(deps.get_user),
+) -> list[schemas.SyncJob]:
+    """List all sync jobs across all syncs.
+
+    Args:
+    -----
+        db: The database session
+        skip: The number of jobs to skip
+        limit: The number of jobs to return
+        user: The current user
+
+    Returns:
+    --------
+        list[schemas.SyncJob]: A list of all sync jobs
+    """
+    jobs = await crud.sync_job.get_all_jobs(db=db, skip=skip, limit=limit, current_user=user)
+    return jobs
+
+
 @router.get("/{sync_id}", response_model=schemas.Sync)
 async def get_sync(
     *,
@@ -213,7 +238,7 @@ async def list_sync_jobs(
     return await crud.sync_job.get_all_by_sync_id(db=db, sync_id=sync_id)
 
 
-@router.get("/job/{job_id}", response_model=schemas.SyncJob)
+@router.get("/{sync_id}/job/{job_id}", response_model=schemas.SyncJob)
 async def get_sync_job(
     *,
     db: AsyncSession = Depends(deps.get_db),
@@ -316,9 +341,10 @@ async def update_sync(
     --------
         sync (schemas.Sync): The updated sync
     """
-    sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
+    sync = await crud.sync.get(db=db, id=sync_id, current_user=user, with_connections=False)
     if not sync:
         raise HTTPException(status_code=404, detail="Sync not found")
 
     updated_sync = await crud.sync.update(db=db, db_obj=sync, obj_in=sync_update, current_user=user)
+    updated_sync = await crud.sync.get(db=db, id=sync_id, current_user=user, with_connections=True)
     return updated_sync

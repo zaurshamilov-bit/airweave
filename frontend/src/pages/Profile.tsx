@@ -21,9 +21,9 @@ const Profile = () => {
   };
 
   return (
-    <div className="container py-8">
+    <div className="container pb-8">
       <h1 className="text-3xl font-bold mb-8">Profile</h1>
-      
+
       <div className="grid gap-6">
         <Card>
           <CardHeader>
