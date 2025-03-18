@@ -14,7 +14,9 @@ import {
   ExternalLink,
   Eye,
   Copy,
-  Activity
+  Activity,
+  Box,
+  Heart
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -310,11 +312,11 @@ const ViewEditSync = () => {
 
   const getStatusColor = (status?: string) => {
     switch (status) {
-      case 'success': return { bg: 'bg-green-500/10', text: 'text-green-500/80' };
-      case 'failed': return { bg: 'bg-red-500/10', text: 'text-red-500/80' };
-      case 'running': return { bg: 'bg-blue-500/10', text: 'text-blue-500/80' };
-      case 'pending': return { bg: 'bg-yellow-500/10', text: 'text-yellow-500/80' };
-      default: return { bg: 'bg-gray-500/10', text: 'text-gray-500/80' };
+      case 'success': return { bg: 'bg-muted', text: 'text-foreground' };
+      case 'failed': return { bg: 'bg-muted', text: 'text-foreground' };
+      case 'running': return { bg: 'bg-muted', text: 'text-foreground' };
+      case 'pending': return { bg: 'bg-muted', text: 'text-foreground' };
+      default: return { bg: 'bg-muted', text: 'text-foreground' };
     }
   };
 
@@ -334,7 +336,7 @@ const ViewEditSync = () => {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight">{syncDetails?.name}</h1>
-              <Badge className="bg-teal-500/70 text-white rounded-full font-semibold hover:bg-teal-500/70">{syncDetails?.status?.toUpperCase()}</Badge>
+              <Badge className="rounded-full font-semibold">{syncDetails?.status?.toUpperCase()}</Badge>
             </div>
             <p className="text-muted-foreground text-sm mt-1">
               {syncDetails?.id}
@@ -346,7 +348,6 @@ const ViewEditSync = () => {
             variant="default"
             onClick={handleRunSync}
             disabled={isRunningSync || lastSync?.status === 'running' || lastSync?.status === 'pending'}
-            className="bg-blue-500 hover:bg-blue-600"
           >
             <Play className="mr-2 h-4 w-4" />
             {isRunningSync ? 'Starting...' : 'Run Sync'}
@@ -372,8 +373,8 @@ const ViewEditSync = () => {
                     {/* Source */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-shrink-0 h-5 w-5 text-blue-500">
-                          <Database className="h-full w-full" />
+                        <div className="flex-shrink-0 h-5 w-5">
+                          <Box className="h-full w-full" />
                         </div>
                         <span className="text-sm font-medium">Source</span>
                       </div>
@@ -406,7 +407,7 @@ const ViewEditSync = () => {
                     {/* Destination */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-shrink-0 h-5 w-5 text-teal-500">
+                        <div className="flex-shrink-0 h-5 w-5">
                           <Database className="h-full w-full" />
                         </div>
                         <span className="text-sm font-medium">Destination</span>
@@ -416,7 +417,7 @@ const ViewEditSync = () => {
                           {syncDetails?.uiMetadata.destination.shortName && (
                             syncDetails?.uiMetadata.destination.shortName === "Native" ? (
                               <div className="h-5 w-5 flex items-center justify-center flex-shrink-0">
-                                <Database className="h-4 w-4 text-teal-500" />
+                                <Database className="h-4 w-4" />
                               </div>
                             ) : (
                               <img
@@ -431,7 +432,7 @@ const ViewEditSync = () => {
                                   if (parent) {
                                     const fallback = document.createElement('div');
                                     fallback.className = 'h-5 w-5 flex items-center justify-center flex-shrink-0';
-                                    fallback.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" class="text-teal-500"><path fill="none" d="M0 0h24v24H0z"/><path d="M3 12h3v9H3v-9zm15-9H6v9h12V3z" fill="currentColor"/></svg>';
+                                    fallback.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16"><path fill="none" d="M0 0h24v24H0z"/><path d="M3 12h3v9H3v-9zm15-9H6v9h12V3z" fill="currentColor"/></svg>';
                                     parent.prepend(fallback);
                                   }
                                 }}
@@ -460,7 +461,7 @@ const ViewEditSync = () => {
                     {/* Schedule */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-shrink-0 h-5 w-5 text-blue-500">
+                        <div className="flex-shrink-0 h-5 w-5">
                           <Clock className="h-full w-full" />
                         </div>
                         <span className="text-sm font-medium">Schedule</span>
@@ -480,14 +481,14 @@ const ViewEditSync = () => {
                     {/* Status */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-shrink-0 h-5 w-5 text-green-500 flex items-center justify-center">
+                        <div className="flex-shrink-0 h-5 w-5 flex items-center justify-center">
                           <Activity className="h-4 w-4" />
                         </div>
                         <span className="text-sm font-medium">Status</span>
                       </div>
                       <div className="ml-7">
                         <div className="flex items-center gap-2">
-                          <Badge className="bg-green-500/70 hover:bg-green-500/70 text-white text-xs px-3 py-0.5 rounded-full">Active</Badge>
+                          <Badge className="rounded-full text-xs px-3 py-0.5">Active</Badge>
                           {lastSync && (
                             <span className="text-xs text-muted-foreground">
                               Last run {format(new Date(lastSync.created_at), 'MMM dd, yyyy')}
@@ -500,7 +501,7 @@ const ViewEditSync = () => {
                     {/* Created Info */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-shrink-0 h-5 w-5 text-purple-500">
+                        <div className="flex-shrink-0 h-5 w-5">
                           <Clock className="h-full w-full" />
                         </div>
                         <span className="text-sm font-medium">Created</span>
@@ -520,7 +521,7 @@ const ViewEditSync = () => {
                     {/* Sync Jobs */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-shrink-0 h-5 w-5 text-amber-500">
+                        <div className="flex-shrink-0 h-5 w-5">
                           <Database className="h-full w-full" />
                         </div>
                         <span className="text-sm font-medium">Sync Jobs</span>
@@ -576,8 +577,8 @@ const ViewEditSync = () => {
               {lastSync ? (
                 <div className="space-y-4">
                   <div className="flex items-center">
-                    <div className={`w-10 h-10 mr-3 ${getStatusColor(lastSync.status).bg} rounded-full flex items-center justify-center`}>
-                      <Clock className={`w-5 h-5 ${getStatusColor(lastSync.status).text}`} />
+                    <div className={`w-10 h-10 mr-3 rounded-full flex items-center justify-center`}>
+                      <Clock className={`w-5 h-5 text-blue-500/80`} />
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Time</p>
@@ -599,7 +600,7 @@ const ViewEditSync = () => {
                   </div>
                   <div className="flex items-center">
                     <div className={`w-10 h-10 mr-3 ${getStatusColor(lastSync.status).bg} rounded-full flex items-center justify-center`}>
-                      <Database className={`w-5 h-5 ${getStatusColor(lastSync.status).text}`} />
+                      <Heart className={`w-5 h-5 text-red-500 ${getStatusColor(lastSync.status).text}`} />
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Status</p>
@@ -657,6 +658,18 @@ const ViewEditSync = () => {
             </Card>
           </div>
         </div>
+
+        {/* Live Sync Progress View - Only shown when sync is running */}
+        {lastSync && (lastSync.status === "running" || lastSync.status === "pending") && (
+          <div className="border rounded-lg overflow-hidden">
+            <SyncProgress
+              syncId={id || null}
+              syncJobId={lastSync.id}
+              isLive={true}
+              startedAt={lastSync.started_at}
+            />
+          </div>
+        )}
 
         {/* Second row: Sync DAG (full width) */}
           <Card className="border rounded-lg overflow-hidden px-3 py-2">

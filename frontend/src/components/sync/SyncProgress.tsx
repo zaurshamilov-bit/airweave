@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { CheckCircle2, Clock, MessageSquare, X } from "lucide-react";
 import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { format } from "date-fns";
 
 /**
  * Four key metrics as per pubsub:
@@ -18,9 +19,11 @@ interface SyncProgressProps {
   syncId: string | null;
   syncJobId: string | null;
   onClose?: () => void;
+  isLive?: boolean; // New prop to indicate if this is a live view in the main UI
+  startedAt?: string | null; // Pass the started_at timestamp for live views
 }
 
-export const SyncProgress = ({ syncId, syncJobId, onClose }: SyncProgressProps) => {
+export const SyncProgress = ({ syncId, syncJobId, onClose, isLive = false, startedAt }: SyncProgressProps) => {
   const navigate = useNavigate();
   const updates = useSyncSubscription(syncJobId);
   const latestUpdate = updates[updates.length - 1];
@@ -47,12 +50,97 @@ export const SyncProgress = ({ syncId, syncJobId, onClose }: SyncProgressProps) 
 
   const handleTryChat = () => {
     navigate("/chat", {
-      state: { 
+      state: {
         showCreateDialog: true,
-        preselectedSyncId: syncId 
+        preselectedSyncId: syncId
       }
     });
   };
+
+  // If this is a live view used in the main UI, we use a different layout
+  if (isLive) {
+    return (
+      <Card className="w-full max-w-none bg-card shadow-sm">
+        <CardHeader className="pb-2">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <div className="w-3 h-3 rounded-full bg-red-500 absolute animate-ping opacity-75"></div>
+                <div className="w-3 h-3 rounded-full bg-red-500 relative"></div>
+              </div>
+              <CardTitle>Live Sync Progress</CardTitle>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Started at: {startedAt ? format(new Date(startedAt), 'h:mm:ss a') : 'Pending...'}
+            </div>
+          </div>
+          <CardDescription>Processing and embedding your data</CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          {/* Normalized multi-segment progress bar */}
+          <div className="relative w-full h-3 bg-secondary/20 rounded-md overflow-hidden">
+            <div
+              className="absolute left-0 top-0 h-3 bg-green-500"
+              style={{ width: `${insertedPct}%` }}
+            />
+            <div
+              className="absolute top-0 h-3 bg-cyan-500"
+              style={{ left: `${insertedPct}%`, width: `${updatedPct}%` }}
+            />
+            <div
+              className="absolute top-0 h-3 bg-primary"
+              style={{ left: `${insertedPct + updatedPct}%`, width: `${keptPct}%` }}
+            />
+            <div
+              className="absolute top-0 h-3 bg-red-500"
+              style={{ left: `${insertedPct + updatedPct + keptPct}%`, width: `${deletedPct}%` }}
+            />
+          </div>
+
+          {/* Legend */}
+          <div className="text-xs mt-2 flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center space-x-1">
+              <span className="w-3 h-3 block bg-green-500 rounded-full" />
+              <span>Inserted</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <span className="w-3 h-3 block bg-cyan-500 rounded-full" />
+              <span>Updated</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <span className="w-3 h-3 block bg-primary rounded-full" />
+              <span>Kept</span>
+            </div>
+            <div className="flex items-center space-x-1">
+              <span className="w-3 h-3 block bg-red-500 rounded-full" />
+              <span>Deleted</span>
+            </div>
+          </div>
+
+          {/* Tally so far */}
+          <div className="space-y-2 text-sm mt-4">
+            <div className="flex justify-between">
+              <span>Inserted</span>
+              <span>{inserted.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Updated</span>
+              <span>{updated.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Kept</span>
+              <span>{kept.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Deleted</span>
+              <span>{deleted.toLocaleString()}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (latestUpdate?.is_complete) {
     return (
