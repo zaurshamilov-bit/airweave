@@ -341,9 +341,10 @@ async def update_sync(
     --------
         sync (schemas.Sync): The updated sync
     """
-    sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
+    sync = await crud.sync.get(db=db, id=sync_id, current_user=user, with_connections=False)
     if not sync:
         raise HTTPException(status_code=404, detail="Sync not found")
 
     updated_sync = await crud.sync.update(db=db, db_obj=sync, obj_in=sync_update, current_user=user)
+    updated_sync = await crud.sync.get(db=db, id=sync_id, current_user=user, with_connections=True)
     return updated_sync

@@ -65,7 +65,15 @@ from .source import (
     SourceUpdate,
     SourceWithConfigFields,
 )
-from .sync import Sync, SyncBase, SyncCreate, SyncInDBBase, SyncUpdate, SyncWithSourceConnection
+from .sync import (
+    Sync,
+    SyncBase,
+    SyncCreate,
+    SyncInDBBase,
+    SyncUpdate,
+    SyncWithoutConnections,
+    SyncWithSourceConnection,
+)
 from .sync_job import SyncJob, SyncJobCreate, SyncJobInDBBase, SyncJobUpdate
 from .transformer import Transformer, TransformerCreate, TransformerUpdate
 from .user import (
