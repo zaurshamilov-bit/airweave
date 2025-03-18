@@ -77,7 +77,7 @@ export const SyncProgress = ({ syncId, syncJobId, onClose, isLive = false, start
               <CardTitle>Live Sync Progress</CardTitle>
             </div>
             <div className="text-sm text-muted-foreground">
-              Started at: {startedAt ? format(new Date(startedAt), 'h:mm:ss a') : 'Pending...'}
+              Started at: {startedAt ? format(new Date(startedAt), 'h:mm:ss a') : 'Now'}
             </div>
           </div>
           <CardDescription>Processing and embedding your data</CardDescription>

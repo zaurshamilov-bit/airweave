@@ -6,14 +6,24 @@ interface ReasoningIndicatorProps {
   isVisible: boolean;
 }
 
-const reasoningSteps = [
-  "Rephrasing question for optimal search query.",
-  "Found 10 relevant items.",
-  "3 items seem very interesting. I will look into it a bit further...",
-  "I think I found what the user is asking for. Let's double-check by going through neighboring nodes",
-  "Analyzing the most relevant information.",
-  "Preparing a comprehensive response."
-];
+// Define the phases of reasoning
+const phases = {
+  initial: ["Thinking..."],
+  rephrasing: ["Rephrasing question to format internal query..."],
+  processing: [
+    "Found {n} matching entities in vector database with similarity above threshold.",
+    "Retrieved {n} related nodes from knowledge graph.",
+    "Exploring {n} connections between entities in the graph.",
+    "Analyzing {n} most relevant text chunks for context.",
+    "Traversing {n} levels deep in the knowledge graph.",
+    "Merging information from {n} different data sources.",
+    "Identified {n} key insights from retrieved documents.",
+    "Extracting structured data from {n} relevant passages.",
+    "Comparing similarity between {n} vector embeddings.",
+    "Resolving {n} entity references across documents."
+  ],
+  final: ["Writing readable message back to user.."]
+};
 
 function PulsingText({ text, isTransitioning }: { text: string; isTransitioning: boolean }) {
   return (
@@ -41,27 +51,59 @@ function PulsingText({ text, isTransitioning }: { text: string; isTransitioning:
 }
 
 export function ReasoningIndicator({ isVisible }: ReasoningIndicatorProps) {
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [currentPhase, setCurrentPhase] = useState<'initial' | 'rephrasing' | 'processing' | 'final'>('initial');
+  const [currentMessage, setCurrentMessage] = useState(phases.initial[0]);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [displayedStep, setDisplayedStep] = useState(reasoningSteps[0]);
+  const [processingIndex, setProcessingIndex] = useState(0);
 
   useEffect(() => {
     if (!isVisible) return;
 
-    const interval = setInterval(() => {
+    // Handle phase transitions
+    const phaseTimeline = async () => {
+      // Start with "Thinking..."
+      setCurrentPhase('initial');
+      setCurrentMessage(phases.initial[0]);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Move to "Rephrasing question"
       setIsTransitioning(true);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setCurrentPhase('rephrasing');
+      setCurrentMessage(phases.rephrasing[0]);
+      setIsTransitioning(false);
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
-      setTimeout(() => {
-        const nextIndex = (currentStepIndex + 1) % reasoningSteps.length;
-        setCurrentStepIndex(nextIndex);
-        setDisplayedStep(reasoningSteps[nextIndex]);
+      // Show 3-7 random processing messages
+      setCurrentPhase('processing');
+      const numMessages = Math.floor(Math.random() * 5) + 3; // 3 to 7 messages
+
+      for (let i = 0; i < numMessages; i++) {
+        setIsTransitioning(true);
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // Select random message and replace {n} with random number 2-7
+        const randomIndex = Math.floor(Math.random() * phases.processing.length);
+        const randomNumber = Math.floor(Math.random() * 6) + 2; // 2 to 7
+        const message = phases.processing[randomIndex].replace('{n}', randomNumber.toString());
+
+        setProcessingIndex(randomIndex);
+        setCurrentMessage(message);
         setIsTransitioning(false);
-      }, 300); // This matches the transition duration
 
-    }, 2000); // Change thoughts every 2 seconds
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
 
-    return () => clearInterval(interval);
-  }, [isVisible, currentStepIndex]);
+      // Finish with "Writing readable message back to user.."
+      setIsTransitioning(true);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setCurrentPhase('final');
+      setCurrentMessage(phases.final[0]);
+      setIsTransitioning(false);
+    };
+
+    void phaseTimeline();
+  }, [isVisible]);
 
   if (!isVisible) return null;
 
@@ -72,7 +114,7 @@ export function ReasoningIndicator({ isVisible }: ReasoningIndicatorProps) {
       >
         <div className="flex items-center space-x-2">
           <Loader2 className="h-4 w-4 animate-spin text-foreground/60" />
-          <PulsingText text={displayedStep} isTransitioning={isTransitioning} />
+          <PulsingText text={currentMessage} isTransitioning={isTransitioning} />
         </div>
       </div>
     </div>

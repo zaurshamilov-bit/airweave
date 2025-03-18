@@ -373,7 +373,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                               <span className="ml-1 text-xs font-bold">+</span>
                               <MoveUpRight className="h-4 w-4" />
                             </div>
-                            <div className="font-medium">Hybrid Search</div>
+                            <div className="font-medium">Agentic Hybrid Search</div>
                           </div>
                           <div className="text-xs">Combine vector and graph search for comprehensive results</div>
                         </div>
