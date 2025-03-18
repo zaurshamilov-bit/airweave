@@ -5,28 +5,13 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  ChevronRight,
-  Settings,
   Link as LinkIcon,
-  Settings2,
   Trash2,
-  Database,
   Waypoints,
   MoveUpRight,
-  Search,
-  MessagesSquare,
   Info,
   Code,
-  Copy,
-  Check,
 } from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
@@ -37,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { ModelSettings, Chat } from "./types";
+import { ModelSettings } from "./types";
 import { Badge } from "@/components/ui/badge";
 import { getAppIconUrl, getDestinationIconUrl } from "@/lib/utils/icons";
 import {
@@ -59,8 +44,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { materialOceanic, prism } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { ApiReferenceDialog } from "./ApiReferenceDialog";
 
 const AVAILABLE_MODELS = [
   { id: "gpt-4o", name: "GPT-4o" },
@@ -73,6 +57,7 @@ const badgeVariants = {
   active: "bg-emerald-50 text-emerald-700 border-emerald-200",
   inactive: "bg-gray-50 text-gray-600 border-gray-200",
 };
+
 
 export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarProps) {
   const [modelSettings, setModelSettings] = useState<ModelSettings>(() => {
@@ -98,9 +83,6 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showApiDialog, setShowApiDialog] = useState(false);
   const { resolvedTheme } = useTheme();
-  const [copiedPython, setCopiedPython] = useState(false);
-  const [copiedNode, setCopiedNode] = useState(false);
-  const [apiDialogTab, setApiDialogTab] = useState<"rest" | "python" | "node">("rest");
 
   // Track if we're currently updating search type to prevent feedback loops
   const [isUpdatingSearchType, setIsUpdatingSearchType] = useState(false);
@@ -282,102 +264,6 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
     setSaveTimeout(timeout);
   };
 
-  // Function to build API URLs from settings
-  const getApiEndpoints = () => {
-    const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:8001' : window.location.origin;
-
-    // Common parameters for all endpoints
-    const params = new URLSearchParams();
-    params.append('model_name', modelName);
-    params.append('temperature', modelSettings.temperature?.toString() || '0.7');
-    params.append('max_tokens', modelSettings.max_tokens?.toString() || '1000');
-    params.append('top_p', modelSettings.top_p?.toString() || '1.0');
-    params.append('frequency_penalty', modelSettings.frequency_penalty?.toString() || '0');
-    params.append('presence_penalty', modelSettings.presence_penalty?.toString() || '0');
-    params.append('search_type', modelSettings.search_type || 'vector');
-
-    // System prompt (encoded for URL)
-    if (systemPrompt) {
-      params.append('system_prompt', systemPrompt);
-    }
-
-    // Build complete URLs
-    const restUrl = `${baseUrl}/api/v1/search?${params.toString()}`;
-
-    // Python snippet
-    const pythonSnippet = `import requests
-
-# Airweave Search API Request
-response = requests.post(
-    "${baseUrl}/api/v1/search",
-    json={
-        "model_name": "${modelName}",
-        "model_settings": {
-            "temperature": ${modelSettings.temperature || 0.7},
-            "max_tokens": ${modelSettings.max_tokens || 1000},
-            "top_p": ${modelSettings.top_p || 1.0},
-            "frequency_penalty": ${modelSettings.frequency_penalty || 0},
-            "presence_penalty": ${modelSettings.presence_penalty || 0},
-            "search_type": "${modelSettings.search_type || 'vector'}"
-        },
-        "system_prompt": """${systemPrompt}""",
-        "query": "Your search query here"
-    }
-)
-
-results = response.json()
-print(results)`;
-
-    // Node.js snippet
-    const nodeSnippet = `// Using fetch in Node.js
-const response = await fetch("${baseUrl}/api/v1/search", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    "model_name": "${modelName}",
-    "model_settings": {
-      "temperature": ${modelSettings.temperature || 0.7},
-      "max_tokens": ${modelSettings.max_tokens || 1000},
-      "top_p": ${modelSettings.top_p || 1.0},
-      "frequency_penalty": ${modelSettings.frequency_penalty || 0},
-      "presence_penalty": ${modelSettings.presence_penalty || 0},
-      "search_type": "${modelSettings.search_type || 'vector'}"
-    },
-    "system_prompt": \`${systemPrompt}\`,
-    "query": "Your search query here"
-  })
-});
-
-const data = await response.json();
-console.log(data);`;
-
-    return {
-      restUrl,
-      pythonSnippet,
-      nodeSnippet
-    };
-  };
-
-  // Function to handle copying code
-  const handleCopyCode = (code: string, type: 'python' | 'node') => {
-    navigator.clipboard.writeText(code);
-
-    if (type === 'python') {
-      setCopiedPython(true);
-      setTimeout(() => setCopiedPython(false), 1500);
-    } else {
-      setCopiedNode(true);
-      setTimeout(() => setCopiedNode(false), 1500);
-    }
-
-    toast({
-      title: "Copied to clipboard",
-      description: `${type === 'python' ? 'Python' : 'JavaScript'} code copied to clipboard`,
-    });
-  };
-
   return (
     <>
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -405,193 +291,14 @@ console.log(data);`;
         </DialogContent>
       </Dialog>
 
-      {/* API Dialog */}
-      <Dialog open={showApiDialog} onOpenChange={setShowApiDialog}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Search API Reference</DialogTitle>
-            <DialogDescription>
-              Use these endpoints to access this search functionality programmatically.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4 max-h-[70vh] overflow-y-auto">
-            {/* Tabs */}
-            <div className="flex space-x-1 p-1 rounded-md mb-4 w-fit">
-              <Button
-                variant={apiDialogTab === "rest" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setApiDialogTab("rest")}
-                className={cn(
-                  "rounded-sm text-sm",
-                  apiDialogTab === "rest"
-                    ? "shadow-sm bg-slate-200 dark:bg-muted hover:bg-slate-200 dark:hover:bg-muted hover:text-foreground text-foreground"
-                    : "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
-                )}
-              >
-                REST API
-              </Button>
-              <Button
-                variant={apiDialogTab === "python" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setApiDialogTab("python")}
-                className={cn(
-                  "rounded-sm text-sm",
-                  apiDialogTab === "python"
-                    ? "shadow-sm bg-slate-200 dark:bg-muted hover:bg-slate-200 dark:hover:bg-muted hover:text-foreground text-foreground"
-                    : "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
-                )}
-              >
-                Python
-              </Button>
-              <Button
-                variant={apiDialogTab === "node" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setApiDialogTab("node")}
-                className={cn(
-                  "rounded-sm text-sm",
-                  apiDialogTab === "node"
-                    ? "shadow-sm bg-slate-200 dark:bg-muted hover:bg-slate-200 dark:hover:bg-muted hover:text-foreground text-foreground"
-                    : "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
-                )}
-              >
-                Node.js
-              </Button>
-            </div>
-
-            {/* Tab Content */}
-            {apiDialogTab === "rest" && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium">REST API Endpoint</h3>
-                  <Badge variant="outline" className="text-xs">POST</Badge>
-                </div>
-                <div className="rounded-md bg-muted p-3 overflow-x-auto">
-                  <code className="text-xs font-mono text-primary break-all">
-                    {getApiEndpoints().restUrl}
-                  </code>
-                </div>
-                <div className="space-y-3 mt-4">
-                  <h4 className="text-sm font-medium">Request Body</h4>
-                  <SyntaxHighlighter
-                    language="json"
-                    style={resolvedTheme === 'dark' ? materialOceanic : prism}
-                    customStyle={{
-                      fontSize: '0.75rem',
-                      borderRadius: '0.375rem',
-                      margin: 0,
-                      padding: '1rem',
-                    }}
-                    wrapLongLines={false}
-                    showLineNumbers={true}
-                  >
-{`{
-  "model_name": "${modelName}",
-  "model_settings": {
-    "temperature": ${modelSettings.temperature || 0.7},
-    "max_tokens": ${modelSettings.max_tokens || 1000},
-    "top_p": ${modelSettings.top_p || 1.0},
-    "frequency_penalty": ${modelSettings.frequency_penalty || 0},
-    "presence_penalty": ${modelSettings.presence_penalty || 0},
-    "search_type": "${modelSettings.search_type || 'vector'}"
-  },
-  "system_prompt": "${systemPrompt.replace(/"/g, '\\"')}",
-  "query": "Your search query here"
-}`}
-                  </SyntaxHighlighter>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Make a POST request to this endpoint with your search query in the body.
-                </p>
-              </div>
-            )}
-
-            {apiDialogTab === "python" && (
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium">Python Example</h3>
-                <div className="rounded-md overflow-hidden">
-                  <div className="relative">
-                    <SyntaxHighlighter
-                      language="python"
-                      style={resolvedTheme === 'dark' ? materialOceanic : prism}
-                      customStyle={{
-                        fontSize: '0.75rem',
-                        borderRadius: '0.375rem',
-                        margin: 0,
-                        padding: '1rem',
-                      }}
-                      wrapLongLines={false}
-                      showLineNumbers={true}
-                    >
-                      {getApiEndpoints().pythonSnippet}
-                    </SyntaxHighlighter>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="absolute top-2 right-2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                      onClick={() => handleCopyCode(getApiEndpoints().pythonSnippet, 'python')}
-                    >
-                      {copiedPython ?
-                        <Check className="h-4 w-4" /> :
-                        <Copy className="h-4 w-4" />
-                      }
-                    </Button>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Use this code snippet to call the search API with Python's requests library.
-                </p>
-              </div>
-            )}
-
-            {apiDialogTab === "node" && (
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium">Node.js Example</h3>
-                <div className="rounded-md overflow-hidden">
-                  <div className="relative">
-                    <SyntaxHighlighter
-                      language="javascript"
-                      style={resolvedTheme === 'dark' ? materialOceanic : prism}
-                      customStyle={{
-                        fontSize: '0.75rem',
-                        borderRadius: '0.375rem',
-                        margin: 0,
-                        padding: '1rem',
-                      }}
-                      wrapLongLines={false}
-                      showLineNumbers={true}
-                    >
-                      {getApiEndpoints().nodeSnippet}
-                    </SyntaxHighlighter>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="absolute top-2 right-2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                      onClick={() => handleCopyCode(getApiEndpoints().nodeSnippet, 'node')}
-                    >
-                      {copiedNode ?
-                        <Check className="h-4 w-4" /> :
-                        <Copy className="h-4 w-4" />
-                      }
-                    </Button>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Use this code snippet to call the search API with JavaScript's fetch API.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowApiDialog(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Use the ApiReferenceDialog component */}
+      <ApiReferenceDialog
+        open={showApiDialog}
+        onOpenChange={setShowApiDialog}
+        modelName={modelName}
+        modelSettings={modelSettings}
+        systemPrompt={systemPrompt}
+      />
 
       <div className="w-[350px] border-l bg-background">
         <div className="p-4 border-b flex items-center justify-between">
@@ -601,10 +308,10 @@ console.log(data);`;
               variant="ghost"
               size="icon"
               onClick={() => setShowApiDialog(true)}
-              className="h-8 w-8 text-muted-foreground hover:text-primary"
+              className="h-8 w-8 text-muted-foreground hover:text-primary border border-border/20 rounded-md"
               title="API Reference"
             >
-              <Code className="h-4 w-4" />
+              <Code className="h-8 w-8" />
             </Button>
             <Button
               variant="ghost"
@@ -612,9 +319,8 @@ console.log(data);`;
               onClick={() => setShowDeleteDialog(true)}
               className="h-8 w-8 text-muted-foreground hover:text-destructive"
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-6 w-6" />
             </Button>
-            <Settings2 className="h-4 w-4 text-muted-foreground" />
           </div>
         </div>
 

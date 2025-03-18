@@ -4,8 +4,10 @@ import { WhiteLabelForm } from "@/components/white-label/WhiteLabelForm";
 import { CodeSnippet } from "@/components/white-label/CodeSnippet";
 import { HowItWorksAccordion } from "@/components/white-label/HowItWorksAccordion";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 import { apiClient } from "@/lib/api";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 interface WhiteLabelData {
   id: string;
@@ -70,7 +72,18 @@ const CreateWhiteLabel = () => {
       <HowItWorksAccordion />
 
       <div className="space-y-8">
-        <WhiteLabelForm onSuccess={handleSuccess} />
+        {/* Form Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Integration Configuration</CardTitle>
+            <CardDescription>
+              Set up your white label integration details. These parameters will be used to generate your integration code.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <WhiteLabelForm onSuccess={handleSuccess} />
+          </CardContent>
+        </Card>
 
         {isLoading ? (
           <div className="flex items-center justify-center p-8">
@@ -78,30 +91,54 @@ const CreateWhiteLabel = () => {
           </div>
         ) : (
           <>
-            <CodeSnippet
-              whitelabelGuid={whiteLabel?.id}
-              frontendUrl={whiteLabel?.redirect_url}
-              clientId={whiteLabel?.client_id}
-              source={whiteLabel?.source_short_name}
-            />
+            {/* Code Snippet Card */}
+            <Card className={!whiteLabel?.id ? "opacity-50 pointer-events-none" : ""}>
+              <CardHeader>
+                <CardTitle>Integration Code</CardTitle>
+                <CardDescription>
+                  Copy these code snippets to implement the OAuth2 flow in your application.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CodeSnippet
+                  whitelabelGuid={whiteLabel?.id}
+                  frontendUrl={whiteLabel?.redirect_url}
+                  clientId={whiteLabel?.client_id}
+                  source={whiteLabel?.source_short_name}
+                />
+              </CardContent>
+            </Card>
 
-            <div className="mt-4">
-              <Button
-                onClick={initiateOAuth2Flow}
-                variant="secondary"
-                disabled={!whiteLabel?.id}
-                className={!whiteLabel?.id ? "opacity-50 cursor-not-allowed" : ""}
-              >
-                Try out now
-              </Button>
-            </div>
+            {/* Try Now Card */}
+            <Card className={!whiteLabel?.id ? "opacity-50 pointer-events-none" : ""}>
+              <CardHeader>
+                <CardTitle>Test Your Integration</CardTitle>
+                <CardDescription>
+                  Try out the OAuth2 flow with your new integration.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p>
+                  Click the button below to test the OAuth2 flow with your new integration.
+                  This will redirect you to the authentication page.
+                </p>
+                <Button
+                  onClick={initiateOAuth2Flow}
+                  disabled={!whiteLabel?.id}
+                  className="flex items-center gap-2"
+                >
+                  <span>Try OAuth2 Flow</span>
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
           </>
         )}
 
         {whiteLabel && (
-          <div className="flex gap-4">
+          <div className="flex gap-4 pt-4">
             <Button onClick={() => navigate(`/white-label/${whiteLabel.id}`)}>
-              Go to white label integration
+              Go to integration dashboard
             </Button>
             <Button onClick={() => navigate("/white-label")} variant="outline">
               Back to list
