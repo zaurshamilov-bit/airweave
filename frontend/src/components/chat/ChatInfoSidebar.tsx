@@ -16,6 +16,9 @@ import {
   Search,
   MessagesSquare,
   Info,
+  Code,
+  Copy,
+  Check,
 } from "lucide-react";
 import {
   Sheet,
@@ -56,6 +59,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { materialOceanic, prism } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 const AVAILABLE_MODELS = [
   { id: "gpt-4o", name: "GPT-4o" },
@@ -91,7 +96,10 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const navigate = useNavigate();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showApiDialog, setShowApiDialog] = useState(false);
   const { resolvedTheme } = useTheme();
+  const [copiedPython, setCopiedPython] = useState(false);
+  const [copiedNode, setCopiedNode] = useState(false);
 
   // Track if we're currently updating search type to prevent feedback loops
   const [isUpdatingSearchType, setIsUpdatingSearchType] = useState(false);
@@ -273,6 +281,102 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
     setSaveTimeout(timeout);
   };
 
+  // Function to build API URLs from settings
+  const getApiEndpoints = () => {
+    const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:8001' : window.location.origin;
+
+    // Common parameters for all endpoints
+    const params = new URLSearchParams();
+    params.append('model_name', modelName);
+    params.append('temperature', modelSettings.temperature?.toString() || '0.7');
+    params.append('max_tokens', modelSettings.max_tokens?.toString() || '1000');
+    params.append('top_p', modelSettings.top_p?.toString() || '1.0');
+    params.append('frequency_penalty', modelSettings.frequency_penalty?.toString() || '0');
+    params.append('presence_penalty', modelSettings.presence_penalty?.toString() || '0');
+    params.append('search_type', modelSettings.search_type || 'vector');
+
+    // System prompt (encoded for URL)
+    if (systemPrompt) {
+      params.append('system_prompt', systemPrompt);
+    }
+
+    // Build complete URLs
+    const restUrl = `${baseUrl}/api/v1/search?${params.toString()}`;
+
+    // Python snippet
+    const pythonSnippet = `import requests
+
+# Airweave Search API Request
+response = requests.post(
+    "${baseUrl}/api/v1/search",
+    json={
+        "model_name": "${modelName}",
+        "model_settings": {
+            "temperature": ${modelSettings.temperature || 0.7},
+            "max_tokens": ${modelSettings.max_tokens || 1000},
+            "top_p": ${modelSettings.top_p || 1.0},
+            "frequency_penalty": ${modelSettings.frequency_penalty || 0},
+            "presence_penalty": ${modelSettings.presence_penalty || 0},
+            "search_type": "${modelSettings.search_type || 'vector'}"
+        },
+        "system_prompt": """${systemPrompt}""",
+        "query": "Your search query here"
+    }
+)
+
+results = response.json()
+print(results)`;
+
+    // Node.js snippet
+    const nodeSnippet = `// Using fetch in Node.js
+const response = await fetch("${baseUrl}/api/v1/search", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    "model_name": "${modelName}",
+    "model_settings": {
+      "temperature": ${modelSettings.temperature || 0.7},
+      "max_tokens": ${modelSettings.max_tokens || 1000},
+      "top_p": ${modelSettings.top_p || 1.0},
+      "frequency_penalty": ${modelSettings.frequency_penalty || 0},
+      "presence_penalty": ${modelSettings.presence_penalty || 0},
+      "search_type": "${modelSettings.search_type || 'vector'}"
+    },
+    "system_prompt": \`${systemPrompt}\`,
+    "query": "Your search query here"
+  })
+});
+
+const data = await response.json();
+console.log(data);`;
+
+    return {
+      restUrl,
+      pythonSnippet,
+      nodeSnippet
+    };
+  };
+
+  // Function to handle copying code
+  const handleCopyCode = (code: string, type: 'python' | 'node') => {
+    navigator.clipboard.writeText(code);
+
+    if (type === 'python') {
+      setCopiedPython(true);
+      setTimeout(() => setCopiedPython(false), 1500);
+    } else {
+      setCopiedNode(true);
+      setTimeout(() => setCopiedNode(false), 1500);
+    }
+
+    toast({
+      title: "Copied to clipboard",
+      description: `${type === 'python' ? 'Python' : 'JavaScript'} code copied to clipboard`,
+    });
+  };
+
   return (
     <>
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -300,10 +404,124 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
         </DialogContent>
       </Dialog>
 
+      {/* API Dialog */}
+      <Dialog open={showApiDialog} onOpenChange={setShowApiDialog}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Search API Reference</DialogTitle>
+            <DialogDescription>
+              Use these endpoints to access this search functionality programmatically.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-4 max-h-[70vh] overflow-y-auto">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium">REST API Endpoint</h3>
+                <Badge variant="outline" className="text-xs">POST</Badge>
+              </div>
+              <div className="rounded-md bg-muted p-3 overflow-x-auto">
+                <code className="text-xs font-mono text-primary break-all">
+                  {getApiEndpoints().restUrl}
+                </code>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Make a POST request to this endpoint with your search query in the body.
+              </p>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Python Example</h3>
+              <div className="rounded-md overflow-hidden">
+                <div className="relative">
+                  <SyntaxHighlighter
+                    language="python"
+                    style={resolvedTheme === 'dark' ? materialOceanic : prism}
+                    customStyle={{
+                      fontSize: '0.75rem',
+                      borderRadius: '0.375rem',
+                      margin: 0,
+                      padding: '1rem',
+                    }}
+                    wrapLongLines={false}
+                    showLineNumbers={true}
+                  >
+                    {getApiEndpoints().pythonSnippet}
+                  </SyntaxHighlighter>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-2 right-2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => handleCopyCode(getApiEndpoints().pythonSnippet, 'python')}
+                  >
+                    {copiedPython ?
+                      <Check className="h-4 w-4" /> :
+                      <Copy className="h-4 w-4" />
+                    }
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Node.js Example</h3>
+              <div className="rounded-md overflow-hidden">
+                <div className="relative">
+                  <SyntaxHighlighter
+                    language="javascript"
+                    style={resolvedTheme === 'dark' ? materialOceanic : prism}
+                    customStyle={{
+                      fontSize: '0.75rem',
+                      borderRadius: '0.375rem',
+                      margin: 0,
+                      padding: '1rem',
+                    }}
+                    wrapLongLines={false}
+                    showLineNumbers={true}
+                  >
+                    {getApiEndpoints().nodeSnippet}
+                  </SyntaxHighlighter>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-2 right-2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => handleCopyCode(getApiEndpoints().nodeSnippet, 'node')}
+                  >
+                    {copiedNode ?
+                      <Check className="h-4 w-4" /> :
+                      <Copy className="h-4 w-4" />
+                    }
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowApiDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="w-[350px] border-l bg-background">
         <div className="p-4 border-b flex items-center justify-between">
           <h2 className="font-semibold">Chat Settings</h2>
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowApiDialog(true)}
+              className="h-8 w-8 text-muted-foreground hover:text-primary"
+              title="API Reference"
+            >
+              <Code className="h-4 w-4" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
