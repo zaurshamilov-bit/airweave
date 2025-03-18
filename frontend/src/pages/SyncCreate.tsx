@@ -201,7 +201,7 @@ const Sync = () => {
       }
 
       // First, update the sync status to active
-      const updateResp = await apiClient.put(`/sync/${syncId}`, {
+      const updateResp = await apiClient.patch(`/sync/${syncId}`, {
         status: "active"
       });
 
