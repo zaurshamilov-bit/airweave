@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core.exceptions import NotFoundException
-from airweave.platform.destinations.weaviate import WeaviateDestination
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.locator import resource_locator
 
@@ -44,43 +43,52 @@ class SearchService:
             if not sync:
                 raise NotFoundException("Sync not found")
 
-            # Get destination connection if specified, otherwise use default Weaviate
-            destination = None
-            if sync.destination_connection_id:
-                connection = await crud.connection.get(
-                    db, sync.destination_connection_id, current_user
-                )
-                if not connection:
-                    raise NotFoundException("Destination connection not found")
+            # Check if there are destination connections
+            if not sync.destination_connection_ids or len(sync.destination_connection_ids) == 0:
+                raise NotFoundException("No destination connections found for this sync")
 
-                destination_model = await crud.destination.get_by_short_name(
-                    db, connection.short_name
-                )
-                if not destination_model:
-                    raise NotFoundException("Destination not found")
+            # TODO: In the future, implement multi-destination search capability,
+            # e.g., neo4j + weaviate for GraphRAG.
+            # Currently, we only use the first destination for searching, but eventually
+            # we should support searching across all destinations and aggregating results
+            destination_connection_id = sync.destination_connection_ids[0]
 
-                # Get credentials
-                integration_credential = await crud.integration_credential.get(
-                    db,
-                    connection.integration_credential_id,
-                    current_user,
-                )
-                if not integration_credential:
-                    raise NotFoundException("Destination credentials not found")
+            # Get the destination connection
+            connection = await crud.connection.get(db, destination_connection_id, current_user)
+            if not connection:
+                raise NotFoundException("Destination connection not found")
 
-                # Initialize destination class
-                destination_class = resource_locator.get_destination(destination_model)
-                destination = await destination_class.create(
-                    sync_id=sync_id,
-                    embedding_model=LocalText2Vec(),  # Default model if none specified
-                )
+            # Get the destination model
+            destination_model = await crud.destination.get_by_short_name(db, connection.short_name)
+            if not destination_model:
+                raise NotFoundException("Destination not found")
 
-            # If no destination connection, use default Weaviate
-            if not destination:
-                destination = await WeaviateDestination.create(
-                    sync_id=sync_id,
-                    embedding_model=LocalText2Vec(),
-                )
+            # Check if this is a native connection
+            is_native = crud.connection._is_native_connection(connection)
+
+            # Get credentials if not a native connection
+            if not is_native:
+                if connection.integration_credential_id:
+                    integration_credential = await crud.integration_credential.get(
+                        db,
+                        connection.integration_credential_id,
+                        current_user,
+                    )
+                    if not integration_credential:
+                        raise NotFoundException("Destination credentials not found")
+                else:
+                    logger.warning(
+                        f"Non-native connection {connection.id} does not have "
+                        f"integration credentials, but will attempt to continue with search."
+                    )
+
+            # Initialize destination class
+            destination_class = resource_locator.get_destination(destination_model)
+            # TODO: Add a step to get the embedding model from the sync
+            destination = await destination_class.create(
+                sync_id=sync_id,
+                embedding_model=LocalText2Vec(),  # Default model
+            )
 
             # Perform search
             results = await destination.search_for_sync_id(

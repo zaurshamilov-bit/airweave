@@ -12,7 +12,6 @@ from airweave.core.exceptions import NotFoundException
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.auth.services import oauth2_service
 from airweave.platform.destinations._base import BaseDestination
-from airweave.platform.destinations.weaviate import WeaviateDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.entities._base import BaseEntity
@@ -27,7 +26,7 @@ class SyncContext:
 
     Contains all the necessary components for a sync:
     - source - the source instance
-    - destination - the destination instance (still assumes single destination)
+    - destinations - the destination instances
     - embedding model - the embedding model used for the sync
     - transformers - a dictionary of transformer callables
     - sync - the main sync object
@@ -39,7 +38,7 @@ class SyncContext:
     """
 
     source: BaseSource
-    destination: BaseDestination  # still assumes single destination
+    destinations: list[BaseDestination]
     embedding_model: BaseEmbeddingModel
     transformers: dict[str, callable]
     sync: schemas.Sync
@@ -54,7 +53,7 @@ class SyncContext:
     def __init__(
         self,
         source: BaseSource,
-        destination: BaseDestination,  # still assumes single destination
+        destinations: list[BaseDestination],
         embedding_model: BaseEmbeddingModel,
         transformers: dict[str, callable],
         sync: schemas.Sync,
@@ -67,7 +66,7 @@ class SyncContext:
     ):
         """Initialize the sync context."""
         self.source = source
-        self.destination = destination
+        self.destinations = destinations
         self.embedding_model = embedding_model
         self.transformers = transformers
         self.sync = sync
@@ -93,18 +92,20 @@ class SyncContextFactory:
         white_label: Optional[schemas.WhiteLabel] = None,
     ) -> SyncContext:
         """Create a sync context."""
-        source = await cls._create_source_instance(db, sync, current_user)
-        embedding_model = cls._get_embedding_model(sync)
-        destination = await cls._create_destination_instance(sync, embedding_model)
-        transformers = await cls._get_transformer_callables(db, sync)
-        entity_map = await cls._get_entity_definition_map(db)
+        source = await cls._create_source_instance(db=db, sync=sync, current_user=current_user)
+        embedding_model = cls._get_embedding_model(sync=sync)
+        destinations = await cls._create_destination_instances(
+            db=db, sync=sync, embedding_model=embedding_model, current_user=current_user
+        )
+        transformers = await cls._get_transformer_callables(db=db, sync=sync)
+        entity_map = await cls._get_entity_definition_map(db=db)
 
         progress = SyncProgress(sync_job.id)
         router = SyncDAGRouter(dag, entity_map)
 
         return SyncContext(
             source=source,
-            destination=destination,
+            destinations=destinations,
             embedding_model=embedding_model,
             transformers=transformers,
             sync=sync,
@@ -231,15 +232,52 @@ class SyncContextFactory:
         return LocalText2Vec()  # TODO: Handle other embedding models
 
     @classmethod
-    async def _create_destination_instance(
-        cls, sync: schemas.Sync, embedding_model: BaseEmbeddingModel
-    ) -> BaseDestination:
-        """Create destination instance."""
-        if not sync.destination_connection_id:
-            return await WeaviateDestination.create(sync.id, embedding_model)
-        return await WeaviateDestination.create(
-            sync.id, embedding_model
-        )  # TODO: Handle other destinations
+    async def _create_destination_instances(
+        cls,
+        db: AsyncSession,
+        sync: schemas.Sync,
+        embedding_model: BaseEmbeddingModel,
+        current_user: schemas.User,
+    ) -> list[BaseDestination]:
+        """Create destination instances.
+
+        Args:
+        -----
+            db (AsyncSession): The database session
+            sync (schemas.Sync): The sync object
+            embedding_model (BaseEmbeddingModel): The embedding model instance
+            current_user (schemas.User): The current user
+
+        Returns:
+        --------
+            list[BaseDestination]: A list of destination instances
+        """
+        destinations = []
+        for destination_connection_id in sync.destination_connection_ids:
+            destination_connection = await crud.connection.get(
+                db, destination_connection_id, current_user
+            )
+            if not destination_connection:
+                raise NotFoundException(
+                    (
+                        f"Destination connection not found for user {current_user.email}"
+                        f" and connection id {destination_connection_id}"
+                    )
+                )
+            destination_model = await crud.destination.get_by_short_name(
+                db, destination_connection.short_name
+            )
+            destination_schema = schemas.Destination.model_validate(destination_model)
+            if not destination_model:
+                raise NotFoundException(
+                    f"Destination not found for connection {destination_connection.short_name}"
+                )
+            destinations.append(
+                await resource_locator.get_destination(destination_schema).create(
+                    sync.id, embedding_model
+                )
+            )
+        return destinations
 
     @classmethod
     async def _get_transformer_callables(

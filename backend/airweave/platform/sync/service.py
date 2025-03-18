@@ -17,11 +17,27 @@ class SyncService:
     async def create(
         self,
         db: AsyncSession,
-        sync: schemas.Sync,
+        sync: schemas.SyncCreate,
         current_user: schemas.User,
         uow: UnitOfWork,
     ) -> schemas.Sync:
-        """Create a new sync."""
+        """Create a new sync.
+
+        This function creates a new sync and then creates the initial DAG for it. It uses an
+        externally scoped unit of work to ensure that the sync and DAG are created in a single
+        transaction, with rollback on error.
+
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            sync (schemas.SyncCreate): The sync to create.
+            current_user (schemas.User): The current user.
+            uow (UnitOfWork): The unit of work.
+
+        Returns:
+        -------
+            schemas.Sync: The created sync.
+        """
         sync = await crud.sync.create(db=db, obj_in=sync, current_user=current_user, uow=uow)
         await uow.session.flush()
         await dag_service.create_initial_dag(
@@ -36,7 +52,19 @@ class SyncService:
         dag: schemas.SyncDag,
         current_user: schemas.User,
     ) -> schemas.Sync:
-        """Run a sync."""
+        """Run a sync.
+
+        Args:
+        ----
+            sync (schemas.Sync): The sync to run.
+            sync_job (schemas.SyncJob): The sync job to run.
+            dag (schemas.SyncDag): The DAG to run.
+            current_user (schemas.User): The current user.
+
+        Returns:
+        -------
+            schemas.Sync: The sync.
+        """
         try:
             async with get_db_context() as db:
                 sync_context = await SyncContextFactory.create(

@@ -7,6 +7,8 @@ import uuid
 import pytest
 import requests
 
+from airweave.core.constants.native_connections import NATIVE_TEXT2VEC_UUID
+
 
 @pytest.fixture
 def source_connection_data():
@@ -29,8 +31,10 @@ def sync_data():
         "name": f"Test Sync {uuid.uuid4()}",
         "description": "Test sync created by E2E test",
         "source_connection_id": None,  # Will be created during test
-        "destination_connection_id": None,  # Will use default destination
-        "embedding_model_connection_id": None,  # Will use default embedding model
+        "destination_connection_ids": [],  # Will be populated during test
+        "embedding_model_connection_id": str(
+            NATIVE_TEXT2VEC_UUID
+        ),  # Use the default native embedding model
         "run_immediately": False,
         "schedule": None,
     }
@@ -47,7 +51,7 @@ def test_sync_operations(e2e_environment, e2e_api_url, source_connection_data, s
     5. Gets the sync DAG
     6. Deletes the sync
     """
-    # Step 1: Create a new integration credential
+    # Step 1: Create a source connection
     create_connection_response = requests.post(
         f"{e2e_api_url}/connections/connect/source/stripe", json=source_connection_data
     )
@@ -70,6 +74,8 @@ def test_sync_operations(e2e_environment, e2e_api_url, source_connection_data, s
     assert sync["name"] == sync_data["name"]
     assert sync["description"] == sync_data["description"]
     assert sync["source_connection_id"] == sync_data["source_connection_id"]
+    assert "destination_connection_ids" in sync
+    assert isinstance(sync["destination_connection_ids"], list)
 
     # Step 4: Retrieve the sync
     get_response = requests.get(f"{e2e_api_url}/sync/{sync_id}")
@@ -77,6 +83,8 @@ def test_sync_operations(e2e_environment, e2e_api_url, source_connection_data, s
     retrieved_sync = get_response.json()
     assert retrieved_sync["id"] == sync_id
     assert retrieved_sync["name"] == sync_data["name"]
+    assert "destination_connection_ids" in retrieved_sync
+    assert isinstance(retrieved_sync["destination_connection_ids"], list)
 
     # Step 5: Run a sync job
     run_sync_response = requests.post(f"{e2e_api_url}/sync/{sync_id}/run")
@@ -116,6 +124,9 @@ def test_sync_operations(e2e_environment, e2e_api_url, source_connection_data, s
     # Step 8: Delete the sync
     delete_response = requests.delete(f"{e2e_api_url}/sync/{sync_id}")
     assert delete_response.status_code == 200, f"Failed to delete sync: {delete_response.text}"
+
+    # Give the system time to process the deletion
+    time.sleep(2)
 
     # Step 9: Verify the sync is gone
     get_after_delete_response = requests.get(f"{e2e_api_url}/sync/{sync_id}")

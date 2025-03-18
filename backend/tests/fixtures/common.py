@@ -35,7 +35,7 @@ def mock_sync():
         name="Test Sync",
         description="Test description",
         source_connection_id=uuid.uuid4(),
-        destination_id=uuid.uuid4(),
+        destination_connection_ids=[uuid.uuid4()],
         user_id=uuid.uuid4(),
         tenant_id=uuid.uuid4(),
         created_at="2023-01-01T00:00:00",
