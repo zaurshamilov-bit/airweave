@@ -98,7 +98,9 @@ class PlatformScheduler:
 
                     # Update the sync
                     current_user = await crud.user.get_by_email(db, email=sync.created_by_email)
-                    db_sync = await crud.sync.get(db, id=sync.id, current_user=current_user)
+                    db_sync = await crud.sync.get(
+                        db, id=sync.id, current_user=current_user, with_connections=False
+                    )
                     if not db_sync:
                         raise ValueError(f"Could not find sync {sync.id} in database")
                     await crud.sync.update(

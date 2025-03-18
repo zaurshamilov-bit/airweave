@@ -53,7 +53,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
 
         if with_connections:
             # Enrich the sync with all its connections
-            sync = await self.enrich_sync_with_connections(db, sync=sync, current_user=current_user)
+            sync = await self.enrich_sync_with_connections(db, sync=sync)
 
         # Validate user permissions
         self._validate_if_user_has_permission(
