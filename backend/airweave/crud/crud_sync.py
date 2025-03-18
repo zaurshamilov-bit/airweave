@@ -89,9 +89,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
 
         # Enrich the syncs with their connections if requested
         if with_connections:
-            syncs = [
-                await self.enrich_sync_with_connections(db, sync, current_user) for sync in syncs
-            ]
+            syncs = [await self.enrich_sync_with_connections(db, sync) for sync in syncs]
         return syncs
 
     async def enrich_sync_with_connections(

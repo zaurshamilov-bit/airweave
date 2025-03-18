@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast, useToast } from "@/components/ui/use-toast";
 import { VectorDBSelector } from "@/components/VectorDBSelector";
 import { SyncProgress } from "@/components/sync/SyncProgress";
@@ -47,6 +47,9 @@ const Sync = () => {
   // Hook for showing user feedback toasts
   const { toast } = useToast();
   const location = useLocation();
+
+  // Add navigate hook
+  const navigate = useNavigate();
 
   // Subscribe to SSE updates whenever syncJobId is set
   // 'updates' returns an array of progress updates
@@ -148,7 +151,7 @@ const Sync = () => {
       const syncResp = await apiClient.post("/sync/", {
         name: "Sync from UI",
         source_connection_id: selectedSource.connectionId,
-        destination_connection_ids: dbDetails.isNative 
+        destination_connection_ids: dbDetails.isNative
           ? [NATIVE_WEAVIATE_UUID] // Use constant for Native Weaviate UUID
           : [dbDetails.connectionId],
         embedding_model_connection_id: NATIVE_TEXT2VEC_UUID, // Use constant for Text2Vec UUID
@@ -224,7 +227,9 @@ const Sync = () => {
       }
       const data = await resp.json();
       setSyncJobId(data.id);
-      setStep(4);
+
+      // Navigate to the sync view instead of showing step 4
+      navigate(`/sync/${syncId}`);
     } catch (err: any) {
       toast({
         variant: "destructive",
