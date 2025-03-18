@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
 
 interface ReasoningIndicatorProps {
   isVisible: boolean;
@@ -13,6 +14,31 @@ const reasoningSteps = [
   "Analyzing the most relevant information.",
   "Preparing a comprehensive response."
 ];
+
+function PulsingText({ text, isTransitioning }: { text: string; isTransitioning: boolean }) {
+  return (
+    <div className={cn(
+      "text-sm transition-opacity duration-300 ease-in-out flex flex-wrap",
+      isTransitioning ? "opacity-0" : "opacity-100"
+    )}>
+      {text.split('').map((char, index) => (
+        <span
+          key={index}
+          style={{
+            animationDelay: `${index * 50}ms`,
+            opacity: Math.max(0.2, Math.min(1, index === 0 ? 0.2 : 0.2 + (index / (text.length)) * 0.8)),
+            display: 'inline-block',
+            width: char === ' ' ? '0.25em' : 'auto',
+            transition: 'opacity 0.5s ease-in-out',
+            animation: 'pulse 2s infinite',
+          }}
+        >
+          {char === ' ' ? '\u00A0' : char}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export function ReasoningIndicator({ isVisible }: ReasoningIndicatorProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -40,27 +66,13 @@ export function ReasoningIndicator({ isVisible }: ReasoningIndicatorProps) {
   if (!isVisible) return null;
 
   return (
-    <div className="flex justify-start mb-4">
+    <div className="flex justify-start mb-2">
       <div
-        className={cn(
-          "bg-muted/80 border border-border/70 rounded-lg p-4 max-w-[80%] relative",
-          "before:content-[''] before:absolute before:left-[-6px] before:top-[calc(50%-6px)] before:w-3 before:h-3 before:rotate-45 before:bg-muted/80 before:border-l before:border-b before:border-border/70"
-        )}
+        className="bg-none border border-border/70 rounded-lg p-4 max-w-[80%]"
       >
         <div className="flex items-center space-x-2">
-          <div className="flex space-x-1">
-            <div className="w-1.5 h-1.5 bg-foreground/60 rounded-full animate-pulse"></div>
-            <div className="w-1.5 h-1.5 bg-foreground/60 rounded-full animate-pulse delay-150"></div>
-            <div className="w-1.5 h-1.5 bg-foreground/60 rounded-full animate-pulse delay-300"></div>
-          </div>
-          <div
-            className={cn(
-              "text-sm text-foreground/90 transition-opacity duration-300 ease-in-out",
-              isTransitioning ? "opacity-0" : "opacity-100"
-            )}
-          >
-            {displayedStep}
-          </div>
+          <Loader2 className="h-4 w-4 animate-spin text-foreground/60" />
+          <PulsingText text={displayedStep} isTransitioning={isTransitioning} />
         </div>
       </div>
     </div>
