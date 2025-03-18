@@ -342,7 +342,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              <div className="rounded-lg border p-3">
+              <div className="rounded-lg border p-2">
                 <Textarea
                   value={systemPrompt}
                   onChange={(e) => handleSystemPromptChange(e.target.value)}
@@ -357,14 +357,14 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                 <div>
                   <h3 className="text-sm font-medium text-muted-foreground">SEARCH SETTINGS</h3>
 
-                  <div className="space-y-4 mt-4">
+                  <div className="space-y-4">
                     {/* Custom search type selector using radio buttons to avoid resets */}
                     <div className="space-y-2">
                       <Label className="text-xs text-muted-foreground">Search Type</Label>
 
                       <div className="space-y-2 mt-2">
                         <div
-                          className={`border p-2 rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground ${modelSettings.search_type === 'hybrid' ? 'bg-primary text-primary-foreground' : ''}`}
+                          className={`border p-2 rounded-md cursor-pointer hover:bg-primary/50 hover:text-accent-foreground transition-colors duration-200 ${modelSettings.search_type === 'hybrid' ? 'bg-primary/50 text-primary-foreground' : ''}`}
                           onClick={() => handleSearchTypeChange('hybrid')}
                         >
                           <div className="flex items-center gap-2">
@@ -378,7 +378,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                           <div className="text-xs">Combine vector and graph search for comprehensive results</div>
                         </div>
                         <div
-                          className={`border p-2 rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground ${modelSettings.search_type === 'vector' ? 'bg-primary text-primary-foreground' : ''}`}
+                          className={`border p-2 rounded-md cursor-pointer hover:bg-primary/50 hover:text-accent-foreground transition-colors duration-200 ${modelSettings.search_type === 'vector' ? 'bg-primary/50 text-primary-foreground' : ''}`}
                           onClick={() => handleSearchTypeChange('vector')}
                         >
                           <div className="flex items-center gap-2">
@@ -389,7 +389,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                         </div>
 
                         <div
-                          className={`border p-2 rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground ${modelSettings.search_type === 'graph' ? 'bg-primary text-primary-foreground' : ''}`}
+                          className={`border p-2 rounded-md cursor-pointer hover:bg-primary/50 hover:text-accent-foreground transition-colors duration-200 ${modelSettings.search_type === 'graph' ? 'bg-primary/50 text-primary-foreground' : ''}`}
                           onClick={() => handleSearchTypeChange('graph')}
                         >
                           <div className="flex items-center gap-2">
