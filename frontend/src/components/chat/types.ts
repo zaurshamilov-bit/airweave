@@ -65,11 +65,12 @@ export interface ChatInfo {
   model_settings: ModelSettings;
   sync_id: string;
   sync?: Sync;
+  system_prompt?: string;
 }
 
 export interface ChatInfoSidebarProps {
   chatInfo: ChatInfo;
-  onUpdateSettings: (settings: Partial<ModelSettings>) => Promise<void>;
+  onUpdateSettings: (settings: Partial<ChatInfo>) => Promise<void>;
   className?: string;
 }
 

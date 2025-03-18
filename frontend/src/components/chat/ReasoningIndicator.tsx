@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Loader2 } from 'lucide-react';
 
 interface ReasoningIndicatorProps {
   isVisible: boolean;
@@ -44,14 +43,19 @@ export function ReasoningIndicator({ isVisible }: ReasoningIndicatorProps) {
     <div className="flex justify-start mb-4">
       <div
         className={cn(
-          "border border-border/30 rounded-lg p-4 max-w-[80%] bg-transparent"
+          "bg-muted/80 border border-border/70 rounded-lg p-4 max-w-[80%] relative",
+          "before:content-[''] before:absolute before:left-[-6px] before:top-[calc(50%-6px)] before:w-3 before:h-3 before:rotate-45 before:bg-muted/80 before:border-l before:border-b before:border-border/70"
         )}
       >
         <div className="flex items-center space-x-2">
-          <Loader2 className="h-4 w-4 text-foreground/70 animate-spin" />
+          <div className="flex space-x-1">
+            <div className="w-1.5 h-1.5 bg-foreground/60 rounded-full animate-pulse"></div>
+            <div className="w-1.5 h-1.5 bg-foreground/60 rounded-full animate-pulse delay-150"></div>
+            <div className="w-1.5 h-1.5 bg-foreground/60 rounded-full animate-pulse delay-300"></div>
+          </div>
           <div
             className={cn(
-              "text-sm text-foreground/90 transition-opacity duration-300 ease-in-out animate-pulse",
+              "text-sm text-foreground/90 transition-opacity duration-300 ease-in-out",
               isTransitioning ? "opacity-0" : "opacity-100"
             )}
           >

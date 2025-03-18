@@ -14,6 +14,8 @@ import {
   Waypoints,
   MoveUpRight,
   Search,
+  MessagesSquare,
+  Info,
 } from "lucide-react";
 import {
   Sheet,
@@ -47,6 +49,13 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { useTheme } from "@/lib/theme-provider";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const AVAILABLE_MODELS = [
   { id: "gpt-4o", name: "GPT-4o" },
@@ -75,6 +84,9 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
     return chatInfo.model_settings;
   });
   const [modelName, setModelName] = useState<string>(chatInfo.model_name);
+  const [systemPrompt, setSystemPrompt] = useState<string>(
+    chatInfo.system_prompt || "You are a helpful assistant that assists the user in finding information across their data sources."
+  );
   const { toast } = useToast();
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const navigate = useNavigate();
@@ -99,6 +111,13 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
       setModelName(chatInfo.model_name);
     }
   }, [chatInfo.model_settings, chatInfo.model_name, isUpdatingSearchType]);
+
+  // New useEffect to update system prompt when chatInfo changes
+  useEffect(() => {
+    if (chatInfo.system_prompt) {
+      setSystemPrompt(chatInfo.system_prompt);
+    }
+  }, [chatInfo.system_prompt]);
 
   const handleModelChange = async (newModelName: string) => {
     setModelName(newModelName);
@@ -225,6 +244,35 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
     }
   };
 
+  // Add system prompt handler
+  const handleSystemPromptChange = (value: string) => {
+    setSystemPrompt(value);
+
+    // Clear existing timeout
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+    }
+
+    // Set a new timeout to save the system prompt
+    const timeout = setTimeout(async () => {
+      try {
+        await onUpdateSettings({ system_prompt: value } as any);
+        toast({
+          title: "System prompt saved",
+          description: "Your changes have been saved.",
+        });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to save system prompt",
+          variant: "destructive",
+        });
+      }
+    }, 1000);
+
+    setSaveTimeout(timeout);
+  };
+
   return (
     <>
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -252,8 +300,6 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
         </DialogContent>
       </Dialog>
 
-
-
       <div className="w-[350px] border-l bg-background">
         <div className="p-4 border-b flex items-center justify-between">
           <h2 className="font-semibold">Chat Settings</h2>
@@ -273,7 +319,110 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
         <ScrollArea className="h-[calc(100vh-65px)]">
           <div className="p-4 space-y-6">
 
+            {/* System Prompt Section */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1">
+                <h3 className="text-sm font-medium text-muted-foreground">SYSTEM PROMPT</h3>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center"
+                        aria-label="System prompt information"
+                      >
+                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Customize instructions for the AI to better assist searching your data.</p>
+                      <p>You can add context about where your information is stored or how it's organized.</p>
+                      <p>Read more about it in the <a href="https://docs.google.com/document/d/1-_90000000000000000000000000000000000000000/edit?tab=t.0" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600">docs</a>.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <div className="rounded-lg border p-3">
+                <Textarea
+                  value={systemPrompt}
+                  onChange={(e) => handleSystemPromptChange(e.target.value)}
+                  placeholder="Enter system instructions for the AI..."
+                  className="min-h-[120px] text-sm border-none focus-visible:ring-0 p-0"
+                />
+              </div>
+            </div>
 
+              {/* Search Settings */}
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">SEARCH SETTINGS</h3>
+
+                  <div className="space-y-4 mt-4">
+                    {/* Custom search type selector using radio buttons to avoid resets */}
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Search Type</Label>
+
+                      <div className="space-y-2 mt-2">
+                        <div
+                          className={`border p-2 rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground ${modelSettings.search_type === 'hybrid' ? 'bg-primary text-primary-foreground' : ''}`}
+                          onClick={() => handleSearchTypeChange('hybrid')}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center">
+                              <Waypoints className="h-4 w-4" />
+                              <span className="ml-1 text-xs font-bold">+</span>
+                              <MoveUpRight className="h-4 w-4" />
+                            </div>
+                            <div className="font-medium">Hybrid Search</div>
+                          </div>
+                          <div className="text-xs">Combine vector and graph search for comprehensive results</div>
+                        </div>
+                        <div
+                          className={`border p-2 rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground ${modelSettings.search_type === 'vector' ? 'bg-primary text-primary-foreground' : ''}`}
+                          onClick={() => handleSearchTypeChange('vector')}
+                        >
+                          <div className="flex items-center gap-2">
+                            <MoveUpRight className="h-4 w-4" />
+                            <div className="font-medium">Vector Search</div>
+                          </div>
+                          <div className="text-xs">Search using embeddings for semantic similarity</div>
+                        </div>
+
+                        <div
+                          className={`border p-2 rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground ${modelSettings.search_type === 'graph' ? 'bg-primary text-primary-foreground' : ''}`}
+                          onClick={() => handleSearchTypeChange('graph')}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Waypoints className="h-4 w-4" />
+                            <div className="font-medium">Graph Search</div>
+                          </div>
+                          <div className="text-xs">Search using graph relationships between entities</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Show info for graph search if selected but not available */}
+                    {modelSettings.search_type === "graph" && (
+                      <div className="rounded-md p-2 text-xs text-muted-foreground bg-background/50">
+                        <p>
+                          <strong>Note:</strong> Graph search requires a properly configured Neo4j instance.
+                          If unavailable, results may fall back to vector search.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Show info for hybrid search if selected */}
+                    {modelSettings.search_type === "hybrid" && (
+                      <div className=" rounded-md p-2 text-xs text-muted-foreground bg-background/50">
+                        <p>
+                          <strong>Note:</strong> Hybrid search combines results from both vector and graph search.
+                          Both Weaviate and Neo4j must be configured for optimal results.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             {/* Chat Details Section */}
             <div className="space-y-4">
               <div className="space-y-2">
@@ -295,6 +444,7 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                   )}
                 </div>
               </div>
+
 
               {/* Data Connection Section */}
               {chatInfo.sync && (
@@ -407,81 +557,6 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
                   </div>
                 </div>
               )}
-                            {/* Search Settings */}
-              <div className="space-y-6">
-                <div>
-                  <div className="flex items-center">
-                    <Search className="mr-2 h-4 w-4" />
-                    <h3 className="text-sm font-medium">Search Settings</h3>
-                  </div>
-                  <Separator className="my-2" />
-
-                  <div className="space-y-4 mt-4">
-                    {/* Custom search type selector using radio buttons to avoid resets */}
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Search Type</Label>
-
-                      <div className="space-y-2 mt-2">
-                        <div
-                          className={`border p-2 rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground ${modelSettings.search_type === 'hybrid' ? 'bg-primary text-primary-foreground' : ''}`}
-                          onClick={() => handleSearchTypeChange('hybrid')}
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center">
-                              <Waypoints className="h-4 w-4" />
-                              <span className="ml-1 text-xs font-bold">+</span>
-                              <MoveUpRight className="h-4 w-4" />
-                            </div>
-                            <div className="font-medium">Hybrid Search</div>
-                          </div>
-                          <div className="text-xs">Combine vector and graph search for comprehensive results</div>
-                        </div>
-                        <div
-                          className={`border p-2 rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground ${modelSettings.search_type === 'vector' ? 'bg-primary text-primary-foreground' : ''}`}
-                          onClick={() => handleSearchTypeChange('vector')}
-                        >
-                          <div className="flex items-center gap-2">
-                            <MoveUpRight className="h-4 w-4" />
-                            <div className="font-medium">Vector Search</div>
-                          </div>
-                          <div className="text-xs">Search using embeddings for semantic similarity</div>
-                        </div>
-
-                        <div
-                          className={`border p-2 rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground ${modelSettings.search_type === 'graph' ? 'bg-primary text-primary-foreground' : ''}`}
-                          onClick={() => handleSearchTypeChange('graph')}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Waypoints className="h-4 w-4" />
-                            <div className="font-medium">Graph Search</div>
-                          </div>
-                          <div className="text-xs">Search using graph relationships between entities</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Show info for graph search if selected but not available */}
-                    {modelSettings.search_type === "graph" && (
-                      <div className="bg-yellow-50 rounded p-2 text-xs text-yellow-800">
-                        <p>
-                          <strong>Note:</strong> Graph search requires a properly configured Neo4j instance.
-                          If unavailable, results may fall back to vector search.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Show info for hybrid search if selected */}
-                    {modelSettings.search_type === "hybrid" && (
-                      <div className="bg-blue-50 rounded p-2 text-xs text-blue-800">
-                        <p>
-                          <strong>Note:</strong> Hybrid search combines results from both vector and graph search.
-                          Both Weaviate and Neo4j must be configured for optimal results.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
 
               {/* Model Settings Section */}
               <div className="space-y-2">
