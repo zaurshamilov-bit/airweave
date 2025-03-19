@@ -32,7 +32,7 @@ def test_source_connection_operations(e2e_environment, e2e_api_url, source_conne
     # Step 1: Create a new source connection using the connect endpoint
     # This will also create the integration credential internally
     integration_type = "source"
-    short_name = "clickup"
+    short_name = "stripe"
 
     create_connection_response = requests.post(
         f"{e2e_api_url}/connections/connect/{integration_type}/{short_name}",
