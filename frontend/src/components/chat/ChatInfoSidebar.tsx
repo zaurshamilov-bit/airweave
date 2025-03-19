@@ -71,7 +71,11 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
       };
     }
 
-    return chatInfo.model_settings;
+    // Default to "hybrid" if no valid search type is found
+    return {
+      ...chatInfo.model_settings,
+      search_type: chatInfo.model_settings.search_type || "hybrid"
+    };
   });
   const [modelName, setModelName] = useState<string>(chatInfo.model_name);
   const [systemPrompt, setSystemPrompt] = useState<string>(
@@ -95,8 +99,8 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
 
       setModelSettings(prev => ({
         ...chatInfo.model_settings,
-        // Preserve our locally selected search type if it exists
-        search_type: currentSearchType || chatInfo.model_settings.search_type || "vector"
+        // Preserve our locally selected search type if it exists, default to hybrid
+        search_type: currentSearchType || chatInfo.model_settings.search_type || "hybrid"
       }));
 
       setModelName(chatInfo.model_name);

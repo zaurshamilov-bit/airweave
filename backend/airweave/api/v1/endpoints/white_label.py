@@ -282,4 +282,5 @@ async def list_white_label_syncs(
     --------
         list[schemas.Sync]: A list of syncs
     """
-    return await crud.sync.get_all_for_white_label(db, white_label_id, current_user)
+    result = await crud.sync.get_all_for_white_label(db, white_label_id, current_user)
+    return [schemas.Sync.model_validate(sync) for sync in result]
