@@ -9,9 +9,8 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Check, CirclePlus, Database, X } from "lucide-react";
+import { Loader2, Check, CirclePlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
 
 import { useToast } from "@/components/ui/use-toast";
 import { getDestinationIconUrl } from "@/lib/utils/icons";
@@ -53,10 +52,7 @@ interface ConnectionSelection {
 }
 
 interface DestinationSelectorProps {
-  onComplete: (
-    selections: ConnectionSelection[],
-    metadata: { name: string; shortName: string }[]
-  ) => void;
+  onComplete: (details: ConnectionSelection, metadata: { name: string; shortName: string }) => void;
 }
 
 interface DestinationDetails {
@@ -89,28 +85,6 @@ export const DestinationSelector = ({ onComplete }: DestinationSelectorProps) =>
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
   const [configFields, setConfigFields] = useState<ConfigField[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
-  // Initialize with both native instances selected
-  const [selectedConnections, setSelectedConnections] = useState<
-    {
-      connectionId: string;
-      isNative?: boolean;
-      name: string;
-      shortName: string;
-    }[]
-  >([
-    {
-      connectionId: "native",
-      isNative: true,
-      name: "Native Weaviate",
-      shortName: "weaviate_native"
-    },
-    {
-      connectionId: "neo4j_native",
-      isNative: true,
-      name: "Native Neo4j",
-      shortName: "neo4j_native"
-    }
-  ]);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -169,29 +143,20 @@ export const DestinationSelector = ({ onComplete }: DestinationSelectorProps) =>
   };
 
   /**
-   * Submit the final selection
+   * Submit the final selection - keeping the same API signature as before
    */
   const handleSubmitSelections = () => {
-    if (selectedConnections.length === 0) {
-      toast({
-        title: "No destinations selected",
-        description: "Please select at least one destination",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const selections = selectedConnections.map(sc => ({
-      connectionId: sc.connectionId,
-      isNative: sc.isNative
-    }));
-
-    const metadata = selectedConnections.map(sc => ({
-      name: sc.name,
-      shortName: sc.shortName
-    }));
-
-    onComplete(selections, metadata);
+    // Only use Native Weaviate
+    onComplete(
+      {
+        connectionId: "native",
+        isNative: true
+      },
+      {
+        name: "Native Weaviate",
+        shortName: "weaviate_native"
+      }
+    );
   };
 
   /**
@@ -243,7 +208,7 @@ export const DestinationSelector = ({ onComplete }: DestinationSelectorProps) =>
   const renderNativeInstances = () => {
     return (
       <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
-        {/* Weaviate Native - Pre-selected */}
+        {/* Weaviate Native - Actually selected */}
         <Card
           className="flex flex-col justify-between border-primary border-2 bg-gradient-to-br from-background to-muted/50"
         >
@@ -279,7 +244,7 @@ export const DestinationSelector = ({ onComplete }: DestinationSelectorProps) =>
           </CardFooter>
         </Card>
 
-        {/* Neo4j Native - Pre-selected */}
+        {/* Neo4j Native - Visually selected but not in state */}
         <Card
           className="flex flex-col justify-between border-primary border-2 bg-gradient-to-br from-background to-muted/50"
         >
@@ -478,28 +443,14 @@ export const DestinationSelector = ({ onComplete }: DestinationSelectorProps) =>
 
   return (
     <div className="space-y-8">
-      {/* Selection summary - simple banner showing what's selected */}
-      <div className="bg-background border border-border p-4 rounded-lg">
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="font-semibold mb-2">Selected Destinations ({selectedConnections.length})</h3>
-            <div className="flex flex-wrap gap-2">
-              {selectedConnections.map((conn, idx) => (
-                <Badge key={idx} variant="secondary" className="text-sm">
-                  {conn.name}
-                </Badge>
-              ))}
-            </div>
-          </div>
-          <Button onClick={handleSubmitSelections}>
-            Continue with Selected Destinations
-          </Button>
-        </div>
-      </div>
-
       {/* Native instances at top */}
       <div>
-        <h2 className="text-xl font-bold mb-4">Native Databases</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold">Native Databases</h2>
+          <Button size="lg" onClick={handleSubmitSelections}>
+            Continue
+          </Button>
+        </div>
         {renderNativeInstances()}
       </div>
 
