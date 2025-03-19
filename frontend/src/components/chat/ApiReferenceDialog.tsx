@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Terminal, Copy, Check } from "lucide-react";
+import { Terminal, Copy, Check, Sparkles } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -46,9 +46,10 @@ export function ApiReferenceDialog({
   modelSettings,
   systemPrompt,
 }: ApiReferenceDialogProps) {
-  const [apiDialogTab, setApiDialogTab] = useState<"rest" | "python" | "node">("rest");
+  const [apiDialogTab, setApiDialogTab] = useState<"rest" | "python" | "node" | "mcp">("rest");
   const [copiedPython, setCopiedPython] = useState(false);
   const [copiedNode, setCopiedNode] = useState(false);
+  const [copiedMcp, setCopiedMcp] = useState(false);
   const { toast } = useToast();
 
   // Function to build API URLs from settings
@@ -105,28 +106,66 @@ fetch(url, {
   .then(data => console.log(data))
   .catch(error => console.error('Error:', error));`;
 
+    // Create the MCP code (Model Context Protocol)
+    const mcpSnippet =
+`import { MCPClient } from "@mcp/client";
+
+// Initialize the MCP client with your Airweave endpoint
+const client = new MCPClient({
+  endpoint: "${apiUrl}",
+  version: "0.1.0-beta"
+});
+
+// Create a context with your data sources
+const context = client.createContext({
+  model: "${modelName}",
+  systemPrompt: \`${systemPrompt}\`
+});
+
+// Execute a search query with MCP
+async function searchWithMCP() {
+  const result = await context.search({
+    query: "Your search query here",
+    // Optional MCP-specific parameters
+    retrieval: {
+      strategy: "hybrid",
+      depth: 3,
+      sources: ["primary", "knowledge_graph"]
+    }
+  });
+
+  console.log(result.data);
+  console.log(result.metadata.context_used);
+}
+
+searchWithMCP();`;
+
     return {
       curlSnippet,
       pythonSnippet,
-      nodeSnippet
+      nodeSnippet,
+      mcpSnippet
     };
   };
 
   // Function to handle copying code
-  const handleCopyCode = (code: string, type: 'python' | 'node') => {
+  const handleCopyCode = (code: string, type: 'python' | 'node' | 'mcp') => {
     navigator.clipboard.writeText(code);
 
     if (type === 'python') {
       setCopiedPython(true);
       setTimeout(() => setCopiedPython(false), 1500);
-    } else {
+    } else if (type === 'node') {
       setCopiedNode(true);
       setTimeout(() => setCopiedNode(false), 1500);
+    } else if (type === 'mcp') {
+      setCopiedMcp(true);
+      setTimeout(() => setCopiedMcp(false), 1500);
     }
 
     toast({
       title: "Copied to clipboard",
-      description: `${type === 'python' ? 'Python' : 'JavaScript'} code copied to clipboard`,
+      description: `${type === 'python' ? 'Python' : type === 'node' ? 'JavaScript' : 'MCP'} code copied to clipboard`,
     });
   };
 
@@ -224,6 +263,31 @@ fetch(url, {
                 </g>
               </svg>
               <span>Node.js</span>
+            </Button>
+            <Button
+              variant={apiDialogTab === "mcp" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setApiDialogTab("mcp")}
+              className={cn(
+                "rounded-sm text-xs flex items-center gap-2",
+                apiDialogTab === "mcp"
+                  ? "shadow-sm bg-muted"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 200 195" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid">
+                <path
+                  d="M25 97.8528L92.8823 29.9706C102.255 20.598 117.451 20.598 126.823 29.9706V29.9706C136.196 39.3431 136.196 54.5391 126.823 63.9117L75.5581 115.177"
+                  stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
+                <path
+                  d="M76.2653 114.47L126.823 63.9117C136.196 54.5391 151.392 54.5391 160.765 63.9117L161.118 64.2652C170.491 73.6378 170.491 88.8338 161.118 98.2063L99.7248 159.6C96.6006 162.724 96.6006 167.789 99.7248 170.913L112.331 183.52"
+                  stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
+                <path
+                  d="M109.853 46.9411L59.6482 97.1457C50.2757 106.518 50.2757 121.714 59.6482 131.087V131.087C69.0208 140.459 84.2168 140.459 93.5894 131.087L143.794 80.8822"
+                  stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
+              </svg>
+              <span>MCP</span>
+              <Badge className="bg-blue-500 text-xs px-1 py-0 h-4 ml-1">Beta</Badge>
             </Button>
           </div>
 
@@ -374,6 +438,66 @@ fetch(url, {
                     {getApiEndpoints().nodeSnippet}
                   </SyntaxHighlighter>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {apiDialogTab === "mcp" && (
+            <div className="space-y-2">
+              <div className="rounded-md overflow-hidden border bg-card text-card-foreground">
+                <div className="flex items-center bg-muted px-4 py-2 justify-between border-b">
+                  <div className="flex items-center gap-3">
+                    <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-xs font-bold px-2 rounded">MCP</Badge>
+                    <span className="text-sm font-mono">/api/v1/search</span>
+                    <Badge className="bg-blue-500/20 text-blue-700 text-xs px-2 rounded border border-blue-200">Beta</Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 text-xs border rounded px-2 py-1">
+                      <span className="font-medium">MCP Client</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleCopyCode(getApiEndpoints().mcpSnippet, 'mcp')}
+                    >
+                      {copiedMcp ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+                <div className="p-4 bg-card">
+                  <SyntaxHighlighter
+                    language="javascript"
+                    style={customStyle}
+                    customStyle={{
+                      fontSize: '0.75rem',
+                      background: 'transparent',
+                      margin: 0,
+                      padding: 0,
+                    }}
+                    wrapLongLines={false}
+                    showLineNumbers={true}
+                    codeTagProps={{
+                      style: {
+                        fontSize: '0.75rem',
+                        fontFamily: 'monospace',
+                      }
+                    }}
+                  >
+                    {getApiEndpoints().mcpSnippet}
+                  </SyntaxHighlighter>
+                </div>
+              </div>
+              <div className="rounded-md p-3 bg-blue-50 border border-blue-200 text-sm text-blue-700">
+                <div className="flex items-center gap-2 mb-1 font-medium">
+                  <Sparkles className="h-4 w-4" />
+                  <span>Model Context Protocol (Beta)</span>
+                </div>
+                <p className="text-xs text-blue-600 pl-6">
+                  MCP is an experimental protocol for improved context management.
+                  It provides better control over search strategies, context injection,
+                  and result formatting when using RAG applications.
+                </p>
               </div>
             </div>
           )}
