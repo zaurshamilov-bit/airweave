@@ -23,15 +23,23 @@
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Quick Start](#quick-start)
-3. [Usage](#usage)
-4. [Key Features](#key-features)
-5. [Technology Stack](#technology-stack)
-6. [Configuration](#configuration)
-7. [Contributing](#contributing)
-8. [Roadmap](#roadmap)
-9. [License](#license)
+- [Table of Contents](#table-of-contents)
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+  - [Steps](#steps)
+- [Usage](#usage)
+  - [Frontend](#frontend)
+  - [API Endpoints (FastAPI)](#api-endpoints-fastapi)
+  - [Native Weaviate](#native-weaviate)
+  - [Why Airweave?](#why-airweave)
+- [Integrations - adding more every day!](#integrations---adding-more-every-day)
+- [Key Features](#key-features)
+- [Technology Stack](#technology-stack)
+- [Bring your own database](#bring-your-own-database)
+- [Contributing](#contributing)
+- [Roadmap](#roadmap)
+- [License](#license)
+- [Contact \& Community](#contact--community)
 
 ---
 
@@ -51,8 +59,9 @@ Below is a simple guide to get Airweave up and running locally. For more detaile
    ```bash
    git clone https://github.com/airweave-ai/airweave.git
    cd airweave
+   ```
 
-3. **Build and Run**
+2. **Build and Run**
    ```bash
    chmod +x start.sh
    ./start.sh
@@ -88,9 +97,9 @@ You can configure your own vector database in the app UI or via the API.
 ### Why Airweave?
 - **Over 25 integrations and counting**: Airweave is your one-stop shop for building any application that requires semantic search.
 - **Simplicity**: Minimal configuration needed to sync data from diverse sources (APIs, databases, and more).
-- **Extensibility**: Easily add new integrations via `sources` , `destinations` and `embedders`.
+- **Extensibility**: Easily add new integrations via `sources`, `destinations`, and `embedders`.
 - **Open-Core**: Core features are open source, ensuring transparency. Future commercial offerings will bring additional, advanced capabilities.
-- **Async-First**: Built to handle large-scale data synchronization asynchronously (upcoming: managed Redis workers for production scale)
+- **Async-First**: Built to handle large-scale data synchronization asynchronously (upcoming: managed Redis workers for production scale).
 
 ---
 
@@ -158,7 +167,7 @@ POSTGRES_PORT=<your-database-port>
 
 We welcome all contributions! Whether you're fixing a bug, improving documentation, or adding a new feature:
 
-Please follow the existing code style and conventions. See [CONTRIBUTING.md](https://github.com/airweave-ai/airweave/blob/main/README.md) for more details.
+Please follow the existing code style and conventions. See [CONTRIBUTING.md](https://github.com/airweave-ai/airweave/blob/main/CONTRIBUTING.md) for more details.
 
 ---
 
@@ -166,7 +175,7 @@ Please follow the existing code style and conventions. See [CONTRIBUTING.md](htt
 
 - **Additional Integrations**: Expand entity generators for popular SaaS APIs and databases.
 - **Redis & Worker Queues**: Improved background job processing and caching for large or frequent syncs.
-- **Webhooks**: Trigger syncs on external events (e.g. new data in a database)
+- **Webhooks**: Trigger syncs on external events (e.g., new data in a database).
 - **Kubernetes Support**: Offer easy Helm charts for production-scale deployments.
 - **Commercial Offerings**: Enterprise features, extended metrics, and priority support.
 
