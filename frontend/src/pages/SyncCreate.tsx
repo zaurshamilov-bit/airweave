@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast, useToast } from "@/components/ui/use-toast";
-import { VectorDBSelector } from "@/components/VectorDBSelector";
+import { DestinationSelector } from "@/components/DestinationSelector";
 import { SyncProgress } from "@/components/sync/SyncProgress";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
@@ -315,7 +315,7 @@ const Sync = () => {
               <h2 className="text-2xl font-semibold">Choose your vector database</h2>
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </div>
-            <VectorDBSelector onComplete={handleVectorDBSelected} />
+            <DestinationSelector onComplete={handleVectorDBSelected} />
           </div>
         )}
 
