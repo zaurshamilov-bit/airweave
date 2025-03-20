@@ -41,7 +41,7 @@ from airweave.platform.entities.stripe import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Stripe", "stripe", AuthType.config_class, "StripeAuthConfig")
+@source("Stripe", "stripe", AuthType.config_class, "StripeAuthConfig", labels=["Payment"])
 class StripeSource(BaseSource):
     """Stripe source implementation.
 

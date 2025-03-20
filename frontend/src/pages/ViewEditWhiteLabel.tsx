@@ -16,13 +16,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from "@/components/ui/table";
 import { apiClient } from "@/lib/api";
 
@@ -133,11 +133,11 @@ const ViewEditWhiteLabel = () => {
           client_secret: formData.client_secret,
         }),
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to update white label');
       }
-      
+
       const updatedData = await response.json();
       setWhiteLabel(updatedData);
       toast.success("Changes saved successfully");
@@ -157,7 +157,7 @@ const ViewEditWhiteLabel = () => {
 
   if (!whiteLabel) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto pb-8">
         <div className="text-center text-muted-foreground">
           White label not found
         </div>
@@ -166,7 +166,7 @@ const ViewEditWhiteLabel = () => {
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="container mx-auto pb-8 space-y-8">
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
@@ -311,13 +311,13 @@ const ViewEditWhiteLabel = () => {
                       </span>
                     </TableCell>
                     <TableCell>
-                      {sync.last_run_at 
-                        ? new Date(sync.last_run_at).toLocaleString() 
+                      {sync.last_run_at
+                        ? new Date(sync.last_run_at).toLocaleString()
                         : 'Never'}
                     </TableCell>
                     <TableCell>
-                      {sync.next_run_at 
-                        ? new Date(sync.next_run_at).toLocaleString() 
+                      {sync.next_run_at
+                        ? new Date(sync.next_run_at).toLocaleString()
                         : 'Not scheduled'}
                     </TableCell>
                   </TableRow>

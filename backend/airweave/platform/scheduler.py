@@ -7,7 +7,6 @@ and triggers them when they are due.
 import asyncio
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import UUID
 
 from croniter import croniter
 from sqlalchemy import select
@@ -66,7 +65,7 @@ class PlatformScheduler:
             )
             result = await db.execute(stmt)
             syncs = result.scalars().all()
-            syncs = [schemas.Sync.model_validate(sync) for sync in syncs]
+            syncs = [schemas.SyncWithoutConnections.model_validate(sync) for sync in syncs]
 
             if not syncs:
                 logger.info("No syncs with cron schedules found")
@@ -99,7 +98,9 @@ class PlatformScheduler:
 
                     # Update the sync
                     current_user = await crud.user.get_by_email(db, email=sync.created_by_email)
-                    db_sync = await crud.sync.get(db, id=sync.id, current_user=current_user)
+                    db_sync = await crud.sync.get(
+                        db, id=sync.id, current_user=current_user, with_connections=False
+                    )
                     if not db_sync:
                         raise ValueError(f"Could not find sync {sync.id} in database")
                     await crud.sync.update(
@@ -122,45 +123,6 @@ class PlatformScheduler:
                 f"Completed update of next_scheduled_run values: "
                 f"{updated_count} updated, {error_count} errors"
             )
-
-    async def manually_trigger_sync(self, sync_id: UUID) -> bool:
-        """Manually trigger a sync run for a specific sync ID.
-
-        Args:
-            sync_id: The UUID of the sync to trigger
-
-        Returns:
-            bool: True if the sync was triggered successfully, False otherwise
-        """
-        logger.info(f"Manually triggering sync {sync_id}")
-
-        try:
-            async with get_db_context() as db:
-                # Get the sync
-                stmt = select(Sync).where(Sync.id == sync_id)
-                result = await db.execute(stmt)
-                sync = result.scalar_one_or_none()
-
-                if not sync:
-                    logger.error(f"Sync {sync_id} not found")
-                    return False
-
-                # Convert to schema
-                sync_schema = schemas.Sync.model_validate(sync)
-
-                # Check if there's already a job in progress
-                latest_job = await crud.sync_job.get_latest_by_sync_id(db, sync_id=sync_id)
-                if latest_job and latest_job.status == SyncJobStatus.IN_PROGRESS:
-                    logger.warning(f"Sync {sync_id} already has a job in progress, cannot trigger")
-                    return False
-
-                # Trigger the sync
-                await self._trigger_sync(db, sync_schema)
-                return True
-
-        except Exception as e:
-            logger.error(f"Error manually triggering sync {sync_id}: {e}", exc_info=True)
-            return False
 
     async def start(self):
         """Start the scheduler."""
@@ -263,17 +225,11 @@ class PlatformScheduler:
         logger.debug(f"Querying for active syncs with schedules at {now.isoformat()}")
 
         # First, get syncs with next_scheduled_run in the past or null
-        stmt = select(Sync).where(
-            (Sync.status == SyncStatus.ACTIVE)
-            & (Sync.cron_schedule.is_not(None))
-            & ((Sync.next_scheduled_run <= now) | (Sync.next_scheduled_run.is_(None)))
-        )
         query_start = datetime.now(timezone.utc)
-        result = await db.execute(stmt)
-        syncs = result.scalars().all()
+        syncs = await crud.sync.get_all_with_schedule(db)
         query_duration = (datetime.now(timezone.utc) - query_start).total_seconds()
 
-        sync_list = [schemas.Sync.model_validate(sync) for sync in syncs]
+        sync_list = [schemas.SyncWithoutConnections.model_validate(sync) for sync in syncs]
         logger.debug(f"Found {len(sync_list)} candidate syncs in {query_duration:.3f}s")
 
         # Log some details about the syncs
@@ -348,10 +304,13 @@ class PlatformScheduler:
 
             async with get_db_context() as db:
                 # Get the actual SQLAlchemy model object from the database
-                db_sync = await crud.sync.get(db, id=sync.id, current_user=current_user)
+                db_sync = await crud.sync.get(
+                    db, id=sync.id, current_user=current_user, with_connections=False
+                )
                 if not db_sync:
                     logger.error(f"Could not find sync {sync.id} in database, skipping update")
                     return False
+
                 # Update the next_scheduled_run field
                 await crud.sync.update(
                     db=db,

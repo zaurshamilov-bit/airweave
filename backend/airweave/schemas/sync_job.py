@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from airweave.models.sync_job import SyncJobStatus
 
@@ -57,6 +57,9 @@ class SyncJobInDBBase(SyncJobBase):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     failed_at: Optional[datetime] = None
+    sync_name: Optional[str] = Field(
+        None, description="Name of the sync, populated from join query"
+    )
 
     class Config:
         """Pydantic config for SyncJobInDBBase."""

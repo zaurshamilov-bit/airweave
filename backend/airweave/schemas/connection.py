@@ -38,10 +38,9 @@ class ConnectionInDBBase(ConnectionBase):
     """Base schema for connection in DB."""
 
     id: UUID
-    organization_id: UUID
-
-    created_by_email: str
-    modified_by_email: str
+    organization_id: Optional[UUID] = None
+    created_by_email: Optional[str] = None
+    modified_by_email: Optional[str] = None
 
     class Config:
         """Pydantic configuration."""

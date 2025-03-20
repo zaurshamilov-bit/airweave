@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast, useToast } from "@/components/ui/use-toast";
-import { SyncDataSourceGrid } from "@/components/sync/SyncDataSourceGrid";
 import { VectorDBSelector } from "@/components/VectorDBSelector";
 import { SyncProgress } from "@/components/sync/SyncProgress";
 import { Button } from "@/components/ui/button";
@@ -12,10 +11,12 @@ import { SyncPipelineVisual } from "@/components/sync/SyncPipelineVisual";
 import { SyncDagEditor } from "@/components/sync/SyncDagEditor";
 import { SyncUIMetadata } from "@/components/sync/types";
 import { Dag } from "@/components/sync/dag";
+import { NATIVE_TEXT2VEC_UUID, NATIVE_WEAVIATE_UUID } from "@/constants/nativeConnections";
 import { SyncOverview } from "@/components/sync/SyncOverview";
 import { SyncSchedule, SyncScheduleConfig, buildCronExpression } from "@/components/sync/SyncSchedule";
 import { isValidCronExpression } from "@/components/sync/CronExpressionInput";
-import { Separator } from "@/components/ui/separator";
+import { UnifiedDataSourceGrid } from "@/components/data-sources/UnifiedDataSourceGrid";
+import { AddSourceWizard } from "@/components/sync/AddSourceWizard";
 
 /**
  * This component coordinates all user actions (source selection,
@@ -46,6 +47,9 @@ const Sync = () => {
   // Hook for showing user feedback toasts
   const { toast } = useToast();
   const location = useLocation();
+
+  // Add navigate hook
+  const navigate = useNavigate();
 
   // Subscribe to SSE updates whenever syncJobId is set
   // 'updates' returns an array of progress updates
@@ -147,9 +151,11 @@ const Sync = () => {
       const syncResp = await apiClient.post("/sync/", {
         name: "Sync from UI",
         source_connection_id: selectedSource.connectionId,
-        ...(dbDetails.isNative ? {} : { destination_connection_id: dbDetails.connectionId }),
-        run_immediately: false,
-        status: "inactive"
+        destination_connection_ids: dbDetails.isNative
+          ? [NATIVE_WEAVIATE_UUID] // Use constant for Native Weaviate UUID
+          : [dbDetails.connectionId],
+        embedding_model_connection_id: NATIVE_TEXT2VEC_UUID, // Use constant for Text2Vec UUID
+        run_immediately: false
       });
 
       if (!syncResp.ok) {
@@ -221,7 +227,9 @@ const Sync = () => {
       }
       const data = await resp.json();
       setSyncJobId(data.id);
-      setStep(4);
+
+      // Navigate to the sync view instead of showing step 4
+      navigate(`/sync/${syncId}`);
     } catch (err: any) {
       toast({
         variant: "destructive",
@@ -246,7 +254,7 @@ const Sync = () => {
   };
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto pb-8">
       <div className="mx-auto">
         {/* Step + progress bar */}
         <div className="mb-8">
@@ -284,7 +292,19 @@ const Sync = () => {
               <h2 className="text-2xl font-semibold">Choose your data source</h2>
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </div>
-            <SyncDataSourceGrid onSelect={handleSourceSelect} />
+            <UnifiedDataSourceGrid
+              mode="select"
+              onSelectConnection={handleSourceSelect}
+              renderSourceDialog={(source, options) => (
+                <AddSourceWizard
+                  open={options.isOpen}
+                  onOpenChange={options.onOpenChange}
+                  onComplete={options.onComplete}
+                  shortName={source.short_name}
+                  name={source.name}
+                />
+              )}
+            />
           </div>
         )}
 

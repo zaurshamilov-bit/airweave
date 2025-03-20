@@ -24,17 +24,18 @@ function App() {
         <Route element={<DashboardLayout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          
+
           <Route path="/sync">
             <Route index element={<SyncTableView />} />
             <Route path="create" element={<SyncCreate />} />
             <Route path="white-label/:id" element={<ViewEditWhiteLabelSync />} />
             <Route path=":id" element={<ViewEditSync />} />
+            <Route path=":id/job/:jobId" element={<ViewEditSync />} />
           </Route>
 
           <Route path="/sources" element={<Sources />} />
           <Route path="/destinations" element={<Destinations />} />
-          
+
           <Route path="/white-label">
             <Route index element={<WhiteLabel />} />
             <Route path="create" element={<CreateWhiteLabel />} />
@@ -44,7 +45,7 @@ function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/chat/:chatId?" element={<Chat />} />
-          
+
           <Route path="*" element={<NotFound />} />
         </Route>
 

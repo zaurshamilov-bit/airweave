@@ -202,6 +202,7 @@ async def validation_exception_handler(
                 "error_messages": error_messages,
             },
         )
+    logger.error(f"Validation error: {error_messages}")
 
     return JSONResponse(status_code=422, content=error_messages)
 

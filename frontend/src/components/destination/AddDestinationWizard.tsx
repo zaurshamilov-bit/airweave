@@ -64,9 +64,9 @@ export const AddDestinationWizard = ({ open, onOpenChange, onComplete }: AddDest
   const [step, setStep] = useState(1);
   const [selectedDB, setSelectedDB] = useState<string | null>(null);
   const [destinationDetails, setDestinationDetails] = useState<DestinationDetails | null>(null);
-  const [config, setConfig] = useState<DestinationConfig>({ 
-    name: "", 
-    config_fields: {} 
+  const [config, setConfig] = useState<DestinationConfig>({
+    name: "",
+    config_fields: {}
   });
   const [testing, setTesting] = useState(false);
   const [activeTab, setActiveTab] = useState("basic");
@@ -94,13 +94,13 @@ export const AddDestinationWizard = ({ open, onOpenChange, onComplete }: AddDest
 
       setSelectedDB(dbId);
       setIsLoading(true);
-      
+
       const response = await apiClient.get(`/destinations/detail/${selectedInfo.shortName}`);
       if (!response.ok) {
         throw new Error("Failed to fetch destination details");
       }
       const data = await response.json();
-      
+
       setDestinationDetails(data);
       if (data.config_fields?.fields) {
         const initialConfig: Record<string, string> = {};
@@ -237,7 +237,7 @@ export const AddDestinationWizard = ({ open, onOpenChange, onComplete }: AddDest
           {step === 2 && (
             <div className="space-y-6 animate-in slide-in-from-right">
               {isLoading ? (
-                <div className="flex items-center justify-center py-8">
+                <div className="flex items-center justify-center">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
               ) : destinationDetails ? (
@@ -275,7 +275,7 @@ export const AddDestinationWizard = ({ open, onOpenChange, onComplete }: AddDest
                           id={field.name}
                           type={field.type === "string" ? "text" : field.type}
                           value={config.config_fields[field.name] || ""}
-                          onChange={(e) => 
+                          onChange={(e) =>
                             setConfig({
                               ...config,
                               config_fields: {
@@ -291,7 +291,7 @@ export const AddDestinationWizard = ({ open, onOpenChange, onComplete }: AddDest
                   </div>
                 </>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="text-center text-muted-foreground">
                   Failed to load configuration. Please try again.
                 </div>
               )}

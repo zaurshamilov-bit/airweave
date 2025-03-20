@@ -21,7 +21,7 @@ def mock_sync_with_schedule(mock_user):
         name="Test Sync With Schedule",
         description="Test description with schedule",
         source_connection_id=uuid.uuid4(),
-        destination_id=uuid.uuid4(),
+        destination_connection_ids=[uuid.uuid4()],
         user_id=mock_user.id,
         tenant_id=uuid.uuid4(),
         created_at="2023-01-01T00:00:00",
@@ -48,7 +48,7 @@ def mock_sync_multiple():
         name="Due Sync",
         description="Due sync description",
         source_connection_id=uuid.uuid4(),
-        destination_id=uuid.uuid4(),
+        destination_connection_ids=[uuid.uuid4()],
         user_id=uuid.uuid4(),
         tenant_id=uuid.uuid4(),
         created_at=base_time - timedelta(hours=2),
@@ -68,7 +68,7 @@ def mock_sync_multiple():
         name="Future Sync",
         description="Future sync description",
         source_connection_id=uuid.uuid4(),
-        destination_id=uuid.uuid4(),
+        destination_connection_ids=[uuid.uuid4()],
         user_id=uuid.uuid4(),
         tenant_id=uuid.uuid4(),
         created_at=base_time - timedelta(hours=2),
@@ -88,7 +88,7 @@ def mock_sync_multiple():
         name="No Next Run Sync",
         description="No next run sync description",
         source_connection_id=uuid.uuid4(),
-        destination_id=uuid.uuid4(),
+        destination_connection_ids=[uuid.uuid4()],
         user_id=uuid.uuid4(),
         tenant_id=uuid.uuid4(),
         created_at=base_time - timedelta(hours=2),
@@ -332,6 +332,7 @@ class TestGetActiveSync:
 
         # Setup mock query results for db.execute
         mock_scalar_result = Mock()
+        mock_scalar_result.unique = Mock(return_value=mock_scalar_result)  # Add unique() mock
         mock_scalar_result.all.return_value = mock_sync_multiple
         mock_execute_result = Mock()
         mock_execute_result.scalars.return_value = mock_scalar_result
@@ -339,11 +340,17 @@ class TestGetActiveSync:
         # Make execute() an AsyncMock that returns the expected result
         mock_db.execute = AsyncMock(return_value=mock_execute_result)
 
-        result = await scheduler._get_active_syncs_with_schedule(mock_db)
+        # Mock crud.sync.get_all_with_schedule to return the mock_sync_multiple directly
+        with patch(
+            "airweave.platform.scheduler.crud.sync.get_all_with_schedule",
+            new_callable=AsyncMock,
+            return_value=mock_sync_multiple,
+        ):
+            result = await scheduler._get_active_syncs_with_schedule(mock_db)
 
-        # Assert database was queried and results processed
-        mock_db.execute.assert_called_once()
-        assert len(result) == len(mock_sync_multiple)
+            # Assert database was queried and results processed
+            crud.sync.get_all_with_schedule.assert_called_once_with(mock_db)
+            assert len(result) == len(mock_sync_multiple)
 
 
 class TestProcessSync:

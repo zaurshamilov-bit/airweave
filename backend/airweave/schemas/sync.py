@@ -5,9 +5,10 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from airweave import schemas
+from airweave.core.constants.native_connections import NATIVE_TEXT2VEC_UUID
 from airweave.core.shared_models import SyncStatus
 
 
@@ -15,10 +16,10 @@ class SyncBase(BaseModel):
     """Base schema for Sync."""
 
     name: str
-    description: Optional[str] = None
     source_connection_id: UUID
-    destination_connection_id: Optional[UUID] = None
-    embedding_model_connection_id: Optional[UUID] = None
+    embedding_model_connection_id: UUID = Field(default=NATIVE_TEXT2VEC_UUID)
+    destination_connection_ids: list[UUID]
+    description: Optional[str] = None
     cron_schedule: Optional[str] = None  # Actual cron expression
     next_scheduled_run: Optional[datetime] = None
     white_label_id: Optional[UUID] = None
@@ -72,10 +73,6 @@ class SyncUpdate(BaseModel):
     """Schema for updating a Sync object."""
 
     name: Optional[str] = None
-    schedule: Optional[str] = None
-    source_connection_id: Optional[UUID] = None
-    destination_connection_id: Optional[UUID] = None
-    embedding_model_connection_id: Optional[UUID] = None
     cron_schedule: Optional[str] = None
     next_scheduled_run: Optional[datetime] = None
     white_label_id: Optional[UUID] = None
@@ -105,6 +102,31 @@ class Sync(SyncInDBBase):
     """Schema for Sync."""
 
     pass
+
+
+class SyncWithoutConnections(BaseModel):
+    """Schema for Sync without connections."""
+
+    name: str
+    description: Optional[str] = None
+    cron_schedule: Optional[str] = None
+    next_scheduled_run: Optional[datetime] = None
+    status: SyncStatus
+    white_label_id: Optional[UUID] = None
+    white_label_user_identifier: Optional[str] = None
+    sync_metadata: Optional[dict] = None
+
+    id: UUID
+    organization_id: UUID
+    created_at: datetime
+    modified_at: datetime
+    created_by_email: EmailStr
+    modified_by_email: EmailStr
+
+    class Config:
+        """Pydantic config."""
+
+        from_attributes = True
 
 
 class SyncWithSourceConnection(SyncInDBBase):

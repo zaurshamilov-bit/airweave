@@ -65,7 +65,15 @@ from .source import (
     SourceUpdate,
     SourceWithConfigFields,
 )
-from .sync import Sync, SyncBase, SyncCreate, SyncInDBBase, SyncUpdate, SyncWithSourceConnection
+from .sync import (
+    Sync,
+    SyncBase,
+    SyncCreate,
+    SyncInDBBase,
+    SyncUpdate,
+    SyncWithoutConnections,
+    SyncWithSourceConnection,
+)
 from .sync_job import SyncJob, SyncJobCreate, SyncJobInDBBase, SyncJobUpdate
 from .transformer import Transformer, TransformerCreate, TransformerUpdate
 from .user import (
@@ -77,36 +85,3 @@ from .user import (
     UserWithOrganizations,
 )
 from .white_label import WhiteLabel, WhiteLabelCreate, WhiteLabelInDBBase, WhiteLabelUpdate
-
-__all__ = [
-    "Connection",
-    "ConnectionCreate",
-    "ConnectionUpdate",
-    "Destination",
-    "DestinationCreate",
-    "DestinationUpdate",
-    "EntityDefinition",
-    "EntityCreate",
-    "EntityRelation",
-    "EntityRelationCreate",
-    "EntityRelationUpdate",
-    "EntityType",
-    "EntityUpdate",
-    "Organization",
-    "OrganizationCreate",
-    "OrganizationUpdate",
-    "Source",
-    "SourceCreate",
-    "SourceUpdate",
-    "Sync",
-    "SyncCreate",
-    "SyncUpdate",
-    "Entity",
-    "EntityCreate",
-    "Transformer",
-    "TransformerCreate",
-    "TransformerUpdate",
-    "User",
-    "UserCreate",
-    "UserUpdate",
-]

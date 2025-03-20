@@ -42,27 +42,34 @@ class SyncDAGRouter:
 
                 edges_outwards = self.dag.get_edges_from_node(node.id)
 
-                # It's only allowed to have multiple consumers if the entity is sent to destinations
-                if len(edges_outwards) > 1:
-                    consumer_nodes = [
-                        self.dag.get_node(edge.from_node_id) for edge in edges_outwards
-                    ]
-                    if any(
-                        consumer_node.type != NodeType.destination
-                        for consumer_node in consumer_nodes
-                    ):
+                # Check if all outgoing edges go to destination nodes
+                if edges_outwards:
+                    all_destinations = True
+                    for edge in edges_outwards:
+                        consumer_node = self.dag.get_node(edge.to_node_id)
+                        if consumer_node.type != NodeType.destination:
+                            all_destinations = False
+                            break
+
+                    if all_destinations:
+                        # If all outgoing edges go to destinations, stop routing
+                        route_map[(producer, node.entity_definition_id)] = None
+                    elif len(edges_outwards) == 1:
+                        # If there's only one outgoing edge and it's not to a destination,
+                        # route to that node
+                        route_map[(producer, node.entity_definition_id)] = edges_outwards[
+                            0
+                        ].to_node_id
+                    else:
+                        # If there are multiple outgoing edges and not all go to destinations,
+                        # this is an invalid configuration
                         raise ValueError(
-                            f"Entity node {node.id} has multiple outbound edges"
+                            f"Entity node {node.id} has multiple outbound edges "
                             "to non-destination nodes."
                         )
-                    # Setting to None stops the entity from being routed further
-                    route_map[(producer, node.entity_definition_id)] = None
-                elif len(edges_outwards) == 1 and self._get_if_node_is_destination(
-                    self.dag.get_node(edges_outwards[0].to_node_id)
-                ):
-                    route_map[(producer, node.entity_definition_id)] = None
                 else:
-                    route_map[(producer, node.entity_definition_id)] = edges_outwards[0].to_node_id
+                    # No outgoing edges, this is a terminal node
+                    route_map[(producer, node.entity_definition_id)] = None
 
         return route_map
 

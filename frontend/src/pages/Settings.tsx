@@ -13,12 +13,12 @@ const Settings = () => {
   };
 
   return (
-    <div className="container py-8">
+    <div className="container pb-8">
       <div className="flex items-center gap-2 mb-8">
         <Settings2 className="h-8 w-8 text-primary" />
         <h1 className="text-3xl font-bold">Settings</h1>
       </div>
-      
+
       <Tabs defaultValue="organization" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
           <TabsTrigger value="organization">Organization</TabsTrigger>

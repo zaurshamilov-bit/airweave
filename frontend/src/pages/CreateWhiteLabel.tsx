@@ -37,16 +37,16 @@ const CreateWhiteLabel = () => {
         throw new Error(`Failed to get auth URL. Status: ${response.status}`);
       }
       const authUrl = await response.text();
-      
+
       // Remove any quotes from the URL and ensure it's a valid URL
       const cleanUrl = authUrl.trim().replace(/^["'](.+)["']$/, '$1');
       if (!cleanUrl.startsWith('http')) {
         throw new Error('Invalid auth URL received');
       }
-      
+
       // Replace current URL with the OAuth2 URL
       window.location.replace(cleanUrl);
-      
+
     } catch (error) {
       console.error("Error initiating OAuth2 flow:", error);
       setIsLoading(false);
@@ -54,7 +54,7 @@ const CreateWhiteLabel = () => {
   };
 
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="container mx-auto pb-8 space-y-8">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate("/white-label")}>
           <ArrowLeft className="h-4 w-4" />

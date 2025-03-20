@@ -95,6 +95,7 @@ async def list_connected_integrations(
     connections = await crud.connection.get_by_integration_type(
         db, integration_type=integration_type, organization_id=user.organization_id
     )
+
     return connections
 
 

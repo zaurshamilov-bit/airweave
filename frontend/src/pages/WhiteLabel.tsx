@@ -30,7 +30,7 @@ const WhiteLabel = () => {
   ];
 
   return (
-    <div className="container mx-auto py-8 space-y-8">
+    <div className="container mx-auto pb-8 space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">White Labels</h1>
