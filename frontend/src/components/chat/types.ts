@@ -1,10 +1,9 @@
 export interface ModelSettings {
-  temperature: number;
-  max_tokens: number;
-  top_p: number;
-  frequency_penalty: number;
-  presence_penalty: number;
-  search_type?: "vector" | "graph" | "hybrid";
+  temperature?: number;
+  max_tokens?: number;
+  top_p?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
 }
 
 export interface SourceConnection {
@@ -65,7 +64,6 @@ export interface ChatInfo {
   model_settings: ModelSettings;
   sync_id: string;
   sync?: Sync;
-  system_prompt?: string;
 }
 
 export interface ChatInfoSidebarProps {
