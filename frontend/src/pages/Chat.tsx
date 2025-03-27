@@ -7,7 +7,6 @@ import { ChatMessage } from "@/components/chat/ChatMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatInfoSidebar } from "@/components/chat/ChatInfoSidebar";
 import { ChatInfo, ModelSettings } from "@/components/chat/types";
-import { ReasoningIndicator } from "@/components/chat/ReasoningIndicator";
 import {
   Select,
   SelectContent,
@@ -42,7 +41,6 @@ function Chat() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [isReasoning, setIsReasoning] = useState(false);
   const { toast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
@@ -158,66 +156,56 @@ function Chat() {
         };
         setMessages(prev => [...prev, userMessage]);
 
-        // Show reasoning indicator
-        setIsReasoning(true);
+        // Create assistant message placeholder
+        const assistantMessage: Message = {
+          role: "assistant",
+          content: "",
+          id: Date.now() + 1,
+          attachments: []
+        };
+        setMessages(prev => [...prev, assistantMessage]);
 
-        // Set a timeout to simulate AI thinking time before response starts
-        setTimeout(async () => {
-          // Create assistant message placeholder
-          const assistantMessage: Message = {
-            role: "assistant",
-            content: "",
-            id: Date.now() + 1,
-            attachments: []
-          };
-          setMessages(prev => [...prev, assistantMessage]);
+        // Send user message to backend
+        await apiClient.post(`/chat/${chatId}/message`, {
+          content,
+          role: "user",
+        });
 
-          // Hide the reasoning indicator once the real content starts
-          setIsReasoning(false);
+        // Start stream
+        const eventSource = new EventSource(`${API_CONFIG.baseURL}/chat/${chatId}/stream`);
 
-          // Send user message to backend
-          await apiClient.post(`/chat/${chatId}/message`, {
-            content,
-            role: "user",
-          });
-
-          // Start stream
-          const eventSource = new EventSource(`${API_CONFIG.baseURL}/chat/${chatId}/stream`);
-
-          eventSource.onmessage = (event) => {
-            if (event.data === '[DONE]' || event.data === '[ERROR]') {
-              eventSource.close();
-              return;
-            }
-
-            setMessages(prev => {
-              const newMessages = [...prev];
-              const lastMessage = newMessages[newMessages.length - 1];
-              // Decode the escaped newlines
-              const decodedContent = event.data.replace(/\\n/g, '\n');
-              newMessages[newMessages.length - 1] = {
-                ...lastMessage,
-                content: lastMessage.content + decodedContent,
-                id: Date.now()
-              };
-              return newMessages;
-            });
-          };
-
-          eventSource.onerror = (error) => {
-            console.error('EventSource failed:', error);
+        eventSource.onmessage = (event) => {
+          if (event.data === '[DONE]' || event.data === '[ERROR]') {
             eventSource.close();
-            toast({
-              title: "Error",
-              description: "Failed to get response",
-              variant: "destructive",
-            });
-          };
-        }, 6000); // Show reasoning for 6 seconds before starting real response
+            return;
+          }
+
+          setMessages(prev => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            // Decode the escaped newlines
+            const decodedContent = event.data.replace(/\\n/g, '\n');
+            newMessages[newMessages.length - 1] = {
+              ...lastMessage,
+              content: lastMessage.content + decodedContent,
+              id: Date.now()
+            };
+            return newMessages;
+          });
+        };
+
+        eventSource.onerror = (error) => {
+          console.error('EventSource failed:', error);
+          eventSource.close();
+          toast({
+            title: "Error",
+            description: "Failed to get response",
+            variant: "destructive",
+          });
+        };
 
       } catch (error) {
         console.error(error);
-        setIsReasoning(false);
         toast({
           title: "Error",
           description: "Failed to get response",
@@ -405,17 +393,14 @@ function Chat() {
                 </div>
               ))}
 
-              {/* Add the reasoning indicator */}
-              <ReasoningIndicator isVisible={isReasoning} />
-
-              {isLoading && !isReasoning && (
+              {isLoading && (
                 <div className="flex justify-center">
                   <Spinner className="h-6 w-6" />
                 </div>
               )}
             </div>
             <Card className="m-4 p-4">
-              <ChatInput onSubmit={handleSubmit} isLoading={isLoading || isReasoning} />
+              <ChatInput onSubmit={handleSubmit} isLoading={isLoading} />
             </Card>
           </>
         )}

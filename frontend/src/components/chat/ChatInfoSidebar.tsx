@@ -35,13 +35,6 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { useTheme } from "@/lib/theme-provider";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { ApiReferenceDialog } from "./ApiReferenceDialog";
 
 const AVAILABLE_MODELS = [
