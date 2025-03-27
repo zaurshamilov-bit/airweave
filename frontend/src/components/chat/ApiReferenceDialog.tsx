@@ -293,12 +293,6 @@ searchWithMCP();`;
                     {getApiEndpoints().curlSnippet}
                   </SyntaxHighlighter>
                 </div>
-                <div className="px-4 py-2 border-t text-xs flex items-center gap-2 text-muted-foreground">
-                  <span>→</span>
-                  <a href="https://docs.airweave.ai/api-reference/search" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-                    Explore the full API documentation
-                  </a>
-                </div>
               </div>
             </div>
           )}
@@ -347,12 +341,6 @@ searchWithMCP();`;
                     {getApiEndpoints().pythonSnippet}
                   </SyntaxHighlighter>
                 </div>
-                <div className="px-4 py-2 border-t text-xs flex items-center gap-2 text-muted-foreground">
-                  <span>→</span>
-                  <a href="https://docs.airweave.ai/api-reference/search" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-                    Explore the full API documentation
-                  </a>
-                </div>
               </div>
             </div>
           )}
@@ -400,12 +388,6 @@ searchWithMCP();`;
                   >
                     {getApiEndpoints().nodeSnippet}
                   </SyntaxHighlighter>
-                </div>
-                <div className="px-4 py-2 border-t text-xs flex items-center gap-2 text-muted-foreground">
-                  <span>→</span>
-                  <a href="https://docs.airweave.ai/api-reference/search" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-                    Explore the full API documentation
-                  </a>
                 </div>
               </div>
             </div>
