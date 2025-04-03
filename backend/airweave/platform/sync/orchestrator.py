@@ -31,8 +31,6 @@ class SyncOrchestrator:
                 # Process entities through the stream
                 await self._process_entity_stream(source_node, sync_context, db)
 
-                # Finalize and return sync
-                await sync_context.progress.finalize()
                 return sync_context.sync
 
         except Exception as e:
