@@ -232,6 +232,8 @@ class ConfluenceSource(BaseSource):
             data = await self._get_with_auth(client, url)
             for page in data.get("results", []):
                 page_breadcrumbs = [space_breadcrumb]
+                page_id = page["id"]
+                download_url = f"{self.base_url}/wiki/api/v2/pages/{page_id}"
                 yield ConfluencePageEntity(
                     entity_id=page["id"],
                     breadcrumbs=page_breadcrumbs,
@@ -243,6 +245,9 @@ class ConfluenceSource(BaseSource):
                     status=page.get("status"),
                     created_at=page.get("createdAt"),
                     updated_at=page.get("updatedAt"),
+                    file_id=page["id"],
+                    name=page.get("title", "Untitled Page"),
+                    download_url=download_url,
                 )
                 # Optionally fetch children or comments for each page
                 # or recursively fetch child pages if you need deeper nesting.
@@ -405,7 +410,7 @@ class ConfluenceSource(BaseSource):
                     # 3) For each page, yield comments
                     async for comment_entity in self._generate_comment_entities(
                         client,
-                        content_id=page_entity.content_id,
+                        page_id=page_entity.content_id,
                         parent_breadcrumbs=page_breadcrumbs,
                     ):
                         yield comment_entity
