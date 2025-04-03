@@ -227,7 +227,7 @@ class ConfluenceSource(BaseSource):
                 ConfluencePageEntity objects
         """
         limit = 50
-        url = f"{self.base_url}/wiki/api/v2/spaces/{space_id}/content/page?limit={limit}"
+        url = f"{self.base_url}/wiki/api/v2/spaces/{space_id}/pages?limit={limit}"
         while url:
             data = await self._get_with_auth(client, url)
             for page in data.get("results", []):
@@ -255,7 +255,7 @@ class ConfluenceSource(BaseSource):
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate ConfluenceBlogPostEntity objects."""
         limit = 50
-        url = f"{self.base_url}/wiki/api/v2/spaces/{space_id}/content/blogpost?limit={limit}"
+        url = f"{self.base_url}/wiki/api/v2/spaces/{space_id}/blogposts?limit={limit}"
         while url:
             data = await self._get_with_auth(client, url)
             for blog in data.get("results", []):
@@ -295,7 +295,7 @@ class ConfluenceSource(BaseSource):
                 yield ConfluenceCommentEntity(
                     entity_id=comment["id"],
                     breadcrumbs=parent_breadcrumbs,
-                    content_id=comment["id"],
+                    page_id=comment["id"],
                     parent_content_id=comment.get("container", {}).get("id"),
                     text=(comment.get("body", {}).get("storage", {}).get("value")),
                     created_by=comment.get("createdBy"),
@@ -428,7 +428,7 @@ class ConfluenceSource(BaseSource):
 
                 # 6) For each space, yield blog posts and their comments
                 async for blog_entity in self._generate_blog_post_entities(
-                    client, space_id=space_entity.entity_id
+                    client, space_id=space_entity.entity_id, space_breadcrumb=space_breadcrumb
                 ):
                     yield blog_entity
 
