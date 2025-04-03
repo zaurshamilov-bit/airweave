@@ -37,6 +37,7 @@ import {
   toDagEdges,
 } from "@/components/sync/dag";
 import { TransformerNode } from "./nodes/TransformerNode";
+import { v4 as uuidv4 } from 'uuid';
 
 // Define custom node types
 const nodeTypes: NodeTypes = {
@@ -406,7 +407,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
 
     // Create transformer node
     const transformerNode: Node = {
-      id: `transformer-${Date.now()}`,
+      id: uuidv4(),
       type: 'transformer',
       data: {
         name: transformerName,
@@ -417,7 +418,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
 
     // Create chunk nodes
     const chunk1: Node = {
-      id: `chunk-${Date.now()}-1`,
+      id: uuidv4(),
       type: 'entity',
       data: {
         name: 'Entity 1',
@@ -426,7 +427,7 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
     };
 
     const chunk2: Node = {
-      id: `chunk-${Date.now()}-2`,
+      id: uuidv4(),
       type: 'entity',
       data: {
         name: 'Entity 2',
@@ -438,33 +439,33 @@ const SyncDagEditorInner = ({ syncId, initialDag, onSave }: SyncDagEditorProps) 
     const newEdges: Edge[] = [
       // Edge from source to transformer (button type)
       {
-        id: `edge-${Date.now()}-1`,
+        id: uuidv4(),
         source: sourceNodeId,
         target: transformerNode.id,
         type: 'button',
       },
       // Edges from transformer to entities (blank type)
       {
-        id: `edge-${Date.now()}-2`,
+        id: uuidv4(),
         source: transformerNode.id,
         target: chunk1.id,
         type: 'blank',
       },
       {
-        id: `edge-${Date.now()}-3`,
+        id: uuidv4(),
         source: transformerNode.id,
         target: chunk2.id,
         type: 'blank',
       },
       // Edges from entities to target (button type)
       {
-        id: `edge-${Date.now()}-4`,
+        id: uuidv4(),
         source: chunk1.id,
         target: targetNodeId,
         type: 'button',
       },
       {
-        id: `edge-${Date.now()}-5`,
+        id: uuidv4(),
         source: chunk2.id,
         target: targetNodeId,
         type: 'button',
