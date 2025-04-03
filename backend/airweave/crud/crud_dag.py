@@ -94,8 +94,13 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
         current_user: schemas.User,
     ) -> SyncDag:
         """Update a DAG with its nodes and edges."""
-        # Update DAG fields
-        db_obj = await self.update(db, db_obj=db_obj, obj_in=obj_in, current_user=current_user)
+        # Create a copy of the input without nodes and edges for basic fields update
+        parent_update_data = obj_in.model_dump(exclude={"nodes", "edges"}, exclude_unset=True)
+
+        # Update only the parent SyncDag fields
+        db_obj = await self.update(
+            db, db_obj=db_obj, obj_in=parent_update_data, current_user=current_user
+        )
 
         # If nodes provided, replace all nodes
         if obj_in.nodes is not None:
