@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core.logging import logger
+from airweave.core.shared_models import SyncJobStatus
 from airweave.db.session import get_db_context
 from airweave.platform.entities._base import BaseEntity, DestinationAction
 from airweave.platform.sync.context import SyncContext
@@ -32,39 +33,29 @@ class SyncOrchestrator:
                 # Process entities through the stream
                 await self._process_entity_stream(source_node, sync_context, db)
 
-                # Update the sync job status to COMPLETED with counters from progress
-                progress = sync_context.progress
-                await crud.sync_job.update(
-                    db=db,
-                    db_obj=sync_context.sync_job,
-                    obj_in=schemas.SyncJobUpdate(
-                        status=schemas.SyncJobStatus.COMPLETED,
-                        entities_inserted=progress.stats.inserted,
-                        entities_deleted=progress.stats.deleted,
-                        entities_skipped=progress.stats.already_sync,
-                        completed_at=datetime.now(UTC),
-                    ),
+                # Update the sync job status to COMPLETED
+                await crud.sync_job.update_status(
+                    job_id=sync_context.sync_job.id,
+                    status=SyncJobStatus.COMPLETED,
+                    progress=sync_context.progress,
+                    current_user=sync_context.current_user,
+                    completed_at=datetime.now(UTC),
                 )
 
                 return sync_context.sync
 
         except Exception as e:
             logger.error(f"Error during sync: {e}")
-            # Update the sync job status to FAILED with error information
-            async with get_db_context() as db:
-                progress = sync_context.progress
-                await crud.sync_job.update(
-                    db=db,
-                    db_obj=sync_context.sync_job,
-                    obj_in=schemas.SyncJobUpdate(
-                        status=schemas.SyncJobStatus.FAILED,
-                        entities_inserted=progress.stats.inserted,
-                        entities_deleted=progress.stats.deleted,
-                        entities_skipped=progress.stats.already_sync,
-                        error=str(e),
-                        failed_at=datetime.now(UTC),
-                    ),
-                )
+
+            # Update the sync job status to FAILED
+            await crud.sync_job.update_status(
+                job_id=sync_context.sync_job.id,
+                status=SyncJobStatus.FAILED,
+                progress=sync_context.progress,
+                current_user=sync_context.current_user,
+                error=str(e),
+                failed_at=datetime.now(UTC),
+            )
             raise
 
     async def _process_entity_stream(
@@ -82,6 +73,7 @@ class SyncOrchestrator:
 
         # Create async stream and use it as a context manager
         async with AsyncSourceStream(sync_context.source.generate_entities()) as stream:
+            error_occurred = False
             try:
                 # Process entities with controlled concurrency
                 await self._process_stream_with_concurrency(
@@ -89,10 +81,11 @@ class SyncOrchestrator:
                 )
             except Exception as e:
                 logger.error(f"Error during sync: {e}")
+                error_occurred = True
                 raise
             finally:
-                # Ensure we finalize progress
-                await sync_context.progress.finalize()
+                # Ensure we finalize progress with appropriate status
+                await sync_context.progress.finalize(is_complete=not error_occurred)
 
     async def _process_stream_with_concurrency(
         self,
@@ -130,6 +123,8 @@ class SyncOrchestrator:
             pending_tasks.add(task)
 
             task.add_done_callback(lambda t: self._handle_task_completion(t, pending_tasks))
+            stream.stop()
+            break
 
             # If we have too many pending tasks, wait for some to complete
             if len(pending_tasks) >= MAX_WORKERS * 2:
