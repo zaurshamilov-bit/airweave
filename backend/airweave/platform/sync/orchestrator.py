@@ -1,7 +1,7 @@
 """Module for data synchronization."""
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,7 +39,7 @@ class SyncOrchestrator:
                     status=SyncJobStatus.COMPLETED,
                     progress=sync_context.progress,
                     current_user=sync_context.current_user,
-                    completed_at=datetime.now(UTC),
+                    completed_at=datetime.now(),
                 )
 
                 return sync_context.sync
@@ -54,7 +54,7 @@ class SyncOrchestrator:
                 progress=sync_context.progress,
                 current_user=sync_context.current_user,
                 error=str(e),
-                failed_at=datetime.now(UTC),
+                failed_at=datetime.now(),
             )
             raise
 
