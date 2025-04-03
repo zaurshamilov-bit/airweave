@@ -1,6 +1,7 @@
 """Module for data synchronization."""
 
 import asyncio
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,10 +32,39 @@ class SyncOrchestrator:
                 # Process entities through the stream
                 await self._process_entity_stream(source_node, sync_context, db)
 
+                # Update the sync job status to COMPLETED with counters from progress
+                progress = sync_context.progress
+                await crud.sync_job.update(
+                    db=db,
+                    db_obj=sync_context.sync_job,
+                    obj_in=schemas.SyncJobUpdate(
+                        status=schemas.SyncJobStatus.COMPLETED,
+                        entities_inserted=progress.stats.inserted,
+                        entities_deleted=progress.stats.deleted,
+                        entities_skipped=progress.stats.already_sync,
+                        completed_at=datetime.now(UTC),
+                    ),
+                )
+
                 return sync_context.sync
 
         except Exception as e:
             logger.error(f"Error during sync: {e}")
+            # Update the sync job status to FAILED with error information
+            async with get_db_context() as db:
+                progress = sync_context.progress
+                await crud.sync_job.update(
+                    db=db,
+                    db_obj=sync_context.sync_job,
+                    obj_in=schemas.SyncJobUpdate(
+                        status=schemas.SyncJobStatus.FAILED,
+                        entities_inserted=progress.stats.inserted,
+                        entities_deleted=progress.stats.deleted,
+                        entities_skipped=progress.stats.already_sync,
+                        error=str(e),
+                        failed_at=datetime.now(UTC),
+                    ),
+                )
             raise
 
     async def _process_entity_stream(
