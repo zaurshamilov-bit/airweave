@@ -3,7 +3,7 @@
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -105,7 +105,7 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
         # If nodes provided, replace all nodes
         if obj_in.nodes is not None:
             # Delete existing nodes (cascade will handle edges)
-            await db.execute(select(DagNode).where(DagNode.dag_id == db_obj.id).delete())
+            await db.execute(delete(DagNode).where(DagNode.dag_id == db_obj.id))
             # Create new nodes
             for node_in in obj_in.nodes:
                 node_data = node_in.model_dump()
@@ -122,7 +122,7 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
         # If edges provided, replace all edges
         if obj_in.edges is not None:
             # Delete existing edges
-            await db.execute(select(DagEdge).where(DagEdge.dag_id == db_obj.id).delete())
+            await db.execute(delete(DagEdge).where(DagEdge.dag_id == db_obj.id))
             # Create new edges
             for edge_in in obj_in.edges:
                 db_edge = DagEdge(
