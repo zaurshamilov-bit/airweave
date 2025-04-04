@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', airweaveOAuth.init);
       <div className="space-y-6">
 
         {/* Tabs */}
-        <div className="flex space-x-1 p-1 rounded-md mb-4 w-fit bg-muted border">
+        <div className="flex space-x-1 p-1 rounded-md mb-4 w-fit  dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
           <Button
             variant={activeTab === "auth" ? "default" : "ghost"}
             size="sm"
@@ -86,8 +86,8 @@ document.addEventListener('DOMContentLoaded', airweaveOAuth.init);
             className={cn(
               "rounded-sm text-xs flex items-center gap-2",
               activeTab === "auth"
-                ? "shadow-sm bg-muted"
-                : "text-muted-foreground hover:text-foreground"
+                ? "shadow-sm bg-slate-100 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-200"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100"
             )}
           >
             <Link className="h-4 w-4" />
@@ -100,8 +100,8 @@ document.addEventListener('DOMContentLoaded', airweaveOAuth.init);
             className={cn(
               "rounded-sm text-xs flex items-center gap-2",
               activeTab === "implementation"
-                ? "shadow-sm bg-muted"
-                : "text-muted-foreground hover:text-foreground"
+                ? "shadow-sm bg-slate-100 dark:bg-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-200"
+                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100"
             )}
           >
             <ArrowRight className="h-4 w-4" />
