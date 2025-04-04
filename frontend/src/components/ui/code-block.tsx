@@ -4,7 +4,8 @@ import { Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { materialOceanic } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { materialOceanic, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useTheme } from "@/lib/theme-provider";
 
 interface CodeBlockProps {
   code: string;
@@ -15,21 +16,6 @@ interface CodeBlockProps {
   footerContent?: React.ReactNode;
   disabled?: boolean;
 }
-
-// Create a custom style that removes backgrounds but keeps text coloring
-const customStyle = {
-  ...materialOceanic,
-  'pre[class*="language-"]': {
-    ...materialOceanic['pre[class*="language-"]'],
-    background: 'transparent',
-    margin: 0,
-    padding: 0,
-  },
-  'code[class*="language-"]': {
-    ...materialOceanic['code[class*="language-"]'],
-    background: 'transparent',
-  }
-};
 
 export function CodeBlock({
   code,
@@ -42,6 +28,27 @@ export function CodeBlock({
 }: CodeBlockProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const { theme } = useTheme();
+  const isDarkTheme = theme === "dark";
+
+  // Choose base style based on theme
+  const baseStyle = isDarkTheme ? materialOceanic : oneLight;
+
+  // Create a custom style that removes backgrounds but keeps text coloring
+  const customStyle = {
+    ...baseStyle,
+    'pre[class*="language-"]': {
+      ...baseStyle['pre[class*="language-"]'],
+      background: 'transparent',
+      margin: 0,
+      padding: 0,
+    },
+    'code[class*="language-"]': {
+      ...baseStyle['code[class*="language-"]'],
+      background: 'transparent',
+
+    }
+  };
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(code);
