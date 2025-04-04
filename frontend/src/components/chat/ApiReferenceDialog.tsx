@@ -24,7 +24,8 @@ interface ApiReferenceDialogProps {
   onOpenChange: (open: boolean) => void;
   modelName: string;
   modelSettings: ModelSettings;
-  systemPrompt: string;
+  syncId: string;
+  lastUserMessage?: string;
 }
 
 // Create a custom style that removes backgrounds but keeps text coloring
@@ -47,7 +48,8 @@ export function ApiReferenceDialog({
   onOpenChange,
   modelName,
   modelSettings,
-  systemPrompt,
+  syncId,
+  lastUserMessage = "Your search query here",
 }: ApiReferenceDialogProps) {
   const [apiDialogTab, setApiDialogTab] = useState<"rest" | "python" | "node" | "mcp">("rest");
   const [copiedPython, setCopiedPython] = useState(false);
@@ -58,56 +60,34 @@ export function ApiReferenceDialog({
   // Function to build API URLs from settings
   const getApiEndpoints = () => {
     const baseUrl = window.location.origin;
-    const apiUrl = `${baseUrl}/api/v1/search`;
-
-    // Create the JSON body that will be used in all API examples
-    const jsonBody = {
-      model_name: modelName,
-      model_settings: {
-        temperature: modelSettings.temperature || 0.7,
-        max_tokens: modelSettings.max_tokens || 1000,
-        top_p: modelSettings.top_p || 1.0,
-        frequency_penalty: modelSettings.frequency_penalty || 0,
-        presence_penalty: modelSettings.presence_penalty || 0,
-        search_type: modelSettings.search_type || 'vector'
-      },
-      system_prompt: systemPrompt,
-      query: "Your search query here"
-    };
+    const apiUrl = `${baseUrl}/search`;
 
     // Create the cURL command
-    const curlSnippet = `curl -X POST ${apiUrl} \\
-  -H "Content-Type: application/json" \\
-  -d '${JSON.stringify(jsonBody, null, 2)}'`;
+    const curlSnippet = `curl -G ${apiUrl}/ \\
+     -d sync_id="${syncId}" \\
+     -d query="${lastUserMessage}"`;
 
     // Create the Python code
     const pythonSnippet =
-`import requests
-import json
+`from airweave import AirweaveSDK
 
-url = "${apiUrl}"
-headers = {"Content-Type": "application/json"}
-payload = ${JSON.stringify(jsonBody, null, 2)}
-
-response = requests.post(url, headers=headers, json=payload)
-print(response.json())`;
+client = AirweaveSDK(
+    api_key="YOUR_API_KEY",
+)
+client.search.search(
+    sync_id="${syncId}",
+    query="${lastUserMessage}",
+)`;
 
     // Create the Node.js code
     const nodeSnippet =
-`const fetch = require('node-fetch');
+`import { AirweaveSDKClient } from "@airweave/sdk";
 
-const url = "${apiUrl}";
-const headers = {"Content-Type": "application/json"};
-const payload = ${JSON.stringify(jsonBody, null, 2)};
-
-fetch(url, {
-  method: 'POST',
-  headers: headers,
-  body: JSON.stringify(payload)
-})
-  .then(response => response.json())
-  .then(data => console.log(data))
-  .catch(error => console.error('Error:', error));`;
+const client = new AirweaveSDKClient({ apiKey: "YOUR_API_KEY" });
+await client.search.search({
+    syncId: "${syncId}",
+    query: "${lastUserMessage}"
+});`;
 
     // Create the MCP code (Model Context Protocol)
     const mcpSnippet =
@@ -121,14 +101,13 @@ const client = new MCPClient({
 
 // Create a context with your data sources
 const context = client.createContext({
-  model: "${modelName}",
-  systemPrompt: \`${systemPrompt}\`
+  syncId: "${syncId}"
 });
 
 // Execute a search query with MCP
 async function searchWithMCP() {
   const result = await context.search({
-    query: "Your search query here",
+    query: "${lastUserMessage}",
     // Optional MCP-specific parameters
     retrieval: {
       strategy: "hybrid",
@@ -248,8 +227,8 @@ searchWithMCP();`;
               <div className="rounded-md overflow-hidden border bg-card text-card-foreground">
                 <div className="flex items-center bg-muted px-4 py-2 justify-between border-b">
                   <div className="flex items-center gap-3">
-                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-xs font-bold px-2 rounded">POST</Badge>
-                    <span className="text-sm font-mono">/api/v1/search</span>
+                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-xs font-bold px-2 rounded">GET</Badge>
+                    <span className="text-sm font-mono">/search</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1 text-xs border rounded px-2 py-1">
@@ -293,6 +272,12 @@ searchWithMCP();`;
                     {getApiEndpoints().curlSnippet}
                   </SyntaxHighlighter>
                 </div>
+                <div className="px-4 py-2 border-t text-xs flex items-center gap-2 text-muted-foreground">
+                  <span>→</span>
+                  <a href="https://docs.airweave.ai/api-reference/search" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+                    Explore the full API documentation
+                  </a>
+                </div>
               </div>
             </div>
           )}
@@ -302,8 +287,8 @@ searchWithMCP();`;
               <div className="rounded-md overflow-hidden border bg-card text-card-foreground">
                 <div className="flex items-center bg-muted px-4 py-2 justify-between border-b">
                   <div className="flex items-center gap-3">
-                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-xs font-bold px-2 rounded">POST</Badge>
-                    <span className="text-sm font-mono">/api/v1/search</span>
+                    <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-xs font-bold px-2 rounded">SDK</Badge>
+                    <span className="text-sm font-mono">AirweaveSDK</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1 text-xs border rounded px-2 py-1">
@@ -341,6 +326,12 @@ searchWithMCP();`;
                     {getApiEndpoints().pythonSnippet}
                   </SyntaxHighlighter>
                 </div>
+                <div className="px-4 py-2 border-t text-xs flex items-center gap-2 text-muted-foreground">
+                  <span>→</span>
+                  <a href="https://docs.airweave.ai/api-reference/search" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+                    Explore the full API documentation
+                  </a>
+                </div>
               </div>
             </div>
           )}
@@ -350,8 +341,8 @@ searchWithMCP();`;
               <div className="rounded-md overflow-hidden border bg-card text-card-foreground">
                 <div className="flex items-center bg-muted px-4 py-2 justify-between border-b">
                   <div className="flex items-center gap-3">
-                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-xs font-bold px-2 rounded">POST</Badge>
-                    <span className="text-sm font-mono">/api/v1/search</span>
+                    <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-xs font-bold px-2 rounded">SDK</Badge>
+                    <span className="text-sm font-mono">AirweaveSDKClient</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1 text-xs border rounded px-2 py-1">
@@ -388,6 +379,12 @@ searchWithMCP();`;
                   >
                     {getApiEndpoints().nodeSnippet}
                   </SyntaxHighlighter>
+                </div>
+                <div className="px-4 py-2 border-t text-xs flex items-center gap-2 text-muted-foreground">
+                  <span>→</span>
+                  <a href="https://docs.airweave.ai/api-reference/search" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors duration-200">
+                    Explore the full API documentation
+                  </a>
                 </div>
               </div>
             </div>

@@ -59,6 +59,30 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showApiDialog, setShowApiDialog] = useState(false);
   const { resolvedTheme } = useTheme();
+  // Get the last user message from Chat component
+  const [lastUserMessage, setLastUserMessage] = useState<string>("Your search query here");
+
+  useEffect(() => {
+    // Attempt to get the last user message from the chat
+    const getLastUserMessage = async () => {
+      try {
+        const response = await apiClient.get(`/chat/${chatInfo.id}`);
+        const chatData = await response.json();
+
+        if (chatData.messages && chatData.messages.length > 0) {
+          // Find the last user message
+          const userMessages = chatData.messages.filter((msg: any) => msg.role === "user");
+          if (userMessages.length > 0) {
+            setLastUserMessage(userMessages[userMessages.length - 1].content);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch last user message:", error);
+      }
+    };
+
+    void getLastUserMessage();
+  }, [chatInfo.id]);
 
   useEffect(() => {
     setModelSettings(chatInfo.model_settings);
@@ -156,6 +180,8 @@ export function ChatInfoSidebar({ chatInfo, onUpdateSettings }: ChatInfoSidebarP
         onOpenChange={setShowApiDialog}
         modelName={modelName}
         modelSettings={modelSettings}
+        syncId={chatInfo.sync_id}
+        lastUserMessage={lastUserMessage}
       />
 
       <div className="w-[350px] border-l bg-background">

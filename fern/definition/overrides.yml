@@ -39,6 +39,9 @@ paths:
   /cursor-dev/connections/status/{short_name}:
     get:
       x-fern-ignore: true
+  /cursor-dev/test-sync/{short_name}:
+    post:
+      x-fern-ignore: true
   /dag/sync/{sync_id}/dag/:
     get:
       x-fern-ignore: true
