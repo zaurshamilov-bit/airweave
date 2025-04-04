@@ -3,11 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { WhiteLabelForm } from "@/components/white-label/WhiteLabelForm";
 import { CodeSnippet } from "@/components/white-label/CodeSnippet";
 import { HowItWorksAccordion } from "@/components/white-label/HowItWorksAccordion";
+import { TestIntegrationCard } from "@/components/white-label/TestIntegrationCard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ExternalLink } from "lucide-react";
-import { apiClient } from "@/lib/api";
+import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 
 interface WhiteLabelData {
   id: string;
@@ -25,34 +24,6 @@ const CreateWhiteLabel = () => {
   const handleSuccess = (data: WhiteLabelData) => {
     setIsLoading(false);
     setWhiteLabel(data);
-  };
-
-  // Kick off the OAuth2 flow (matching the snippet in CodeSnippet.tsx)
-  const initiateOAuth2Flow = async () => {
-    if (!whiteLabel?.id) return;
-    try {
-      setIsLoading(true);
-      const response = await apiClient.get(
-        `/connections/oauth2/white-label/${whiteLabel.id}/auth_url`
-      );
-      if (!response.ok) {
-        throw new Error(`Failed to get auth URL. Status: ${response.status}`);
-      }
-      const authUrl = await response.text();
-
-      // Remove any quotes from the URL and ensure it's a valid URL
-      const cleanUrl = authUrl.trim().replace(/^["'](.+)["']$/, '$1');
-      if (!cleanUrl.startsWith('http')) {
-        throw new Error('Invalid auth URL received');
-      }
-
-      // Replace current URL with the OAuth2 URL
-      window.location.replace(cleanUrl);
-
-    } catch (error) {
-      console.error("Error initiating OAuth2 flow:", error);
-      setIsLoading(false);
-    }
   };
 
   return (
@@ -109,29 +80,8 @@ const CreateWhiteLabel = () => {
               </CardContent>
             </Card>
 
-            {/* Try Now Card */}
-            <Card className={!whiteLabel?.id ? "opacity-50 pointer-events-none" : ""}>
-              <CardHeader>
-                <CardTitle>Test Your Integration</CardTitle>
-                <CardDescription>
-                  Try out the OAuth2 flow with your new integration.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <p>
-                  Click the button below to test the OAuth2 flow with your new integration.
-                  This will redirect you to the authentication page.
-                </p>
-                <Button
-                  onClick={initiateOAuth2Flow}
-                  disabled={!whiteLabel?.id}
-                  className="flex items-center gap-2"
-                >
-                  <span>Try OAuth2 Flow</span>
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
+            {/* Test Integration Card */}
+            <TestIntegrationCard whitelabelId={whiteLabel?.id} />
           </>
         )}
 

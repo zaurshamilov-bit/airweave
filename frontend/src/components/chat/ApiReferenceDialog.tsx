@@ -11,13 +11,12 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { materialOceanic } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useToast } from "@/hooks/use-toast";
 import { ModelSettings } from "./types";
 import { PythonIcon } from "@/components/icons/PythonIcon";
 import { NodeIcon } from "@/components/icons/NodeIcon";
 import { McpIcon } from "@/components/icons/McpIcon";
+import { CodeBlock } from "@/components/ui/code-block";
 
 interface ApiReferenceDialogProps {
   open: boolean;
@@ -28,21 +27,6 @@ interface ApiReferenceDialogProps {
   lastUserMessage?: string;
 }
 
-// Create a custom style that removes backgrounds but keeps text coloring
-const customStyle = {
-  ...materialOceanic,
-  'pre[class*="language-"]': {
-    ...materialOceanic['pre[class*="language-"]'],
-    background: 'transparent',
-    margin: 0,
-    padding: 0,
-  },
-  'code[class*="language-"]': {
-    ...materialOceanic['code[class*="language-"]'],
-    background: 'transparent',
-  }
-};
-
 export function ApiReferenceDialog({
   open,
   onOpenChange,
@@ -52,9 +36,6 @@ export function ApiReferenceDialog({
   lastUserMessage = "Your search query here",
 }: ApiReferenceDialogProps) {
   const [apiDialogTab, setApiDialogTab] = useState<"rest" | "python" | "node" | "mcp">("rest");
-  const [copiedPython, setCopiedPython] = useState(false);
-  const [copiedNode, setCopiedNode] = useState(false);
-  const [copiedMcp, setCopiedMcp] = useState(false);
   const { toast } = useToast();
 
   // Function to build API URLs from settings
@@ -130,26 +111,14 @@ searchWithMCP();`;
     };
   };
 
-  // Function to handle copying code
-  const handleCopyCode = (code: string, type: 'python' | 'node' | 'mcp') => {
-    navigator.clipboard.writeText(code);
-
-    if (type === 'python') {
-      setCopiedPython(true);
-      setTimeout(() => setCopiedPython(false), 1500);
-    } else if (type === 'node') {
-      setCopiedNode(true);
-      setTimeout(() => setCopiedNode(false), 1500);
-    } else if (type === 'mcp') {
-      setCopiedMcp(true);
-      setTimeout(() => setCopiedMcp(false), 1500);
-    }
-
-    toast({
-      title: "Copied to clipboard",
-      description: `${type === 'python' ? 'Python' : type === 'node' ? 'JavaScript' : 'MCP'} code copied to clipboard`,
-    });
-  };
+  const docLinkFooter = (
+    <div className="text-xs flex items-center gap-2 text-muted-foreground">
+      <span>→</span>
+      <a href="https://docs.airweave.ai/api-reference/search" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
+        Explore the full API documentation
+      </a>
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -224,169 +193,40 @@ searchWithMCP();`;
           {/* Tab Content */}
           {apiDialogTab === "rest" && (
             <div className="space-y-4">
-              <div className="rounded-md overflow-hidden border bg-card text-card-foreground">
-                <div className="flex items-center bg-muted px-4 py-2 justify-between border-b">
-                  <div className="flex items-center gap-3">
-                    <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-xs font-bold px-2 rounded">GET</Badge>
-                    <span className="text-sm font-mono">/search</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 text-xs border rounded px-2 py-1">
-                      <span className="font-medium">Shell</span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                      onClick={() => {
-                        navigator.clipboard.writeText(getApiEndpoints().curlSnippet);
-                        toast({
-                          title: "Copied to clipboard",
-                          description: "cURL command copied to clipboard",
-                        });
-                      }}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="p-4 bg-card">
-                  <SyntaxHighlighter
-                    language="bash"
-                    style={customStyle}
-                    customStyle={{
-                      fontSize: '0.75rem',
-                      background: 'transparent',
-                      margin: 0,
-                      padding: 0,
-                    }}
-                    wrapLongLines={false}
-                    showLineNumbers={true}
-                    codeTagProps={{
-                      style: {
-                        fontSize: '0.75rem',
-                        fontFamily: 'monospace',
-                      }
-                    }}
-                  >
-                    {getApiEndpoints().curlSnippet}
-                  </SyntaxHighlighter>
-                </div>
-                <div className="px-4 py-2 border-t text-xs flex items-center gap-2 text-muted-foreground">
-                  <span>→</span>
-                  <a href="https://docs.airweave.ai/api-reference/search" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-                    Explore the full API documentation
-                  </a>
-                </div>
-              </div>
+              <CodeBlock
+                code={getApiEndpoints().curlSnippet}
+                language="bash"
+                badgeText="GET"
+                badgeColor="bg-emerald-600 hover:bg-emerald-600"
+                title="/search"
+                footerContent={docLinkFooter}
+              />
             </div>
           )}
 
           {apiDialogTab === "python" && (
             <div className="space-y-2">
-              <div className="rounded-md overflow-hidden border bg-card text-card-foreground">
-                <div className="flex items-center bg-muted px-4 py-2 justify-between border-b">
-                  <div className="flex items-center gap-3">
-                    <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-xs font-bold px-2 rounded">SDK</Badge>
-                    <span className="text-sm font-mono">AirweaveSDK</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 text-xs border rounded px-2 py-1">
-                      <span className="font-medium">Python</span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                      onClick={() => handleCopyCode(getApiEndpoints().pythonSnippet, 'python')}
-                    >
-                      {copiedPython ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-                <div className="p-4 bg-card">
-                  <SyntaxHighlighter
-                    language="python"
-                    style={customStyle}
-                    customStyle={{
-                      fontSize: '0.75rem',
-                      background: 'transparent',
-                      margin: 0,
-                      padding: 0,
-                    }}
-                    wrapLongLines={false}
-                    showLineNumbers={true}
-                    codeTagProps={{
-                      style: {
-                        fontSize: '0.75rem',
-                        fontFamily: 'monospace',
-                      }
-                    }}
-                  >
-                    {getApiEndpoints().pythonSnippet}
-                  </SyntaxHighlighter>
-                </div>
-                <div className="px-4 py-2 border-t text-xs flex items-center gap-2 text-muted-foreground">
-                  <span>→</span>
-                  <a href="https://docs.airweave.ai/api-reference/search" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-                    Explore the full API documentation
-                  </a>
-                </div>
-              </div>
+              <CodeBlock
+                code={getApiEndpoints().pythonSnippet}
+                language="python"
+                badgeText="SDK"
+                badgeColor="bg-blue-600 hover:bg-blue-600"
+                title="AirweaveSDK"
+                footerContent={docLinkFooter}
+              />
             </div>
           )}
 
           {apiDialogTab === "node" && (
             <div className="space-y-2">
-              <div className="rounded-md overflow-hidden border bg-card text-card-foreground">
-                <div className="flex items-center bg-muted px-4 py-2 justify-between border-b">
-                  <div className="flex items-center gap-3">
-                    <Badge className="bg-blue-600 hover:bg-blue-600 text-white text-xs font-bold px-2 rounded">SDK</Badge>
-                    <span className="text-sm font-mono">AirweaveSDKClient</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 text-xs border rounded px-2 py-1">
-                      <span className="font-medium">JavaScript</span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                      onClick={() => handleCopyCode(getApiEndpoints().nodeSnippet, 'node')}
-                    >
-                      {copiedNode ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-                <div className="p-4 bg-card">
-                  <SyntaxHighlighter
-                    language="javascript"
-                    style={customStyle}
-                    customStyle={{
-                      fontSize: '0.75rem',
-                      background: 'transparent',
-                      margin: 0,
-                      padding: 0,
-                    }}
-                    wrapLongLines={false}
-                    showLineNumbers={true}
-                    codeTagProps={{
-                      style: {
-                        fontSize: '0.75rem',
-                        fontFamily: 'monospace',
-                      }
-                    }}
-                  >
-                    {getApiEndpoints().nodeSnippet}
-                  </SyntaxHighlighter>
-                </div>
-                <div className="px-4 py-2 border-t text-xs flex items-center gap-2 text-muted-foreground">
-                  <span>→</span>
-                  <a href="https://docs.airweave.ai/api-reference/search" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors duration-200">
-                    Explore the full API documentation
-                  </a>
-                </div>
-              </div>
+              <CodeBlock
+                code={getApiEndpoints().nodeSnippet}
+                language="javascript"
+                badgeText="SDK"
+                badgeColor="bg-blue-600 hover:bg-blue-600"
+                title="AirweaveSDKClient"
+                footerContent={docLinkFooter}
+              />
             </div>
           )}
         </div>

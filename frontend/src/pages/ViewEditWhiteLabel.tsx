@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Eye, EyeOff, ArrowLeft, Trash2, ExternalLink } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft, Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { apiClient } from "@/lib/api";
 import { CodeSnippet } from "@/components/white-label/CodeSnippet";
+import { TestIntegrationCard } from "@/components/white-label/TestIntegrationCard";
 
 interface Sync {
   id: string;
@@ -65,7 +66,6 @@ const ViewEditWhiteLabel = () => {
   const [showSecret, setShowSecret] = useState(false);
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [whiteLabel, setWhiteLabel] = useState<WhiteLabel | null>(null);
   const [syncs, setSyncs] = useState<Sync[]>([]);
   const [isSyncsLoading, setIsSyncsLoading] = useState(true);
@@ -147,35 +147,6 @@ const ViewEditWhiteLabel = () => {
     } catch (error) {
       toast.error('Failed to save changes');
       console.error(error);
-    }
-  };
-
-  // Kick off the OAuth2 flow
-  const initiateOAuth2Flow = async () => {
-    if (!whiteLabel?.id) return;
-    try {
-      setIsAuthLoading(true);
-      const response = await apiClient.get(
-        `/connections/oauth2/white-label/${whiteLabel.id}/auth_url`
-      );
-      if (!response.ok) {
-        throw new Error(`Failed to get auth URL. Status: ${response.status}`);
-      }
-      const authUrl = await response.text();
-
-      // Remove any quotes from the URL and ensure it's a valid URL
-      const cleanUrl = authUrl.trim().replace(/^["'](.+)["']$/, '$1');
-      if (!cleanUrl.startsWith('http')) {
-        throw new Error('Invalid auth URL received');
-      }
-
-      // Replace current URL with the OAuth2 URL
-      window.location.replace(cleanUrl);
-
-    } catch (error) {
-      console.error("Error initiating OAuth2 flow:", error);
-      toast.error("Failed to initiate OAuth2 flow");
-      setIsAuthLoading(false);
     }
   };
 
@@ -310,32 +281,9 @@ const ViewEditWhiteLabel = () => {
             clientId={whiteLabel.client_id}
             source={whiteLabel.source_short_name}
           />
-          <div className="mt-6 space-y-4">
-            <h3 className="text-lg font-medium">Test Your Integration</h3>
-            <p className="text-sm text-muted-foreground">
-              Try out the OAuth2 flow with your integration.
-            </p>
-            <Button
-              onClick={() => initiateOAuth2Flow()}
-              className="flex items-center gap-2"
-              disabled={isAuthLoading}
-            >
-              {isAuthLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                  <span>Redirecting...</span>
-                </>
-              ) : (
-                <>
-                  <span>Try OAuth2 Flow</span>
-                  <ExternalLink className="h-4 w-4" />
-                </>
-              )}
-            </Button>
-          </div>
         </CardContent>
       </Card>
-
+      <TestIntegrationCard whitelabelId={whiteLabel.id} />
       <div className="space-y-4">
         <h2 className="text-2xl font-bold">Sync Pipelines</h2>
         <Card>
@@ -368,7 +316,7 @@ const ViewEditWhiteLabel = () => {
                   <TableRow
                     key={sync.id}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => navigate(`/white-label/${id}/sync/${sync.id}`)}
+                    onClick={() => navigate(`/sync/${sync.id}`)}
                   >
                     <TableCell>{sync.name}</TableCell>
                     <TableCell>
