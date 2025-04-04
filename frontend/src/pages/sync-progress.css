@@ -28,11 +28,11 @@
   bottom: 0;
   z-index: 0;
   background: linear-gradient(45deg,
-    rgba(30, 64, 255, 0.02),
-    rgba(41, 121, 255, 0.02),
-    rgba(0, 183, 255, 0.02),
-    rgba(41, 121, 255, 0.02),
-    rgba(30, 64, 255, 0.02)
+    rgba(30, 64, 255, 0.01),
+    rgba(41, 121, 255, 0.01),
+    rgba(0, 183, 255, 0.01),
+    rgba(41, 121, 255, 0.01),
+    rgba(30, 64, 255, 0.01)
   );
   background-size: 400% 400%;
   animation: gradient-shift 8s ease infinite;
