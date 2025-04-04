@@ -132,16 +132,16 @@ searchWithMCP();`;
 
         <div className="space-y-6 py-4 max-h-[70vh] overflow-y-auto">
           {/* Tabs - styled like SyncTableView.tsx */}
-          <div className="flex space-x-1 p-1 rounded-md mb-4 w-fit ">
+          <div className="flex space-x-1 p-1 rounded-md mb-4 w-fit">
             <Button
               variant={apiDialogTab === "rest" ? "default" : "ghost"}
               size="sm"
               onClick={() => setApiDialogTab("rest")}
               className={cn(
-                "rounded-sm text-xs flex items-center gap-2",
+                "rounded-sm text-sm flex items-center gap-2",
                 apiDialogTab === "rest"
-                  ? "shadow-sm bg-muted"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "shadow-sm bg-slate-200 dark:bg-muted hover:bg-slate-200 dark:hover:bg-muted hover:text-foreground text-foreground"
+                  : "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
               )}
             >
               <Terminal className="h-4 w-4" />
@@ -152,10 +152,10 @@ searchWithMCP();`;
               size="sm"
               onClick={() => setApiDialogTab("python")}
               className={cn(
-                "rounded-sm text-xs flex items-center gap-2",
+                "rounded-sm text-sm flex items-center gap-2",
                 apiDialogTab === "python"
-                  ? "shadow-sm bg-muted"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "shadow-sm bg-slate-200 dark:bg-muted hover:bg-slate-200 dark:hover:bg-muted hover:text-foreground text-foreground"
+                  : "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
               )}
             >
               <PythonIcon className="h-4 w-4" />
@@ -166,10 +166,10 @@ searchWithMCP();`;
               size="sm"
               onClick={() => setApiDialogTab("node")}
               className={cn(
-                "rounded-sm text-xs flex items-center gap-2",
+                "rounded-sm text-sm flex items-center gap-2",
                 apiDialogTab === "node"
-                  ? "shadow-sm bg-muted"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "shadow-sm bg-slate-200 dark:bg-muted hover:bg-slate-200 dark:hover:bg-muted hover:text-foreground text-foreground"
+                  : "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
               )}
             >
               <NodeIcon className="h-4 w-4" />
@@ -180,8 +180,8 @@ searchWithMCP();`;
               size="sm"
               disabled={true}
               className={cn(
-                "rounded-sm text-xs flex items-center gap-2 opacity-60 cursor-not-allowed",
-                "text-muted-foreground"
+                "rounded-sm text-sm flex items-center gap-2 opacity-60 cursor-not-allowed",
+                "hover:bg-slate-200/60 dark:hover:bg-muted/60 hover:text-foreground"
               )}
             >
               <McpIcon className="h-4 w-4" />
