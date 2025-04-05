@@ -13,8 +13,16 @@
 
 Turn any app data into accessible knowledge for AI agents. **Airweave** connects any app, database, URL, or API for agentic retrieval.
 
-### Demo 
+### 🎥 Demo 
 https://github.com/user-attachments/assets/e6f80420-ad16-4844-b9be-30b1fbc2281c
+
+## Overview 
+
+Airweave simplifies the process of making information retrievable for your agent. 
+
+Whether you have structured or unstructured data, Airweave helps you break it into processable entities, store the data and make it retrievable through [REST and MCP endpoints](https://docs.airweave.ai). 
+
+---
 
 ## Table of Contents
 
@@ -33,11 +41,7 @@ https://github.com/user-attachments/assets/e6f80420-ad16-4844-b9be-30b1fbc2281c
 - [License](#license)
 - [Contact \& Community](#contact--community)
 
----
 
-## Overview
-
-Airweave simplifies the process of making information retrievable for your agent. Whether you have structured or unstructured data, Airweave helps you break it into processable entities, store the data and make it retrievable through [REST and MCP endpoints](https://docs.airweave.ai).
 
 
 ## Quick Start
