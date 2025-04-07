@@ -1,6 +1,6 @@
 """ClickUp source implementation.
 
-Retrieves data (read-only) from a user's ClickUp workspace:
+Retrieves data (read-only) from a user's ClickUp workspaces:
     - Workspaces (Teams)
     - Spaces (within each workspace)
     - Folders (within each space)
