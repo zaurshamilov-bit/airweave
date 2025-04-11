@@ -11,5 +11,14 @@ RUN npm install
 # Copy application code
 COPY . .
 
-# Build and serve the application
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"] 
+# Build the application
+RUN npm run build
+
+# Expose port
+EXPOSE 8080
+
+# Use serve to serve the static content
+RUN npm install -g serve
+
+# Start serve
+CMD ["serve", "-s", "dist", "-l", "8080"]
