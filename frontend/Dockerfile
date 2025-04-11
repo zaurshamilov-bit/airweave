@@ -14,11 +14,8 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Expose port
-EXPOSE 8080
-
 # Use serve to serve the static content
 RUN npm install -g serve
 
-# Start serve
-CMD ["serve", "-s", "dist", "-l", "8080"]
+# Simple runtime configuration with direct shell command
+CMD sh -c 'echo "window.ENV = { API_URL: \"${API_URL:-/api}\" };" > ./dist/config.js && serve -s dist -l 8080'
