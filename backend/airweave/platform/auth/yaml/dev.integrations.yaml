@@ -216,3 +216,6 @@ integrations:
 
   weaviate:
     auth_type: "config_class"
+
+  neo4j:
+    auth_type: "config_class"
