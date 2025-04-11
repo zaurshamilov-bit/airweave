@@ -103,7 +103,7 @@ class Settings(BaseSettings):
             return self.LOCAL_NGROK_SERVER
         if self.DTAP_ENVIRONMENT == "prod":
             return "https://api.airweave.ai"
-        return f"https://api.{self.DTAP_ENVIRONMENT}-airweave.ai"
+        return f"https://api.{self.DTAP_ENVIRONMENT}-airweave.com"
 
     @property
     def app_url(self) -> str:
@@ -116,7 +116,7 @@ class Settings(BaseSettings):
             return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
         if self.DTAP_ENVIRONMENT == "prod":
             return "https://app.airweave.ai"
-        return f"https://app.{self.DTAP_ENVIRONMENT}-airweave.ai"
+        return f"https://app.{self.DTAP_ENVIRONMENT}-airweave.com"
 
     @property
     def docs_url(self) -> str:
@@ -129,7 +129,7 @@ class Settings(BaseSettings):
             return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
         if self.DTAP_ENVIRONMENT == "prod":
             return "https://docs.airweave.ai"
-        return f"https://docs.{self.DTAP_ENVIRONMENT}-airweave.ai"
+        return f"https://docs.{self.DTAP_ENVIRONMENT}-airweave.com"
 
 
 settings = Settings()
