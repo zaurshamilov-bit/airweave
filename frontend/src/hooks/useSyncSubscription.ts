@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { env } from "../config/env";
 
 interface SyncUpdate {
   updated?: number;
@@ -14,7 +15,7 @@ export function useSyncSubscription(jobId?: string | null) {
   useEffect(() => {
     if (!jobId) return;
 
-    const url = `http://localhost:8001/sync/job/${jobId}/subscribe`; // make sure to use the correct URL
+    const url = `${env.VITE_API_URL}/sync/job/${jobId}/subscribe`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
@@ -38,4 +39,4 @@ export function useSyncSubscription(jobId?: string | null) {
   }, [jobId]);
 
   return updates;
-} 
+}
