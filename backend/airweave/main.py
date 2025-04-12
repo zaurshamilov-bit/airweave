@@ -245,6 +245,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
+        "localhost:8001",
         "http://localhost:8080",
         "https://app.dev-airweave.com",
         "https://app.stg-airweave.com",
