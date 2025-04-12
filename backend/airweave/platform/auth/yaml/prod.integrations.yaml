@@ -200,3 +200,9 @@ integrations:
     additional_frontend_params:
       access_type: "offline"
       prompt: "consent"
+
+  weaviate:
+    auth_type: "config_class"
+
+  neo4j:
+    auth_type: "config_class"
