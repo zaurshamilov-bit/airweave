@@ -12,16 +12,6 @@ interface SyncJob {
   error_message: string | null;
 }
 
-interface PaginationState {
-  pageIndex: number;
-  pageSize: number;
-}
-
-interface PaginationInfo {
-  pageCount: number;
-  totalItems: number;
-}
-
 interface SyncJobsTableProps {
   syncId: string;
   onTotalRunsChange: (total: number) => void;
@@ -36,42 +26,15 @@ export const SyncJobsTable: React.FC<SyncJobsTableProps> = ({
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [pagination, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 10,
-  });
-  const [paginationInfo, setPaginationInfo] = useState<PaginationInfo>({
-    pageCount: 1,
-    totalItems: 0,
-  });
 
   useEffect(() => {
     const fetchJobs = async () => {
       setIsLoading(true);
       try {
-        const skip = pagination.pageIndex * pagination.pageSize;
-        const limit = pagination.pageSize;
-
-        const response = await apiClient.get(
-          `/sync/${syncId}/jobs?skip=${skip}&limit=${limit}`
-        );
+        const response = await apiClient.get(`/sync/${syncId}/jobs`);
         const data: SyncJob[] = await response.json();
-
         setJobs(data);
-
-        // Estimate pagination info
-        const isLastPage = data.length < pagination.pageSize;
-        const estimatedTotalItems = isLastPage
-          ? pagination.pageIndex * pagination.pageSize + data.length
-          : (pagination.pageIndex + 1) * pagination.pageSize + 1;
-
-        setPaginationInfo({
-          pageCount: isLastPage ? pagination.pageIndex + 1 : pagination.pageIndex + 2,
-          totalItems: estimatedTotalItems
-        });
-
-        // Use the estimated total for onTotalRunsChange
-        onTotalRunsChange?.(estimatedTotalItems);
+        onTotalRunsChange?.(data.length);
       } catch (error) {
         console.error("Error fetching sync jobs:", error);
       } finally {
@@ -80,7 +43,7 @@ export const SyncJobsTable: React.FC<SyncJobsTableProps> = ({
     };
 
     fetchJobs();
-  }, [syncId, pagination, onTotalRunsChange]);
+  }, [syncId, onTotalRunsChange]);
 
   // Filter by search term
   const filteredJobs = jobs.filter(job =>
@@ -142,14 +105,11 @@ export const SyncJobsTable: React.FC<SyncJobsTableProps> = ({
       <DataTable
         data={filteredJobs}
         columns={columns}
-        pagination={pagination}
-        paginationInfo={paginationInfo}
         isLoading={isLoading}
         searchPlaceholder="Search by status..."
         searchValue={search}
         onSearchChange={setSearch}
         onRowClick={(job) => onJobSelect(job.id)}
-        onPaginationChange={setPagination}
         emptyMessage="No sync jobs found"
       />
     </div>
