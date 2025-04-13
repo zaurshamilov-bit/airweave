@@ -123,8 +123,6 @@ class SyncOrchestrator:
             pending_tasks.add(task)
 
             task.add_done_callback(lambda t: self._handle_task_completion(t, pending_tasks))
-            stream.stop()
-            break
 
             # If we have too many pending tasks, wait for some to complete
             if len(pending_tasks) >= MAX_WORKERS * 2:
