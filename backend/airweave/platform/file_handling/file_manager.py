@@ -51,9 +51,9 @@ class FileManager:
             downloaded_size = 0
             async with aiofiles.open(temp_path, "wb") as f:
                 async for chunk in stream:
-                    await f.write(chunk)  # now the HTTP request is actually executed
+                    await f.write(chunk)
                     downloaded_size += len(chunk)
-                    # what if the file is too large to be reconstructed in memory?
+                    #TODO: Implement safety check that skips file if size exceeds 1 GB
 
                     # Log progress for large files
                     if entity.total_size and entity.total_size > 10 * 1024 * 1024:  # 10MB
@@ -130,7 +130,6 @@ class FileManager:
 file_manager = FileManager()
 
 
-# what is the purpose of this?
 async def handle_file_entity(file_entity: FileEntity, stream: AsyncIterator[bytes]) -> FileEntity:
     """Utility function to handle a file entity with its stream.
 
