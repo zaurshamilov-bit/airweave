@@ -502,6 +502,8 @@ class OAuth2Service:
         ------
             HTTPException: If the token exchange fails
         """
+        # is this not very similar to _prepare_token_request
+        # or new function that can be used by refresh and exchange code
         headers = {
             "Content-Type": integration_config.content_type,
         }
