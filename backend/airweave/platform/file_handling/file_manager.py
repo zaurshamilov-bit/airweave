@@ -53,7 +53,7 @@ class FileManager:
                 async for chunk in stream:
                     await f.write(chunk)
                     downloaded_size += len(chunk)
-                    #TODO: Implement safety check that skips file if size exceeds 1 GB
+                    # TODO: Implement safety check that skips file if size exceeds 1 GB
 
                     # Log progress for large files
                     if entity.total_size and entity.total_size > 10 * 1024 * 1024:  # 10MB
