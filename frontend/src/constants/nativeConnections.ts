@@ -13,4 +13,4 @@ export const NATIVE_CONNECTION_UUIDS = {
   weaviate_native: NATIVE_WEAVIATE_UUID,
   neo4j_native: NATIVE_NEO4J_UUID,
   local_text2vec: NATIVE_TEXT2VEC_UUID,
-}; 
+};
