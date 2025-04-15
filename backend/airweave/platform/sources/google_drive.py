@@ -259,7 +259,7 @@ class GoogleDriveSource(BaseSource):
             # For testing: count file entities yielded
             file_entity_count = 0
             # Testing flag - set to True to stop after first file entity
-            stop_after_first_file = True
+            stop_after_first_file = False
 
             # 1) Generate entities for shared drives
             async for drive_entity in self._generate_drive_entities(client):
