@@ -435,7 +435,7 @@ async def get_oauth2_auth_url(
     """
     settings = integration_settings.get_by_short_name(
         short_name
-    )  # -> needs to be clear that it is an OAuth2Settings and not a Setting
+    )  # TODO: needs to be clear that it is an OAuth2Settings and not a Setting
     if not settings:
         raise HTTPException(status_code=404, detail="Integration not found")
 
