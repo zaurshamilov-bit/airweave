@@ -2,10 +2,11 @@
 
 import hashlib
 import os
-from typing import AsyncIterator
+from typing import AsyncGenerator, AsyncIterator, Dict, Optional
 from uuid import uuid4
 
 import aiofiles
+import httpx
 
 from airweave.core.logging import logger
 from airweave.platform.entities._base import FileEntity
@@ -50,13 +51,14 @@ class FileManager:
             downloaded_size = 0
             async with aiofiles.open(temp_path, "wb") as f:
                 async for chunk in stream:
-                    await f.write(chunk)
+                    await f.write(chunk)  # now the HTTP request is actually executed
                     downloaded_size += len(chunk)
+                    # what if the file is too large to be reconstructed in memory?
 
                     # Log progress for large files
                     if entity.total_size and entity.total_size > 10 * 1024 * 1024:  # 10MB
                         progress = (downloaded_size / entity.total_size) * 100
-                        logger.debug(
+                        logger.info(
                             f"Saving {entity.name}: {progress:.1f}% "
                             f"({downloaded_size}/{entity.total_size} bytes)"
                         )
@@ -66,6 +68,7 @@ class FileManager:
                 content = f.read()
                 entity.checksum = hashlib.sha256(content).hexdigest()
                 entity.local_path = temp_path
+                logger.info(f"\nlocal_path: {entity.local_path}\n")
                 entity.file_uuid = file_uuid
                 entity.total_size = downloaded_size  # Update with actual size
 
@@ -85,11 +88,49 @@ class FileManager:
         safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ")
         return safe_name.strip()
 
+    async def stream_file_from_url(
+        self,
+        url: str,
+        access_token: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> AsyncGenerator[bytes, None]:
+        """Stream file content from a URL with optional authentication.
+
+        Args:
+            url: The file download URL
+            access_token: Optional OAuth token
+            headers: Optional additional headers
+
+        Yields:
+            Chunks of file content
+        """
+        request_headers = headers or {}
+        if access_token:
+            request_headers["Authorization"] = f"Bearer {access_token}"
+
+        # The file is downloaded in chunks
+        # Google Drive API might take longer than default 5 second timeout prepare chunks
+        timeout = httpx.Timeout(10.0, read=30.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            # Simple streaming without retry
+            try:
+                async with client.stream(
+                    "GET", url, headers=request_headers, follow_redirects=True
+                ) as response:
+                    response.raise_for_status()
+                    async for chunk in response.aiter_bytes():
+                        yield chunk
+            except Exception as e:
+                logger.error(f"Error streaming file from URL {url}: {str(e)}")
+                logger.exception("Full error details:")  # This logs the stack trace
+                raise  # This will propagate through the generator
+
 
 # Global instance
 file_manager = FileManager()
 
 
+# what is the purpose of this?
 async def handle_file_entity(file_entity: FileEntity, stream: AsyncIterator[bytes]) -> FileEntity:
     """Utility function to handle a file entity with its stream.
 
