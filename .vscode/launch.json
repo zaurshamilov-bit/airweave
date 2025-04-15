@@ -24,14 +24,16 @@
                 "LOCAL_DEVELOPMENT": "true",
                 "NATIVE_WEAVIATE_HOST": "localhost",
                 "NATIVE_WEAVIATE_PORT": "8087",
-                "NATIVE_WEAVIATE_GRPC_PORT": "50051",
+                "NATIVE_WEAVIATE_GRPC_PORT": "50052",
             }
         },
         {
             "name": "Python: Debug Test Method",
             "type": "debugpy",
             "request": "launch",
-            "purpose": ["debug-test"],
+            "purpose": [
+                "debug-test"
+            ],
             "console": "integratedTerminal",
             "justMyCode": false,
             "cwd": "${workspaceFolder}/backend",
@@ -66,7 +68,7 @@
             "name": "Debug React",
             "type": "chrome",
             "request": "launch",
-            "url": "http://localhost:8080",  // Update this to match your actual Vite port
+            "url": "http://localhost:8080", // Update this to match your actual Vite port
             "webRoot": "${workspaceFolder}/frontend",
             "runtimeExecutable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
             "sourceMapPathOverrides": {
@@ -78,7 +80,10 @@
     "compounds": [
         {
             "name": "FastAPI + ARQ Worker",
-            "configurations": ["FastAPI", "ARQ Worker"],
+            "configurations": [
+                "FastAPI",
+                "ARQ Worker"
+            ],
             "stopAll": true,
             "preLaunchTask": "start-docker-services",
             "postDebugTask": "stop-docker-services"

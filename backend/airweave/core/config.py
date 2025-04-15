@@ -62,7 +62,7 @@ class Settings(BaseSettings):
 
     NATIVE_WEAVIATE_HOST: str = "weaviate"
     NATIVE_WEAVIATE_PORT: int = 8080
-    NATIVE_WEAVIATE_GRPC_PORT: int = 50051
+    NATIVE_WEAVIATE_GRPC_PORT: int = 50052
 
     NEO4J_HOST: str = "neo4j"
     NEO4J_PORT: int = 7687
