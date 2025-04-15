@@ -8,7 +8,10 @@ from pydantic import BaseModel
 
 
 class SyncProgressUpdate(BaseModel):
-    """Sync progress update data structure."""
+    """Sync progress update data structure.
+
+    This is sent over the pubsub channel to subscribers
+    """
 
     inserted: int = 0
     updated: int = 0
@@ -123,6 +126,10 @@ class SyncProgress:
         self.stats.is_complete = is_complete
         self.stats.is_failed = not is_complete
         await self._publish()
+
+    def to_dict(self) -> dict:
+        """Convert progress to a dictionary."""
+        return self.stats.model_dump()
 
 
 # Create a global instance for the entire app

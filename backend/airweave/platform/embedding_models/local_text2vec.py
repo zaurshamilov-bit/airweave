@@ -5,6 +5,8 @@ from typing import List, Optional
 import httpx
 from pydantic import Field
 
+from airweave.core.config import settings
+from airweave.core.logging import logger
 from airweave.platform.decorators import embedding_model
 
 from ._base import BaseEmbeddingModel
@@ -21,11 +23,18 @@ class LocalText2Vec(BaseEmbeddingModel):
     """Local text2vec model configuration for embedding."""
 
     model_name: str = "local-text2vec-transformers"
-    inference_url: str = Field(
-        default="http://text2vec-transformers:8080", description="URL of the inference API"
-    )
+    inference_url: str = Field(default="", description="URL of the inference API")
     vector_dimensions: int = 384  # MiniLM-L6-v2 dimensions
     enabled: bool = True
+
+    def model_post_init(self, __context) -> None:
+        """Post initialization hook to set the inference URL from settings.
+
+        This runs after Pydantic validation but before the model is used.
+        """
+        super().model_post_init(__context)
+        self.inference_url = settings.TEXT2VEC_INFERENCE_URL
+        logger.info(f"Text2Vec model using inference URL: {self.inference_url}")
 
     async def embed(
         self,
@@ -87,28 +96,25 @@ class LocalText2Vec(BaseEmbeddingModel):
         if dimensions:
             raise ValueError("Dimensions override not supported for local text2vec")
 
-        # Filter out empty texts
-        filtered_texts = [text for text in texts if text.strip()]
+        # Create result list with same order as input
+        result = []
 
-        if not filtered_texts:
-            return [[0.0] * self.vector_dimensions] * len(texts)
-
+        # Process each text individually since batch endpoint isn't available
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.inference_url}/vectors/batch", json={"texts": filtered_texts}
-            )
-            response.raise_for_status()
-            vectors = response.json()["vectors"]
-
-            # Ensure we return vectors for all texts, including empty ones
-            result = []
-            filtered_idx = 0
-
             for text in texts:
                 if text.strip():
-                    result.append(vectors[filtered_idx])
-                    filtered_idx += 1
+                    try:
+                        response = await client.post(
+                            f"{self.inference_url}/vectors/", json={"text": text}
+                        )
+                        response.raise_for_status()
+                        result.append(response.json()["vector"])
+                    except Exception as e:
+                        logger.error(f"Error embedding text: {e}")
+                        # Return zero vector for failed embedding
+                        result.append([0.0] * self.vector_dimensions)
                 else:
+                    # Return zero vector for empty text
                     result.append([0.0] * self.vector_dimensions)
 
-            return result
+        return result

@@ -30,15 +30,13 @@ class Settings(BaseSettings):
         RUN_ALEMBIC_MIGRATIONS (Optional[bool]): Whether to run the alembic migrations.
         RUN_DB_SYNC (Optional[bool]): Whether to run the system sync to process sources,
             destinations, and entity types.
-        NATIVE_WEAVIATE_HOST (str): The Weaviate host.
-        NATIVE_WEAVIATE_PORT (int): The Weaviate port.
-        NATIVE_WEAVIATE_GRPC_PORT (int): The Weaviate gRPC port.
         NEO4J_HOST (str): The Neo4j host.
         NEO4J_PORT (int): The Neo4j port.
         NEO4J_USER (str): The Neo4j username.
         NEO4J_PASSWORD (str): The Neo4j password.
         QDRANT_URL (str): The Qdrant URL.
         QDRANT_API_KEY (str): The Qdrant API key.
+        TEXT2VEC_INFERENCE_URL (str): The URL for text2vec-transformers inference service.
     """
 
     PROJECT_NAME: str = "Airweave"
@@ -63,10 +61,6 @@ class Settings(BaseSettings):
     RUN_ALEMBIC_MIGRATIONS: Optional[bool] = False
     RUN_DB_SYNC: Optional[bool] = True
 
-    NATIVE_WEAVIATE_HOST: str = os.getenv("NATIVE_WEAVIATE_HOST", "weaviate")
-    NATIVE_WEAVIATE_PORT: int = int(os.getenv("NATIVE_WEAVIATE_PORT", "8080"))
-    NATIVE_WEAVIATE_GRPC_PORT: int = int(os.getenv("NATIVE_WEAVIATE_GRPC_PORT", "50052"))
-
     NEO4J_HOST: str = "neo4j"
     NEO4J_PORT: int = 7687
     NEO4J_USER: str = "neo4j"
@@ -74,6 +68,30 @@ class Settings(BaseSettings):
 
     QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
     QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY", "")
+
+    @property
+    def TEXT2VEC_INFERENCE_URL(self) -> str:
+        """Get the appropriate Text2Vec inference URL based on deployment context.
+
+        For Docker internal communication, use http://text2vec-transformers:8080
+        For local development reaching Docker containers, use http://localhost:8000
+        Use environment variable if explicitly set, otherwise determine by LOCAL_DEVELOPMENT flag
+
+        Returns:
+            str: The URL for the Text2Vec inference service
+        """
+        # If explicitly set in env vars, use that
+        env_url = os.getenv("TEXT2VEC_INFERENCE_URL")
+        if env_url:
+            return env_url
+
+        # Otherwise, choose based on deployment context
+        if self.LOCAL_DEVELOPMENT:
+            # Local dev accessing Docker-hosted service (uses port mapping in docker-compose)
+            return "http://localhost:8000"
+        else:
+            # Inside Docker network (service-to-service)
+            return "http://text2vec-transformers:8080"
 
     OPENAI_API_KEY: Optional[str] = None
 

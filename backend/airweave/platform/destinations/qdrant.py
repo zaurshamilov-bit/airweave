@@ -39,13 +39,13 @@ class QdrantDestination(VectorDBDestination):
         self.url: str | None = None
         self.api_key: str | None = None
         self.client: QdrantClient | None = None
-        self.vector_size: int = 1536  # Default vector size
+        self.vector_size: int = 384  # Default vector size
 
     @classmethod
     async def create(
         cls,
         sync_id: UUID,
-        vector_size: int = 1536,
+        vector_size: int = 384,
     ) -> "QdrantDestination":
         """Create a new Qdrant destination.
 
@@ -154,20 +154,6 @@ class QdrantDestination(VectorDBDestination):
         """
         await self.ensure_client_readiness()
 
-        # Define collection schema with payload properties
-        payload_schema = {
-            "source_name": "keyword",
-            "entity_id": "keyword",
-            "sync_id": "keyword",
-            "sync_job_id": "keyword",
-            "content": "text",
-            "url": "keyword",
-            "sync_metadata": "text",
-            "white_label_user_identifier": "keyword",
-            "white_label_id": "keyword",
-            "white_label_name": "keyword",
-        }
-
         try:
             # Check if collection exists
             if await self.collection_exists(self.collection_name):
@@ -175,22 +161,6 @@ class QdrantDestination(VectorDBDestination):
                 return
 
             logger.info(f"Creating collection {self.collection_name}...")
-
-            # Define schema mapping for payload fields
-            schema_mapping = {}
-            for field_name, field_type in payload_schema.items():
-                if field_type == "keyword":
-                    schema_mapping[field_name] = rest.PayloadSchemaType.KEYWORD
-                elif field_type == "text":
-                    schema_mapping[field_name] = rest.PayloadSchemaType.TEXT
-                elif field_type == "integer":
-                    schema_mapping[field_name] = rest.PayloadSchemaType.INTEGER
-                elif field_type == "float":
-                    schema_mapping[field_name] = rest.PayloadSchemaType.FLOAT
-                elif field_type == "boolean":
-                    schema_mapping[field_name] = rest.PayloadSchemaType.BOOL
-                elif field_type == "geo":
-                    schema_mapping[field_name] = rest.PayloadSchemaType.GEO
 
             # Create the collection
             self.client.create_collection(
@@ -204,14 +174,6 @@ class QdrantDestination(VectorDBDestination):
                 ),
                 on_disk_payload=True,  # Store payload on disk to save memory
             )
-
-            # Add payload schema for indexing
-            for field_name, field_type in schema_mapping.items():
-                self.client.create_payload_index(
-                    collection_name=self.collection_name,
-                    field_name=field_name,
-                    field_schema=field_type,
-                )
 
         except Exception as e:
             if "already exists" not in str(e):
@@ -338,26 +300,37 @@ class QdrantDestination(VectorDBDestination):
 
         await self.ensure_client_readiness()
 
-        # Create filter for parent_id and sync_id
+        # Ensure sync_id is a string
+        sync_id_str = str(sync_id)
+        parent_id_str = str(parent_id)
+
+        # Create filter for parent_id and sync_id using the correct Qdrant structure
         filter_condition = {
             "must": [
-                {"key": "parent_entity_id", "match": {"value": parent_id}},
-                {"key": "sync_id", "match": {"value": sync_id}},
+                {"key": "parent_entity_id", "match": {"value": parent_id_str}},
+                {"key": "sync_id", "match": {"value": sync_id_str}},
             ]
         }
 
-        # Convert dict filter to Qdrant filter format
-        qdrant_filter = rest.Filter.parse_obj(filter_condition)
+        # Use try-except to handle any filter validation errors
+        try:
+            # Convert dict filter to Qdrant filter format
+            qdrant_filter = rest.Filter.model_validate(filter_condition)
 
-        self.client.delete(
-            collection_name=self.collection_name,
-            points_selector=rest.FilterSelector(
-                filter=qdrant_filter,
-            ),
-            wait=True,  # Wait for operation to complete
-        )
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=rest.FilterSelector(
+                    filter=qdrant_filter,
+                ),
+                wait=True,  # Wait for operation to complete
+            )
+        except Exception as e:
+            logger.error(f"Error creating Qdrant filter: {e}")
+            logger.error(f"Filter condition: {filter_condition}")
+            # Fallback to a different approach if needed
+            raise
 
-    async def search_for_sync_id(self, query_vector: list[float], sync_id: UUID) -> list[dict]:
+    async def search(self, query_vector: list[float]) -> list[dict]:
         """Search for a sync_id in the destination.
 
         Args:
@@ -369,37 +342,45 @@ class QdrantDestination(VectorDBDestination):
         """
         await self.ensure_client_readiness()
 
+        # Ensure sync_id is a string
+        sync_id_str = str(self.sync_id)
+
         # Create filter for sync_id
         filter_condition = {
             "must": [
-                {"key": "sync_id", "match": {"value": str(sync_id)}},
+                {"key": "sync_id", "match": {"value": sync_id_str}},
             ]
         }
 
-        # Convert dict filter to Qdrant filter format
-        qdrant_filter = rest.Filter.parse_obj(filter_condition)
+        try:
+            # Convert dict filter to Qdrant filter format
+            qdrant_filter = rest.Filter.model_validate(filter_condition)
 
-        # Perform search
-        search_results = self.client.search(
-            collection_name=self.collection_name,
-            query_vector=query_vector,
-            query_filter=qdrant_filter,
-            limit=10,
-            with_payload=True,
-        )
-
-        # Convert results to a standard format
-        results = []
-        for result in search_results:
-            results.append(
-                {
-                    "id": result.id,
-                    "score": result.score,
-                    "payload": result.payload,
-                }
+            # Perform search
+            search_results = self.client.search(
+                collection_name=self.collection_name,
+                query_vector=query_vector,
+                query_filter=qdrant_filter,
+                limit=10,
+                with_payload=True,
             )
 
-        return results
+            # Convert results to a standard format
+            results = []
+            for result in search_results:
+                results.append(
+                    {
+                        "id": result.id,
+                        "score": result.score,
+                        "payload": result.payload,
+                    }
+                )
+
+            return results
+        except Exception as e:
+            logger.error(f"Error searching with Qdrant filter: {e}")
+            logger.error(f"Filter condition: {filter_condition}")
+            return []
 
     @staticmethod
     def _sanitize_collection_name(collection_name: UUID) -> str:
