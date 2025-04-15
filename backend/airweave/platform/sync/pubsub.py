@@ -13,7 +13,7 @@ class SyncProgressUpdate(BaseModel):
     inserted: int = 0
     updated: int = 0
     deleted: int = 0
-    already_sync: int = 0
+    kept: int = 0
     is_complete: bool = False  # Add completion flag
     is_failed: bool = False  # Add failure flag
 
@@ -107,7 +107,7 @@ class SyncProgress:
         setattr(self.stats, stat_name, current_value + amount)
 
         total_ops = sum(
-            [self.stats.inserted, self.stats.updated, self.stats.deleted, self.stats.already_sync]
+            [self.stats.inserted, self.stats.updated, self.stats.deleted, self.stats.kept]
         )
 
         if total_ops - self._last_published >= self._publish_threshold:

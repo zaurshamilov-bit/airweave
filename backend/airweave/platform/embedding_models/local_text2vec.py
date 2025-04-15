@@ -1,10 +1,10 @@
 """Local text2vec model for embedding."""
 
-from typing import Any, Dict, Optional
+from typing import List, Optional
 
+import httpx
 from pydantic import Field
 
-from airweave.core.logging import logger
 from airweave.platform.decorators import embedding_model
 
 from ._base import BaseEmbeddingModel
@@ -27,34 +27,88 @@ class LocalText2Vec(BaseEmbeddingModel):
     vector_dimensions: int = 384  # MiniLM-L6-v2 dimensions
     enabled: bool = True
 
-    def get_model_config(self) -> Dict[str, Any]:
-        """Get the model configuration."""
-        return {
-            "type": "text2vec-transformers",
-            "inference_api": self.inference_url,
-            "dimensions": self.vector_dimensions,
-        }
+    async def embed(
+        self,
+        text: str,
+        model: Optional[str] = None,
+        encoding_format: str = "float",
+        dimensions: Optional[int] = None,
+    ) -> List[float]:
+        """Embed a single text string using the local text2vec model.
 
-    def get_additional_config(self) -> Optional[Dict[str, Any]]:
-        """Get additional configuration for generative features."""
-        return None
+        Args:
+            text: The text to embed
+            model: Optional model override (defaults to self.model_name)
+            encoding_format: Format of the embedding (default: float)
+            dimensions: Vector dimensions (defaults to self.vector_dimensions)
 
-    def get_headers(self) -> dict:
-        """Get necessary headers for the vectorizer."""
-        return {}
+        Returns:
+            List of embedding values
+        """
+        if model:
+            raise ValueError("Model override not supported for local text2vec")
 
-    @property
-    def requires_api_key(self) -> bool:
-        """Check if this vectorizer requires an API key."""
-        return False
+        if dimensions:
+            raise ValueError("Dimensions override not supported for local text2vec")
 
-    def validate_configuration(self) -> bool:
-        """Validate that the model is properly configured."""
-        try:
-            if not self.enabled:
-                logger.warning("Local text2vec model is disabled")
-                return False
-            return True
-        except Exception as e:
-            logger.error(f"Error validating local text2vec configuration: {e}")
-            return False
+        if not text.strip():
+            # Return zero vector for empty text
+            return [0.0] * self.vector_dimensions
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(f"{self.inference_url}/vectors", json={"text": text})
+            response.raise_for_status()
+            return response.json()["vector"]
+
+    async def embed_many(
+        self,
+        texts: List[str],
+        model: Optional[str] = None,
+        encoding_format: str = "float",
+        dimensions: Optional[int] = None,
+    ) -> List[List[float]]:
+        """Embed multiple text strings using the local text2vec model.
+
+        Args:
+            texts: List of texts to embed
+            model: Optional model override (defaults to self.model_name)
+            encoding_format: Format of the embedding (default: float)
+            dimensions: Vector dimensions (defaults to self.vector_dimensions)
+
+        Returns:
+            List of embedding vectors
+        """
+        if not texts:
+            return []
+
+        if model:
+            raise ValueError("Model override not supported for local text2vec")
+
+        if dimensions:
+            raise ValueError("Dimensions override not supported for local text2vec")
+
+        # Filter out empty texts
+        filtered_texts = [text for text in texts if text.strip()]
+
+        if not filtered_texts:
+            return [[0.0] * self.vector_dimensions] * len(texts)
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.inference_url}/vectors/batch", json={"texts": filtered_texts}
+            )
+            response.raise_for_status()
+            vectors = response.json()["vectors"]
+
+            # Ensure we return vectors for all texts, including empty ones
+            result = []
+            filtered_idx = 0
+
+            for text in texts:
+                if text.strip():
+                    result.append(vectors[filtered_idx])
+                    filtered_idx += 1
+                else:
+                    result.append([0.0] * self.vector_dimensions)
+
+            return result

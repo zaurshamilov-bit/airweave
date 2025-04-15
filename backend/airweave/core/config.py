@@ -3,6 +3,7 @@
 Wraps environment variables and provides defaults.
 """
 
+import os
 from typing import Optional
 
 from pydantic import PostgresDsn, ValidationInfo, field_validator
@@ -36,6 +37,8 @@ class Settings(BaseSettings):
         NEO4J_PORT (int): The Neo4j port.
         NEO4J_USER (str): The Neo4j username.
         NEO4J_PASSWORD (str): The Neo4j password.
+        QDRANT_URL (str): The Qdrant URL.
+        QDRANT_API_KEY (str): The Qdrant API key.
     """
 
     PROJECT_NAME: str = "Airweave"
@@ -60,14 +63,17 @@ class Settings(BaseSettings):
     RUN_ALEMBIC_MIGRATIONS: Optional[bool] = False
     RUN_DB_SYNC: Optional[bool] = True
 
-    NATIVE_WEAVIATE_HOST: str = "weaviate"
-    NATIVE_WEAVIATE_PORT: int = 8080
-    NATIVE_WEAVIATE_GRPC_PORT: int = 50051
+    NATIVE_WEAVIATE_HOST: str = os.getenv("NATIVE_WEAVIATE_HOST", "weaviate")
+    NATIVE_WEAVIATE_PORT: int = int(os.getenv("NATIVE_WEAVIATE_PORT", "8080"))
+    NATIVE_WEAVIATE_GRPC_PORT: int = int(os.getenv("NATIVE_WEAVIATE_GRPC_PORT", "50052"))
 
     NEO4J_HOST: str = "neo4j"
     NEO4J_PORT: int = 7687
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str = "password"
+
+    QDRANT_URL: str = os.getenv("QDRANT_URL", "http://localhost:6333")
+    QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY", "")
 
     OPENAI_API_KEY: Optional[str] = None
 
