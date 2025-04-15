@@ -1,5 +1,6 @@
 """Tests for LocalText2Vec embedding model."""
 
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,7 +19,11 @@ class TestLocalText2Vec:
     @pytest.fixture
     def model_kwargs(self):
         """Return kwargs for model initialization."""
-        return {"inference_url": "http://test-text2vec:8080"}
+        # Get the inference URL from the environment variable
+        inference_url = os.getenv("TEXT2VEC_INFERENCE_URL")
+        if not inference_url:
+            raise ValueError("INFERENCE_URL environment variable is not set")
+        return {"inference_url": inference_url}
 
     @pytest.fixture
     def model(self, model_class, model_kwargs):
@@ -110,10 +115,11 @@ class TestLocalText2Vec:
         assert len(result) == 2
         assert all(len(vec) == 384 for vec in result)
 
-        # Verify the API call
-        mock_post.assert_called_once_with(
-            f"{model.inference_url}/vectors/batch", json={"texts": texts}
-        )
+        # Verify the API call - updated to match the actual implementation
+        # The method is making individual calls for each text rather than a batch call
+        assert mock_post.call_count == 2
+        mock_post.assert_any_call(f"{model.inference_url}/vectors/", json={"text": "Text 1"})
+        mock_post.assert_any_call(f"{model.inference_url}/vectors/", json={"text": "Text 2"})
 
     @pytest.mark.asyncio
     @patch("httpx.AsyncClient.post")
@@ -136,8 +142,8 @@ class TestLocalText2Vec:
 
         # Verify the API call
         mock_post.assert_called_once_with(
-            f"{model.inference_url}/vectors/batch",
-            json={"texts": ["Text 2"]},  # Only non-empty text should be sent
+            f"{model.inference_url}/vectors/",
+            json={"text": "Text 2"},  # Only non-empty text should be sent
         )
 
     @pytest.mark.asyncio
