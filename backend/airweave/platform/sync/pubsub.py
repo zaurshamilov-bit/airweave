@@ -8,12 +8,15 @@ from pydantic import BaseModel
 
 
 class SyncProgressUpdate(BaseModel):
-    """Sync progress update data structure."""
+    """Sync progress update data structure.
+
+    This is sent over the pubsub channel to subscribers
+    """
 
     inserted: int = 0
     updated: int = 0
     deleted: int = 0
-    already_sync: int = 0
+    kept: int = 0
     is_complete: bool = False  # Add completion flag
     is_failed: bool = False  # Add failure flag
 
@@ -107,7 +110,7 @@ class SyncProgress:
         setattr(self.stats, stat_name, current_value + amount)
 
         total_ops = sum(
-            [self.stats.inserted, self.stats.updated, self.stats.deleted, self.stats.already_sync]
+            [self.stats.inserted, self.stats.updated, self.stats.deleted, self.stats.kept]
         )
 
         if total_ops - self._last_published >= self._publish_threshold:
@@ -123,6 +126,10 @@ class SyncProgress:
         self.stats.is_complete = is_complete
         self.stats.is_failed = not is_complete
         await self._publish()
+
+    def to_dict(self) -> dict:
+        """Convert progress to a dictionary."""
+        return self.stats.model_dump()
 
 
 # Create a global instance for the entire app

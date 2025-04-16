@@ -21,10 +21,7 @@
             "preLaunchTask": "start-docker-services",
             "envFile": "${workspaceFolder}/.env",
             "env": {
-                "LOCAL_DEVELOPMENT": "true",
-                "NATIVE_WEAVIATE_HOST": "localhost",
-                "NATIVE_WEAVIATE_PORT": "8087",
-                "NATIVE_WEAVIATE_GRPC_PORT": "50052",
+                "LOCAL_DEVELOPMENT": "true"
             }
         },
         {
