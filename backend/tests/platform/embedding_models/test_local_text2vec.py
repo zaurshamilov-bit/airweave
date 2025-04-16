@@ -1,10 +1,10 @@
 """Tests for LocalText2Vec embedding model."""
 
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from airweave.core.config import settings
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 
 
@@ -20,9 +20,9 @@ class TestLocalText2Vec:
     def model_kwargs(self):
         """Return kwargs for model initialization."""
         # Get the inference URL from the environment variable
-        inference_url = os.getenv("TEXT2VEC_INFERENCE_URL")
+        inference_url = settings.TEXT2VEC_INFERENCE_URL
         if not inference_url:
-            raise ValueError("INFERENCE_URL environment variable is not set")
+            raise ValueError("TEXT2VEC_INFERENCE_URL environment variable is not set")
         return {"inference_url": inference_url}
 
     @pytest.fixture
