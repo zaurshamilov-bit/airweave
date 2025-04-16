@@ -56,6 +56,12 @@ else
   exit 1
 fi
 
+# Add this block: Check if Docker daemon is running
+if ! docker info > /dev/null 2>&1; then
+  echo "Error: Docker daemon is not running. Please start Docker and try again."
+  exit 1
+fi
+
 echo "Using command: $COMPOSE_CMD"
 
 # Now run the appropriate Docker Compose command
