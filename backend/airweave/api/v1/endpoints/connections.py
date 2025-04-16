@@ -433,13 +433,16 @@ async def get_oauth2_auth_url(
         short_name: The short name of the source
         user: The current user
     """
-    settings = integration_settings.get_by_short_name(short_name)
+    settings = integration_settings.get_by_short_name(
+        short_name
+    )  # TODO: needs to be clear that it is an OAuth2Settings and not a Setting
     if not settings:
         raise HTTPException(status_code=404, detail="Integration not found")
 
     if short_name == "trello":
         return oauth2_service.generate_auth_url_for_trello()
 
+    # can also use OAuth2Service._supports_oauth2(settings.auth_type) for consistency
     if settings.auth_type not in [
         AuthType.oauth2,
         AuthType.oauth2_with_refresh,

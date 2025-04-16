@@ -13,7 +13,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airweave"]
+      test: [ "CMD-SHELL", "pg_isready -U airweave" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -26,7 +26,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -40,7 +40,7 @@ services:
       ENABLE_CUDA: 0
       WORKERS_PER_NODE: 1
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8080/health" ]
       interval: 5s
       timeout: 10s
       retries: 3
@@ -51,7 +51,7 @@ services:
     image: semitechnologies/weaviate:1.24.1
     ports:
       - "8087:8080"
-      - "50052:50051"
+      - "50052:50052"
     environment:
       QUERY_DEFAULTS_LIMIT: 25
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
@@ -63,7 +63,7 @@ services:
       LOG_LEVEL: 'trace'
       CONSOLE_LOGGER: 'true'
       LOG_FORMAT: 'text'
-      GRPC_PORT: "50051"
+      GRPC_PORT: "50052"
     depends_on:
       - text2vec-transformers
     logging:
@@ -74,7 +74,7 @@ services:
     volumes:
       - weaviate_data:/var/lib/weaviate
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/v1/.well-known/ready"]
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8080/v1/.well-known/ready" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -92,7 +92,7 @@ services:
     volumes:
       - neo4j_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      test: [ "CMD", "curl", "-f", "http://localhost:7474" ]
       interval: 10s
       timeout: 10s
       retries: 5
