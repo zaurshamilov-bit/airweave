@@ -64,6 +64,27 @@ fi
 
 echo "Using command: $COMPOSE_CMD"
 
+# Check for existing airweave containers
+EXISTING_CONTAINERS=$(docker ps -a --filter "name=airweave" --format "{{.Names}}" | tr '\n' ' ')
+
+if [ -n "$EXISTING_CONTAINERS" ]; then
+  echo "Found existing airweave containers: $EXISTING_CONTAINERS"
+  read -p "Would you like to remove them before starting? (y/n): " REMOVE_CONTAINERS
+
+  if [ "$REMOVE_CONTAINERS" = "y" ] || [ "$REMOVE_CONTAINERS" = "Y" ]; then
+    echo "Removing existing containers..."
+    docker rm -f $EXISTING_CONTAINERS
+
+    # Also remove the database volume
+    echo "Removing database volume..."
+    docker volume rm airweave_postgres_data
+
+    echo "Containers and volumes removed."
+  else
+    echo "Warning: Starting with existing containers may cause conflicts."
+  fi
+fi
+
 # Now run the appropriate Docker Compose command
 $COMPOSE_CMD up -d
 
