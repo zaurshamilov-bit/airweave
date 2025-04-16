@@ -1,3 +1,7 @@
+# docker-compose.test.yml
+# Used for system testing with dedicated configuration
+# All required environment variables are explicitly set here
+
 services:
   postgres:
     image: postgres:16
@@ -65,21 +69,18 @@ services:
       qdrant:
         condition: service_healthy
 
+    # Load environment from .env.test
+    env_file:
+      - ../../../.env.test
+
+    # Override specific variables for container-specific settings
     environment:
-      - DATABASE_URL=postgresql+asyncpg://airweave:airweave1234!@postgres:5432/airweave
+      # For docker networking - overrides host names in .env.test
+      - POSTGRES_HOST=postgres
       - REDIS_HOST=redis
-      - QDRANT_HOST=qdrant
       - QDRANT_URL=http://qdrant:6333
       - TEXT2VEC_INFERENCE_URL=http://text2vec-transformers:8080
-      - TESTING=true
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=airweave
-      - POSTGRES_PASSWORD=airweave1234!
-      - POSTGRES_DB=airweave
-      - FIRST_SUPERUSER=admin@example.com
-      - FIRST_SUPERUSER_PASSWORD=admin
-      - ENCRYPTION_KEY="SpgLrrEEgJ/7QdhSMSvagL1juEY5eoyCG0tZN7OSQV0="
+
     ports:
       - "9001:8001"
     volumes:

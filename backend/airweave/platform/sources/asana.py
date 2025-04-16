@@ -17,7 +17,7 @@ from airweave.platform.entities.asana import (
     AsanaTaskEntity,
     AsanaWorkspaceEntity,
 )
-from airweave.platform.file_handling.file_manager import file_manager, handle_file_entity
+from airweave.platform.file_handling.file_manager import file_manager
 from airweave.platform.sources._base import BaseSource
 
 
@@ -266,9 +266,9 @@ class AsanaSource(BaseSource):
 
             # Use the new method with retry for robustness
             file_stream = file_manager.stream_file_from_url(
-                file_entity.download_url, headers=headers, with_retry=True
+                file_entity.download_url, headers=headers
             )
-            yield await handle_file_entity(stream=file_stream, entity=file_entity)
+            yield await file_manager.handle_file_entity(stream=file_stream, entity=file_entity)
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Asana."""

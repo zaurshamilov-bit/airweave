@@ -1,19 +1,22 @@
-#version: "3.8"
+# docker-compose.yml
+# Used for "clone & run" deployment scenario
+# Started by ./start.sh with auto-generated .env
 
 services:
   postgres:
     container_name: airweave-db
     image: postgres:16
+    # Uses variables from .env with fallbacks
     environment:
-      POSTGRES_DB: airweave
-      POSTGRES_USER: airweave
-      POSTGRES_PASSWORD: airweave1234!
+      POSTGRES_DB: ${POSTGRES_DB:-airweave}
+      POSTGRES_USER: ${POSTGRES_USER:-airweave}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airweave1234!}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U airweave" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-airweave}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -36,15 +39,23 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    # Import all variables from .env file
     env_file:
       - .env
     ports:
       - "8001:8001"
     volumes:
       - ./backend:/app
+    # These variables override any from .env file
+    # Required for container networking (services refer to container names, not localhost)
     environment:
+      # Override any localhost references for container networking
+      - POSTGRES_HOST=postgres
       - REDIS_HOST=redis
-      - WEAVIATE_HOST=qdrant
+      - QDRANT_URL=http://qdrant:6333
+      - TEXT2VEC_INFERENCE_URL=http://text2vec-transformers:8080
+      # These ensure services run properly inside containers
+      - LOCAL_DEVELOPMENT=false
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,7 +76,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "${FRONTEND_LOCAL_DEVELOPMENT_PORT:-8080}:8080"
     environment:
       - API_URL=http://localhost:8001
     depends_on:

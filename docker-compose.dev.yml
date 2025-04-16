@@ -1,5 +1,9 @@
 version: "3.8"
 
+# docker-compose.dev.yml
+# Used for local development and debugging
+# Started by VS Code tasks.json for local debugging
+
 services:
   postgres:
     container_name: airweave-db
@@ -50,7 +54,6 @@ services:
     container_name: airweave-qdrant
     image: qdrant/qdrant:latest
     command: bash -c "apt-get update && apt-get install -y curl && ./entrypoint.sh" # we need to install curl to check health
-
     ports:
       - "6333:6333"
     volumes:
@@ -61,6 +64,7 @@ services:
       timeout: 5s
       retries: 3
     restart: on-failure
+
 volumes:
   postgres_data:
   redis_data:

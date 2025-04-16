@@ -2,26 +2,16 @@
 
 from uuid import UUID
 
-from pydantic import Field
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as rest
 
 from airweave.core.config import settings
 from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
-from airweave.platform.configs.auth import AuthConfig
+from airweave.platform.configs.auth import QdrantAuthConfig
 from airweave.platform.decorators import destination
 from airweave.platform.destinations._base import VectorDBDestination
 from airweave.platform.entities._base import ChunkEntity
-
-
-class QdrantAuthConfig(AuthConfig):
-    """Qdrant authentication credentials schema."""
-
-    url: str = Field(title="URL", description="The URL of the Qdrant service")
-    api_key: str = Field(
-        title="API Key", description="The API key for the Qdrant service (if required)"
-    )
 
 
 @destination("Qdrant", "qdrant", AuthType.config_class, "QdrantAuthConfig", labels=["Vector"])
@@ -98,7 +88,7 @@ class QdrantDestination(VectorDBDestination):
                 }
 
                 # Add API key if provided
-                api_key = self.api_key or settings.QDRANT_API_KEY
+                api_key = self.api_key
                 if api_key:
                     client_config["api_key"] = api_key
 
