@@ -166,6 +166,17 @@ def perform_search(e2e_api_url: str, sync_id: str, query: str) -> List[Dict[str,
     assert "payload" in search_results[0], "Result should have text content"
     assert "score" in search_results[0], "Result should have a relevance score"
 
+    # Log search results
+    print(f"\n----- Search Results for Query: '{query}' -----")
+    print(f"Found {len(search_results)} results")
+
+    for i, result in enumerate(search_results):
+        print(f"\nResult #{i+1} (Score: {result['score']:.4f}):")
+        print(f"Payload: {result['payload']}")
+        if 'metadata' in result:
+            print(f"Metadata: {result['metadata']}")
+        print("-" * 50)
+
     return search_results
 
 
@@ -318,13 +329,13 @@ def test_user_onboarding(e2e_api_url, source_connection_data, sync_data):
     wait_for_sync_completion(e2e_api_url, sync_id, job_id)
 
     # Define the test query
-    search_query = "What did Daan Manneke buy according to the invoice?"
+    search_query = "What did Neena buy according to the invoice?"
 
     # Step 5: Test search functionality
     search_results = perform_search(e2e_api_url, sync_id, search_query)
 
     # Step 6: Evaluate search results with LLM judge
-    expected_keywords = ["harry potter book", "koffiezetapparaat"]
+    expected_keywords = ["Vitesse", "schaakbord"]
     evaluate_with_llm_judge(search_query, search_results, expected_keywords)
 
     # Step 7: Test chat functionality

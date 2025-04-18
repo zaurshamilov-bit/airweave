@@ -8,9 +8,11 @@ import json
 import logging
 import os
 from typing import Any, Dict, List, Optional
+import openai
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
 
 
 class SearchResultEvaluator:
@@ -28,7 +30,7 @@ class SearchResultEvaluator:
         Args:
             llm_api_key: API key for the LLM service (optional)
         """
-        self.llm_api_key = llm_api_key or os.environ.get("LLM_API_KEY")
+        self.llm_api_key = llm_api_key or os.environ.get("OPENAI_API_KEY") or os.environ.get("LLM_API_KEY")
 
     def evaluate(
         self,
@@ -56,7 +58,7 @@ class SearchResultEvaluator:
         if self.llm_api_key:
             evaluation = self._evaluate_with_llm(query, results, expected_keywords)
         else:
-            logger.warning("No LLM API key provided, falling back to simple evaluation")
+            logger.warning("No LLM API key provided, falling back to simple evaluation.")
             evaluation = self._simple_evaluation(query, results, expected_keywords)
 
         # Add pass/fail status
@@ -70,10 +72,7 @@ class SearchResultEvaluator:
     def _evaluate_with_llm(
         self, query: str, results: List[Dict[str, Any]], expected_content_keywords: List[str]
     ) -> Dict[str, Any]:
-        """Use an LLM to evaluate search results.
-
-        This is a placeholder implementation. In a real implementation,
-        you would call your LLM API of choice.
+        """Use OpenAI's API to evaluate search results.
 
         Args:
             query: The search query
@@ -83,29 +82,70 @@ class SearchResultEvaluator:
         Returns:
             Dict with evaluation metrics
         """
-        # This is a placeholder - in a real implementation, integrate with your LLM API
-        # For example with OpenAI:
-
         try:
-            # Placeholder for an API call
-            # In a real implementation:
-            # 1. Import the LLM client library
-            # 2. Format a prompt with the query, results, expected keywords
-            # 3. Call the API and parse the response
+            # Check if OpenAI module is available
+            if 'openai' not in globals():
+                logger.error("OpenAI package not installed, falling back to simple evaluation")
+                return self._simple_evaluation(query, results, expected_content_keywords)
 
-            # Simulated response for now
-            logger.info("LLM evaluation not implemented yet, returning simulated response")
-            return {
-                "relevance": 0.8,
-                "completeness": 0.75,
-                "diversity": 0.7,
-                "relevant_results": len(results) // 2 + 1,  # Simplified placeholder
-                "score": 0.75,  # Weighted average
-                "feedback": "Simulated LLM feedback",
-            }
+            # Set up OpenAI client
+            client = openai.OpenAI(api_key=self.llm_api_key)
+
+            # Format results for better readability in the prompt
+            formatted_results = json.dumps(results, indent=2)
+            keywords_str = ", ".join(expected_content_keywords) if expected_content_keywords else "None specified"
+
+            # Create the evaluation prompt
+            prompt = f"""
+            Evaluate the quality of these search results for the query: "{query}".
+
+            Search Results:
+            {formatted_results}
+
+            Expected keywords that should appear in good results: {keywords_str}
+
+            Please evaluate the results on the following metrics:
+            1. Relevance (0-1): How relevant are the results to the query?
+            2. Completeness (0-1): How well do the results cover the expected keywords and topics?
+            3. Diversity (0-1): How diverse are the results in covering different aspects?
+            4. Relevant Results Count: How many results are actually relevant to the query?
+
+            Please provide your evaluation in JSON format with these fields:
+            - relevance: float (0-1)
+            - completeness: float (0-1)
+            - diversity: float (0-1)
+            - relevant_results: int
+            - score: float (0-1, weighted average of other metrics)
+            - feedback: string (brief explanation of the evaluation)
+            """
+
+            # Call the OpenAI API
+            response = client.chat.completions.create(
+                model="gpt-4o",  # Use an appropriate model
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,  # Low temperature for more consistent evaluations
+                response_format={"type": "json_object"}
+            )
+
+            # Parse the response
+            evaluation = json.loads(response.choices[0].message.content)
+
+            # Ensure all required fields are present
+            required_fields = ["relevance", "completeness", "diversity", "relevant_results", "score", "feedback"]
+            for field in required_fields:
+                if field not in evaluation:
+                    logger.warning(f"Field {field} missing from LLM evaluation, adding default value")
+                    if field == "relevant_results":
+                        evaluation[field] = 0
+                    elif field == "feedback":
+                        evaluation[field] = "No feedback provided by LLM"
+                    else:
+                        evaluation[field] = 0.0  # Default value for missing metrics
+
+            return evaluation
 
         except Exception as e:
-            logger.error(f"Error calling LLM API: {e}")
+            logger.error(f"Error calling OpenAI API: {e}")
             # Fall back to simple evaluation
             return self._simple_evaluation(query, results, expected_content_keywords)
 
