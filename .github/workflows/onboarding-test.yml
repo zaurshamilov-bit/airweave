@@ -5,6 +5,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+
 jobs:
   test-onboarding:
     runs-on: ubuntu-latest
@@ -21,7 +22,7 @@ jobs:
       # TODO: change to main branch
       - name: Clone repository
         run: |
-          git clone -b feat/user_onboarding_test_in_CI https://github.com/marc-rutzou/airweave.git
+          git clone https://github.com/marc-rutzou/airweave.git
           cd airweave
 
       - name: Run start script
