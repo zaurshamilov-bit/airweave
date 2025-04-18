@@ -58,7 +58,7 @@ class SearchResultEvaluator:
         if self.llm_api_key:
             evaluation = self._evaluate_with_llm(query, results, expected_keywords)
         else:
-            logger.warning("No LLM API key provided, falling back to simple evaluation.")
+            logger.warning("!!!!No LLM API key provided, falling back to simple evaluation.")
             evaluation = self._simple_evaluation(query, results, expected_keywords)
 
         # Add pass/fail status
