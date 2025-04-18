@@ -35,6 +35,11 @@ navigation:
       - page: White Labeling
         path: docs/pages/white-labeling.mdx
 
+      - section: Connectors
+        contents:
+          - page: Slack
+            path: docs/pages/connectors/slack/main.mdx
+
   - api: API Reference
     snippets:
       python: airweave-sdk
@@ -65,3 +70,5 @@ logo:
   href: https://docs.airweave.ai/
 
 favicon: docs/assets/favicon.ico
+
+css: docs/styles.css
