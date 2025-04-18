@@ -25,6 +25,13 @@ if settings.OPENAI_API_KEY:
 
     openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
+# Remove the module-level Mistral client initialization
+mistral_client = None
+if hasattr(settings, "MISTRAL_API_KEY") and settings.MISTRAL_API_KEY:
+    from mistralai import Mistral
+
+    mistral_client = Mistral(api_key=settings.MISTRAL_API_KEY)
+
 
 class AsyncDocumentConverterResult:
     """The result of converting a document to text."""
@@ -259,12 +266,97 @@ class AsyncImageConverter(AsyncDocumentConverter):
 
 
 class AsyncPdfConverter(AsyncDocumentConverter):
-    """Converts PDF files to Markdown using PyPDF2 or pdfminer.six if available."""
+    """Converts PDF files to Markdown using Mistral OCR or falls back to PyPDF2."""
+
+    def __init__(self):
+        """Initialize the PDF converter with Mistral client if API key is available."""
+        self.mistral_client = mistral_client
+
+    async def _convert_with_mistral(self, local_path: str) -> tuple[str, str | None]:
+        """Convert PDF using Mistral OCR.
+
+        Args:
+            local_path: Path to the PDF file
+
+        Returns:
+            Tuple of (markdown_content, title)
+
+        Raises:
+            Exception: If Mistral OCR conversion fails
+        """
+        logger.info(f"Using Mistral OCR to process PDF: {local_path}")
+
+        # Upload file to Mistral
+        with open(local_path, "rb") as file:
+            uploaded_pdf = self.mistral_client.files.upload(
+                file={
+                    "file_name": os.path.basename(local_path),
+                    "content": file,
+                },
+                purpose="ocr",
+            )
+
+        # Get signed URL for accessing the file
+        signed_url = self.mistral_client.files.get_signed_url(file_id=uploaded_pdf.id)
+
+        # Process file with OCR
+        ocr_response = self.mistral_client.ocr.process(
+            model="mistral-ocr-latest",
+            document={
+                "type": "document_url",
+                "document_url": signed_url.url,
+            },
+        )
+
+        # Extract markdown content from each page
+        md_content = ""
+        for page in ocr_response.pages:
+            md_content += f"\n\n## Page {page.index + 1}\n\n{page.markdown}\n"
+
+        # Try to extract title from metadata if available
+        title = None
+        if hasattr(ocr_response, "metadata") and ocr_response.metadata:
+            if hasattr(ocr_response.metadata, "title"):
+                title = ocr_response.metadata.title
+
+        return md_content.strip(), title
+
+    async def _convert_with_pypdf(self, local_path: str) -> tuple[str, str | None]:
+        """Convert PDF using PyPDF2 as fallback.
+
+        Args:
+            local_path: Path to the PDF file
+
+        Returns:
+            Tuple of (markdown_content, title)
+
+        Raises:
+            ImportError: If PyPDF2 is not installed
+        """
+        import PyPDF2
+
+        md_content = ""
+        title = None
+
+        with open(local_path, "rb") as file:
+            reader = PyPDF2.PdfReader(file)
+
+            # Try to extract title from metadata
+            if reader.metadata and hasattr(reader.metadata, "title"):
+                title = reader.metadata.title
+
+            # Extract text from each page
+            for i, page in enumerate(reader.pages):
+                page_text = page.extract_text()
+                if page_text:
+                    md_content += f"\n\n## Page {i + 1}\n\n{page_text}\n"
+
+        return md_content.strip(), title
 
     async def convert(
         self, local_path: str, **kwargs: Any
     ) -> Union[None, AsyncDocumentConverterResult]:
-        """Convert a PDF file to markdown.
+        """Convert a PDF file to markdown using Mistral OCR when available.
 
         Args:
             local_path: Path to the PDF file
@@ -277,53 +369,26 @@ class AsyncPdfConverter(AsyncDocumentConverter):
         if extension.lower() != ".pdf":
             return None
 
-        md_content = ""
-        title = None
-
-        try:
-            # Try using PyPDF2 first
-            import PyPDF2
-
-            with open(local_path, "rb") as file:
-                reader = PyPDF2.PdfReader(file)
-
-                # Try to extract title from metadata
-                if reader.metadata and hasattr(reader.metadata, "title"):
-                    title = reader.metadata.title
-
-                # Extract text from each page
-                for i, page in enumerate(reader.pages):
-                    page_text = page.extract_text()
-                    if page_text:
-                        md_content += f"\n\n## Page {i + 1}\n\n{page_text}\n"
-        except ImportError:
-            # Fall back to pdfminer.six if PyPDF2 is not available
+        # Try Mistral OCR first if available
+        if self.mistral_client:
             try:
-                from pdfminer.high_level import extract_text
+                md_content, title = await self._convert_with_mistral(local_path)
+                return AsyncDocumentConverterResult(title=title, text_content=md_content)
+            except Exception as e:
+                logger.error(f"Error converting PDF with Mistral OCR: {str(e)}")
+                logger.info("Falling back to PyPDF2")
 
-                text = extract_text(local_path)
-                md_content = text
-            except ImportError:
-                # If neither library is available, use subprocess to call external tools
-                try:
-                    # Try pdftotext if available
-                    if shutil.which("pdftotext"):
-                        result = subprocess.run(
-                            ["pdftotext", local_path, "-"], capture_output=True, text=True
-                        )
-                        md_content = result.stdout
-                    else:
-                        return AsyncDocumentConverterResult(
-                            title=None,
-                            text_content=(
-                                "PDF conversion requires PyPDF2, pdfminer.six, or pdftotext."
-                            ),
-                        )
-                except Exception as e:
-                    logger.error(f"Error converting PDF with external tools: {str(e)}")
-                    return None
-
-        return AsyncDocumentConverterResult(title=title, text_content=md_content.strip())
+        # Fall back to PyPDF2
+        try:
+            md_content, title = await self._convert_with_pypdf(local_path)
+            return AsyncDocumentConverterResult(title=title, text_content=md_content)
+        except ImportError:
+            return AsyncDocumentConverterResult(
+                title=None, text_content="PDF conversion requires Mistral API key or PyPDF2."
+            )
+        except Exception as e:
+            logger.error(f"Error converting PDF with PyPDF2: {str(e)}")
+            return None
 
 
 class AsyncDocxConverter(AsyncDocumentConverter):
