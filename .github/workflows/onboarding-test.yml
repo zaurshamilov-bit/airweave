@@ -22,7 +22,7 @@ jobs:
       # TODO: change to main branch
       - name: Clone repository
         run: |
-          git clone https://github.com/marc-rutzou/airweave.git
+          git clone -b fix/onboarding_test https://github.com/marc-rutzou/airweave.git
           cd airweave
 
       - name: Run start script

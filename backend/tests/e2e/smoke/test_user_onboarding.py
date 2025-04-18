@@ -166,6 +166,17 @@ def perform_search(e2e_api_url: str, sync_id: str, query: str) -> List[Dict[str,
     assert "payload" in search_results[0], "Result should have text content"
     assert "score" in search_results[0], "Result should have a relevance score"
 
+    # Log search results
+    print(f"\n----- Search Results for Query: '{query}' -----")
+    print(f"Found {len(search_results)} results")
+
+    for i, result in enumerate(search_results):
+        print(f"\nResult #{i+1} (Score: {result['score']:.4f}):")
+        print(f"Payload: {result['payload']}")
+        if 'metadata' in result:
+            print(f"Metadata: {result['metadata']}")
+        print("-" * 50)
+
     return search_results
 
 
