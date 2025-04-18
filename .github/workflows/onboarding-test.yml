@@ -1,0 +1,60 @@
+name: User Onboarding Test
+
+on:
+  pull_request_target: # Need access to secrets
+    branches: [main]
+  push:
+    branches:
+      - feat/user_onboarding_test_in_CI # TODO delete rule
+
+jobs:
+  test-onboarding:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify prerequisites
+        run: |
+          echo "Docker version:"
+          docker --version
+          echo "Docker Compose version:"
+          docker compose version
+
+      # TODO: change to main branch
+      - name: Clone repository
+        run: |
+          git clone -b feat/user_onboarding_test_in_CI https://github.com/marc-rutzou/airweave.git
+          cd airweave
+
+      - name: Run start script
+        working-directory: ./airweave
+        run: |
+          chmod +x start.sh
+          { echo "y"; echo "${{ secrets.OPENAI_API_KEY }}"; } | ./start.sh
+
+      - name: Run backend-specific health checks
+        working-directory: ./airweave
+        run: |
+          docker exec -e AIRWEAVE_TEST_ENV=onboarding airweave-backend pytest tests/e2e/smoke/test_basic_health.py -v
+
+      - name: Run frontend health checks
+        working-directory: ./airweave
+        run: |
+          echo "Checking frontend accessibility..."
+          FRONTEND_URL="http://localhost:8080"
+
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" $FRONTEND_URL)
+
+          if [ "$HTTP_STATUS" == "200" ]; then
+            echo "Frontend accessibility test passed!"
+          else
+            echo "Frontend test failed: HTTP status $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Run user onboarding test
+        working-directory: ./airweave
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+        run: |
+          docker exec -e STRIPE_API_KEY=${OPENAI_API_KEY} -e STRIPE_API_KEY=${STRIPE_API_KEY} -e AIRWEAVE_TEST_ENV=onboarding airweave-backend pytest tests/e2e/smoke/test_user_onboarding.py -sv
