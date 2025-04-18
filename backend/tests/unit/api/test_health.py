@@ -6,8 +6,7 @@ from fastapi.testclient import TestClient
 from airweave.main import app
 
 
-@pytest.mark.asyncio
-async def test_health_check():
+def test_health_check():
     """Test the health check endpoint returns status as healthy."""
     # Create a test client for the FastAPI app
     client = TestClient(app)
