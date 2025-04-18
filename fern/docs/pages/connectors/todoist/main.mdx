@@ -1,0 +1,37 @@
+---
+title: "Todoist"
+description: "Todoist integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+<div className="connector-header">
+  <img src="icon.svg" alt="Todoist logo" width="72" height="72" className="connector-icon" />
+  <div className="connector-info">
+    <h1>Todoist</h1>
+    <p>Connect your Todoist data to Airweave</p>
+  </div>
+</div>
+
+## Overview
+
+The Todoist connector allows you to sync data from Todoist into Airweave, making it available for search and retrieval by your agents.
+
+## Configuration
+
+
+### TodoistSource
+
+Todoist source implementation.
+
+    This connector retrieves hierarchical data from the Todoist REST API:
+    - Projects
+    - Sections (within each project)
+    - Tasks (within each project, optionally nested under a section)
+    - Comments (within each task)
+
+    The Todoist entity schemas are defined in entities/todoist.py.
+
+
+
+{/* AUTO-GENERATED CONTENT END */}

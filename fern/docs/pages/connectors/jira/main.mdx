@@ -1,0 +1,60 @@
+---
+title: "Jira"
+description: "Jira integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+<div className="connector-header">
+  <img src="icon.svg" alt="Jira logo" width="72" height="72" className="connector-icon" />
+  <div className="connector-info">
+    <h1>Jira</h1>
+    <p>Connect your Jira data to Airweave</p>
+  </div>
+</div>
+
+## Overview
+
+The Jira connector allows you to sync data from Jira into Airweave, making it available for search and retrieval by your agents.
+
+## Configuration
+
+
+### JiraSource
+
+Jira source implementation (read-only).
+
+    This connector retrieves hierarchical data from Jira's REST API:
+      - Projects
+      - Issues (within each project)
+      - Comments (within each issue)
+
+    The Jira entity schemas are defined in entities/jira.py.
+
+
+## Data Models
+
+The following data models are available for this connector:
+
+
+<details>
+<summary><strong>JiraProjectEntity</strong></summary>
+
+Schema for a Jira Issue.
+
+    See:
+      https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-issue-issueidorkey-get
+      (Issue APIs in Jira Cloud)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| project_key | str | Unique key of the project (e.g., 'PROJ'). |
+| archived | bool | Indicates if this project is archived. |
+| issue_key | str | Jira key for the issue (e.g. 'PROJ-123'). |
+| archived | bool | Indicates if this issue has been archived. |
+| issue_key | str | Key of the issue this comment belongs to. |
+
+</details>
+
+
+{/* AUTO-GENERATED CONTENT END */}

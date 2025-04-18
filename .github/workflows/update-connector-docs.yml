@@ -1,0 +1,52 @@
+name: Update Connector Documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/src/components/icons/apps/**"
+      - "backend/airweave/platform/entities/**"
+      - "backend/airweave/platform/sources/**"
+      - "backend/airweave/platform/configs/auth.py"
+      - ".github/scripts/update-connector-docs.py"
+      - ".github/scripts/fix-mdx-comments.py"
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Run documentation script
+        run: python .github/scripts/update-connector-docs.py
+
+      - name: Fix MDX comments
+        run: python .github/scripts/fix-mdx-comments.py
+
+      - name: Install Fern
+        run: npm install -g fern-api
+
+      - name: Generate docs preview
+        run: cd fern && fern generate --docs --preview
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add fern/docs/pages/connectors/ fern/docs.yml
+          git diff --quiet && git diff --staged --quiet || git commit -m "docs: update connector documentation [skip ci]"
+          git push

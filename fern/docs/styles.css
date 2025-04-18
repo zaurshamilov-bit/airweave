@@ -1,3 +1,42 @@
 img {
     border-radius: 8px;
 }
+
+.connector-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.connector-icon {
+    margin-right: 15px;
+}
+
+.connector-info h1 {
+    margin: 0;
+}
+
+.connector-info p {
+    margin: 0;
+}
+
+/* Hide the Fern-generated page title on connector pages */
+[data-fern-page-path^="/connectors/"] .fern-page-heading {
+    display: none;
+}
+
+/* Alternative approach using the direct relationship */
+.fern-page-heading + .connector-header,
+.connector-header ~ .fern-page-heading {
+    margin-top: 0;
+}
+
+/* Approach to hide title on pages containing connector headers */
+.fern-page-heading:has(+ .connector-header) {
+    display: none;
+}
+
+/* If our connector header is present, hide the Fern default heading */
+.fern-content:has(.connector-header) .fern-page-heading {
+    display: none;
+}

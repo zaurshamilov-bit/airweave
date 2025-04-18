@@ -1,8 +1,38 @@
 ---
-title: Connecting to Slack (local)
-description: Guide for connecting Slack to Airweave
-slug: connectors/slack
+title: "Slack"
+description: "Slack integration with Airweave"
 ---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+
+<div className="connector-header">
+  <img src="icon.svg" alt="Slack logo" width="60" height="60" className="connector-icon" />
+  <div className="connector-info">
+    <h1>Slack</h1>
+    <p>Connect your Slack data to Airweave</p>
+  </div>
+</div>
+
+## Overview
+
+The Slack connector allows you to sync data from Slack into Airweave, making it available for search and retrieval by your agents.
+
+## Configuration
+
+
+### SlackSource
+
+Slack source implementation.
+
+    This connector retrieves data from Slack such as Channels, Users, and Messages,
+    then yields them as entities using their respective Slack entity schemas.
+
+{/* AUTO-GENERATED CONTENT END */}
+
+-------
+
+# Integrate with Slack on localhost
 
 This guide will walk you through connecting your Slack workspace to Airweave when run locally. Slack does not allow OAuth2 flows for `http://localhost`, so this is a workaround.
 

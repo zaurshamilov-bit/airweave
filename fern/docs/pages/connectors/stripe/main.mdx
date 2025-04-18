@@ -1,0 +1,47 @@
+---
+title: "Stripe"
+description: "Stripe integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+<div className="connector-header">
+  <img src="icon.svg" alt="Stripe logo" width="72" height="72" className="connector-icon" />
+  <div className="connector-info">
+    <h1>Stripe</h1>
+    <p>Connect your Stripe data to Airweave</p>
+  </div>
+</div>
+
+## Overview
+
+The Stripe connector allows you to sync data from Stripe into Airweave, making it available for search and retrieval by your agents.
+
+## Configuration
+
+
+### StripeSource
+
+Stripe source implementation.
+
+    This connector retrieves data from various Stripe objects, yielding them as entities
+    through their respective schemas. The following resource endpoints are used:
+
+      - /v1/balance
+      - /v1/balance_transactions
+      - /v1/charges
+      - /v1/customers
+      - /v1/events
+      - /v1/invoices
+      - /v1/payment_intents
+      - /v1/payment_methods
+      - /v1/payouts
+      - /v1/refunds
+      - /v1/subscriptions
+
+    Each resource endpoint may use Stripe's pagination (has_more + starting_after) to
+    retrieve all objects. Fields are mapped to the entity schemas defined in entities/stripe.py.
+
+
+
+{/* AUTO-GENERATED CONTENT END */}
