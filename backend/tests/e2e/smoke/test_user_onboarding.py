@@ -329,13 +329,13 @@ def test_user_onboarding(e2e_api_url, source_connection_data, sync_data):
     wait_for_sync_completion(e2e_api_url, sync_id, job_id)
 
     # Define the test query
-    search_query = "What did Daan Manneke buy according to the invoice?"
+    search_query = "What did Neena buy according to the invoice?"
 
     # Step 5: Test search functionality
     search_results = perform_search(e2e_api_url, sync_id, search_query)
 
     # Step 6: Evaluate search results with LLM judge
-    expected_keywords = ["harry potter book", "koffiezetapparaat"]
+    expected_keywords = ["Vitesse", "schaakbord"]
     evaluate_with_llm_judge(search_query, search_results, expected_keywords)
 
     # Step 7: Test chat functionality
