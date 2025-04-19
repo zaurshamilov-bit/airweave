@@ -30,16 +30,14 @@ OneDrive source implementation (read-only).
 
 This connector uses **OAuth 2.0 with refresh token**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>OneDriveDriveEntity</strong></summary>
+<Accordion title="OneDriveDriveEntity">
 
 Schema for a OneDrive Drive object.
 
@@ -55,10 +53,8 @@ nested objects; we store them as dictionaries.
 | created_at | Optional[datetime] | Datetime when the drive was created (from createdDateTime). |
 | updated_at | Optional[datetime] | Datetime when the drive was last modified (from lastModifiedDateTime). |
 
-</details>
-
-<details>
-<summary><strong>OneDriveDriveItemEntity</strong></summary>
+</Accordion>
+<Accordion title="OneDriveDriveItemEntity">
 
 Schema for a OneDrive DriveItem object (file or folder).
 
@@ -79,7 +75,7 @@ appear only in one context.
 | folder | Optional[Dict[str, Any]] | Folder metadata if the item is a folder (e.g., childCount). |
 | parent_reference | Optional[Dict[str, Any]] | Information about the parent of this item, such as driveId or parent folder path. |
 
-</details>
+</Accordion>
 
 
 

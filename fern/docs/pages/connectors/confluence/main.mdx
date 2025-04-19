@@ -41,16 +41,14 @@ This connector retrieves data from Confluence to yield the following entities:
 
 This connector uses **OAuth 2.0 with refresh token**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>ConfluenceSpaceEntity</strong></summary>
+<Accordion title="ConfluenceSpaceEntity">
 
 Schema for a Confluence Space.
 
@@ -67,10 +65,8 @@ See:
 | created_at | Optional[datetime] | Timestamp when the space was created. |
 | updated_at | Optional[datetime] | Timestamp when the space was last updated. |
 
-</details>
-
-<details>
-<summary><strong>ConfluenceBlogPostEntity</strong></summary>
+</Accordion>
+<Accordion title="ConfluenceBlogPostEntity">
 
 Schema for a Confluence Blog Post.
 
@@ -88,10 +84,8 @@ See:
 | created_at | Optional[datetime] | Timestamp when the blog post was created. |
 | updated_at | Optional[datetime] | Timestamp when the blog post was last updated. |
 
-</details>
-
-<details>
-<summary><strong>ConfluenceCommentEntity</strong></summary>
+</Accordion>
+<Accordion title="ConfluenceCommentEntity">
 
 Schema for a Confluence Comment.
 
@@ -107,10 +101,8 @@ See:
 | updated_at | Optional[datetime] | Timestamp when this comment was last updated. |
 | status | Optional[str] | Status of the comment (e.g., 'current'). |
 
-</details>
-
-<details>
-<summary><strong>ConfluenceDatabaseEntity</strong></summary>
+</Accordion>
+<Accordion title="ConfluenceDatabaseEntity">
 
 Schema for a Confluence Database object.
 
@@ -126,10 +118,8 @@ See:
 | updated_at | Optional[datetime] | Timestamp when the database was last updated. |
 | status | Optional[str] | Status of the database content item. |
 
-</details>
-
-<details>
-<summary><strong>ConfluenceFolderEntity</strong></summary>
+</Accordion>
+<Accordion title="ConfluenceFolderEntity">
 
 Schema for a Confluence Folder object.
 
@@ -144,10 +134,8 @@ See:
 | updated_at | Optional[datetime] | Timestamp when the folder was last updated. |
 | status | Optional[str] | Status of the folder (e.g., 'current'). |
 
-</details>
-
-<details>
-<summary><strong>ConfluenceLabelEntity</strong></summary>
+</Accordion>
+<Accordion title="ConfluenceLabelEntity">
 
 Schema for a Confluence Label object.
 
@@ -160,10 +148,8 @@ See:
 | label_type | Optional[str] | Type of the label (e.g., 'global'). |
 | owner_id | Optional[str] | ID of the user or content that owns label. |
 
-</details>
-
-<details>
-<summary><strong>ConfluenceTaskEntity</strong></summary>
+</Accordion>
+<Accordion title="ConfluenceTaskEntity">
 
 Schema for a Confluence Task object.
 
@@ -180,10 +166,8 @@ For example, tasks extracted from Confluence pages or macros.
 | created_at | Optional[datetime] | Timestamp when this task was created. |
 | updated_at | Optional[datetime] | Timestamp when this task was last updated. |
 
-</details>
-
-<details>
-<summary><strong>ConfluenceWhiteboardEntity</strong></summary>
+</Accordion>
+<Accordion title="ConfluenceWhiteboardEntity">
 
 Schema for a Confluence Whiteboard object.
 
@@ -198,10 +182,8 @@ See:
 | updated_at | Optional[datetime] | Timestamp when the whiteboard was last updated. |
 | status | Optional[str] | Status of the whiteboard (e.g., 'current'). |
 
-</details>
-
-<details>
-<summary><strong>ConfluenceCustomContentEntity</strong></summary>
+</Accordion>
+<Accordion title="ConfluenceCustomContentEntity">
 
 Schema for a Confluence Custom Content object.
 
@@ -217,7 +199,7 @@ See:
 | updated_at | Optional[datetime] | Timestamp when the custom content was last updated. |
 | status | Optional[str] | Status of the custom content item (e.g., 'current'). |
 
-</details>
+</Accordion>
 
 
 

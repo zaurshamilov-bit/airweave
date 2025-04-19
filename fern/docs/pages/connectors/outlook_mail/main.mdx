@@ -34,16 +34,14 @@ also retrieves email messages and yields OutlookMessageEntity items.
 
 This connector uses **OAuth 2.0 with refresh token**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>OutlookMailFolderEntity</strong></summary>
+<Accordion title="OutlookMailFolderEntity">
 
 Schema for an Outlook mail folder.
 
@@ -59,10 +57,8 @@ See:
 | unread_item_count | Optional[int] | Number of unread items in this folder. |
 | well_known_name | Optional[str] | Well-known name of this folder if applicable (e.g., 'inbox'). |
 
-</details>
-
-<details>
-<summary><strong>OutlookMessageEntity</strong></summary>
+</Accordion>
+<Accordion title="OutlookMessageEntity">
 
 Schema for an Outlook message.
 
@@ -89,7 +85,7 @@ See:
 | created_at | Optional[datetime] | Timestamp when the message resource was created (if available). |
 | updated_at | Optional[datetime] | Timestamp when the message was last updated (if available). |
 
-</details>
+</Accordion>
 
 
 

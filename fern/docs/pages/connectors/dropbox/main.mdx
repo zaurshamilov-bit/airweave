@@ -30,16 +30,14 @@ Dropbox source implementation.
 
 This connector uses **OAuth 2.0 with refresh token**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>DropboxAccountEntity</strong></summary>
+<Accordion title="DropboxAccountEntity">
 
 Schema for Dropbox account-level entities based on the Dropbox API.
 
@@ -74,10 +72,8 @@ OPTIONAL fields from ChunkEntity (automatically populated if available):
 | team_info | Optional[Dict] | Information about the team if user is a member |
 | root_info | Optional[Dict] | Information about the user's root namespace |
 
-</details>
-
-<details>
-<summary><strong>DropboxFolderEntity</strong></summary>
+</Accordion>
+<Accordion title="DropboxFolderEntity">
 
 Schema for Dropbox folder entities matching the Dropbox API.
 
@@ -100,7 +96,7 @@ OPTIONAL fields from ChunkEntity (automatically populated if available):
 | no_access | bool | Whether the folder cannot be accessed |
 | property_groups | Optional[List[Dict]] | Custom properties and tags |
 
-</details>
+</Accordion>
 
 
 

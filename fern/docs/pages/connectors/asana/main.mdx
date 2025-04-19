@@ -30,16 +30,14 @@ Asana source implementation.
 
 This connector uses **OAuth 2.0 with refresh token**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>AsanaWorkspaceEntity</strong></summary>
+<Accordion title="AsanaWorkspaceEntity">
 
 Schema for Asana workspace entities.
 
@@ -51,10 +49,8 @@ Schema for Asana workspace entities.
 | email_domains | List[str] | List of email domains that can access this workspace |
 | permalink_url | Optional[str] | URL to access the workspace in the Asana application |
 
-</details>
-
-<details>
-<summary><strong>AsanaProjectEntity</strong></summary>
+</Accordion>
+<Accordion title="AsanaProjectEntity">
 
 Schema for Asana project entities.
 
@@ -85,10 +81,8 @@ Schema for Asana project entities.
 | icon | Optional[str] | The icon for a project |
 | permalink_url | Optional[str] | URL to access the project in the Asana application |
 
-</details>
-
-<details>
-<summary><strong>AsanaSectionEntity</strong></summary>
+</Accordion>
+<Accordion title="AsanaSectionEntity">
 
 Schema for Asana section entities.
 
@@ -99,10 +93,8 @@ Schema for Asana section entities.
 | created_at | Optional[datetime] | The time at which this section was created |
 | projects | List[Dict] | Deprecated. Array of projects this section is associated with |
 
-</details>
-
-<details>
-<summary><strong>AsanaTaskEntity</strong></summary>
+</Accordion>
+<Accordion title="AsanaTaskEntity">
 
 Schema for Asana task entities.
 
@@ -142,10 +134,8 @@ Schema for Asana task entities.
 | followers | List[Dict] | Array of users following this task |
 | workspace | Optional[Dict] | The workspace this task is associated with |
 
-</details>
-
-<details>
-<summary><strong>AsanaCommentEntity</strong></summary>
+</Accordion>
+<Accordion title="AsanaCommentEntity">
 
 Schema for Asana comment/story entities.
 
@@ -165,7 +155,7 @@ Schema for Asana comment/story entities.
 | type | str | The type of the comment (comment or system) |
 | previews | List[Dict] | Previews of attachments referenced in the comment |
 
-</details>
+</Accordion>
 
 
 

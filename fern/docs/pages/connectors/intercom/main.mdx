@@ -34,16 +34,14 @@ Intercom entity schemas.
 
 This connector uses **OAuth 2.0 authentication flow**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>IntercomContactEntity</strong></summary>
+<Accordion title="IntercomContactEntity">
 
 Schema for Intercom contact entities.
 
@@ -61,10 +59,8 @@ Contacts in Intercom can be either users or leads with associated profile data.
 | updated_at | Optional[datetime] | Last updated time of the contact, represented as UTC Unix timestamp |
 | archived | bool | Indicates whether the contact has been archived |
 
-</details>
-
-<details>
-<summary><strong>IntercomCompanyEntity</strong></summary>
+</Accordion>
+<Accordion title="IntercomCompanyEntity">
 
 Schema for Intercom company entities.
 
@@ -83,10 +79,8 @@ Companies in Intercom represent organizations that your contacts belong to.
 | updated_at | Optional[datetime] | Last updated time of the company, represented as UTC Unix timestamp |
 | archived | bool | Indicates whether the company has been archived |
 
-</details>
-
-<details>
-<summary><strong>IntercomConversationEntity</strong></summary>
+</Accordion>
+<Accordion title="IntercomConversationEntity">
 
 Schema for Intercom conversation entities.
 
@@ -101,10 +95,8 @@ Conversations in Intercom represent message threads between contacts and your te
 | updated_at | Optional[datetime] | The time the conversation was last updated, represented as UTC Unix timestamp |
 | archived | bool | Indicates whether the conversation has been archived |
 
-</details>
-
-<details>
-<summary><strong>IntercomTicketEntity</strong></summary>
+</Accordion>
+<Accordion title="IntercomTicketEntity">
 
 Schema for Intercom ticket entities.
 
@@ -121,7 +113,7 @@ Tickets in Intercom represent structured support requests that can be tracked an
 | updated_at | Optional[datetime] | The time the ticket was last updated, represented as UTC Unix timestamp |
 | archived | bool | Indicates whether the ticket has been archived |
 
-</details>
+</Accordion>
 
 
 

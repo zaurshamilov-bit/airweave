@@ -33,16 +33,14 @@ as entity schemas defined in entities/gmail.py.
 
 This connector uses **OAuth 2.0 with refresh token**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>GmailLabelEntity</strong></summary>
+<Accordion title="GmailLabelEntity">
 
 Schema for Gmail label entities.
 
@@ -57,10 +55,8 @@ Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.label
 | total_messages | Optional[int] | Total number of messages with this label |
 | unread_messages | Optional[int] | Number of unread messages with this label |
 
-</details>
-
-<details>
-<summary><strong>GmailThreadEntity</strong></summary>
+</Accordion>
+<Accordion title="GmailThreadEntity">
 
 Schema for Gmail thread entities.
 
@@ -74,10 +70,8 @@ Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.threa
 | label_ids | List[str] | Labels applied to this thread |
 | last_message_date | Optional[datetime] | Date of the last message |
 
-</details>
-
-<details>
-<summary><strong>GmailMessageEntity</strong></summary>
+</Accordion>
+<Accordion title="GmailMessageEntity">
 
 Schema for Gmail message entities.
 
@@ -99,10 +93,8 @@ Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.messa
 | internal_date | Optional[datetime] | Internal Gmail timestamp |
 | size_estimate | Optional[int] | Estimated size in bytes |
 
-</details>
-
-<details>
-<summary><strong>GmailDraftEntity</strong></summary>
+</Accordion>
+<Accordion title="GmailDraftEntity">
 
 Schema for Gmail draft entities.
 
@@ -121,7 +113,7 @@ Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.draft
 | created_date | Optional[datetime] | Date the draft was created |
 | updated_date | Optional[datetime] | Date the draft was last updated |
 
-</details>
+</Accordion>
 
 
 

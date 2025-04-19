@@ -30,16 +30,14 @@ Outlook Calendar source implementation (read-only).
 
 This connector uses **OAuth 2.0 with refresh token**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>OutlookCalendarCalendarEntity</strong></summary>
+<Accordion title="OutlookCalendarCalendarEntity">
 
 Schema for an Outlook Calendar object.
 
@@ -55,10 +53,8 @@ The inherited entity_id field stores the calendar's Microsoft Graph ID.
 | can_view_private_items | bool | Indicates if the user can view private events on the calendar. |
 | owner | Optional[Dict[str, Any]] | Details about the calendar's owner. Usually includes name and address fields. |
 
-</details>
-
-<details>
-<summary><strong>OutlookCalendarEventEntity</strong></summary>
+</Accordion>
+<Accordion title="OutlookCalendarEventEntity">
 
 Schema for an Outlook Calendar Event object.
 
@@ -88,7 +84,7 @@ The inherited entity_id field stores the event's Microsoft Graph ID.
 | series_master_id | Optional[str] | If this is part of a recurring series, specifies the ID of the master recurring event. |
 | recurrence | Optional[Dict[str, Any]] | When present, indicates the recurrence pattern of a repeating event. |
 
-</details>
+</Accordion>
 
 
 

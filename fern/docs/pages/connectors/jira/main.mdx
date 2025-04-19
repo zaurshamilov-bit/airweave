@@ -37,16 +37,14 @@ The Jira entity schemas are defined in entities/jira.py.
 
 This connector uses **OAuth 2.0 with refresh token**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>JiraProjectEntity</strong></summary>
+<Accordion title="JiraProjectEntity">
 
 Schema for a Jira Project.
 
@@ -63,10 +61,8 @@ See:
 | description | Optional[str] | Description of the project. |
 | archived | bool | Indicates if this project is archived. |
 
-</details>
-
-<details>
-<summary><strong>JiraIssueEntity</strong></summary>
+</Accordion>
+<Accordion title="JiraIssueEntity">
 
 Schema for a Jira Issue.
 
@@ -93,10 +89,8 @@ See:
 | votes | Optional[int] | Number of votes on the issue. |
 | archived | bool | Indicates if this issue has been archived. |
 
-</details>
-
-<details>
-<summary><strong>JiraCommentEntity</strong></summary>
+</Accordion>
+<Accordion title="JiraCommentEntity">
 
 Schema for a Jira Comment.
 
@@ -112,7 +106,7 @@ See:
 | created_at | Optional[datetime] | Timestamp when this comment was created. |
 | updated_at | Optional[datetime] | Timestamp when this comment was last updated. |
 
-</details>
+</Accordion>
 
 
 

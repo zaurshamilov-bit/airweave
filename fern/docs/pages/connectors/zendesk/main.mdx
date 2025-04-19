@@ -39,16 +39,14 @@ airweave.platform.entities.zendesk.
 
 This connector uses **OAuth 2.0 with refresh token**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>ZendeskOrganizationEntity</strong></summary>
+<Accordion title="ZendeskOrganizationEntity">
 
 Schema for a Zendesk organization.
 
@@ -67,10 +65,8 @@ References:
 | updated_at | Optional[datetime] | When the organization was last updated. |
 | archived | bool | Placeholder for archival state if applicable. |
 
-</details>
-
-<details>
-<summary><strong>ZendeskUserEntity</strong></summary>
+</Accordion>
+<Accordion title="ZendeskUserEntity">
 
 Schema for a Zendesk user (agent or end user).
 
@@ -93,10 +89,8 @@ References:
 | updated_at | Optional[datetime] | When the user was last updated. |
 | archived | bool | Placeholder for archival state if applicable. |
 
-</details>
-
-<details>
-<summary><strong>ZendeskTicketEntity</strong></summary>
+</Accordion>
+<Accordion title="ZendeskTicketEntity">
 
 Schema for a Zendesk ticket.
 
@@ -122,10 +116,8 @@ References:
 | custom_fields | List[Dict[str, Any]] | List of custom field objects with id/value pairs for this ticket. |
 | archived | bool | Placeholder for archival state if applicable. |
 
-</details>
-
-<details>
-<summary><strong>ZendeskCommentEntity</strong></summary>
+</Accordion>
+<Accordion title="ZendeskCommentEntity">
 
 Schema for a Zendesk comment, typically tied to a specific ticket.
 
@@ -142,7 +134,7 @@ References:
 | attachments | List[Dict[str, Any]] | Attachments associated with the comment, if any. |
 | archived | bool | Placeholder for archival state if applicable. |
 
-</details>
+</Accordion>
 
 
 

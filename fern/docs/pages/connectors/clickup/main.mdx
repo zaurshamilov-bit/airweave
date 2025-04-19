@@ -38,16 +38,14 @@ This connector retrieves hierarchical data from ClickUp's REST API:
 
 This connector uses **OAuth 2.0 authentication flow**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>ClickUpWorkspaceEntity</strong></summary>
+<Accordion title="ClickUpWorkspaceEntity">
 
 ClickUp workspace entity.
 
@@ -60,10 +58,8 @@ ClickUp workspace entity.
 | avatar | Optional[str] | Workspace avatar URL |
 | members | List[dict] | List of workspace members |
 
-</details>
-
-<details>
-<summary><strong>ClickUpSpaceEntity</strong></summary>
+</Accordion>
+<Accordion title="ClickUpSpaceEntity">
 
 ClickUp space entity.
 
@@ -76,10 +72,8 @@ ClickUp space entity.
 | multiple_assignees | bool | Whether multiple assignees are allowed |
 | features | Dict[str, Any] | Space features configuration |
 
-</details>
-
-<details>
-<summary><strong>ClickUpFolderEntity</strong></summary>
+</Accordion>
+<Accordion title="ClickUpFolderEntity">
 
 ClickUp folder entity.
 
@@ -91,10 +85,8 @@ ClickUp folder entity.
 | space_id | str | Parent space ID |
 | task_count | Optional[int] | Number of tasks in the folder |
 
-</details>
-
-<details>
-<summary><strong>ClickUpListEntity</strong></summary>
+</Accordion>
+<Accordion title="ClickUpListEntity">
 
 ClickUp list entity.
 
@@ -114,10 +106,8 @@ ClickUp list entity.
 | folder_name | str | Parent folder name |
 | space_name | str | Parent space name |
 
-</details>
-
-<details>
-<summary><strong>ClickUpTaskEntity</strong></summary>
+</Accordion>
+<Accordion title="ClickUpTaskEntity">
 
 ClickUp task entity.
 
@@ -141,10 +131,8 @@ ClickUp task entity.
 | description | str | Task description |
 | parent | Optional[str] | Parent task ID if this is a subtask |
 
-</details>
-
-<details>
-<summary><strong>ClickUpCommentEntity</strong></summary>
+</Accordion>
+<Accordion title="ClickUpCommentEntity">
 
 ClickUp comment entity.
 
@@ -160,7 +148,7 @@ ClickUp comment entity.
 | reactions | List[Dict[str, Any]] | List of reactions to the comment |
 | date | datetime | Comment creation date |
 
-</details>
+</Accordion>
 
 
 

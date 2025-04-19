@@ -30,16 +30,14 @@ Notion source implementation.
 
 This connector uses **OAuth 2.0 authentication flow**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>NotionDatabaseEntity</strong></summary>
+<Accordion title="NotionDatabaseEntity">
 
 Schema for Notion database entities.
 
@@ -51,10 +49,8 @@ Schema for Notion database entities.
 | created_time | Optional[datetime] | The creation time of the database |
 | last_edited_time | Optional[datetime] | The last edited time of the database |
 
-</details>
-
-<details>
-<summary><strong>NotionPageEntity</strong></summary>
+</Accordion>
+<Accordion title="NotionPageEntity">
 
 Schema for Notion page entities.
 
@@ -69,10 +65,8 @@ Schema for Notion page entities.
 | archived | bool | Whether the page is archived |
 | content | Optional[str] | The content of the page |
 
-</details>
-
-<details>
-<summary><strong>NotionBlockEntity</strong></summary>
+</Accordion>
+<Accordion title="NotionBlockEntity">
 
 Schema for Notion block entities.
 
@@ -87,7 +81,7 @@ Schema for Notion block entities.
 | created_time | Optional[datetime] | The creation time of the block |
 | last_edited_time | Optional[datetime] | The last edited time of the block |
 
-</details>
+</Accordion>
 
 
 

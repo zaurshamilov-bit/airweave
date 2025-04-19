@@ -85,7 +85,7 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
                 or auth_type == "oauth2_with_refresh"
                 or auth_type == "oauth2_with_refresh_rotating"
             ):
-                content += "This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.\n\n"
+                content += "You can connect through the Airweave UI, which will guide you through the OAuth flow.\n\n"
             elif auth_type == "none":
                 content += "This connector does not require authentication.\n\n"
             else:
@@ -99,19 +99,15 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
         content += "The following data models are available for this connector:\n\n"
 
         for entity in entity_info:
-            content += f"""
-<details>
-<summary><strong>{entity['name']}</strong></summary>
-
-{entity['docstring']}
-
-| Field | Type | Description |
-|-------|------|-------------|
-"""
+            # Start with opening Accordion tag
+            content += f"<Accordion title=\"{entity['name']}\">\n\n"
+            content += f"{entity['docstring']}\n\n"
+            content += "| Field | Type | Description |\n"
+            content += "|-------|------|-------------|\n"
             for field in entity["fields"]:
                 content += f"| {field['name']} | {field['type']} | {field['description']} |\n"
 
-            content += "\n</details>\n"
+            content += "\n</Accordion>\n"
 
     # Wrap the content with delimiters
     return f"{CONTENT_START_MARKER}\n\n{content}\n\n{CONTENT_END_MARKER}"

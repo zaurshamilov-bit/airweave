@@ -34,16 +34,14 @@ entities/google_calendar.py.
 
 This connector uses **OAuth 2.0 with refresh token**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>GoogleCalendarCalendarEntity</strong></summary>
+<Accordion title="GoogleCalendarCalendarEntity">
 
 Schema for a Google Calendar object (the underlying calendar resource).
 
@@ -57,10 +55,8 @@ See: https://developers.google.com/calendar/api/v3/reference/calendars
 | location | Optional[str] | Geographic location of the calendar. |
 | time_zone | Optional[str] | The time zone of the calendar. |
 
-</details>
-
-<details>
-<summary><strong>GoogleCalendarListEntity</strong></summary>
+</Accordion>
+<Accordion title="GoogleCalendarListEntity">
 
 Schema for a CalendarList entry, i.e., how the user sees a calendar.
 
@@ -80,10 +76,8 @@ See: https://developers.google.com/calendar/api/v3/reference/calendarList
 | primary | bool | Flag to indicate if this is the primary calendar. |
 | deleted | bool | Flag to indicate if this calendar has been deleted. |
 
-</details>
-
-<details>
-<summary><strong>GoogleCalendarEventEntity</strong></summary>
+</Accordion>
+<Accordion title="GoogleCalendarEventEntity">
 
 Schema for a Google Calendar Event.
 
@@ -114,10 +108,8 @@ See: https://developers.google.com/calendar/api/v3/reference/events
 | conference_data | Optional[Dict[str, Any]] | Conference data associated with the event, e.g., hangout or meet link. |
 | event_type | Optional[str] | Event type. E.g., 'default' or 'focus'. |
 
-</details>
-
-<details>
-<summary><strong>GoogleCalendarFreeBusyEntity</strong></summary>
+</Accordion>
+<Accordion title="GoogleCalendarFreeBusyEntity">
 
 Schema for a FreeBusy response entity for a given calendar.
 
@@ -128,7 +120,7 @@ See: https://developers.google.com/calendar/api/v3/reference/freebusy
 | calendar_id | str | ID of the calendar for which free/busy is returned. |
 | busy | List[Dict[str, str]] | List of time ranges during which this calendar is busy. Each range is typically {'start': <RFC3339 date/time>, 'end': <RFC3339 date/time>}. |
 
-</details>
+</Accordion>
 
 
 

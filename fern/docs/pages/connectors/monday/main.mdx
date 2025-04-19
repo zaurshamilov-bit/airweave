@@ -33,16 +33,14 @@ data types including boards, groups, columns, items, subitems, and updates.
 
 This connector uses **OAuth 2.0 authentication flow**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>MondayBoardEntity</strong></summary>
+<Accordion title="MondayBoardEntity">
 
 Schema for Monday Board objects.
 
@@ -62,10 +60,8 @@ https://developer.monday.com/api-reference/reference/boards
 | updated_at | Optional[datetime] | When the board was last updated. |
 | workspace_id | Optional[str] | The unique identifier of the workspace containing this board (if any). |
 
-</details>
-
-<details>
-<summary><strong>MondayGroupEntity</strong></summary>
+</Accordion>
+<Accordion title="MondayGroupEntity">
 
 Schema for Monday Group objects.
 
@@ -82,10 +78,8 @@ https://developer.monday.com/api-reference/reference/boards
 | archived | bool | Whether this group is archived. |
 | items | List[Dict] | List of items (rows) contained within this group. |
 
-</details>
-
-<details>
-<summary><strong>MondayColumnEntity</strong></summary>
+</Accordion>
+<Accordion title="MondayColumnEntity">
 
 Schema for Monday Column objects.
 
@@ -103,10 +97,8 @@ https://developer.monday.com/api-reference/reference/column-types-reference
 | settings_str | Optional[str] | Raw settings/configuration details for the column. |
 | archived | bool | Whether this column is archived or hidden. |
 
-</details>
-
-<details>
-<summary><strong>MondayItemEntity</strong></summary>
+</Accordion>
+<Accordion title="MondayItemEntity">
 
 Schema for Monday Item objects (rows on a board).
 
@@ -124,10 +116,8 @@ https://developer.monday.com/api-reference/reference/boards
 | created_at | Optional[datetime] | When the item was first created. |
 | updated_at | Optional[datetime] | When the item was last updated. |
 
-</details>
-
-<details>
-<summary><strong>MondaySubitemEntity</strong></summary>
+</Accordion>
+<Accordion title="MondaySubitemEntity">
 
 Schema for Monday Subitem objects.
 
@@ -148,10 +138,8 @@ https://developer.monday.com/api-reference/reference/boards
 | created_at | Optional[datetime] | When the subitem was first created. |
 | updated_at | Optional[datetime] | When the subitem was last updated. |
 
-</details>
-
-<details>
-<summary><strong>MondayUpdateEntity</strong></summary>
+</Accordion>
+<Accordion title="MondayUpdateEntity">
 
 Schema for Monday Update objects.
 
@@ -169,7 +157,7 @@ https://developer.monday.com/api-reference/reference/updates
 | created_at | Optional[datetime] | When the update was first created. |
 | assets | List[Dict] | Assets (e.g. images, attachments) associated with this update. |
 
-</details>
+</Accordion>
 
 
 

@@ -38,16 +38,14 @@ The Todoist entity schemas are defined in entities/todoist.py.
 
 This connector uses **OAuth 2.0 authentication flow**.
 
-This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>TodoistProjectEntity</strong></summary>
+<Accordion title="TodoistProjectEntity">
 
 Schema for Todoist project entities.
 
@@ -65,10 +63,8 @@ Schema for Todoist project entities.
 | url | Optional[str] | URL to access the project |
 | parent_id | Optional[str] | ID of the parent project if nested |
 
-</details>
-
-<details>
-<summary><strong>TodoistSectionEntity</strong></summary>
+</Accordion>
+<Accordion title="TodoistSectionEntity">
 
 Schema for Todoist section entities.
 
@@ -78,10 +74,8 @@ Schema for Todoist section entities.
 | project_id | str | ID of the project this section belongs to |
 | order | int | Section order in the project |
 
-</details>
-
-<details>
-<summary><strong>TodoistTaskEntity</strong></summary>
+</Accordion>
+<Accordion title="TodoistTaskEntity">
 
 Schema for Todoist task entities.
 
@@ -106,10 +100,8 @@ Schema for Todoist task entities.
 | due_timezone | Optional[str] | Timezone for the due date |
 | url | Optional[str] | URL to access the task |
 
-</details>
-
-<details>
-<summary><strong>TodoistCommentEntity</strong></summary>
+</Accordion>
+<Accordion title="TodoistCommentEntity">
 
 Schema for Todoist comment entities.
 
@@ -119,7 +111,7 @@ Schema for Todoist comment entities.
 | content | Optional[str] | The comment content |
 | posted_at | datetime | When the comment was posted |
 
-</details>
+</Accordion>
 
 
 

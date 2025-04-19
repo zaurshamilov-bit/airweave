@@ -43,9 +43,7 @@ Please refer to the Airweave documentation for authentication details.
 
 The following data models are available for this connector:
 
-
-<details>
-<summary><strong>TrelloOrganizationEntity</strong></summary>
+<Accordion title="TrelloOrganizationEntity">
 
 Schema for Trello organization (Workspace) entities.
 
@@ -60,10 +58,8 @@ among team members.
 | desc | Optional[str] | Description text for the organization |
 | website | Optional[str] | URL to the organization's website |
 
-</details>
-
-<details>
-<summary><strong>TrelloBoardEntity</strong></summary>
+</Accordion>
+<Accordion title="TrelloBoardEntity">
 
 Schema for Trello board entities.
 
@@ -81,10 +77,8 @@ Boards in Trello are the containers for lists and cards, representing projects o
 | short_url | Optional[str] | A shortened URL to access the board |
 | date_last_activity | Optional[datetime] | The date and time of the last activity on the board |
 
-</details>
-
-<details>
-<summary><strong>TrelloListEntity</strong></summary>
+</Accordion>
+<Accordion title="TrelloListEntity">
 
 Schema for Trello list entities.
 
@@ -99,10 +93,8 @@ in a workflow.
 | closed | bool | Whether the list is closed (archived) |
 | subscribed | bool | Whether the user is subscribed to this list |
 
-</details>
-
-<details>
-<summary><strong>TrelloCardEntity</strong></summary>
+</Accordion>
+<Accordion title="TrelloCardEntity">
 
 Schema for Trello card entities.
 
@@ -122,10 +114,8 @@ supporting attachments.
 | last_activity_at | Optional[datetime] | The date and time of the last activity on the card |
 | url | Optional[str] | The URL to access the card in Trello |
 
-</details>
-
-<details>
-<summary><strong>TrelloMemberEntity</strong></summary>
+</Accordion>
+<Accordion title="TrelloMemberEntity">
 
 Schema for Trello member entities.
 
@@ -143,10 +133,8 @@ their permissions.
 | organizations | List[str] | List of organization IDs the member belongs to |
 | boards | List[str] | List of board IDs the member has access to |
 
-</details>
-
-<details>
-<summary><strong>TrelloActionEntity</strong></summary>
+</Accordion>
+<Accordion title="TrelloActionEntity">
 
 Schema for Trello action entities.
 
@@ -160,7 +148,7 @@ Actions in Trello represent activities or changes made to boards, lists, or card
 | member_creator_id | Optional[str] | The ID of the member who created/performed the action |
 | data | Optional[dict] | Additional data associated with the action |
 
-</details>
+</Accordion>
 
 
 
