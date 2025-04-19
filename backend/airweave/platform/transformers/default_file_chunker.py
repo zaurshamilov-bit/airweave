@@ -97,7 +97,7 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
         max_chunk_size = 8191
 
         # Step 1: Initial chunking with RecursiveChunker
-        recursive_chunker = get_recursive_chunker(max_chunk_size)
+        recursive_chunker = get_recursive_chunker()
         initial_chunks = recursive_chunker.chunk(result.text_content)
 
         # Step 2: Apply semantic chunking if any chunks are still too large
