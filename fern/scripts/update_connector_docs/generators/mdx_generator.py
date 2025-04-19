@@ -3,6 +3,27 @@
 from ..constants import CONTENT_START_MARKER, CONTENT_END_MARKER, AUTH_TYPE_DESCRIPTIONS
 
 
+def escape_mdx_special_chars(text):
+    """Escape special characters that could cause issues in MDX parsing.
+
+    Args:
+        text (str): The text to escape
+
+    Returns:
+        str: Text with special characters escaped
+    """
+    if not text:
+        return text
+
+    # Replace angle brackets with their HTML entity equivalents
+    escaped_text = text.replace("<", "&lt;").replace(">", "&gt;")
+
+    # Debug statement to verify the function is working
+    print(f"Escaping text: '{text}' -> '{escaped_text}'")
+
+    return escaped_text
+
+
 def generate_mdx_content(connector_name, entity_info, source_info, auth_configs):
     """Generate MDX content for a connector.
 
@@ -78,7 +99,9 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
                                         field_description = parent_field["description"]
                                         break
 
-                        content += f"| {field['name']} | {field['type']} | {field_description} | {'Yes' if field['required'] else 'No'} |\n"
+                        # Escape special characters in description
+                        escaped_description = escape_mdx_special_chars(field_description)
+                        content += f"| {field['name']} | {field['type']} | {escaped_description} | {'Yes' if field['required'] else 'No'} |\n"
                     content += "\n"
             elif (
                 auth_type == "oauth2"
@@ -105,7 +128,9 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
             content += "| Field | Type | Description |\n"
             content += "|-------|------|-------------|\n"
             for field in entity["fields"]:
-                content += f"| {field['name']} | {field['type']} | {field['description']} |\n"
+                # Escape special characters in the description
+                escaped_description = escape_mdx_special_chars(field["description"])
+                content += f"| {field['name']} | {field['type']} | {escaped_description} |\n"
 
             content += "\n</Accordion>\n"
 
