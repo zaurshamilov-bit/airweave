@@ -91,6 +91,7 @@ MySQL authentication configuration.
   path="schema"
   type="str"
   required={false}
+  default="public"
 >
   The schema of the MySQL database
 </ParamField>
@@ -98,6 +99,7 @@ MySQL authentication configuration.
   path="tables"
   type="str"
   required={false}
+  default="*"
 >
   Comma separated list of tables to sync. For example, 'users,orders'. For all tables, use '*'
 </ParamField>

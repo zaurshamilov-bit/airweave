@@ -69,6 +69,7 @@ def parse_auth_config():
                         field_type = field_type or "Unknown"
                         description = "No description"
                         is_required = True
+                        default_value = None
 
                         # Extract Field parameters by traversing the AST
                         if hasattr(item, "value") and isinstance(item.value, ast.Call):
@@ -112,6 +113,36 @@ def parse_auth_config():
 
                                 elif keyword.arg == "default":
                                     is_required = False
+                                    # Extract default value
+                                    if isinstance(keyword.value, ast.Str):
+                                        default_value = keyword.value.s
+                                    elif isinstance(keyword.value, ast.Constant):
+                                        default_value = keyword.value.value
+                                    elif isinstance(
+                                        keyword.value, (ast.Num, ast.Bytes, ast.NameConstant)
+                                    ):
+                                        # For Python 3.7 and earlier
+                                        if isinstance(keyword.value, ast.Num):
+                                            default_value = keyword.value.n
+                                        elif isinstance(keyword.value, ast.Bytes):
+                                            default_value = keyword.value.s
+                                        elif isinstance(keyword.value, ast.NameConstant):
+                                            default_value = keyword.value.value
+                                    elif isinstance(keyword.value, ast.Name):
+                                        # For constants like True, False, None
+                                        default_value = keyword.value.id
+                                    elif isinstance(keyword.value, ast.List):
+                                        default_value = "[]"  # Simplified for lists
+                                    elif isinstance(keyword.value, ast.Dict):
+                                        default_value = "{}"  # Simplified for dicts
+                                    elif isinstance(keyword.value, ast.Call):
+                                        if hasattr(keyword.value, "func") and hasattr(
+                                            keyword.value.func, "id"
+                                        ):
+                                            # For function calls like list(), dict(), etc.
+                                            default_value = f"{keyword.value.func.id}()"
+                                        else:
+                                            default_value = "custom value"
 
                         fields.append(
                             {
@@ -119,6 +150,7 @@ def parse_auth_config():
                                 "type": field_type,
                                 "description": description,
                                 "required": is_required,
+                                "default": default_value,
                             }
                         )
 
@@ -175,12 +207,18 @@ def parse_auth_config():
                     break
             # If not found, add it
             else:
+                # Try to extract default value for tables field
+                default_pattern = r'tables:\s*str\s*=\s*Field\(\s*default="([^"]*)"'
+                default_match = re.search(default_pattern, content)
+                default_value = default_match.group(1) if default_match else None
+
                 auth_configs["BaseDatabaseAuthConfig"]["fields"].append(
                     {
                         "name": "tables",
                         "type": "str",
                         "description": description,
                         "required": False,  # Has default value
+                        "default": default_value,
                     }
                 )
 
@@ -198,12 +236,21 @@ def parse_auth_config():
                         tables_desc = (
                             description.replace("PostgreSQL", db_type) if db_type else description
                         )
+
+                        # Use the same default value from BaseDatabaseAuthConfig
+                        table_default = None
+                        for field in auth_configs["BaseDatabaseAuthConfig"]["fields"]:
+                            if field["name"] == "tables" and "default" in field:
+                                table_default = field["default"]
+                                break
+
                         config["fields"].append(
                             {
                                 "name": "tables",
                                 "type": "str",
                                 "description": tables_desc,
                                 "required": False,
+                                "default": table_default,
                             }
                         )
 

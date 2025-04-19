@@ -120,13 +120,22 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
                         # Escape special characters in description
                         escaped_description = escape_mdx_special_chars(field_description)
 
+                        # Prepare default value attribute if exists
+                        default_attr = ""
+                        if "default" in field and field["default"] is not None:
+                            # Convert default value to string and escape if needed
+                            default_value = str(field["default"])
+                            if isinstance(field["default"], str):
+                                default_value = f'"{default_value}"'
+                            default_attr = f"  default={default_value}\n"
+
                         # Generate ParamField component instead of table row
                         # Use proper JSX syntax with curly braces for boolean values
                         content += f"""<ParamField
   path="{field['name']}"
   type="{field['type']}"
   required={{{'true' if field['required'] else 'false'}}}
->
+{default_attr}>
   {escaped_description}
 </ParamField>
 """
