@@ -81,9 +81,6 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
                     content += f"{auth_info['docstring']}\n\n"
 
                 if auth_info["fields"]:
-                    content += "The following configuration fields are required:\n\n"
-                    content += "| Field | Type | Description | Required |\n"
-                    content += "|-------|------|-------------|----------|\n"
                     for field in auth_info["fields"]:
                         # Get descriptions from parent class if available
                         field_description = field["description"]
@@ -101,7 +98,17 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
 
                         # Escape special characters in description
                         escaped_description = escape_mdx_special_chars(field_description)
-                        content += f"| {field['name']} | {field['type']} | {escaped_description} | {'Yes' if field['required'] else 'No'} |\n"
+
+                        # Generate ParamField component instead of table row
+                        # Use proper JSX syntax with curly braces for boolean values
+                        content += f"""<ParamField
+  name="{field['name']}"
+  type="{field['type']}"
+  required={{{'true' if field['required'] else 'false'}}}
+>
+  {escaped_description}
+</ParamField>
+"""
                     content += "\n"
             elif (
                 auth_type == "oauth2"
@@ -116,6 +123,17 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
                     "Please refer to the Airweave documentation for authentication details.\n\n"
                 )
 
+    # Add GitHub reference card between Configuration and Entities sections
+    content += f"""
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/{connector_name}.py"
+>
+  Explore the {display_name} connector implementation
+</Card>
+"""
+
     # Add entity information
     if entity_info:
         content += "\n## Entities\n\n"
@@ -125,6 +143,8 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
             # Start with opening Accordion tag
             content += f"<Accordion title=\"{entity['name']}\">\n\n"
             content += f"{entity['docstring']}\n\n"
+
+            # Use markdown tables for entity fields
             content += "| Field | Type | Description |\n"
             content += "|-------|------|-------------|\n"
             for field in entity["fields"]:

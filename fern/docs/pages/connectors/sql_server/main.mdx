@@ -40,18 +40,64 @@ Authentication configuration class: `SQLServerAuthConfig`
 
 SQL Server authentication configuration.
 
-The following configuration fields are required:
+<ParamField
+  name="host"
+  type="str"
+  required={true}
+>
+  The host of the SQLServer database
+</ParamField>
+<ParamField
+  name="port"
+  type="int"
+  required={true}
+>
+  The port of the SQLServer database
+</ParamField>
+<ParamField
+  name="database"
+  type="str"
+  required={true}
+>
+  The name of the SQLServer database
+</ParamField>
+<ParamField
+  name="user"
+  type="str"
+  required={true}
+>
+  The username for the SQLServer database
+</ParamField>
+<ParamField
+  name="password"
+  type="str"
+  required={true}
+>
+  The password for the SQLServer database
+</ParamField>
+<ParamField
+  name="schema"
+  type="str"
+  required={false}
+>
+  The schema of the SQLServer database
+</ParamField>
+<ParamField
+  name="tables"
+  type="str"
+  required={false}
+>
+  Comma separated list of tables to sync. For example, 'users,orders'. For all tables, use '*'
+</ParamField>
 
-| Field | Type | Description | Required |
-|-------|------|-------------|----------|
-| host | str | The host of the SQLServer database | Yes |
-| port | int | The port of the SQLServer database | Yes |
-| database | str | The name of the SQLServer database | Yes |
-| user | str | The username for the SQLServer database | Yes |
-| password | str | The password for the SQLServer database | Yes |
-| schema | str | The schema of the SQLServer database | No |
-| tables | str | Comma separated list of tables to sync. For example, 'users,orders'. For all tables, use '*' | No |
 
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/sql_server.py"
+>
+  Explore the Sql Server connector implementation
+</Card>
 
 
 

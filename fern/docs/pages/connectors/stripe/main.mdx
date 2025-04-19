@@ -52,12 +52,22 @@ Authentication configuration class: `StripeAuthConfig`
 
 Stripe authentication credentials schema.
 
-The following configuration fields are required:
+<ParamField
+  name="api_key"
+  type="str"
+  required={true}
+>
+  The API key for the Stripe account. Should start with 'sk_test_' for test mode or 'sk_live_' for live mode.
+</ParamField>
 
-| Field | Type | Description | Required |
-|-------|------|-------------|----------|
-| api_key | str | The API key for the Stripe account. Should start with 'sk_test_' for test mode or 'sk_live_' for live mode. | Yes |
 
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/stripe.py"
+>
+  Explore the Stripe connector implementation
+</Card>
 
 ## Entities
 
