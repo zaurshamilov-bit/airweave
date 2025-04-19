@@ -161,6 +161,6 @@ Airweave is released under an open-core model. The community edition is licensed
 ## Contact & Community
 - **Discord**: Join our Discord channel [here](https://discord.com/invite/484HY9Ehxt) to get help or discuss features.
 - **GitHub Issues**: Report bugs or request new features in GitHub Issues.
-- **Twitter**: Follow @airweave_ai for updates.
+- **Twitter**: Follow [@airweave_ai](https://x.com/airweave_ai) for updates.
 
 That's it! We're looking forward to seeing what you build. If you have any questions, please don't hesitate to open an issue or reach out on Discord.
