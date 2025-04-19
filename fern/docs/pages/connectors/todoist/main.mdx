@@ -1,0 +1,128 @@
+---
+title: "Todoist"
+description: "Todoist integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+
+
+<div className="connector-header">
+  <img src="icon.svg" alt="Todoist logo" width="72" height="72" className="connector-icon" />
+  <div className="connector-info">
+    <h1>Todoist</h1>
+    <p>Connect your Todoist data to Airweave</p>
+  </div>
+</div>
+
+## Overview
+
+The Todoist connector allows you to sync data from Todoist into Airweave, making it available for search and retrieval by your agents.
+
+## Configuration
+
+
+### TodoistSource
+
+Todoist source implementation.
+
+This connector retrieves hierarchical data from the Todoist REST API:
+- Projects
+- Sections (within each project)
+- Tasks (within each project, optionally nested under a section)
+- Comments (within each task)
+
+The Todoist entity schemas are defined in entities/todoist.py.
+
+
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/todoist.py"
+>
+  Explore the Todoist connector implementation
+</Card>
+
+### Authentication
+
+This connector uses **OAuth 2.0 authentication flow**.
+
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
+
+
+## Entities
+
+The following data models are available for this connector:
+
+<Accordion title="TodoistProjectEntity">
+
+Schema for Todoist project entities.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | str | The name of the project |
+| color | Optional[str] | Color of the project (e.g., 'grey', 'blue') |
+| comment_count | int | Number of comments in the project |
+| order | int | Project order in the project list |
+| is_shared | bool | Whether the project is shared with others |
+| is_favorite | bool | Whether the project is marked as a favorite |
+| is_inbox_project | bool | Whether this is the Inbox project |
+| is_team_inbox | bool | Whether this is the team Inbox project |
+| view_style | Optional[str] | Project view style ('list' or 'board') |
+| url | Optional[str] | URL to access the project |
+| parent_id | Optional[str] | ID of the parent project if nested |
+
+</Accordion>
+<Accordion title="TodoistSectionEntity">
+
+Schema for Todoist section entities.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | str | The name of the section |
+| project_id | str | ID of the project this section belongs to |
+| order | int | Section order in the project |
+
+</Accordion>
+<Accordion title="TodoistTaskEntity">
+
+Schema for Todoist task entities.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| content | str | The task content/title |
+| description | Optional[str] | Optional detailed description of the task |
+| comment_count | int | Number of comments on the task |
+| is_completed | bool | Whether the task is completed |
+| labels | List[str] | List of label names attached to the task |
+| order | int | Task order in the project or section |
+| priority | int | Task priority (1-4, 4 is highest) |
+| project_id | Optional[str] | ID of the project this task belongs to |
+| section_id | Optional[str] | ID of the section this task belongs to |
+| parent_id | Optional[str] | ID of the parent task if subtask |
+| creator_id | Optional[str] | ID of the user who created the task |
+| created_at | Optional[datetime] | When the task was created |
+| due_date | Optional[str] | Due date in YYYY-MM-DD format |
+| due_datetime | Optional[datetime] | Due date and time |
+| due_string | Optional[str] | Original due date string (e.g., 'tomorrow') |
+| due_is_recurring | bool | Whether the task is recurring |
+| due_timezone | Optional[str] | Timezone for the due date |
+| url | Optional[str] | URL to access the task |
+
+</Accordion>
+<Accordion title="TodoistCommentEntity">
+
+Schema for Todoist comment entities.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| task_id | str | ID of the task this comment belongs to |
+| content | Optional[str] | The comment content |
+| posted_at | datetime | When the comment was posted |
+
+</Accordion>
+
+
+
+
+{/* AUTO-GENERATED CONTENT END */}

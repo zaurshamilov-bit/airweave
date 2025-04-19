@@ -1,0 +1,165 @@
+---
+title: "Clickup"
+description: "Clickup integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+
+
+<div className="connector-header">
+  <img src="icon.svg" alt="Clickup logo" width="72" height="72" className="connector-icon" />
+  <div className="connector-info">
+    <h1>Clickup</h1>
+    <p>Connect your Clickup data to Airweave</p>
+  </div>
+</div>
+
+## Overview
+
+The Clickup connector allows you to sync data from Clickup into Airweave, making it available for search and retrieval by your agents.
+
+## Configuration
+
+
+### ClickUpSource
+
+ClickUp source implementation.
+
+This connector retrieves hierarchical data from ClickUp's REST API:
+    - Workspaces (Teams)
+    - Spaces (within each workspace)
+    - Folders (within each space)
+    - Lists (within each folder)
+    - Tasks (within each list)
+    - Comments (within each task)
+
+
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/clickup.py"
+>
+  Explore the Clickup connector implementation
+</Card>
+
+### Authentication
+
+This connector uses **OAuth 2.0 authentication flow**.
+
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
+
+
+## Entities
+
+The following data models are available for this connector:
+
+<Accordion title="ClickUpWorkspaceEntity">
+
+ClickUp workspace entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| entity_id | str | Unique Entity ID |
+| workspace_id | str | Workspace ID |
+| name | str | Workspace name |
+| color | Optional[str] | Workspace color |
+| avatar | Optional[str] | Workspace avatar URL |
+| members | List[dict] | List of workspace members |
+
+</Accordion>
+<Accordion title="ClickUpSpaceEntity">
+
+ClickUp space entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| space_id | str | Space ID |
+| name | str | Space name |
+| private | bool | Whether the space is private |
+| status | Dict[str, Any] | Space status configuration |
+| multiple_assignees | bool | Whether multiple assignees are allowed |
+| features | Dict[str, Any] | Space features configuration |
+
+</Accordion>
+<Accordion title="ClickUpFolderEntity">
+
+ClickUp folder entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| folder_id | str | Folder ID |
+| name | str | Folder name |
+| hidden | bool | Whether the folder is hidden |
+| space_id | str | Parent space ID |
+| task_count | Optional[int] | Number of tasks in the folder |
+
+</Accordion>
+<Accordion title="ClickUpListEntity">
+
+ClickUp list entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| list_id | str | List ID |
+| name | str | List name |
+| folder_id | str | Parent folder ID |
+| space_id | str | Parent space ID |
+| content | Optional[str] | List content/description |
+| status | Optional[Dict[str, Any]] | List status configuration |
+| priority | Optional[Dict[str, Any]] | List priority configuration |
+| assignee | Optional[str] | List assignee username |
+| task_count | Optional[int] | Number of tasks in the list |
+| due_date | Optional[Any] | List due date |
+| start_date | Optional[Any] | List start date |
+| folder_name | str | Parent folder name |
+| space_name | str | Parent space name |
+
+</Accordion>
+<Accordion title="ClickUpTaskEntity">
+
+ClickUp task entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| task_id | str | Task ID |
+| name | str | Task name |
+| status | Dict[str, Any] | Task status configuration |
+| priority | Optional[Dict[str, Any]] | Task priority configuration |
+| assignees | List[Dict[str, Any]] | List of task assignees |
+| tags | List[str] | List of task tags |
+| due_date | Optional[datetime] | Task due date |
+| start_date | Optional[datetime] | Task start date |
+| time_estimate | Optional[int] | Estimated time in milliseconds |
+| time_spent | Optional[int] | Time spent in milliseconds |
+| custom_fields | List[Dict[str, Any]] | List of custom fields |
+| list_id | str | Parent list ID |
+| folder_id | str | Parent folder ID |
+| space_id | str | Parent space ID |
+| url | str | Task URL |
+| description | str | Task description |
+| parent | Optional[str] | Parent task ID if this is a subtask |
+
+</Accordion>
+<Accordion title="ClickUpCommentEntity">
+
+ClickUp comment entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| comment_id | str | Comment ID |
+| task_id | str | Parent task ID |
+| user | Dict[str, Any] | Comment author information |
+| text_content | str | Comment text content |
+| resolved | bool | Whether the comment is resolved |
+| assignee | Optional[Dict[str, Any]] | Comment assignee information |
+| assigned_by | Optional[Dict[str, Any]] | User who assigned the comment |
+| reactions | List[Dict[str, Any]] | List of reactions to the comment |
+| date | datetime | Comment creation date |
+
+</Accordion>
+
+
+
+
+{/* AUTO-GENERATED CONTENT END */}

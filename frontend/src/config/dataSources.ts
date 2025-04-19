@@ -38,7 +38,7 @@ export const dataSources: DataSource[] = [
     auth_type: AuthType.OAUTH2,
   },
   {
-    id: "gdrive",
+    id: "google_drive",
     name: "Google Drive",
     short_name: "google_drive",
     description: "Sync your Google Drive files",

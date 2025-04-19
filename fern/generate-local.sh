@@ -9,10 +9,18 @@ if [[ $(basename "$PWD") != "fern" ]]; then
     exit 1
 fi
 
+# Make scripts executable if needed
+chmod +x scripts/update_connector_docs.py
+chmod +x scripts/generate_openapi.py
+
+# Generate connector documentation
+echo "📝 Generating connector documentation..."
+python scripts/update_connector_docs.py
+
 # Generate OpenAPI spec
 echo "📝 Generating OpenAPI spec..."
 cd ../backend
-poetry run python ../.github/scripts/generate_openapi.py
+poetry run python ../fern/scripts/generate_openapi.py
 cd ../fern
 
 # Ensure directories exist
@@ -40,7 +48,6 @@ fern generate --group public --log-level debug
 
 echo "✅ Done! Generated files:"
 ls -la definition/
-
 
 # Generate docs
 echo "📚 Generating Fern documentation..."

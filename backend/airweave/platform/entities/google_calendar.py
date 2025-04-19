@@ -147,8 +147,5 @@ class GoogleCalendarFreeBusyEntity(ChunkEntity):
     calendar_id: str = Field(..., description="ID of the calendar for which free/busy is returned.")
     busy: List[Dict[str, str]] = Field(
         default_factory=list,
-        description=(
-            "List of time ranges during which this calendar is busy. "
-            "Each range is typically {'start': <RFC3339 date/time>, 'end': <RFC3339 date/time>}."
-        ),
+        description=("List of time ranges during which this calendar is busy. "),
     )

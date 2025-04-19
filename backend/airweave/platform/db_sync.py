@@ -90,6 +90,32 @@ def _get_decorated_classes(directory: str) -> Dict[str, list[Type | Callable]]:
     return components
 
 
+def _validate_entity_class_fields(cls: Type, name: str, module_name: str) -> None:
+    """Validate that all fields in an entity class use Pydantic Fields with descriptions.
+
+    Args:
+        cls: The entity class to validate
+        name: The name of the entity class
+        module_name: The name of the module containing the entity class
+
+    Raises:
+        ValueError: If any field is not defined using Pydantic Field with a description
+    """
+    # Get all fields from the class
+    for field_name, field_info in cls.model_fields.items():
+        # Skip internal fields that start with underscores
+        if field_name.startswith("_"):
+            continue
+
+        # Check that the field is defined using Pydantic Field
+        if not hasattr(field_info, "description") or not field_info.description:
+            raise ValueError(
+                f"Entity '{name}' in module '{module_name}' has field '{field_name}' "
+                f"without a Pydantic Field description. All entity fields must use "
+                f"Field with a description parameter."
+            )
+
+
 async def _sync_embedding_models(db: AsyncSession, models: list[Type[BaseEmbeddingModel]]) -> None:
     """Sync embedding models with the database.
 
@@ -171,6 +197,9 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, dict]:
                         f"Duplicate entity name '{name}' found in {full_module_name}. "
                         f"Already registered from {entity_registry[name]['module']}"
                     )
+
+                # Validate that all fields in the class use Pydantic Field with descriptions
+                _validate_entity_class_fields(cls, name, module_name)
 
                 # Register the entity
                 entity_registry[name] = {

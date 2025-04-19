@@ -5,12 +5,20 @@ on:
     branches: [main]
     paths:
       - "backend/airweave/api/**/*.py" # API endpoint changes
+      - "frontend/src/components/icons/apps/**" # Icon changes
+      - "backend/airweave/platform/entities/**" # Entity changes
+      - "backend/airweave/platform/sources/**" # Source changes
+      - "backend/airweave/platform/configs/auth.py" # Auth config changes
+      - "fern/scripts/**" # Script changes
       - "fern/**" # Fern config changes
       - ".github/workflows/fern-docs.yml" # Workflow file changes
+  workflow_dispatch: # Allow manual triggering
 
 jobs:
   generate-and-publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v3
@@ -28,8 +36,14 @@ jobs:
         working-directory: ./backend
         run: poetry install --no-root
 
+      - name: Install documentation dependencies
+        run: pip install pyyaml
+
+      - name: Generate connector documentation
+        run: python fern/scripts/update_connector_docs.py
+
       - name: Generate OpenAPI spec
-        run: poetry run python ../.github/scripts/generate_openapi.py
+        run: poetry run python fern/scripts/generate_openapi.py
         working-directory: ./backend
         # Set mock environment variables for documentation generation
         env:
@@ -80,11 +94,10 @@ jobs:
         env:
           FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
 
-      - name: Check Fern docs status
+      - name: Commit changes
         run: |
-          if [ $? -eq 0 ]; then
-            echo "✅ Fern docs generated successfully"
-          else
-            echo "❌ Fern docs generation failed"
-            exit 1
-          fi
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add fern/docs/pages/connectors/ fern/docs.yml fern/openapi/
+          git diff --quiet && git diff --staged --quiet || git commit -m "docs: update documentation [skip ci]"
+          git push
