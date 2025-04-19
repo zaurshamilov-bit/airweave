@@ -62,23 +62,44 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
 {source['docstring']}
 
 """
+            # Add GitHub reference card between Configuration and Authentication sections
+            content += f"""
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/{connector_name}.py"
+>
+  Explore the {display_name} connector implementation
+</Card>
+"""
+
             # Add authentication information section
-            content += "#### Authentication\n\n"
+            content += "\n### Authentication\n\n"
 
             auth_type = source.get("auth_type")
             auth_config_class = source.get("auth_config_class")
 
             if auth_type:
                 auth_type_display = AUTH_TYPE_DESCRIPTIONS.get(auth_type, auth_type)
-                content += f"This connector uses **{auth_type_display}**.\n\n"
+                if auth_type == "config_class":
+                    content += f"This connector uses a custom authentication configuration class: `{auth_config_class}`.\n\n"
+                else:
+                    content += f"This connector uses **{auth_type_display}**.\n\n"
 
             # If auth_config_class is available and matches an entry in auth_configs, display its fields
             if auth_config_class and auth_config_class in auth_configs:
                 auth_info = auth_configs[auth_config_class]
-                content += f"Authentication configuration class: `{auth_config_class}`\n\n"
+
+                # Wrap the entire authentication configuration in a Card
+                content += """<Card
+  title="Authentication Configuration"
+  className="auth-config-card"
+  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
+>
+"""
 
                 if auth_info["docstring"]:
-                    content += f"{auth_info['docstring']}\n\n"
+                    content += f"\n{auth_info['docstring']}\n"
 
                 if auth_info["fields"]:
                     for field in auth_info["fields"]:
@@ -102,14 +123,15 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
                         # Generate ParamField component instead of table row
                         # Use proper JSX syntax with curly braces for boolean values
                         content += f"""<ParamField
-  name="{field['name']}"
+  path="{field['name']}"
   type="{field['type']}"
   required={{{'true' if field['required'] else 'false'}}}
 >
   {escaped_description}
 </ParamField>
 """
-                    content += "\n"
+                # Close the Card component
+                content += "</Card>\n\n"
             elif (
                 auth_type == "oauth2"
                 or auth_type == "oauth2_with_refresh"
@@ -122,17 +144,6 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
                 content += (
                     "Please refer to the Airweave documentation for authentication details.\n\n"
                 )
-
-    # Add GitHub reference card between Configuration and Entities sections
-    content += f"""
-<Card
-  title="View Source Code"
-  icon="brands github"
-  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/{connector_name}.py"
->
-  Explore the {display_name} connector implementation
-</Card>
-"""
 
     # Add entity information
     if entity_info:

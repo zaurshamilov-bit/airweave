@@ -44,22 +44,6 @@ through their respective schemas. The following resource endpoints are used:
 Each resource endpoint may use Stripe's pagination (has_more + starting_after) to
 retrieve all objects. Fields are mapped to the entity schemas defined in entities/stripe.py.
 
-#### Authentication
-
-This connector uses **Configuration-based authentication**.
-
-Authentication configuration class: `StripeAuthConfig`
-
-Stripe authentication credentials schema.
-
-<ParamField
-  name="api_key"
-  type="str"
-  required={true}
->
-  The API key for the Stripe account. Should start with 'sk_test_' for test mode or 'sk_live_' for live mode.
-</ParamField>
-
 
 <Card
   title="View Source Code"
@@ -68,6 +52,27 @@ Stripe authentication credentials schema.
 >
   Explore the Stripe connector implementation
 </Card>
+
+### Authentication
+
+This connector uses a custom authentication configuration class: `StripeAuthConfig`.
+
+<Card
+  title="Authentication Configuration"
+  className="auth-config-card"
+  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
+>
+
+Stripe authentication credentials schema.
+<ParamField
+  path="api_key"
+  type="str"
+  required={true}
+>
+  The API key for the Stripe account. Should start with 'sk_test_' for test mode or 'sk_live_' for live mode.
+</ParamField>
+</Card>
+
 
 ## Entities
 
