@@ -1,21 +1,20 @@
-name: Fern Docs
+name: Fern Docs Generation
 
 on:
   push:
     branches: [main]
     paths:
-      - "backend/airweave/api/**/*.py" # API endpoint changes
-      - "frontend/src/components/icons/apps/**" # Icon changes
-      - "backend/airweave/platform/entities/**" # Entity changes
-      - "backend/airweave/platform/sources/**" # Source changes
-      - "backend/airweave/platform/configs/auth.py" # Auth config changes
-      - "fern/scripts/**" # Script changes
-      - "fern/**" # Fern config changes
-      - ".github/workflows/fern-docs.yml" # Workflow file changes
-  workflow_dispatch: # Allow manual triggering
+      - "backend/airweave/api/**/*.py"
+      - "frontend/src/components/icons/apps/**"
+      - "backend/airweave/platform/entities/**"
+      - "backend/airweave/platform/sources/**"
+      - "backend/airweave/platform/configs/auth.py"
+      - "fern/**"
+      - ".github/workflows/fern-docs.yml"
+  workflow_dispatch:
 
 jobs:
-  generate-and-publish:
+  generate-docs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -63,28 +62,11 @@ jobs:
       - name: Install Fern
         run: npm install -g fern-api
 
-      - name: Initialize Fern with OpenAPI
-        run: |
-          # Only initialize if fern folder doesn't exist
-          if [ ! -d "fern" ]; then
-            fern init --openapi fern/openapi/openapi.json
-          fi
-
       - name: Update Fern OpenAPI definition
         run: |
           mkdir -p fern/definition
           echo "🌿 Updating Fern OpenAPI definition..."
           cp fern/openapi/openapi.json fern/definition/openapi.json || echo "OpenAPI spec not found"
-
-      - name: Generate SDKs
-        env:
-          FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          cd fern
-          fern generate --group public
 
       - name: Generate Docs
         run: |

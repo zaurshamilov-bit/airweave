@@ -1,0 +1,51 @@
+name: Fern SDK Generation
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "SDK version to release"
+        required: true
+        type: string
+
+jobs:
+  generate-sdks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      - name: Install Fern
+        run: npm install -g fern-api
+
+      - name: Generate SDKs with version
+        env:
+          FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          cd fern
+          VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
+          fern generate --group public --version $VERSION
+
+      - name: Trigger Docs Generation
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'fern-docs.yml',
+              ref: 'main'
+            })
