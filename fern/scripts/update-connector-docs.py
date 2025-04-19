@@ -321,15 +321,7 @@ def main():
 
     valid_connectors = []
 
-    # Skip Slack as it has custom content
-    skip_connectors = ["slack"]
-
     for connector_name in sorted(connectors):
-        if connector_name in skip_connectors:
-            print(f"  Skipping {connector_name} as it has custom content")
-            valid_connectors.append(connector_name)
-            continue
-
         print(f"Processing connector: {connector_name}")
 
         entity_info = parse_entity_file(connector_name)
@@ -366,13 +358,48 @@ description: "{display_name} integration with Airweave"
 
 """
 
-        # Create the file with the frontmatter and generated content
-        with open(main_mdx_path, "w") as f:
-            f.write(frontmatter + mdx_content)
+        if main_mdx_path.exists():
+            # If file exists, preserve custom content and update only auto-generated part
+            with open(main_mdx_path, "r") as f:
+                existing_content = f.read()
 
-        print(
-            f"  {'Updated' if main_mdx_path.exists() else 'Created'} main.mdx for {connector_name}"
-        )
+            # Replace content between auto-generated markers
+            auto_gen_start = "{/* AUTO-GENERATED CONTENT START */}"
+            auto_gen_end = "{/* AUTO-GENERATED CONTENT END */}"
+
+            start_index = existing_content.find(auto_gen_start)
+            end_index = existing_content.find(auto_gen_end) + len(auto_gen_end)
+
+            if start_index != -1 and end_index != -1:
+                # Replace only the auto-generated part
+                updated_content = (
+                    existing_content[:start_index]
+                    + auto_gen_start
+                    + "\n\n"
+                    + mdx_content.replace(auto_gen_start, "").replace(auto_gen_end, "")
+                    + "\n\n"
+                    + auto_gen_end
+                    + existing_content[end_index:]
+                )
+
+                with open(main_mdx_path, "w") as f:
+                    f.write(updated_content)
+
+                print(f"  Updated auto-generated content for {connector_name}")
+            else:
+                # No markers found, treat as a new file
+                with open(main_mdx_path, "w") as f:
+                    f.write(frontmatter + mdx_content)
+
+                print(
+                    f"  Created new main.mdx for {connector_name} (no markers found in existing file)"
+                )
+        else:
+            # Create the file with the frontmatter and generated content
+            with open(main_mdx_path, "w") as f:
+                f.write(frontmatter + mdx_content)
+
+            print(f"  Created new main.mdx for {connector_name}")
 
     # Update the docs.yml file with the valid connectors
     update_docs_yml(valid_connectors)
