@@ -43,9 +43,8 @@ jobs:
         run: python fern/scripts/update_connector_docs.py
 
       - name: Generate OpenAPI spec
-        run: poetry run python fern/scripts/generate_openapi.py
         working-directory: ./backend
-        # Set mock environment variables for documentation generation
+        run: poetry run python ${{ github.workspace }}/fern/scripts/generate_openapi.py
         env:
           FIRST_SUPERUSER: "docs@example.com"
           FIRST_SUPERUSER_PASSWORD: "docs-password"
