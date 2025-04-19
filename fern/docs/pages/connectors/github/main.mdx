@@ -25,12 +25,7 @@ The Github connector allows you to sync data from Github into Airweave, making i
 GitHub source implementation (read-only).
 
 
-#### Authentication Type
-
-This connector uses **oauth2_with_refresh** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -42,7 +37,6 @@ Schema for a GitHub repository.
 
     References:
       https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28
-
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -77,18 +71,17 @@ Schema for a GitHub repository's content (file, directory, submodule, etc.).
     References:
       https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | repo_full_name | Optional[str] | Full name of the parent repository. |
 | path | Optional[str] | Path of the file or directory within the repo. |
 | sha | Optional[str] | SHA identifier for this content item. |
-| item_type | Optional[str] | Type of content. Typically  |
+| item_type | Optional[str] | Type of content. Typically 'file', 'dir', 'submodule', or 'symlink'. |
 | size | Optional[int] | Size of the content (in bytes). |
 | html_url | Optional[str] | HTML URL for viewing this content on GitHub. |
 | download_url | Optional[str] | Direct download URL if applicable. |
-| content | Optional[str] | File content (base64-encoded) if retrieved via  |
-| encoding | Optional[str] | Indicates the encoding of the content (e.g.,  |
+| content | Optional[str] | File content (base64-encoded) if retrieved via 'mediaType=raw' or similar. |
+| encoding | Optional[str] | Indicates the encoding of the content (e.g., 'base64'). |
 
 </details>
 

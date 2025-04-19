@@ -45,17 +45,37 @@ def parse_entity_file(connector_name):
         content = f.read()
 
     # Extract classes using regex
-    class_pattern = r'class\s+(\w+)\(.*?BaseEntity.*?\):\s*(?:"""(.*?)""")?'
+    class_pattern = r'class\s+(\w+)\(.*?(?:BaseEntity|ChunkEntity).*?\):\s*(?:"""(.*?)""")?'
     classes = re.findall(class_pattern, content, re.DOTALL)
 
     entity_classes = []
     for class_name, docstring in classes:
-        # Extract fields using regex
-        field_pattern = r'(\w+):\s*(\w+)\s*=\s*Field\(.*?description="(.*?)"'
-        fields = re.findall(field_pattern, content, re.DOTALL)
+        # First find the entire class section to isolate fields
+        class_section_pattern = rf"class\s+{class_name}\(.*?\).*?(?=\nclass\s+\w+\(|\Z)"
+        class_section_match = re.search(class_section_pattern, content, re.DOTALL)
+
+        if not class_section_match:
+            continue
+
+        class_section = class_section_match.group(0)
+
+        # Extract fields using regex - updated to handle more complex field descriptions
+        field_pattern = r'(\w+):\s*(?:\w+(?:\[.+?\])?)\s*=\s*Field\(.*?description=(?:"""(.*?)"""|\'\'\'(.*?)\'\'\'|"(.*?)"|\'(.*?)\')'
+        fields = re.findall(field_pattern, class_section, re.DOTALL)
 
         entity_fields = []
-        for field_name, field_type, description in fields:
+        for field_match in fields:
+            field_name = field_match[0]  # First group is always field name
+            # Find the first non-empty description group (one of them will have the description)
+            description = next((desc for desc in field_match[1:] if desc), "No description")
+            # Clean up the description - remove excessive whitespace and newlines
+            description = re.sub(r"\s+", " ", description).strip()
+
+            # Get the field type from the line
+            field_type_pattern = rf"{field_name}:\s*(\w+(?:\[.+?\])?)"
+            field_type_match = re.search(field_type_pattern, class_section)
+            field_type = field_type_match.group(1) if field_type_match else "Unknown"
+
             entity_fields.append(
                 {"name": field_name, "type": field_type, "description": description}
             )
@@ -125,11 +145,18 @@ def parse_auth_config():
                 class_section = class_section_match.group(0)
 
                 # Extract field definitions
-                field_pattern = r'(\w+):\s*(\w+)\s*=\s*Field\(.*?description="(.*?)".*?\)'
+                field_pattern = r'(\w+):\s*(\w+)\s*=\s*Field\(.*?description=(?:"""(.*?)"""|\'\'\'(.*?)\'\'\'|"(.*?)"|\'(.*?)\')'
                 fields = re.findall(field_pattern, class_section, re.DOTALL)
 
                 auth_fields = []
-                for field_name, field_type, description in fields:
+                for field_match in fields:
+                    field_name = field_match[0]  # First group is always field name
+                    field_type = field_match[1]  # Second group is the field type
+                    # Find the first non-empty description group (one of them will have the description)
+                    description = next((desc for desc in field_match[2:] if desc), "No description")
+                    # Clean up the description - remove excessive whitespace and newlines
+                    description = re.sub(r"\s+", " ", description).strip()
+
                     # Check if required
                     is_required = "required" in class_section or field_name in re.findall(
                         r"required\s*=\s*\[(.*?)\]", class_section, re.DOTALL
@@ -198,7 +225,7 @@ This connector requires the following authentication:
 
     # Add entity information
     if entity_info:
-        content += "\n## Data Models\n\n"
+        content += "\n## Entities\n\n"
         content += "The following data models are available for this connector:\n\n"
 
         for entity in entity_info:

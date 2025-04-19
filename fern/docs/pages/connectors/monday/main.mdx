@@ -28,12 +28,7 @@ Monday source implementation.
     data types including boards, groups, columns, items, subitems, and updates.
 
 
-#### Authentication Type
-
-This connector uses **oauth2** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -45,18 +40,17 @@ Schema for Monday Board objects.
 
     https://developer.monday.com/api-reference/reference/boards
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | board_id | str | The unique identifier (ID) of the board. |
-| board_kind | Optional[str] | The board |
+| board_kind | Optional[str] | The board's kind/type: 'public', 'private', or 'share'. |
 | columns | List[Dict] | A list of columns on the board (each column is typically a dict of fields). |
 | created_at | Optional[datetime] | When the board was first created. |
 | description | Optional[str] | The description of the board. |
 | groups | List[Dict] | A list of groups on the board (each group is typically a dict of fields). |
 | name | Optional[str] | The display name/title of the board. |
 | owners | List[Dict] | A list of users or teams who own the board. |
-| state | Optional[str] | The board |
+| state | Optional[str] | The board's current state: 'active', 'archived', or 'deleted'. |
 | updated_at | Optional[datetime] | When the board was last updated. |
 | workspace_id | Optional[str] | The unique identifier of the workspace containing this board (if any). |
 
@@ -71,13 +65,12 @@ Schema for Monday Group objects.
 
     https://developer.monday.com/api-reference/reference/boards
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | group_id | str | The unique identifier (ID) of the group. |
 | board_id | str | ID of the board this group belongs to. |
 | title | Optional[str] | Title or display name of the group. |
-| color | Optional[str] | Group color code (e.g.,  |
+| color | Optional[str] | Group color code (e.g., 'red', 'green', 'blue', etc.). |
 | archived | bool | Whether this group is archived. |
 | items | List[Dict] | List of items (rows) contained within this group. |
 
@@ -92,13 +85,12 @@ Schema for Monday Column objects.
 
     https://developer.monday.com/api-reference/reference/column-types-reference
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | column_id | str | The unique identifier (ID) of the column. |
 | board_id | str | ID of the board this column belongs to. |
 | title | Optional[str] | The display title of the column. |
-| column_type | Optional[str] | The type of the column (e.g.,  |
+| column_type | Optional[str] | The type of the column (e.g., 'text', 'number', 'date', 'link'). |
 | description | Optional[str] | The description of the column. |
 | settings_str | Optional[str] | Raw settings/configuration details for the column. |
 | archived | bool | Whether this column is archived or hidden. |
@@ -111,7 +103,6 @@ Schema for Monday Column objects.
 Schema for Monday Item objects (rows on a board).
 
     https://developer.monday.com/api-reference/reference/boards
-
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -136,7 +127,6 @@ Schema for Monday Subitem objects.
 
     https://developer.monday.com/api-reference/reference/boards
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | subitem_id | str | The unique identifier (ID) of the subitem. |
@@ -160,7 +150,6 @@ Schema for Monday Update objects.
     monday.com updates add notes and discussions to items outside of their column data.
 
     https://developer.monday.com/api-reference/reference/updates
-
 
 | Field | Type | Description |
 |-------|------|-------------|

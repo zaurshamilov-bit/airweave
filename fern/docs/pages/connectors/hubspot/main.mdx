@@ -29,12 +29,7 @@ HubSpot source implementation.
     their respective entity schemas.
 
 
-#### Authentication Type
-
-This connector uses **oauth2_with_refresh** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -44,6 +39,16 @@ The following data models are available for this connector:
 
 Schema for HubSpot contact entities.
 
+| Field | Type | Description |
+|-------|------|-------------|
+| first_name | Optional[str] | The contact's first name |
+| last_name | Optional[str] | The contact's last name |
+| email | Optional[str] | The contact's email address |
+| phone | Optional[str] | The contact's phone number |
+| lifecycle_stage | Optional[str] | The contact's lifecycle stage in the marketing/sales process |
+| created_at | Optional[datetime] | Timestamp when the contact was created |
+| updated_at | Optional[datetime] | Timestamp when the contact was last updated |
+| archived | bool | Whether the contact is archived |
 
 </details>
 
@@ -52,6 +57,19 @@ Schema for HubSpot contact entities.
 
 Schema for HubSpot company entities.
 
+| Field | Type | Description |
+|-------|------|-------------|
+| name | Optional[str] | The company's name |
+| domain | Optional[str] | The company's domain name |
+| industry | Optional[str] | The company's industry category |
+| phone | Optional[str] | The company's phone number |
+| website | Optional[str] | The company's website URL |
+| city | Optional[str] | The city where the company is located |
+| state | Optional[str] | The state or region where the company is located |
+| zip | Optional[str] | The postal code where the company is located |
+| created_at | Optional[datetime] | Timestamp when the company was created |
+| updated_at | Optional[datetime] | Timestamp when the company was last updated |
+| archived | bool | Whether the company is archived |
 
 </details>
 
@@ -60,6 +78,16 @@ Schema for HubSpot company entities.
 
 Schema for HubSpot deal entities.
 
+| Field | Type | Description |
+|-------|------|-------------|
+| deal_name | Optional[str] | The name of the deal |
+| amount | Optional[float] | The monetary value of the deal |
+| pipeline | Optional[str] | The pipeline the deal belongs to |
+| deal_stage | Optional[str] | The stage of the deal in the sales process |
+| close_date | Optional[datetime] | The date when the deal is expected to close or closed |
+| created_at | Optional[datetime] | Timestamp when the deal was created |
+| updated_at | Optional[datetime] | Timestamp when the deal was last updated |
+| archived | bool | Whether the deal is archived |
 
 </details>
 
@@ -68,6 +96,14 @@ Schema for HubSpot deal entities.
 
 Schema for HubSpot ticket entities.
 
+| Field | Type | Description |
+|-------|------|-------------|
+| subject | Optional[str] | The subject of the support ticket |
+| content | Optional[str] | The content or description of the ticket |
+| status | Optional[str] | The current status of the ticket |
+| created_at | Optional[datetime] | Timestamp when the ticket was created |
+| updated_at | Optional[datetime] | Timestamp when the ticket was last updated |
+| archived | bool | Whether the ticket is archived |
 
 </details>
 

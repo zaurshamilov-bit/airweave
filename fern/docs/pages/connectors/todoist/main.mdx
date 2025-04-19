@@ -33,12 +33,7 @@ Todoist source implementation.
     The Todoist entity schemas are defined in entities/todoist.py.
 
 
-#### Authentication Type
-
-This connector uses **oauth2** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -48,18 +43,17 @@ The following data models are available for this connector:
 
 Schema for Todoist project entities.
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | name | str | The name of the project |
-| color | Optional[str] | Color of the project (e.g.,  |
+| color | Optional[str] | Color of the project (e.g., 'grey', 'blue') |
 | comment_count | int | Number of comments in the project |
 | order | int | Project order in the project list |
 | is_shared | bool | Whether the project is shared with others |
 | is_favorite | bool | Whether the project is marked as a favorite |
 | is_inbox_project | bool | Whether this is the Inbox project |
 | is_team_inbox | bool | Whether this is the team Inbox project |
-| view_style | Optional[str] | Project view style ( |
+| view_style | Optional[str] | Project view style ('list' or 'board') |
 | url | Optional[str] | URL to access the project |
 | parent_id | Optional[str] | ID of the parent project if nested |
 
@@ -69,7 +63,6 @@ Schema for Todoist project entities.
 <summary><strong>TodoistSectionEntity</strong></summary>
 
 Schema for Todoist section entities.
-
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -83,7 +76,6 @@ Schema for Todoist section entities.
 <summary><strong>TodoistTaskEntity</strong></summary>
 
 Schema for Todoist task entities.
-
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -101,7 +93,7 @@ Schema for Todoist task entities.
 | created_at | Optional[datetime] | When the task was created |
 | due_date | Optional[str] | Due date in YYYY-MM-DD format |
 | due_datetime | Optional[datetime] | Due date and time |
-| due_string | Optional[str] | Original due date string (e.g.,  |
+| due_string | Optional[str] | Original due date string (e.g., 'tomorrow') |
 | due_is_recurring | bool | Whether the task is recurring |
 | due_timezone | Optional[str] | Timezone for the due date |
 | url | Optional[str] | URL to access the task |
@@ -112,7 +104,6 @@ Schema for Todoist task entities.
 <summary><strong>TodoistCommentEntity</strong></summary>
 
 Schema for Todoist comment entities.
-
 
 | Field | Type | Description |
 |-------|------|-------------|

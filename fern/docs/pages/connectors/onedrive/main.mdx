@@ -25,12 +25,7 @@ The Onedrive connector allows you to sync data from Onedrive into Airweave, maki
 OneDrive source implementation (read-only).
 
 
-#### Authentication Type
-
-This connector uses **oauth2_with_refresh** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -44,11 +39,10 @@ Schema for a OneDrive Drive object.
     from the OneDrive/SharePoint drive resource. Owner and quota are typically
     nested objects; we store them as dictionaries.
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | drive_type | Optional[str] | Information about the user or application that owns this drive. |
-| quota | Optional[Dict[str, Any]] | Information about the drive |
+| quota | Optional[Dict[str, Any] | Information about the drive's storage quota (total, used, remaining, etc.). |
 | created_at | Optional[datetime] | Datetime when the drive was created (from createdDateTime). |
 | updated_at | Optional[datetime] | Datetime when the drive was last modified (from lastModifiedDateTime). |
 
@@ -63,7 +57,6 @@ Schema for a OneDrive DriveItem object (file or folder).
     because a DriveItem may represent either a file or a folder, and some properties
     appear only in one context.
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | name | Optional[str] | The name of the item (folder or file). |
@@ -73,8 +66,8 @@ Schema for a OneDrive DriveItem object (file or folder).
 | updated_at | Optional[datetime] | Datetime when the item was last modified (from lastModifiedDateTime). |
 | size | Optional[int] | Size of the item in bytes. |
 | web_url | Optional[str] | URL that displays the resource in the browser. |
-| file | Optional[Dict[str, Any]] | File metadata if the item is a file (e.g., mimeType, hashes). |
-| folder | Optional[Dict[str, Any]] | Folder metadata if the item is a folder (e.g., childCount). |
+| file | Optional[Dict[str, Any] | File metadata if the item is a file (e.g., mimeType, hashes). |
+| folder | Optional[Dict[str, Any] | Folder metadata if the item is a folder (e.g., childCount). |
 
 </details>
 

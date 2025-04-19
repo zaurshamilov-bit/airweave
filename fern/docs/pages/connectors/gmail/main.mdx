@@ -28,12 +28,7 @@ Gmail source implementation (read-only).
     as entity schemas defined in entities/gmail.py.
 
 
-#### Authentication Type
-
-This connector uses **oauth2_with_refresh** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -45,11 +40,10 @@ Schema for Gmail label entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.labels
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | name | str | The display name of the label |
-| label_type | str | Type of label:  |
+| label_type | str | Type of label: 'system' or 'user' |
 | message_list_visibility | Optional[str] | Show/hide in message list |
 | label_list_visibility | Optional[str] | Show/hide in label list |
 | total_messages | Optional[int] | Total number of messages with this label |
@@ -64,11 +58,10 @@ Schema for Gmail thread entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.threads
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | snippet | Optional[str] | A short snippet from the thread |
-| history_id | Optional[str] | The thread |
+| history_id | Optional[str] | The thread's history ID |
 | message_count | Optional[int] | Number of messages in the thread |
 | label_ids | List[str] | Labels applied to this thread |
 | last_message_date | Optional[datetime] | Date of the last message |
@@ -81,7 +74,6 @@ Schema for Gmail thread entities.
 Schema for Gmail message entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.messages
-
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -107,7 +99,6 @@ Schema for Gmail message entities.
 Schema for Gmail draft entities.
 
     Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.drafts
-
 
 | Field | Type | Description |
 |-------|------|-------------|

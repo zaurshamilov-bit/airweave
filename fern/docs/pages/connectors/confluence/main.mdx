@@ -36,12 +36,7 @@ Confluence source implementation, retrieving content in a hierarchical fashion.
       - (Optionally) Database, Folder, etc.
 
 
-#### Authentication Type
-
-This connector uses **oauth2_with_refresh** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -54,46 +49,36 @@ Schema for a Confluence Space.
     See:
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-spaces/
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | space_key | str | Unique key for the space. |
 | name | Optional[str] | Name of the space. |
-| space_type | Optional[str] | Type of space (e.g.  |
+| space_type | Optional[str] | Type of space (e.g. 'global'). |
 | description | Optional[str] | Description of the space. |
 | status | Optional[str] | Status of the space if applicable. |
 | created_at | Optional[datetime] | Timestamp when the space was created. |
 | updated_at | Optional[datetime] | Timestamp when the space was last updated. |
-| content_id | Optional[str] | Actual Confluence page ID. |
-| title | Optional[str] | Title of the page. |
-| space_id | Optional[str] | ID of the space this page belongs to. |
-| body | Optional[str] | HTML body or excerpt of the page. |
-| version | Optional[int] | Page version number. |
-| status | Optional[str] | Status of the page (e.g.,  |
-| created_at | Optional[datetime] | Timestamp when the page was created. |
-| updated_at | Optional[datetime] | Timestamp when the page was last updated. |
 
 </details>
 
 <details>
-<summary><strong>ConfluenceBlogPostEntity</strong></summary>
+<summary><strong>ConfluencePageEntity</strong></summary>
 
 Schema for a Confluence Blog Post.
 
     See:
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-posts/
 
-
 | Field | Type | Description |
 |-------|------|-------------|
-| content_id | Optional[str] | Actual Confluence blog post ID. |
-| title | Optional[str] | Title of the blog post. |
-| space_id | Optional[str] | ID of the space this blog post is in. |
-| body | Optional[str] | HTML body of the blog post. |
-| version | Optional[int] | Blog post version number. |
-| status | Optional[str] | Status of the blog post (e.g.,  |
-| created_at | Optional[datetime] | Timestamp when the blog post was created. |
-| updated_at | Optional[datetime] | Timestamp when the blog post was last updated. |
+| content_id | Optional[str] | Actual Confluence page ID. |
+| title | Optional[str] | Title of the page. |
+| space_id | Optional[str] | ID of the space this page belongs to. |
+| body | Optional[str] | HTML body or excerpt of the page. |
+| version | Optional[int] | Page version number. |
+| status | Optional[str] | Status of the page (e.g., 'current'). |
+| created_at | Optional[datetime] | Timestamp when the page was created. |
+| updated_at | Optional[datetime] | Timestamp when the page was last updated. |
 
 </details>
 
@@ -105,15 +90,14 @@ Schema for a Confluence Comment.
     See:
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comments/
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | content_id | Optional[str] | ID of the content this comment is attached to. |
 | text | Optional[str] | Text/HTML body of the comment. |
-| created_by | Optional[Dict[str, Any]] | Information about the user who created the comment. |
+| created_by | Optional[Dict[str, Any] | Information about the user who created the comment. |
 | created_at | Optional[datetime] | Timestamp when this comment was created. |
 | updated_at | Optional[datetime] | Timestamp when this comment was last updated. |
-| status | Optional[str] | Status of the comment (e.g.,  |
+| status | Optional[str] | Status of the comment (e.g., 'current'). |
 
 </details>
 
@@ -124,7 +108,6 @@ Schema for a Confluence Database object.
 
     See:
       (the "database" content type in Confluence Cloud).
-
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -145,14 +128,13 @@ Schema for a Confluence Folder object.
     See:
       (the "folder" content type in Confluence Cloud).
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | title | Optional[str] | Name of the folder. |
 | space_key | Optional[str] | Key of the space this folder is in. |
 | created_at | Optional[datetime] | Timestamp when the folder was created. |
 | updated_at | Optional[datetime] | Timestamp when the folder was last updated. |
-| status | Optional[str] | Status of the folder (e.g.,  |
+| status | Optional[str] | Status of the folder (e.g., 'current'). |
 
 </details>
 
@@ -164,11 +146,10 @@ Schema for a Confluence Label object.
     See:
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-labels/
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | name | str | The text value of the label. |
-| label_type | Optional[str] | Type of the label (e.g.,  |
+| label_type | Optional[str] | Type of the label (e.g., 'global'). |
 | owner_id | Optional[str] | ID of the user or content that owns label. |
 
 </details>
@@ -180,13 +161,12 @@ Schema for a Confluence Task object.
 
     For example, tasks extracted from Confluence pages or macros.
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | content_id | Optional[str] | The content ID (page, blog, etc.) that this task is associated with. |
 | space_key | Optional[str] | Space key if task is associated with a space. |
 | text | Optional[str] | Text of the task. |
-| assignee | Optional[Dict[str, Any]] | Information about the user assigned to this task. |
+| assignee | Optional[Dict[str, Any] | Information about the user assigned to this task. |
 | completed | bool | Indicates if this task is completed. |
 | due_date | Optional[datetime] | Due date/time if applicable. |
 | created_at | Optional[datetime] | Timestamp when this task was created. |
@@ -202,14 +182,13 @@ Schema for a Confluence Whiteboard object.
     See:
       (the "whiteboard" content type in Confluence Cloud).
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | title | Optional[str] | Title of the whiteboard. |
 | space_key | Optional[str] | Key of the space this whiteboard is in. |
 | created_at | Optional[datetime] | Timestamp when the whiteboard was created. |
 | updated_at | Optional[datetime] | Timestamp when the whiteboard was last updated. |
-| status | Optional[str] | Status of the whiteboard (e.g.,  |
+| status | Optional[str] | Status of the whiteboard (e.g., 'current'). |
 
 </details>
 
@@ -221,7 +200,6 @@ Schema for a Confluence Custom Content object.
     See:
       (the "custom content" type in Confluence Cloud).
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | title | Optional[str] | Title or name of this custom content. |
@@ -229,7 +207,7 @@ Schema for a Confluence Custom Content object.
 | body | Optional[str] | Optional HTML body or representation. |
 | created_at | Optional[datetime] | Timestamp when the custom content was created. |
 | updated_at | Optional[datetime] | Timestamp when the custom content was last updated. |
-| status | Optional[str] | Status of the custom content item (e.g.,  |
+| status | Optional[str] | Status of the custom content item (e.g., 'current'). |
 
 </details>
 

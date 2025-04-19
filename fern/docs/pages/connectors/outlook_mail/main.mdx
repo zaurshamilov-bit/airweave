@@ -29,12 +29,7 @@ Outlook Mail source implementation (read-only).
     also retrieves email messages and yields OutlookMessageEntity items.
 
 
-#### Authentication Type
-
-This connector uses **oauth2_with_refresh** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -47,15 +42,14 @@ Schema for an Outlook mail folder.
     See:
       https://learn.microsoft.com/en-us/graph/api/resources/mailfolder?view=graph-rest-1.0
 
-
 | Field | Type | Description |
 |-------|------|-------------|
-| display_name | str | Display name of the mail folder (e.g.,  |
+| display_name | str | Display name of the mail folder (e.g., 'Inbox'). |
 | parent_folder_id | Optional[str] | ID of the parent mail folder, if any. |
 | child_folder_count | Optional[int] | Number of child mail folders under this folder. |
 | total_item_count | Optional[int] | Total number of items (messages) in this folder. |
 | unread_item_count | Optional[int] | Number of unread items in this folder. |
-| well_known_name | Optional[str] | Well-known name of this folder if applicable (e.g.,  |
+| well_known_name | Optional[str] | Well-known name of this folder if applicable (e.g., 'inbox'). |
 
 </details>
 
@@ -66,7 +60,6 @@ Schema for an Outlook message.
 
     See:
       https://learn.microsoft.com/en-us/graph/api/resources/message?view=graph-rest-1.0
-
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -79,9 +72,9 @@ Schema for an Outlook message.
 | importance | Optional[str] | Indicates the importance of the message (Low, Normal, High). |
 | has_attachments | Optional[bool] | Indicates if the message has file attachments. |
 | internet_message_id | Optional[str] | Internet message ID of the email (RFC 2822 format). |
-| from_ | Optional[Dict[str, Any]] | List of primary recipients (each typically contains emailAddress info). |
-| cc_recipients | List[Dict[str, Any]] | List of CC recipients (each typically contains emailAddress info). |
-| bcc_recipients | List[Dict[str, Any]] | List of BCC recipients (each typically contains emailAddress info). |
+| from_ | Optional[Dict[str, Any] | List of primary recipients (each typically contains emailAddress info). |
+| cc_recipients | List[Dict[str, Any] | List of CC recipients (each typically contains emailAddress info). |
+| bcc_recipients | List[Dict[str, Any] | List of BCC recipients (each typically contains emailAddress info). |
 | sent_at | Optional[datetime] | Timestamp when the message was sent. |
 | received_at | Optional[datetime] | Timestamp when the message was received. |
 | created_at | Optional[datetime] | Timestamp when the message resource was created (if available). |

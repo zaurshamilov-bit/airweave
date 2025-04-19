@@ -34,12 +34,7 @@ Zendesk source implementation (read-only).
     airweave.platform.entities.zendesk.
 
 
-#### Authentication Type
-
-This connector uses **oauth2_with_refresh** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -51,7 +46,6 @@ Schema for a Zendesk organization.
 
     References:
       https://developer.zendesk.com/api-reference/ticketing/organizations/organizations/
-
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -75,16 +69,15 @@ Schema for a Zendesk user (agent or end user).
     References:
       https://developer.zendesk.com/api-reference/ticketing/users/users/
 
-
 | Field | Type | Description |
 |-------|------|-------------|
-| name | Optional[str] | The user |
-| email | Optional[str] | The user |
-| role | Optional[str] | Role assigned, e.g.,  |
-| time_zone | Optional[str] | The user |
+| name | Optional[str] | The user's full name. |
+| email | Optional[str] | The user's email address. |
+| role | Optional[str] | Role assigned, e.g., 'admin', 'agent', 'end-user'. |
+| time_zone | Optional[str] | The user's time zone. |
 | locale | Optional[str] | Locale for the user (language, date/time format). |
 | active | bool | Whether the user is currently active. |
-| verified | bool | Whether the user |
+| verified | bool | Whether the user's identity is verified. |
 | shared | bool | Whether the user is suspended. |
 | last_login_at | Optional[datetime] | When the user last signed in (if available). |
 | created_at | Optional[datetime] | When the user was created. |
@@ -101,23 +94,22 @@ Schema for a Zendesk ticket.
     References:
       https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | subject | Optional[str] | Subject or summary of the ticket. |
 | description | Optional[str] | Description text of the ticket. |
-| type | Optional[str] | Type of ticket, e.g.,  |
-| priority | Optional[str] | Priority of the ticket, e.g.,  |
-| status | Optional[str] | Current status, e.g.,  |
+| type | Optional[str] | Type of ticket, e.g., 'question', 'incident'. |
+| priority | Optional[str] | Priority of the ticket, e.g., 'low', 'normal'. |
+| status | Optional[str] | Current status, e.g., 'open', 'pending'. |
 | tags | List[str] | List of tags attached to the ticket. |
-| requester_id | Optional[str] | ID of the user that requested the ticket (i.e., the ticket |
+| requester_id | Optional[str] | ID of the user that requested the ticket (i.e., the ticket's author). |
 | assignee_id | Optional[str] | ID of the user (agent) assigned to handle this ticket. |
 | organization_id | Optional[str] | ID of the organization associated with this ticket. |
 | group_id | Optional[str] | ID of the group this ticket is assigned to. |
 | created_at | Optional[datetime] | When the ticket was created. |
 | updated_at | Optional[datetime] | When the ticket was last updated. |
 | due_at | Optional[datetime] | When this ticket is due. |
-| via | Optional[Dict[str, Any]] | List of custom field objects with id/value pairs for this ticket. |
+| via | Optional[Dict[str, Any] | List of custom field objects with id/value pairs for this ticket. |
 | archived | bool | Placeholder for archival state if applicable. |
 
 </details>
@@ -130,7 +122,6 @@ Schema for a Zendesk comment, typically tied to a specific ticket.
     References:
       https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_comments/
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | ticket_id | str | ID of the ticket this comment belongs to. |
@@ -138,7 +129,7 @@ Schema for a Zendesk comment, typically tied to a specific ticket.
 | plain_body | Optional[str] | Plain text version of the comment. |
 | public | bool | Whether the comment is public or private. |
 | created_at | Optional[datetime] | When the comment was created. |
-| attachments | List[Dict[str, Any]] | Attachments associated with the comment, if any. |
+| attachments | List[Dict[str, Any] | Attachments associated with the comment, if any. |
 | archived | bool | Placeholder for archival state if applicable. |
 
 </details>

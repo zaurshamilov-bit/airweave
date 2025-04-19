@@ -25,12 +25,7 @@ The Dropbox connector allows you to sync data from Dropbox into Airweave, making
 Dropbox source implementation.
 
 
-#### Authentication Type
-
-This connector uses **oauth2_with_refresh** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -47,30 +42,29 @@ Schema for Dropbox account-level entities based on the Dropbox API.
     OPTIONAL fields from ChunkEntity (automatically populated if available):
     - Other inherited fields from ChunkEntity
 
-
 | Field | Type | Description |
 |-------|------|-------------|
-| account_id | str | The user |
-| name | str | Name for display representing the user |
-| abbreviated_name | Optional[str] | Abbreviated form of the person |
+| account_id | str | The user's unique Dropbox ID |
+| name | str | Name for display representing the user's Dropbox account |
+| abbreviated_name | Optional[str] | Abbreviated form of the person's name (typically initials) |
 | familiar_name | Optional[str] | Locale-dependent name (usually given name in US) |
 | given_name | Optional[str] | Also known as first name |
 | surname | Optional[str] | Also known as last name or family name |
-| email | Optional[str] | The user |
+| email | Optional[str] | The user's email address |
 | email_verified | bool | Whether the user has verified their email address |
 | disabled | bool | Whether the user has been disabled |
 | account_type | Optional[str] | Type of account (basic, pro, business, etc.) |
 | is_teammate | bool | Whether this user is a teammate of the current user |
 | is_paired | bool | Whether the user has both personal and work accounts linked |
-| team_member_id | Optional[str] | The user |
+| team_member_id | Optional[str] | The user's unique team member ID (if part of a team) |
 | locale | Optional[str] | The language that the user specified (IETF language tag) |
-| country | Optional[str] | The user |
+| country | Optional[str] | The user's two-letter country code (ISO 3166-1) |
 | profile_photo_url | Optional[str] | URL for the profile photo |
-| referral_link | Optional[str] | The user |
-| space_used | Optional[int] | The user |
-| space_allocated | Optional[int] | The user |
+| referral_link | Optional[str] | The user's referral link |
+| space_used | Optional[int] | The user's total space usage in bytes |
+| space_allocated | Optional[int] | The user's total space allocation in bytes |
 | team_info | Optional[Dict] | Information about the team if user is a member |
-| root_info | Optional[Dict] | Information about the user |
+| root_info | Optional[Dict] | Information about the user's root namespace |
 
 </details>
 
@@ -86,7 +80,6 @@ Schema for Dropbox folder entities matching the Dropbox API.
     OPTIONAL fields from ChunkEntity (automatically populated if available):
     - Other inherited fields from ChunkEntity
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | folder_id | str | Unique identifier for the folder |
@@ -97,16 +90,7 @@ Schema for Dropbox folder entities matching the Dropbox API.
 | read_only | bool | Whether the folder is read-only |
 | traverse_only | bool | Whether the folder can only be traversed |
 | no_access | bool | Whether the folder cannot be accessed |
-| property_groups | Optional[List[Dict]] | Custom properties and tags |
-| path_lower | Optional[str] | Lowercase full path in Dropbox |
-| path_display | Optional[str] | Display path with proper casing |
-| rev | Optional[str] | Unique identifier for the file revision |
-| client_modified | Optional[datetime] | When file was modified by client |
-| server_modified | Optional[datetime] | When file was modified on server |
-| is_downloadable | bool | Whether file can be downloaded directly |
-| content_hash | Optional[str] | Dropbox content hash for integrity checks |
-| sharing_info | Optional[Dict] | Sharing information for the file |
-| has_explicit_shared_members | Optional[bool] | Whether file has explicit shared members |
+| property_groups | Optional[List[Dict] | Custom properties and tags |
 
 </details>
 

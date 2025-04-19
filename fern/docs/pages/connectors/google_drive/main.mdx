@@ -30,12 +30,7 @@ Google Drive source implementation (read-only).
       - GoogleDriveFileEntity objects, representing files in the user's My Drive
 
 
-#### Authentication Type
-
-This connector uses **oauth2_with_refresh** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -48,31 +43,15 @@ Schema for a Drive resource (shared drive).
     Reference:
       https://developers.google.com/drive/api/v3/reference/drives
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | drive_id | str | Unique ID of the shared drive. |
 | name | Optional[str] | The name of this shared drive. |
-| kind | Optional[str] | Identifies what kind of resource this is; typically  |
+| kind | Optional[str] | Identifies what kind of resource this is; typically "drive#drive". |
 | color_rgb | Optional[str] | The color of this shared drive as an RGB hex string. |
 | created_time | Optional[datetime] | When the shared drive was created (RFC 3339 date-time). |
 | hidden | bool | Whether the shared drive is hidden from default view. |
 | org_unit_id | Optional[str] | The organizational unit of this shared drive, if applicable. |
-| file_id | str | Unique ID of the file. |
-| name | Optional[str] | Name of the file. |
-| mime_type | Optional[str] | MIME type of the file. |
-| description | Optional[str] | Optional description of the file. |
-| starred | bool | Indicates whether the user has starred the file. |
-| trashed | bool | Whether the file is in the trash. |
-| explicitly_trashed | bool | Whether the file was explicitly trashed by the user. |
-| parents | List[str] | IDs of the parent folders containing this file. |
-| shared | bool | Whether the file is shared. |
-| web_view_link | Optional[str] | Link for opening the file in a relevant Google editor or viewer. |
-| icon_link | Optional[str] | A static, far-reaching URL to the file |
-| created_time | Optional[datetime] | When the file was created (RFC 3339 date-time). |
-| modified_time | Optional[datetime] | When the file was last modified (RFC 3339 date-time). |
-| size | Optional[int] | The size of the file |
-| md5_checksum | Optional[str] | MD5 checksum for the content of the file. |
 
 </details>
 

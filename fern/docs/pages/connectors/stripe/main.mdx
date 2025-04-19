@@ -43,12 +43,7 @@ Stripe source implementation.
     retrieve all objects. Fields are mapped to the entity schemas defined in entities/stripe.py.
 
 
-#### Authentication Type
-
-This connector uses **config_class** authentication.
-
-
-## Data Models
+## Entities
 
 The following data models are available for this connector:
 
@@ -60,13 +55,12 @@ Schema for Stripe Balance resource.
 
     https://stripe.com/docs/api/balance/balance_object
 
-
 | Field | Type | Description |
 |-------|------|-------------|
-| available | List[Dict[str, Any]] | Funds that are available to be paid out, broken down by currency |
-| pending | List[Dict[str, Any]] | Funds not yet available, broken down by currency |
-| instant_available | Optional[List[Dict[str, Any]]] | Funds available for Instant Payouts (if enabled) |
-| connect_reserved | Optional[List[Dict[str, Any]]] | Funds reserved for connected accounts (if using Connect) |
+| available | List[Dict[str, Any] | Funds that are available to be paid out, broken down by currency |
+| pending | List[Dict[str, Any] | Funds not yet available, broken down by currency |
+| instant_available | Optional[List[Dict[str, Any] | Funds available for Instant Payouts (if enabled) |
+| connect_reserved | Optional[List[Dict[str, Any] | Funds reserved for connected accounts (if using Connect) |
 | livemode | bool | Whether this balance is in live mode (vs test mode) |
 
 </details>
@@ -78,7 +72,6 @@ Schema for Stripe Balance Transaction resource.
 
     https://stripe.com/docs/api/balance_transactions
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | amount | Optional[int] | Gross amount of the transaction, in cents |
@@ -86,12 +79,12 @@ Schema for Stripe Balance Transaction resource.
 | created_at | Optional[datetime] | Time at which the transaction was created |
 | description | Optional[str] | Text description of the transaction |
 | fee | Optional[int] | Fees (in cents) taken from this transaction |
-| fee_details | List[Dict[str, Any]] | Detailed breakdown of fees (type, amount, application, etc.) |
+| fee_details | List[Dict[str, Any] | Detailed breakdown of fees (type, amount, application, etc.) |
 | net | Optional[int] | Net amount of the transaction, in cents |
-| reporting_category | Optional[str] | Reporting category (e.g.,  |
+| reporting_category | Optional[str] | Reporting category (e.g., 'charge', 'refund', etc.) |
 | source | Optional[str] | ID of the charge or other object that caused this balance transaction |
-| status | Optional[str] | Status of the balance transaction (e.g.,  |
-| type | Optional[str] | Transaction type (e.g.,  |
+| status | Optional[str] | Status of the balance transaction (e.g., 'available', 'pending') |
+| type | Optional[str] | Transaction type (e.g., 'charge', 'refund', 'payout') |
 
 </details>
 
@@ -102,7 +95,6 @@ Schema for Stripe Charge entities.
 
     https://stripe.com/docs/api/charges
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | amount | Optional[int] | Amount charged in cents |
@@ -112,7 +104,7 @@ Schema for Stripe Charge entities.
 | refunded | bool | Whether the charge was refunded |
 | created_at | Optional[datetime] | When the charge was created |
 | description | Optional[str] | Arbitrary description of the charge |
-| receipt_url | Optional[str] | URL to view this charge |
+| receipt_url | Optional[str] | URL to view this charge's receipt |
 | customer_id | Optional[str] | ID of the Customer this charge belongs to |
 | invoice_id | Optional[str] | ID of the Invoice this charge is linked to (if any) |
 | metadata | Dict[str, Any] | Set of key-value pairs attached to the charge |
@@ -126,18 +118,17 @@ Schema for Stripe Customer entities.
 
     https://stripe.com/docs/api/customers
 
-
 | Field | Type | Description |
 |-------|------|-------------|
-| email | Optional[str] | The customer |
-| phone | Optional[str] | The customer |
-| name | Optional[str] | The customer |
+| email | Optional[str] | The customer's email address |
+| phone | Optional[str] | The customer's phone number |
+| name | Optional[str] | The customer's full name |
 | description | Optional[str] | Arbitrary description of the customer |
 | created_at | Optional[datetime] | When the customer was created |
-| currency | Optional[str] | Preferred currency for the customer |
+| currency | Optional[str] | Preferred currency for the customer's recurring payments |
 | default_source | Optional[str] | ID of the default payment source (e.g. card) attached to this customer |
 | delinquent | bool | Whether the customer has any unpaid/overdue invoices |
-| invoice_prefix | Optional[str] | Prefix for the customer |
+| invoice_prefix | Optional[str] | Prefix for the customer's invoices |
 | metadata | Dict[str, Any] | Set of key-value pairs attached to the customer |
 
 </details>
@@ -149,16 +140,15 @@ Schema for Stripe Event resource.
 
     https://stripe.com/docs/api/events
 
-
 | Field | Type | Description |
 |-------|------|-------------|
-| event_type | Optional[str] | The event |
+| event_type | Optional[str] | The event's type (e.g., 'charge.succeeded', 'customer.created') |
 | api_version | Optional[str] | API version used to render event data |
 | created_at | Optional[datetime] | When the notification was created (time of the event) |
-| data | Dict[str, Any] | The event payload. Typically includes  |
+| data | Dict[str, Any] | The event payload. Typically includes 'object' and 'previous_attributes'. |
 | livemode | bool | Whether the event was triggered in live mode |
 | pending_webhooks | Optional[int] | Number of webhooks yet to be delivered |
-| request | Optional[Dict[str, Any]] | Information on the request that created or triggered the event |
+| request | Optional[Dict[str, Any] | Information on the request that created or triggered the event |
 
 </details>
 
@@ -169,19 +159,18 @@ Schema for Stripe Invoice entities.
 
     https://stripe.com/docs/api/invoices
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | customer_id | Optional[str] | The ID of the customer this invoice belongs to |
 | number | Optional[str] | A unique, user-facing reference for this invoice |
-| status | Optional[str] | Invoice status (e.g.,  |
+| status | Optional[str] | Invoice status (e.g., 'draft', 'open', 'paid', 'void') |
 | amount_due | Optional[int] | Final amount due in cents (before any payment or credit) |
 | amount_paid | Optional[int] | Amount paid in cents |
 | amount_remaining | Optional[int] | Amount remaining to be paid in cents |
 | created_at | Optional[datetime] | When the invoice was created |
 | due_date | Optional[datetime] | Date on which payment is due (if applicable) |
-| paid | bool | Whether the invoice has been fully paid |
-| currency | Optional[str] | Three-letter ISO currency code (e.g.  |
+| paid | Optional[int] | Whether the invoice has been fully paid |
+| currency | Optional[str] | Three-letter ISO currency code (e.g. 'usd') |
 | metadata | Dict[str, Any] | Set of key-value pairs that can be attached to the invoice |
 
 </details>
@@ -193,12 +182,11 @@ Schema for Stripe PaymentIntent entities.
 
     https://stripe.com/docs/api/payment_intents
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | amount | Optional[int] | Amount in cents intended to be collected by this PaymentIntent |
 | currency | Optional[str] | Three-letter ISO currency code |
-| status | Optional[str] | Status of the PaymentIntent (e.g.  |
+| status | Optional[str] | Status of the PaymentIntent (e.g. 'requires_payment_method', 'succeeded') |
 | description | Optional[str] | Arbitrary description for the PaymentIntent |
 | created_at | Optional[datetime] | When the PaymentIntent was created |
 | customer_id | Optional[str] | ID of the Customer this PaymentIntent is for (if any) |
@@ -213,13 +201,12 @@ Schema for Stripe PaymentMethod resource.
 
     https://stripe.com/docs/api/payment_methods
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | type | Optional[str] | Type of the PaymentMethod (card, ideal, etc.) |
 | billing_details | Dict[str, Any] | Billing information associated with the PaymentMethod |
 | customer_id | Optional[str] | ID of the Customer to which this PaymentMethod is saved (if any) |
-| card | Optional[Dict[str, Any]] | When the PaymentMethod was created |
+| card | Optional[Dict[str, Any] | When the PaymentMethod was created |
 | metadata | Dict[str, Any] | Set of key-value pairs that can be attached to the PaymentMethod |
 
 </details>
@@ -231,7 +218,6 @@ Schema for Stripe Payout resource.
 
     https://stripe.com/docs/api/payouts
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | amount | Optional[int] | Amount in cents to be transferred |
@@ -240,9 +226,9 @@ Schema for Stripe Payout resource.
 | created_at | Optional[datetime] | When this payout was created |
 | description | Optional[str] | An arbitrary string attached to the payout |
 | destination | Optional[str] | ID of the bank account or card the payout was sent to |
-| method | Optional[str] | The method used to send this payout (e.g.,  |
-| status | Optional[str] | Status of the payout (e.g.,  |
-| statement_descriptor | Optional[str] | Extra information to be displayed on the user |
+| method | Optional[str] | The method used to send this payout (e.g., 'standard', 'instant') |
+| status | Optional[str] | Status of the payout (e.g., 'paid', 'pending', 'in_transit') |
+| statement_descriptor | Optional[str] | Extra information to be displayed on the user's bank statement |
 | metadata | Dict[str, Any] | Set of key-value pairs that can be attached to the payout |
 
 </details>
@@ -254,13 +240,12 @@ Schema for Stripe Refund resource.
 
     https://stripe.com/docs/api/refunds
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | amount | Optional[int] | Amount in cents refunded |
 | currency | Optional[str] | Three-letter ISO currency code |
 | created_at | Optional[datetime] | When this refund was created |
-| status | Optional[str] | Status of the refund (e.g.,  |
+| status | Optional[str] | Status of the refund (e.g., 'pending', 'succeeded', 'failed') |
 | reason | Optional[str] | Reason for the refund (duplicate, fraudulent, requested_by_customer, etc.) |
 | receipt_number | Optional[str] | Transaction number that appears on email receipts issued for this refund |
 | charge_id | Optional[str] | ID of the charge being refunded |
@@ -276,11 +261,10 @@ Schema for Stripe Subscription entities.
 
     https://stripe.com/docs/api/subscriptions
 
-
 | Field | Type | Description |
 |-------|------|-------------|
 | customer_id | Optional[str] | The ID of the customer who owns this subscription |
-| status | Optional[str] | Status of the subscription (e.g.,  |
+| status | Optional[str] | Status of the subscription (e.g., 'active', 'past_due', 'canceled') |
 | current_period_start | Optional[datetime] | Start of the current billing period for this subscription |
 | current_period_end | Optional[datetime] | End of the current billing period for this subscription |
 | cancel_at_period_end | bool | Whether the subscription will cancel at the end of the current period |
