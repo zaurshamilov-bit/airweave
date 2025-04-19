@@ -1,0 +1,98 @@
+---
+title: "Notion"
+description: "Notion integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+
+
+<div className="connector-header">
+  <img src="icon.svg" alt="Notion logo" width="72" height="72" className="connector-icon" />
+  <div className="connector-info">
+    <h1>Notion</h1>
+    <p>Connect your Notion data to Airweave</p>
+  </div>
+</div>
+
+## Overview
+
+The Notion connector allows you to sync data from Notion into Airweave, making it available for search and retrieval by your agents.
+
+## Configuration
+
+
+### NotionSource
+
+Notion source implementation.
+
+
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/notion.py"
+>
+  Explore the Notion connector implementation
+</Card>
+
+### Authentication
+
+This connector uses **OAuth 2.0 authentication flow**.
+
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
+
+
+## Entities
+
+The following data models are available for this connector:
+
+<Accordion title="NotionDatabaseEntity">
+
+Schema for Notion database entities.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | str | The name of the database |
+| database_id | str | The ID of the database |
+| description | Optional[str] | The description of the database |
+| created_time | Optional[datetime] | The creation time of the database |
+| last_edited_time | Optional[datetime] | The last edited time of the database |
+
+</Accordion>
+<Accordion title="NotionPageEntity">
+
+Schema for Notion page entities.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| page_id | str | The ID of the page |
+| parent_id | str | The ID of the parent page |
+| parent_type | str | The type of the parent page |
+| title | str | The title of the page |
+| created_time | Optional[datetime] | The creation time of the page |
+| last_edited_time | Optional[datetime] | The last edited time of the page |
+| archived | bool | Whether the page is archived |
+| content | Optional[str] | The content of the page |
+
+</Accordion>
+<Accordion title="NotionBlockEntity">
+
+Schema for Notion block entities.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| block_id | str | The ID of the block |
+| parent_id | str | The ID of the parent block |
+| block_type | str | The type of the block |
+| text_content | Optional[str] | The text content of the block |
+| has_children | bool | Whether the block has children |
+| children_ids | List[str] | The IDs of the children blocks |
+| created_time | Optional[datetime] | The creation time of the block |
+| last_edited_time | Optional[datetime] | The last edited time of the block |
+
+</Accordion>
+
+
+
+
+{/* AUTO-GENERATED CONTENT END */}

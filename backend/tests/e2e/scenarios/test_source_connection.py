@@ -38,9 +38,9 @@ def test_source_connection_operations(e2e_environment, e2e_api_url, source_conne
         f"{e2e_api_url}/connections/connect/{integration_type}/{short_name}",
         json=source_connection_data,
     )
-    assert create_connection_response.status_code == 200, (
-        f"Failed to create connection: {create_connection_response.text}"
-    )
+    assert (
+        create_connection_response.status_code == 200
+    ), f"Failed to create connection: {create_connection_response.text}"
 
     # Extract the connection ID from the response
     connection = create_connection_response.json()
@@ -61,9 +61,9 @@ def test_source_connection_operations(e2e_environment, e2e_api_url, source_conne
     disconnect_response = requests.put(
         f"{e2e_api_url}/connections/disconnect/source/{connection_id}"
     )
-    assert disconnect_response.status_code == 200, (
-        f"Failed to disconnect connection: {disconnect_response.text}"
-    )
+    assert (
+        disconnect_response.status_code == 200
+    ), f"Failed to disconnect connection: {disconnect_response.text}"
     disconnected_connection = disconnect_response.json()
     assert disconnected_connection["status"] == "inactive"
 
@@ -76,9 +76,9 @@ def test_source_connection_operations(e2e_environment, e2e_api_url, source_conne
 
     # Step 4: Delete the source connection
     delete_response = requests.delete(f"{e2e_api_url}/connections/delete/source/{connection_id}")
-    assert delete_response.status_code == 200, (
-        f"Failed to delete connection: {delete_response.text}"
-    )
+    assert (
+        delete_response.status_code == 200
+    ), f"Failed to delete connection: {delete_response.text}"
 
     # Step 5: Verify the source connection is gone
     get_after_delete_response = requests.get(f"{e2e_api_url}/connections/detail/{connection_id}")

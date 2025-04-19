@@ -1,0 +1,113 @@
+---
+title: "Dropbox"
+description: "Dropbox integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+
+
+<div className="connector-header">
+  <img src="icon.svg" alt="Dropbox logo" width="72" height="72" className="connector-icon" />
+  <div className="connector-info">
+    <h1>Dropbox</h1>
+    <p>Connect your Dropbox data to Airweave</p>
+  </div>
+</div>
+
+## Overview
+
+The Dropbox connector allows you to sync data from Dropbox into Airweave, making it available for search and retrieval by your agents.
+
+## Configuration
+
+
+### DropboxSource
+
+Dropbox source implementation.
+
+
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/dropbox.py"
+>
+  Explore the Dropbox connector implementation
+</Card>
+
+### Authentication
+
+This connector uses **OAuth 2.0 with refresh token**.
+
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
+
+
+## Entities
+
+The following data models are available for this connector:
+
+<Accordion title="DropboxAccountEntity">
+
+Schema for Dropbox account-level entities based on the Dropbox API.
+
+REQUIRED fields from ChunkEntity (must be provided):
+- entity_id: ID of the entity this represents in the source
+- breadcrumbs: List of breadcrumbs for this entity (empty for top-level accounts)
+
+OPTIONAL fields from ChunkEntity (automatically populated if available):
+- Other inherited fields from ChunkEntity
+
+| Field | Type | Description |
+|-------|------|-------------|
+| account_id | str | The user's unique Dropbox ID |
+| name | str | Name for display representing the user's Dropbox account |
+| abbreviated_name | Optional[str] | Abbreviated form of the person's name (typically initials) |
+| familiar_name | Optional[str] | Locale-dependent name (usually given name in US) |
+| given_name | Optional[str] | Also known as first name |
+| surname | Optional[str] | Also known as last name or family name |
+| email | Optional[str] | The user's email address |
+| email_verified | bool | Whether the user has verified their email address |
+| disabled | bool | Whether the user has been disabled |
+| account_type | Optional[str] | Type of account (basic, pro, business, etc.) |
+| is_teammate | bool | Whether this user is a teammate of the current user |
+| is_paired | bool | Whether the user has both personal and work accounts linked |
+| team_member_id | Optional[str] | The user's unique team member ID (if part of a team) |
+| locale | Optional[str] | The language that the user specified (IETF language tag) |
+| country | Optional[str] | The user's two-letter country code (ISO 3166-1) |
+| profile_photo_url | Optional[str] | URL for the profile photo |
+| referral_link | Optional[str] | The user's referral link |
+| space_used | Optional[int] | The user's total space usage in bytes |
+| space_allocated | Optional[int] | The user's total space allocation in bytes |
+| team_info | Optional[Dict] | Information about the team if user is a member |
+| root_info | Optional[Dict] | Information about the user's root namespace |
+
+</Accordion>
+<Accordion title="DropboxFolderEntity">
+
+Schema for Dropbox folder entities matching the Dropbox API.
+
+REQUIRED fields from ChunkEntity (must be provided):
+- entity_id: ID of the entity this represents in the source
+- breadcrumbs: List of breadcrumbs for this entity
+
+OPTIONAL fields from ChunkEntity (automatically populated if available):
+- Other inherited fields from ChunkEntity
+
+| Field | Type | Description |
+|-------|------|-------------|
+| folder_id | str | Unique identifier for the folder |
+| name | str | The name of the folder (last path component) |
+| path_lower | Optional[str] | Lowercase full path starting with slash |
+| path_display | Optional[str] | Display path with proper casing |
+| sharing_info | Optional[Dict] | Sharing information for the folder |
+| read_only | bool | Whether the folder is read-only |
+| traverse_only | bool | Whether the folder can only be traversed |
+| no_access | bool | Whether the folder cannot be accessed |
+| property_groups | Optional[List[Dict]] | Custom properties and tags |
+
+</Accordion>
+
+
+
+
+{/* AUTO-GENERATED CONTENT END */}

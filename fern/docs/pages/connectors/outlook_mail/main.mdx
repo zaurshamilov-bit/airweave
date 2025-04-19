@@ -1,0 +1,102 @@
+---
+title: "Outlook Mail"
+description: "Outlook Mail integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+
+
+<div className="connector-header">
+  <img src="icon.svg" alt="Outlook Mail logo" width="72" height="72" className="connector-icon" />
+  <div className="connector-info">
+    <h1>Outlook Mail</h1>
+    <p>Connect your Outlook Mail data to Airweave</p>
+  </div>
+</div>
+
+## Overview
+
+The Outlook Mail connector allows you to sync data from Outlook Mail into Airweave, making it available for search and retrieval by your agents.
+
+## Configuration
+
+
+### OutlookMailSource
+
+Outlook Mail source implementation (read-only).
+
+This connector retrieves Outlook mail folders in a hierarchical fashion
+and yields OutlookMailFolderEntity for each folder. For each folder, it
+also retrieves email messages and yields OutlookMessageEntity items.
+
+
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/outlook_mail.py"
+>
+  Explore the Outlook Mail connector implementation
+</Card>
+
+### Authentication
+
+This connector uses **OAuth 2.0 with refresh token**.
+
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
+
+
+## Entities
+
+The following data models are available for this connector:
+
+<Accordion title="OutlookMailFolderEntity">
+
+Schema for an Outlook mail folder.
+
+See:
+  https://learn.microsoft.com/en-us/graph/api/resources/mailfolder?view=graph-rest-1.0
+
+| Field | Type | Description |
+|-------|------|-------------|
+| display_name | str | Display name of the mail folder (e.g., 'Inbox'). |
+| parent_folder_id | Optional[str] | ID of the parent mail folder, if any. |
+| child_folder_count | Optional[int] | Number of child mail folders under this folder. |
+| total_item_count | Optional[int] | Total number of items (messages) in this folder. |
+| unread_item_count | Optional[int] | Number of unread items in this folder. |
+| well_known_name | Optional[str] | Well-known name of this folder if applicable (e.g., 'inbox'). |
+
+</Accordion>
+<Accordion title="OutlookMessageEntity">
+
+Schema for an Outlook message.
+
+See:
+  https://learn.microsoft.com/en-us/graph/api/resources/message?view=graph-rest-1.0
+
+| Field | Type | Description |
+|-------|------|-------------|
+| breadcrumbs | List[Breadcrumb] | Breadcrumb hierarchy (e.g., parent mail folder). |
+| subject | Optional[str] | Subject of the email message. |
+| body_preview | Optional[str] | Short text preview of the message body. |
+| body_content | Optional[str] | Full text or HTML body of the message. |
+| is_read | Optional[bool] | Indicates if the message has been read (True) or is unread (False). |
+| is_draft | Optional[bool] | Indicates if the message is still a draft. |
+| importance | Optional[str] | Indicates the importance of the message (Low, Normal, High). |
+| has_attachments | Optional[bool] | Indicates if the message has file attachments. |
+| internet_message_id | Optional[str] | Internet message ID of the email (RFC 2822 format). |
+| from_ | Optional[Dict[str, Any]] | Information about the sender. Typically includes emailAddress { name, address }. |
+| to_recipients | List[Dict[str, Any]] | List of primary recipients (each typically contains emailAddress info). |
+| cc_recipients | List[Dict[str, Any]] | List of CC recipients (each typically contains emailAddress info). |
+| bcc_recipients | List[Dict[str, Any]] | List of BCC recipients (each typically contains emailAddress info). |
+| sent_at | Optional[datetime] | Timestamp when the message was sent. |
+| received_at | Optional[datetime] | Timestamp when the message was received. |
+| created_at | Optional[datetime] | Timestamp when the message resource was created (if available). |
+| updated_at | Optional[datetime] | Timestamp when the message was last updated (if available). |
+
+</Accordion>
+
+
+
+
+{/* AUTO-GENERATED CONTENT END */}

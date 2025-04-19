@@ -1,16 +1,23 @@
-name: Fern Docs
+name: Fern Docs Generation
 
 on:
   push:
     branches: [main]
     paths:
-      - "backend/airweave/api/**/*.py" # API endpoint changes
-      - "fern/**" # Fern config changes
-      - ".github/workflows/fern-docs.yml" # Workflow file changes
+      - "backend/airweave/api/**/*.py"
+      - "frontend/src/components/icons/apps/**"
+      - "backend/airweave/platform/entities/**"
+      - "backend/airweave/platform/sources/**"
+      - "backend/airweave/platform/configs/auth.py"
+      - "fern/**"
+      - ".github/workflows/fern-docs.yml"
+  workflow_dispatch:
 
 jobs:
-  generate-and-publish:
+  generate-docs:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v3
@@ -28,10 +35,15 @@ jobs:
         working-directory: ./backend
         run: poetry install --no-root
 
+      - name: Install documentation dependencies
+        run: pip install pyyaml
+
+      - name: Generate connector documentation
+        run: python fern/scripts/update_connector_docs.py
+
       - name: Generate OpenAPI spec
-        run: poetry run python ../.github/scripts/generate_openapi.py
         working-directory: ./backend
-        # Set mock environment variables for documentation generation
+        run: poetry run python ${{ github.workspace }}/fern/scripts/generate_openapi.py
         env:
           FIRST_SUPERUSER: "docs@example.com"
           FIRST_SUPERUSER_PASSWORD: "docs-password"
@@ -50,28 +62,11 @@ jobs:
       - name: Install Fern
         run: npm install -g fern-api
 
-      - name: Initialize Fern with OpenAPI
-        run: |
-          # Only initialize if fern folder doesn't exist
-          if [ ! -d "fern" ]; then
-            fern init --openapi fern/openapi/openapi.json
-          fi
-
       - name: Update Fern OpenAPI definition
         run: |
           mkdir -p fern/definition
           echo "🌿 Updating Fern OpenAPI definition..."
           cp fern/openapi/openapi.json fern/definition/openapi.json || echo "OpenAPI spec not found"
-
-      - name: Generate SDKs
-        env:
-          FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          cd fern
-          fern generate --group public
 
       - name: Generate Docs
         run: |
@@ -80,11 +75,10 @@ jobs:
         env:
           FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
 
-      - name: Check Fern docs status
+      - name: Commit changes
         run: |
-          if [ $? -eq 0 ]; then
-            echo "✅ Fern docs generated successfully"
-          else
-            echo "❌ Fern docs generation failed"
-            exit 1
-          fi
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add fern/docs/pages/connectors/ fern/docs.yml fern/openapi/
+          git diff --quiet && git diff --staged --quiet || git commit -m "docs: update documentation [skip ci]"
+          git push

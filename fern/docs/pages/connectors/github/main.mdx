@@ -1,0 +1,104 @@
+---
+title: "Github"
+description: "Github integration with Airweave"
+---
+
+{/* AUTO-GENERATED CONTENT START */}
+
+
+
+<div className="connector-header">
+  <img src="icon.svg" alt="Github logo" width="72" height="72" className="connector-icon" />
+  <div className="connector-info">
+    <h1>Github</h1>
+    <p>Connect your Github data to Airweave</p>
+  </div>
+</div>
+
+## Overview
+
+The Github connector allows you to sync data from Github into Airweave, making it available for search and retrieval by your agents.
+
+## Configuration
+
+
+### GithubSource
+
+GitHub source implementation (read-only).
+
+
+<Card
+  title="View Source Code"
+  icon="brands github"
+  href="https://github.com/airweave-ai/airweave/tree/main/backend/airweave/platform/sources/github.py"
+>
+  Explore the Github connector implementation
+</Card>
+
+### Authentication
+
+This connector uses **OAuth 2.0 with refresh token**.
+
+You can connect through the Airweave UI, which will guide you through the OAuth flow.
+
+
+## Entities
+
+The following data models are available for this connector:
+
+<Accordion title="GithubRepoEntity">
+
+Schema for a GitHub repository.
+
+References:
+  https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | Optional[str] | Name of the repository. |
+| full_name | Optional[str] | Full name (including owner) of the repo. |
+| owner_login | Optional[str] | Login/username of the repository owner. |
+| private | bool | Whether the repository is private. |
+| description | Optional[str] | Short description of the repository. |
+| fork | bool | Whether this repository is a fork. |
+| created_at | Optional[datetime] | When the repository was created. |
+| updated_at | Optional[datetime] | When the repository was last updated. |
+| pushed_at | Optional[datetime] | When the repository was last pushed. |
+| homepage | Optional[str] | Homepage URL for the repository. |
+| size | Optional[int] | Size of the repository (in kilobytes). |
+| stargazers_count | int | Number of stars on this repository. |
+| watchers_count | int | Number of people watching this repository. |
+| language | Optional[str] | Primary language of the repository. |
+| forks_count | int | Number of forks for this repository. |
+| open_issues_count | int | Number of open issues on this repository. |
+| topics | List[str] | Topics/tags applied to this repo. |
+| default_branch | Optional[str] | Default branch name of the repository. |
+| archived | bool | Whether the repository is archived. |
+| disabled | bool | Whether the repository is disabled in GitHub. |
+
+</Accordion>
+<Accordion title="GithubContentEntity">
+
+Schema for a GitHub repository's content (file, directory, submodule, etc.).
+
+References:
+  https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28
+
+| Field | Type | Description |
+|-------|------|-------------|
+| repo_full_name | Optional[str] | Full name of the parent repository. |
+| path | Optional[str] | Path of the file or directory within the repo. |
+| sha | Optional[str] | SHA identifier for this content item. |
+| item_type | Optional[str] | Type of content. Typically 'file', 'dir', 'submodule', or 'symlink'. |
+| size | Optional[int] | Size of the content (in bytes). |
+| html_url | Optional[str] | HTML URL for viewing this content on GitHub. |
+| download_url | Optional[str] | Direct download URL if applicable. |
+| content | Optional[str] | File content (base64-encoded) if retrieved via 'mediaType=raw' or similar. |
+| encoding | Optional[str] | Indicates the encoding of the content (e.g., 'base64'). |
+
+</Accordion>
+
+
+
+
+{/* AUTO-GENERATED CONTENT END */}

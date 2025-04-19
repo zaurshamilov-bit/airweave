@@ -90,6 +90,40 @@ def _get_decorated_classes(directory: str) -> Dict[str, list[Type | Callable]]:
     return components
 
 
+def _validate_entity_class_fields(cls: Type, name: str, module_name: str) -> None:
+    """Validate that all fields in an entity class use Pydantic Fields with descriptions.
+
+    Args:
+        cls: The entity class to validate
+        name: The name of the entity class
+        module_name: The name of the module containing the entity class
+
+    Raises:
+        ValueError: If any field is not defined using Pydantic Field with a description
+    """
+    # We need to check the actual class annotations, not inherited ones
+    if hasattr(cls, "__annotations__"):
+        direct_annotations = cls.__annotations__
+
+        # Get all fields from the class and only validate those in direct_annotations
+        for field_name, field_info in cls.model_fields.items():
+            # Skip internal fields that start with underscores
+            if field_name.startswith("_"):
+                continue
+
+            # Skip fields that are not directly defined in this class
+            if field_name not in direct_annotations:
+                continue
+
+            # Check that the field is defined using Pydantic Field
+            if not hasattr(field_info, "description") or not field_info.description:
+                raise ValueError(
+                    f"Entity '{name}' in module '{module_name}' has field '{field_name}' "
+                    f"without a Pydantic Field description. All entity fields must use "
+                    f"Field with a description parameter."
+                )
+
+
 async def _sync_embedding_models(db: AsyncSession, models: list[Type[BaseEmbeddingModel]]) -> None:
     """Sync embedding models with the database.
 
@@ -159,11 +193,12 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, dict]:
 
         # Find all chunk classes (subclasses of BaseEntity) in the module
         for name, cls in inspect.getmembers(module, inspect.isclass):
-            # Check if it's a subclass of BaseEntity (but not BaseEntity itself)
+            # Check if it's a subclass of BaseEntity (or any class from _base.py)
             # AND the class is actually defined in this module (not imported)
             if (
                 issubclass(cls, BaseEntity)
-                and cls != BaseEntity
+                and cls.__module__
+                != "airweave.platform.entities._base"  # Exclude all classes from _base.py
                 and cls.__module__ == full_module_name
             ):
                 if name in entity_registry:
@@ -171,6 +206,9 @@ async def _sync_entity_definitions(db: AsyncSession) -> Dict[str, dict]:
                         f"Duplicate entity name '{name}' found in {full_module_name}. "
                         f"Already registered from {entity_registry[name]['module']}"
                     )
+
+                # Validate that all fields in the class use Pydantic Field with descriptions
+                _validate_entity_class_fields(cls, name, module_name)
 
                 # Register the entity
                 entity_registry[name] = {
@@ -367,7 +405,20 @@ def _create_transformer_definition(
     input_type = type_hints[first_param.name]
     input_type_name = input_type.__name__
 
-    if input_type_name not in entity_name_to_id_map:
+    # Base types from _base.py are special cases
+    base_types = ["BaseEntity", "ChunkEntity", "ParentEntity", "FileEntity", "PolymorphicEntity"]
+
+    # For input types
+    input_entity_ids = []
+    if input_type_name in entity_name_to_id_map:
+        input_entity_ids = [UUID(id) for id in entity_name_to_id_map[input_type_name]]
+    elif input_type_name in base_types:
+        # For base types, we don't require entity IDs since they're not directly registered
+        # as entity definitions (they're abstract base classes)
+        sync_logger.info(
+            f"Transformer {transformer_func._name} uses base type {input_type_name} as input"
+        )
+    else:
         raise ValueError(
             f"Transformer {transformer_func._name} has unknown input type {input_type_name}"
         )
@@ -376,9 +427,17 @@ def _create_transformer_definition(
     return_type = type_hints["return"]
     output_types = _get_type_names(return_type)
 
-    # Validate output types
+    # For output types
+    output_entity_ids = []
     for type_name in output_types:
-        if type_name not in entity_name_to_id_map:
+        if type_name in entity_name_to_id_map:
+            output_entity_ids.extend([UUID(id) for id in entity_name_to_id_map[type_name]])
+        elif type_name in base_types:
+            # For base types, don't add entity IDs but don't error either
+            sync_logger.info(
+                f"Transformer {transformer_func._name} uses base type {type_name} as output"
+            )
+        else:
             raise ValueError(
                 f"Transformer {transformer_func._name} has unknown output type {type_name}"
             )
@@ -391,10 +450,8 @@ def _create_transformer_definition(
         auth_type=getattr(transformer_func, "_auth_type", None),
         auth_config_class=getattr(transformer_func, "_auth_config_class", None),
         config_schema=getattr(transformer_func, "_config_schema", {}),
-        input_entity_definition_ids=[UUID(id) for id in entity_name_to_id_map[input_type_name]],
-        output_entity_definition_ids=[
-            UUID(id) for type_name in output_types for id in entity_name_to_id_map[type_name]
-        ],
+        input_entity_definition_ids=input_entity_ids,
+        output_entity_definition_ids=output_entity_ids,
     )
 
 

@@ -8,7 +8,7 @@ These tests verify critical components are working in both:
 import requests
 
 
-def test_backend_health(test_environment):
+def test_backend_health(e2e_environment, test_environment):
     """Test that the backend API is healthy and responding."""
     health_url = f"{test_environment['backend_url']}/health"
 
@@ -19,7 +19,7 @@ def test_backend_health(test_environment):
     assert response_data["status"] == "healthy"
 
 
-def test_documentation_availability(test_environment):
+def test_documentation_availability(e2e_environment, test_environment):
     """Test that documentation is accessible for users."""
     # Test API docs
     api_docs_url = f"{test_environment['backend_url']}/docs"

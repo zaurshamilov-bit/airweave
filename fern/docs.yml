@@ -1,67 +1,106 @@
 instances:
- - url: airweave.docs.buildwithfern.com
-   custom-domain: docs.airweave.ai
-
+- url: airweave.docs.buildwithfern.com
+  custom-domain: docs.airweave.ai
 title: Airweave
-
 layout:
   searchbar-placement: header
   page-width: full
-
-
 default-language: python
-
 navigation:
-  - section: Docs
+- section: Docs
+  contents:
+  - page: Welcome
+    path: docs/pages/welcome.mdx
+  - page: Concepts
+    path: docs/pages/concepts.mdx
+  - page: Setup
+    path: docs/pages/setup.mdx
+  - page: SDKs
+    path: docs/pages/sdks.mdx
+  - page: Architecture
+    path: docs/pages/architecture.mdx
+  - page: Extending Connectors
+    path: docs/pages/extending-connectors.mdx
+  - page: White Labeling
+    path: docs/pages/white-labeling.mdx
+  - section: Connectors
     contents:
-      - page: Welcome
-        path: docs/pages/welcome.mdx
-
-      - page: Concepts
-        path: docs/pages/concepts.mdx
-
-      - page: Setup
-        path: docs/pages/setup.mdx
-
-      - page: SDKs
-        path: docs/pages/sdks.mdx
-
-      - page: Architecture
-        path: docs/pages/architecture.mdx
-
-      - page: Extending Connectors
-        path: docs/pages/extending-connectors.mdx
-
-      - page: White Labeling
-        path: docs/pages/white-labeling.mdx
-
-  - api: API Reference
-    snippets:
-      python: airweave-sdk
-      typescript: "@airweave/sdk"
-
-    playground:
-      environments:
-        - Production
-        - Local
-
+    - page: Asana
+      path: docs/pages/connectors/asana/main.mdx
+    - page: Clickup
+      path: docs/pages/connectors/clickup/main.mdx
+    - page: Confluence
+      path: docs/pages/connectors/confluence/main.mdx
+    - page: Dropbox
+      path: docs/pages/connectors/dropbox/main.mdx
+    - page: Github
+      path: docs/pages/connectors/github/main.mdx
+    - page: Gmail
+      path: docs/pages/connectors/gmail/main.mdx
+    - page: Google Calendar
+      path: docs/pages/connectors/google_calendar/main.mdx
+    - page: Google Drive
+      path: docs/pages/connectors/google_drive/main.mdx
+    - page: Hubspot
+      path: docs/pages/connectors/hubspot/main.mdx
+    - page: Intercom
+      path: docs/pages/connectors/intercom/main.mdx
+    - page: Jira
+      path: docs/pages/connectors/jira/main.mdx
+    - page: Monday
+      path: docs/pages/connectors/monday/main.mdx
+    - page: Mysql
+      path: docs/pages/connectors/mysql/main.mdx
+    - page: Notion
+      path: docs/pages/connectors/notion/main.mdx
+    - page: Onedrive
+      path: docs/pages/connectors/onedrive/main.mdx
+    - page: Oracle
+      path: docs/pages/connectors/oracle/main.mdx
+    - page: Outlook Calendar
+      path: docs/pages/connectors/outlook_calendar/main.mdx
+    - page: Outlook Mail
+      path: docs/pages/connectors/outlook_mail/main.mdx
+    - page: Postgresql
+      path: docs/pages/connectors/postgresql/main.mdx
+    - page: Slack
+      path: docs/pages/connectors/slack/main.mdx
+    - page: Sql Server
+      path: docs/pages/connectors/sql_server/main.mdx
+    - page: Sqlite
+      path: docs/pages/connectors/sqlite/main.mdx
+    - page: Stripe
+      path: docs/pages/connectors/stripe/main.mdx
+    - page: Todoist
+      path: docs/pages/connectors/todoist/main.mdx
+    - page: Trello
+      path: docs/pages/connectors/trello/main.mdx
+    - page: Zendesk
+      path: docs/pages/connectors/zendesk/main.mdx
+- api: API Reference
+  snippets:
+    python: airweave-sdk
+    typescript: '@airweave/sdk'
+  playground:
+    environments:
+    - Production
+    - Local
 navbar-links:
-  - type: secondary
-    text: Fork this repo
-    url: https://github.com/airweave-ai/airweave/fork
-  - type: primary
-    text: Get a demo
-    url: https://cal.com/lennert-airweave/30min
-
+- type: secondary
+  text: Fork this repo
+  url: https://github.com/airweave-ai/airweave/fork
+- type: primary
+  text: Get a demo
+  url: https://cal.com/lennert-airweave/30min
 colors:
   accentPrimary:
-    dark: "#0047B3"
-    light: "#4D94FF"
-
+    dark: '#0047B3'
+    light: '#4D94FF'
 logo:
   dark: docs/assets/logo-dark.png
   light: docs/assets/logo-light.png
   height: 32
   href: https://docs.airweave.ai/
-
 favicon: docs/assets/favicon.ico
+css: docs/styles.css
+js: docs/assets/custom-connectors.js
