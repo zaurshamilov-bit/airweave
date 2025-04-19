@@ -10,12 +10,12 @@ if [[ $(basename "$PWD") != "fern" ]]; then
 fi
 
 # Make scripts executable if needed
-chmod +x scripts/update-connector-docs.py
+chmod +x scripts/update_connector_docs.py
 chmod +x scripts/generate_openapi.py
 
 # Generate connector documentation
 echo "📝 Generating connector documentation..."
-python scripts/update-connector-docs.py
+python scripts/update_connector_docs.py
 
 # Generate OpenAPI spec
 echo "📝 Generating OpenAPI spec..."

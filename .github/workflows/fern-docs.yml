@@ -40,7 +40,7 @@ jobs:
         run: pip install pyyaml
 
       - name: Generate connector documentation
-        run: python fern/scripts/update-connector-docs.py
+        run: python fern/scripts/update_connector_docs.py
 
       - name: Generate OpenAPI spec
         run: poetry run python fern/scripts/generate_openapi.py
