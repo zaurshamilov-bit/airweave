@@ -25,5 +25,69 @@ The Notion connector allows you to sync data from Notion into Airweave, making i
 Notion source implementation.
 
 
+#### Authentication Type
+
+This connector uses **oauth2** authentication.
+
+
+## Data Models
+
+The following data models are available for this connector:
+
+
+<details>
+<summary><strong>NotionDatabaseEntity</strong></summary>
+
+Schema for Notion database entities.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | str | The name of the database |
+| database_id | str | The ID of the database |
+| description | Optional[str] | The description of the database |
+| created_time | Optional[datetime] | The creation time of the database |
+| last_edited_time | Optional[datetime] | The last edited time of the database |
+
+</details>
+
+<details>
+<summary><strong>NotionPageEntity</strong></summary>
+
+Schema for Notion page entities.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| page_id | str | The ID of the page |
+| parent_id | str | The ID of the parent page |
+| parent_type | str | The type of the parent page |
+| title | str | The title of the page |
+| created_time | Optional[datetime] | The creation time of the page |
+| last_edited_time | Optional[datetime] | The last edited time of the page |
+| archived | bool | Whether the page is archived |
+| content | Optional[str] | The content of the page |
+
+</details>
+
+<details>
+<summary><strong>NotionBlockEntity</strong></summary>
+
+Schema for Notion block entities.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| block_id | str | The ID of the block |
+| parent_id | str | The ID of the parent block |
+| block_type | str | The type of the block |
+| text_content | Optional[str] | The text content of the block |
+| has_children | bool | Whether the block has children |
+| children_ids | List[str] | The IDs of the children blocks |
+| created_time | Optional[datetime] | The creation time of the block |
+| last_edited_time | Optional[datetime] | The last edited time of the block |
+
+</details>
+
 
 {/* AUTO-GENERATED CONTENT END */}

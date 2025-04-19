@@ -9,7 +9,7 @@ import yaml
 import shutil
 from pathlib import Path
 
-# Define paths
+# Define paths - updated for the new location in fern/scripts
 REPO_ROOT = Path(__file__).parent.parent.parent
 FRONTEND_ICONS_DIR = REPO_ROOT / "frontend" / "src" / "components" / "icons" / "apps"
 BACKEND_ENTITIES_DIR = REPO_ROOT / "backend" / "airweave" / "platform" / "entities"

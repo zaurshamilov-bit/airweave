@@ -25,5 +25,59 @@ The Outlook Calendar connector allows you to sync data from Outlook Calendar int
 Outlook Calendar source implementation (read-only).
 
 
+#### Authentication Type
+
+This connector uses **oauth2_with_refresh** authentication.
+
+
+## Data Models
+
+The following data models are available for this connector:
+
+
+<details>
+<summary><strong>OutlookCalendarCalendarEntity</strong></summary>
+
+Schema for an Outlook Calendar object.
+
+    The inherited entity_id field stores the calendar's Microsoft Graph ID.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | Optional[str] | The display name of the calendar. |
+| color | Optional[str] | Indicates the color theme for the calendar. |
+| change_key | Optional[str] | Indicates if the user can write to the calendar. |
+| can_share | bool | Indicates if the user has the ability to share the calendar. |
+| can_view_private_items | bool | Indicates if the user can view private events on the calendar. |
+| owner | Optional[Dict[str, Any]] | Details about the calendar |
+
+</details>
+
+<details>
+<summary><strong>OutlookCalendarEventEntity</strong></summary>
+
+Schema for an Outlook Calendar Event object.
+
+    The inherited entity_id field stores the event's Microsoft Graph ID.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| subject | Optional[str] | The subject or title of the event. |
+| body_preview | Optional[str] | A short text preview of the event body. |
+| body_content | Optional[str] | Full body content (HTML or text). |
+| start_datetime | Optional[datetime] | Time zone for the start time, from  |
+| end_datetime | Optional[datetime] | Time zone for the end time, from  |
+| is_all_day | bool | Indicates if the event lasts all day. |
+| is_cancelled | bool | Indicates if the event has been canceled. |
+| show_as | Optional[str] | The status to show. E.g.,  |
+| importance | Optional[str] | Indicates the importance of the event. |
+| sensitivity | Optional[str] | Timestamp when the event was created, from  |
+| updated_at | Optional[datetime] | Timestamp when the event was last modified, from  |
+| web_link | Optional[str] | A URL that opens the event in Outlook on the web. |
+
+</details>
+
 
 {/* AUTO-GENERATED CONTENT END */}

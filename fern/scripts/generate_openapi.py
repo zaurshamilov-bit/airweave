@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-# Get the absolute path to the project root (2 levels up from .github/scripts)
+# Get the absolute path to the project root (2 levels up from fern/scripts)
 project_root = Path(__file__).parent.parent.parent.absolute()
 backend_dir = project_root / "backend"
 

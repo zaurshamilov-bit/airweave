@@ -25,5 +25,65 @@ The Asana connector allows you to sync data from Asana into Airweave, making it 
 Asana source implementation.
 
 
+#### Authentication Type
+
+This connector uses **oauth2_with_refresh** authentication.
+
+
+## Data Models
+
+The following data models are available for this connector:
+
+
+<details>
+<summary><strong>AsanaWorkspaceEntity</strong></summary>
+
+Schema for Asana workspace entities.
+
+
+</details>
+
+<details>
+<summary><strong>AsanaProjectEntity</strong></summary>
+
+Schema for Asana project entities.
+
+
+</details>
+
+<details>
+<summary><strong>AsanaSectionEntity</strong></summary>
+
+Schema for Asana section entities.
+
+
+</details>
+
+<details>
+<summary><strong>AsanaTaskEntity</strong></summary>
+
+Schema for Asana task entities.
+
+
+</details>
+
+<details>
+<summary><strong>AsanaCommentEntity</strong></summary>
+
+Schema for Asana comment/story entities.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| previews | List[Dict] | GID of the task this file is attached to |
+| task_name | str | Name of the task this file is attached to |
+| resource_type | str | Type of the attachment resource |
+| host | Optional[str] | Service hosting the attachment |
+| parent | Optional[Dict[str, Any]] | Parent resource the attachment is on |
+| view_url | Optional[str] | URL to view the attachment |
+| permanent | bool | Whether this is a permanent attachment |
+
+</details>
+
 
 {/* AUTO-GENERATED CONTENT END */}

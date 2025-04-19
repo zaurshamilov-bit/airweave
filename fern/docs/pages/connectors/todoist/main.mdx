@@ -33,5 +33,94 @@ Todoist source implementation.
     The Todoist entity schemas are defined in entities/todoist.py.
 
 
+#### Authentication Type
+
+This connector uses **oauth2** authentication.
+
+
+## Data Models
+
+The following data models are available for this connector:
+
+
+<details>
+<summary><strong>TodoistProjectEntity</strong></summary>
+
+Schema for Todoist project entities.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | str | The name of the project |
+| color | Optional[str] | Color of the project (e.g.,  |
+| comment_count | int | Number of comments in the project |
+| order | int | Project order in the project list |
+| is_shared | bool | Whether the project is shared with others |
+| is_favorite | bool | Whether the project is marked as a favorite |
+| is_inbox_project | bool | Whether this is the Inbox project |
+| is_team_inbox | bool | Whether this is the team Inbox project |
+| view_style | Optional[str] | Project view style ( |
+| url | Optional[str] | URL to access the project |
+| parent_id | Optional[str] | ID of the parent project if nested |
+
+</details>
+
+<details>
+<summary><strong>TodoistSectionEntity</strong></summary>
+
+Schema for Todoist section entities.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | str | The name of the section |
+| project_id | str | ID of the project this section belongs to |
+| order | int | Section order in the project |
+
+</details>
+
+<details>
+<summary><strong>TodoistTaskEntity</strong></summary>
+
+Schema for Todoist task entities.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| content | str | The task content/title |
+| description | Optional[str] | Optional detailed description of the task |
+| comment_count | int | Number of comments on the task |
+| is_completed | bool | Whether the task is completed |
+| labels | List[str] | List of label names attached to the task |
+| order | int | Task order in the project or section |
+| priority | int | Task priority (1-4, 4 is highest) |
+| project_id | Optional[str] | ID of the project this task belongs to |
+| section_id | Optional[str] | ID of the section this task belongs to |
+| parent_id | Optional[str] | ID of the parent task if subtask |
+| creator_id | Optional[str] | ID of the user who created the task |
+| created_at | Optional[datetime] | When the task was created |
+| due_date | Optional[str] | Due date in YYYY-MM-DD format |
+| due_datetime | Optional[datetime] | Due date and time |
+| due_string | Optional[str] | Original due date string (e.g.,  |
+| due_is_recurring | bool | Whether the task is recurring |
+| due_timezone | Optional[str] | Timezone for the due date |
+| url | Optional[str] | URL to access the task |
+
+</details>
+
+<details>
+<summary><strong>TodoistCommentEntity</strong></summary>
+
+Schema for Todoist comment entities.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| task_id | str | ID of the task this comment belongs to |
+| content | Optional[str] | The comment content |
+| posted_at | datetime | When the comment was posted |
+
+</details>
+
 
 {/* AUTO-GENERATED CONTENT END */}

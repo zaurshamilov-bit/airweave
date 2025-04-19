@@ -34,5 +34,114 @@ Zendesk source implementation (read-only).
     airweave.platform.entities.zendesk.
 
 
+#### Authentication Type
+
+This connector uses **oauth2_with_refresh** authentication.
+
+
+## Data Models
+
+The following data models are available for this connector:
+
+
+<details>
+<summary><strong>ZendeskOrganizationEntity</strong></summary>
+
+Schema for a Zendesk organization.
+
+    References:
+      https://developer.zendesk.com/api-reference/ticketing/organizations/organizations/
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | Optional[str] | Name of the organization. |
+| details | Optional[str] | Details about the organization. |
+| domain_names | List[str] | List of domain names associated with this organization. |
+| external_id | Optional[str] | An external ID for this organization. |
+| shared_tickets | bool | Whether tickets from this organization are shareable with all members. |
+| shared_comments | bool | Whether comments are shared between all members of the organization. |
+| created_at | Optional[datetime] | When the organization was created. |
+| updated_at | Optional[datetime] | When the organization was last updated. |
+| archived | bool | Placeholder for archival state if applicable. |
+
+</details>
+
+<details>
+<summary><strong>ZendeskUserEntity</strong></summary>
+
+Schema for a Zendesk user (agent or end user).
+
+    References:
+      https://developer.zendesk.com/api-reference/ticketing/users/users/
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | Optional[str] | The user |
+| email | Optional[str] | The user |
+| role | Optional[str] | Role assigned, e.g.,  |
+| time_zone | Optional[str] | The user |
+| locale | Optional[str] | Locale for the user (language, date/time format). |
+| active | bool | Whether the user is currently active. |
+| verified | bool | Whether the user |
+| shared | bool | Whether the user is suspended. |
+| last_login_at | Optional[datetime] | When the user last signed in (if available). |
+| created_at | Optional[datetime] | When the user was created. |
+| updated_at | Optional[datetime] | When the user was last updated. |
+| archived | bool | Placeholder for archival state if applicable. |
+
+</details>
+
+<details>
+<summary><strong>ZendeskTicketEntity</strong></summary>
+
+Schema for a Zendesk ticket.
+
+    References:
+      https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| subject | Optional[str] | Subject or summary of the ticket. |
+| description | Optional[str] | Description text of the ticket. |
+| type | Optional[str] | Type of ticket, e.g.,  |
+| priority | Optional[str] | Priority of the ticket, e.g.,  |
+| status | Optional[str] | Current status, e.g.,  |
+| tags | List[str] | List of tags attached to the ticket. |
+| requester_id | Optional[str] | ID of the user that requested the ticket (i.e., the ticket |
+| assignee_id | Optional[str] | ID of the user (agent) assigned to handle this ticket. |
+| organization_id | Optional[str] | ID of the organization associated with this ticket. |
+| group_id | Optional[str] | ID of the group this ticket is assigned to. |
+| created_at | Optional[datetime] | When the ticket was created. |
+| updated_at | Optional[datetime] | When the ticket was last updated. |
+| due_at | Optional[datetime] | When this ticket is due. |
+| via | Optional[Dict[str, Any]] | List of custom field objects with id/value pairs for this ticket. |
+| archived | bool | Placeholder for archival state if applicable. |
+
+</details>
+
+<details>
+<summary><strong>ZendeskCommentEntity</strong></summary>
+
+Schema for a Zendesk comment, typically tied to a specific ticket.
+
+    References:
+      https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_comments/
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| ticket_id | str | ID of the ticket this comment belongs to. |
+| author_id | Optional[str] | ID of the user who wrote this comment. |
+| plain_body | Optional[str] | Plain text version of the comment. |
+| public | bool | Whether the comment is public or private. |
+| created_at | Optional[datetime] | When the comment was created. |
+| attachments | List[Dict[str, Any]] | Attachments associated with the comment, if any. |
+| archived | bool | Placeholder for archival state if applicable. |
+
+</details>
+
 
 {/* AUTO-GENERATED CONTENT END */}

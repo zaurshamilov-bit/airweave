@@ -29,5 +29,99 @@ Google Calendar source implementation (read-only).
     entities/google_calendar.py.
 
 
+#### Authentication Type
+
+This connector uses **oauth2_with_refresh** authentication.
+
+
+## Data Models
+
+The following data models are available for this connector:
+
+
+<details>
+<summary><strong>GoogleCalendarCalendarEntity</strong></summary>
+
+Schema for a Google Calendar object (the underlying calendar resource).
+
+    See: https://developers.google.com/calendar/api/v3/reference/calendars
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| calendar_id | str | Unique identifier for the calendar. |
+| summary | Optional[str] | Title of the calendar. |
+| description | Optional[str] | Description of the calendar. |
+| location | Optional[str] | Geographic location of the calendar. |
+| time_zone | Optional[str] | The time zone of the calendar. |
+
+</details>
+
+<details>
+<summary><strong>GoogleCalendarListEntity</strong></summary>
+
+Schema for a CalendarList entry, i.e., how the user sees a calendar.
+
+    See: https://developers.google.com/calendar/api/v3/reference/calendarList
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| calendar_id | str | Unique identifier for the calendar. |
+| summary | Optional[str] | Title of the calendar. |
+| summary_override | Optional[str] | User-defined name for the calendar, if set. |
+| color_id | Optional[str] | Color ID reference for the calendar. |
+| background_color | Optional[str] | Background color in HEX. |
+| foreground_color | Optional[str] | Foreground color in HEX. |
+| hidden | bool | Whether the calendar is hidden from the UI. |
+| selected | bool | Indicates if the calendar is selected in the UI. |
+| access_role | Optional[str] | Flag to indicate if this is the primary calendar. |
+| deleted | bool | Flag to indicate if this calendar has been deleted. |
+
+</details>
+
+<details>
+<summary><strong>GoogleCalendarEventEntity</strong></summary>
+
+Schema for a Google Calendar Event.
+
+    See: https://developers.google.com/calendar/api/v3/reference/events
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| event_id | str | Unique identifier for the event. |
+| status | Optional[str] | Status of the event (e.g.,  |
+| html_link | Optional[str] | An absolute link to the event in the Google Calendar UI. |
+| created_at | Optional[datetime] | When the event was created. |
+| updated_at | Optional[datetime] | When the event was last modified. |
+| summary | Optional[str] | Title of the event. |
+| description | Optional[str] | Description of the event. |
+| location | Optional[str] | Geographic location of the event. |
+| color_id | Optional[str] | Color ID for this event. |
+| start_datetime | Optional[datetime] | List of RRULE, EXRULE, RDATE, EXDATE lines for recurring events. |
+| recurring_event_id | Optional[str] | For recurring events, identifies the event ID of the recurring series. |
+| organizer | Optional[Dict[str, Any]] | The organizer of the event. Usually contains  |
+| creator | Optional[Dict[str, Any]] | The creator of the event. Usually contains  |
+| attendees | Optional[List[Dict[str, Any]]] | Visibility of the event (e.g.,  |
+| conference_data | Optional[Dict[str, Any]] | Conference data associated with the event, e.g., hangout or meet link. |
+| event_type | Optional[str] | Event type. E.g.,  |
+
+</details>
+
+<details>
+<summary><strong>GoogleCalendarFreeBusyEntity</strong></summary>
+
+Schema for a FreeBusy response entity for a given calendar.
+
+    See: https://developers.google.com/calendar/api/v3/reference/freebusy
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| calendar_id | str | ID of the calendar for which free/busy is returned. |
+
+</details>
+
 
 {/* AUTO-GENERATED CONTENT END */}

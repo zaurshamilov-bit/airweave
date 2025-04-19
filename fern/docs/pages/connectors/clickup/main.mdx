@@ -33,5 +33,137 @@ ClickUp source implementation.
         - Comments (within each task)
 
 
+#### Authentication Type
+
+This connector uses **oauth2** authentication.
+
+
+## Data Models
+
+The following data models are available for this connector:
+
+
+<details>
+<summary><strong>ClickUpWorkspaceEntity</strong></summary>
+
+ClickUp workspace entity.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| entity_id | str | Unique Entity ID |
+| workspace_id | str | Workspace ID |
+| name | str | Workspace name |
+| color | Optional[str] | Workspace color |
+| avatar | Optional[str] | Workspace avatar URL |
+| members | List[dict] | List of workspace members |
+
+</details>
+
+<details>
+<summary><strong>ClickUpSpaceEntity</strong></summary>
+
+ClickUp space entity.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| space_id | str | Space ID |
+| name | str | Space name |
+| private | bool | Whether the space is private |
+| status | Dict[str, Any] | Space status configuration |
+| multiple_assignees | bool | Whether multiple assignees are allowed |
+| features | Dict[str, Any] | Space features configuration |
+
+</details>
+
+<details>
+<summary><strong>ClickUpFolderEntity</strong></summary>
+
+ClickUp folder entity.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| folder_id | str | Folder ID |
+| name | str | Folder name |
+| hidden | bool | Whether the folder is hidden |
+| space_id | str | Parent space ID |
+| task_count | Optional[int] | Number of tasks in the folder |
+
+</details>
+
+<details>
+<summary><strong>ClickUpListEntity</strong></summary>
+
+ClickUp list entity.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| list_id | str | List ID |
+| name | str | List name |
+| folder_id | str | Parent folder ID |
+| space_id | str | Parent space ID |
+| content | Optional[str] | List content/description |
+| status | Optional[Dict[str, Any]] | List status configuration |
+| priority | Optional[Dict[str, Any]] | List priority configuration |
+| assignee | Optional[str] | List assignee username |
+| task_count | Optional[int] | Number of tasks in the list |
+| due_date | Optional[Any] | List due date |
+| start_date | Optional[Any] | List start date |
+| folder_name | str | Parent folder name |
+| space_name | str | Parent space name |
+
+</details>
+
+<details>
+<summary><strong>ClickUpTaskEntity</strong></summary>
+
+ClickUp task entity.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| task_id | str | Task ID |
+| name | str | Task name |
+| status | Dict[str, Any] | Task status configuration |
+| priority | Optional[Dict[str, Any]] | Task priority configuration |
+| assignees | List[Dict[str, Any]] | List of task assignees |
+| tags | List[str] | List of task tags |
+| due_date | Optional[datetime] | Task due date |
+| start_date | Optional[datetime] | Task start date |
+| time_estimate | Optional[int] | Estimated time in milliseconds |
+| time_spent | Optional[int] | Time spent in milliseconds |
+| custom_fields | List[Dict[str, Any]] | List of custom fields |
+| list_id | str | Parent list ID |
+| folder_id | str | Parent folder ID |
+| space_id | str | Parent space ID |
+| url | str | Task URL |
+| description | str | Task description |
+| parent | Optional[str] | Parent task ID if this is a subtask |
+
+</details>
+
+<details>
+<summary><strong>ClickUpCommentEntity</strong></summary>
+
+ClickUp comment entity.
+
+
+| Field | Type | Description |
+|-------|------|-------------|
+| comment_id | str | Comment ID |
+| task_id | str | Parent task ID |
+| user | Dict[str, Any] | Comment author information |
+| text_content | str | Comment text content |
+| resolved | bool | Whether the comment is resolved |
+| assignee | Optional[Dict[str, Any]] | Comment assignee information |
+| assigned_by | Optional[Dict[str, Any]] | User who assigned the comment |
+| reactions | List[Dict[str, Any]] | List of reactions to the comment |
+| date | datetime | Comment creation date |
+
+</details>
+
 
 {/* AUTO-GENERATED CONTENT END */}
