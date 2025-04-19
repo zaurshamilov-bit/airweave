@@ -26,10 +26,16 @@ The Google Drive connector allows you to sync data from Google Drive into Airwea
 
 Google Drive source implementation (read-only).
 
-    Retrieves and yields:
-      - GoogleDriveDriveEntity objects, representing shared drives
-      - GoogleDriveFileEntity objects, representing files in each shared drive
-      - GoogleDriveFileEntity objects, representing files in the user's My Drive
+Retrieves and yields:
+  - GoogleDriveDriveEntity objects, representing shared drives
+  - GoogleDriveFileEntity objects, representing files in each shared drive
+  - GoogleDriveFileEntity objects, representing files in the user's My Drive
+
+#### Authentication
+
+This connector uses **OAuth 2.0 with refresh token**.
+
+This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
@@ -42,8 +48,8 @@ The following data models are available for this connector:
 
 Schema for a Drive resource (shared drive).
 
-    Reference:
-      https://developers.google.com/drive/api/v3/reference/drives
+Reference:
+  https://developers.google.com/drive/api/v3/reference/drives
 
 | Field | Type | Description |
 |-------|------|-------------|

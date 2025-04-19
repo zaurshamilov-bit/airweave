@@ -26,16 +26,22 @@ The Confluence connector allows you to sync data from Confluence into Airweave, 
 
 Confluence source implementation, retrieving content in a hierarchical fashion.
 
-    This connector retrieves data from Confluence to yield the following entities:
-      - Space
-      - Page (including child pages as desired)
-      - Blog Post
-      - Comment
-      - Label
-      - Task
-      - Whiteboard
-      - Custom Content
-      - (Optionally) Database, Folder, etc.
+This connector retrieves data from Confluence to yield the following entities:
+  - Space
+  - Page (including child pages as desired)
+  - Blog Post
+  - Comment
+  - Label
+  - Task
+  - Whiteboard
+  - Custom Content
+  - (Optionally) Database, Folder, etc.
+
+#### Authentication
+
+This connector uses **OAuth 2.0 with refresh token**.
+
+This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
@@ -48,8 +54,8 @@ The following data models are available for this connector:
 
 Schema for a Confluence Space.
 
-    See:
-      https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-spaces/
+See:
+  https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-spaces/
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -64,23 +70,23 @@ Schema for a Confluence Space.
 </details>
 
 <details>
-<summary><strong>ConfluencePageEntity</strong></summary>
+<summary><strong>ConfluenceBlogPostEntity</strong></summary>
 
 Schema for a Confluence Blog Post.
 
-    See:
-      https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-posts/
+See:
+  https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-posts/
 
 | Field | Type | Description |
 |-------|------|-------------|
-| content_id | Optional[str] | Actual Confluence page ID. |
-| title | Optional[str] | Title of the page. |
-| space_id | Optional[str] | ID of the space this page belongs to. |
-| body | Optional[str] | HTML body or excerpt of the page. |
-| version | Optional[int] | Page version number. |
-| status | Optional[str] | Status of the page (e.g., 'current'). |
-| created_at | Optional[datetime] | Timestamp when the page was created. |
-| updated_at | Optional[datetime] | Timestamp when the page was last updated. |
+| content_id | Optional[str] | Actual Confluence blog post ID. |
+| title | Optional[str] | Title of the blog post. |
+| space_id | Optional[str] | ID of the space this blog post is in. |
+| body | Optional[str] | HTML body of the blog post. |
+| version | Optional[int] | Blog post version number. |
+| status | Optional[str] | Status of the blog post (e.g., 'current'). |
+| created_at | Optional[datetime] | Timestamp when the blog post was created. |
+| updated_at | Optional[datetime] | Timestamp when the blog post was last updated. |
 
 </details>
 
@@ -89,14 +95,14 @@ Schema for a Confluence Blog Post.
 
 Schema for a Confluence Comment.
 
-    See:
-      https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comments/
+See:
+  https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comments/
 
 | Field | Type | Description |
 |-------|------|-------------|
 | content_id | Optional[str] | ID of the content this comment is attached to. |
 | text | Optional[str] | Text/HTML body of the comment. |
-| created_by | Optional[Dict[str, Any] | Information about the user who created the comment. |
+| created_by | Optional[Dict[str, Any]] | Information about the user who created the comment. |
 | created_at | Optional[datetime] | Timestamp when this comment was created. |
 | updated_at | Optional[datetime] | Timestamp when this comment was last updated. |
 | status | Optional[str] | Status of the comment (e.g., 'current'). |
@@ -108,8 +114,8 @@ Schema for a Confluence Comment.
 
 Schema for a Confluence Database object.
 
-    See:
-      (the "database" content type in Confluence Cloud).
+See:
+  (the "database" content type in Confluence Cloud).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -127,8 +133,8 @@ Schema for a Confluence Database object.
 
 Schema for a Confluence Folder object.
 
-    See:
-      (the "folder" content type in Confluence Cloud).
+See:
+  (the "folder" content type in Confluence Cloud).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -145,8 +151,8 @@ Schema for a Confluence Folder object.
 
 Schema for a Confluence Label object.
 
-    See:
-      https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-labels/
+See:
+  https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-labels/
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -161,14 +167,14 @@ Schema for a Confluence Label object.
 
 Schema for a Confluence Task object.
 
-    For example, tasks extracted from Confluence pages or macros.
+For example, tasks extracted from Confluence pages or macros.
 
 | Field | Type | Description |
 |-------|------|-------------|
 | content_id | Optional[str] | The content ID (page, blog, etc.) that this task is associated with. |
 | space_key | Optional[str] | Space key if task is associated with a space. |
 | text | Optional[str] | Text of the task. |
-| assignee | Optional[Dict[str, Any] | Information about the user assigned to this task. |
+| assignee | Optional[Dict[str, Any]] | Information about the user assigned to this task. |
 | completed | bool | Indicates if this task is completed. |
 | due_date | Optional[datetime] | Due date/time if applicable. |
 | created_at | Optional[datetime] | Timestamp when this task was created. |
@@ -181,8 +187,8 @@ Schema for a Confluence Task object.
 
 Schema for a Confluence Whiteboard object.
 
-    See:
-      (the "whiteboard" content type in Confluence Cloud).
+See:
+  (the "whiteboard" content type in Confluence Cloud).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -199,8 +205,8 @@ Schema for a Confluence Whiteboard object.
 
 Schema for a Confluence Custom Content object.
 
-    See:
-      (the "custom content" type in Confluence Cloud).
+See:
+  (the "custom content" type in Confluence Cloud).
 
 | Field | Type | Description |
 |-------|------|-------------|

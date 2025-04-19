@@ -26,6 +26,12 @@ The Onedrive connector allows you to sync data from Onedrive into Airweave, maki
 
 OneDrive source implementation (read-only).
 
+#### Authentication
+
+This connector uses **OAuth 2.0 with refresh token**.
+
+This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+
 
 ## Entities
 
@@ -37,14 +43,15 @@ The following data models are available for this connector:
 
 Schema for a OneDrive Drive object.
 
-    The inherited entity_id stores the drive's unique ID. Additional key fields come
-    from the OneDrive/SharePoint drive resource. Owner and quota are typically
-    nested objects; we store them as dictionaries.
+The inherited entity_id stores the drive's unique ID. Additional key fields come
+from the OneDrive/SharePoint drive resource. Owner and quota are typically
+nested objects; we store them as dictionaries.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| drive_type | Optional[str] | Information about the user or application that owns this drive. |
-| quota | Optional[Dict[str, Any] | Information about the drive's storage quota (total, used, remaining, etc.). |
+| drive_type | Optional[str] | Describes the type of drive represented by this resource (e.g., personal or business). |
+| owner | Optional[Dict[str, Any]] | Information about the user or application that owns this drive. |
+| quota | Optional[Dict[str, Any]] | Information about the drive's storage quota (total, used, remaining, etc.). |
 | created_at | Optional[datetime] | Datetime when the drive was created (from createdDateTime). |
 | updated_at | Optional[datetime] | Datetime when the drive was last modified (from lastModifiedDateTime). |
 
@@ -55,9 +62,9 @@ Schema for a OneDrive Drive object.
 
 Schema for a OneDrive DriveItem object (file or folder).
 
-    The inherited entity_id stores the DriveItem's unique ID. Many fields are optional
-    because a DriveItem may represent either a file or a folder, and some properties
-    appear only in one context.
+The inherited entity_id stores the DriveItem's unique ID. Many fields are optional
+because a DriveItem may represent either a file or a folder, and some properties
+appear only in one context.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -68,8 +75,9 @@ Schema for a OneDrive DriveItem object (file or folder).
 | updated_at | Optional[datetime] | Datetime when the item was last modified (from lastModifiedDateTime). |
 | size | Optional[int] | Size of the item in bytes. |
 | web_url | Optional[str] | URL that displays the resource in the browser. |
-| file | Optional[Dict[str, Any] | File metadata if the item is a file (e.g., mimeType, hashes). |
-| folder | Optional[Dict[str, Any] | Folder metadata if the item is a folder (e.g., childCount). |
+| file | Optional[Dict[str, Any]] | File metadata if the item is a file (e.g., mimeType, hashes). |
+| folder | Optional[Dict[str, Any]] | Folder metadata if the item is a folder (e.g., childCount). |
+| parent_reference | Optional[Dict[str, Any]] | Information about the parent of this item, such as driveId or parent folder path. |
 
 </details>
 

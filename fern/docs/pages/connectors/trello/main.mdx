@@ -26,11 +26,17 @@ The Trello connector allows you to sync data from Trello into Airweave, making i
 
 Trello source implementation.
 
-    This connector retrieves data from Trello objects such as Organizations,
-    Boards, Lists, Cards, Members, and Actions, then yields them as entities using
-    their respective Trello entity schemas. This version also utilizes the
-    'breadcrumb' pattern to reflect the hierarchy:
-      Organization → Board → List → Card
+This connector retrieves data from Trello objects such as Organizations,
+Boards, Lists, Cards, Members, and Actions, then yields them as entities using
+their respective Trello entity schemas. This version also utilizes the
+'breadcrumb' pattern to reflect the hierarchy:
+  Organization → Board → List → Card
+
+#### Authentication
+
+This connector uses **Trello authentication**.
+
+Please refer to the Airweave documentation for authentication details.
 
 
 ## Entities
@@ -43,8 +49,8 @@ The following data models are available for this connector:
 
 Schema for Trello organization (Workspace) entities.
 
-    Organizations (or Workspaces) in Trello are containers for boards that are shared
-    among team members.
+Organizations (or Workspaces) in Trello are containers for boards that are shared
+among team members.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -61,7 +67,7 @@ Schema for Trello organization (Workspace) entities.
 
 Schema for Trello board entities.
 
-    Boards in Trello are the containers for lists and cards, representing projects or workflows.
+Boards in Trello are the containers for lists and cards, representing projects or workflows.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -82,8 +88,8 @@ Schema for Trello board entities.
 
 Schema for Trello list entities.
 
-    Lists in Trello are vertical columns on a board that contain cards and represent stages
-    in a workflow.
+Lists in Trello are vertical columns on a board that contain cards and represent stages
+in a workflow.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -100,8 +106,8 @@ Schema for Trello list entities.
 
 Schema for Trello card entities.
 
-    Cards in Trello represent tasks or items within a list, containing details and
-    supporting attachments.
+Cards in Trello represent tasks or items within a list, containing details and
+supporting attachments.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -123,8 +129,8 @@ Schema for Trello card entities.
 
 Schema for Trello member entities.
 
-    Members in Trello are users who can interact with boards, lists, and cards based on
-    their permissions.
+Members in Trello are users who can interact with boards, lists, and cards based on
+their permissions.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -144,7 +150,7 @@ Schema for Trello member entities.
 
 Schema for Trello action entities.
 
-    Actions in Trello represent activities or changes made to boards, lists, or cards.
+Actions in Trello represent activities or changes made to boards, lists, or cards.
 
 | Field | Type | Description |
 |-------|------|-------------|

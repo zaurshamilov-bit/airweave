@@ -26,8 +26,14 @@ The Monday connector allows you to sync data from Monday into Airweave, making i
 
 Monday source implementation.
 
-    Connects to Monday.com using GraphQL queries to retrieve and entity various
-    data types including boards, groups, columns, items, subitems, and updates.
+Connects to Monday.com using GraphQL queries to retrieve and entity various
+data types including boards, groups, columns, items, subitems, and updates.
+
+#### Authentication
+
+This connector uses **OAuth 2.0 authentication flow**.
+
+This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
@@ -40,7 +46,7 @@ The following data models are available for this connector:
 
 Schema for Monday Board objects.
 
-    https://developer.monday.com/api-reference/reference/boards
+https://developer.monday.com/api-reference/reference/boards
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -63,9 +69,9 @@ Schema for Monday Board objects.
 
 Schema for Monday Group objects.
 
-    Groups are collections of items (rows) within a board.
+Groups are collections of items (rows) within a board.
 
-    https://developer.monday.com/api-reference/reference/boards
+https://developer.monday.com/api-reference/reference/boards
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -83,9 +89,9 @@ Schema for Monday Group objects.
 
 Schema for Monday Column objects.
 
-    Columns define the structure of data on a Monday board.
+Columns define the structure of data on a Monday board.
 
-    https://developer.monday.com/api-reference/reference/column-types-reference
+https://developer.monday.com/api-reference/reference/column-types-reference
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -104,7 +110,7 @@ Schema for Monday Column objects.
 
 Schema for Monday Item objects (rows on a board).
 
-    https://developer.monday.com/api-reference/reference/boards
+https://developer.monday.com/api-reference/reference/boards
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -125,9 +131,9 @@ Schema for Monday Item objects (rows on a board).
 
 Schema for Monday Subitem objects.
 
-    Subitems are items nested under a parent item, often in a dedicated 'Subitems' column.
+Subitems are items nested under a parent item, often in a dedicated 'Subitems' column.
 
-    https://developer.monday.com/api-reference/reference/boards
+https://developer.monday.com/api-reference/reference/boards
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -149,14 +155,15 @@ Schema for Monday Subitem objects.
 
 Schema for Monday Update objects.
 
-    monday.com updates add notes and discussions to items outside of their column data.
+monday.com updates add notes and discussions to items outside of their column data.
 
-    https://developer.monday.com/api-reference/reference/updates
+https://developer.monday.com/api-reference/reference/updates
 
 | Field | Type | Description |
 |-------|------|-------------|
 | update_id | str | The unique identifier (ID) of the update. |
-| item_id | Optional[str] | ID of the board, if applicable. |
+| item_id | Optional[str] | ID of the item this update is referencing (could also be a board-level update). |
+| board_id | Optional[str] | ID of the board, if applicable. |
 | creator_id | Optional[str] | ID of the user who created this update. |
 | body | Optional[str] | The text (body) of the update, which may include markdown or HTML formatting. |
 | created_at | Optional[datetime] | When the update was first created. |

@@ -26,23 +26,37 @@ The Stripe connector allows you to sync data from Stripe into Airweave, making i
 
 Stripe source implementation.
 
-    This connector retrieves data from various Stripe objects, yielding them as entities
-    through their respective schemas. The following resource endpoints are used:
+This connector retrieves data from various Stripe objects, yielding them as entities
+through their respective schemas. The following resource endpoints are used:
 
-      - /v1/balance
-      - /v1/balance_transactions
-      - /v1/charges
-      - /v1/customers
-      - /v1/events
-      - /v1/invoices
-      - /v1/payment_intents
-      - /v1/payment_methods
-      - /v1/payouts
-      - /v1/refunds
-      - /v1/subscriptions
+  - /v1/balance
+  - /v1/balance_transactions
+  - /v1/charges
+  - /v1/customers
+  - /v1/events
+  - /v1/invoices
+  - /v1/payment_intents
+  - /v1/payment_methods
+  - /v1/payouts
+  - /v1/refunds
+  - /v1/subscriptions
 
-    Each resource endpoint may use Stripe's pagination (has_more + starting_after) to
-    retrieve all objects. Fields are mapped to the entity schemas defined in entities/stripe.py.
+Each resource endpoint may use Stripe's pagination (has_more + starting_after) to
+retrieve all objects. Fields are mapped to the entity schemas defined in entities/stripe.py.
+
+#### Authentication
+
+This connector uses **Configuration-based authentication**.
+
+Authentication configuration class: `StripeAuthConfig`
+
+Stripe authentication credentials schema.
+
+The following configuration fields are required:
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| api_key | str | The API key for the Stripe account. Should start with 'sk_test_' for test mode or 'sk_live_' for live mode. | Yes |
 
 
 ## Entities
@@ -55,14 +69,14 @@ The following data models are available for this connector:
 
 Schema for Stripe Balance resource.
 
-    https://stripe.com/docs/api/balance/balance_object
+https://stripe.com/docs/api/balance/balance_object
 
 | Field | Type | Description |
 |-------|------|-------------|
-| available | List[Dict[str, Any] | Funds that are available to be paid out, broken down by currency |
-| pending | List[Dict[str, Any] | Funds not yet available, broken down by currency |
-| instant_available | Optional[List[Dict[str, Any] | Funds available for Instant Payouts (if enabled) |
-| connect_reserved | Optional[List[Dict[str, Any] | Funds reserved for connected accounts (if using Connect) |
+| available | List[Dict[str, Any]] | Funds that are available to be paid out, broken down by currency |
+| pending | List[Dict[str, Any]] | Funds not yet available, broken down by currency |
+| instant_available | Optional[List[Dict[str, Any]]] | Funds available for Instant Payouts (if enabled) |
+| connect_reserved | Optional[List[Dict[str, Any]]] | Funds reserved for connected accounts (if using Connect) |
 | livemode | bool | Whether this balance is in live mode (vs test mode) |
 
 </details>
@@ -72,7 +86,7 @@ Schema for Stripe Balance resource.
 
 Schema for Stripe Balance Transaction resource.
 
-    https://stripe.com/docs/api/balance_transactions
+https://stripe.com/docs/api/balance_transactions
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -81,7 +95,7 @@ Schema for Stripe Balance Transaction resource.
 | created_at | Optional[datetime] | Time at which the transaction was created |
 | description | Optional[str] | Text description of the transaction |
 | fee | Optional[int] | Fees (in cents) taken from this transaction |
-| fee_details | List[Dict[str, Any] | Detailed breakdown of fees (type, amount, application, etc.) |
+| fee_details | List[Dict[str, Any]] | Detailed breakdown of fees (type, amount, application, etc.) |
 | net | Optional[int] | Net amount of the transaction, in cents |
 | reporting_category | Optional[str] | Reporting category (e.g., 'charge', 'refund', etc.) |
 | source | Optional[str] | ID of the charge or other object that caused this balance transaction |
@@ -95,7 +109,7 @@ Schema for Stripe Balance Transaction resource.
 
 Schema for Stripe Charge entities.
 
-    https://stripe.com/docs/api/charges
+https://stripe.com/docs/api/charges
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -118,7 +132,7 @@ Schema for Stripe Charge entities.
 
 Schema for Stripe Customer entities.
 
-    https://stripe.com/docs/api/customers
+https://stripe.com/docs/api/customers
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -140,7 +154,7 @@ Schema for Stripe Customer entities.
 
 Schema for Stripe Event resource.
 
-    https://stripe.com/docs/api/events
+https://stripe.com/docs/api/events
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -150,7 +164,7 @@ Schema for Stripe Event resource.
 | data | Dict[str, Any] | The event payload. Typically includes 'object' and 'previous_attributes'. |
 | livemode | bool | Whether the event was triggered in live mode |
 | pending_webhooks | Optional[int] | Number of webhooks yet to be delivered |
-| request | Optional[Dict[str, Any] | Information on the request that created or triggered the event |
+| request | Optional[Dict[str, Any]] | Information on the request that created or triggered the event |
 
 </details>
 
@@ -159,7 +173,7 @@ Schema for Stripe Event resource.
 
 Schema for Stripe Invoice entities.
 
-    https://stripe.com/docs/api/invoices
+https://stripe.com/docs/api/invoices
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -171,7 +185,7 @@ Schema for Stripe Invoice entities.
 | amount_remaining | Optional[int] | Amount remaining to be paid in cents |
 | created_at | Optional[datetime] | When the invoice was created |
 | due_date | Optional[datetime] | Date on which payment is due (if applicable) |
-| paid | Optional[int] | Whether the invoice has been fully paid |
+| paid | bool | Whether the invoice has been fully paid |
 | currency | Optional[str] | Three-letter ISO currency code (e.g. 'usd') |
 | metadata | Dict[str, Any] | Set of key-value pairs that can be attached to the invoice |
 
@@ -182,7 +196,7 @@ Schema for Stripe Invoice entities.
 
 Schema for Stripe PaymentIntent entities.
 
-    https://stripe.com/docs/api/payment_intents
+https://stripe.com/docs/api/payment_intents
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -201,14 +215,15 @@ Schema for Stripe PaymentIntent entities.
 
 Schema for Stripe PaymentMethod resource.
 
-    https://stripe.com/docs/api/payment_methods
+https://stripe.com/docs/api/payment_methods
 
 | Field | Type | Description |
 |-------|------|-------------|
 | type | Optional[str] | Type of the PaymentMethod (card, ideal, etc.) |
 | billing_details | Dict[str, Any] | Billing information associated with the PaymentMethod |
 | customer_id | Optional[str] | ID of the Customer to which this PaymentMethod is saved (if any) |
-| card | Optional[Dict[str, Any] | When the PaymentMethod was created |
+| card | Optional[Dict[str, Any]] | If the PaymentMethod type is 'card', details about the card (brand, last4, etc.) |
+| created_at | Optional[datetime] | When the PaymentMethod was created |
 | metadata | Dict[str, Any] | Set of key-value pairs that can be attached to the PaymentMethod |
 
 </details>
@@ -218,7 +233,7 @@ Schema for Stripe PaymentMethod resource.
 
 Schema for Stripe Payout resource.
 
-    https://stripe.com/docs/api/payouts
+https://stripe.com/docs/api/payouts
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -240,7 +255,7 @@ Schema for Stripe Payout resource.
 
 Schema for Stripe Refund resource.
 
-    https://stripe.com/docs/api/refunds
+https://stripe.com/docs/api/refunds
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -261,7 +276,7 @@ Schema for Stripe Refund resource.
 
 Schema for Stripe Subscription entities.
 
-    https://stripe.com/docs/api/subscriptions
+https://stripe.com/docs/api/subscriptions
 
 | Field | Type | Description |
 |-------|------|-------------|

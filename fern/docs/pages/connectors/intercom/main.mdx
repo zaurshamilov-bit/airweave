@@ -26,9 +26,15 @@ The Intercom connector allows you to sync data from Intercom into Airweave, maki
 
 Intercom source implementation.
 
-    This connector retrieves data from Intercom objects such as Contacts, Companies,
-    Conversations, and Tickets, then yields them as entities using their respective
-    Intercom entity schemas.
+This connector retrieves data from Intercom objects such as Contacts, Companies,
+Conversations, and Tickets, then yields them as entities using their respective
+Intercom entity schemas.
+
+#### Authentication
+
+This connector uses **OAuth 2.0 authentication flow**.
+
+This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
@@ -41,7 +47,7 @@ The following data models are available for this connector:
 
 Schema for Intercom contact entities.
 
-    Contacts in Intercom can be either users or leads with associated profile data.
+Contacts in Intercom can be either users or leads with associated profile data.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -62,7 +68,7 @@ Schema for Intercom contact entities.
 
 Schema for Intercom company entities.
 
-    Companies in Intercom represent organizations that your contacts belong to.
+Companies in Intercom represent organizations that your contacts belong to.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -84,7 +90,7 @@ Schema for Intercom company entities.
 
 Schema for Intercom conversation entities.
 
-    Conversations in Intercom represent message threads between contacts and your team.
+Conversations in Intercom represent message threads between contacts and your team.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -102,7 +108,7 @@ Schema for Intercom conversation entities.
 
 Schema for Intercom ticket entities.
 
-    Tickets in Intercom represent structured support requests that can be tracked and managed.
+Tickets in Intercom represent structured support requests that can be tracked and managed.
 
 | Field | Type | Description |
 |-------|------|-------------|

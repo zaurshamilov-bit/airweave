@@ -26,9 +26,15 @@ The Outlook Mail connector allows you to sync data from Outlook Mail into Airwea
 
 Outlook Mail source implementation (read-only).
 
-    This connector retrieves Outlook mail folders in a hierarchical fashion
-    and yields OutlookMailFolderEntity for each folder. For each folder, it
-    also retrieves email messages and yields OutlookMessageEntity items.
+This connector retrieves Outlook mail folders in a hierarchical fashion
+and yields OutlookMailFolderEntity for each folder. For each folder, it
+also retrieves email messages and yields OutlookMessageEntity items.
+
+#### Authentication
+
+This connector uses **OAuth 2.0 with refresh token**.
+
+This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
@@ -41,8 +47,8 @@ The following data models are available for this connector:
 
 Schema for an Outlook mail folder.
 
-    See:
-      https://learn.microsoft.com/en-us/graph/api/resources/mailfolder?view=graph-rest-1.0
+See:
+  https://learn.microsoft.com/en-us/graph/api/resources/mailfolder?view=graph-rest-1.0
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -60,8 +66,8 @@ Schema for an Outlook mail folder.
 
 Schema for an Outlook message.
 
-    See:
-      https://learn.microsoft.com/en-us/graph/api/resources/message?view=graph-rest-1.0
+See:
+  https://learn.microsoft.com/en-us/graph/api/resources/message?view=graph-rest-1.0
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -74,9 +80,10 @@ Schema for an Outlook message.
 | importance | Optional[str] | Indicates the importance of the message (Low, Normal, High). |
 | has_attachments | Optional[bool] | Indicates if the message has file attachments. |
 | internet_message_id | Optional[str] | Internet message ID of the email (RFC 2822 format). |
-| from_ | Optional[Dict[str, Any] | List of primary recipients (each typically contains emailAddress info). |
-| cc_recipients | List[Dict[str, Any] | List of CC recipients (each typically contains emailAddress info). |
-| bcc_recipients | List[Dict[str, Any] | List of BCC recipients (each typically contains emailAddress info). |
+| from_ | Optional[Dict[str, Any]] | Information about the sender. Typically includes emailAddress { name, address }. |
+| to_recipients | List[Dict[str, Any]] | List of primary recipients (each typically contains emailAddress info). |
+| cc_recipients | List[Dict[str, Any]] | List of CC recipients (each typically contains emailAddress info). |
+| bcc_recipients | List[Dict[str, Any]] | List of BCC recipients (each typically contains emailAddress info). |
 | sent_at | Optional[datetime] | Timestamp when the message was sent. |
 | received_at | Optional[datetime] | Timestamp when the message was received. |
 | created_at | Optional[datetime] | Timestamp when the message resource was created (if available). |

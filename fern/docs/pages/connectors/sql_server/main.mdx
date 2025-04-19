@@ -26,11 +26,31 @@ The Sql Server connector allows you to sync data from Sql Server into Airweave, 
 
 SQL Server source implementation.
 
-    This source connects to a SQL Server database and generates entities for each table
-    in the specified schemas. It uses database introspection to:
-    1. Discover tables and their structures
-    2. Create appropriate entity classes dynamically
-    3. Generate entities for each table's data
+This source connects to a SQL Server database and generates entities for each table
+in the specified schemas. It uses database introspection to:
+1. Discover tables and their structures
+2. Create appropriate entity classes dynamically
+3. Generate entities for each table's data
+
+#### Authentication
+
+This connector uses **Configuration-based authentication**.
+
+Authentication configuration class: `SQLServerAuthConfig`
+
+SQL Server authentication configuration.
+
+The following configuration fields are required:
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| host | str | The host of the SQLServer database | Yes |
+| port | int | The port of the SQLServer database | Yes |
+| database | str | The name of the SQLServer database | Yes |
+| user | str | The username for the SQLServer database | Yes |
+| password | str | The password for the SQLServer database | Yes |
+| schema | str | The schema of the SQLServer database | No |
+| tables | str | Comma separated list of tables to sync. For example, 'users,orders'. For all tables, use '*' | No |
 
 
 

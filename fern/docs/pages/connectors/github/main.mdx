@@ -26,6 +26,12 @@ The Github connector allows you to sync data from Github into Airweave, making i
 
 GitHub source implementation (read-only).
 
+#### Authentication
+
+This connector uses **OAuth 2.0 with refresh token**.
+
+This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
+
 
 ## Entities
 
@@ -37,8 +43,8 @@ The following data models are available for this connector:
 
 Schema for a GitHub repository.
 
-    References:
-      https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28
+References:
+  https://docs.github.com/en/rest/repos/repos?apiVersion=2022-11-28
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -70,8 +76,8 @@ Schema for a GitHub repository.
 
 Schema for a GitHub repository's content (file, directory, submodule, etc.).
 
-    References:
-      https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28
+References:
+  https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28
 
 | Field | Type | Description |
 |-------|------|-------------|

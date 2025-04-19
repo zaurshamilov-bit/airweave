@@ -26,9 +26,15 @@ The Google Calendar connector allows you to sync data from Google Calendar into 
 
 Google Calendar source implementation (read-only).
 
-    Retrieves and yields Google Calendar objects (CalendarList entries,
-    Calendars, Events, and Free/Busy data) as entity schemas defined in
-    entities/google_calendar.py.
+Retrieves and yields Google Calendar objects (CalendarList entries,
+Calendars, Events, and Free/Busy data) as entity schemas defined in
+entities/google_calendar.py.
+
+#### Authentication
+
+This connector uses **OAuth 2.0 with refresh token**.
+
+This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
@@ -41,7 +47,7 @@ The following data models are available for this connector:
 
 Schema for a Google Calendar object (the underlying calendar resource).
 
-    See: https://developers.google.com/calendar/api/v3/reference/calendars
+See: https://developers.google.com/calendar/api/v3/reference/calendars
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -58,7 +64,7 @@ Schema for a Google Calendar object (the underlying calendar resource).
 
 Schema for a CalendarList entry, i.e., how the user sees a calendar.
 
-    See: https://developers.google.com/calendar/api/v3/reference/calendarList
+See: https://developers.google.com/calendar/api/v3/reference/calendarList
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -70,7 +76,8 @@ Schema for a CalendarList entry, i.e., how the user sees a calendar.
 | foreground_color | Optional[str] | Foreground color in HEX. |
 | hidden | bool | Whether the calendar is hidden from the UI. |
 | selected | bool | Indicates if the calendar is selected in the UI. |
-| access_role | Optional[str] | Flag to indicate if this is the primary calendar. |
+| access_role | Optional[str] | The effective access role that the authenticated user has on the calendar. E.g., 'owner', 'reader', 'writer'. |
+| primary | bool | Flag to indicate if this is the primary calendar. |
 | deleted | bool | Flag to indicate if this calendar has been deleted. |
 
 </details>
@@ -80,7 +87,7 @@ Schema for a CalendarList entry, i.e., how the user sees a calendar.
 
 Schema for a Google Calendar Event.
 
-    See: https://developers.google.com/calendar/api/v3/reference/events
+See: https://developers.google.com/calendar/api/v3/reference/events
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -93,12 +100,18 @@ Schema for a Google Calendar Event.
 | description | Optional[str] | Description of the event. |
 | location | Optional[str] | Geographic location of the event. |
 | color_id | Optional[str] | Color ID for this event. |
-| start_datetime | Optional[datetime] | List of RRULE, EXRULE, RDATE, EXDATE lines for recurring events. |
+| start_datetime | Optional[datetime] | Start datetime if the event has a specific datetime. (DateTime from 'start' if 'dateTime' is present.) |
+| start_date | Optional[str] | Start date if the event is an all-day event. (Date from 'start' if 'date' is present.) |
+| end_datetime | Optional[datetime] | End datetime if the event has a specific datetime. (DateTime from 'end' if 'dateTime' is present.) |
+| end_date | Optional[str] | End date if the event is an all-day event. (Date from 'end' if 'date' is present.) |
+| recurrence | Optional[List[str]] | List of RRULE, EXRULE, RDATE, EXDATE lines for recurring events. |
 | recurring_event_id | Optional[str] | For recurring events, identifies the event ID of the recurring series. |
-| organizer | Optional[Dict[str, Any] | The organizer of the event. Usually contains 'email' and 'displayName'. |
-| creator | Optional[Dict[str, Any] | The creator of the event. Usually contains 'email' and 'displayName'. |
-| attendees | Optional[List[Dict[str, Any] | Visibility of the event (e.g., 'default', 'public'). |
-| conference_data | Optional[Dict[str, Any] | Conference data associated with the event, e.g., hangout or meet link. |
+| organizer | Optional[Dict[str, Any]] | The organizer of the event. Usually contains 'email' and 'displayName'. |
+| creator | Optional[Dict[str, Any]] | The creator of the event. Usually contains 'email' and 'displayName'. |
+| attendees | Optional[List[Dict[str, Any]]] | The attendees of the event (each dict typically has 'email', 'responseStatus', etc.). |
+| transparency | Optional[str] | Specifies whether the event blocks time on the calendar ('opaque') or not ('transparent'). |
+| visibility | Optional[str] | Visibility of the event (e.g., 'default', 'public'). |
+| conference_data | Optional[Dict[str, Any]] | Conference data associated with the event, e.g., hangout or meet link. |
 | event_type | Optional[str] | Event type. E.g., 'default' or 'focus'. |
 
 </details>
@@ -108,11 +121,12 @@ Schema for a Google Calendar Event.
 
 Schema for a FreeBusy response entity for a given calendar.
 
-    See: https://developers.google.com/calendar/api/v3/reference/freebusy
+See: https://developers.google.com/calendar/api/v3/reference/freebusy
 
 | Field | Type | Description |
 |-------|------|-------------|
 | calendar_id | str | ID of the calendar for which free/busy is returned. |
+| busy | List[Dict[str, str]] | List of time ranges during which this calendar is busy. Each range is typically {'start': <RFC3339 date/time>, 'end': <RFC3339 date/time>}. |
 
 </details>
 

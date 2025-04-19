@@ -26,8 +26,14 @@ The Gmail connector allows you to sync data from Gmail into Airweave, making it 
 
 Gmail source implementation (read-only).
 
-    Retrieves and yields Gmail objects (labels, threads, messages, drafts)
-    as entity schemas defined in entities/gmail.py.
+Retrieves and yields Gmail objects (labels, threads, messages, drafts)
+as entity schemas defined in entities/gmail.py.
+
+#### Authentication
+
+This connector uses **OAuth 2.0 with refresh token**.
+
+This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
@@ -40,7 +46,7 @@ The following data models are available for this connector:
 
 Schema for Gmail label entities.
 
-    Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.labels
+Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.labels
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -58,7 +64,7 @@ Schema for Gmail label entities.
 
 Schema for Gmail thread entities.
 
-    Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.threads
+Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.threads
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -75,7 +81,7 @@ Schema for Gmail thread entities.
 
 Schema for Gmail message entities.
 
-    Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.messages
+Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.messages
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -100,7 +106,7 @@ Schema for Gmail message entities.
 
 Schema for Gmail draft entities.
 
-    Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.drafts
+Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.drafts
 
 | Field | Type | Description |
 |-------|------|-------------|

@@ -26,13 +26,19 @@ The Clickup connector allows you to sync data from Clickup into Airweave, making
 
 ClickUp source implementation.
 
-    This connector retrieves hierarchical data from ClickUp's REST API:
-        - Workspaces (Teams)
-        - Spaces (within each workspace)
-        - Folders (within each space)
-        - Lists (within each folder)
-        - Tasks (within each list)
-        - Comments (within each task)
+This connector retrieves hierarchical data from ClickUp's REST API:
+    - Workspaces (Teams)
+    - Spaces (within each workspace)
+    - Folders (within each space)
+    - Lists (within each folder)
+    - Tasks (within each list)
+    - Comments (within each task)
+
+#### Authentication
+
+This connector uses **OAuth 2.0 authentication flow**.
+
+This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
@@ -99,8 +105,8 @@ ClickUp list entity.
 | folder_id | str | Parent folder ID |
 | space_id | str | Parent space ID |
 | content | Optional[str] | List content/description |
-| status | Optional[Dict[str, Any] | List status configuration |
-| priority | Optional[Dict[str, Any] | List priority configuration |
+| status | Optional[Dict[str, Any]] | List status configuration |
+| priority | Optional[Dict[str, Any]] | List priority configuration |
 | assignee | Optional[str] | List assignee username |
 | task_count | Optional[int] | Number of tasks in the list |
 | due_date | Optional[Any] | List due date |
@@ -120,14 +126,14 @@ ClickUp task entity.
 | task_id | str | Task ID |
 | name | str | Task name |
 | status | Dict[str, Any] | Task status configuration |
-| priority | Optional[Dict[str, Any] | Task priority configuration |
-| assignees | List[Dict[str, Any] | List of task assignees |
+| priority | Optional[Dict[str, Any]] | Task priority configuration |
+| assignees | List[Dict[str, Any]] | List of task assignees |
 | tags | List[str] | List of task tags |
 | due_date | Optional[datetime] | Task due date |
 | start_date | Optional[datetime] | Task start date |
 | time_estimate | Optional[int] | Estimated time in milliseconds |
 | time_spent | Optional[int] | Time spent in milliseconds |
-| custom_fields | List[Dict[str, Any] | List of custom fields |
+| custom_fields | List[Dict[str, Any]] | List of custom fields |
 | list_id | str | Parent list ID |
 | folder_id | str | Parent folder ID |
 | space_id | str | Parent space ID |
@@ -149,9 +155,9 @@ ClickUp comment entity.
 | user | Dict[str, Any] | Comment author information |
 | text_content | str | Comment text content |
 | resolved | bool | Whether the comment is resolved |
-| assignee | Optional[Dict[str, Any] | Comment assignee information |
-| assigned_by | Optional[Dict[str, Any] | User who assigned the comment |
-| reactions | List[Dict[str, Any] | List of reactions to the comment |
+| assignee | Optional[Dict[str, Any]] | Comment assignee information |
+| assigned_by | Optional[Dict[str, Any]] | User who assigned the comment |
+| reactions | List[Dict[str, Any]] | List of reactions to the comment |
 | date | datetime | Comment creation date |
 
 </details>

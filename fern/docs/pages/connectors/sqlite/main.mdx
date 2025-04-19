@@ -26,11 +26,17 @@ The Sqlite connector allows you to sync data from Sqlite into Airweave, making i
 
 SQLite source implementation.
 
-    This source connects to a SQLite database and generates entities for each table.
-    It uses database introspection to:
-    1. Discover tables and their structures
-    2. Create appropriate entity classes dynamically
-    3. Generate entities for each table's data
+This source connects to a SQLite database and generates entities for each table.
+It uses database introspection to:
+1. Discover tables and their structures
+2. Create appropriate entity classes dynamically
+3. Generate entities for each table's data
+
+#### Authentication
+
+This connector uses **Configuration-based authentication**.
+
+Please refer to the Airweave documentation for authentication details.
 
 
 

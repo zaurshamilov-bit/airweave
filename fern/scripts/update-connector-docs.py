@@ -36,7 +36,9 @@ def get_connectors_from_icons():
 
 
 def parse_entity_file(connector_name):
-    """Parse entity file for a connector."""
+    """Parse entity file for a connector using AST."""
+    import ast
+
     entity_file = BACKEND_ENTITIES_DIR / f"{connector_name}.py"
     if not entity_file.exists():
         return None
@@ -44,55 +46,125 @@ def parse_entity_file(connector_name):
     with open(entity_file, "r") as f:
         content = f.read()
 
-    # Extract classes using regex
-    class_pattern = r'class\s+(\w+)\(.*?(?:BaseEntity|ChunkEntity).*?\):\s*(?:"""(.*?)""")?'
-    classes = re.findall(class_pattern, content, re.DOTALL)
+    # Parse the Python file
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        print(f"  Warning: Could not parse {entity_file} due to syntax error")
+        return None
 
     entity_classes = []
-    for class_name, docstring in classes:
-        # First find the entire class section to isolate fields
-        class_section_pattern = rf"class\s+{class_name}\(.*?\).*?(?=\nclass\s+\w+\(|\Z)"
-        class_section_match = re.search(class_section_pattern, content, re.DOTALL)
 
-        if not class_section_match:
-            continue
+    # Find all class definitions that inherit from BaseEntity or ChunkEntity
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            # Check if this class inherits from BaseEntity or ChunkEntity
+            is_entity = False
+            for base in node.bases:
+                if isinstance(base, ast.Name):
+                    if base.id in ["BaseEntity", "ChunkEntity", "PolymorphicEntity"]:
+                        is_entity = True
+                        break
+                # Handle complex inheritance (like with subscripts)
+                elif isinstance(base, ast.Subscript) and isinstance(base.value, ast.Name):
+                    if base.value.id in ["BaseEntity", "ChunkEntity", "PolymorphicEntity"]:
+                        is_entity = True
+                        break
 
-        class_section = class_section_match.group(0)
+            if not is_entity:
+                continue
 
-        # Extract fields using regex - updated to handle more complex field descriptions
-        field_pattern = r'(\w+):\s*(?:\w+(?:\[.+?\])?)\s*=\s*Field\(.*?description=(?:"""(.*?)"""|\'\'\'(.*?)\'\'\'|"(.*?)"|\'(.*?)\')'
-        fields = re.findall(field_pattern, class_section, re.DOTALL)
+            class_name = node.name
+            docstring = ast.get_docstring(node) or "No description available."
 
-        entity_fields = []
-        for field_match in fields:
-            field_name = field_match[0]  # First group is always field name
-            # Find the first non-empty description group (one of them will have the description)
-            description = next((desc for desc in field_match[1:] if desc), "No description")
-            # Clean up the description - remove excessive whitespace and newlines
-            description = re.sub(r"\s+", " ", description).strip()
+            # Extract fields
+            fields = []
+            for item in node.body:
+                # Look for attribute assignments with Field() constructor
+                if isinstance(item, ast.AnnAssign) and hasattr(item, "target"):
+                    field_name = None
+                    if isinstance(item.target, ast.Name):
+                        field_name = item.target.id
 
-            # Get the field type from the line
-            field_type_pattern = rf"{field_name}:\s*(\w+(?:\[.+?\])?)"
-            field_type_match = re.search(field_type_pattern, class_section)
-            field_type = field_type_match.group(1) if field_type_match else "Unknown"
+                    if field_name:
+                        # Get field type
+                        field_type = None
+                        if hasattr(item, "annotation"):
+                            if hasattr(ast, "unparse"):  # Python 3.9+
+                                field_type = ast.unparse(item.annotation)
+                            else:
+                                # Fallback for older Python versions
+                                if isinstance(item.annotation, ast.Name):
+                                    field_type = item.annotation.id
+                                elif isinstance(item.annotation, ast.Subscript):
+                                    if isinstance(item.annotation.value, ast.Name):
+                                        field_type = item.annotation.value.id
 
-            entity_fields.append(
-                {"name": field_name, "type": field_type, "description": description}
+                        field_type = field_type or "Unknown"
+                        description = "No description"
+
+                        # Extract Field parameters for description if Field constructor is used
+                        if hasattr(item, "value") and isinstance(item.value, ast.Call):
+                            for keyword in item.value.keywords:
+                                if keyword.arg == "description":
+                                    # Simple string
+                                    if isinstance(keyword.value, ast.Str):
+                                        description = keyword.value.s
+                                    # String in Python 3.8+ (ast.Constant)
+                                    elif isinstance(keyword.value, ast.Constant) and isinstance(
+                                        keyword.value.value, str
+                                    ):
+                                        description = keyword.value.value
+                                    # Concatenated strings or multiline description
+                                    elif isinstance(keyword.value, ast.BinOp) or isinstance(
+                                        keyword.value, ast.Tuple
+                                    ):
+                                        # We need the original source for this part
+                                        try:
+                                            lines = content.split("\n")
+                                            lineno = (
+                                                keyword.value.lineno - 1
+                                            )  # Convert to 0-indexed
+
+                                            # Heuristic: take the current line and the next 3 lines
+                                            # to capture multiline descriptions
+                                            desc_lines = lines[lineno : lineno + 4]
+
+                                            # Extract the part inside the quotes or parentheses
+                                            desc_text = " ".join(desc_lines)
+                                            desc_match = re.search(
+                                                r'description\s*=\s*(?:\(?\s*"([^"]*)"|\(?\s*\'([^\']*)\')',
+                                                desc_text,
+                                            )
+                                            if desc_match:
+                                                description = desc_match.group(
+                                                    1
+                                                ) or desc_match.group(2)
+                                        except:
+                                            pass
+
+                        # Clean up the description - remove excessive whitespace and newlines
+                        description = re.sub(r"\s+", " ", description).strip()
+
+                        fields.append(
+                            {"name": field_name, "type": field_type, "description": description}
+                        )
+
+            entity_classes.append(
+                {
+                    "name": class_name,
+                    "docstring": docstring.strip() if docstring else "No description available.",
+                    "fields": fields,
+                }
             )
-
-        entity_classes.append(
-            {
-                "name": class_name,
-                "docstring": docstring.strip() if docstring else "No description available.",
-                "fields": entity_fields,
-            }
-        )
 
     return entity_classes
 
 
 def parse_source_file(connector_name):
-    """Parse source file for a connector."""
+    """Parse source file for a connector using AST."""
+    import ast
+
     source_file = BACKEND_SOURCES_DIR / f"{connector_name}.py"
     if not source_file.exists():
         return None
@@ -100,83 +172,338 @@ def parse_source_file(connector_name):
     with open(source_file, "r") as f:
         content = f.read()
 
-    # Extract classes using regex
-    class_pattern = r'class\s+(\w+)\(.*?BaseSource.*?\):\s*(?:"""(.*?)""")?'
-    classes = re.findall(class_pattern, content, re.DOTALL)
+    # Parse the Python file
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        print(f"  Warning: Could not parse {source_file} due to syntax error")
+        return None
 
     source_classes = []
-    for class_name, docstring in classes:
-        # Extract auth type and auth config class
-        auth_type_match = re.search(r'_auth_type\s*=\s*[\'"]([^\'"]*)[\'"]', content)
-        auth_config_match = re.search(r'_auth_config_class\s*=\s*[\'"]([^\'"]*)[\'"]', content)
 
-        auth_type = auth_type_match.group(1) if auth_type_match else None
-        auth_config_class = auth_config_match.group(1) if auth_config_match else None
+    # First extract information from decorators
+    decorators_info = {}
 
-        source_classes.append(
-            {
-                "name": class_name,
-                "docstring": docstring.strip() if docstring else "No description available.",
-                "auth_type": auth_type,
-                "auth_config_class": auth_config_class,
-            }
-        )
+    for node in ast.walk(tree):
+        # Look for classes with @source decorator
+        if isinstance(node, ast.ClassDef):
+            class_name = node.name
+            auth_type = None
+            auth_config_class = None
+
+            # Check decorators for @source
+            for decorator in node.decorator_list:
+                if (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Name)
+                    and decorator.func.id == "source"
+                ):
+                    # Extract arguments from the @source decorator
+                    if len(decorator.args) >= 3 and isinstance(decorator.args[2], ast.Attribute):
+                        # Handle AuthType enum reference (e.g., AuthType.config_class)
+                        if hasattr(decorator.args[2], "attr"):
+                            auth_type = decorator.args[2].attr
+
+                    # Extract named arguments and keyword args
+                    for i, arg in enumerate(decorator.args):
+                        # First arg is name, second is short_name, third might be auth_type
+                        if i == 2 and isinstance(arg, ast.Name) and arg.id.startswith("AuthType"):
+                            auth_type = arg.id.replace("AuthType.", "")
+                        # Fourth arg might be auth_config_class
+                        elif (
+                            i == 3 and isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+                        ):
+                            auth_config_class = arg.value
+
+                    # Check for auth_config_class in keywords
+                    for keyword in decorator.keywords:
+                        if keyword.arg == "auth_config_class" and isinstance(
+                            keyword.value, ast.Constant
+                        ):
+                            auth_config_class = keyword.value.value
+                        elif keyword.arg == "auth_type" and isinstance(
+                            keyword.value, ast.Attribute
+                        ):
+                            if hasattr(keyword.value, "attr"):
+                                auth_type = keyword.value.attr
+
+                    decorators_info[class_name] = {
+                        "auth_type": auth_type,
+                        "auth_config_class": auth_config_class,
+                    }
+
+    # Now process class definitions
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            # Check if this class inherits from BaseSource
+            is_source = False
+            for base in node.bases:
+                if isinstance(base, ast.Name) and base.id == "BaseSource":
+                    is_source = True
+                    break
+
+            if not is_source:
+                continue
+
+            class_name = node.name
+            docstring = ast.get_docstring(node) or "No description available."
+
+            # Get auth information from decorators or class attributes
+            auth_type = None
+            auth_config_class = None
+
+            # Check if we found decorator info
+            if class_name in decorators_info:
+                auth_type = decorators_info[class_name]["auth_type"]
+                auth_config_class = decorators_info[class_name]["auth_config_class"]
+
+            # If not found in decorator, check for class attributes
+            if not auth_type or not auth_config_class:
+                for item in node.body:
+                    # Look for _auth_type and _auth_config_class attributes
+                    if isinstance(item, ast.Assign) and len(item.targets) == 1:
+                        target = item.targets[0]
+                        if isinstance(target, ast.Name):
+                            if target.id == "_auth_type":
+                                if isinstance(item.value, ast.Constant) and isinstance(
+                                    item.value.value, str
+                                ):
+                                    auth_type = item.value.value
+                                elif isinstance(item.value, ast.Attribute) and hasattr(
+                                    item.value, "attr"
+                                ):
+                                    auth_type = item.value.attr
+                            elif target.id == "_auth_config_class":
+                                if isinstance(item.value, ast.Constant) and isinstance(
+                                    item.value.value, str
+                                ):
+                                    auth_config_class = item.value.value
+
+            # If we still don't have auth info, try to extract from the source code using regex
+            # This is a fallback for complex cases the AST parser might miss
+            if not auth_type:
+                auth_type_match = re.search(
+                    r'_auth_type\s*=\s*(?:AuthType\.([^\s,\)]*)|[\'"]([^\'"]*)[\'"])', content
+                )
+                if auth_type_match:
+                    auth_type = auth_type_match.group(1) or auth_type_match.group(2)
+
+            if not auth_config_class:
+                auth_config_match = re.search(
+                    r'_auth_config_class\s*=\s*[\'"]([^\'"]*)[\'"]', content
+                )
+                if auth_config_match:
+                    auth_config_class = auth_config_match.group(1)
+
+            source_classes.append(
+                {
+                    "name": class_name,
+                    "docstring": docstring.strip() if docstring else "No description available.",
+                    "auth_type": auth_type,
+                    "auth_config_class": auth_config_class,
+                }
+            )
 
     return source_classes
 
 
 def parse_auth_config():
-    """Parse auth config file."""
+    """Parse auth config file using Python's AST module."""
+    import ast
+
     with open(AUTH_CONFIG_PATH, "r") as f:
         content = f.read()
 
-    # Extract auth classes using regex
-    class_pattern = r'class\s+(\w+)(\(.+?\)):\s*(?:"""(.*?)""")?'
-    classes = re.findall(class_pattern, content, re.DOTALL)
+    # Parse the Python file
+    tree = ast.parse(content)
 
+    # Find all class definitions and their inheritance
     auth_configs = {}
-    for class_name, parent_class, docstring in classes:
-        if "Auth" in parent_class or "Auth" in class_name:
-            # Find the section for this class
-            class_section_pattern = f"class\\s+{class_name}{parent_class}:.*?(?=class\\s+\\w+\\(|$)"
-            class_section_match = re.search(class_section_pattern, content, re.DOTALL)
 
-            if class_section_match:
-                class_section = class_section_match.group(0)
+    # First pass: collect all classes
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            class_name = node.name
 
-                # Extract field definitions
-                field_pattern = r'(\w+):\s*(\w+)\s*=\s*Field\(.*?description=(?:"""(.*?)"""|\'\'\'(.*?)\'\'\'|"(.*?)"|\'(.*?)\')'
-                fields = re.findall(field_pattern, class_section, re.DOTALL)
+            # Check if this is an auth config class
+            parent_classes = []
+            for base in node.bases:
+                if isinstance(base, ast.Name):
+                    parent_classes.append(base.id)
 
-                auth_fields = []
-                for field_match in fields:
-                    field_name = field_match[0]  # First group is always field name
-                    field_type = field_match[1]  # Second group is the field type
-                    # Find the first non-empty description group (one of them will have the description)
-                    description = next((desc for desc in field_match[2:] if desc), "No description")
-                    # Clean up the description - remove excessive whitespace and newlines
-                    description = re.sub(r"\s+", " ", description).strip()
+            # Skip if not auth-related
+            if not (
+                any("AuthConfig" in parent for parent in parent_classes)
+                or "AuthConfig" in class_name
+            ):
+                continue
 
-                    # Check if required
-                    is_required = "required" in class_section or field_name in re.findall(
-                        r"required\s*=\s*\[(.*?)\]", class_section, re.DOTALL
-                    )
+            # Get docstring
+            docstring = ast.get_docstring(node) or "No description available."
 
-                    auth_fields.append(
-                        {
-                            "name": field_name,
-                            "type": field_type,
-                            "description": description,
-                            "required": is_required,
-                        }
-                    )
+            # Get fields
+            fields = []
+            for item in node.body:
+                # Look for attribute assignments with Field() constructor
+                if isinstance(item, ast.AnnAssign) and hasattr(item, "value"):
+                    field_name = item.target.id if isinstance(item.target, ast.Name) else None
 
-                auth_configs[class_name] = {
-                    "name": class_name,
-                    "docstring": docstring.strip() if docstring else "No description available.",
-                    "fields": auth_fields,
-                }
+                    if field_name:
+                        # Get field type
+                        field_type = None
+                        if hasattr(item, "annotation"):
+                            if hasattr(ast, "unparse"):  # Python 3.9+
+                                field_type = ast.unparse(item.annotation)
+                            else:
+                                # Fallback for older Python versions
+                                if isinstance(item.annotation, ast.Name):
+                                    field_type = item.annotation.id
+                                elif isinstance(item.annotation, ast.Subscript):
+                                    if isinstance(item.annotation.value, ast.Name):
+                                        field_type = item.annotation.value.id
 
+                        field_type = field_type or "Unknown"
+                        description = "No description"
+                        is_required = True
+
+                        # Extract Field parameters by traversing the AST
+                        if isinstance(item.value, ast.Call):
+                            for keyword in item.value.keywords:
+                                if keyword.arg == "description":
+                                    # Simple string
+                                    if isinstance(keyword.value, ast.Str):
+                                        description = keyword.value.s
+                                    # String in Python 3.8+ (ast.Constant)
+                                    elif isinstance(keyword.value, ast.Constant) and isinstance(
+                                        keyword.value.value, str
+                                    ):
+                                        description = keyword.value.value
+                                    # Concatenated strings or multiline description
+                                    elif isinstance(keyword.value, ast.BinOp) or isinstance(
+                                        keyword.value, ast.Tuple
+                                    ):
+                                        # We need the original source for this part
+                                        try:
+                                            lines = content.split("\n")
+                                            lineno = (
+                                                keyword.value.lineno - 1
+                                            )  # Convert to 0-indexed
+
+                                            # Heuristic: take the current line and the next 3 lines
+                                            # to capture multiline descriptions
+                                            desc_lines = lines[lineno : lineno + 4]
+
+                                            # Extract the part inside the quotes or parentheses
+                                            desc_text = " ".join(desc_lines)
+                                            desc_match = re.search(
+                                                r'description\s*=\s*(?:\(?\s*"([^"]*)"|\(?\s*\'([^\']*)\')',
+                                                desc_text,
+                                            )
+                                            if desc_match:
+                                                description = desc_match.group(
+                                                    1
+                                                ) or desc_match.group(2)
+                                        except:
+                                            pass
+
+                                elif keyword.arg == "default":
+                                    is_required = False
+
+                        fields.append(
+                            {
+                                "name": field_name,
+                                "type": field_type,
+                                "description": description,
+                                "required": is_required,
+                            }
+                        )
+
+            auth_configs[class_name] = {
+                "name": class_name,
+                "parent_class": parent_classes[0] if parent_classes else None,
+                "docstring": docstring,
+                "fields": fields,
+            }
+
+    # Second pass: handle inheritance
+    for class_name, config in auth_configs.items():
+        parent_class = config.get("parent_class")
+        if (
+            parent_class in auth_configs
+            and parent_class != "AuthConfig"
+            and parent_class != "BaseConfig"
+        ):
+            parent_fields = auth_configs[parent_class]["fields"]
+            existing_field_names = [field["name"] for field in config["fields"]]
+
+            # Extract the database type from the class name
+            db_type = None
+            if "AuthConfig" in class_name:
+                db_type = class_name.replace("AuthConfig", "")
+
+            for parent_field in parent_fields:
+                if parent_field["name"] not in existing_field_names:
+                    field_copy = parent_field.copy()
+
+                    # Replace database type in description if needed
+                    if db_type and "PostgreSQL" in field_copy["description"]:
+                        field_copy["description"] = field_copy["description"].replace(
+                            "PostgreSQL", db_type
+                        )
+
+                    config["fields"].append(field_copy)
+
+    # Special case for BaseDatabaseAuthConfig
+    # Ensure we fully extract the "tables" field which has a complex description in parentheses
+    if "BaseDatabaseAuthConfig" in auth_configs:
+        tables_pattern = r'tables:\s*str\s*=\s*Field\(\s*default="[^"]*",\s*title="[^"]*",\s*description=\(\s*"([^"]*)"\s*(?:"([^"]*)")?\s*\),?\s*\)'
+        tables_match = re.search(tables_pattern, content, re.DOTALL)
+
+        if tables_match:
+            description = tables_match.group(1)
+            if tables_match.group(2):  # Second part of the description if split
+                description += " " + tables_match.group(2)
+
+            # Find tables field and update its description
+            for field in auth_configs["BaseDatabaseAuthConfig"]["fields"]:
+                if field["name"] == "tables":
+                    field["description"] = description
+                    break
+            # If not found, add it
+            else:
+                auth_configs["BaseDatabaseAuthConfig"]["fields"].append(
+                    {
+                        "name": "tables",
+                        "type": "str",
+                        "description": description,
+                        "required": False,  # Has default value
+                    }
+                )
+
+            # Also propagate to children
+            for class_name, config in auth_configs.items():
+                if config.get("parent_class") == "BaseDatabaseAuthConfig":
+                    tables_found = False
+                    for field in config["fields"]:
+                        if field["name"] == "tables":
+                            tables_found = True
+                            break
+
+                    if not tables_found:
+                        db_type = class_name.replace("AuthConfig", "")
+                        tables_desc = (
+                            description.replace("PostgreSQL", db_type) if db_type else description
+                        )
+                        config["fields"].append(
+                            {
+                                "name": "tables",
+                                "type": "str",
+                                "description": tables_desc,
+                                "required": False,
+                            }
+                        )
+
+    print(f"  Parsed {len(auth_configs)} auth configurations")
     return auth_configs
 
 
@@ -208,20 +535,70 @@ The {display_name} connector allows you to sync data from {display_name} into Ai
 {source['docstring']}
 
 """
+            # Add authentication information section
+            content += "#### Authentication\n\n"
 
-            # Add authentication information if available
-            if source["auth_config_class"] and source["auth_config_class"] in auth_configs:
-                auth_info = auth_configs[source["auth_config_class"]]
-                content += """
-#### Authentication
+            # Map auth_type to human-readable description
+            auth_type_descriptions = {
+                "oauth2": "OAuth 2.0 authentication flow",
+                "oauth2_with_refresh": "OAuth 2.0 with refresh token",
+                "oauth2_with_refresh_rotating": "OAuth 2.0 with rotating refresh token",
+                "trello_auth": "Trello authentication",
+                "api_key": "API key authentication",
+                "config_class": "Configuration-based authentication",
+                "none": "No authentication required",
+                "native_functionality": "Native functionality",
+                "url_and_api_key": "URL and API key authentication",
+            }
 
-This connector requires the following authentication:
+            auth_type = source.get("auth_type")
+            auth_config_class = source.get("auth_config_class")
 
-| Field | Type | Description | Required |
-|-------|------|-------------|----------|
-"""
-                for field in auth_info["fields"]:
-                    content += f"| {field['name']} | {field['type']} | {field['description']} | {'Yes' if field['required'] else 'No'} |\n"
+            if auth_type:
+                auth_type_display = auth_type_descriptions.get(auth_type, auth_type)
+                content += f"This connector uses **{auth_type_display}**.\n\n"
+
+            # If auth_config_class is available and matches an entry in auth_configs, display its fields
+            if auth_config_class and auth_config_class in auth_configs:
+                auth_info = auth_configs[auth_config_class]
+                content += f"Authentication configuration class: `{auth_config_class}`\n\n"
+
+                if auth_info["docstring"]:
+                    content += f"{auth_info['docstring']}\n\n"
+
+                if auth_info["fields"]:
+                    content += "The following configuration fields are required:\n\n"
+                    content += "| Field | Type | Description | Required |\n"
+                    content += "|-------|------|-------------|----------|\n"
+                    for field in auth_info["fields"]:
+                        # Get descriptions from parent class if available
+                        field_description = field["description"]
+                        if field_description == "No description" and "parent_class" in auth_info:
+                            parent_class = auth_info["parent_class"]
+                            if parent_class in auth_configs:
+                                parent_fields = auth_configs[parent_class]["fields"]
+                                for parent_field in parent_fields:
+                                    if (
+                                        parent_field["name"] == field["name"]
+                                        and parent_field["description"] != "No description"
+                                    ):
+                                        field_description = parent_field["description"]
+                                        break
+
+                        content += f"| {field['name']} | {field['type']} | {field_description} | {'Yes' if field['required'] else 'No'} |\n"
+                    content += "\n"
+            elif (
+                auth_type == "oauth2"
+                or auth_type == "oauth2_with_refresh"
+                or auth_type == "oauth2_with_refresh_rotating"
+            ):
+                content += "This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.\n\n"
+            elif auth_type == "none":
+                content += "This connector does not require authentication.\n\n"
+            else:
+                content += (
+                    "Please refer to the Airweave documentation for authentication details.\n\n"
+                )
 
     # Add entity information
     if entity_info:

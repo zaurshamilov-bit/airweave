@@ -26,13 +26,19 @@ The Todoist connector allows you to sync data from Todoist into Airweave, making
 
 Todoist source implementation.
 
-    This connector retrieves hierarchical data from the Todoist REST API:
-    - Projects
-    - Sections (within each project)
-    - Tasks (within each project, optionally nested under a section)
-    - Comments (within each task)
+This connector retrieves hierarchical data from the Todoist REST API:
+- Projects
+- Sections (within each project)
+- Tasks (within each project, optionally nested under a section)
+- Comments (within each task)
 
-    The Todoist entity schemas are defined in entities/todoist.py.
+The Todoist entity schemas are defined in entities/todoist.py.
+
+#### Authentication
+
+This connector uses **OAuth 2.0 authentication flow**.
+
+This connector uses OAuth authentication. You can connect through the Airweave UI, which will guide you through the OAuth flow.
 
 
 ## Entities
