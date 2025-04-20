@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    allowedHosts: ["app.dev-airweave.com", "localhost", "app.airweave.ai"],
   },
   plugins: [
     react(),
@@ -18,5 +19,11 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+  },
+  build: {
+    // Ensure no host checking in the production build
+    ssrManifest: false,
+    // Generate source maps for debugging
+    sourcemap: mode !== 'production',
   },
 }));

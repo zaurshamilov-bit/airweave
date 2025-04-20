@@ -18,4 +18,4 @@ RUN npm run build
 RUN npm install -g serve
 
 # Simple runtime configuration with direct shell command (using JSON format for CMD as recommended)
-CMD ["sh", "-c", "echo \"window.ENV = { API_URL: \\\"${API_URL:-/api}\\\" };\" > ./dist/config.js && serve -s dist -l 8080"]
+CMD ["sh", "-c", "echo \"window.ENV = { API_URL: \\\"${API_URL:-/api}\\\" };\" > ./dist/config.js && serve -s dist -l 8080 --no-clipboard --no-port-switching"]
