@@ -30,8 +30,8 @@ integrations:
     url: "https://www.dropbox.com/oauth2/authorize"
     backend_url: "https://api.dropbox.com/oauth2/token"
     grant_type: "authorization_code"
-    client_id: "g061pqv1f97gv8v"
-    client_secret: "gkjxiwaedws4k68"
+    client_id: "ve73w0vi2k8b5p9"
+    client_secret: "k2jg3c3zq0uyyuo"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
     additional_frontend_params:
