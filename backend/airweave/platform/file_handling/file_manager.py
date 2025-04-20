@@ -124,11 +124,11 @@ class FileManager:
     ) -> AsyncGenerator[bytes, None]:
         """Stream file content from a URL with optional authentication."""
         request_headers = headers or {}
-        
+
         # Only add Authorization header if URL doesn't already have S3 auth
         if access_token and "X-Amz-Algorithm" not in url:
             request_headers["Authorization"] = f"Bearer {access_token}"
-        
+
         # The file is downloaded in chunks
         timeout = httpx.Timeout(180.0, read=540.0)
         async with httpx.AsyncClient(timeout=timeout) as client:

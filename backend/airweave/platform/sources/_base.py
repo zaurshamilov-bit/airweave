@@ -70,8 +70,7 @@ class BaseSource:
 
             # Process entity - Fix the stream handling issue
             processed_entity = await file_manager.handle_file_entity(
-                stream=file_stream, 
-                entity=file_entity
+                stream=file_stream, entity=file_entity
             )
 
             # Skip if file was too large
