@@ -26,6 +26,13 @@ if hasattr(settings, "MISTRAL_API_KEY") and settings.MISTRAL_API_KEY:
 
     mistral_client = Mistral(api_key=settings.MISTRAL_API_KEY)
 
+# Initialize OpenAI client if API key is available
+openai_client = None
+if hasattr(settings, "OPENAI_API_KEY") and settings.OPENAI_API_KEY:
+    from openai import AsyncOpenAI
+
+    openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+
 # Maximum file size for Mistral OCR (50MB in bytes)
 MAX_MISTRAL_FILE_SIZE = 50 * 1024 * 1024
 
@@ -37,8 +44,31 @@ class AsyncImageConverter(DocumentConverter):
     """
 
     def __init__(self):
-        """Initialize the image converter with Mistral client if API key is available."""
+        """Initialize the image converter with available clients."""
         self.mistral_client = mistral_client
+        self.openai_client = openai_client
+
+        # Store the exiftool path instead of just a boolean
+        self.exiftool_path = shutil.which("exiftool")
+        self.exiftool_available = bool(self.exiftool_path)
+
+        # Log available capabilities
+        self._log_available_capabilities()
+
+    def _log_available_capabilities(self):
+        """Log which conversion capabilities are available."""
+        capabilities = []
+        if self.mistral_client:
+            capabilities.append("Mistral OCR")
+        if self.exiftool_available:
+            capabilities.append("Exiftool metadata extraction")
+        if self.openai_client:
+            capabilities.append("OpenAI image description")
+
+        if capabilities:
+            logger.info(f"Image converter initialized with: {', '.join(capabilities)}")
+        else:
+            logger.warning("Image converter initialized without any processing capabilities")
 
     async def convert(self, local_path: str, **kwargs: Any) -> Union[None, DocumentConverterResult]:
         """Convert an image to markdown.
@@ -55,6 +85,13 @@ class AsyncImageConverter(DocumentConverter):
         if not self._is_supported_image(extension):
             return None
 
+        # Check if we have minimum viable conversion capabilities
+        if not self._has_minimum_viable_capabilities():
+            logger.warning(
+                f"Skipping image conversion for {local_path} due to insufficient capabilities"
+            )
+            return None
+
         md_content = ""
 
         # Try Mistral OCR first if available and file size is under 50MB
@@ -63,14 +100,28 @@ class AsyncImageConverter(DocumentConverter):
             return DocumentConverterResult(title=None, text_content=ocr_result.strip())
 
         # Add metadata if exiftool is available
-        md_content = await self._extract_metadata_content(local_path)
+        metadata_content = await self._extract_metadata_content(local_path)
+        if metadata_content:
+            md_content += metadata_content
 
-        # Try describing the image with LLM if client is provided
-        llm_description = await self._try_llm_description(local_path, extension, **kwargs)
+        # Try describing the image with built-in OpenAI client
+        llm_description = await self._try_llm_description(local_path, extension)
         if llm_description:
             md_content += f"\n# Description:\n{llm_description.strip()}\n"
 
+        if not md_content.strip():
+            logger.warning(f"No content extracted from image {local_path}")
+            return None
+
         return DocumentConverterResult(title=None, text_content=md_content.strip())
+
+    def _has_minimum_viable_capabilities(self) -> bool:
+        """Check if we have enough capabilities for a meaningful conversion.
+
+        Returns:
+            True if we have at least one viable conversion method
+        """
+        return bool(self.mistral_client or self.exiftool_available or self.openai_client)
 
     def _is_supported_image(self, extension: str) -> bool:
         """Check if the file extension is supported.
@@ -101,6 +152,11 @@ class AsyncImageConverter(DocumentConverter):
                 ocr_text = await self._process_with_mistral_ocr(local_path)
                 if ocr_text:
                     return ocr_text
+            else:
+                logger.warning(
+                    f"Image {local_path} exceeds Mistral OCR size limit "
+                    f"of {MAX_MISTRAL_FILE_SIZE / 1024 / 1024}MB"
+                )
         except Exception as e:
             logger.error(f"Error processing image with Mistral OCR: {str(e)}")
             logger.info("Falling back to metadata extraction and LLM description")
@@ -116,6 +172,10 @@ class AsyncImageConverter(DocumentConverter):
         Returns:
             Formatted metadata content
         """
+        if not self.exiftool_available:
+            logger.info(f"Exiftool not available, skipping metadata extraction for {local_path}")
+            return ""
+
         md_content = ""
         metadata = await self._get_metadata(local_path)
         if metadata:
@@ -133,31 +193,30 @@ class AsyncImageConverter(DocumentConverter):
             ]:
                 if field in metadata:
                     md_content += f"{field}: {metadata[field]}\n"
+        else:
+            logger.info(f"No metadata extracted from {local_path}")
 
         return md_content
 
-    async def _try_llm_description(
-        self, local_path: str, extension: str, **kwargs
-    ) -> Optional[str]:
-        """Try to get a description of the image using an LLM.
+    async def _try_llm_description(self, local_path: str, extension: str) -> Optional[str]:
+        """Try to get a description of the image using built-in OpenAI client.
 
         Args:
             local_path: Path to the image file
             extension: File extension
-            **kwargs: Additional arguments that might contain LLM client and model
 
         Returns:
             Description text or None if unavailable
         """
-        llm_client = kwargs.get("llm_client")
-        llm_model = kwargs.get("llm_model")
-
-        if not (llm_client and llm_model):
+        if not self.openai_client:
             return None
 
-        return await self._get_llm_description(
-            local_path, extension, llm_client, llm_model, prompt=kwargs.get("llm_prompt")
-        )
+        try:
+            prompt = "Write a detailed caption for this image."
+            return await self._get_llm_description(local_path, extension, prompt)
+        except Exception as e:
+            logger.error(f"Error getting LLM description: {str(e)}")
+            return None
 
     async def _process_with_mistral_ocr(self, image_path: str) -> str:
         """Process image using Mistral OCR.
@@ -210,25 +269,29 @@ class AsyncImageConverter(DocumentConverter):
 
     async def _get_metadata(self, local_path: str) -> Optional[Dict[str, Any]]:
         """Get image metadata using exiftool if available."""
-        exiftool = shutil.which("exiftool")
-        if not exiftool:
-            return None
-
         try:
             result = subprocess.run(
-                [exiftool, "-json", local_path], capture_output=True, text=True
+                [self.exiftool_path, "-json", local_path], capture_output=True, text=True
             ).stdout
             return json.loads(result)[0]
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error extracting metadata with exiftool: {str(e)}")
             return None
 
-    async def _get_llm_description(
-        self, local_path: str, extension: str, client: Any, model: str, prompt: Optional[str] = None
-    ) -> str:
-        """Get image description from LLM if available."""
-        if not prompt:
-            prompt = "Write a detailed caption for this image."
+    async def _get_llm_description(self, local_path: str, extension: str, prompt: str) -> str:
+        """Get image description from OpenAI.
 
+        Args:
+            local_path: Path to the image file
+            extension: File extension
+            prompt: Prompt for the image description
+
+        Returns:
+            Description text
+
+        Raises:
+            Exception: If OpenAI API call fails
+        """
         # Convert image to data URI
         with open(local_path, "rb") as image_file:
             content_type, _ = mimetypes.guess_type("dummy" + extension)
@@ -248,6 +311,8 @@ class AsyncImageConverter(DocumentConverter):
             }
         ]
 
-        # Get response from LLM
-        response = await client.chat.completions.create(model=model, messages=messages)
+        # Get response from LLM (default to vision model)
+        response = await self.openai_client.chat.completions.create(
+            model="gpt-4-vision-preview", messages=messages, max_tokens=300
+        )
         return response.choices[0].message.content
