@@ -173,7 +173,6 @@ class AsyncImageConverter(DocumentConverter):
             Formatted metadata content
         """
         if not self.exiftool_available:
-            logger.info(f"Exiftool not available, skipping metadata extraction for {local_path}")
             return ""
 
         md_content = ""
