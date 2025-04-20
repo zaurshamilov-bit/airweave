@@ -12,6 +12,8 @@ jobs:
     environment: dev
     steps:
       - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # Run on feature instead of main
 
       - name: Set up Python
         uses: actions/setup-python@v4
