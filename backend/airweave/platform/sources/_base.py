@@ -60,7 +60,7 @@ class BaseSource:
             logger.error(f"No access token provided for file {file_entity.name}")
             raise ValueError(f"No access token available for processing file {file_entity.name}")
 
-        logger.info(f"Processing file entity: {file_entity.name} from URL: {url}")
+        logger.info(f"Processing file entity: {file_entity.name}")
 
         try:
             # Create stream (pass token as before)
