@@ -23,6 +23,7 @@ from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import ChunkEntity
 from airweave.platform.entities.google_drive import GoogleDriveDriveEntity, GoogleDriveFileEntity
+from airweave.platform.file_handling.file_manager import file_manager
 from airweave.platform.sources._base import BaseSource
 
 
@@ -204,14 +205,14 @@ class GoogleDriveSource(BaseSource):
             try:
                 file_entity = self._build_file_entity(file_obj)
                 if file_entity.download_url:
-                    # Use BaseSource helper method instead of direct file_manager calls
-                    processed_entity = await self.process_file_entity(
-                        file_entity=file_entity, access_token=self.access_token
+                    # Stream the file and process it
+                    file_stream = file_manager.stream_file_from_url(
+                        file_entity.download_url, access_token=self.access_token
                     )
-
-                    # Only yield if the file wasn't skipped due to size limits
-                    if processed_entity:
-                        yield processed_entity
+                    processed_entity = await file_manager.handle_file_entity(
+                        stream=file_stream, entity=file_entity
+                    )
+                    yield processed_entity
                 else:
                     # Skip files without download URL
                     logger.warning(f"No download URL available for {file_entity.name}")
@@ -230,14 +231,13 @@ class GoogleDriveSource(BaseSource):
             try:
                 file_entity = self._build_file_entity(file_obj)
                 if file_entity.download_url:
-                    # Use BaseSource helper method instead of direct file_manager calls
-                    processed_entity = await self.process_file_entity(
-                        file_entity=file_entity, access_token=self.access_token
+                    file_stream = file_manager.stream_file_from_url(
+                        file_entity.download_url, access_token=self.access_token
                     )
-
-                    # Only yield if the file wasn't skipped due to size limits
-                    if processed_entity:
-                        yield processed_entity
+                    processed_entity = await file_manager.handle_file_entity(
+                        stream=file_stream, entity=file_entity
+                    )
+                    yield processed_entity
                 else:
                     logger.warning(f"No download URL available for {file_entity.name}")
             except Exception as e:

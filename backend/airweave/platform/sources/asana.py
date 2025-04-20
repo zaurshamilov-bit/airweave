@@ -17,6 +17,7 @@ from airweave.platform.entities.asana import (
     AsanaTaskEntity,
     AsanaWorkspaceEntity,
 )
+from airweave.platform.file_handling.file_manager import file_manager
 from airweave.platform.sources._base import BaseSource
 
 
@@ -263,14 +264,11 @@ class AsanaSource(BaseSource):
             if file_entity.download_url.startswith("https://app.asana.com/"):
                 headers = {"Authorization": f"Bearer {self.access_token}"}
 
-            # Use the BaseSource helper method instead of direct file_manager calls
-            processed_entity = await self.process_file_entity(
-                file_entity=file_entity, headers=headers
+            # Use the new method with retry for robustness
+            file_stream = file_manager.stream_file_from_url(
+                file_entity.download_url, headers=headers
             )
-
-            # Only yield if the file wasn't skipped due to size limits
-            if processed_entity:
-                yield processed_entity
+            yield await file_manager.handle_file_entity(stream=file_stream, entity=file_entity)
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Asana."""
