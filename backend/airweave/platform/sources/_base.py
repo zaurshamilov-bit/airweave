@@ -52,25 +52,39 @@ class BaseSource:
             logger.warning(f"No download URL for file {file_entity.name}")
             return None
 
-        # Create stream
-        file_stream = file_manager.stream_file_from_url(
-            url, access_token=access_token or getattr(self, "access_token", None), headers=headers
-        )
+        # Get access token (from parameter or instance)
+        token = access_token or getattr(self, "access_token", None)
 
-        # Process entity
-        processed_entity = await file_manager.handle_file_entity(
-            stream=file_stream, entity=file_entity
-        )
+        # Validate we have an access token for authentication
+        if not token:
+            logger.error(f"No access token provided for file {file_entity.name}")
+            raise ValueError(f"No access token available for processing file {file_entity.name}")
 
-        # Skip if file was too large
-        if hasattr(processed_entity, "should_skip") and processed_entity.should_skip:
-            logger.warning(
-                f"Skipping file {processed_entity.name}: "
-                f"{processed_entity.metadata.get('error', 'Unknown reason')}"
+        logger.info(f"Processing file entity: {file_entity.name} from URL: {url}")
+
+        try:
+            # Create stream (pass token as before)
+            file_stream = file_manager.stream_file_from_url(
+                url, access_token=token, headers=headers
             )
-            return None
 
-        return processed_entity
+            # Process entity
+            processed_entity = await file_manager.handle_file_entity(
+                stream=file_stream, entity=file_entity
+            )
+
+            # Skip if file was too large
+            if hasattr(processed_entity, "should_skip") and processed_entity.should_skip:
+                logger.warning(
+                    f"Skipping file {processed_entity.name}: "
+                    f"{processed_entity.metadata.get('error', 'Unknown reason')}"
+                )
+                return None
+
+            return processed_entity
+        except Exception as e:
+            logger.error(f"Error processing file {file_entity.name}: {e}")
+            return None
 
 
 class Relation(BaseModel):
