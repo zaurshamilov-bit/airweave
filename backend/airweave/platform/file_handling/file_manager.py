@@ -122,25 +122,16 @@ class FileManager:
         access_token: Optional[str] = None,
         headers: Optional[Dict[str, str]] = None,
     ) -> AsyncGenerator[bytes, None]:
-        """Stream file content from a URL with optional authentication.
-
-        Args:
-            url: The file download URL
-            access_token: Optional OAuth token
-            headers: Optional additional headers
-
-        Yields:
-            Chunks of file content
-        """
+        """Stream file content from a URL with optional authentication."""
         request_headers = headers or {}
-        if access_token:
+        
+        # Only add Authorization header if URL doesn't already have S3 auth
+        if access_token and "X-Amz-Algorithm" not in url:
             request_headers["Authorization"] = f"Bearer {access_token}"
-
+        
         # The file is downloaded in chunks
-        # Google Drive API might take longer than default 5 second timeout prepare chunks
         timeout = httpx.Timeout(180.0, read=540.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
-            # Simple streaming without retry
             try:
                 async with client.stream(
                     "GET", url, headers=request_headers, follow_redirects=True
@@ -149,9 +140,8 @@ class FileManager:
                     async for chunk in response.aiter_bytes():
                         yield chunk
             except Exception as e:
-                logger.error(f"Error streaming file from URL {url}: {str(e)}")
-                logger.exception("Full error details:")  # This logs the stack trace
-                raise  # This will propagate through the generator
+                logger.error(f"Error streaming file: {str(e)}")
+                raise
 
 
 # Global instance

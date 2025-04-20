@@ -68,9 +68,10 @@ class BaseSource:
                 url, access_token=token, headers=headers
             )
 
-            # Process entity
+            # Process entity - Fix the stream handling issue
             processed_entity = await file_manager.handle_file_entity(
-                stream=file_stream, entity=file_entity
+                stream=file_stream, 
+                entity=file_entity
             )
 
             # Skip if file was too large
