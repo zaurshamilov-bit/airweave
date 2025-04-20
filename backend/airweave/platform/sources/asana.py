@@ -265,7 +265,9 @@ class AsanaSource(BaseSource):
 
             # Use the BaseSource helper method instead of direct file_manager calls
             processed_entity = await self.process_file_entity(
-                file_entity=file_entity, headers=headers
+                file_entity=file_entity,
+                headers=headers,
+                access_token=self.access_token,  # Always pass the access token
             )
 
             # Only yield if the file wasn't skipped due to size limits
