@@ -138,7 +138,7 @@ class FileManager:
 
         # The file is downloaded in chunks
         # Google Drive API might take longer than default 5 second timeout prepare chunks
-        timeout = httpx.Timeout(10.0, read=30.0)
+        timeout = httpx.Timeout(180.0, read=540.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             # Simple streaming without retry
             try:
