@@ -52,7 +52,8 @@ services:
       # Override any localhost references for container networking
       - POSTGRES_HOST=postgres
       - REDIS_HOST=redis
-      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
       - TEXT2VEC_INFERENCE_URL=http://text2vec-transformers:8080
       # These ensure services run properly inside containers
       - LOCAL_DEVELOPMENT=false

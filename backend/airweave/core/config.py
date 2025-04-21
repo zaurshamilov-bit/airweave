@@ -31,6 +31,8 @@ class Settings(BaseSettings):
         RUN_ALEMBIC_MIGRATIONS (bool): Whether to run the alembic migrations.
         RUN_DB_SYNC (bool): Whether to run the system sync to process sources,
             destinations, and entity types.
+        QDRANT_HOST (str): The Qdrant host.
+        QDRANT_PORT (int): The Qdrant port.
         QDRANT_URL (str): The Qdrant URL.
         TEXT2VEC_INFERENCE_URL (str): The URL for text2vec-transformers inference service.
         OPENAI_API_KEY (Optional[str]): The OpenAI API key.
@@ -59,7 +61,9 @@ class Settings(BaseSettings):
     RUN_ALEMBIC_MIGRATIONS: bool = False
     RUN_DB_SYNC: bool = True
 
-    QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_HOST: str = "localhost"
+    QDRANT_PORT: int = 6333
+    QDRANT_URL: str = f"http://{QDRANT_HOST}:{QDRANT_PORT}"
 
     TEXT2VEC_INFERENCE_URL: str = "http://localhost:9878"
 
