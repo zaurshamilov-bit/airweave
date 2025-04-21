@@ -83,7 +83,7 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
 
     if not file.local_path:
         logger.error(f"File {file.name} has no local path")
-        return
+        return []
 
     try:
         # Convert file to markdown
@@ -91,7 +91,7 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
 
         if not result or not result.text_content:
             logger.warning(f"No content extracted from file {file.name}")
-            return
+            return []
 
         # Max token size for embedding models (e.g. OpenAI's text-embedding-ada-002)
         max_chunk_size = 8191
