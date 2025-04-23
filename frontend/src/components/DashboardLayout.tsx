@@ -263,7 +263,7 @@ const DashboardLayout = () => {
 
                     {/* Get a demo button */}
                     <a
-                      href="https://cal.com/lennert-airweave/quick-chat"
+                      href="https://cal.com/lennert-airweave/airweave-q-a-demo"
                       target="_blank"
                       rel="noopener noreferrer"
                     >

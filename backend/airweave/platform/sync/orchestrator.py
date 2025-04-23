@@ -293,7 +293,8 @@ class EntityProcessor:
     ) -> None:
         """Handle INSERT action."""
         if len(processed_entities) == 0:
-            raise ValueError("No processed entities to persist")
+            logger.info("No processed entities to insert")
+            return
 
         # Prepare entities with parent reference
         for processed_entity in processed_entities:
@@ -332,7 +333,9 @@ class EntityProcessor:
     ) -> None:
         """Handle UPDATE action."""
         if len(processed_entities) == 0:
-            raise ValueError("No processed entities to persist")
+            # TODO: keep track of skipped entities that could not be processed
+            logger.info("No processed entities to update")
+            return
 
         # Prepare entities with parent reference
         for processed_entity in processed_entities:
