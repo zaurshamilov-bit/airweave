@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER: str
     FIRST_SUPERUSER_PASSWORD: str
 
+    AUTH_ENABLED: Optional[bool] = False
+    AUTH0_DOMAIN: Optional[str] = None
+    AUTH0_AUDIENCE: Optional[str] = None
+    AUTH0_RULE_NAMESPACE: Optional[str] = None
+
     ENCRYPTION_KEY: str
 
     POSTGRES_HOST: str
@@ -69,6 +74,30 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: Optional[str] = None
     MISTRAL_API_KEY: Optional[str] = None
+
+    @field_validator("AUTH0_DOMAIN", "AUTH0_AUDIENCE", "AUTH0_RULE_NAMESPACE", mode="before")
+    def validate_auth0_settings(cls, v: str, info: ValidationInfo) -> str:
+        """Validate Auth0 settings when AUTH_ENABLED is True.
+
+        Args:
+
+        ----
+            v (str): The value of the Auth0 setting.
+            info (ValidationInfo): The validation context containing all field values.
+
+        Returns:
+        -------
+            str: The validated Auth0 setting.
+
+        Raises:
+        ------
+            ValueError: If AUTH_ENABLED is True and the Auth0 setting is empty.
+        """
+        auth_enabled = info.data.get("AUTH_ENABLED", False)
+        if auth_enabled and not v:
+            field_name = info.field_name
+            raise ValueError(f"{field_name} must be set when AUTH_ENABLED is True")
+        return v
 
     @field_validator("SQLALCHEMY_ASYNC_DATABASE_URI", mode="before")
     def assemble_db_connection(cls, v: Optional[str], info: ValidationInfo) -> PostgresDsn:
