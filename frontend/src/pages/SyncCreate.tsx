@@ -152,7 +152,7 @@ const Sync = () => {
         name: "Sync from UI",
         source_connection_id: selectedSource.connectionId,
         destination_connection_ids: dbDetails.isNative
-          ? [NATIVE_QDRANT_UUID] // Use constant for Native Weaviate UUID
+          ? [NATIVE_QDRANT_UUID] // Use constant for Native Qdrant UUID
           : [dbDetails.connectionId],
         embedding_model_connection_id: NATIVE_TEXT2VEC_UUID, // Use constant for Text2Vec UUID
         run_immediately: false
