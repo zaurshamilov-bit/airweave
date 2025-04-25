@@ -1,10 +1,10 @@
 """Elasticsearch source implementation.
 
-This source connects to an Elasticsearch cluster and retrieves index metadata and documents
-todo: for protected access indices using API key authentication.
+This source connects to an Elasticsearch cluster and retrieves index metadata and documents.
+TODO: Support for protected access indices using API key authentication.
 """
 
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -45,7 +45,7 @@ class ElasticsearchSource(BaseSource):
     async def create(cls, config: ElasticsearchAuthConfig) -> "ElasticsearchSource":
         """Create a new Elasticsearch source instance."""
         instance = cls()
-        instance.url = f"http://{config.host}:{config.port}"
+        instance.url = f"{config.host}:{config.port}"  # Trust host to have http/https
         instance.api_key = getattr(config, "api_key", None)
         instance.indices = config.indices
         instance.fields = getattr(config, "fields", None)
@@ -79,6 +79,29 @@ class ElasticsearchSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
+    async def _scroll_documents(
+        self,
+        client: httpx.AsyncClient,
+        initial_scroll_id: str,
+    ) -> AsyncGenerator[List[Dict[str, Any]], None]:
+        """Helper to scroll through documents using a scroll ID, yielding batches."""
+        scroll_id = initial_scroll_id
+
+        try:
+            while True:
+                scroll_data = {"scroll_id": scroll_id, "scroll": "1m"}
+                data = await self._post(client, "/_search/scroll", scroll_data)
+                hits = data.get("hits", {}).get("hits", [])
+                if not hits:
+                    break
+
+                scroll_id = data["_scroll_id"]
+                yield hits  # Yield a whole batch at once
+        finally:
+            # Always clean up scroll context
+            if scroll_id:
+                await client.delete("/_search/scroll", json={"scroll_id": [scroll_id]})
+
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate Elasticsearch index and document entities."""
         async with httpx.AsyncClient(base_url=self.url) as client:
@@ -90,10 +113,11 @@ class ElasticsearchSource(BaseSource):
             indices_data = await self._get(client, "/_cat/indices", params=params)
 
             # Determine which indices to sync
-            if self.indices and self.indices != "*":
-                allowed_indices = [i.strip() for i in self.indices.split(",")]
-            else:
-                allowed_indices = None
+            allowed_indices = (
+                [i.strip() for i in self.indices.split(",")]
+                if self.indices and self.indices != "*"
+                else None
+            )
 
             for idx in indices_data:
                 index_name = idx.get("index")
@@ -115,31 +139,26 @@ class ElasticsearchSource(BaseSource):
                 BATCH_SIZE = 100
                 search_body = {"query": {"match_all": {}}, "size": BATCH_SIZE}
                 if self.fields and self.fields != "*":
-                    search_body["_source"] = self.fields
+                    search_body["_source"] = [field.strip() for field in self.fields.split(",")]
+
                 data = await self._post(client, f"/{index_name}/_search?scroll=1m", search_body)
-                scroll_id = data.get("_scroll_id")
+                scroll_id = data["_scroll_id"]
                 hits = data.get("hits", {}).get("hits", [])
 
                 for hit in hits:
                     yield ElasticsearchDocumentEntity(
-                        entity_id=f"{index_name}-{hit.get('_id')}",
+                        entity_id=f"{index_name}-{hit['_id']}",
                         index=index_name,
-                        doc_id=hit.get("_id"),
+                        doc_id=hit["_id"],
                         source=hit.get("_source", {}),
                     )
 
-                # Continue scrolling until no more hits
-                while hits:
-                    scroll_data = {"scroll_id": scroll_id, "scroll": "1m"}
-                    data = await self._post(client, "/_search/scroll", scroll_data)
-                    hits = data.get("hits", {}).get("hits", [])
-                    scroll_id = data.get("_scroll_id", scroll_id)
-                    if not hits:
-                        break
-                    for hit in hits:
+                # Continue scrolling
+                async for batch_hits in self._scroll_documents(client, scroll_id):
+                    for hit in batch_hits:
                         yield ElasticsearchDocumentEntity(
-                            entity_id=f"{index_name}-{hit.get('_id')}",
+                            entity_id=f"{index_name}-{hit['_id']}",
                             index=index_name,
-                            doc_id=hit.get("_id"),
+                            doc_id=hit["_id"],
                             source=hit.get("_source", {}),
                         )
