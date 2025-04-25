@@ -22,7 +22,7 @@ const initialState: ThemeProviderState = {
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
-function ThemeProvider({
+export function ThemeProvider({
   children,
   defaultTheme = "system",
   storageKey = "airweave-ui-theme",

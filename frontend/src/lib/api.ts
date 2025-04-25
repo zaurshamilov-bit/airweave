@@ -30,7 +30,7 @@ const requestQueue: QueuedRequest[] = [];
 let isProcessingQueue = false;
 
 // Function to set a custom token provider
-const setTokenProvider = (provider: TokenProvider) => {
+export const setTokenProvider = (provider: TokenProvider) => {
   tokenProvider = provider;
 
   // Try to process any queued requests when provider changes
@@ -90,7 +90,7 @@ const queueOrExecute = async (requestFn: () => Promise<Response>): Promise<Respo
   });
 };
 
-const API_CONFIG = {
+export const API_CONFIG = {
   baseURL: env.VITE_API_URL,
   headers: {
     'Content-Type': 'application/json',

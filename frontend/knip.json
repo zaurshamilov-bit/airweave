@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "project": ["react"],
   "ignoreDependencies": [
     "tailwind-merge",
     "clsx",
@@ -24,7 +25,7 @@
     "src/App.tsx",
     "src/pages/**/*.tsx",
     "src/components/**/*.tsx",
-    "src/lib/**/*.tsx"
+    "src/lib/**/*.{ts,tsx}"
   ],
-  "ignore": ["src/components/DestinationSelector.tsx"]
+  "includeEntryExports": false
 }
