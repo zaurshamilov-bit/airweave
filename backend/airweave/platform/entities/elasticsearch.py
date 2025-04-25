@@ -2,13 +2,15 @@
 
 from typing import Any, Dict, Optional
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from airweave.platform.entities._base import ChunkEntity
 
 
 class ElasticsearchIndexEntity(ChunkEntity):
     """Schema for Elasticsearch index entities."""
+
+    model_config = ConfigDict(extra="forbid")
 
     index: str = Field(..., description="Name of the Elasticsearch index")
     health: Optional[str] = Field(None, description="Health status of the index")
@@ -20,6 +22,8 @@ class ElasticsearchIndexEntity(ChunkEntity):
 
 class ElasticsearchDocumentEntity(ChunkEntity):
     """Schema for Elasticsearch document entities."""
+
+    model_config = ConfigDict(extra="forbid")
 
     index: str = Field(..., description="Name of the index this document belongs to")
     doc_id: str = Field(..., description="Document ID")
