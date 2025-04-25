@@ -84,6 +84,7 @@ async def setup_connection_with_refresh_token(db, service_name, refresh_token, u
         raise ValueError(f"Source {service_name} not found")
 
     # Encrypt the refresh token
+    settings.ENCRYPTION_KEY = "SpgLrrEEgJ/7QdhSMSvagL1juEY5eoyCG0tZN7OSQV0="
     encrypted_credentials = credentials.encrypt({"refresh_token": refresh_token})
 
     async with UnitOfWork(db) as uow:
@@ -187,7 +188,7 @@ async def _create_connection(e2e_api_url, service_name, refresh_token):
     original_uri = settings.SQLALCHEMY_ASYNC_DATABASE_URI
     try:
         # Override with test URI for Docker container
-        settings.SQLALCHEMY_ASYNC_DATABASE_URI = "postgresql+asyncpg://airweave:airweave1234!@localhost:9432/airweave"
+        settings.SQLALCHEMY_ASYNC_DATABASE_URI = "postgresql+asyncpg://airweave:airweave1234!@localhost:16432/airweave"
 
         # NOTE: Import location is important since it create the engine on import using the URI
         from airweave.db.session import get_db_context
