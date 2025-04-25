@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, ExternalLink, Database } from "lucide-react";
+import { Database } from "lucide-react";
 import { CodeBlock } from "@/components/ui/code-block";
 import { apiClient } from "@/lib/api";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
 import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 interface SyncCardProps {
   syncId: string;
@@ -15,7 +16,6 @@ interface SyncCardProps {
   sourceConnectionShortName: string;
   status: string;
   onViewDetails?: () => void;
-  onChat?: () => void;
 }
 
 export function SyncCard({
@@ -24,7 +24,6 @@ export function SyncCard({
   sourceConnectionShortName,
   status,
   onViewDetails,
-  onChat,
 }: SyncCardProps) {
   const [entityCount, setEntityCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,13 +53,24 @@ export function SyncCard({
 
   const getStatusBadge = (status: string) => {
     const statusUpper = status.toUpperCase();
-    let variant: "default" | "secondary" | "destructive" = "secondary";
 
-    if (statusUpper === "ACTIVE") variant = "default";
+    if (statusUpper === "ACTIVE") {
+      return (
+        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-normal bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400"></span>
+          {statusUpper}
+        </div>
+      );
+    }
+
+    let variant: "default" | "secondary" | "destructive" = "secondary";
     if (statusUpper === "ERROR") variant = "destructive";
 
     return (
-      <Badge variant={variant} className="text-xs">
+      <Badge
+        variant={variant}
+        className="text-xs px-1.5 py-0 h-5 font-normal"
+      >
         {statusUpper}
       </Badge>
     );
@@ -74,22 +84,14 @@ export function SyncCard({
     }
   };
 
-  const handleChat = () => {
-    if (onChat) {
-      onChat();
-    } else {
-      navigate(`/chat?syncId=${syncId}`);
-    }
-  };
-
   // Basic search query example for the code block
   const searchCode = `curl -G ${window.location.origin}/search/ \\
  -d sync_id="${syncId}" \\
  -d query="Your search query here"`;
 
   return (
-    <Card className="w-full h-full flex flex-col">
-      <div className="p-6 pb-4 flex justify-between">
+    <Card className="w-full min-h-[240px] flex flex-col overflow-hidden border-border/70 relative rounded-xl dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-900/70 transition-colors">
+      <div className="p-4 pb-2 flex justify-between">
         <div>
           <div className="flex items-center gap-3">
             <h3 className="text-lg font-semibold">{syncName}</h3>
@@ -101,7 +103,7 @@ export function SyncCard({
             </code>
           </div>
         </div>
-        <div className="w-10 h-10 rounded-full flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full flex items-center justify-center">
           <img
             src={getAppIconUrl(sourceConnectionShortName, resolvedTheme)}
             alt={sourceConnectionShortName}
@@ -110,10 +112,10 @@ export function SyncCard({
         </div>
       </div>
 
-      <CardContent className="flex-1 px-6 space-y-4">
-        <div className="flex items-center gap-2 text-sm">
-          <Database className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">
+      <CardContent className="flex-1 p-4 pt-2 space-y-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Database className="h-4 w-4" />
+          <span>
             {isLoading
               ? "Loading..."
               : entityCount !== null
@@ -131,12 +133,14 @@ export function SyncCard({
         />
       </CardContent>
 
-      <CardFooter className="flex gap-3 p-6 pt-4">
-        <Button onClick={handleViewDetails} variant="outline" className="flex-1">
+      <CardFooter className="p-4 pt-2 flex justify-center border-t border-border/10">
+        <Button
+          onClick={handleViewDetails}
+          variant="outline"
+          size="sm"
+          className="px-6 text-foreground hover:bg-accent hover:text-accent-foreground transition-colors rounded-md text-xs"
+        >
           View details
-        </Button>
-        <Button onClick={handleChat} className="flex-1">
-          Chat
         </Button>
       </CardFooter>
     </Card>

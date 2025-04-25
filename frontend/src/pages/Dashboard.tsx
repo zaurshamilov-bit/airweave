@@ -5,8 +5,8 @@ import { ConnectedDestinationsGrid } from "@/components/dashboard/ConnectedDesti
 import { ChatCTA } from "@/components/dashboard/ChatCTA";
 import { DocsCard } from "@/components/dashboard/DocsCard";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Plus } from "lucide-react";
-import { SyncGridView } from "@/components/dashboard";
+import { MessageSquare, Plus, Table } from "lucide-react";
+import { SyncGridView, ResourceCards, SyncTableComponent } from "@/components/dashboard";
 import { CreateSyncCTA } from "@/components/dashboard/CreateSyncCTA";
 import { apiClient } from "@/lib/api";
 import { useTheme } from "@/lib/theme-provider";
@@ -116,17 +116,28 @@ const Dashboard = () => {
               Overview of your knowledge
             </p>
           </div>
-          <Button onClick={handleCreateSync}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Sync
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleCreateSync}
+              size="sm"
+              className="rounded-lg px-3 py-0.5 bg-blue-500 hover:bg-blue-600 text-white font-medium shadow-md hover:shadow-lg transition-all"
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Create Sync
+            </Button>
+          </div>
         </div>
 
         <SyncGridView syncs={syncs} />
 
-        <div className="grid gap-8 md:grid-cols-2">
-          <DocsCard />
-          <ChatCTA />
+        <div>
+          <SyncTableComponent showBorder maxHeight="500px" />
+        </div>
+
+
+        <div>
+          <h3 className="text-2xl font-semibold mb-4">Resources</h3>
+          <ResourceCards />
         </div>
       </div>
     </div>
