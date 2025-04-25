@@ -1,11 +1,7 @@
 """
-1. Create IntegrationCredentialCreateEncrypted with encrypted refresh token
-2.
-
-To reproduce locally:
-1. set dropbox, stripe, openai keys
-2. start test containers
-3. you encryption key should be the same as in the test backend
+To run the test locally:
+1. Set env var for DROPBOX_REFRESH_TOKEN
+2. Set env var for ENCRYPTION_KEY equal to the docker-compose.test.yml
 """
 
 from airweave import crud, schemas
@@ -29,8 +25,58 @@ import atexit
 from airweave.core.constants.native_connections import NATIVE_QDRANT_UUID, NATIVE_TEXT2VEC_UUID
 from tests.e2e.smoke.test_user_onboarding import wait_for_sync_completion
 
+
+@pytest.fixture
+def oauth_refresh_tokens():
+    """Fixture to provide refresh tokens for OAuth services."""
+    return {
+        "dropbox": os.getenv("DROPBOX_REFRESH_TOKEN"),
+        "google_drive": os.getenv("GDRIVE_REFRESH_TOKEN"),
+        "asana": os.getenv("ASANA_REFRESH_TOKEN"),
+    }
+
+
+@pytest.fixture(scope="session")
+def docker_services():
+    """Start and stop Docker services for testing."""
+    # Path to docker-compose file
+    compose_file = os.path.join(os.path.dirname(__file__), "../../docker/docker-compose.test.yml")
+
+    # Stop any running containers - fixed command format
+    print("Stopping any existing Docker containers...")
+    subprocess.run(["docker", "compose", "down", "-v"], check=False)
+
+    print("Starting Docker containers...")
+    try:
+        subprocess.run(["docker", "compose", "-f", compose_file, "up", "-d"], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to start containers: {e}")
+        raise
+
+    # Register cleanup function
+    def cleanup():
+        print("Cleaning up test containers...")
+        subprocess.run(["docker", "compose", "-f", compose_file, "down", "-v"], check=False)
+
+    # Execute cleanup when Python interpreter exits on failure
+    atexit.register(cleanup)
+
+    print("Waiting for services to become healthy...")
+    time.sleep(20)
+
+    yield
+
+    # Cleanup after tests
+    cleanup()
+    atexit.unregister(cleanup)
+
+
 async def setup_connection_with_refresh_token(db, service_name, refresh_token, user):
-    """Create a connection directly with a refresh token."""
+    """
+    - Create encrypted integration credentials using the refresh token
+    - Create connection with those credentials
+    - Store directly in the database
+    """
 
     # Get the source definition
     source = await crud.source.get_by_short_name(db, service_name)
@@ -73,66 +119,7 @@ async def setup_connection_with_refresh_token(db, service_name, refresh_token, u
 
     return connection
 
-@pytest.fixture
-def oauth_refresh_tokens():
-    """Fixture to provide refresh tokens for OAuth services."""
-    return {
-        "dropbox": os.getenv("DROPBOX_REFRESH_TOKEN"),
-        "google_drive": os.getenv("GDRIVE_REFRESH_TOKEN"),
-        "asana": os.getenv("ASANA_REFRESH_TOKEN"),
-    }
 
-@pytest.fixture(scope="session")
-def docker_services():
-    """Start and stop Docker services for testing."""
-    # Path to docker-compose file
-    compose_file = os.path.join(os.path.dirname(__file__), "../../docker/docker-compose.test.yml")
-
-    # Print current directory and file path for debugging
-    print(f"Current directory: {os.getcwd()}")
-    print(f"Docker compose file path: {compose_file}")
-
-    # Stop any running containers - fixed command format
-    print("Stopping any existing Docker containers...")
-    subprocess.run(["docker", "compose", "down", "-v"], check=False)
-
-    # Check if ports are already in use
-    test_ports = [9432, 9379, 9080, 9333, 9001]
-    for port in test_ports:
-        # macOS specific check
-        result = subprocess.run(["lsof", "-i", f":{port}"], capture_output=True, text=True)
-        if result.stdout:
-            print(f"Warning: Port {port} already in use by:\n{result.stdout}")
-
-    # Start test containers - fixed command format
-    print("Starting Docker containers...")
-    try:
-        subprocess.run(["docker", "compose", "-f", compose_file, "up", "-d"], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to start containers: {e}")
-        # Show what's running
-        subprocess.run(["docker", "ps"], check=False)
-        raise
-
-    # Register cleanup function
-    def cleanup():
-        print("Cleaning up test containers...")
-        subprocess.run(["docker", "compose", "-f", compose_file, "down", "-v"], check=False)
-
-    atexit.register(cleanup)
-
-    # Wait for services to be healthy
-    print("Waiting for services to become healthy...")
-    time.sleep(20)
-
-    # Show running containers
-    subprocess.run(["docker", "ps"], check=False)
-
-    yield
-
-    # Cleanup after tests
-    cleanup()
-    atexit.unregister(cleanup)
 
 @pytest.mark.parametrize("service_name", ["dropbox"]) # , "google_drive", "asana"
 def test_oauth_refresh_sync(docker_services, e2e_api_url, oauth_refresh_tokens, service_name):
