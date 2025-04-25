@@ -5,16 +5,30 @@ import { ConnectedDestinationsGrid } from "@/components/dashboard/ConnectedDesti
 import { ChatCTA } from "@/components/dashboard/ChatCTA";
 import { DocsCard } from "@/components/dashboard/DocsCard";
 import { Button } from "@/components/ui/button";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Plus } from "lucide-react";
 import { SyncGridView } from "@/components/dashboard";
 import { CreateSyncCTA } from "@/components/dashboard/CreateSyncCTA";
 import { apiClient } from "@/lib/api";
 import { useTheme } from "@/lib/theme-provider";
+import { useNavigate } from "react-router-dom";
+
+interface Sync {
+  id: string;
+  name: string;
+  status?: string;
+  source_connection?: {
+    short_name: string;
+    name: string;
+  };
+  created_at: string;
+  modified_at: string;
+}
 
 const Dashboard = () => {
-  const [syncs, setSyncs] = useState<any[]>([]);
+  const [syncs, setSyncs] = useState<Sync[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { resolvedTheme } = useTheme();
+  const navigate = useNavigate();
 
   // Determine which logo to use based on theme
   const logoSrc = resolvedTheme === "dark" ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg";
@@ -23,11 +37,18 @@ const Dashboard = () => {
     const fetchSyncs = async () => {
       setIsLoading(true);
       try {
-        const response = await apiClient.get("/sync/?limit=1");
-        const data = await response.json();
-        setSyncs(data);
+        const response = await apiClient.get("/sync/?with_source_connection=true");
+        if (response.ok) {
+          const data = await response.json();
+          setSyncs(data);
+        } else {
+          // If we get an error, assume no syncs
+          console.error("Failed to fetch syncs:", await response.text());
+          setSyncs([]);
+        }
       } catch (error) {
         console.error("Failed to fetch syncs", error);
+        setSyncs([]);
       } finally {
         setIsLoading(false);
       }
@@ -36,8 +57,8 @@ const Dashboard = () => {
     fetchSyncs();
   }, []);
 
-  const handleDiscordClick = () => {
-    window.open("https://discord.com/invite/484HY9Ehxt", "_blank");
+  const handleCreateSync = () => {
+    navigate("/sync/create");
   };
 
   if (isLoading) {
@@ -47,7 +68,7 @@ const Dashboard = () => {
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
             <p className="text-muted-foreground">
-              Overview of your knowledege
+              Overview of your knowledge
             </p>
           </div>
         </div>
@@ -92,12 +113,16 @@ const Dashboard = () => {
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Your Syncs</h2>
             <p className="text-muted-foreground">
-              Overview of your knowledege
+              Overview of your knowledge
             </p>
           </div>
+          <Button onClick={handleCreateSync}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Sync
+          </Button>
         </div>
 
-        <SyncGridView />
+        <SyncGridView syncs={syncs} />
 
         <div className="grid gap-8 md:grid-cols-2">
           <DocsCard />

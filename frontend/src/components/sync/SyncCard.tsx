@@ -101,11 +101,11 @@ export function SyncCard({
             </code>
           </div>
         </div>
-        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full flex items-center justify-center">
           <img
             src={getAppIconUrl(sourceConnectionShortName, resolvedTheme)}
             alt={sourceConnectionShortName}
-            className="w-6 h-6"
+            className="w-8 h-8"
           />
         </div>
       </div>
@@ -133,11 +133,9 @@ export function SyncCard({
 
       <CardFooter className="flex gap-3 p-6 pt-4">
         <Button onClick={handleViewDetails} variant="outline" className="flex-1">
-          <ExternalLink className="mr-2 h-4 w-4" />
           View details
         </Button>
         <Button onClick={handleChat} className="flex-1">
-          <MessageSquare className="mr-2 h-4 w-4" />
           Chat
         </Button>
       </CardFooter>
