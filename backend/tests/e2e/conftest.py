@@ -26,7 +26,7 @@ def test_environment() -> Dict[str, any]:
 
     # Set configuration based on environment
     if env == "test":
-        backend_port = 18001  # Test environment port
+        backend_port = 38001  # Test environment port
         frontend_port = None  # No frontend in test environment
     else:  # onboarding environment
         backend_port = 8001  # Onboarding environment port

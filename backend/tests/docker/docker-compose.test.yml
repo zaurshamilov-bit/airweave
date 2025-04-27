@@ -10,7 +10,7 @@ services:
       - POSTGRES_PASSWORD=airweave1234!
       - POSTGRES_DB=airweave
     ports:
-      - "16432:5432"
+      - "36432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -34,7 +34,7 @@ services:
   text2vec-transformers:
     image: semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
     ports:
-      - "18080:8080"
+      - "38080:8080"
     environment:
       ENABLE_CUDA: 0
       WORKERS_PER_NODE: 1
@@ -87,7 +87,7 @@ services:
       - TEXT2VEC_INFERENCE_URL=http://text2vec-transformers:8080
 
     ports:
-      - "18001:8001"
+      - "38001:8001"
     volumes:
       - ../../../backend:/app
     healthcheck:

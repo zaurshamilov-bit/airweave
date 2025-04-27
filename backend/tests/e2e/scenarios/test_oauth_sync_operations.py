@@ -188,7 +188,7 @@ async def _create_connection(e2e_api_url, service_name, refresh_token):
     original_uri = settings.SQLALCHEMY_ASYNC_DATABASE_URI
     try:
         # Override with test URI for Docker container
-        settings.SQLALCHEMY_ASYNC_DATABASE_URI = "postgresql+asyncpg://airweave:airweave1234!@localhost:16432/airweave"
+        settings.SQLALCHEMY_ASYNC_DATABASE_URI = "postgresql+asyncpg://airweave:airweave1234!@localhost:36432/airweave"
 
         # NOTE: Import location is important since it create the engine on import using the URI
         from airweave.db.session import get_db_context
