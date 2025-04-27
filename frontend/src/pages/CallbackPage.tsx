@@ -30,10 +30,9 @@ export const CallbackPage = () => {
             return;
           }
 
-          // Extract relevant user data from Auth0 user object
           const userData = {
             email: user.email,
-            name: user.name,
+            full_name: user.name,
             picture: user.picture,
             auth0_id: user.sub,
             email_verified: user.email_verified,
