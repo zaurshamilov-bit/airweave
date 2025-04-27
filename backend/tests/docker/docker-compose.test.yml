@@ -10,7 +10,7 @@ services:
       - POSTGRES_PASSWORD=airweave1234!
       - POSTGRES_DB=airweave
     ports:
-      - "36432:5432"
+      - "9432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "36379:6379"
+      - "9379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -34,7 +34,7 @@ services:
   text2vec-transformers:
     image: semitechnologies/transformers-inference:sentence-transformers-all-MiniLM-L6-v2
     ports:
-      - "38080:8080"
+      - "9080:8080"
     environment:
       ENABLE_CUDA: 0
       WORKERS_PER_NODE: 1
@@ -48,7 +48,7 @@ services:
     image: qdrant/qdrant:latest
     command: bash -c "apt-get update && apt-get install -y curl && ./entrypoint.sh" # we need to install curl to check health
     ports:
-      - "36333:6333"
+      - "9333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
@@ -87,7 +87,7 @@ services:
       - TEXT2VEC_INFERENCE_URL=http://text2vec-transformers:8080
 
     ports:
-      - "38001:8001"
+      - "9001:8001"
     volumes:
       - ../../../backend:/app
     healthcheck:

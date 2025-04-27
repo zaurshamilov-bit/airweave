@@ -140,10 +140,13 @@ class TestSyncServiceIntegration:
                 "airweave.core.sync_service.SyncContextFactory.create"
             ) as mock_create_context,
             patch("airweave.core.sync_service.logger.error") as mock_logger_error,
+            patch("airweave.core.sync_service.sync_job_service.update_status") as mock_update_status,
         ):
             mock_db_context = AsyncMock()
             mock_db_context.__aenter__.return_value = mock_db
             mock_get_db_context.return_value = mock_db_context
+
+            mock_update_status.return_value = None
 
             # Simulate error during context creation
             mock_create_context.side_effect = test_error

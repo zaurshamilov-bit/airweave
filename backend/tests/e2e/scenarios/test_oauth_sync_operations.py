@@ -25,6 +25,8 @@ import atexit
 from airweave.core.constants.native_connections import NATIVE_QDRANT_UUID, NATIVE_TEXT2VEC_UUID
 from tests.e2e.smoke.test_user_onboarding import wait_for_sync_completion
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 
 @pytest.fixture
 def oauth_refresh_tokens():
@@ -34,41 +36,6 @@ def oauth_refresh_tokens():
         "google_drive": os.getenv("GDRIVE_REFRESH_TOKEN"),
         "asana": os.getenv("ASANA_REFRESH_TOKEN"),
     }
-
-
-@pytest.fixture(scope="session")
-def docker_services():
-    """Start and stop Docker services for testing."""
-    # Path to docker-compose file
-    compose_file = os.path.join(os.path.dirname(__file__), "../../docker/docker-compose.test.yml")
-
-    # Stop any running containers - fixed command format
-    print("Stopping any existing Docker containers...")
-    subprocess.run(["docker", "compose", "down", "-v"], check=False)
-
-    print("Starting Docker containers...")
-    try:
-        subprocess.run(["docker", "compose", "-f", compose_file, "up", "-d"], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to start containers: {e}")
-        raise
-
-    # Register cleanup function
-    def cleanup():
-        print("Cleaning up test containers...")
-        subprocess.run(["docker", "compose", "-f", compose_file, "down", "-v"], check=False)
-
-    # Execute cleanup when Python interpreter exits on failure
-    atexit.register(cleanup)
-
-    print("Waiting for services to become healthy...")
-    time.sleep(20)
-
-    yield
-
-    # Cleanup after tests
-    cleanup()
-    atexit.unregister(cleanup)
 
 
 async def setup_connection_with_refresh_token(db, service_name, refresh_token, user):
@@ -123,7 +90,7 @@ async def setup_connection_with_refresh_token(db, service_name, refresh_token, u
 
 
 @pytest.mark.parametrize("service_name", ["dropbox"]) # , "google_drive", "asana"
-def test_oauth_refresh_sync(docker_services, e2e_api_url, oauth_refresh_tokens, service_name):
+def test_oauth_refresh_sync(e2e_environment, e2e_api_url, oauth_refresh_tokens, service_name):
     """Test end-to-end flow with OAuth services using refresh tokens.
 
     This test:
@@ -188,16 +155,26 @@ async def _create_connection(e2e_api_url, service_name, refresh_token):
     original_uri = settings.SQLALCHEMY_ASYNC_DATABASE_URI
     try:
         # Override with test URI for Docker container
-        settings.SQLALCHEMY_ASYNC_DATABASE_URI = "postgresql+asyncpg://airweave:airweave1234!@localhost:36432/airweave"
+        settings.SQLALCHEMY_ASYNC_DATABASE_URI = "postgresql+asyncpg://airweave:airweave1234!@localhost:9432/airweave"
 
-        # NOTE: Import location is important since it create the engine on import using the URI
-        from airweave.db.session import get_db_context
+        async_engine = create_async_engine(
+            str(settings.SQLALCHEMY_ASYNC_DATABASE_URI),
+            pool_size=50,
+            max_overflow=10,
+            pool_pre_ping=True,
+            pool_recycle=300,
+            pool_timeout=60,
+            isolation_level="READ COMMITTED",
+        )
+        AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=async_engine)
 
-        # Use regular get_db_context which will now use the modified URI
-        async with get_db_context() as db:
-            user_db = await crud.user.get_by_email(db, email=settings.FIRST_SUPERUSER)
-            user = schemas.User.model_validate(user_db)
-            return await setup_connection_with_refresh_token(db, service_name, refresh_token, user)
+        async with AsyncSessionLocal() as db:
+            try:
+                user_db = await crud.user.get_by_email(db, email=settings.FIRST_SUPERUSER)
+                user = schemas.User.model_validate(user_db)
+                return await setup_connection_with_refresh_token(db, service_name, refresh_token, user)
+            finally:
+                await db.close()
     finally:
         # Restore original URI
         settings.SQLALCHEMY_ASYNC_DATABASE_URI = original_uri
