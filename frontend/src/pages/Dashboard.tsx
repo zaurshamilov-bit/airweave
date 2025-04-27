@@ -120,7 +120,7 @@ const Dashboard = () => {
             <Button
               onClick={handleCreateSync}
               size="sm"
-              className="rounded-lg px-3 py-0.5 bg-blue-500 hover:bg-blue-600 text-white font-medium shadow-md hover:shadow-lg transition-all"
+              className="rounded-lg px-3 py-0.5 bg-blue-500 hover:bg-blue-600 text-white font-medium transition-all"
             >
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               Create Sync
