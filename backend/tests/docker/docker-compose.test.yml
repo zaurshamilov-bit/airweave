@@ -22,7 +22,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "16379:6379"
+      - "36379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -48,7 +48,7 @@ services:
     image: qdrant/qdrant:latest
     command: bash -c "apt-get update && apt-get install -y curl && ./entrypoint.sh" # we need to install curl to check health
     ports:
-      - "16333:6333"
+      - "36333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
