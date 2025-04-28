@@ -8,6 +8,7 @@ from airweave import crud, schemas
 from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus
 from airweave.db.session import get_db_context
+from airweave.platform.sync.pubsub import SyncProgressUpdate
 
 
 class SyncJobService:
@@ -18,10 +19,11 @@ class SyncJobService:
         sync_job_id: UUID,
         status: SyncJobStatus,
         current_user: schemas.User,
+        stats: Optional[SyncProgressUpdate] = None,
         error: Optional[str] = None,
+        started_at: Optional[datetime] = None,
         completed_at: Optional[datetime] = None,
         failed_at: Optional[datetime] = None,
-        stats: Optional[dict] = None,
     ) -> None:
         """Update sync job status with provided details."""
         try:
@@ -35,11 +37,14 @@ class SyncJobService:
                 update_data = {"status": status}
 
                 if stats:
-                    update_data["stats"] = stats
-                    update_data["records_processed"] = stats.get("inserted", 0)
-                    update_data["records_updated"] = stats.get("updated", 0)
-                    update_data["records_deleted"] = stats.get("deleted", 0)
+                    update_data["entities_inserted"] = stats.inserted
+                    update_data["entities_updated"] = stats.updated
+                    update_data["entities_deleted"] = stats.deleted
+                    update_data["entities_kept"] = stats.kept
+                    update_data["entities_skipped"] = stats.skipped
 
+                if started_at:
+                    update_data["started_at"] = started_at
                 if status == SyncJobStatus.COMPLETED and completed_at:
                     update_data["completed_at"] = completed_at
                 elif status == SyncJobStatus.FAILED:
