@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core.dag_service import dag_service
+from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus
 from airweave.core.sync_job_service import sync_job_service
 from airweave.db.session import get_db_context
@@ -74,6 +75,7 @@ class SyncService:
                     db, sync, sync_job, dag, current_user
                 )
         except Exception as e:
+            logger.error(f"Error during sync context creation: {e}")
             # Fail the sync job if concext creation failed
             await sync_job_service.update_status(
                 sync_job_id=sync_job.id,
@@ -82,7 +84,7 @@ class SyncService:
                 error=str(e),
                 failed_at=datetime.now(),
             )
-            raise
+            raise e
 
         return await sync_orchestrator.run(sync_context)
 

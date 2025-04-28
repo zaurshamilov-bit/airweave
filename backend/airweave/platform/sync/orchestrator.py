@@ -297,7 +297,6 @@ class SyncOrchestrator:
     ) -> None:
         """Process stream of entities from source."""
         error_occurred = False
-        processed_count = 0
 
         # Use the stream as a context manager
         async with AsyncSourceStream(sync_context.source.generate_entities()) as stream:
@@ -307,10 +306,6 @@ class SyncOrchestrator:
                     if getattr(entity, "should_skip", False):
                         await sync_context.progress.increment("skipped")
                         continue  # Do not process further
-
-                    processed_count += 1
-                    if processed_count > 3:
-                        raise RuntimeError("Simulated orchestrator failure after 3 entities")
 
                     # Submit each entity for processing in the worker pool
                     task = await self.worker_pool.submit(
