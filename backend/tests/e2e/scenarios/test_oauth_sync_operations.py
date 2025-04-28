@@ -1,7 +1,26 @@
 """
-To run the test locally:
-1. Set env var for DROPBOX_REFRESH_TOKEN
-2. Set env var for ENCRYPTION_KEY equal to the docker-compose.test.yml
+End-to-end OAuth sync test for Airweave sources.
+
+How this test works (step-by-step):
+- For each source listed in the @pytest.mark.parametrize("service_name", [...]) decorator:
+    - Retrieve the refresh token for the source from environment variables (set via GitHub secrets or your local .env file).
+    - Open a database session to the test Postgres instance (spun up by the test fixture).
+    - Look up the source definition in the database using its short_name.
+    - Encrypt the refresh token and create an IntegrationCredential row in the database for the source.
+    - Create a Connection row in the database, linked to the new IntegrationCredential.
+    - Send a POST request to the /sync/ API endpoint to create a new sync configuration using the connection.
+    - Send a POST request to the /sync/{sync_id}/run API endpoint to start a sync job for the configuration.
+    - Wait for the sync job to complete by polling the job status (using wait_for_sync_completion).
+    - Assert that the sync job status is "completed" (fail if not).
+
+How to add a new OAuth source to this test:
+- Add the new source's short_name to the @pytest.mark.parametrize("service_name", [...]) decorator.
+- Obtain a valid refresh token for the new source (run the debugger or follow the source's OAuth flow).
+- Add the corresponding environment variable for the refresh token to the oauth_refresh_tokens fixture.
+- Add the refresh token to GitHub secrets for CI, and/or to your local .env file for local runs.
+- Ensure the backend supports the new source and its short_name matches the one used in the test.
+- Pass the secrets to the environment variable in tests.yml.
+- If the new source uses a different authorization type (not refresh token), add logic to handle it in the test and credential setup.
 """
 
 from airweave import crud, schemas
