@@ -248,6 +248,14 @@ class SyncOrchestrator:
     async def run(self, sync_context: SyncContext) -> schemas.Sync:
         """Run a sync with full async processing."""
         try:
+            # Mark job as started
+            await sync_job_service.update_status(
+                sync_job_id=sync_context.sync_job.id,
+                status=SyncJobStatus.IN_PROGRESS,
+                current_user=sync_context.current_user,
+                started_at=datetime.now(),
+            )
+
             # Get source node from DAG
             source_node = sync_context.dag.get_source_node()
 
@@ -260,7 +268,7 @@ class SyncOrchestrator:
                 status=SyncJobStatus.COMPLETED,
                 current_user=sync_context.current_user,
                 completed_at=datetime.now(),
-                stats=sync_context.progress.stats.model_dump()
+                stats=sync_context.progress.stats
                 if hasattr(sync_context.progress, "stats")
                 else None,
             )
@@ -277,7 +285,7 @@ class SyncOrchestrator:
                 current_user=sync_context.current_user,
                 error=str(e),
                 failed_at=datetime.now(),
-                stats=sync_context.progress.stats.model_dump()
+                stats=sync_context.progress.stats
                 if hasattr(sync_context.progress, "stats")
                 else None,
             )
@@ -295,6 +303,10 @@ class SyncOrchestrator:
             try:
                 # Process entities as they come
                 async for entity in stream.get_entities():
+                    if getattr(entity, "should_skip", False):
+                        await sync_context.progress.increment("skipped")
+                        continue  # Do not process further
+
                     # Submit each entity for processing in the worker pool
                     task = await self.worker_pool.submit(
                         self._process_single_entity,

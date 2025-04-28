@@ -1,10 +1,10 @@
 """API endpoints for managing syncs."""
 
 import asyncio
-from typing import AsyncGenerator, Union
+from typing import AsyncGenerator, List, Optional, Union
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,6 +55,7 @@ async def list_all_jobs(
     db: AsyncSession = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
+    status: Optional[List[str]] = Query(None, description="Filter by job status"),
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.SyncJob]:
     """List all sync jobs across all syncs.
@@ -64,13 +65,16 @@ async def list_all_jobs(
         db: The database session
         skip: The number of jobs to skip
         limit: The number of jobs to return
+        status: Filter by job status
         user: The current user
 
     Returns:
     --------
         list[schemas.SyncJob]: A list of all sync jobs
     """
-    jobs = await crud.sync_job.get_all_jobs(db=db, skip=skip, limit=limit, current_user=user)
+    jobs = await crud.sync_job.get_all_jobs(
+        db=db, skip=skip, limit=limit, current_user=user, status=status
+    )
     return jobs
 
 

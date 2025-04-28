@@ -39,6 +39,7 @@ const Sync = () => {
   // Created sync ID and job ID once we make calls
   const [syncId, setSyncId] = useState<string | null>(null);
   const [syncJobId, setSyncJobId] = useState<string | null>(null);
+  const [jobFromDb, setJobFromDb] = useState<any>(null);
 
   // Hook for showing user feedback toasts
   const { toast } = useToast();
@@ -92,6 +93,20 @@ const Sync = () => {
     }
   }, [location.search, toast]);
 
+  useEffect(() => {
+    if (!syncId) return;
+    const fetchLatestJob = async () => {
+      const resp = await apiClient.get(`/sync/${syncId}/jobs`);
+      if (resp.ok) {
+        const jobs = await resp.json();
+        if (jobs.length > 0) {
+          setSyncJobId(jobs[0].id);
+          setJobFromDb(jobs[0]);
+        }
+      }
+    };
+    fetchLatestJob();
+  }, [syncId]);
 
   /**
    * handleSourceSelect is triggered by SyncDataSourceGrid when the user
@@ -322,7 +337,9 @@ const Sync = () => {
         {/* Step 3: Show progress updates with pipeline visual (previously step 4) */}
         {step === 3 && (
           <div className="space-y-6">
-            <SyncProgress syncId={syncId} syncJobId={syncJobId} />
+            {syncId && syncJobId && (
+              <SyncProgress syncId={syncId} syncJobId={syncJobId} jobFromDb={jobFromDb} />
+            )}
           </div>
         )}
       </div>

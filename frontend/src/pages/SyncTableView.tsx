@@ -229,7 +229,7 @@ const SyncTableView = () => {
     let textColor = "";
 
     switch (status) {
-      case "running":
+      case "in_progress":
         bgColor = "bg-blue-100 dark:bg-blue-900/40";
         textColor = "text-blue-800 dark:text-blue-300";
         break;

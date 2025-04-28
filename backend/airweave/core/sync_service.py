@@ -74,10 +74,9 @@ class SyncService:
                 sync_context = await SyncContextFactory.create(
                     db, sync, sync_job, dag, current_user
                 )
-            return await sync_orchestrator.run(sync_context)
         except Exception as e:
-            logger.error(f"Error during sync: {e}")
-            # Update status using sync_job_service
+            logger.error(f"Error during sync context creation: {e}")
+            # Fail the sync job if concext creation failed
             await sync_job_service.update_status(
                 sync_job_id=sync_job.id,
                 status=SyncJobStatus.FAILED,
@@ -85,8 +84,9 @@ class SyncService:
                 error=str(e),
                 failed_at=datetime.now(),
             )
-            # silent failure - doesn't propagate the error to the client, as it's in the background
             raise e
+
+        return await sync_orchestrator.run(sync_context)
 
 
 sync_service = SyncService()
