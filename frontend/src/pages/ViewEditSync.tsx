@@ -38,6 +38,7 @@ import { getDestinationIconUrl } from "@/lib/utils/icons";
 import { Input } from "@/components/ui/input";
 import { SyncSchedule, SyncScheduleConfig } from "@/components/sync/SyncSchedule";
 import "./sync-progress.css"; // Import custom CSS for animations
+import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 
 interface SyncDetails {
   id: string;
@@ -101,6 +102,10 @@ const ViewEditSync = () => {
     type: "one-time",
     frequency: "custom"
   });
+
+  const liveUpdates = useSyncSubscription(lastSync?.id);
+  const liveStatus = liveUpdates.length > 0 ? liveUpdates[liveUpdates.length - 1]?.status : lastSync?.status;
+  const status = (liveStatus || lastSync?.status || "").toLowerCase();
 
   const fetchLastSyncJob = async () => {
     try {
@@ -201,7 +206,7 @@ const ViewEditSync = () => {
           destination: {
             type: destination.integration_type?.toLowerCase() ?? 'Destination',
             name: destination.name ?? 'Native Airweave',
-            shortName: destination.short_name ?? ( destinationData.short_name === 'qdrant_native' ? 'Native' : 'unknown')
+            shortName: destination.short_name ?? (destinationData.short_name === 'qdrant_native' ? 'Native' : 'unknown')
           },
           userId: syncData.created_by_email,
           organizationId: syncData.organization_id,
@@ -384,7 +389,7 @@ const ViewEditSync = () => {
       if (!response.ok) throw new Error("Failed to update sync name");
 
       // Update local state only after successful API call
-      setSyncDetails(prev => prev ? {...prev, name: newName} : null);
+      setSyncDetails(prev => prev ? { ...prev, name: newName } : null);
       setIsEditingName(false);
 
       toast({
@@ -760,19 +765,19 @@ const ViewEditSync = () => {
 
                   <div className="flex items-center gap-3 mb-2">
                     <div className={`flex-shrink-0 h-9 w-9 rounded-full flex items-center justify-center
-                      ${lastSync.status === "success" ? "bg-green-500/10" :
-                        lastSync.status === "failed" ? "bg-red-500/10" :
-                        "bg-blue-500/10"}`}>
+                      ${status === "completed" ? "bg-green-500/10" :
+                        status === "failed" ? "bg-red-500/10" :
+                          "bg-blue-500/10"}`}>
                       <Activity className={`w-4 h-4
-                        ${lastSync.status === "success" ? "text-green-500" :
-                          lastSync.status === "failed" ? "text-red-500" :
-                          "text-blue-500"}`} />
+                        ${status === "completed" ? "text-green-500" :
+                          status === "failed" ? "text-red-500" :
+                            "text-blue-500"}`} />
                     </div>
                     <div>
                       <h4 className="text-sm font-medium">Status</h4>
                       <p className="capitalize text-sm">
-                        {lastSync.status}
-                        {lastSync.status === "running" && <span className="ml-1 animate-pulse">...</span>}
+                        {status}
+                        {(status === "in_progress" || status === "pending") && <span className="ml-1 animate-pulse">...</span>}
                       </p>
                     </div>
                   </div>
@@ -815,17 +820,17 @@ const ViewEditSync = () => {
           </div>
         </div>
 
-        {/* Live Sync Progress View - Only shown when sync is running */}
-        {lastSync && (lastSync.status === "running" || lastSync.status === "pending") && (
-          <Card className="p-5 border rounded-lg bg-card">
-            <h3 className="text-lg font-medium mb-4">Live Sync Progress</h3>
+        {/* Live Sync Progress or Final Card */}
+        {lastSync && (
+          <div className="w-full flex justify-center my-8">
             <SyncProgress
               syncId={id || null}
               syncJobId={lastSync.id}
-              isLive={true}
+              jobFromDb={lastSync}
+              isLive={status === "running" || status === "pending"}
               startedAt={lastSync.started_at}
             />
-          </Card>
+          </div>
         )}
 
         {/* Sync DAG (full width) */}
