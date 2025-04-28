@@ -141,14 +141,16 @@ class TestSyncServiceRun:
                 # Mock logger.error
                 with patch("airweave.core.sync_service.logger.error") as mock_logger_error:
                     # Act & Assert
-                    service = SyncService()
-                    with pytest.raises(Exception) as excinfo:
-                        await service.run(
-                            sync=mock_sync,
-                            sync_job=mock_sync_job,
-                            dag=mock_sync_dag,
-                            current_user=mock_user,
-                        )
+                    with patch("airweave.core.sync_service.sync_job_service.update_status") as mock_update_status:
+                        mock_update_status.return_value = None
+                        service = SyncService()
+                        with pytest.raises(Exception) as excinfo:
+                            await service.run(
+                                sync=mock_sync,
+                                sync_job=mock_sync_job,
+                                dag=mock_sync_dag,
+                                current_user=mock_user,
+                            )
 
                     # Verify the exception was logged and re-raised
                     assert excinfo.value == test_error

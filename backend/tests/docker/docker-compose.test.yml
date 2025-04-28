@@ -22,7 +22,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "16379:6379"
+      - "9379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -84,6 +84,7 @@ services:
       - FIRST_SUPERUSER=admin@example.com
       - FIRST_SUPERUSER_PASSWORD=admin
       - ENCRYPTION_KEY="SpgLrrEEgJ/7QdhSMSvagL1juEY5eoyCG0tZN7OSQV0="
+      - TEXT2VEC_INFERENCE_URL=http://text2vec-transformers:8080
 
     ports:
       - "9001:8001"
