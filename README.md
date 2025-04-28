@@ -155,7 +155,7 @@ Please follow the existing code style and conventions. See [CONTRIBUTING.md](htt
 
 ## License
 
-Airweave is released under an open-core model. The community edition is licensed under the [Apache 2.0 License](LICENSE). Additional modules (for enterprise or advanced features) may be licensed separately.
+Airweave is released under an open-core model. The community edition is licensed under the [MIT](LICENSE). Additional modules (for enterprise or advanced features) may be licensed separately.
 
 
 ## Contact & Community
