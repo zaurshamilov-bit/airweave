@@ -35,7 +35,7 @@ jobs:
         env:
           AIRWEAVE_TEST_ENV: test
           ENCRYPTION_KEY: "SpgLrrEEgJ/7QdhSMSvagL1juEY5eoyCG0tZN7OSQV0=" # This is just a dummy key
-          FIRST_SUPERUSER: admin@airweave.ai
+          FIRST_SUPERUSER: admin@example.com
           FIRST_SUPERUSER_PASSWORD: airweave1234!
           POSTGRES_USER: airweave
           POSTGRES_DB: airweave
@@ -57,7 +57,7 @@ jobs:
         env:
           AIRWEAVE_TEST_ENV: test
           ENCRYPTION_KEY: "SpgLrrEEgJ/7QdhSMSvagL1juEY5eoyCG0tZN7OSQV0=" # This is just a dummy key
-          FIRST_SUPERUSER: admin@airweave.ai
+          FIRST_SUPERUSER: admin@example.com
           FIRST_SUPERUSER_PASSWORD: airweave1234!
           POSTGRES_USER: airweave
           POSTGRES_DB: airweave
