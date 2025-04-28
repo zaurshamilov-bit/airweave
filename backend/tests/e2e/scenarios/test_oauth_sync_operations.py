@@ -88,8 +88,7 @@ async def setup_connection_with_refresh_token(db, service_name, refresh_token, u
     return connection
 
 
-
-@pytest.mark.parametrize("service_name", ["dropbox"]) # , "google_drive", "asana"
+@pytest.mark.parametrize("service_name", ["dropbox"])  # , "google_drive", "asana"
 def test_oauth_refresh_sync(e2e_environment, e2e_api_url, oauth_refresh_tokens, service_name):
     """Test end-to-end flow with OAuth services using refresh tokens.
 
@@ -121,7 +120,9 @@ def test_oauth_refresh_sync(e2e_environment, e2e_api_url, oauth_refresh_tokens, 
     print(f"\nSync data: {sync_data}\n")
 
     create_sync_response = requests.post(f"{e2e_api_url}/sync/", json=sync_data)
-    assert create_sync_response.status_code == 200, f"Failed to create sync: {create_sync_response.text}"
+    assert (
+        create_sync_response.status_code == 200
+    ), f"Failed to create sync: {create_sync_response.text}"
 
     sync_id = create_sync_response.json()["id"]
     print(f"Created sync: {sync_id}")
@@ -137,8 +138,7 @@ def test_oauth_refresh_sync(e2e_environment, e2e_api_url, oauth_refresh_tokens, 
 
     # 5. Verify the job completed successfully
     job_status_response = requests.get(
-        f"{e2e_api_url}/sync/{sync_id}/job/{job_id}",
-        params={"sync_id": sync_id}
+        f"{e2e_api_url}/sync/{sync_id}/job/{job_id}", params={"sync_id": sync_id}
     )
     assert job_status_response.status_code == 200
 
@@ -155,7 +155,9 @@ async def _create_connection(e2e_api_url, service_name, refresh_token):
     original_uri = settings.SQLALCHEMY_ASYNC_DATABASE_URI
     try:
         # Override with test URI for Docker container
-        settings.SQLALCHEMY_ASYNC_DATABASE_URI = "postgresql+asyncpg://airweave:airweave1234!@localhost:9432/airweave"
+        settings.SQLALCHEMY_ASYNC_DATABASE_URI = (
+            "postgresql+asyncpg://airweave:airweave1234!@localhost:9432/airweave"
+        )
 
         async_engine = create_async_engine(
             str(settings.SQLALCHEMY_ASYNC_DATABASE_URI),
@@ -170,9 +172,29 @@ async def _create_connection(e2e_api_url, service_name, refresh_token):
 
         async with AsyncSessionLocal() as db:
             try:
+                # Get user by email
                 user_db = await crud.user.get_by_email(db, email=settings.FIRST_SUPERUSER)
+
+                # Error handling for when user is None
+                if user_db is None:
+                    print(
+                        f"ERROR: User with email {settings.FIRST_SUPERUSER} not found in database"
+                    )
+                    print(f"Database URI: {settings.SQLALCHEMY_ASYNC_DATABASE_URI}")
+
+                    # Try to list available users for debugging
+                    try:
+                        users = await crud.user.get_multi(db, skip=0, limit=10)
+                        print(f"Available users in database: {[u.email for u in users]}")
+                    except Exception as e:
+                        print(f"Failed to list users: {e}")
+
+                    raise ValueError(f"User with email {settings.FIRST_SUPERUSER} not found")
+
                 user = schemas.User.model_validate(user_db)
-                return await setup_connection_with_refresh_token(db, service_name, refresh_token, user)
+                return await setup_connection_with_refresh_token(
+                    db, service_name, refresh_token, user
+                )
             finally:
                 await db.close()
     finally:
