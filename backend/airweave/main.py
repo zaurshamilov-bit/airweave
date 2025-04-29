@@ -241,17 +241,23 @@ async def not_found_exception_handler(request: Request, exc: NotFoundException) 
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
+CORS_ORIGINS = [
+    "http://localhost:5173",
+    "localhost:8001",
+    "http://localhost:8080",
+    "https://app.dev-airweave.com",
+    "https://app.stg-airweave.com",
+    "https://app.airweave.ai",
+    "https://docs.airweave.ai",
+]
+
+if settings.ADDITIONAL_CORS_ORIGINS:
+    additional_origins = settings.ADDITIONAL_CORS_ORIGINS.split(",")
+    CORS_ORIGINS.extend(additional_origins)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "localhost:8001",
-        "http://localhost:8080",
-        "https://app.dev-airweave.com",
-        "https://app.stg-airweave.com",
-        "https://app.airweave.ai",
-        "https://docs.airweave.ai",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

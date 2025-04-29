@@ -85,7 +85,7 @@ class QdrantDestination(VectorDBDestination):
                 if self.url:
                     location = self.url
                 else:
-                    location = f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}"
+                    location = settings.qdrant_url
 
                 client_config = {
                     "location": location,
