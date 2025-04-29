@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast, useToast } from "@/components/ui/use-toast";
-import { SyncProgress } from "@/components/sync/SyncProgress";
 import { Button } from "@/components/ui/button";
 import { ChevronRight } from "lucide-react";
 import { apiClient } from "@/lib/api";
@@ -39,7 +38,6 @@ const Sync = () => {
   // Created sync ID and job ID once we make calls
   const [syncId, setSyncId] = useState<string | null>(null);
   const [syncJobId, setSyncJobId] = useState<string | null>(null);
-  const [jobFromDb, setJobFromDb] = useState<any>(null);
 
   // Hook for showing user feedback toasts
   const { toast } = useToast();
@@ -47,10 +45,6 @@ const Sync = () => {
 
   // Add navigate hook
   const navigate = useNavigate();
-
-  // Subscribe to SSE updates whenever syncJobId is set
-  // 'updates' returns an array of progress updates
-  const updates = useSyncSubscription(syncJobId);
 
   // Add UI metadata state for the pipeline visual
   const [pipelineMetadata, setPipelineMetadata] = useState<SyncUIMetadata | null>(null);
@@ -101,7 +95,6 @@ const Sync = () => {
         const jobs = await resp.json();
         if (jobs.length > 0) {
           setSyncJobId(jobs[0].id);
-          setJobFromDb(jobs[0]);
         }
       }
     };
@@ -247,19 +240,19 @@ const Sync = () => {
               Set up your sync
             </h1>
             <div className="text-sm text-muted-foreground">
-              Step {step} of 3
+              Step {step} of 2
             </div>
           </div>
           <div className="mt-2 h-2 w-full rounded-full bg-secondary/20">
             <div
               className="h-2 rounded-full bg-primary transition-all duration-300"
-              style={{ width: `${(step / 3) * 100}%` }}
+              style={{ width: `${(step / 2) * 100}%` }}
             />
           </div>
         </div>
 
-        {/* Add pipeline visual for steps 2 and 3 */}
-        {pipelineMetadata?.source.name && (step === 2 || step === 3) && (
+        {/* Add pipeline visual for step 2 */}
+        {pipelineMetadata?.source.name && step === 2 && (
           <div className="mb-8">
             <SyncPipelineVisual
               sync={{
@@ -292,7 +285,7 @@ const Sync = () => {
           </div>
         )}
 
-        {/* Step 2: Configure and start sync (previously step 3) */}
+        {/* Step 2: Configure and start sync */}
         {step === 2 && (
           <div className="space-y-8">
             <div>
@@ -315,7 +308,6 @@ const Sync = () => {
                   syncId={syncId}
                 />
 
-
                 <div>
                   <SyncDagEditor
                     syncId={syncId}
@@ -330,15 +322,6 @@ const Sync = () => {
                   </Button>
                 </div>
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Step 3: Show progress updates with pipeline visual (previously step 4) */}
-        {step === 3 && (
-          <div className="space-y-6">
-            {syncId && syncJobId && (
-              <SyncProgress syncId={syncId} syncJobId={syncJobId} jobFromDb={jobFromDb} />
             )}
           </div>
         )}
