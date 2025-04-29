@@ -70,11 +70,21 @@ interface DestinationResponse {
 interface SyncJob {
   id: string;
   sync_id: string;
-  status: "success" | "failed" | "running" | "pending";
-  created_at: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';  // from SyncJobStatus enum
   started_at: string | null;
-  ended_at: string | null;
-  error_message: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
+  entities_inserted: number;
+  entities_updated: number;
+  entities_deleted: number;
+  entities_kept: number;
+  entities_skipped: number;
+  error: string | null;
+  created_at: string;
+  modified_at: string;
+  organization_id: string;
+  created_by_email: string;
+  modified_by_email: string;
 }
 
 const ViewEditSync = () => {
@@ -104,7 +114,21 @@ const ViewEditSync = () => {
   });
 
   const liveUpdates = useSyncSubscription(lastSync?.id);
-  const liveStatus = liveUpdates.length > 0 ? liveUpdates[liveUpdates.length - 1]?.status : lastSync?.status;
+  const latestUpdate = liveUpdates.length > 0 ? liveUpdates[liveUpdates.length - 1] : null;
+
+  // Derive status from the update flags
+  let liveStatus = lastSync?.status;
+  if (latestUpdate) {
+    if (latestUpdate.is_complete === true) {
+      liveStatus = "completed";
+    } else if (latestUpdate.is_failed === true) {
+      liveStatus = "failed";
+    } else {
+      // If we have updates but neither complete nor failed, it must be in progress
+      liveStatus = "in_progress";
+    }
+  }
+
   const status = (liveStatus || lastSync?.status || "").toLowerCase();
 
   const fetchLastSyncJob = async () => {
@@ -129,8 +153,10 @@ const ViewEditSync = () => {
         // Calculate total runtime across all completed jobs
         let totalTime = 0;
         syncJobs.forEach(job => {
-          if (job.started_at && job.ended_at) {
-            totalTime += new Date(job.ended_at).getTime() - new Date(job.started_at).getTime();
+          // Use completed_at or failed_at as the end time
+          const endTime = job.completed_at || job.failed_at;
+          if (job.started_at && endTime) {
+            totalTime += new Date(endTime).getTime() - new Date(job.started_at).getTime();
           }
         });
         setTotalRuntime(totalTime);
@@ -271,6 +297,15 @@ const ViewEditSync = () => {
       }
     }
   }, [syncDetails, isEditingName]);
+
+  // Add this effect to refresh the lastSync data when a sync completes
+  useEffect(() => {
+    // When a live sync transitions from running to complete/failed, refresh the job data
+    if (latestUpdate && (latestUpdate.is_complete || latestUpdate.is_failed)) {
+      // Fetch the latest job data to get accurate stats
+      fetchLastSyncJob();
+    }
+  }, [latestUpdate?.is_complete, latestUpdate?.is_failed]);
 
   const handleDelete = async () => {
     try {
@@ -525,7 +560,7 @@ const ViewEditSync = () => {
           <Button
             variant="default"
             onClick={handleRunSync}
-            disabled={isRunningSync || lastSync?.status === 'running' || lastSync?.status === 'pending'}
+            disabled={isRunningSync || lastSync?.status === 'in_progress' || lastSync?.status === 'pending'}
           >
             <Play className="mr-2 h-4 w-4" />
             {isRunningSync ? 'Starting...' : 'Run Sync'}
@@ -776,13 +811,13 @@ const ViewEditSync = () => {
                     <div>
                       <h4 className="text-sm font-medium">Status</h4>
                       <p className="capitalize text-sm">
-                        {status}
+                        {status === "in_progress" ? "running" : status}
                         {(status === "in_progress" || status === "pending") && <span className="ml-1 animate-pulse">...</span>}
                       </p>
                     </div>
                   </div>
 
-                  {lastSync.started_at && lastSync.ended_at && (
+                  {lastSync.started_at && (
                     <div className="flex items-center gap-3 mb-2">
                       <div className="flex-shrink-0 h-9 w-9 bg-purple-500/10 rounded-full flex items-center justify-center">
                         <Clock className="w-4 h-4 text-purple-500" />
@@ -790,16 +825,18 @@ const ViewEditSync = () => {
                       <div>
                         <h4 className="text-sm font-medium">Duration</h4>
                         <p className="text-sm">
-                          {Math.round((new Date(lastSync.ended_at).getTime() - new Date(lastSync.started_at).getTime()) / 1000)} seconds
+                          {(lastSync.completed_at || lastSync.failed_at) ?
+                            `${Math.round((new Date(lastSync.completed_at || lastSync.failed_at || '').getTime() - new Date(lastSync.started_at).getTime()) / 1000)} seconds` :
+                            "-"}
                         </p>
                       </div>
                     </div>
                   )}
 
-                  {lastSync.error_message && (
+                  {lastSync.error && (
                     <div className="mt-4 p-3 bg-red-100 text-red-800 rounded-md text-sm">
                       <p className="font-semibold">Error:</p>
-                      <p className="text-xs mt-1">{lastSync.error_message}</p>
+                      <p className="text-xs mt-1">{lastSync.error}</p>
                     </div>
                   )}
                 </div>
@@ -826,9 +863,8 @@ const ViewEditSync = () => {
             <SyncProgress
               syncId={id || null}
               syncJobId={lastSync.id}
-              jobFromDb={lastSync}
-              isLive={status === "running" || status === "pending"}
-              startedAt={lastSync.started_at}
+              lastSync={lastSync}
+              isLive={status === "in_progress" || status === "pending"}
             />
           </div>
         )}
