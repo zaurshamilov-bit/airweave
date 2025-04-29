@@ -83,8 +83,28 @@ class Settings(BaseSettings):
     # Custom deployment URLs - these are used to override the default URLs to allow
     # for custom domains in custom deployments
     API_FULL_URL: Optional[str] = None
+    APP_FULL_URL: Optional[str] = None
     QDRANT_FULL_URL: Optional[str] = None
-    ADDITIONAL_CORS_ORIGINS: Optional[list[str]] = None  # Separated by commas
+    ADDITIONAL_CORS_ORIGINS: Optional[str] = None  # Separated by commas or semicolons
+
+    @field_validator("ADDITIONAL_CORS_ORIGINS", mode="before")
+    def parse_cors_origins(cls, v: Optional[str]) -> Optional[list[str]]:
+        """Parse CORS origins from string to list, supporting both comma and semicolon separators.
+
+        Args:
+            v: The CORS origins string or list.
+
+        Returns:
+            Optional[list[str]]: The parsed list of CORS origins or None.
+        """
+        if isinstance(v, list) or v is None:
+            return v
+
+        if ";" in v:
+            return [origin.strip() for origin in v.split(";") if origin.strip()]
+
+        # Default Pydantic behavior will handle comma separation
+        return v
 
     @field_validator("AUTH0_DOMAIN", "AUTH0_AUDIENCE", "AUTH0_RULE_NAMESPACE", mode="before")
     def validate_auth0_settings(cls, v: str, info: ValidationInfo) -> str:
@@ -177,6 +197,9 @@ class Settings(BaseSettings):
         Returns:
             str: The app URL.
         """
+        if self.APP_FULL_URL:
+            return self.APP_FULL_URL
+
         if self.DTAP_ENVIRONMENT == "local":
             return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
         if self.DTAP_ENVIRONMENT == "prod":
