@@ -373,6 +373,8 @@ class CodeFileEntity(ChunkEntity):
         None, description="Additional metadata about the file"
     )
 
+    summary: Optional[str] = Field(None, description="Summary of the file")
+
     # Content and navigation
     url: str = Field(..., description="URL to view the file")
     content: Optional[str] = Field(None, description="File content if available")
