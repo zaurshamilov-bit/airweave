@@ -9,13 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.db.unit_of_work import UnitOfWork
-from airweave.platform.entities._base import (
-    BaseEntity,
-    ChunkEntity,
-    CodeFileEntity,
-    FileEntity,
-    ParentEntity,
-)
+from airweave.platform.entities._base import BaseEntity, ChunkEntity, FileEntity, ParentEntity
 from airweave.platform.locator import resource_locator
 from airweave.schemas.dag import DagEdgeCreate, DagNodeCreate, NodeType, SyncDagCreate
 
@@ -160,13 +154,6 @@ class DagService:
                     edges=edges,
                     processed_entity_ids=processed_entity_ids,
                 )
-            elif issubclass(entity_class, CodeFileEntity):
-                await self._process_code_file_entity(
-                    db=db,
-                    entity_definition=entity_definition,
-                    nodes=nodes,
-                    edges=edges,
-                )
             # Handle regular entities
             else:
                 await self._process_regular_entity(
@@ -214,15 +201,6 @@ class DagService:
                     to_node_id=dest_node_id,
                 )
             )
-
-    async def _process_code_file_entity(
-        self,
-        db,
-        entity_definition,
-        nodes,
-        edges,
-    ):
-        """Process a code file entity and create necessary nodes and edges."""
 
     async def _create_and_save_dag(
         self, db, sync, sync_id, nodes, edges, current_user, uow
@@ -316,17 +294,6 @@ class DagService:
         if not file_chunker:
             raise Exception("No file chunker found")
         return file_chunker
-
-    async def _get_code_file_chunker(self, db: AsyncSession) -> schemas.Transformer:
-        """Get the code file chunker transformer."""
-        transformers = await crud.transformer.get_all(db)
-        code_file_chunker = next(
-            (t for t in transformers if t.method_name == "code_file_chunker"),
-            None,
-        )
-        if not code_file_chunker:
-            raise Exception("No code file chunker found")
-        return code_file_chunker
 
     async def _get_source_and_entity_definitions(
         self, db: AsyncSession, sync: schemas.Sync, current_user: schemas.User
