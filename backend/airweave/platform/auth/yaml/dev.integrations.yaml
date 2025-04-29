@@ -216,3 +216,6 @@ integrations:
 
   qdrant:
     auth_type: "config_class"
+
+  github:
+    auth_type: "config_class"

@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 import sys
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type
 from uuid import UUID, uuid4
@@ -345,6 +346,35 @@ class FileEntity(BaseEntity):
         _file_entity_models_created.add(cls)
 
         return parent_model, chunk_model
+
+
+class CodeFileEntity(ChunkEntity):
+    """Base schema for code file entities."""
+
+    # Basic entity fields
+    source_name: str = Field(..., description="Source name")
+    name: str = Field(..., description="File name")
+
+    # File specific fields
+    file_id: str = Field(..., description="Unique ID of the file")
+    mime_type: Optional[str] = Field(None, description="MIME type of the file")
+    size: int = Field(..., description="Size of the file in bytes")
+
+    # Code specific fields
+    language: Optional[str] = Field(None, description="Programming language of the file")
+    line_count: Optional[int] = Field(None, description="Number of lines in the file")
+    path_in_repo: str = Field(..., description="Path of the file within the repository")
+    last_modified: Optional[datetime] = Field(None, description="Last modification timestamp")
+    commit_id: Optional[str] = Field(None, description="Last commit ID that modified this file")
+    repo_name: str = Field(..., description="Name of the repository containing this file")
+    repo_owner: str = Field(..., description="Owner of the repository")
+
+    # Content and navigation
+    url: str = Field(..., description="URL to view the file")
+    content: Optional[str] = Field(None, description="File content if available")
+    breadcrumbs: List[Breadcrumb] = Field(
+        default_factory=list, description="Breadcrumb navigation path"
+    )
 
 
 def ensure_file_entity_models():

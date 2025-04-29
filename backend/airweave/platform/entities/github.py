@@ -14,7 +14,65 @@ from typing import List, Optional
 
 from pydantic import Field
 
-from airweave.platform.entities._base import ChunkEntity
+from airweave.platform.entities._base import Breadcrumb, ChunkEntity, ParentEntity
+
+
+class GitHubRepositoryEntity(ParentEntity):
+    """Schema for GitHub repository entity."""
+
+    name: str = Field(..., description="Repository name")
+    full_name: str = Field(..., description="Full repository name including owner")
+    description: Optional[str] = Field(None, description="Repository description")
+    default_branch: str = Field(..., description="Default branch of the repository")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+    language: Optional[str] = Field(None, description="Primary language of the repository")
+    fork: bool = Field(..., description="Whether the repository is a fork")
+    size: int = Field(..., description="Size of the repository in KB")
+    stars_count: Optional[int] = Field(None, description="Number of stars")
+    watchers_count: Optional[int] = Field(None, description="Number of watchers")
+    forks_count: Optional[int] = Field(None, description="Number of forks")
+    open_issues_count: Optional[int] = Field(None, description="Number of open issues")
+
+
+class GitHubDirectoryEntity(ChunkEntity):
+    """Schema for GitHub directory entity."""
+
+    path: str = Field(..., description="Path of the directory within the repository")
+    repo_name: str = Field(..., description="Name of the repository containing this directory")
+    repo_owner: str = Field(..., description="Owner of the repository")
+
+
+class GitHubCodeFileEntity(ChunkEntity):
+    """Schema for GitHub code file entity."""
+
+    # Basic entity fields
+    source_name: str = Field(..., description="Source name")
+    name: str = Field(..., description="File name")
+
+    # GitHub specific fields
+    file_id: str = Field(..., description="Unique ID of the file")
+    sha: str = Field(..., description="SHA hash of the file content")
+    mime_type: Optional[str] = Field(None, description="MIME type of the file")
+    size: int = Field(..., description="Size of the file in bytes")
+    path: str = Field(..., description="Path of the file within the repository")
+    url: str = Field(..., description="URL to view the file")
+
+    # Code specific fields
+    language: Optional[str] = Field(None, description="Programming language of the file")
+    line_count: Optional[int] = Field(None, description="Number of lines in the file")
+    is_binary: bool = Field(False, description="Flag indicating if file is binary")
+    path_in_repo: str = Field(..., description="Path of the file within the repository")
+    last_modified: Optional[datetime] = Field(None, description="Last modification timestamp")
+    commit_id: Optional[str] = Field(None, description="Last commit ID that modified this file")
+    repo_name: str = Field(..., description="Name of the repository containing this file")
+    repo_owner: str = Field(..., description="Owner of the repository")
+
+    # Content and navigation
+    content: Optional[str] = Field(None, description="File content if available")
+    breadcrumbs: List[Breadcrumb] = Field(
+        default_factory=list, description="Breadcrumb navigation path"
+    )
 
 
 class GithubRepoEntity(ChunkEntity):

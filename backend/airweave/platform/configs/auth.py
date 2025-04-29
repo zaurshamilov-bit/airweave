@@ -135,3 +135,16 @@ class Neo4jAuthConfig(AuthConfig):
     uri: str = Field(title="URI", description="The URI of the Neo4j database")
     username: str = Field(title="Username", description="The username for the Neo4j database")
     password: str = Field(title="Password", description="The password for the Neo4j database")
+
+
+# Source auth configs
+class GitHubAuthConfig(AuthConfig):
+    """GitHub authentication credentials schema."""
+
+    personal_access_token: str = Field(
+        title="Personal Access Token", description="GitHub Personal Access Token with repo scope"
+    )
+    repo_name: str = Field(
+        title="Repository Name",
+        description="Repository to sync in owner/repo format (e.g., 'airweave-ai/airweave')",
+    )
