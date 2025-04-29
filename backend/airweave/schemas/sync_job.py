@@ -19,7 +19,9 @@ class SyncJobBase(BaseModel):
     entities_deleted: Optional[int] = 0
     entities_kept: Optional[int] = 0
     entities_skipped: Optional[int] = 0
-
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    failed_at: Optional[datetime] = None
     error: Optional[str] = None
 
     class Config:
