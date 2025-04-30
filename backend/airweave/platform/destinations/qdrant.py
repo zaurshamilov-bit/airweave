@@ -92,6 +92,10 @@ class QdrantDestination(VectorDBDestination):
                     "prefer_grpc": False,  # Use HTTP by default
                 }
 
+                if location[-4:] != ":6333":
+                    # allow railway to work
+                    client_config["port"] = None
+
                 # Add API key if provided
                 api_key = self.api_key
                 if api_key:
