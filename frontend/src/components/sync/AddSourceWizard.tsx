@@ -13,6 +13,7 @@ interface AddSourceWizardProps {
   onComplete: (connectionId: string) => void;
   shortName: string;
   name: string;
+  sourceDetails?: SourceDetails;
 }
 
 interface ConfigField {
@@ -29,6 +30,7 @@ interface SourceDetails {
   config_fields?: {
     fields: ConfigField[];
   };
+  auth_type?: string;
 }
 
 export const AddSourceWizard = ({
@@ -36,7 +38,8 @@ export const AddSourceWizard = ({
   onOpenChange,
   onComplete,
   shortName,
-  name
+  name,
+  sourceDetails: passedSourceDetails
 }: AddSourceWizardProps) => {
   const [step, setStep] = useState(1);
   const [sourceDetails, setSourceDetails] = useState<SourceDetails | null>(null);
@@ -48,10 +51,27 @@ export const AddSourceWizard = ({
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (open) {
+    if (passedSourceDetails) {
+      setSourceDetails(passedSourceDetails);
+
+      if (passedSourceDetails.config_fields?.fields) {
+        const initialConfig: Record<string, string> = {};
+        passedSourceDetails.config_fields.fields.forEach((field: ConfigField) => {
+          initialConfig[field.name] = "";
+        });
+        setConfig({
+          name: "",
+          config_fields: initialConfig
+        });
+      }
+    }
+  }, [passedSourceDetails]);
+
+  useEffect(() => {
+    if (open && !passedSourceDetails) {
       fetchSourceDetails();
     }
-  }, [open, shortName]);
+  }, [open, shortName, passedSourceDetails]);
 
   useEffect(() => {
     if (!open) {
@@ -82,6 +102,9 @@ export const AddSourceWizard = ({
           name: "",
           config_fields: initialConfig
         });
+      } else {
+        // if there are no config fields for the source, no dialog should open
+        onOpenChange(false);
       }
     } catch (error) {
       toast.error("Failed to load source configuration");
@@ -93,6 +116,11 @@ export const AddSourceWizard = ({
   const handleTest = async () => {
     try {
       setTesting(true);
+
+      if (sourceDetails?.auth_type?.startsWith('oauth2')) {
+        alert(`OAuth2 source with config fields: ${shortName}`);
+      }
+
       const response = await apiClient.post(
         `/connections/connect/source/${shortName}`,
         config
