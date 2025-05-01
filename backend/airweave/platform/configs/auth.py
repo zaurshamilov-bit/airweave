@@ -149,3 +149,14 @@ class GitHubAuthConfig(AuthConfig):
         title="Repository Name",
         description="Repository to sync in owner/repo format (e.g., 'airweave-ai/airweave')",
     )
+
+
+class DropboxAuthConfig(AuthConfig):
+    """Dropbox authentication credentials schema."""
+
+    client_id: str = Field(
+        title="Client ID", description="The OAuth client ID for your Dropbox app"
+    )
+    client_secret: str = Field(
+        title="Client Secret", description="The OAuth client secret for your Dropbox app"
+    )
