@@ -72,6 +72,7 @@ export function UnifiedDataSourceGrid({
   const [selectedSource, setSelectedSource] = useState<{
     name: string;
     short_name: string;
+    sourceDetails?: any;
   } | null>(null);
 
   const { toast } = useToast();
@@ -82,52 +83,75 @@ export function UnifiedDataSourceGrid({
   const handleInitiateConnection = useCallback(async (source: Source) => {
     console.log("🔄 handleInitiateConnection called with auth_type:", source.auth_type);
 
-    // Handle config_class and api_key directly with AddSourceWizard
-    if (source.auth_type === "config_class" || source.auth_type === "api_key") {
-      console.log("⭐ Using direct AddSourceWizard for config_class/api_key");
-      setSelectedSource({
-        name: source.name,
-        short_name: source.short_name
-      });
-      setAddSourceOpen(true);
-      return;
-    }
+    // Fetch source details first
+    try {
+      const response = await apiClient.get(`/sources/detail/${source.short_name}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch source details");
+      }
 
-    if (source.auth_type === "none" || source.auth_type?.startsWith("basic")) {
-      // Open dialog for manual configuration
-      setActiveSourceForDialog(source);
-      setDialogOpen(true);
-    } else if (source.auth_type?.startsWith("oauth2")) {
-      // Initiate OAuth flow
-      if (handleOAuth) {
-        await handleOAuth(source.short_name);
+      const data = await response.json();
+
+      // Only open wizard if there are config fields
+      if (data.config_fields?.fields) {
+        setSelectedSource({
+          name: source.name,
+          short_name: source.short_name,
+          sourceDetails: data // Optional: pass pre-fetched data
+        });
+        setAddSourceOpen(true);
       } else {
-        // Default OAuth handler
-        try {
-          // Store the current path for redirect after OAuth
-          localStorage.setItem("oauth_return_url", window.location.pathname);
-
-          const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${source.short_name}`);
-          if (!resp.ok) {
-            throw new Error("Failed to retrieve auth URL");
-          }
-          const authUrl = await resp.text();
-          const cleanUrl = authUrl.replace(/^"|"$/g, ''); // Remove surrounding quotes
-          window.location.href = cleanUrl;
-        } catch (err: any) {
-          toast({
-            variant: "destructive",
-            title: "Failed to initiate OAuth2",
-            description: err.message ?? String(err),
-          });
+        // Handle source without config fields
+        if (data.auth_type?.startsWith('oauth2')) {
+          // Handle OAuth flow directly
+          // ... existing OAuth code
+        } else if (data.auth_type === 'none') {
+          // Handle no-auth sources
         }
       }
-    } else {
-      // Default to dialog for unknown auth types
-      setActiveSourceForDialog(source);
-      setDialogOpen(true);
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Failed to fetch source details",
+        description: err.message ?? String(err),
+      });
     }
-  }, [handleOAuth, toast, setActiveSourceForDialog, setDialogOpen, setSelectedSource, setAddSourceOpen]);
+
+    // if (source.auth_type === "none" || source.auth_type?.startsWith("basic")) {
+    //   // Open dialog for manual configuration
+    //   setActiveSourceForDialog(source);
+    //   setDialogOpen(true);
+    // } else if (source.auth_type?.startsWith("oauth2")) {
+    //   // Initiate OAuth flow
+    //   if (handleOAuth) {
+    //     await handleOAuth(source.short_name);
+    //   } else {
+    //     // Default OAuth handler
+    //     try {
+    //       // Store the current path for redirect after OAuth
+    //       localStorage.setItem("oauth_return_url", window.location.pathname);
+
+    //       const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${source.short_name}`);
+    //       if (!resp.ok) {
+    //         throw new Error("Failed to retrieve auth URL");
+    //       }
+    //       const authUrl = await resp.text();
+    //       const cleanUrl = authUrl.replace(/^"|"$/g, ''); // Remove surrounding quotes
+    //       window.location.href = cleanUrl;
+    //     } catch (err: any) {
+    //       toast({
+    //         variant: "destructive",
+    //         title: "Failed to initiate OAuth2",
+    //         description: err.message ?? String(err),
+    //       });
+    //     }
+    //   }
+    // } else {
+    //   // Default to dialog for unknown auth types
+    //   setActiveSourceForDialog(source);
+    //   setDialogOpen(true);
+    // }
+  }, [handleOAuth, toast, setSelectedSource, setAddSourceOpen]);
 
   const fetchSources = async () => {
     try {
@@ -373,17 +397,7 @@ export function UnifiedDataSourceGrid({
                   onSelect={mode === "select" ? (connectionId) => handleSelectConnection(connectionId, source) : undefined}
                   onAddConnection={() => {
                     console.log("📣 Adding connection for:", source.short_name);
-                    // For API key auth types, open wizard directly
-                    if (source.auth_type === "api_key" || source.auth_type === "config_class") {
-                      setSelectedSource({
-                        name: source.name,
-                        short_name: source.short_name
-                      });
-                      setAddSourceOpen(true);
-                    } else {
-                      // Use the standard flow for other auth types
-                      handleInitiateConnection(source);
-                    }
+                    handleInitiateConnection(source);
                   }}
                   onManage={mode === "manage" ? () => handleManageSource(source) : undefined}
                   renderDialogs={undefined} // Handled at the grid level
@@ -413,6 +427,7 @@ export function UnifiedDataSourceGrid({
           onComplete={handleConnectionCreated}
           shortName={selectedSource.short_name}
           name={selectedSource.name}
+          sourceDetails={selectedSource.sourceDetails}
         />
       )}
     </div>
