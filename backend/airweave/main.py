@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import ValidationError
 from starlette.middleware.cors import CORSMiddleware
 
+from airweave.api.router import TrailingSlashRouter
 from airweave.api.v1.api import api_router
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException, PermissionException, unpack_validation_error
@@ -52,7 +53,14 @@ async def lifespan(app: FastAPI):
     await platform_scheduler.stop()
 
 
-app = FastAPI(title=settings.PROJECT_NAME, openapi_url="/openapi.json", lifespan=lifespan)
+# Create FastAPI app with our custom router and disable FastAPI's built-in redirects
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    openapi_url="/openapi.json",
+    lifespan=lifespan,
+    router=TrailingSlashRouter(),
+    redirect_slashes=False,  # Critical: disable FastAPI's built-in slash redirects
+)
 
 app.include_router(api_router)
 
