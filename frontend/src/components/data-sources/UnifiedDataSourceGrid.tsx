@@ -7,8 +7,6 @@ import { apiClient, useApiClient } from "@/lib/api";
 import { UnifiedDataSourceCard } from "./UnifiedDataSourceCard";
 import { Connection } from "@/types";
 import { AddSourceWizard } from "@/components/sync/AddSourceWizard";
-import { toast } from "sonner";
-import { DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface Source {
   id: string;
@@ -18,6 +16,7 @@ interface Source {
   auth_type?: string | null;
   labels?: string[];
   output_entity_definition_ids?: string[]; // This will be used for entity count
+  sourceDetails?: any;
 }
 
 interface UnifiedDataSourceGridProps {
@@ -63,13 +62,9 @@ export function UnifiedDataSourceGrid({
   const [activeSourceForDialog, setActiveSourceForDialog] = useState<Source | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [sourceForWizard, setSourceForWizard] = useState<{
-    shortName: string;
-    name: string;
-  } | null>(null);
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [addSourceOpen, setAddSourceOpen] = useState(false);
-  const [selectedSource, setSelectedSource] = useState<{
+  const [connectionWizardOpen, setConnectionWizardOpen] = useState(false);
+  const [connectionWizardCompleted, setConnectionWizardCompleted] = useState(false);
+  const [sourceForConnection, setSourceForConnection] = useState<{
     name: string;
     short_name: string;
     sourceDetails?: any;
@@ -78,11 +73,9 @@ export function UnifiedDataSourceGrid({
   const { toast } = useToast();
 
   /**
-   * Handle initiating a connection
+   * When user clicks "+ Add Connection" -> this function determines if it should start a config field dialog
    */
   const handleInitiateConnection = useCallback(async (source: Source) => {
-    console.log("🔄 handleInitiateConnection called with auth_type:", source.auth_type);
-
     // Fetch source details first
     try {
       const response = await apiClient.get(`/sources/detail/${source.short_name}`);
@@ -94,20 +87,14 @@ export function UnifiedDataSourceGrid({
 
       // Only open wizard if there are config fields
       if (data.config_fields?.fields) {
-        setSelectedSource({
+        setSourceForConnection({
           name: source.name,
           short_name: source.short_name,
-          sourceDetails: data // Optional: pass pre-fetched data
+          sourceDetails: data
         });
-        setAddSourceOpen(true);
+        setConnectionWizardOpen(true);
       } else {
-        // Handle source without config fields
-        if (data.auth_type?.startsWith('oauth2')) {
-          // Handle OAuth flow directly
-          // ... existing OAuth code
-        } else if (data.auth_type === 'none') {
-          // Handle no-auth sources
-        }
+        handleDialogClosed(source)
       }
     } catch (err) {
       toast({
@@ -117,41 +104,79 @@ export function UnifiedDataSourceGrid({
       });
     }
 
-    // if (source.auth_type === "none" || source.auth_type?.startsWith("basic")) {
-    //   // Open dialog for manual configuration
-    //   setActiveSourceForDialog(source);
-    //   setDialogOpen(true);
-    // } else if (source.auth_type?.startsWith("oauth2")) {
-    //   // Initiate OAuth flow
-    //   if (handleOAuth) {
-    //     await handleOAuth(source.short_name);
-    //   } else {
-    //     // Default OAuth handler
-    //     try {
-    //       // Store the current path for redirect after OAuth
-    //       localStorage.setItem("oauth_return_url", window.location.pathname);
+  }, [handleOAuth, toast, setSourceForConnection, setConnectionWizardOpen]);
 
-    //       const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${source.short_name}`);
-    //       if (!resp.ok) {
-    //         throw new Error("Failed to retrieve auth URL");
-    //       }
-    //       const authUrl = await resp.text();
-    //       const cleanUrl = authUrl.replace(/^"|"$/g, ''); // Remove surrounding quotes
-    //       window.location.href = cleanUrl;
-    //     } catch (err: any) {
-    //       toast({
-    //         variant: "destructive",
-    //         title: "Failed to initiate OAuth2",
-    //         description: err.message ?? String(err),
-    //       });
-    //     }
-    //   }
-    // } else {
-    //   // Default to dialog for unknown auth types
-    //   setActiveSourceForDialog(source);
-    //   setDialogOpen(true);
-    // }
-  }, [handleOAuth, toast, setSelectedSource, setAddSourceOpen]);
+  // Function to handle actions when dialog closes or doesn't open at all
+  const handleDialogClosed = useCallback(async (
+    source: Source | { short_name: string; sourceDetails?: any } | null
+  ) => {
+    if (!source) return;
+
+    // Get the auth_type safely by checking both possible locations
+    const authType = source.sourceDetails?.auth_type || ('auth_type' in source ? source.auth_type : null);
+    const shortName = source.short_name;
+
+    // Skip config_class auth type - already handled in AddSourceWizard
+    if (authType === 'config_class') {
+      return;
+    }
+
+    if (authType === "none" || authType?.startsWith("basic")) {
+      // Open dialog for manual configuration
+      if ('id' in source && 'name' in source) {
+        setActiveSourceForDialog(source);
+        setDialogOpen(true);
+      }
+    } else if (authType?.startsWith("oauth2")) {
+      // Initiate OAuth flow
+      if (handleOAuth) {
+        await handleOAuth(shortName);
+      } else {
+        // Default OAuth handler
+        try {
+          // Store the current path for redirect after OAuth
+          localStorage.setItem("oauth_return_url", window.location.pathname);
+
+          const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${shortName}`);
+          if (!resp.ok) {
+            throw new Error("Failed to retrieve auth URL");
+          }
+          const authUrl = await resp.text();
+          const cleanUrl = authUrl.replace(/^"|"$/g, ''); // Remove surrounding quotes
+          window.location.href = cleanUrl;
+        } catch (err: any) {
+          toast({
+            variant: "destructive",
+            title: "Failed to initiate OAuth2",
+            description: err.message ?? String(err),
+          });
+        }
+      }
+    } else if (authType && 'id' in source && 'name' in source) {
+      // Default to dialog for unknown auth types
+      setActiveSourceForDialog(source);
+      setDialogOpen(true);
+    }
+  }, [handleOAuth, setActiveSourceForDialog, setDialogOpen, toast]);
+
+  // Combined useEffect to handle both cleanup and post-dialog actions
+  useEffect(() => {
+    // Only run when dialog closes AND setup was completed
+    if (!connectionWizardOpen && connectionWizardCompleted) {
+      handleDialogClosed(sourceForConnection);
+      setConnectionWizardCompleted(false);
+    }
+
+    // Schedule cleanup with a small delay
+    const timer = setTimeout(() => {
+      if (!connectionWizardOpen) {
+        setSourceForConnection(null);
+      }
+    }, 100);
+
+    // Clean up timer if component unmounts
+    return () => clearTimeout(timer);
+  }, [connectionWizardOpen, handleDialogClosed, sourceForConnection, connectionWizardCompleted]);
 
   const fetchSources = async () => {
     try {
@@ -310,28 +335,25 @@ export function UnifiedDataSourceGrid({
     });
 
   // Function to handle connection creation success
-  const handleConnectionCreated = () => {
-    console.log("✅ [Sources] Connection created");
-    toast({
-      title: "Connection created successfully"
-    });
-    // Refresh the page or fetch connections again
-    window.location.reload();
-  };
+  const handleConnectionCreated = (connectionId: string) => {
+    setConnectionWizardCompleted(true);
 
-  // Add this useEffect to clean up the wizard state
-  useEffect(() => {
-    // Clean up when unmounting or when addSourceOpen changes to false
-    if (!addSourceOpen) {
-      // Small delay to avoid state updates during render
-      const timer = setTimeout(() => {
-        if (!addSourceOpen) {
-          setSelectedSource(null);
-        }
-      }, 100);
-      return () => clearTimeout(timer);
+    // Check if this is an OAuth flow that needs to continue
+    if (connectionId.startsWith("oauth2_")) {
+      toast({
+        title: "OAuth configuration saved",
+        description: "Please complete the authorization process"
+      });
+      // Don't reload - the OAuth flow will continue
+    } else {
+      // For fully created connections (config_class, api_key)
+      toast({
+        title: "Connection created successfully"
+      });
+      // Refresh the page or fetch connections again
+      window.location.reload();
     }
-  }, [addSourceOpen]);
+  };
 
   return (
     <div className="space-y-6">
@@ -420,14 +442,14 @@ export function UnifiedDataSourceGrid({
       )}
 
       {/* Render AddSourceWizard directly */}
-      {selectedSource && (
+      {sourceForConnection && (
         <AddSourceWizard
-          open={addSourceOpen}
-          onOpenChange={setAddSourceOpen}
+          open={connectionWizardOpen}
+          onOpenChange={setConnectionWizardOpen}
           onComplete={handleConnectionCreated}
-          shortName={selectedSource.short_name}
-          name={selectedSource.name}
-          sourceDetails={selectedSource.sourceDetails}
+          shortName={sourceForConnection.short_name}
+          name={sourceForConnection.name}
+          sourceDetails={sourceForConnection.sourceDetails}
         />
       )}
     </div>

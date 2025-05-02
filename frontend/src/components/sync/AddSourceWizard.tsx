@@ -118,22 +118,33 @@ export const AddSourceWizard = ({
       setTesting(true);
 
       if (sourceDetails?.auth_type?.startsWith('oauth2')) {
-        alert(`OAuth2 source with config fields: ${shortName}`);
+        // Store config fields in session storage
+        sessionStorage.setItem(`oauth2_config_${shortName}`, JSON.stringify({
+          name: config.name,
+          config_fields: config.config_fields
+        }));
+
+        // Return early without making POST request for OAuth2 sources
+        toast.success("OAuth2 configuration saved");
+        onComplete("oauth2_" + shortName);
+        onOpenChange(false);
+        return;
+      } else if (sourceDetails?.auth_type === "config_class" || sourceDetails?.auth_type === "api_key") {
+        console.log("I am going to send the config and try to connect")
+        const response = await apiClient.post(
+          `/connections/connect/source/${shortName}`,
+          config
+        );
+        if (!response.ok) {
+          throw new Error("Failed to create connection");
+        }
+        const data = await response.json();
+        toast.success("Connection created successfully!");
+        onComplete(data.id);
+        onOpenChange(false);
+      } else {
+        toast.error(`Having auth configuration for auth type "${sourceDetails?.auth_type || 'unknown'}" is not supported`);
       }
-
-      const response = await apiClient.post(
-        `/connections/connect/source/${shortName}`,
-        config
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to create connection");
-      }
-
-      const data = await response.json();
-      toast.success("Connection created successfully!");
-      onComplete(data.id);
-      onOpenChange(false);
     } catch (error) {
       toast.error("Failed to create connection");
     } finally {
