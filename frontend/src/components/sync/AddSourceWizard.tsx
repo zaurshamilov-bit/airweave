@@ -120,7 +120,7 @@ export const AddSourceWizard = ({
       if (sourceDetails?.auth_type?.startsWith('oauth2')) {
         // Store config fields in session storage
         sessionStorage.setItem(`oauth2_config_${shortName}`, JSON.stringify({
-          name: config.name,
+          connection_name: config.name,
           config_fields: config.config_fields
         }));
 
