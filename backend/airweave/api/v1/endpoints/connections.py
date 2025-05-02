@@ -1,5 +1,6 @@
 """The API module that contains the endpoints for connections."""
 
+import json
 from typing import Optional
 from uuid import UUID
 
@@ -200,14 +201,25 @@ async def disconnect_source_connection(
 async def get_oauth2_auth_url(
     *,
     short_name: str,
+    config_fields: Optional[str] = None,
 ) -> str:
     """Get the OAuth2 authorization URL for a source.
 
     Args:
     -----
         short_name: The short name of the source
+        config_fields: Optional JSON string containing configuration fields
     """
-    return await connection_service.get_oauth2_auth_url(short_name)
+    parsed_config_fields = None
+    if config_fields:
+        try:
+            parsed_config_fields = json.loads(config_fields)
+        except json.JSONDecodeError as err:
+            raise HTTPException(
+                status_code=400, detail="Invalid config_fields format. Must be valid JSON."
+            ) from err
+
+    return await connection_service.get_oauth2_auth_url(short_name, parsed_config_fields)
 
 
 @router.post("/oauth2/source/code", response_model=schemas.Connection)

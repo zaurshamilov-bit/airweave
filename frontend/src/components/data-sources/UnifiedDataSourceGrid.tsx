@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { apiClient, useApiClient } from "@/lib/api";
+import { apiClient } from "@/lib/api";
 import { UnifiedDataSourceCard } from "./UnifiedDataSourceCard";
 import { Connection } from "@/types";
 import { AddSourceWizard } from "@/components/sync/AddSourceWizard";
@@ -137,7 +137,31 @@ export function UnifiedDataSourceGrid({
           // Store the current path for redirect after OAuth
           localStorage.setItem("oauth_return_url", window.location.pathname);
 
-          const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${shortName}`);
+          // Check for stored OAuth2 config data
+          const storedConfigKey = `oauth2_config_${shortName}`;
+          const storedConfigJson = sessionStorage.getItem(storedConfigKey);
+          let configFields = {};
+
+          if (storedConfigJson) {
+            try {
+              const storedConfig = JSON.parse(storedConfigJson);
+              if (storedConfig.config_fields) {
+                configFields = storedConfig.config_fields;
+              }
+            } catch (err) {
+              console.error('Failed to parse stored OAuth2 config:', err);
+            }
+          }
+
+          // Build the URL with query parameters
+          let url = `/connections/oauth2/source/auth_url?short_name=${shortName}`;
+
+          // Add config fields if available
+          if (Object.keys(configFields).length > 0) {
+            url += `&config_fields=${encodeURIComponent(JSON.stringify(configFields))}`;
+          }
+
+          const resp = await apiClient.get(url);
           if (!resp.ok) {
             throw new Error("Failed to retrieve auth URL");
           }

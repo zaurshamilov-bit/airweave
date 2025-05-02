@@ -174,11 +174,14 @@ class ConnectionService:
                     ),
                 )
 
-    async def get_oauth2_auth_url(self, short_name: str) -> str:
+    async def get_oauth2_auth_url(
+        self, short_name: str, config_fields: Optional[Dict[str, Any]] = None
+    ) -> str:
         """Get the OAuth2 authorization URL for a source.
 
         Args:
             short_name: The short name of the source
+            config_fields: Optional configuration fields which may include client_id
 
         Returns:
             The OAuth2 authorization URL
@@ -196,7 +199,7 @@ class ConnectionService:
         if not self._supports_oauth2(settings.auth_type):
             raise HTTPException(status_code=400, detail="Integration does not support OAuth2")
 
-        return oauth2_service.generate_auth_url(settings)
+        return oauth2_service.generate_auth_url(settings, config_fields)
 
     async def connect_with_oauth2_code(
         self,

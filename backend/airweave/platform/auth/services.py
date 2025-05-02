@@ -34,12 +34,15 @@ class OAuth2Service:
     """Service class for handling OAuth2 authentication and token exchange."""
 
     @staticmethod
-    def generate_auth_url(oauth2_settings: OAuth2Settings) -> str:
+    def generate_auth_url(
+        oauth2_settings: OAuth2Settings, config_fields: Optional[dict] = None
+    ) -> str:
         """Generate the OAuth2 authorization URL with the required query parameters.
 
         Args:
         ----
             oauth2_settings: The OAuth2 settings for the integration.
+            config_fields: Optional dict containing configuration parameters like client_id
 
         Returns:
         -------
@@ -48,9 +51,13 @@ class OAuth2Service:
         """
         redirect_uri = OAuth2Service._get_redirect_url(oauth2_settings.integration_short_name)
 
+        client_id, _ = OAuth2Service._get_client_credentials(
+            oauth2_settings, config_fields["client_id"]
+        )
+
         params = {
             "response_type": "code",
-            "client_id": oauth2_settings.client_id,
+            "client_id": client_id,
             "redirect_uri": redirect_uri,
             **(oauth2_settings.additional_frontend_params or {}),
         }
@@ -161,6 +168,7 @@ class OAuth2Service:
             integration_config = OAuth2Service._get_integration_config(integration_short_name)
 
             # Get client credentials
+            # TODO: this needs to check the db
             client_id, client_secret = await OAuth2Service._get_client_credentials(
                 integration_config
             )
@@ -272,6 +280,7 @@ class OAuth2Service:
 
         """
         # Try to get client_id and client_secret from config_fields first
+        # TODO: needs database option
         if config_fields:
             client_id = config_fields.get("client_id", integration_config.client_id)
             client_secret = config_fields.get("client_secret", integration_config.client_secret)
