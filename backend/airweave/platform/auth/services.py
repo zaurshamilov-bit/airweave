@@ -35,14 +35,14 @@ class OAuth2Service:
 
     @staticmethod
     def generate_auth_url(
-        oauth2_settings: OAuth2Settings, config_fields: Optional[dict] = None
+        oauth2_settings: OAuth2Settings, auth_fields: Optional[dict] = None
     ) -> str:
         """Generate the OAuth2 authorization URL with the required query parameters.
 
         Args:
         ----
             oauth2_settings: The OAuth2 settings for the integration.
-            config_fields: Optional dict containing configuration parameters like client_id
+            auth_fields: Optional dict containing configuration parameters like client_id
 
         Returns:
         -------
@@ -51,7 +51,7 @@ class OAuth2Service:
         """
         redirect_uri = OAuth2Service._get_redirect_url(oauth2_settings.integration_short_name)
 
-        client_id, _ = OAuth2Service._get_client_credentials(oauth2_settings, config_fields)
+        client_id, _ = OAuth2Service._get_client_credentials(oauth2_settings, auth_fields)
 
         params = {
             "response_type": "code",
@@ -97,7 +97,7 @@ class OAuth2Service:
 
     @staticmethod
     async def exchange_autorization_code_for_token(
-        integration_short_name: str, code: str, config_fields: Optional[dict] = None
+        integration_short_name: str, code: str, auth_fields: Optional[dict] = None
     ) -> OAuth2TokenResponse:
         """Exchanges an authorization code for an access token.
 
@@ -105,7 +105,7 @@ class OAuth2Service:
         ----
             integration_short_name (str): The short name of the integration.
             code (str): The authorization code received from the OAuth provider.
-            config_fields: Optional additional configuration fields for the connection
+            auth_fields: Optional additional authentication fields for the connection
 
         Returns:
         -------
@@ -122,7 +122,7 @@ class OAuth2Service:
         redirect_uri = OAuth2Service._get_redirect_url(integration_short_name)
 
         client_id, client_secret = OAuth2Service._get_client_credentials(
-            integration_config, config_fields
+            integration_config, auth_fields
         )
 
         return await OAuth2Service._exchange_code(
@@ -252,7 +252,7 @@ class OAuth2Service:
     @staticmethod
     def _get_client_credentials(
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
-        config_fields: Optional[dict] = None,
+        auth_fields: Optional[dict] = None,
         decrypted_credential: Optional[dict] = None,
     ) -> tuple[str, str]:
         """Get client credentials based on priority ordering.
@@ -260,7 +260,7 @@ class OAuth2Service:
         Args:
         ----
             integration_config: The integration configuration.
-            config_fields: Optional additional configuration fields for the connection.
+            auth_fields: Optional additional authentication fields for the connection.
             decrypted_credential: Optional decrypted credentials that may contain client ID/secret.
 
         Returns:
@@ -269,7 +269,7 @@ class OAuth2Service:
 
         Priority order:
         1. From decrypted_credential (if available)
-        2. From config_fields (if available)
+        2. From auth_fields (if available)
         3. From integration_config (as fallback)
         """
         client_id = integration_config.client_id
@@ -280,10 +280,10 @@ class OAuth2Service:
             client_id = decrypted_credential.get("client_id", client_id)
             client_secret = decrypted_credential.get("client_secret", client_secret)
 
-        # Then check config_fields
-        if config_fields:
-            client_id = config_fields.get("client_id", client_id)
-            client_secret = config_fields.get("client_secret", client_secret)
+        # Then check auth_fields
+        if auth_fields:
+            client_id = auth_fields.get("client_id", client_id)
+            client_secret = auth_fields.get("client_secret", client_secret)
 
         return client_id, client_secret
 

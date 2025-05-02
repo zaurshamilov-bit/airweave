@@ -97,7 +97,7 @@ async def connect_integration(
     integration_type: IntegrationType,
     short_name: str,
     name: Optional[str] = Body(default=None),
-    config_fields: dict = Body(..., exclude={"name"}),
+    auth_fields: dict = Body(..., exclude={"name"}),
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Connection:
     """Connect to a source, destination, or embedding model.
@@ -116,7 +116,7 @@ async def connect_integration(
         integration_type: The type of integration to connect to.
         short_name: The short name of the integration to connect to.
         name: The name of the connection.
-        config_fields: The config fields for the integration.
+        auth_fields: The config fields for the integration.
         user: The current user.
 
     Returns:
@@ -124,7 +124,7 @@ async def connect_integration(
         schemas.Connection: The connection.
     """
     return await connection_service.connect_with_config(
-        db, integration_type, short_name, name, config_fields, user
+        db, integration_type, short_name, name, auth_fields, user
     )
 
 
@@ -201,25 +201,25 @@ async def disconnect_source_connection(
 async def get_oauth2_auth_url(
     *,
     short_name: str,
-    config_fields: Optional[str] = None,
+    auth_fields: Optional[str] = None,
 ) -> str:
     """Get the OAuth2 authorization URL for a source.
 
     Args:
     -----
         short_name: The short name of the source
-        config_fields: Optional JSON string containing configuration fields
+        auth_fields: Optional JSON string containing authentication fields
     """
-    parsed_config_fields = None
-    if config_fields:
+    parsed_auth_fields = None
+    if auth_fields:
         try:
-            parsed_config_fields = json.loads(config_fields)
+            parsed_auth_fields = json.loads(auth_fields)
         except json.JSONDecodeError as err:
             raise HTTPException(
-                status_code=400, detail="Invalid config_fields format. Must be valid JSON."
+                status_code=400, detail="Invalid auth_fields format. Must be valid JSON."
             ) from err
 
-    return await connection_service.get_oauth2_auth_url(short_name, parsed_config_fields)
+    return await connection_service.get_oauth2_auth_url(short_name, parsed_auth_fields)
 
 
 @router.post("/oauth2/source/code", response_model=schemas.Connection)
@@ -230,7 +230,7 @@ async def send_oauth2_code(
     code: str = Body(...),
     user: schemas.User = Depends(deps.get_user),
     connection_name: Optional[str] = Body(default=None),
-    config_fields: Optional[dict] = Body(default=None),
+    auth_fields: Optional[dict] = Body(default=None),
 ) -> schemas.Connection:
     """Send the OAuth2 authorization code for a source.
 
@@ -246,14 +246,14 @@ async def send_oauth2_code(
         code: The authorization code
         user: The current user
         connection_name: Optional custom name for the connection
-        config_fields: Optional additional configuration fields for the connection
+        auth_fields: Optional additional authentication fields for the connection
 
     Returns:
     --------
         connection (schemas.Connection): The created connection
     """
     return await connection_service.connect_with_oauth2_code(
-        db, short_name, code, user, connection_name, config_fields
+        db, short_name, code, user, connection_name, auth_fields
     )
 
 

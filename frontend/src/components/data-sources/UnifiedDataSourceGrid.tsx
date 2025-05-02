@@ -86,7 +86,7 @@ export function UnifiedDataSourceGrid({
       const data = await response.json();
 
       // Only open wizard if there are config fields
-      if (data.config_fields?.fields) {
+      if (data.auth_fields?.fields) {
         setSourceForConnection({
           name: source.name,
           short_name: source.short_name,
@@ -140,13 +140,13 @@ export function UnifiedDataSourceGrid({
           // Check for stored OAuth2 config data
           const storedConfigKey = `oauth2_config_${shortName}`;
           const storedConfigJson = sessionStorage.getItem(storedConfigKey);
-          let configFields = {};
+          let authenticationFields = {};
 
           if (storedConfigJson) {
             try {
               const storedConfig = JSON.parse(storedConfigJson);
-              if (storedConfig.config_fields) {
-                configFields = storedConfig.config_fields;
+              if (storedConfig.auth_fields) {
+                authenticationFields = storedConfig.auth_fields;
               }
             } catch (err) {
               console.error('Failed to parse stored OAuth2 config:', err);
@@ -157,8 +157,8 @@ export function UnifiedDataSourceGrid({
           let url = `/connections/oauth2/source/auth_url?short_name=${shortName}`;
 
           // Add config fields if available
-          if (Object.keys(configFields).length > 0) {
-            url += `&config_fields=${encodeURIComponent(JSON.stringify(configFields))}`;
+          if (Object.keys(authenticationFields).length > 0) {
+            url += `&auth_fields=${encodeURIComponent(JSON.stringify(authenticationFields))}`;
           }
 
           const resp = await apiClient.get(url);

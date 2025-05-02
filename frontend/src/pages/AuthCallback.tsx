@@ -68,7 +68,7 @@ export function AuthCallback() {
         const payload = {
           short_name,
           code,
-          ...(storedConfig ? { config_fields: storedConfig.config_fields, connection_name: storedConfig.connection_name } : {})
+          ...(storedConfig ? { auth_fields: storedConfig.auth_fields, connection_name: storedConfig.connection_name } : {})
         };
 
         // Use a Promise ref to ensure only one request is made

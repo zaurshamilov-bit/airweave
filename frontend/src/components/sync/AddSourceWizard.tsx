@@ -27,7 +27,7 @@ interface SourceDetails {
   name: string;
   description: string;
   short_name: string;
-  config_fields?: {
+  auth_fields?: {
     fields: ConfigField[];
   };
   auth_type?: string;
@@ -43,9 +43,9 @@ export const AddSourceWizard = ({
 }: AddSourceWizardProps) => {
   const [step, setStep] = useState(1);
   const [sourceDetails, setSourceDetails] = useState<SourceDetails | null>(null);
-  const [config, setConfig] = useState<{ name: string; config_fields: Record<string, string> }>({
+  const [config, setConfig] = useState<{ name: string; auth_fields: Record<string, string> }>({
     name: "",
-    config_fields: {}
+    auth_fields: {}
   });
   const [testing, setTesting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -54,14 +54,14 @@ export const AddSourceWizard = ({
     if (passedSourceDetails) {
       setSourceDetails(passedSourceDetails);
 
-      if (passedSourceDetails.config_fields?.fields) {
+      if (passedSourceDetails.auth_fields?.fields) {
         const initialConfig: Record<string, string> = {};
-        passedSourceDetails.config_fields.fields.forEach((field: ConfigField) => {
+        passedSourceDetails.auth_fields.fields.forEach((field: ConfigField) => {
           initialConfig[field.name] = "";
         });
         setConfig({
           name: "",
-          config_fields: initialConfig
+          auth_fields: initialConfig
         });
       }
     }
@@ -77,7 +77,7 @@ export const AddSourceWizard = ({
     if (!open) {
       setStep(1);
       setSourceDetails(null);
-      setConfig({ name: "", config_fields: {} });
+      setConfig({ name: "", auth_fields: {} });
       setTesting(false);
       setIsLoading(false);
     }
@@ -93,14 +93,14 @@ export const AddSourceWizard = ({
       const data = await response.json();
       setSourceDetails(data);
 
-      if (data.config_fields?.fields) {
+      if (data.auth_fields?.fields) {
         const initialConfig: Record<string, string> = {};
-        data.config_fields.fields.forEach((field: ConfigField) => {
+        data.auth_fields.fields.forEach((field: ConfigField) => {
           initialConfig[field.name] = "";
         });
         setConfig({
           name: "",
-          config_fields: initialConfig
+          auth_fields: initialConfig
         });
       } else {
         // if there are no config fields for the source, no dialog should open
@@ -121,7 +121,7 @@ export const AddSourceWizard = ({
         // Store config fields in session storage
         sessionStorage.setItem(`oauth2_config_${shortName}`, JSON.stringify({
           connection_name: config.name,
-          config_fields: config.config_fields
+          auth_fields: config.auth_fields
         }));
 
         // Return early without making POST request for OAuth2 sources
@@ -160,9 +160,9 @@ export const AddSourceWizard = ({
       return false;
     }
 
-    // Validate all required fields from config_fields
-    const missingFields = sourceDetails?.config_fields?.fields.filter(
-      field => !config.config_fields[field.name]?.trim()
+    // Validate all required fields from auth_fields
+    const missingFields = sourceDetails?.auth_fields?.fields.filter(
+      field => !config.auth_fields[field.name]?.trim()
     );
 
     if (missingFields && missingFields.length > 0) {
@@ -237,7 +237,7 @@ export const AddSourceWizard = ({
                       />
                     </div>
 
-                    {sourceDetails.config_fields?.fields.map((field) => (
+                    {sourceDetails.auth_fields?.fields.map((field) => (
                       <div key={field.name} className="space-y-2">
                         <Label htmlFor={field.name}>
                           {field.title}
@@ -250,12 +250,12 @@ export const AddSourceWizard = ({
                         <Input
                           id={field.name}
                           type={field.type === "string" ? "text" : field.type}
-                          value={config.config_fields[field.name] || ""}
+                          value={config.auth_fields[field.name] || ""}
                           onChange={(e) =>
                             setConfig({
                               ...config,
-                              config_fields: {
-                                ...config.config_fields,
+                              auth_fields: {
+                                ...config.auth_fields,
                                 [field.name]: e.target.value
                               }
                             })
@@ -288,13 +288,13 @@ export const AddSourceWizard = ({
                     <p className="text-sm text-muted-foreground">Connection Name</p>
                     <p className="font-medium">{config.name}</p>
                   </div>
-                  {sourceDetails.config_fields?.fields.map((field) => (
+                  {sourceDetails.auth_fields?.fields.map((field) => (
                     <div key={field.name}>
                       <p className="text-sm text-muted-foreground">{field.title}</p>
                       <p className="font-medium">
                         {field.type === "password" || field.name.toLowerCase().includes('key') || field.name.toLowerCase().includes('token')
-                          ? maskSensitiveValue(config.config_fields[field.name])
-                          : config.config_fields[field.name]}
+                          ? maskSensitiveValue(config.auth_fields[field.name])
+                          : config.auth_fields[field.name]}
                       </p>
                     </div>
                   ))}
