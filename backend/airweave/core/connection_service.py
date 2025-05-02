@@ -199,7 +199,13 @@ class ConnectionService:
         return oauth2_service.generate_auth_url(settings)
 
     async def connect_with_oauth2_code(
-        self, db: AsyncSession, short_name: str, code: str, user: schemas.User
+        self,
+        db: AsyncSession,
+        short_name: str,
+        code: str,
+        user: schemas.User,
+        connection_name: Optional[str] = None,
+        config_fields: Optional[dict] = None,
     ) -> schemas.Connection:
         """Create a connection using an OAuth2 code.
 
@@ -208,6 +214,8 @@ class ConnectionService:
             short_name: The short name of the integration
             code: The OAuth2 authorization code
             user: The current user
+            connection_name: Optional custom name for the connection
+            config_fields: Optional additional configuration fields for the connection
 
         Returns:
             The created connection
@@ -218,7 +226,7 @@ class ConnectionService:
         try:
             # Exchange the authorization code for a token
             oauth2_response = await oauth2_service.exchange_autorization_code_for_token(
-                short_name, code
+                short_name, code, config_fields
             )
 
             # Get the source information
@@ -237,6 +245,8 @@ class ConnectionService:
                 settings=settings,
                 oauth2_response=oauth2_response,
                 user=user,
+                connection_name=connection_name,
+                config_fields=config_fields,
             )
         except Exception as e:
             connection_logger.error(f"Failed to exchange OAuth2 code: {e}")
@@ -609,6 +619,8 @@ class ConnectionService:
         settings: Any,
         oauth2_response: OAuth2TokenResponse,
         user: schemas.User,
+        connection_name: Optional[str] = None,
+        config_fields: Optional[dict] = None,
     ) -> schemas.Connection:
         """Create a connection with OAuth2 credentials.
 
@@ -618,12 +630,21 @@ class ConnectionService:
             settings: The OAuth2 settings
             oauth2_response: The OAuth2 token response
             user: The current user
+            connection_name: Optional custom name for the connection
+            config_fields: Optional additional configuration fields for the connection
 
         Returns:
             The created connection
         """
         # Get the credentials to store
         credentials_data = oauth2_response.model_dump()
+
+        # Store config fields in credentials if provided
+        if config_fields:
+            for key, value in config_fields.items():
+                if key not in credentials_data:
+                    credentials_data[key] = value
+
         encrypted_creds = credentials.encrypt(credentials_data)
 
         async with UnitOfWork(db) as uow:
@@ -643,7 +664,7 @@ class ConnectionService:
 
             # Create connection with credentials
             connection_data = {
-                "name": f"Connection to {source.name}",
+                "name": connection_name if connection_name else f"Connection to {source.name}",
                 "integration_type": IntegrationType.SOURCE,
                 "status": ConnectionStatus.ACTIVE,
                 "integration_credential_id": integration_cred.id,

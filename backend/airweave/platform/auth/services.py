@@ -1,6 +1,7 @@
 """The services for handling OAuth2 authentication and token exchange for integrations."""
 
 import base64
+from typing import Optional
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -91,7 +92,7 @@ class OAuth2Service:
 
     @staticmethod
     async def exchange_autorization_code_for_token(
-        integration_short_name: str, code: str
+        integration_short_name: str, code: str, config_fields: Optional[dict] = None
     ) -> OAuth2TokenResponse:
         """Exchanges an authorization code for an access token.
 
@@ -99,6 +100,7 @@ class OAuth2Service:
         ----
             integration_short_name (str): The short name of the integration.
             code (str): The authorization code received from the OAuth provider.
+            config_fields: Optional additional configuration fields for the connection
 
         Returns:
         -------
@@ -113,8 +115,10 @@ class OAuth2Service:
             raise NotFoundException(f"Integration {integration_short_name} not found.")
 
         redirect_uri = OAuth2Service._get_redirect_url(integration_short_name)
-        client_id = integration_config.client_id
-        client_secret = integration_config.client_secret
+
+        client_id, client_secret = OAuth2Service._get_client_credentials(
+            integration_config, config_fields
+        )
 
         return await OAuth2Service._exchange_code(
             code=code,
@@ -250,8 +254,9 @@ class OAuth2Service:
         return integration_config
 
     @staticmethod
-    async def _get_client_credentials(
+    def _get_client_credentials(
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
+        config_fields: Optional[dict] = None,
     ) -> tuple[str, str]:
         """Get client credentials from configuration.
 
@@ -259,14 +264,21 @@ class OAuth2Service:
         ----
             integration_config (schemas.Source | schemas.Destination | schemas.EmbeddingModel):
                 The integration configuration.
+            config_fields: Optional additional configuration fields for the connection
 
         Returns:
         -------
             tuple[str, str]: The client ID and client secret.
 
         """
-        client_id = integration_config.client_id
-        client_secret = integration_config.client_secret
+        # Try to get client_id and client_secret from config_fields first
+        if config_fields:
+            client_id = config_fields.get("client_id", integration_config.client_id)
+            client_secret = config_fields.get("client_secret", integration_config.client_secret)
+        else:
+            client_id = integration_config.client_id
+            client_secret = integration_config.client_secret
+
         return client_id, client_secret
 
     @staticmethod

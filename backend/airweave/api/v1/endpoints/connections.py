@@ -217,6 +217,8 @@ async def send_oauth2_code(
     short_name: str = Body(...),
     code: str = Body(...),
     user: schemas.User = Depends(deps.get_user),
+    connection_name: Optional[str] = Body(default=None),
+    config_fields: Optional[dict] = Body(default=None),
 ) -> schemas.Connection:
     """Send the OAuth2 authorization code for a source.
 
@@ -231,12 +233,16 @@ async def send_oauth2_code(
         short_name: The short name of the source
         code: The authorization code
         user: The current user
+        connection_name: Optional custom name for the connection
+        config_fields: Optional additional configuration fields for the connection
 
     Returns:
     --------
         connection (schemas.Connection): The created connection
     """
-    return await connection_service.connect_with_oauth2_code(db, short_name, code, user)
+    return await connection_service.connect_with_oauth2_code(
+        db, short_name, code, user, connection_name, config_fields
+    )
 
 
 @router.post("/oauth2/white-label/{white_label_id}/code", response_model=schemas.Connection)
