@@ -171,7 +171,6 @@ class OAuth2Service:
             integration_config = OAuth2Service._get_integration_config(integration_short_name)
 
             # Get client credentials
-            # TODO: this needs to check the db
             client_id, client_secret = OAuth2Service._get_client_credentials(
                 integration_config, None, decrypted_credential
             )

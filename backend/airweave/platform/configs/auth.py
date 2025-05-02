@@ -160,3 +160,12 @@ class DropboxAuthConfig(AuthConfig):
     client_secret: str = Field(
         title="Client Secret", description="The OAuth client secret for your Dropbox app"
     )
+
+
+class GoogleAuthConfig(AuthConfig):
+    """Google authentication credentials schema."""
+
+    client_id: str = Field(title="Client ID", description="The OAuth client ID for your Google app")
+    client_secret: str = Field(
+        title="Client Secret", description="The OAuth client secret for your Google app"
+    )
