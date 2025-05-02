@@ -51,9 +51,7 @@ class OAuth2Service:
         """
         redirect_uri = OAuth2Service._get_redirect_url(oauth2_settings.integration_short_name)
 
-        client_id, _ = OAuth2Service._get_client_credentials(
-            oauth2_settings, config_fields["client_id"]
-        )
+        client_id, _ = OAuth2Service._get_client_credentials(oauth2_settings, config_fields)
 
         params = {
             "response_type": "code",
@@ -137,7 +135,11 @@ class OAuth2Service:
 
     @staticmethod
     async def refresh_access_token(
-        db: AsyncSession, integration_short_name: str, user: schemas.User, connection_id: UUID
+        db: AsyncSession,
+        integration_short_name: str,
+        user: schemas.User,
+        connection_id: UUID,
+        decrypted_credential: dict,
     ) -> OAuth2TokenResponse:
         """Refresh an access token using a refresh token.
 
@@ -149,6 +151,7 @@ class OAuth2Service:
             integration_short_name (str): The short name of the integration.
             user (schemas.User): The user for whom to refresh the token.
             connection_id (UUID): The ID of the connection to refresh the token for.
+            decrypted_credential (dict): The token and optional config fields
 
         Returns:
         -------
@@ -162,15 +165,15 @@ class OAuth2Service:
         """
         try:
             # Get and validate refresh token
-            refresh_token = await OAuth2Service._get_refresh_token(db, user, connection_id)
+            refresh_token = await OAuth2Service._get_refresh_token(decrypted_credential)
 
             # Get and validate integration config
             integration_config = OAuth2Service._get_integration_config(integration_short_name)
 
             # Get client credentials
             # TODO: this needs to check the db
-            client_id, client_secret = await OAuth2Service._get_client_credentials(
-                integration_config
+            client_id, client_secret = OAuth2Service._get_client_credentials(
+                integration_config, None, decrypted_credential
             )
 
             # Prepare request parameters
@@ -198,14 +201,12 @@ class OAuth2Service:
             raise
 
     @staticmethod
-    async def _get_refresh_token(db: AsyncSession, user: schemas.User, connection_id: UUID) -> str:
-        """Get and decrypt refresh token from database.
+    async def _get_refresh_token(decrypted_credential: dict) -> str:
+        """Get refresh token from decrypted credentials.
 
         Args:
         ----
-            db (AsyncSession): The database session.
-            user (schemas.User): The user to get the refresh token for.
-            connection_id (UUID): The ID of the connection to get the refresh token for.
+            decrypted_credential (dict): The decrypted credentials containing the refresh token.
 
         Returns:
         -------
@@ -214,22 +215,10 @@ class OAuth2Service:
         Raises:
         ------
             TokenRefreshError: If no refresh token is found
-
         """
-        # Get connection
-        connection = await crud.connection.get(db=db, id=connection_id, current_user=user)
-
-        # Get integration credential
-        integration_credential = await crud.integration_credential.get(
-            db=db, id=connection.integration_credential_id, current_user=user
-        )
-
-        decrypted_credentials = credentials.decrypt(integration_credential.encrypted_credentials)
-        refresh_token = decrypted_credentials.get("refresh_token", None)
+        refresh_token = decrypted_credential.get("refresh_token", None)
         if not refresh_token:
-            error_message = (
-                f"No refresh token found for user {user.email} and connection {connection_id}"
-            )
+            error_message = "No refresh token found"
             oauth2_service_logger.error(error_message)
             raise TokenRefreshError(error_message)
         return refresh_token
@@ -265,28 +254,37 @@ class OAuth2Service:
     def _get_client_credentials(
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
         config_fields: Optional[dict] = None,
+        decrypted_credential: Optional[dict] = None,
     ) -> tuple[str, str]:
-        """Get client credentials from configuration.
+        """Get client credentials based on priority ordering.
 
         Args:
         ----
-            integration_config (schemas.Source | schemas.Destination | schemas.EmbeddingModel):
-                The integration configuration.
-            config_fields: Optional additional configuration fields for the connection
+            integration_config: The integration configuration.
+            config_fields: Optional additional configuration fields for the connection.
+            decrypted_credential: Optional decrypted credentials that may contain client ID/secret.
 
         Returns:
         -------
             tuple[str, str]: The client ID and client secret.
 
+        Priority order:
+        1. From decrypted_credential (if available)
+        2. From config_fields (if available)
+        3. From integration_config (as fallback)
         """
-        # Try to get client_id and client_secret from config_fields first
-        # TODO: needs database option
+        client_id = integration_config.client_id
+        client_secret = integration_config.client_secret
+
+        # First check decrypted_credential
+        if decrypted_credential:
+            client_id = decrypted_credential.get("client_id", client_id)
+            client_secret = decrypted_credential.get("client_secret", client_secret)
+
+        # Then check config_fields
         if config_fields:
-            client_id = config_fields.get("client_id", integration_config.client_id)
-            client_secret = config_fields.get("client_secret", integration_config.client_secret)
-        else:
-            client_id = integration_config.client_id
-            client_secret = integration_config.client_secret
+            client_id = config_fields.get("client_id", client_id)
+            client_secret = config_fields.get("client_secret", client_secret)
 
         return client_id, client_secret
 
