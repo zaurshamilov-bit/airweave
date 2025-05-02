@@ -269,7 +269,7 @@ class TestConnectionService:
 
         # Assert
         mock_integration_settings.get_by_short_name.assert_called_once_with(short_name)
-        mock_oauth2_service.generate_auth_url.assert_called_once_with(mock_settings)
+        mock_oauth2_service.generate_auth_url.assert_called_once_with(mock_settings, None)
         assert result == expected_url
 
     @patch("airweave.core.connection_service.integration_settings")
@@ -319,7 +319,7 @@ class TestConnectionService:
 
         # Assert
         mock_oauth2_service.exchange_autorization_code_for_token.assert_called_once_with(
-            short_name, code
+            short_name, code, None
         )
         crud.source.get_by_short_name.assert_called_once_with(mock_db, short_name)
         mock_integration_settings.get_by_short_name.assert_called_once_with(short_name)
@@ -329,6 +329,8 @@ class TestConnectionService:
             settings=mock_settings,
             oauth2_response=oauth2_response,
             user=mock_user,
+            connection_name=None,
+            config_fields=None
         )
         assert result == mock_connection
 
