@@ -14,11 +14,17 @@ export function AuthCallback() {
   const { short_name } = useParams();
   const navigate = useNavigate();
   const exchangeAttempted = useRef(false);
+  const exchangePromise = useRef(null);
   const auth = useAuth();
 
   useEffect(() => {
     const doExchange = async () => {
-      if (exchangeAttempted.current) return;
+      console.log(`Starting OAuth code exchange for ${short_name}. exchangeAttempted: ${exchangeAttempted.current}`);
+
+      if (exchangeAttempted.current) {
+        console.log('Exchange already attempted, skipping duplicate call');
+        return;
+      }
 
       const code = searchParams.get("code");
       if (!code || !short_name) {
@@ -65,7 +71,12 @@ export function AuthCallback() {
           ...(storedConfig ? { config_fields: storedConfig.config_fields, connection_name: storedConfig.connection_name } : {})
         };
 
-        const response = await apiClient.post(`/connections/oauth2/source/code`, payload);
+        // Use a Promise ref to ensure only one request is made
+        if (!exchangePromise.current) {
+          exchangePromise.current = apiClient.post(`/connections/oauth2/source/code`, payload);
+        }
+
+        const response = await exchangePromise.current;
 
         if (!response.ok) {
           throw new Error("OAuth code exchange failed.");
