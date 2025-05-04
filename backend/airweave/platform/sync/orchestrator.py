@@ -7,7 +7,6 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
-from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus
 from airweave.core.sync_job_service import sync_job_service
 from airweave.db.session import get_db_context
@@ -30,14 +29,14 @@ class EntityProcessor:
     ) -> List[BaseEntity]:
         """Process an entity through the complete pipeline."""
         try:
-            logger.debug(f"Processing entity {entity.entity_id} through pipeline")
+            sync_context.logger.debug(f"Processing entity {entity.entity_id} through pipeline")
 
             # Stage 1: Enrich entity with metadata
             enriched_entity = await self._enrich(entity, sync_context)
 
             # Stage 2: Determine action for entity
             db_entity, action = await self._determine_action(enriched_entity, sync_context, db)
-            logger.debug(f"Determined action {action} for entity {entity.entity_id}")
+            sync_context.logger.debug(f"Determined action {action} for entity {entity.entity_id}")
 
             # Stage 2.5: Skip further processing if KEEP
             if action == DestinationAction.KEEP:
@@ -48,7 +47,7 @@ class EntityProcessor:
             processed_entities = await self._transform(
                 enriched_entity, source_node, sync_context, db
             )
-            logger.debug(
+            sync_context.logger.debug(
                 f"Transformed entity {entity.entity_id} into {len(processed_entities)} entities"
             )
 
@@ -64,7 +63,7 @@ class EntityProcessor:
 
             return processed_entities
         except Exception as e:
-            logger.error(f"Error processing entity {entity.entity_id}: {str(e)}")
+            sync_context.logger.error(f"Error processing entity {entity.entity_id}: {str(e)}")
             raise
 
     async def _enrich(self, entity: BaseEntity, sync_context: SyncContext) -> BaseEntity:
@@ -157,14 +156,14 @@ class EntityProcessor:
             The entities with vector computed
         """
         if not processed_entities:
-            logger.debug("No entities to vectorize, returning empty list")
+            sync_context.logger.debug("No entities to vectorize, returning empty list")
             return []
 
         try:
             embedding_model = sync_context.embedding_model
             entity_count = len(processed_entities)
 
-            logger.info(
+            sync_context.logger.info(
                 f"Computing vectors for {entity_count} entities using {embedding_model.model_name}"
             )
 
@@ -174,7 +173,7 @@ class EntityProcessor:
             avg_length = total_length / entity_count if entity_count else 0
             max_length = max(content_lengths) if content_lengths else 0
 
-            logger.debug(
+            sync_context.logger.debug(
                 f"Entity content stats: total={total_length}, "
                 f"avg={avg_length:.2f}, max={max_length}, count={entity_count}"
             )
@@ -188,7 +187,7 @@ class EntityProcessor:
                     entity_dict = str(entity.to_storage_dict())
                     entity_dicts.append(entity_dict)
                 except Exception as e:
-                    logger.error(f"Error converting entity to dict: {str(e)}")
+                    sync_context.logger.error(f"Error converting entity to dict: {str(e)}")
                     # Provide a fallback empty string to maintain array alignment
                     entity_dicts.append("")
 
@@ -196,13 +195,13 @@ class EntityProcessor:
             embeddings = await embedding_model.embed_many(entity_dicts)
 
             elapsed = time.time() - start_time
-            logger.info(
+            sync_context.logger.info(
                 f"Vector computation completed in {elapsed:.2f}s for {len(embeddings)} entities"
             )
 
             # Validate we got the expected number of embeddings
             if len(embeddings) != len(processed_entities):
-                logger.warning(
+                sync_context.logger.warning(
                     f"Embedding count mismatch: got {len(embeddings)} embeddings "
                     f"for {len(processed_entities)} entities"
                 )
@@ -213,22 +212,24 @@ class EntityProcessor:
             ):
                 try:
                     if vector is None:
-                        logger.warning(f"Received None vector for entity at index {i}")
+                        sync_context.logger.warning(f"Received None vector for entity at index {i}")
                         continue
 
                     vector_dim = len(vector) if vector else 0
-                    logger.debug(
+                    sync_context.logger.debug(
                         f"Assigning vector of dimension {vector_dim} to "
                         f"entity {processed_entity.entity_id}"
                     )
                     processed_entity.vector = vector
                 except Exception as e:
-                    logger.error(f"Error assigning vector to entity at index {i}: {str(e)}")
+                    sync_context.logger.error(
+                        f"Error assigning vector to entity at index {i}: {str(e)}"
+                    )
 
             return processed_entities
 
         except Exception as e:
-            logger.error(f"Error computing vectors: {str(e)}")
+            sync_context.logger.error(f"Error computing vectors: {str(e)}")
             raise
 
     async def _handle_keep(self, sync_context: SyncContext) -> None:
@@ -245,7 +246,7 @@ class EntityProcessor:
     ) -> None:
         """Handle INSERT action."""
         if len(processed_entities) == 0:
-            logger.info("No processed entities to insert")
+            sync_context.logger.info("No processed entities to insert")
             return
 
         # Prepare entities with parent reference
@@ -286,7 +287,7 @@ class EntityProcessor:
         """Handle UPDATE action."""
         if len(processed_entities) == 0:
             # TODO: keep track of skipped entities that could not be processed
-            logger.info("No processed entities to update")
+            sync_context.logger.info("No processed entities to update")
             return
 
         # Prepare entities with parent reference
@@ -327,6 +328,10 @@ class SyncOrchestrator:
     async def run(self, sync_context: SyncContext) -> schemas.Sync:
         """Run a sync with full async processing."""
         try:
+            sync_context.logger.info(
+                f"Starting sync job {sync_context.sync_job.id} for sync {sync_context.sync.id}"
+            )
+
             # Mark job as started
             await sync_job_service.update_status(
                 sync_job_id=sync_context.sync_job.id,
@@ -352,10 +357,11 @@ class SyncOrchestrator:
                 ),
             )
 
+            sync_context.logger.info(f"Completed sync job {sync_context.sync_job.id} successfully")
             return sync_context.sync
 
         except Exception as e:
-            logger.error(f"Error during sync: {e}")
+            sync_context.logger.error(f"Error during sync: {e}")
 
             # Use sync_job_service to update job status
             await sync_job_service.update_status(
@@ -377,8 +383,14 @@ class SyncOrchestrator:
         """Process stream of entities from source."""
         error_occurred = False
 
+        sync_context.logger.info(
+            f"Starting entity stream processing from source {sync_context.source._name}"
+        )
+
         # Use the stream as a context manager
-        async with AsyncSourceStream(sync_context.source.generate_entities()) as stream:
+        async with AsyncSourceStream(
+            sync_context.source.generate_entities(), logger=sync_context.logger
+        ) as stream:
             try:
                 # Process entities as they come
                 async for entity in stream.get_entities():
@@ -403,9 +415,10 @@ class SyncOrchestrator:
 
                 # Wait for all remaining tasks
                 await self.worker_pool.wait_for_completion()
+                sync_context.logger.info("All entity processing tasks completed")
 
             except Exception as e:
-                logger.error(f"Error during entity stream processing: {e}")
+                sync_context.logger.error(f"Error during entity stream processing: {e}")
                 error_occurred = True
                 raise
             finally:

@@ -10,6 +10,7 @@ from airweave import crud, schemas
 from airweave.core import credentials
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
+from airweave.core.logging import LoggerConfigurator, _ContextualLogger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.auth.services import oauth2_service
 from airweave.platform.destinations._base import BaseDestination, VectorDBDestination
@@ -37,6 +38,7 @@ class SyncContext:
     - progress - the progress tracker, interfaces with PubSub
     - router - the DAG router
     - white label (optional)
+    - logger - contextual logger with sync job metadata
     """
 
     source: BaseSource
@@ -50,6 +52,7 @@ class SyncContext:
     router: SyncDAGRouter
     entity_map: dict[type[BaseEntity], UUID]
     current_user: schemas.User
+    logger: _ContextualLogger
 
     white_label: Optional[schemas.WhiteLabel] = None
 
@@ -66,6 +69,7 @@ class SyncContext:
         router: SyncDAGRouter,
         entity_map: dict[type[BaseEntity], UUID],
         current_user: schemas.User,
+        logger: _ContextualLogger,
         white_label: Optional[schemas.WhiteLabel] = None,
     ):
         """Initialize the sync context."""
@@ -81,6 +85,7 @@ class SyncContext:
         self.entity_map = entity_map
         self.current_user = current_user
         self.white_label = white_label
+        self.logger = logger
 
 
 class SyncContextFactory:
@@ -108,6 +113,17 @@ class SyncContextFactory:
         progress = SyncProgress(sync_job.id)
         router = SyncDAGRouter(dag, entity_map)
 
+        # Create a contextualized logger with sync job metadata
+        logger = LoggerConfigurator.configure_logger(
+            "airweave.platform.sync",
+            dimensions={
+                "sync_id": str(sync.id),
+                "sync_job_id": str(sync_job.id),
+                "user_id": str(current_user.id),
+                # "org_id": str(sync.organization_id), TODO: add org id when we have orgs
+            },
+        )
+
         return SyncContext(
             source=source,
             destinations=destinations,
@@ -120,6 +136,7 @@ class SyncContextFactory:
             router=router,
             entity_map=entity_map,
             current_user=current_user,
+            logger=logger,
             white_label=white_label,
         )
 
