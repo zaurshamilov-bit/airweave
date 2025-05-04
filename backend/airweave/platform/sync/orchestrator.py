@@ -83,17 +83,38 @@ class EntityProcessor:
         self, entity: BaseEntity, sync_context: SyncContext, db: AsyncSession
     ) -> tuple[schemas.Entity, DestinationAction]:
         """Determine what action to take for an entity."""
+        sync_context.logger.info(
+            f"Determining action for entity {entity.entity_id} (type: {type(entity).__name__})"
+        )
+
         db_entity = await crud.entity.get_by_entity_and_sync_id(
             db=db, entity_id=entity.entity_id, sync_id=sync_context.sync.id
         )
 
+        current_hash = entity.hash()
+
         if db_entity:
-            if db_entity.hash != entity.hash():
+            sync_context.logger.info(
+                f"Found existing entity in DB with id {db_entity.id}, "
+                f"comparing hashes: stored={db_entity.hash}, current={current_hash}"
+            )
+
+            if db_entity.hash != current_hash:
                 action = DestinationAction.UPDATE
+                sync_context.logger.info(
+                    f"Hashes differ for entity {entity.entity_id}, will UPDATE"
+                )
             else:
                 action = DestinationAction.KEEP
+                sync_context.logger.info(
+                    f"Hashes match for entity {entity.entity_id}, will KEEP (no changes)"
+                )
         else:
             action = DestinationAction.INSERT
+            sync_context.logger.info(
+                f"No existing entity found for {entity.entity_id} in sync "
+                f"{sync_context.sync.id}, will INSERT"
+            )
 
         return db_entity, action
 
@@ -105,11 +126,33 @@ class EntityProcessor:
         db: AsyncSession,
     ) -> List[BaseEntity]:
         """Transform entity through DAG routing."""
-        return await sync_context.router.process_entity(
+        sync_context.logger.debug(
+            f"Starting transformation for entity {entity.entity_id} "
+            f"(type: {type(entity).__name__}) from source node {source_node.id}"
+        )
+
+        transformed_entities = await sync_context.router.process_entity(
             db=db,
             producer_id=source_node.id,
             entity=entity,
         )
+
+        # Log details about the transformed entities
+        entity_types = {}
+        for e in transformed_entities:
+            entity_type = type(e).__name__
+            if entity_type in entity_types:
+                entity_types[entity_type] += 1
+            else:
+                entity_types[entity_type] = 1
+
+        type_summary = ", ".join([f"{count} {t}" for t, count in entity_types.items()])
+        sync_context.logger.debug(
+            f"Transformation complete: entity {entity.entity_id} transformed into "
+            f"{len(transformed_entities)} entities ({type_summary})"
+        )
+
+        return transformed_entities
 
     async def _persist(
         self,
