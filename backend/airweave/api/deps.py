@@ -39,11 +39,12 @@ async def get_user(
 
     """
     # For test environments or when auth is disabled, use the first superuser
+    user = None
     if not settings.AUTH_ENABLED:
         user = await crud.user.get_by_email(db, email=settings.FIRST_SUPERUSER)
-    if auth0_user:
+    elif auth0_user:
         user = await crud.user.get_by_email(db, email=auth0_user.email)
-    if x_api_key:
+    elif x_api_key:
         user = await crud.user.get_by_api_key(db, api_key=x_api_key)
 
     if user:
