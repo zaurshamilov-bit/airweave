@@ -1,5 +1,6 @@
 """Module for data synchronization with improved architecture."""
 
+import time
 from datetime import datetime
 from typing import List, Optional
 
@@ -28,31 +29,43 @@ class EntityProcessor:
         db: AsyncSession,
     ) -> List[BaseEntity]:
         """Process an entity through the complete pipeline."""
-        # Stage 1: Enrich entity with metadata
-        enriched_entity = await self._enrich(entity, sync_context)
+        try:
+            logger.debug(f"Processing entity {entity.entity_id} through pipeline")
 
-        # Stage 2: Determine action for entity
-        db_entity, action = await self._determine_action(enriched_entity, sync_context, db)
+            # Stage 1: Enrich entity with metadata
+            enriched_entity = await self._enrich(entity, sync_context)
 
-        # Stage 2.5: Skip further processing if KEEP
-        if action == DestinationAction.KEEP:
-            await sync_context.progress.increment("kept", 1)
-            return []
+            # Stage 2: Determine action for entity
+            db_entity, action = await self._determine_action(enriched_entity, sync_context, db)
+            logger.debug(f"Determined action {action} for entity {entity.entity_id}")
 
-        # Stage 3: Process entity through DAG
-        processed_entities = await self._transform(enriched_entity, source_node, sync_context, db)
+            # Stage 2.5: Skip further processing if KEEP
+            if action == DestinationAction.KEEP:
+                await sync_context.progress.increment("kept", 1)
+                return []
 
-        # Stage 4: Compute vector
-        processed_entities_with_vector = await self._compute_vector(
-            processed_entities, sync_context
-        )
+            # Stage 3: Process entity through DAG
+            processed_entities = await self._transform(
+                enriched_entity, source_node, sync_context, db
+            )
+            logger.debug(
+                f"Transformed entity {entity.entity_id} into {len(processed_entities)} entities"
+            )
 
-        # Stage 5: Persist entities based on action
-        await self._persist(
-            enriched_entity, processed_entities_with_vector, db_entity, action, sync_context, db
-        )
+            # Stage 4: Compute vector
+            processed_entities_with_vector = await self._compute_vector(
+                processed_entities, sync_context
+            )
 
-        return processed_entities
+            # Stage 5: Persist entities based on action
+            await self._persist(
+                enriched_entity, processed_entities_with_vector, db_entity, action, sync_context, db
+            )
+
+            return processed_entities
+        except Exception as e:
+            logger.error(f"Error processing entity {entity.entity_id}: {str(e)}")
+            raise
 
     async def _enrich(self, entity: BaseEntity, sync_context: SyncContext) -> BaseEntity:
         """Enrich entity with sync metadata."""
@@ -143,14 +156,80 @@ class EntityProcessor:
         Returns:
             The entities with vector computed
         """
-        embedding_model = sync_context.embedding_model
-        embeddings = await embedding_model.embed_many(
-            [str(entity.to_storage_dict()) for entity in processed_entities]
-        )
-        for processed_entity, vector in zip(processed_entities, embeddings, strict=False):
-            processed_entity.vector = vector
+        if not processed_entities:
+            logger.debug("No entities to vectorize, returning empty list")
+            return []
 
-        return processed_entities
+        try:
+            embedding_model = sync_context.embedding_model
+            entity_count = len(processed_entities)
+
+            logger.info(
+                f"Computing vectors for {entity_count} entities using {embedding_model.model_name}"
+            )
+
+            # Log entity content lengths for debugging
+            content_lengths = [len(str(entity.to_storage_dict())) for entity in processed_entities]
+            total_length = sum(content_lengths)
+            avg_length = total_length / entity_count if entity_count else 0
+            max_length = max(content_lengths) if content_lengths else 0
+
+            logger.debug(
+                f"Entity content stats: total={total_length}, "
+                f"avg={avg_length:.2f}, max={max_length}, count={entity_count}"
+            )
+
+            start_time = time.time()
+
+            # Convert entities to dictionary representations
+            entity_dicts = []
+            for entity in processed_entities:
+                try:
+                    entity_dict = str(entity.to_storage_dict())
+                    entity_dicts.append(entity_dict)
+                except Exception as e:
+                    logger.error(f"Error converting entity to dict: {str(e)}")
+                    # Provide a fallback empty string to maintain array alignment
+                    entity_dicts.append("")
+
+            # Get embeddings from the model
+            embeddings = await embedding_model.embed_many(entity_dicts)
+
+            elapsed = time.time() - start_time
+            logger.info(
+                f"Vector computation completed in {elapsed:.2f}s for {len(embeddings)} entities"
+            )
+
+            # Validate we got the expected number of embeddings
+            if len(embeddings) != len(processed_entities):
+                logger.warning(
+                    f"Embedding count mismatch: got {len(embeddings)} embeddings "
+                    f"for {len(processed_entities)} entities"
+                )
+
+            # Assign vectors to entities
+            for i, (processed_entity, vector) in enumerate(
+                zip(processed_entities, embeddings, strict=False)
+            ):
+                try:
+                    if vector is None:
+                        logger.warning(f"Received None vector for entity at index {i}")
+                        continue
+
+                    vector_dim = len(vector) if vector else 0
+                    logger.debug(
+                        f"Assigning vector of dimension {vector_dim} to "
+                        f"entity {processed_entity.entity_id}"
+                    )
+                    processed_entity.vector = vector
+                except Exception as e:
+                    logger.error(f"Error assigning vector to entity at index {i}: {str(e)}")
+
+            return processed_entities
+
+        except Exception as e:
+            logger.error(f"Error computing vectors: {str(e)}")
+            raise
 
     async def _handle_keep(self, sync_context: SyncContext) -> None:
         """Handle KEEP action."""
@@ -268,9 +347,9 @@ class SyncOrchestrator:
                 status=SyncJobStatus.COMPLETED,
                 current_user=sync_context.current_user,
                 completed_at=datetime.now(),
-                stats=sync_context.progress.stats
-                if hasattr(sync_context.progress, "stats")
-                else None,
+                stats=(
+                    sync_context.progress.stats if hasattr(sync_context.progress, "stats") else None
+                ),
             )
 
             return sync_context.sync
@@ -285,9 +364,9 @@ class SyncOrchestrator:
                 current_user=sync_context.current_user,
                 error=str(e),
                 failed_at=datetime.now(),
-                stats=sync_context.progress.stats
-                if hasattr(sync_context.progress, "stats")
-                else None,
+                stats=(
+                    sync_context.progress.stats if hasattr(sync_context.progress, "stats") else None
+                ),
             )
 
             raise
