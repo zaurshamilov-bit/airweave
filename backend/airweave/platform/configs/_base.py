@@ -2,7 +2,7 @@
 
 from typing import Optional, get_args, get_origin
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class BaseConfig(BaseModel):
@@ -54,3 +54,23 @@ class Fields(BaseModel):
                 )
             )
         return Fields(fields=fields)
+
+
+class ConfigValues(BaseModel):
+    """Config values model.
+
+    Implements "flat dictionary" semantics, where no values are dictionaries.
+    """
+
+    # Allow arbitrary fields
+    model_config = {
+        "extra": "allow",
+    }
+
+    @model_validator(mode="after")
+    def validate_config_values(self):
+        """Validate that no values are dictionaries (depth 0)."""
+        for key, value in self.__dict__.items():
+            if isinstance(value, dict):
+                raise ValueError(f"Value for '{key}' must not be a dictionary (depth 0 only)")
+        return self
