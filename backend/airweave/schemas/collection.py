@@ -90,13 +90,3 @@ class CollectionSearchQuery(BaseModel):
     source_name: Optional[str] = None
     limit: int = 10
     offset: int = 0
-
-
-class CollectionSearchResult(BaseModel):
-    """Schema for search results within a collection."""
-
-    id: UUID
-    content: str
-    metadata: dict
-    source: str
-    score: float
