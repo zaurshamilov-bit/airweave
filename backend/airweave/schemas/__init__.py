@@ -9,6 +9,13 @@ from .api_key import (
     APIKeyWithPlainKey,
 )
 from .chat import Chat, ChatCreate, ChatMessage, ChatMessageCreate, ChatUpdate
+from .collection import (
+    Collection,
+    CollectionCreate,
+    CollectionInDBBase,
+    CollectionSearchQuery,
+    CollectionUpdate,
+)
 from .connection import Connection, ConnectionCreate, ConnectionInDBBase, ConnectionUpdate
 from .dag import (
     DagEdge,
@@ -64,6 +71,12 @@ from .source import (
     SourceInDBBase,
     SourceUpdate,
     SourceWithAuthenticationFields,
+)
+from .source_connection import (
+    SourceConnection,
+    SourceConnectionCreate,
+    SourceConnectionInDBBase,
+    SourceConnectionUpdate,
 )
 from .sync import (
     Sync,

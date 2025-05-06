@@ -1,30 +1,62 @@
 """Collection schema."""
 
+import random
+import re
+import string
 from datetime import datetime
-from enum import Enum
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+
+from airweave.core.shared_models import CollectionStatus
 
 
-class CollectionStatus(str, Enum):
-    """Collection status enum."""
+def generate_readable_id(name: str) -> str:
+    """Generate a readable ID from a name.
 
-    ACTIVE = "ACTIVE"
-    NEEDS_SOURCE = "NEEDS SOURCE"
-    SYNCING = "SYNCING"
-    ERROR = "ERROR"
+    Converts the name to lowercase, replaces spaces with hyphens,
+    removes special characters, and adds a random suffix.
+    """
+    # Convert to lowercase and replace spaces with hyphens
+    readable_id = name.lower().strip()
+
+    # Replace any character that's not a letter, number, or space with nothing
+    readable_id = re.sub(r"[^a-z0-9\s]", "", readable_id)
+    # Replace spaces with hyphens
+    readable_id = re.sub(r"\s+", "-", readable_id)
+    # Ensure no consecutive hyphens
+    readable_id = re.sub(r"-+", "-", readable_id)
+    # Trim hyphens from start and end
+    readable_id = readable_id.strip("-")
+
+    # Add random alphanumeric suffix
+    suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
+    readable_id = f"{readable_id}-{suffix}"
+
+    return readable_id
 
 
 class CollectionBase(BaseModel):
     """Base schema for collections."""
 
-    name: str = Field(..., description="Display name for the collection")
+    name: str = Field(
+        ...,
+        description="Display name for the collection",
+        min_length=4,
+        max_length=32,
+    )
     readable_id: Optional[str] = Field(
         None,
         description="Unique lowercase identifier (e.g., respectable-sparrow, collection-123)",
     )
+
+    @model_validator(mode="after")
+    def generate_readable_id_if_none(self) -> "CollectionBase":
+        """Generate a readable_id if none is provided."""
+        if self.readable_id is None and self.name:
+            self.readable_id = generate_readable_id(self.name)
+        return self
 
     @field_validator("readable_id")
     def validate_readable_id(cls, v: Optional[str]) -> Optional[str]:
@@ -64,7 +96,6 @@ class CollectionInDBBase(CollectionBase):
     id: UUID
     readable_id: str
     status: CollectionStatus = CollectionStatus.NEEDS_SOURCE
-    total_entities: int = 0
     created_at: datetime
     modified_at: datetime
     organization_id: UUID

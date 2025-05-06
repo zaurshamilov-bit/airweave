@@ -2,6 +2,7 @@
 
 from .api_key import APIKey
 from .chat import Chat, ChatMessage
+from .collection import Collection
 from .connection import Connection
 from .dag import DagEdge, DagNode, SyncDag
 from .destination import Destination
@@ -23,6 +24,7 @@ __all__ = [
     "APIKey",
     "Chat",
     "ChatMessage",
+    "Collection",
     "Entity",
     "Connection",
     "DagNode",

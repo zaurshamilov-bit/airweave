@@ -12,6 +12,7 @@ from airweave.models._base import OrganizationBase, UserMixin
 
 if TYPE_CHECKING:
     from airweave.models.entity import Entity
+    from airweave.models.source_connection import SourceConnection
     from airweave.models.sync_connection import SyncConnection
     from airweave.models.sync_job import SyncJob
     from airweave.models.white_label import WhiteLabel
@@ -53,6 +54,14 @@ class Sync(OrganizationBase, UserMixin):
 
     sync_connections: Mapped[list["SyncConnection"]] = relationship(
         "SyncConnection",
+        back_populates="sync",
+        lazy="noload",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    source_connection: Mapped[list["SourceConnection"]] = relationship(
+        "SourceConnection",
         back_populates="sync",
         lazy="noload",
         cascade="all, delete-orphan",

@@ -17,6 +17,7 @@ class SourceConnectionBase(BaseModel):
     name: str
     description: Optional[str] = None
     config_fields: Optional[ConfigValues] = None  # stored in core table
+    short_name: str  # Short name of the source
 
     class Config:
         """Pydantic config for SourceConnectionBase."""
@@ -31,11 +32,9 @@ class SourceConnectionCreate(SourceConnectionBase):
     - Sync specific fields are included here.
     """
 
-    collection_id: Optional[str] = None
+    collection: Optional[str] = None
     cron_schedule: Optional[str] = None
-    auth_fields: Optional[ConfigValues] = (
-        None  # part of create, but stored in integration_credential
-    )
+    auth_fields: Optional[ConfigValues] = None  # part of create, stored in integration_credential
     sync_immediately: bool = True
 
     @field_validator("cron_schedule")
@@ -73,19 +72,23 @@ class SourceConnectionUpdate(SourceConnectionBase):
     auth_fields: Optional[ConfigValues] = None
     config_fields: Optional[ConfigValues] = None
     cron_schedule: Optional[str] = None
+    short_name: Optional[str] = None
+    sync_id: Optional[UUID] = None
+    integration_credential_id: Optional[UUID] = None
 
 
 class SourceConnectionInDBBase(SourceConnectionBase):
     """Core schema for source connection stored in DB."""
 
     id: UUID
-    dag_id: UUID
-    sync_id: UUID
+    dag_id: Optional[UUID] = None
+    sync_id: Optional[UUID] = None
     organization_id: UUID
     status: SourceConnectionStatus
     created_at: datetime
     modified_at: datetime
-    integration_credential_id: UUID
+    integration_credential_id: Optional[UUID] = None
+    collection: Optional[str] = None
     created_by_email: EmailStr
     modified_by_email: EmailStr
 
@@ -98,4 +101,6 @@ class SourceConnectionInDBBase(SourceConnectionBase):
 class SourceConnection(SourceConnectionInDBBase):
     """Schema for source connection."""
 
+    # str if encrypted, ConfigValues if not
+    # comes from integration_credential
     auth_fields: Optional[ConfigValues | str] = None
