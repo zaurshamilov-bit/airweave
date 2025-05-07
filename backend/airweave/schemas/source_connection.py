@@ -93,6 +93,7 @@ class SourceConnectionCreateWithRelatedIds(SourceConnectionCreate):
 
     connection_id: UUID
     readable_collection_id: str
+    sync_id: UUID
 
 
 class SourceConnectionUpdate(BaseModel):
@@ -111,6 +112,7 @@ class SourceConnectionInDBBase(SourceConnectionBase):
 
     id: UUID
     dag_id: Optional[UUID] = None
+    sync_id: Optional[UUID] = None
     organization_id: UUID
     status: SourceConnectionStatus
     created_at: datetime
@@ -166,7 +168,7 @@ class SourceConnectionListItem(BaseModel):
     status: SourceConnectionStatus
     created_at: datetime
     modified_at: datetime
-    sync_id: Optional[UUID] = None
+    sync_id: UUID
     collection: str
 
     class Config:

@@ -61,36 +61,6 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         )  # NB: raises airweave.core.exceptions.PermissionException if user doesn't have permission
         return sync
 
-    async def get_by_source_connection_id(
-        self,
-        db: AsyncSession,
-        source_connection_id: UUID,
-        current_user: schemas.User,
-    ) -> Optional[models.Sync]:
-        """Get a sync by source connection ID.
-
-        Args:
-            db (AsyncSession): The database session
-            source_connection_id (UUID): The ID of the source connection
-            current_user (schemas.User): The current user
-
-        Returns:
-            Optional[models.Sync]: The sync if found, None otherwise
-        """
-        # Query the sync directly through the source_connection_id field
-        query = select(Sync).where(
-            Sync.source_connection_id == source_connection_id,
-            Sync.organization_id == current_user.organization_id,
-        )
-        result = await db.execute(query)
-        sync = result.scalar_one_or_none()
-
-        if sync:
-            # Validate permissions
-            self._validate_if_user_has_permission(sync, current_user)
-
-        return sync
-
     async def get_all_for_user(
         self,
         db: AsyncSession,
@@ -208,7 +178,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
 
             # Add connection IDs
             source = connections["source"]
-            sync_dict["source_system_connection_id"] = source.id if source else None
+            sync_dict["source_connection_id"] = source.id if source else None
 
             destinations = connections["destinations"]
             sync_dict["destination_connection_ids"] = [dest.id for dest in destinations]
@@ -418,14 +388,14 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         obj_in_dict = obj_in.model_dump()
 
         # Pop off the connection ids
-        source_system_connection_id = obj_in_dict.pop("source_system_connection_id")
+        source_connection_id = obj_in_dict.pop("source_connection_id")
         destination_connection_ids = obj_in_dict.pop("destination_connection_ids")  # this is a list
         embedding_model_connection_id = obj_in_dict.pop("embedding_model_connection_id")
 
         # Validate the connections
         await self._validate_connections(
             db,
-            source_system_connection_id,
+            source_connection_id,
             destination_connection_ids,
             embedding_model_connection_id,
             current_user,
@@ -442,9 +412,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
 
         # Write the sync_connection objects to db
         connection_ids = (
-            [source_system_connection_id]
-            + destination_connection_ids
-            + [embedding_model_connection_id]
+            [source_connection_id] + destination_connection_ids + [embedding_model_connection_id]
         )
         for connection_id in connection_ids:
             sync_connection = SyncConnection(
@@ -463,7 +431,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         if "_sa_instance_state" in sync_dict:
             sync_dict.pop("_sa_instance_state")
 
-        sync_dict["source_system_connection_id"] = source_system_connection_id
+        sync_dict["source_connection_id"] = source_connection_id
         sync_dict["destination_connection_ids"] = destination_connection_ids
         sync_dict["embedding_model_connection_id"] = embedding_model_connection_id
 
@@ -587,7 +555,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
             sync_dict.pop("_sa_instance_state")
 
         # Add the connection IDs from the pre-fetched enriched sync
-        sync_dict["source_system_connection_id"] = enriched_sync.source_system_connection_id
+        sync_dict["source_connection_id"] = enriched_sync.source_connection_id
         sync_dict["destination_connection_ids"] = enriched_sync.destination_connection_ids
         sync_dict["embedding_model_connection_id"] = enriched_sync.embedding_model_connection_id
 

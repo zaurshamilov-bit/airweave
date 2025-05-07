@@ -1,6 +1,7 @@
 """CRUD operations for collections."""
 
-from typing import Optional
+from typing import List, Optional
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,18 @@ class CRUDCollection(CRUDBase[Collection, CollectionCreate, CollectionUpdate]):
             return None
         self._validate_if_user_has_permission(db_obj, current_user)
         return db_obj
+
+    async def get_multi_by_organization(
+        self, db: AsyncSession, organization_id: UUID, skip: int = 0, limit: int = 100
+    ) -> List[Collection]:
+        """Get all collections for a specific organization."""
+        result = await db.execute(
+            select(Collection)
+            .where(Collection.organization_id == organization_id)
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
     async def update_status(
         self,

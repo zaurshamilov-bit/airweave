@@ -11,7 +11,6 @@ from airweave.core.shared_models import SyncStatus
 from airweave.models._base import OrganizationBase, UserMixin
 
 if TYPE_CHECKING:
-    from airweave.models.dag import SyncDag
     from airweave.models.entity import Entity
     from airweave.models.source_connection import SourceConnection
     from airweave.models.sync_connection import SyncConnection
@@ -36,15 +35,13 @@ class Sync(OrganizationBase, UserMixin):
     )
     white_label_user_identifier: Mapped[str] = mapped_column(String(256), nullable=True)
     sync_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    source_connection_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("source_connection.id", ondelete="CASCADE"), nullable=True
-    )
 
     jobs: Mapped[list["SyncJob"]] = relationship(
         "SyncJob",
         back_populates="sync",
         lazy="noload",
         cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     entities: Mapped[list["Entity"]] = relationship(
@@ -52,6 +49,7 @@ class Sync(OrganizationBase, UserMixin):
         back_populates="sync",
         lazy="noload",
         cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     sync_connections: Mapped[list["SyncConnection"]] = relationship(
@@ -59,8 +57,8 @@ class Sync(OrganizationBase, UserMixin):
         back_populates="sync",
         lazy="noload",
         cascade="all, delete-orphan",
+        passive_deletes=True,
     )
-
     white_label: Mapped[Optional["WhiteLabel"]] = relationship(
         "WhiteLabel",
         back_populates="syncs",
@@ -69,16 +67,8 @@ class Sync(OrganizationBase, UserMixin):
 
     source_connection: Mapped[Optional["SourceConnection"]] = relationship(
         "SourceConnection",
-        back_populates="syncs",
-        lazy="noload",
-        uselist=False,
-    )
-
-    dag: Mapped[Optional["SyncDag"]] = relationship(
-        "SyncDag",
         back_populates="sync",
         lazy="noload",
-        cascade="all, delete-orphan",
     )
 
     __table_args__ = (

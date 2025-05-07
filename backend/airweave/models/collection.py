@@ -33,5 +33,5 @@ class Collection(OrganizationBase, UserMixin):
         back_populates="collection",
         lazy="noload",
         cascade="all, delete-orphan",
-        primaryjoin="SourceConnection.readable_collection_id == Collection.readable_id",
+        passive_deletes=True,
     )

@@ -215,9 +215,6 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         await db.delete(db_obj)
 
-        # Add a flush to ensure cascades are properly processed
-        await db.flush()
-
         if not uow:
             await db.commit()
 

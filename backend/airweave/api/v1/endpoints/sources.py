@@ -12,7 +12,7 @@ from airweave.platform.locator import resource_locator
 router = TrailingSlashRouter()
 
 
-@router.get("/detail/{short_name}", response_model=schemas.SourceDetails)
+@router.get("/detail/{short_name}", response_model=schemas.SourceWithAuthenticationFields)
 async def read_source(
     *,
     db: AsyncSession = Depends(deps.get_db),
@@ -38,9 +38,11 @@ async def read_source(
     if source.auth_config_class:
         auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
         fields = Fields.from_config_class(auth_config_class)
-        source_details = schemas.SourceDetails.model_validate(source, from_attributes=True)
-        source_details.auth_fields = fields.fields
-        return source_details
+        source_with_auth_fields = schemas.SourceWithAuthenticationFields.model_validate(
+            source, from_attributes=True
+        )
+        source_with_auth_fields.auth_fields = fields
+        return source_with_auth_fields
     return source
 
 

@@ -80,7 +80,7 @@ class Source(SourceInDBBase):
     pass
 
 
-class SourceDetails(Source):
+class SourceWithAuthenticationFields(Source):
     """Schema for Source with auth config."""
 
     auth_fields: Fields | None = None

@@ -68,9 +68,9 @@ from .organization import (
 from .source import (
     Source,
     SourceCreate,
-    SourceDetails,
     SourceInDBBase,
     SourceUpdate,
+    SourceWithAuthenticationFields,
 )
 from .source_connection import (
     SourceConnection,

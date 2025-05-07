@@ -300,10 +300,10 @@ class DagService:
     ) -> Tuple[schemas.Source, schemas.Connection, Dict]:
         """Get source connection and entity definitions."""
         source_connection = await crud.connection.get(
-            db, id=sync.source_system_connection_id, current_user=current_user
+            db, id=sync.source_connection_id, current_user=current_user
         )
         if not source_connection:
-            raise Exception(f"Source connection for {sync.source_system_connection_id} not found")
+            raise Exception(f"Source connection for {sync.source_connection_id} not found")
 
         source = await crud.source.get_by_short_name(db, short_name=source_connection.short_name)
 
