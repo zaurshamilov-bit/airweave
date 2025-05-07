@@ -19,6 +19,7 @@ class SyncJobBase(BaseModel):
     entities_deleted: Optional[int] = 0
     entities_kept: Optional[int] = 0
     entities_skipped: Optional[int] = 0
+    entities_encountered: Optional[dict[str, int]] = {}
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     failed_at: Optional[datetime] = None
@@ -45,10 +46,11 @@ class SyncJobUpdate(BaseModel):
     entities_deleted: Optional[int] = None
     entities_kept: Optional[int] = None
     entities_skipped: Optional[int] = None
-    error: Optional[str] = None
+    entities_encountered: Optional[dict[str, int]] = {}
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     failed_at: Optional[datetime] = None
+    error: Optional[str] = None
 
 
 class SyncJobInDBBase(SyncJobBase):
