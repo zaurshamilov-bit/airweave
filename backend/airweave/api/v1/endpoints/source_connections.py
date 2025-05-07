@@ -100,12 +100,14 @@ async def create_source_connection(
     async with get_db_context() as db:
         # If job was created and sync_immediately is True, start it in background
         if sync_job and source_connection_in.sync_immediately:
-            sync_dag = await sync_service.get_sync_dag(
-                db=db, sync_id=source_connection.sync_id, current_user=user
+            sync = await crud.sync.get_by_source_connection_id(
+                db=db, source_connection_id=source_connection.id, current_user=user
             )
+            # Get the sync objects
+            sync = await crud.sync.get(db=db, id=sync.id, current_user=user)
+            sync_dag = await sync_service.get_sync_dag(db=db, sync_id=sync.id, current_user=user)
 
-            # Get the sync object
-            sync = await crud.sync.get(db=db, id=source_connection.sync_id, current_user=user)
+            # Map the sync objects to schemas
             sync = schemas.Sync.model_validate(sync, from_attributes=True)
             sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
             sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)

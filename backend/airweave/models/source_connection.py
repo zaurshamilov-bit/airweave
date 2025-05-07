@@ -1,6 +1,6 @@
 """Source connection model."""
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 from uuid import UUID
 
 from sqlalchemy import JSON, ForeignKey, String, Text
@@ -34,28 +34,34 @@ class SourceConnection(OrganizationBase, UserMixin):
     config_fields: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Related objects
-    sync_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("sync.id", ondelete="SET NULL"), nullable=True
-    )
     readable_collection_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("collection.readable_id", ondelete="CASCADE"), nullable=True
     )
     connection_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("connection.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("connection.id", ondelete="CASCADE"), nullable=True
     )
     status: Mapped[SourceConnectionStatus] = mapped_column(
         SQLAlchemyEnum(SourceConnectionStatus), default=SourceConnectionStatus.ACTIVE
     )
 
     # Relationships
-    sync: Mapped[Optional["Sync"]] = relationship(
-        "Sync", back_populates="source_connection", lazy="noload"
+    syncs: Mapped[List["Sync"]] = relationship(
+        "Sync",
+        back_populates="source_connection",
+        lazy="noload",
+        cascade="all, delete-orphan",
     )
     collection: Mapped[Optional["Collection"]] = relationship(
         "Collection",
         foreign_keys=[readable_collection_id],
+        back_populates="source_connections",
         lazy="noload",
+        primaryjoin="SourceConnection.readable_collection_id == Collection.readable_id",
     )
     connection: Mapped[Optional["Connection"]] = relationship(
-        "Connection", back_populates="source_connection", lazy="noload"
+        "Connection",
+        back_populates="source_connection",
+        lazy="noload",
+        cascade="all, delete-orphan",
+        single_parent=True,
     )

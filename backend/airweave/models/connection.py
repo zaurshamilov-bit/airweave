@@ -41,7 +41,7 @@ class Connection(Base):
 
     # Foreign keys
     integration_credential_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("integration_credential.id"), nullable=True
+        ForeignKey("integration_credential.id", ondelete="CASCADE"), nullable=True
     )
     short_name: Mapped[str] = mapped_column(String, nullable=False)
 
@@ -78,6 +78,8 @@ class Connection(Base):
         "SourceConnection",
         back_populates="connection",
         lazy="noload",
+        cascade="all, delete",
+        single_parent=False,
     )
 
     __table_args__ = (

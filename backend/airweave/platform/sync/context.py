@@ -148,11 +148,13 @@ class SyncContextFactory:
         current_user: schemas.User,
     ) -> BaseSource:
         """Create and configure the source instance based on authentication type."""
-        source_connection = await crud.connection.get(db, sync.source_connection_id, current_user)
-        if not source_connection:
+        source_system_connection = await crud.connection.get(
+            db, sync.source_system_connection_id, current_user
+        )
+        if not source_system_connection:
             raise NotFoundException("Source connection not found")
 
-        source_model = await crud.source.get_by_short_name(db, source_connection.short_name)
+        source_model = await crud.source.get_by_short_name(db, source_system_connection.short_name)
         if not source_model:
             raise NotFoundException("Source not found")
 
@@ -166,16 +168,16 @@ class SyncContextFactory:
             AuthType.oauth2_with_refresh_rotating,
         ]:
             return await cls._create_oauth2_with_refresh_source(
-                db, source_model, source_class, current_user, source_connection
+                db, source_model, source_class, current_user, source_system_connection
             )
 
         if source_model.auth_type == AuthType.oauth2:
             return await cls._create_oauth2_source(
-                db, source_class, current_user, source_connection
+                db, source_class, current_user, source_system_connection
             )
 
         return await cls._create_other_auth_source(
-            db, source_model, source_class, current_user, source_connection
+            db, source_model, source_class, current_user, source_system_connection
         )
 
     @classmethod

@@ -1,6 +1,7 @@
 """Models for the DAG system."""
 
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
@@ -13,6 +14,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from ._base import OrganizationBase, UserMixin
+
+if TYPE_CHECKING:
+    pass
 
 
 class NodeType(str, Enum):
@@ -41,6 +45,8 @@ class SyncDag(OrganizationBase, UserMixin):
     edges = relationship(
         "DagEdge", back_populates="dag", lazy="selectin", cascade="all, delete-orphan"
     )
+
+    sync = relationship("Sync", back_populates="dag", lazy="noload")
 
 
 class DagNode(OrganizationBase, UserMixin):

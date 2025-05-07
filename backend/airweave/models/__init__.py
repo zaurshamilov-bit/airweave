@@ -13,6 +13,7 @@ from .entity_relation import EntityRelation
 from .integration_credential import IntegrationCredential
 from .organization import Organization
 from .source import Source
+from .source_connection import SourceConnection
 from .sync import Sync
 from .sync_connection import SyncConnection
 from .sync_job import SyncJob
@@ -36,6 +37,7 @@ __all__ = [
     "IntegrationCredential",
     "Organization",
     "Source",
+    "SourceConnection",
     "Sync",
     "SyncConnection",
     "SyncDag",

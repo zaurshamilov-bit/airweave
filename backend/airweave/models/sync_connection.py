@@ -18,7 +18,7 @@ class SyncConnection(Base):
 
     __tablename__ = "sync_connection"
 
-    sync_id: Mapped[UUID] = mapped_column(ForeignKey("sync.id"), nullable=False)
+    sync_id: Mapped[UUID] = mapped_column(ForeignKey("sync.id", ondelete="CASCADE"), nullable=False)
     connection_id: Mapped[UUID] = mapped_column(ForeignKey("connection.id"), nullable=False)
 
     # Add relationship back to Sync
