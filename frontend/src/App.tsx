@@ -18,6 +18,7 @@ import ViewEditWhiteLabel from "./pages/ViewEditWhiteLabel";
 import { LoginPage } from "./pages/LoginPage";
 import { CallbackPage } from "./pages/CallbackPage";
 import { AuthGuard } from "./components/AuthGuard";
+import Playground from "./new/Playground";
 
 function App() {
   return (
@@ -53,6 +54,7 @@ function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/chat/:id" element={<Chat />} />
+          <Route path="/playground" element={<Playground />} />
         </Route>
 
         {/* Public routes */}

@@ -16,7 +16,8 @@ import {
   Moon,
   Monitor,
   Check,
-  Box
+  Box,
+  Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -76,6 +77,11 @@ const DashboardLayout = () => {
       href: "/chat",
       icon: Bot,
     },
+    {
+      name: "UI Playground",
+      href: "/playground",
+      icon: Sparkles,
+    },
   ];
 
   const configureNavigation = [
@@ -111,15 +117,14 @@ const DashboardLayout = () => {
   const NavLink = ({ item, isActive }: { item: typeof navigation[0], isActive: boolean }) => (
     <Link
       to={item.href}
-      className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 ease-in-out ${
-        isActive
+      className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 ease-in-out ${isActive
           ? item.isSpecial
             ? "bg-gradient-to-r from-primary-300/90 to-secondary-300/90 dark:from-primary-700/70 dark:to-secondary-700/70 text-primary-900 dark:text-primary-100 shadow-sm"
             : "bg-primary/10 text-primary"
           : item.isSpecial
-          ? "bg-gradient-to-r from-primary-300/70 to-secondary-300/70 dark:from-primary-500/50 dark:to-secondary-400/50 text-primary-800 dark:text-primary-100 shadow-sm hover:from-primary-400/80 hover:to-secondary-400/80 dark:hover:from-primary-400/60 dark:hover:to-secondary-300/60 hover:shadow transition-all duration-200 ease-in-out"
-          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-      }`}
+            ? "bg-gradient-to-r from-primary-300/70 to-secondary-300/70 dark:from-primary-500/50 dark:to-secondary-400/50 text-primary-800 dark:text-primary-100 shadow-sm hover:from-primary-400/80 hover:to-secondary-400/80 dark:hover:from-primary-400/60 dark:hover:to-secondary-300/60 hover:shadow transition-all duration-200 ease-in-out"
+            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+        }`}
     >
       <item.icon className="mr-3 h-5 w-5" />
       {item.name}
@@ -245,7 +250,7 @@ const DashboardLayout = () => {
               isNonScrollable ? "overflow-hidden" : "overflow-auto"
             )}>
               {/* Top Navigation Bar - Now inside the scrollable area */}
-                <header className={`h-16 sticky top-0 pr-2 backdrop-blur-sm z-10 ${resolvedTheme === 'dark' ? 'bg-black/20' : 'bg-background-alpha-10'}`}>
+              <header className={`h-16 sticky top-0 pr-2 backdrop-blur-sm z-10 ${resolvedTheme === 'dark' ? 'bg-black/20' : 'bg-background-alpha-10'}`}>
 
                 <div className="flex justify-end items-center h-full px-6">
                   <nav className="flex items-center space-x-4">
@@ -256,7 +261,7 @@ const DashboardLayout = () => {
                       rel="noopener noreferrer"
                       className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-md"
                     >
-                    <DiscordIcon size={22}/>
+                      <DiscordIcon size={22} />
                     </a>
 
                     {/* Get a demo button */}
@@ -325,7 +330,7 @@ const DashboardLayout = () => {
                 "h-[calc(100%-4rem)]",
                 isNonScrollable ? "overflow-hidden" : "pb-8"
               )}>
-                  <Outlet />
+                <Outlet />
               </div>
             </div>
           </div>
