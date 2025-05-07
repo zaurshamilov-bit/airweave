@@ -123,7 +123,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         """
         if not isinstance(obj_in, dict):
-            obj_in = obj_in.model_dump()
+            obj_in = obj_in.model_dump(exclude_unset=True)
         db_obj = self.model(**obj_in)  # type: ignore
 
         if current_user:

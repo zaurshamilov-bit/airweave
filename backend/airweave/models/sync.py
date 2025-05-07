@@ -59,18 +59,15 @@ class Sync(OrganizationBase, UserMixin):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-
-    source_connection: Mapped[list["SourceConnection"]] = relationship(
-        "SourceConnection",
-        back_populates="sync",
-        lazy="noload",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-
     white_label: Mapped[Optional["WhiteLabel"]] = relationship(
         "WhiteLabel",
         back_populates="syncs",
+        lazy="noload",
+    )
+
+    source_connection: Mapped[Optional["SourceConnection"]] = relationship(
+        "SourceConnection",
+        back_populates="sync",
         lazy="noload",
     )
 

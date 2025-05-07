@@ -46,7 +46,12 @@ class SyncService:
         -------
             schemas.Sync: The created sync.
         """
-        sync = await crud.sync.create(db=db, obj_in=sync, current_user=current_user, uow=uow)
+        sync = await crud.sync.create(
+            db=db,
+            obj_in=sync,
+            current_user=current_user,
+            uow=uow,
+        )
         await uow.session.flush()
         await dag_service.create_initial_dag(
             db=db, sync_id=sync.id, current_user=current_user, uow=uow
@@ -161,6 +166,7 @@ class SyncService:
         sync_id: UUID,
         current_user: schemas.User,
         delete_data: bool = False,
+        uow: Optional[UnitOfWork] = None,
     ) -> schemas.Sync:
         """Delete a sync configuration and optionally its associated data.
 
@@ -170,6 +176,7 @@ class SyncService:
             sync_id (UUID): The ID of the sync to delete.
             current_user (schemas.User): The current user.
             delete_data (bool): Whether to delete the data.
+            uow (Optional[UnitOfWork]): The unit of work.
 
         Returns:
         -------
@@ -187,46 +194,77 @@ class SyncService:
             # TODO: Implement data deletion logic, should be part of destination interface
             pass
 
-        return await crud.sync.remove(db=db, id=sync_id, current_user=current_user)
+        return await crud.sync.remove(db=db, id=sync_id, current_user=current_user, uow=uow)
+
+    async def _create_and_run_sync_internal(
+        self,
+        sync_in: schemas.SyncCreate,
+        current_user: schemas.User,
+        uow: UnitOfWork,
+    ) -> tuple[schemas.Sync, Optional[schemas.SyncJob]]:
+        """Internal helper method for creating and running a sync.
+
+        Args:
+        ----
+            sync_in (schemas.SyncCreate): The sync to create.
+            current_user (schemas.User): The current user.
+            uow (UnitOfWork): The unit of work to use.
+
+        Returns:
+        -------
+            tuple[schemas.Sync, Optional[schemas.SyncJob]]: The created sync and job if run.
+        """
+        sync = await self.create(
+            db=uow.session, sync=sync_in.to_base(), current_user=current_user, uow=uow
+        )
+        await uow.session.flush()
+        sync_schema = schemas.Sync.model_validate(sync)
+
+        sync_job = None
+        if sync_in.run_immediately:
+            sync_job_create = schemas.SyncJobCreate(sync_id=sync_schema.id)
+            sync_job = await crud.sync_job.create(
+                db=uow.session, obj_in=sync_job_create, current_user=current_user, uow=uow
+            )
+            await uow.session.flush()
+            await uow.session.refresh(sync_job)
+            sync_job = schemas.SyncJob.model_validate(sync_job)
+
+        return sync_schema, sync_job
 
     async def create_and_run_sync(
         self,
         db: AsyncSession,
         sync_in: schemas.SyncCreate,
         current_user: schemas.User,
+        uow: Optional[UnitOfWork] = None,
     ) -> tuple[schemas.Sync, Optional[schemas.SyncJob]]:
         """Create a new sync and optionally run it immediately.
+
+        TODO: Make it run immediately if sync_in.run_immediately is True
+            Currently, it expects the FastAPI endpoint to trigger the run
+            in background. This should be replaced by decentralized orchestration.
 
         Args:
         ----
             db (AsyncSession): The database session.
             sync_in (schemas.SyncCreate): The sync to create.
             current_user (schemas.User): The current user.
+            uow (Optional[UnitOfWork]): Existing unit of work if provided, otherwise create new one.
 
         Returns:
         -------
             tuple[schemas.Sync, Optional[schemas.SyncJob]]: The created sync and job if run.
         """
-        async with UnitOfWork(db) as uow:
-            sync = await self.create(
-                db=db, sync=sync_in.to_base(), current_user=current_user, uow=uow
-            )
-            await uow.session.flush()
-            sync_schema = schemas.Sync.model_validate(sync)
-
-            sync_job = None
-            if sync_in.run_immediately:
-                sync_job_create = schemas.SyncJobCreate(sync_id=sync_schema.id)
-                sync_job = await crud.sync_job.create(
-                    db=db, obj_in=sync_job_create, current_user=current_user, uow=uow
-                )
-                await uow.commit()
-                await uow.session.refresh(sync_job)
-                sync_job = schemas.SyncJob.model_validate(sync_job)
-            else:
-                await uow.commit()
-
-        return sync_schema, sync_job
+        if uow is not None:
+            # Use the provided UnitOfWork without managing its lifecycle
+            return await self._create_and_run_sync_internal(sync_in, current_user, uow)
+        else:
+            # Create and manage our own UnitOfWork
+            async with UnitOfWork(db) as local_uow:
+                result = await self._create_and_run_sync_internal(sync_in, current_user, local_uow)
+                await local_uow.commit()
+                return result
 
     async def trigger_sync_run(
         self,
@@ -235,6 +273,10 @@ class SyncService:
         current_user: schemas.User,
     ) -> tuple[schemas.Sync, schemas.SyncJob, schemas.SyncDag]:
         """Trigger a sync run.
+
+        TODO: Does not actually run the sync, just creates the job and DAG.
+        The actual sync run is triggered by background task in the endpoint.
+        At some point this method will distribute to task queue.
 
         Args:
         ----
@@ -260,6 +302,7 @@ class SyncService:
 
         sync_job_in = schemas.SyncJobCreate(sync_id=sync_id)
         sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_in, current_user=current_user)
+        await db.flush()
         sync_job_schema = schemas.SyncJob.model_validate(sync_job)
 
         sync_dag = await crud.sync_dag.get_by_sync_id(

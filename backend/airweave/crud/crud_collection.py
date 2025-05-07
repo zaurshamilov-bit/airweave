@@ -21,6 +21,8 @@ class CRUDCollection(CRUDBase[Collection, CollectionCreate, CollectionUpdate]):
         """Get a collection by its readable ID."""
         result = await db.execute(select(Collection).where(Collection.readable_id == readable_id))
         db_obj = result.scalar_one_or_none()
+        if db_obj is None:
+            return None
         self._validate_if_user_has_permission(db_obj, current_user)
         return db_obj
 

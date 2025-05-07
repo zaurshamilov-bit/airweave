@@ -15,10 +15,16 @@ if TYPE_CHECKING:
     from airweave.models.embedding_model import EmbeddingModel
     from airweave.models.integration_credential import IntegrationCredential
     from airweave.models.source import Source
+    from airweave.models.source_connection import SourceConnection
 
 
 class Connection(Base):
-    """Connection model to manage relationships between integrations and their credentials."""
+    """Connection model to manage relationships between integrations and their credentials.
+
+    This is a system table that contains the connection information for all integrations.
+    Not to be confused with the source connection model, which is a user-facing model that
+    encompasses the connection and sync information for a specific source.
+    """
 
     __tablename__ = "connection"
 
@@ -65,6 +71,12 @@ class Connection(Base):
         "Connection.integration_type=='EMBEDDING_MODEL')",
         foreign_keys=[short_name],
         viewonly=True,
+        lazy="noload",
+    )
+
+    source_connection: Mapped[Optional["SourceConnection"]] = relationship(
+        "SourceConnection",
+        back_populates="connection",
         lazy="noload",
     )
 

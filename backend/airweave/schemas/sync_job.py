@@ -73,4 +73,49 @@ class SyncJobInDBBase(SyncJobBase):
 class SyncJob(SyncJobInDBBase):
     """Schema for SyncJob."""
 
-    pass
+    def to_source_connection_job(self, source_connection_id: UUID) -> "SourceConnectionJob":
+        """Convert SyncJob to SourceConnectionJob."""
+        return SourceConnectionJob(
+            source_connection_id=source_connection_id,
+            id=self.id,
+            organization_id=self.organization_id,
+            created_by_email=self.created_by_email,
+            modified_by_email=self.modified_by_email,
+            created_at=self.created_at,
+            modified_at=self.modified_at,
+            status=self.status,
+            entities_inserted=self.entities_inserted,
+            entities_updated=self.entities_updated,
+            entities_deleted=self.entities_deleted,
+            entities_kept=self.entities_kept,
+            entities_skipped=self.entities_skipped,
+            started_at=self.started_at,
+            completed_at=self.completed_at,
+            failed_at=self.failed_at,
+        )
+
+
+class SourceConnectionJob(BaseModel):
+    """Schema for SourceConnectionJob.
+
+    This is a public schema that is used to return sync jobs for a source connection.
+    Sync / sync jobs are system tables, and are not exposed to the public API.
+    """
+
+    source_connection_id: UUID
+    id: UUID
+    organization_id: UUID
+    created_by_email: EmailStr
+    modified_by_email: EmailStr
+    created_at: datetime
+    modified_at: datetime
+    status: SyncJobStatus = SyncJobStatus.PENDING
+    entities_inserted: Optional[int] = 0
+    entities_updated: Optional[int] = 0
+    entities_deleted: Optional[int] = 0
+    entities_kept: Optional[int] = 0
+    entities_skipped: Optional[int] = 0
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    failed_at: Optional[datetime] = None
+    error: Optional[str] = None

@@ -44,7 +44,7 @@ async def get_collection(
 ) -> schemas.Collection:
     """Get a specific collection by its readable ID."""
     db_obj = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, organization_id=current_user.organization_id
+        db, readable_id=readable_id, current_user=current_user
     )
     if db_obj is None:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -60,7 +60,7 @@ async def update_collection(
 ) -> schemas.Collection:
     """Update a collection by its readable ID."""
     db_obj = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, organization_id=current_user.organization_id
+        db, readable_id=readable_id, current_user=current_user
     )
     if db_obj is None:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -76,11 +76,14 @@ async def delete_collection(
     current_user: User = Depends(deps.get_user),
 ) -> schemas.Collection:
     """Delete a collection by its readable ID."""
+    # Find the collection
     db_obj = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, organization_id=current_user.organization_id
+        db, readable_id=readable_id, current_user=current_user
     )
     if db_obj is None:
         raise HTTPException(status_code=404, detail="Collection not found")
+
+    # Delete the collection - source connections will be removed by SQLAlchemy cascade
     return await crud.collection.remove(db, id=db_obj.id, current_user=current_user)
 
 
@@ -96,7 +99,7 @@ async def search_collection(
 ) -> List[dict]:
     """Search within a collection identified by readable ID."""
     db_obj = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, organization_id=current_user.organization_id
+        db, readable_id=readable_id, current_user=current_user
     )
     if db_obj is None:
         raise HTTPException(status_code=404, detail="Collection not found")

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, List
 
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.models._base import OrganizationBase, UserMixin
 from airweave.schemas.collection import CollectionStatus
@@ -27,3 +27,11 @@ class Collection(OrganizationBase, UserMixin):
     # Relationships
     if TYPE_CHECKING:
         source_connections: List["SourceConnection"]
+
+    source_connections: Mapped[list["SourceConnection"]] = relationship(
+        "SourceConnection",
+        back_populates="collection",
+        lazy="noload",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

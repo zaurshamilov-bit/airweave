@@ -3,7 +3,7 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import BackgroundTasks, Body, Depends, HTTPException
+from fastapi import BackgroundTasks, Body, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
@@ -11,18 +11,19 @@ from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
+from airweave.db.session import get_db_context
 
 router = TrailingSlashRouter()
 
 
-@router.get("/", response_model=List[schemas.SourceConnection])
+@router.get("/", response_model=List[schemas.SourceConnectionListItem])
 async def list_source_connections(
     *,
     db: AsyncSession = Depends(deps.get_db),
     skip: int = 0,
     limit: int = 100,
     user: schemas.User = Depends(deps.get_user),
-) -> List[schemas.SourceConnection]:
+) -> List[schemas.SourceConnectionListItem]:
     """List all source connections for the current user.
 
     Args:
@@ -32,9 +33,9 @@ async def list_source_connections(
         user: The current user
 
     Returns:
-        A list of source connections
+        A list of source connection list items with essential information
     """
-    return await crud.source_connection.get_all_for_user(
+    return await source_connection_service.get_all_source_connections(
         db=db, current_user=user, skip=skip, limit=limit
     )
 
@@ -44,6 +45,7 @@ async def get_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID,
+    show_auth_fields: bool = False,
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.SourceConnection:
     """Get a specific source connection by ID.
@@ -51,17 +53,18 @@ async def get_source_connection(
     Args:
         db: The database session
         source_connection_id: The ID of the source connection
+        show_auth_fields: Whether to show the auth fields, default is False
         user: The current user
 
     Returns:
         The source connection
     """
-    source_connection = await crud.source_connection.get(
-        db=db, id=source_connection_id, current_user=user
+    return await source_connection_service.get_source_connection(
+        db=db,
+        source_connection_id=source_connection_id,
+        show_auth_fields=show_auth_fields,
+        current_user=user,
     )
-    if not source_connection:
-        raise HTTPException(status_code=404, detail="Source connection not found")
-    return source_connection
 
 
 @router.post("/", response_model=schemas.SourceConnection)
@@ -94,16 +97,20 @@ async def create_source_connection(
         db=db, source_connection_in=source_connection_in, current_user=user
     )
 
-    # If job was created and sync_immediately is True, start it in background
-    if sync_job and source_connection_in.sync_immediately:
-        sync_dag = await sync_service.get_sync_dag(
-            db=db, sync_id=source_connection.sync_id, current_user=user
-        )
+    async with get_db_context() as db:
+        # If job was created and sync_immediately is True, start it in background
+        if sync_job and source_connection_in.sync_immediately:
+            sync_dag = await sync_service.get_sync_dag(
+                db=db, sync_id=source_connection.sync_id, current_user=user
+            )
 
-        # Get the sync object
-        sync = await crud.sync.get(db=db, id=source_connection.sync_id, current_user=user)
+            # Get the sync object
+            sync = await crud.sync.get(db=db, id=source_connection.sync_id, current_user=user)
+            sync = schemas.Sync.model_validate(sync, from_attributes=True)
+            sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
+            sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
 
-        background_tasks.add_task(sync_service.run, sync, sync_job, sync_dag, user)
+    background_tasks.add_task(sync_service.run, sync, sync_job, sync_dag, user)
 
     return source_connection
 
@@ -159,14 +166,14 @@ async def delete_source_connection(
     )
 
 
-@router.post("/{source_connection_id}/run", response_model=schemas.SyncJob)
+@router.post("/{source_connection_id}/run", response_model=schemas.SourceConnectionJob)
 async def run_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID,
     user: schemas.User = Depends(deps.get_user),
     background_tasks: BackgroundTasks,
-) -> schemas.SyncJob:
+) -> schemas.SourceConnectionJob:
     """Trigger a sync run for a source connection.
 
     Args:
@@ -185,18 +192,22 @@ async def run_source_connection(
     # Start the sync job in the background
     sync = await crud.sync.get(db=db, id=sync_job.sync_id, current_user=user, with_connections=True)
     sync_dag = await sync_service.get_sync_dag(db=db, sync_id=sync_job.sync_id, current_user=user)
+
+    sync = schemas.Sync.model_validate(sync, from_attributes=True)
+    sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+
     background_tasks.add_task(sync_service.run, sync, sync_job, sync_dag, user)
 
-    return sync_job
+    return sync_job.to_source_connection_job(source_connection_id)
 
 
-@router.get("/{source_connection_id}/jobs", response_model=List[schemas.SyncJob])
+@router.get("/{source_connection_id}/jobs", response_model=List[schemas.SourceConnectionJob])
 async def list_source_connection_jobs(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID,
     user: schemas.User = Depends(deps.get_user),
-) -> List[schemas.SyncJob]:
+) -> List[schemas.SourceConnectionJob]:
     """List all sync jobs for a source connection.
 
     Args:
@@ -209,4 +220,28 @@ async def list_source_connection_jobs(
     """
     return await source_connection_service.get_source_connection_jobs(
         db=db, source_connection_id=source_connection_id, current_user=user
+    )
+
+
+@router.get("/{source_connection_id}/jobs/{job_id}", response_model=schemas.SourceConnectionJob)
+async def get_source_connection_job(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    source_connection_id: UUID,
+    job_id: UUID,
+    user: schemas.User = Depends(deps.get_user),
+) -> schemas.SourceConnectionJob:
+    """Get a specific sync job for a source connection.
+
+    Args:
+        db: The database session
+        source_connection_id: The ID of the source connection
+        job_id: The ID of the sync job
+        user: The current user
+
+    Returns:
+        The sync job
+    """
+    return await source_connection_service.get_source_connection_job(
+        db=db, source_connection_id=source_connection_id, job_id=job_id, current_user=user
     )

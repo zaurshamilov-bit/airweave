@@ -75,7 +75,9 @@ from .source import (
 from .source_connection import (
     SourceConnection,
     SourceConnectionCreate,
+    SourceConnectionCreateWithRelatedIds,
     SourceConnectionInDBBase,
+    SourceConnectionListItem,
     SourceConnectionUpdate,
 )
 from .sync import (
@@ -87,7 +89,13 @@ from .sync import (
     SyncWithoutConnections,
     SyncWithSourceConnection,
 )
-from .sync_job import SyncJob, SyncJobCreate, SyncJobInDBBase, SyncJobUpdate
+from .sync_job import (
+    SourceConnectionJob,
+    SyncJob,
+    SyncJobCreate,
+    SyncJobInDBBase,
+    SyncJobUpdate,
+)
 from .transformer import Transformer, TransformerCreate, TransformerUpdate
 from .user import (
     User,

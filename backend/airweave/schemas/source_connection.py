@@ -2,12 +2,12 @@
 
 import re
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, field_validator
 
-from airweave.core.shared_models import SourceConnectionStatus
+from airweave.core.shared_models import SourceConnectionStatus, SyncJobStatus
 from airweave.platform.configs._base import ConfigValues
 
 
@@ -63,8 +63,40 @@ class SourceConnectionCreate(SourceConnectionBase):
             raise ValueError("Invalid cron schedule format")
         return v
 
+    def map_to_core_and_auxiliary_attributes(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Map the source connection create schema to core and auxiliary attributes.
 
-class SourceConnectionUpdate(SourceConnectionBase):
+        This separates the attributes in the schema into two groups:
+        1. Core attributes: These are used to create the SourceConnection model directly
+        2. Auxiliary attributes: These are used in the creation process but aren't part of the model
+
+        Returns:
+            A tuple containing (core_attributes, auxiliary_attributes)
+        """
+        data = self.model_dump(exclude_unset=True)
+
+        # Auxiliary attributes used in the creation process but not directly in the model
+        auxiliary_attrs = {
+            "auth_fields": data.pop("auth_fields", None),
+            "cron_schedule": data.pop("cron_schedule", None),
+            "sync_immediately": data.pop("sync_immediately", True),
+        }
+
+        # Everything else is a core attribute for the SourceConnection model
+        core_attrs = data
+
+        return core_attrs, auxiliary_attrs
+
+
+class SourceConnectionCreateWithRelatedIds(SourceConnectionCreate):
+    """Schema for creating a source connection with a connection."""
+
+    connection_id: UUID
+    readable_collection_id: str
+    sync_id: UUID
+
+
+class SourceConnectionUpdate(BaseModel):
     """Schema for updating a source connection."""
 
     name: Optional[str] = None
@@ -72,9 +104,7 @@ class SourceConnectionUpdate(SourceConnectionBase):
     auth_fields: Optional[ConfigValues] = None
     config_fields: Optional[ConfigValues] = None
     cron_schedule: Optional[str] = None
-    short_name: Optional[str] = None
-    sync_id: Optional[UUID] = None
-    integration_credential_id: Optional[UUID] = None
+    connection_id: Optional[UUID] = None
 
 
 class SourceConnectionInDBBase(SourceConnectionBase):
@@ -87,8 +117,8 @@ class SourceConnectionInDBBase(SourceConnectionBase):
     status: SourceConnectionStatus
     created_at: datetime
     modified_at: datetime
-    integration_credential_id: Optional[UUID] = None
-    collection: Optional[str] = None
+    connection_id: Optional[UUID] = None  # ID of the underlying connection object
+    collection: str
     created_by_email: EmailStr
     modified_by_email: EmailStr
 
@@ -104,3 +134,44 @@ class SourceConnection(SourceConnectionInDBBase):
     # str if encrypted, ConfigValues if not
     # comes from integration_credential
     auth_fields: Optional[ConfigValues | str] = None
+
+    # sync job info
+    latest_sync_job_status: Optional[SyncJobStatus] = None
+    latest_sync_job_id: Optional[UUID] = None
+    latest_sync_job_started_at: Optional[datetime] = None
+    latest_sync_job_completed_at: Optional[datetime] = None
+
+    @classmethod
+    def from_orm_with_collection_mapping(cls, obj):
+        """Create a SourceConnection from a source_connection ORM model."""
+        # Convert to dict and filter out SQLAlchemy internal attributes
+        obj_dict = {k: v for k, v in obj.__dict__.items() if not k.startswith("_")}
+
+        # Map the readable_collection_id to collection if needed
+        if hasattr(obj, "readable_collection_id"):
+            obj_dict["collection"] = obj.readable_collection_id
+
+        return cls.model_validate(obj_dict)
+
+
+class SourceConnectionListItem(BaseModel):
+    """Simplified schema for source connection list item.
+
+    This is a compact representation containing only core attributes
+    directly from the source connection model.
+    """
+
+    id: UUID
+    name: str
+    description: Optional[str] = None
+    short_name: str
+    status: SourceConnectionStatus
+    created_at: datetime
+    modified_at: datetime
+    sync_id: UUID
+    collection: str
+
+    class Config:
+        """Pydantic config for SourceConnectionListItem."""
+
+        from_attributes = True

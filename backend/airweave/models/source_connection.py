@@ -12,13 +12,17 @@ from airweave.models._base import OrganizationBase, UserMixin
 
 if TYPE_CHECKING:
     from airweave.models.collection import Collection
-    from airweave.models.dag import SyncDag
-    from airweave.models.integration_credential import IntegrationCredential
+    from airweave.models.connection import Connection
     from airweave.models.sync import Sync
 
 
 class SourceConnection(OrganizationBase, UserMixin):
-    """Source connection model for connecting to external data sources."""
+    """Source connection model for connecting to external data sources.
+
+    This is a user-facing model that encompasses the connection and sync information for a
+    specific source. Not to be confused with the connection model, which is a system table
+    that contains the connection information for all integrations.
+    """
 
     __tablename__ = "source_connection"
 
@@ -30,31 +34,28 @@ class SourceConnection(OrganizationBase, UserMixin):
     config_fields: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Related objects
-    dag_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("sync_dag.id", ondelete="SET NULL"), nullable=True
-    )
     sync_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("sync.id", ondelete="SET NULL"), nullable=True
     )
-    integration_credential_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("integration_credential.id", ondelete="SET NULL"), nullable=True
-    )
     readable_collection_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("collection.readable_id", ondelete="SET NULL"), nullable=True
+        ForeignKey("collection.readable_id", ondelete="CASCADE"), nullable=True
+    )
+    connection_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("connection.id", ondelete="SET NULL"), nullable=True
     )
     status: Mapped[SourceConnectionStatus] = mapped_column(
         SQLAlchemyEnum(SourceConnectionStatus), default=SourceConnectionStatus.ACTIVE
     )
-    cron_schedule: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Relationships
     sync: Mapped[Optional["Sync"]] = relationship(
         "Sync", back_populates="source_connection", lazy="noload"
     )
-    integration_credential: Mapped[Optional["IntegrationCredential"]] = relationship(
-        "IntegrationCredential", foreign_keys=[integration_credential_id], lazy="noload"
-    )
-    dag: Mapped[Optional["SyncDag"]] = relationship("SyncDag", foreign_keys=[dag_id], lazy="noload")
     collection: Mapped[Optional["Collection"]] = relationship(
-        "Collection", foreign_keys=[readable_collection_id], lazy="noload"
+        "Collection",
+        foreign_keys=[readable_collection_id],
+        lazy="noload",
+    )
+    connection: Mapped[Optional["Connection"]] = relationship(
+        "Connection", back_populates="source_connection", lazy="noload"
     )
