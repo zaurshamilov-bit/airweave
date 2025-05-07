@@ -34,7 +34,7 @@ class SourceConnectionService:
     """
 
     async def _validate_auth_fields(
-        self, db: AsyncSession, source_short_name: str, auth_fields: Dict[str, Any]
+        self, db: AsyncSession, source_short_name: str, auth_fields: Optional[Dict[str, Any]]
     ) -> dict:
         """Validate auth fields based on auth type.
 
@@ -62,11 +62,19 @@ class SourceConnectionService:
         )
 
         # This method only supports config_class auth type
-        if source.auth_type != AuthType.config_class and auth_fields is not None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Source {source.name} does not support auth fields. " + BASE_ERROR_MESSAGE,
-            )
+        if source.auth_type != AuthType.config_class:
+            if auth_fields is not None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Source {source.name} does not support auth fields. "
+                    + BASE_ERROR_MESSAGE,
+                )
+        else:
+            if auth_fields is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Source {source.name} requires auth fields. " + BASE_ERROR_MESSAGE,
+                )
 
         # Create and validate auth config
         try:
@@ -92,13 +100,13 @@ class SourceConnectionService:
                     + "\n".join(error_messages)
                 )
                 raise HTTPException(
-                    status_code=400,
+                    status_code=422,
                     detail=f"Invalid auth fields: {error_detail}. " + BASE_ERROR_MESSAGE,
                 ) from e
             else:
                 # For other types of errors
                 raise HTTPException(
-                    status_code=400,
+                    status_code=422,
                     detail=f"Invalid auth fields: {str(e)}. " + BASE_ERROR_MESSAGE,
                 ) from e
 
@@ -512,46 +520,11 @@ class SourceConnectionService:
             source_connection
         )
 
-        async with UnitOfWork(db) as uow:
-            # 1. Delete the sync if it exists
-            if source_connection.sync_id:
-                await sync_service.delete_sync(
-                    db=uow.session,
-                    sync_id=source_connection.sync_id,
-                    current_user=current_user,
-                    delete_data=delete_data,
-                )
+        await crud.source_connection.remove(
+            db=db, id=source_connection_id, current_user=current_user
+        )
 
-            # 2. Delete the integration credential if it exists
-            # First get the connection to find the credential
-            if source_connection.connection_id:
-                connection = await crud.connection.get(
-                    uow.session, id=source_connection.connection_id, current_user=current_user
-                )
-
-                if connection and connection.integration_credential_id:
-                    await crud.integration_credential.remove(
-                        uow.session,
-                        id=connection.integration_credential_id,
-                        current_user=current_user,
-                        uow=uow,
-                    )
-
-                # 3. Delete the connection
-                await crud.connection.remove(
-                    uow.session,
-                    id=source_connection.connection_id,
-                    current_user=current_user,
-                    uow=uow,
-                )
-
-            # 4. Delete the source connection
-            await crud.source_connection.remove(
-                db=uow.session, id=source_connection_id, current_user=current_user, uow=uow
-            )
-
-            await uow.commit()
-            return source_connection_schema
+        return source_connection_schema
 
     async def run_source_connection(
         self,

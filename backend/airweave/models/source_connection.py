@@ -1,11 +1,12 @@
 """Source connection model."""
 
+from time import sleep
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
-from sqlalchemy import JSON, ForeignKey, String, Text
+from sqlalchemy import JSON, ForeignKey, String, Text, event
 from sqlalchemy import Enum as SQLAlchemyEnum
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from airweave.core.shared_models import SourceConnectionStatus
 from airweave.models._base import OrganizationBase, UserMixin
@@ -35,13 +36,13 @@ class SourceConnection(OrganizationBase, UserMixin):
 
     # Related objects
     sync_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("sync.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("sync.id", ondelete="CASCADE"), nullable=True
     )
     readable_collection_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("collection.readable_id", ondelete="CASCADE"), nullable=True
     )
     connection_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("connection.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("connection.id", ondelete="CASCADE"), nullable=True
     )
     status: Mapped[SourceConnectionStatus] = mapped_column(
         SQLAlchemyEnum(SourceConnectionStatus), default=SourceConnectionStatus.ACTIVE
@@ -49,7 +50,9 @@ class SourceConnection(OrganizationBase, UserMixin):
 
     # Relationships
     sync: Mapped[Optional["Sync"]] = relationship(
-        "Sync", back_populates="source_connection", lazy="noload"
+        "Sync",
+        back_populates="source_connection",
+        lazy="noload",
     )
     collection: Mapped[Optional["Collection"]] = relationship(
         "Collection",
@@ -57,5 +60,43 @@ class SourceConnection(OrganizationBase, UserMixin):
         lazy="noload",
     )
     connection: Mapped[Optional["Connection"]] = relationship(
-        "Connection", back_populates="source_connection", lazy="noload"
+        "Connection",
+        back_populates="source_connection",
+        lazy="noload",
+        cascade="all, delete-orphan",
+        single_parent=True,
     )
+
+
+# Event to delete parent Sync when SourceConnection is deleted
+@event.listens_for(SourceConnection, "before_delete")
+def delete_parent_sync_and_connection(mapper, connection, target):
+    """When a SourceConnection is deleted, also delete its parent Sync and Connection."""
+    # Delete parent Sync if it exists
+    if target.sync_id:
+        # Get the session
+        session = Session.object_session(target)
+        if session:
+            # If we're in a session, use the session to delete the Sync
+            from airweave.models.sync import Sync
+
+            sync = session.get(Sync, target.sync_id)
+            if sync:
+                session.delete(sync)
+        else:
+            # If we're not in a session, use the connection directly
+            connection.execute(f"DELETE FROM sync WHERE id = '{target.sync_id}'")
+
+    sleep(0.2)
+
+    # Delete related Connection if it exists
+    if target.connection_id:
+        session = Session.object_session(target)
+        if session:
+            from airweave.models.connection import Connection
+
+            related_connection = session.get(Connection, target.connection_id)
+            if related_connection:
+                session.delete(related_connection)
+        else:
+            connection.execute(f"DELETE FROM connection WHERE id = '{target.connection_id}'")

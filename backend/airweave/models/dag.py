@@ -1,6 +1,7 @@
 """Models for the DAG system."""
 
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
@@ -13,6 +14,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from ._base import OrganizationBase, UserMixin
+
+if TYPE_CHECKING:
+    pass
 
 
 class NodeType(str, Enum):
@@ -42,6 +46,8 @@ class SyncDag(OrganizationBase, UserMixin):
         "DagEdge", back_populates="dag", lazy="selectin", cascade="all, delete-orphan"
     )
 
+    sync = relationship("Sync", back_populates="sync_dag", lazy="noload")
+
 
 class DagNode(OrganizationBase, UserMixin):
     """Node in a DAG."""
@@ -54,12 +60,15 @@ class DagNode(OrganizationBase, UserMixin):
     config = Column(JSON)  # Configuration for sources, destinations, transformers
 
     # Reference to the definition (one of these will be set based on type)
-    connection_id = Column(UUID, ForeignKey("connection.id"), nullable=True)
-    entity_definition_id = Column(UUID, ForeignKey("entity_definition.id"), nullable=True)
-    transformer_id = Column(UUID, ForeignKey("transformer.id"), nullable=True)
+    connection_id = Column(UUID, ForeignKey("connection.id", ondelete="CASCADE"), nullable=True)
+    entity_definition_id = Column(
+        UUID, ForeignKey("entity_definition.id", ondelete="CASCADE"), nullable=True
+    )
+    transformer_id = Column(UUID, ForeignKey("transformer.id", ondelete="CASCADE"), nullable=True)
 
     # Relationships
     dag = relationship("SyncDag", back_populates="nodes", lazy="noload")
+    connection = relationship("Connection", back_populates="dag_nodes", lazy="noload")
     outgoing_edges = relationship(
         "DagEdge",
         foreign_keys="[DagEdge.from_node_id]",

@@ -16,7 +16,7 @@ class SyncBase(BaseModel):
     """Base schema for Sync."""
 
     name: str
-    source_connection_id: UUID
+    source_connection_id: UUID  # system connection id
     embedding_model_connection_id: UUID = Field(default=NATIVE_TEXT2VEC_UUID)
     destination_connection_ids: list[UUID]
     description: Optional[str] = None

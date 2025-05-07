@@ -215,6 +215,8 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         await db.delete(db_obj)
 
+        await db.flush()
+
         if not uow:
             await db.commit()
 

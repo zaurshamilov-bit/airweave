@@ -11,6 +11,7 @@ from airweave.core.shared_models import SyncStatus
 from airweave.models._base import OrganizationBase, UserMixin
 
 if TYPE_CHECKING:
+    from airweave.models.dag import SyncDag
     from airweave.models.entity import Entity
     from airweave.models.source_connection import SourceConnection
     from airweave.models.sync_connection import SyncConnection
@@ -31,7 +32,7 @@ class Sync(OrganizationBase, UserMixin):
         DateTime(timezone=True), nullable=True
     )
     white_label_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("white_label.id"), nullable=True
+        ForeignKey("white_label.id", ondelete="CASCADE"), nullable=True
     )
     white_label_user_identifier: Mapped[str] = mapped_column(String(256), nullable=True)
     sync_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
@@ -63,12 +64,23 @@ class Sync(OrganizationBase, UserMixin):
         "WhiteLabel",
         back_populates="syncs",
         lazy="noload",
+        cascade="save-update, merge",
     )
 
     source_connection: Mapped[Optional["SourceConnection"]] = relationship(
         "SourceConnection",
         back_populates="sync",
         lazy="noload",
+        passive_deletes=True,
+    )
+
+    # Add relationship to SyncDag
+    sync_dag: Mapped[Optional["SyncDag"]] = relationship(
+        "SyncDag",
+        back_populates="sync",
+        lazy="noload",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     __table_args__ = (
