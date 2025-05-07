@@ -4,8 +4,9 @@ import { Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { materialOceanic, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { materialOceanic } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTheme } from "@/lib/theme-provider";
+import { cn } from "@/lib/utils";
 
 interface CodeBlockProps {
   code: string;
@@ -15,6 +16,9 @@ interface CodeBlockProps {
   title?: string;
   footerContent?: React.ReactNode;
   disabled?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+  height?: string | number;
 }
 
 export function CodeBlock({
@@ -24,15 +28,16 @@ export function CodeBlock({
   badgeColor = "bg-blue-600 hover:bg-blue-600",
   title,
   footerContent,
-  disabled = false
+  disabled = false,
+  className,
+  style,
+  height
 }: CodeBlockProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
-  const { theme } = useTheme();
-  const isDarkTheme = theme === "dark";
 
-  // Choose base style based on theme
-  const baseStyle = isDarkTheme ? materialOceanic : oneLight;
+  // Always use dark theme styling
+  const baseStyle = materialOceanic;
 
   // Create a custom style that removes backgrounds but keeps text coloring
   const customStyle = {
@@ -70,28 +75,39 @@ export function CodeBlock({
     tsx: "React",
   }[language] || language;
 
+  // Combine styles including height if provided
+  const containerStyle = {
+    ...style,
+    height: height || style?.height,
+    display: 'flex',
+    flexDirection: 'column' as const
+  };
+
   return (
-    <div className="rounded-md overflow-hidden border border-border/50 bg-muted/30 text-card-foreground">
-      <div className="flex items-center px-3 py-1.5 justify-between border-b border-border/40">
+    <div
+      className={cn("rounded-md overflow-hidden border border-gray-800 bg-black text-gray-100", className)}
+      style={containerStyle}
+    >
+      <div className="flex items-center px-3 py-1.5 justify-between border-b border-gray-800">
         <div className="flex items-center gap-2">
           {badgeText && (
             <Badge className={`${badgeColor} text-white text-xs px-1.5 py-0 rounded h-5`}>
               {badgeText}
             </Badge>
           )}
-          {title && <span className="text-xs font-medium">{title}</span>}
+          {title && <span className="text-xs font-medium text-gray-200">{title}</span>}
         </div>
         <Button
           size="sm"
           variant="ghost"
-          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+          className="h-6 w-6 p-0 text-gray-400 hover:text-white"
           onClick={handleCopyCode}
           disabled={disabled}
         >
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
         </Button>
       </div>
-      <div className="p-2 bg-muted/30">
+      <div className="p-2 bg-black flex-1 overflow-auto">
         <SyntaxHighlighter
           language={language}
           style={customStyle}
@@ -100,6 +116,7 @@ export function CodeBlock({
             background: 'transparent',
             margin: 0,
             padding: 0,
+            height: '100%'
           }}
           wrapLongLines={false}
           showLineNumbers={false}
@@ -113,7 +130,11 @@ export function CodeBlock({
           {code}
         </SyntaxHighlighter>
       </div>
-      {footerContent && <div className="px-3 py-1 border-t border-border/40">{footerContent}</div>}
+      {footerContent && (
+        <div className="px-3 py-1 border-t border-gray-800 text-white">
+          {footerContent}
+        </div>
+      )}
     </div>
   );
 }

@@ -5,7 +5,10 @@ import { cn } from "@/lib/utils";
 
 interface EntityNodeData {
   name: string;
-  entityDefinitionId: string;
+  label?: string;
+  shortName?: string;
+  originalName?: string;
+  entityDefinitionId?: string;
   config?: Record<string, any>;
 }
 
@@ -14,33 +17,34 @@ interface EntityNodeProps {
 }
 
 export const EntityNode = memo(({ data, selected, ...props }: NodeProps) => {
+  console.log("EntityNode data:", data);
+
   return (
-    <div className="w-20 h-20 flex items-center justify-center">
-      <div className="w-10 h-10">
-        <div
-          className={cn(
-            "w-full h-full flex items-center justify-center rounded-2xl bg-muted/40 backdrop-blur-sm",
-            "transition-colors duration-200",
-            selected ? "bg-muted/90" : "bg-muted/80"
-          )}
-        >
-          <Handle
-            type="target"
-            position={Position.Left}
-            className="opacity-0 w-0 h-0"
-            style={{ left: -6 }}
-          />
-          <Box className="w-6 h-6 text-muted-foreground" />
-          <Handle
-            type="source"
-            position={Position.Right}
-            className="opacity-0 w-0 h-0"
-            style={{ right: -6 }}
-          />
-        </div>
-        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap">
-          <span className="text-xs font-light text-foreground text-center">{data.name}</span>
-        </div>
+    <div className="w-6 h-6 mt-2">
+      <div
+        className={cn(
+          "w-full h-full flex items-center justify-center bg-background/80 backdrop-blur-sm",
+          "transition-colors duration-200 cursor-pointer",
+          "hover:text-primary rounded-lg",
+          selected ? "text-primary shadow-sm shadow-primary/20" : ""
+        )}
+      >
+        <Handle
+          type="target"
+          position={Position.Left}
+          className="w-1 h-1 ml-[1px] border border-background bg-muted-foreground"
+        />
+        <Box className="w-3 h-3 text-muted-foreground" />
+        <Handle
+          type="source"
+          position={Position.Right}
+          className="w-1 h-1 ml-[1px] border border-background bg-muted-foreground"
+        />
+      </div>
+      <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap">
+        <span className="text-[6px] text-foreground text-center">
+          {data.label || data.name}
+        </span>
       </div>
     </div>
   );

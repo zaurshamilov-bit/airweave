@@ -34,30 +34,30 @@ export const SourceNode = memo(({ data, selected, ...props }: NodeProps) => {
   }, [data.connection_id]);
 
   return (
-    <div className="w-20 h-20">
+    <div className="w-10 h-10">
       <div
         className={cn(
           "w-full h-full flex items-center justify-center bg-background/80 backdrop-blur-sm",
-          "border-2 transition-colors duration-200 cursor-pointer",
-          "border-muted-foreground/50 hover:border-primary rounded-lg rounded-l-2xl",
+          "border-[1px] transition-colors duration-200 cursor-pointer",
+          "border-muted-foreground/50 hover:border-primary rounded-lg",
           selected ? "border-primary shadow-sm shadow-primary/20" : ""
         )}
       >
         <Handle
           type="source"
           position={Position.Right}
-          className="w-3 h-3 -mr-[3px] border border-background bg-muted-foreground"
+          className="w-1 h-1 ml-[1px] border border-background bg-muted-foreground"
         />
-        <div className="w-16 h-16 flex items-center justify-center">
+        <div className="w-16 h-16 flex items-center justify-center p-2">
           <img
             src={getAppIconUrl(connection?.short_name || data.shortName, resolvedTheme)}
             alt={connection?.name || data.name}
-            className="w-12 h-12 object-contain"
+            className="max-w-full max-h-full w-auto h-auto object-contain"
           />
         </div>
       </div>
-      <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap">
-        <span className="text-sm font-semibold text-foreground text-center">
+      <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap">
+        <span className="text-[8px] text-foreground text-center">
           {connection?.name || data.name}
         </span>
       </div>
