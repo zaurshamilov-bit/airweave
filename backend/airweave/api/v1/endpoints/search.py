@@ -57,11 +57,26 @@ async def search(
     if response_type == ResponseType.RAW:
         return {"results": results, "response_type": "raw"}
 
-    # For completion, use chat service to summarize and answer
+    # If no results found, return a more specific message
     if not results:
         return {
             "results": [],
-            "completion": "No results found for your query.",
+            "completion": (
+                "I couldn't find any relevant information for that query. "
+                "Try asking about something in your data collection."
+            ),
+            "response_type": "completion",
+        }
+
+    # For low-quality results (where scores are low), add this check:
+    has_relevant_results = any(result.get("score", 0) > 0.25 for result in results)
+    if not has_relevant_results:
+        return {
+            "results": results,
+            "completion": (
+                "Your query didn't match anything meaningful in the database. "
+                "Please try a different question related to your data."
+            ),
             "response_type": "completion",
         }
 
@@ -78,9 +93,19 @@ async def search(
             if "download_url" in result["payload"]:
                 result["payload"].pop("download_url", None)
 
-    # Prepare messages for completion
+    # Modify the context prompt to be more specific about only answering based on context
     messages = [
-        {"role": "system", "content": chat_service.CONTEXT_PROMPT.format(context=str(results))},
+        {
+            "role": "system",
+            "content": chat_service.CONTEXT_PROMPT.format(
+                context=str(results),
+                additional_instruction=(
+                    "If the provided context doesn't contain information to answer "
+                    "the query directly, respond with 'I don't have enough information to answer "
+                    "that question based on the available data.'"
+                ),
+            ),
+        },
         {"role": "user", "content": query},
     ]
 
