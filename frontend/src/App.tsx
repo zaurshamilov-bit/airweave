@@ -19,6 +19,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { CallbackPage } from "./pages/CallbackPage";
 import { AuthGuard } from "./components/AuthGuard";
 import Playground from "./new/Playground";
+import Collections from "./new/Collections";
 
 function App() {
   return (
@@ -55,6 +56,7 @@ function App() {
           <Route path="/chat" element={<Chat />} />
           <Route path="/chat/:id" element={<Chat />} />
           <Route path="/playground" element={<Playground />} />
+          <Route path="/collections/:readable_id" element={<Collections />} />
         </Route>
 
         {/* Public routes */}

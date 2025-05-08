@@ -205,6 +205,8 @@ class SourceConnectionService:
                 await uow.session.flush()
             else:
                 readable_collection_id = core_attrs["collection"]
+                if "collection" in core_attrs:
+                    del core_attrs["collection"]
                 collection = await crud.collection.get_by_readable_id(
                     db=uow.session, readable_id=readable_collection_id, current_user=current_user
                 )
@@ -231,12 +233,12 @@ class SourceConnectionService:
             )
 
             # 6. Create the source connection from core attributes
-            source_connection_create = schemas.SourceConnectionCreateWithRelatedIds(
+            source_connection_create = {
                 **core_attrs,
-                connection_id=connection_id,
-                readable_collection_id=collection.readable_id,
-                sync_id=sync.id,
-            )
+                "connection_id": connection_id,
+                "readable_collection_id": collection.readable_id,
+                "sync_id": sync.id,
+            }
 
             source_connection = await crud.source_connection.create(
                 db=uow.session, obj_in=source_connection_create, current_user=current_user, uow=uow
