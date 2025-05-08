@@ -1,12 +1,12 @@
 """Module for data synchronization with improved architecture."""
 
+import time
 from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
-from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus
 from airweave.core.sync_job_service import sync_job_service
 from airweave.db.session import get_db_context
@@ -33,54 +33,65 @@ class EntityProcessor:
         db: AsyncSession,
     ) -> List[BaseEntity]:
         """Process an entity through the complete pipeline."""
-        # Track the current entity
-        entity_type = entity.__class__.__name__
+        try:
+            sync_context.logger.debug(f"Processing entity {entity.entity_id} through pipeline")
 
-        # Validate entity type is known
-        if entity_type not in self._entities_encountered:
-            raise ValueError(
-                f"Encountered unknown entity type: {entity_type}. This entity type is not "
-                f"registered in the system. Entity ID: {entity.entity_id}"
+            # Track the current entity
+            entity_type = entity.__class__.__name__
+
+            # Validate entity type is known
+            if entity_type not in self._entities_encountered:
+                raise ValueError(
+                    f"Encountered unknown entity type: {entity_type}. This entity type is not "
+                    f"registered in the system. Entity ID: {entity.entity_id}"
+                )
+
+            # If we encounter the same entity from a different path, silently skip it
+            if entity.entity_id in self._entities_encountered[entity_type]:
+                sync_context.logger.info("\nalready encountered this entity, so silently skip\n")
+                return []
+
+            # Add the entity id to the entity_type set - we're processing it now
+            self._entities_encountered[entity_type].add(entity.entity_id)
+
+            # Update progress tracker with latest entities encountered
+            # NOTE: this will only be published when the other stats are being published
+            await sync_context.progress.update_entities_encountered(self._entities_encountered)
+
+            # Stage 1: Enrich entity with metadata
+            enriched_entity = await self._enrich(entity, sync_context)
+
+            # Stage 2: Determine action for entity
+            db_entity, action = await self._determine_action(enriched_entity, sync_context, db)
+            sync_context.logger.debug(f"Determined action {action} for entity {entity.entity_id}")
+
+            # Stage 2.5: Skip further processing if KEEP
+            if action == DestinationAction.KEEP:
+                await sync_context.progress.increment("kept", 1)
+                return []
+
+            # Stage 3: Process entity through DAG
+            processed_entities = await self._transform(
+                enriched_entity, source_node, sync_context, db
+            )
+            sync_context.logger.debug(
+                f"Transformed entity {entity.entity_id} into {len(processed_entities)} entities"
             )
 
-        # If we encounter the same entity from a different path, silently skip it
-        if entity.entity_id in self._entities_encountered[entity_type]:
-            logger.info("\nalready encountered this entity, so silently skip\n")
-            return []
+            # Stage 4: Compute vector
+            processed_entities_with_vector = await self._compute_vector(
+                processed_entities, sync_context
+            )
 
-        # Add the entity id to the entity_type set - we're processing it now
-        self._entities_encountered[entity_type].add(entity.entity_id)
+            # Stage 5: Persist entities based on action
+            await self._persist(
+                enriched_entity, processed_entities_with_vector, db_entity, action, sync_context, db
+            )
 
-        # Update progress tracker with latest entities encountered
-        # NOTE: this will only be published when the other stats are being published
-        await sync_context.progress.update_entities_encountered(self._entities_encountered)
-        logger.info(f"\npubsub: {sync_context.progress.stats.entities_encountered}\n")
-
-        # Stage 1: Enrich entity with metadata
-        enriched_entity = await self._enrich(entity, sync_context)
-
-        # Stage 2: Determine action for entity
-        db_entity, action = await self._determine_action(enriched_entity, sync_context, db)
-
-        # Stage 2.5: Skip further processing if KEEP
-        if action == DestinationAction.KEEP:
-            await sync_context.progress.increment("kept", 1)
-            return []
-
-        # Stage 3: Process entity through DAG
-        processed_entities = await self._transform(enriched_entity, source_node, sync_context, db)
-
-        # Stage 4: Compute vector
-        processed_entities_with_vector = await self._compute_vector(
-            processed_entities, sync_context
-        )
-
-        # Stage 5: Persist entities based on action
-        await self._persist(
-            enriched_entity, processed_entities_with_vector, db_entity, action, sync_context, db
-        )
-
-        return processed_entities
+            return processed_entities
+        except Exception as e:
+            sync_context.logger.error(f"Error processing entity {entity.entity_id}: {str(e)}")
+            raise
 
     async def _enrich(self, entity: BaseEntity, sync_context: SyncContext) -> BaseEntity:
         """Enrich entity with sync metadata."""
@@ -99,17 +110,38 @@ class EntityProcessor:
         self, entity: BaseEntity, sync_context: SyncContext, db: AsyncSession
     ) -> tuple[schemas.Entity, DestinationAction]:
         """Determine what action to take for an entity."""
+        sync_context.logger.info(
+            f"Determining action for entity {entity.entity_id} (type: {type(entity).__name__})"
+        )
+
         db_entity = await crud.entity.get_by_entity_and_sync_id(
             db=db, entity_id=entity.entity_id, sync_id=sync_context.sync.id
         )
 
+        current_hash = entity.hash()
+
         if db_entity:
-            if db_entity.hash != entity.hash():
+            sync_context.logger.info(
+                f"Found existing entity in DB with id {db_entity.id}, "
+                f"comparing hashes: stored={db_entity.hash}, current={current_hash}"
+            )
+
+            if db_entity.hash != current_hash:
                 action = DestinationAction.UPDATE
+                sync_context.logger.info(
+                    f"Hashes differ for entity {entity.entity_id}, will UPDATE"
+                )
             else:
                 action = DestinationAction.KEEP
+                sync_context.logger.info(
+                    f"Hashes match for entity {entity.entity_id}, will KEEP (no changes)"
+                )
         else:
             action = DestinationAction.INSERT
+            sync_context.logger.info(
+                f"No existing entity found for {entity.entity_id} in sync "
+                f"{sync_context.sync.id}, will INSERT"
+            )
 
         return db_entity, action
 
@@ -121,11 +153,33 @@ class EntityProcessor:
         db: AsyncSession,
     ) -> List[BaseEntity]:
         """Transform entity through DAG routing."""
-        return await sync_context.router.process_entity(
+        sync_context.logger.debug(
+            f"Starting transformation for entity {entity.entity_id} "
+            f"(type: {type(entity).__name__}) from source node {source_node.id}"
+        )
+
+        transformed_entities = await sync_context.router.process_entity(
             db=db,
             producer_id=source_node.id,
             entity=entity,
         )
+
+        # Log details about the transformed entities
+        entity_types = {}
+        for e in transformed_entities:
+            entity_type = type(e).__name__
+            if entity_type in entity_types:
+                entity_types[entity_type] += 1
+            else:
+                entity_types[entity_type] = 1
+
+        type_summary = ", ".join([f"{count} {t}" for t, count in entity_types.items()])
+        sync_context.logger.debug(
+            f"Transformation complete: entity {entity.entity_id} transformed into "
+            f"{len(transformed_entities)} entities ({type_summary})"
+        )
+
+        return transformed_entities
 
     async def _persist(
         self,
@@ -171,14 +225,82 @@ class EntityProcessor:
         Returns:
             The entities with vector computed
         """
-        embedding_model = sync_context.embedding_model
-        embeddings = await embedding_model.embed_many(
-            [str(entity.to_storage_dict()) for entity in processed_entities]
-        )
-        for processed_entity, vector in zip(processed_entities, embeddings, strict=False):
-            processed_entity.vector = vector
+        if not processed_entities:
+            sync_context.logger.debug("No entities to vectorize, returning empty list")
+            return []
 
-        return processed_entities
+        try:
+            embedding_model = sync_context.embedding_model
+            entity_count = len(processed_entities)
+
+            sync_context.logger.info(
+                f"Computing vectors for {entity_count} entities using {embedding_model.model_name}"
+            )
+
+            # Log entity content lengths for debugging
+            content_lengths = [len(str(entity.to_storage_dict())) for entity in processed_entities]
+            total_length = sum(content_lengths)
+            avg_length = total_length / entity_count if entity_count else 0
+            max_length = max(content_lengths) if content_lengths else 0
+
+            sync_context.logger.debug(
+                f"Entity content stats: total={total_length}, "
+                f"avg={avg_length:.2f}, max={max_length}, count={entity_count}"
+            )
+
+            start_time = time.time()
+
+            # Convert entities to dictionary representations
+            entity_dicts = []
+            for entity in processed_entities:
+                try:
+                    entity_dict = str(entity.to_storage_dict())
+                    entity_dicts.append(entity_dict)
+                except Exception as e:
+                    sync_context.logger.error(f"Error converting entity to dict: {str(e)}")
+                    # Provide a fallback empty string to maintain array alignment
+                    entity_dicts.append("")
+
+            # Get embeddings from the model
+            embeddings = await embedding_model.embed_many(entity_dicts)
+
+            elapsed = time.time() - start_time
+            sync_context.logger.info(
+                f"Vector computation completed in {elapsed:.2f}s for {len(embeddings)} entities"
+            )
+
+            # Validate we got the expected number of embeddings
+            if len(embeddings) != len(processed_entities):
+                sync_context.logger.warning(
+                    f"Embedding count mismatch: got {len(embeddings)} embeddings "
+                    f"for {len(processed_entities)} entities"
+                )
+
+            # Assign vectors to entities
+            for i, (processed_entity, vector) in enumerate(
+                zip(processed_entities, embeddings, strict=False)
+            ):
+                try:
+                    if vector is None:
+                        sync_context.logger.warning(f"Received None vector for entity at index {i}")
+                        continue
+
+                    vector_dim = len(vector) if vector else 0
+                    sync_context.logger.debug(
+                        f"Assigning vector of dimension {vector_dim} to "
+                        f"entity {processed_entity.entity_id}"
+                    )
+                    processed_entity.vector = vector
+                except Exception as e:
+                    sync_context.logger.error(
+                        f"Error assigning vector to entity at index {i}: {str(e)}"
+                    )
+
+            return processed_entities
+
+        except Exception as e:
+            sync_context.logger.error(f"Error computing vectors: {str(e)}")
+            raise
 
     async def _handle_keep(self, sync_context: SyncContext) -> None:
         """Handle KEEP action."""
@@ -194,7 +316,7 @@ class EntityProcessor:
     ) -> None:
         """Handle INSERT action."""
         if len(processed_entities) == 0:
-            logger.info("No processed entities to insert")
+            sync_context.logger.info("No processed entities to insert")
             return
 
         # Prepare entities with parent reference
@@ -235,7 +357,7 @@ class EntityProcessor:
         """Handle UPDATE action."""
         if len(processed_entities) == 0:
             # TODO: keep track of skipped entities that could not be processed
-            logger.info("No processed entities to update")
+            sync_context.logger.info("No processed entities to update")
             return
 
         # Prepare entities with parent reference
@@ -276,9 +398,12 @@ class SyncOrchestrator:
     async def run(self, sync_context: SyncContext) -> schemas.Sync:
         """Run a sync with full async processing."""
         try:
+            sync_context.logger.info(
+                f"Starting sync job {sync_context.sync_job.id} for sync {sync_context.sync.id}"
+            )
+
             # Initialize entity tracking with all known entity types
             self._initialize_entity_tracking(sync_context)
-            logger.info(f"\n{self.entity_processor._entities_encountered}\n")
 
             # Mark job as started
             await sync_job_service.update_status(
@@ -300,15 +425,16 @@ class SyncOrchestrator:
                 status=SyncJobStatus.COMPLETED,
                 current_user=sync_context.current_user,
                 completed_at=datetime.now(),
-                stats=sync_context.progress.stats
-                if hasattr(sync_context.progress, "stats")
-                else None,
+                stats=(
+                    sync_context.progress.stats if hasattr(sync_context.progress, "stats") else None
+                ),
             )
 
+            sync_context.logger.info(f"Completed sync job {sync_context.sync_job.id} successfully")
             return sync_context.sync
 
         except Exception as e:
-            logger.error(f"Error during sync: {e}")
+            sync_context.logger.error(f"Error during sync: {e}")
 
             # Use sync_job_service to update job status
             await sync_job_service.update_status(
@@ -317,9 +443,9 @@ class SyncOrchestrator:
                 current_user=sync_context.current_user,
                 error=str(e),
                 failed_at=datetime.now(),
-                stats=sync_context.progress.stats
-                if hasattr(sync_context.progress, "stats")
-                else None,
+                stats=(
+                    sync_context.progress.stats if hasattr(sync_context.progress, "stats") else None
+                ),
             )
 
             raise
@@ -330,8 +456,14 @@ class SyncOrchestrator:
         """Process stream of entities from source."""
         error_occurred = False
 
+        sync_context.logger.info(
+            f"Starting entity stream processing from source {sync_context.source._name}"
+        )
+
         # Use the stream as a context manager
-        async with AsyncSourceStream(sync_context.source.generate_entities()) as stream:
+        async with AsyncSourceStream(
+            sync_context.source.generate_entities(), logger=sync_context.logger
+        ) as stream:
             try:
                 # Process entities as they come
                 async for entity in stream.get_entities():
@@ -356,9 +488,10 @@ class SyncOrchestrator:
 
                 # Wait for all remaining tasks
                 await self.worker_pool.wait_for_completion()
+                sync_context.logger.info("All entity processing tasks completed")
 
             except Exception as e:
-                logger.error(f"Error during entity stream processing: {e}")
+                sync_context.logger.error(f"Error during entity stream processing: {e}")
                 error_occurred = True
                 raise
             finally:
@@ -386,13 +519,8 @@ class SyncOrchestrator:
         # TODO: use the
         # Create a dictionary with entity names as keys and empty sets as values
         for node in entity_nodes:
-            logger.info(f"\nentity class: {node.name}\n")
             if node.name.endswith("Entity"):
                 self.entity_processor._entities_encountered[node.name] = set()
-
-        # If the dictionary is empty for some reason, log a warning
-        if not self.entity_processor._entities_encountered:
-            logger.warning("No entity nodes found in DAG, entity tracking may not work correctly")
 
 
 # Singleton instance

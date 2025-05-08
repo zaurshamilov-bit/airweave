@@ -140,6 +140,7 @@ class OAuth2Service:
         user: schemas.User,
         connection_id: UUID,
         decrypted_credential: dict,
+        white_label: Optional[schemas.WhiteLabel] = None,
     ) -> OAuth2TokenResponse:
         """Refresh an access token using a refresh token.
 
@@ -152,6 +153,8 @@ class OAuth2Service:
             user (schemas.User): The user for whom to refresh the token.
             connection_id (UUID): The ID of the connection to refresh the token for.
             decrypted_credential (dict): The token and optional config fields
+            white_label (Optional[schemas.WhiteLabel]): White label configuration to use if
+                available.
 
         Returns:
         -------
@@ -174,6 +177,11 @@ class OAuth2Service:
             client_id, client_secret = OAuth2Service._get_client_credentials(
                 integration_config, None, decrypted_credential
             )
+
+            # Override with white label credentials if available
+            if white_label and white_label.source_short_name == integration_short_name:
+                client_id = white_label.client_id
+                client_secret = white_label.client_secret
 
             # Prepare request parameters
             headers, payload = OAuth2Service._prepare_token_request(
@@ -516,6 +524,8 @@ class OAuth2Service:
         if not integration_config:
             raise NotFoundException(f"Integration {white_label.source_short_name} not found.")
 
+        logger.info(f"Exchanging code for white label: {white_label.source_short_name}")
+        logger.info(f"Client ID: {white_label.client_id}")
         return await OAuth2Service._exchange_code(
             code=code,
             redirect_uri=white_label.redirect_url,

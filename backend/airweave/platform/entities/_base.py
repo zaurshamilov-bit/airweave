@@ -73,24 +73,52 @@ class BaseEntity(BaseModel):
         from_attributes = True
 
     def hash(self) -> str:
-        """Hash the entity."""
+        """Hash the entity using only content-relevant fields."""
+        if getattr(self, "_hash", None):
+            return self._hash
 
-        # Convert model to dict first, then sanitize any non-serializable values to strings
-        def sanitize_value(v: Any) -> Any:
-            if isinstance(v, (str, int, float, bool, type(None))):
-                return v
-            if isinstance(v, dict):
-                return sanitize_dict(v)
-            if isinstance(v, (list, tuple, set)):
-                return [sanitize_value(x) for x in v]
-            return str(v)
+        # Define content-relevant fields (exclude metadata fields)
+        metadata_fields = {
+            "sync_job_id",
+            "vector",
+            "_hash",
+            "db_entity_id",
+            "source_name",
+            "sync_id",
+            "sync_metadata",
+            "white_label_user_identifier",
+            "white_label_id",
+            "white_label_name",
+        }
 
-        def sanitize_dict(d: dict) -> dict:
-            return {k: sanitize_value(v) for k, v in d.items()}
+        # Get field names from the model
+        all_fields = set(self.model_fields.keys())
+        content_fields = all_fields - metadata_fields
 
-        data = self.model_dump(exclude={"sync_job_id"})
-        sanitized_data = sanitize_dict(data)
-        return hashlib.sha256(str(sanitized_data).encode()).hexdigest()
+        # Extract only content fields
+        data = {k: v for k, v in self.model_dump().items() if k in content_fields}
+
+        # Use stable serialization
+        def stable_serialize(obj):
+            if isinstance(obj, dict):
+                return {k: stable_serialize(v) for k, v in sorted(obj.items())}
+            elif isinstance(obj, (list, tuple)):
+                return [stable_serialize(x) for x in obj]
+            elif isinstance(obj, (str, int, float, bool, type(None))):
+                return obj
+            else:
+                # Handle non-serializable types consistently
+                return str(obj)
+
+        # Create stable representation
+        stable_data = stable_serialize(data)
+
+        # Use canonical JSON encoding for consistent string representation
+        json_str = json.dumps(stable_data, sort_keys=True, separators=(",", ":"))
+
+        # Compute hash
+        self._hash = hashlib.sha256(json_str.encode()).hexdigest()
+        return self._hash
 
     def to_storage_dict(self, exclude_fields: Optional[List[str]] = None) -> Dict[str, Any]:
         """Convert entity to a dictionary suitable for storage in vector databases.
@@ -136,6 +164,8 @@ class ChunkEntity(BaseEntity):
         "white_label_name",
         "sync_metadata",
         "parent_entity_id",
+        "default_exclude_fields",
+        "_hash",
     ]
 
     def to_storage_dict(self, exclude_fields: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -251,12 +281,16 @@ class FileEntity(BaseEntity):
         2. If checksum is available, use it as part of metadata hash
         3. Fall back to parent hash method using all metadata
         """
+        if getattr(self, "_hash", None):
+            return self._hash
+
         if self.local_path:
             # If we have the actual file, compute hash from its contents
             try:
                 with open(self.local_path, "rb") as f:
                     content = f.read()
-                    return hashlib.sha256(content).hexdigest()
+                    self._hash = hashlib.sha256(content).hexdigest()
+                    return self._hash
             except Exception:
                 # If file read fails, fall through to next method
                 pass

@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     TEXT2VEC_INFERENCE_URL: str = "http://localhost:9878"
 
     OPENAI_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None
     MISTRAL_API_KEY: Optional[str] = None
 
     # Custom deployment URLs - these are used to override the default URLs to allow
