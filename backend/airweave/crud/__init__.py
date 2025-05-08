@@ -2,6 +2,7 @@
 
 from .crud_api_key import api_key
 from .crud_chat import chat
+from .crud_collection import collection
 from .crud_connection import connection
 from .crud_dag import sync_dag
 from .crud_destination import destination
@@ -12,6 +13,7 @@ from .crud_entity_relation import entity_relation
 from .crud_integration_credential import integration_credential
 from .crud_organization import organization
 from .crud_source import source
+from .crud_source_connection import source_connection
 from .crud_sync import sync
 from .crud_sync_job import sync_job
 from .crud_transformer import transformer
@@ -21,6 +23,7 @@ from .crud_white_label import white_label
 __all__ = [
     "api_key",
     "chat",
+    "collection",
     "entity",
     "chat_message",
     "chunk",
@@ -30,8 +33,10 @@ __all__ = [
     "entity_definition",
     "entity_relation",
     "integration_credential",
+    "metadata",
     "organization",
     "source",
+    "source_connection",
     "sync",
     "sync_dag",
     "sync_job",

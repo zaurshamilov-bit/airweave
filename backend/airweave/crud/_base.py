@@ -123,7 +123,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         """
         if not isinstance(obj_in, dict):
-            obj_in = obj_in.model_dump()
+            obj_in = obj_in.model_dump(exclude_unset=True)
         db_obj = self.model(**obj_in)  # type: ignore
 
         if current_user:
@@ -214,6 +214,8 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         self._validate_if_user_has_permission(db_obj, current_user)
 
         await db.delete(db_obj)
+
+        await db.flush()
 
         if not uow:
             await db.commit()

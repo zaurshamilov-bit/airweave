@@ -479,7 +479,7 @@ class OAuth2Service:
         )
 
         if not source:
-            raise NotFoundException("Source not found")
+            raise NotFoundException(f"Source not found: {white_label.source_short_name}")
 
         integration_config = integration_settings.get_by_short_name(source.short_name)
 
@@ -624,7 +624,7 @@ class OAuth2Service:
 
         source = await crud.source.get_by_short_name(db, short_name)
         if not source:
-            raise NotFoundException("Source not found")
+            raise NotFoundException(f"Source not found: {short_name}")
 
         if not OAuth2Service._supports_oauth2(source.auth_type):
             raise HTTPException(status_code=400, detail="Source does not support OAuth2")
@@ -662,7 +662,7 @@ class OAuth2Service:
         """
         source = await crud.source.get_by_short_name(db, white_label.source_short_name)
         if not source:
-            raise NotFoundException("Source not found")
+            raise NotFoundException(f"Source not found: {white_label.source_short_name}")
 
         settings = integration_settings.get_by_short_name(source.short_name)
         if not settings:
