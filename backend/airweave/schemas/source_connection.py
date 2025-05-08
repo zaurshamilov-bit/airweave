@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from airweave.core.shared_models import SourceConnectionStatus, SyncJobStatus
 from airweave.platform.configs._base import ConfigValues
@@ -14,7 +14,7 @@ from airweave.platform.configs._base import ConfigValues
 class SourceConnectionBase(BaseModel):
     """Base schema for source connection."""
 
-    name: str
+    name: str = Field(..., description="Name of the source connection", min_length=4, max_length=42)
     description: Optional[str] = None
     config_fields: Optional[ConfigValues] = None  # stored in core table
     short_name: str  # Short name of the source
@@ -99,7 +99,9 @@ class SourceConnectionCreateWithRelatedIds(SourceConnectionCreate):
 class SourceConnectionUpdate(BaseModel):
     """Schema for updating a source connection."""
 
-    name: Optional[str] = None
+    name: Optional[str] = Field(
+        None, description="Name of the source connection", min_length=4, max_length=42
+    )
     description: Optional[str] = None
     auth_fields: Optional[ConfigValues] = None
     config_fields: Optional[ConfigValues] = None
@@ -111,10 +113,8 @@ class SourceConnectionInDBBase(SourceConnectionBase):
     """Core schema for source connection stored in DB."""
 
     id: UUID
-    dag_id: Optional[UUID] = None
     sync_id: Optional[UUID] = None
     organization_id: UUID
-    status: SourceConnectionStatus
     created_at: datetime
     modified_at: datetime
     connection_id: Optional[UUID] = None  # ID of the underlying connection object
@@ -134,6 +134,9 @@ class SourceConnection(SourceConnectionInDBBase):
     # str if encrypted, ConfigValues if not
     # comes from integration_credential
     auth_fields: Optional[ConfigValues | str] = None
+
+    # Ephemeral status derived from the latest sync job
+    status: Optional[SourceConnectionStatus] = None
 
     # sync job info
     latest_sync_job_status: Optional[SyncJobStatus] = None

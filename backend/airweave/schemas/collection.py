@@ -44,7 +44,7 @@ class CollectionBase(BaseModel):
         ...,
         description="Display name for the collection",
         min_length=4,
-        max_length=32,
+        max_length=64,
     )
     readable_id: Optional[str] = Field(
         None,
@@ -95,7 +95,6 @@ class CollectionInDBBase(CollectionBase):
 
     id: UUID
     readable_id: str
-    status: CollectionStatus = CollectionStatus.NEEDS_SOURCE
     created_at: datetime
     modified_at: datetime
     organization_id: UUID
@@ -111,7 +110,8 @@ class CollectionInDBBase(CollectionBase):
 class Collection(CollectionInDBBase):
     """Schema for complete collection representation."""
 
-    pass
+    # Ephemeral status derived from source connections
+    status: CollectionStatus = CollectionStatus.NEEDS_SOURCE
 
 
 class CollectionSearchQuery(BaseModel):

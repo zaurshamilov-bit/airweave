@@ -5,10 +5,8 @@ from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import JSON, ForeignKey, String, Text, event
-from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
-from airweave.core.shared_models import SourceConnectionStatus
 from airweave.models._base import OrganizationBase, UserMixin
 
 if TYPE_CHECKING:
@@ -44,9 +42,7 @@ class SourceConnection(OrganizationBase, UserMixin):
     connection_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("connection.id", ondelete="CASCADE"), nullable=True
     )
-    status: Mapped[SourceConnectionStatus] = mapped_column(
-        SQLAlchemyEnum(SourceConnectionStatus), default=SourceConnectionStatus.ACTIVE
-    )
+    # Status is now ephemeral - removed from database model
 
     # Relationships
     sync: Mapped[Optional["Sync"]] = relationship(

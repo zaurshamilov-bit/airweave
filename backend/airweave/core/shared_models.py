@@ -56,12 +56,13 @@ class SourceConnectionStatus(str, Enum):
 
     ACTIVE = "active"
     IN_PROGRESS = "in_progress"
-    FAILED = "failed"
+    FAILING = "failing"
 
 
 class CollectionStatus(str, Enum):
     """Collection status enum."""
 
     ACTIVE = "ACTIVE"
+    PARTIAL_ERROR = "PARTIAL ERROR"
     NEEDS_SOURCE = "NEEDS SOURCE"
     ERROR = "ERROR"
