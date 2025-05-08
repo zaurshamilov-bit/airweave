@@ -154,7 +154,7 @@ class SyncContextFactory:
 
         source_model = await crud.source.get_by_short_name(db, source_connection.short_name)
         if not source_model:
-            raise NotFoundException("Source not found")
+            raise NotFoundException(f"Source not found: {source_connection.short_name}")
 
         source_class = resource_locator.get_source(source_model)
 

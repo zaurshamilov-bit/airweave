@@ -146,7 +146,9 @@ class SourceConnectionService:
                 db, short_name=source_connection_in.short_name
             )
             if not source:
-                raise HTTPException(status_code=404, detail="Source not found")
+                raise HTTPException(
+                    status_code=404, detail=f"Source not found: {source_connection_in.short_name}"
+                )
 
             # Validate auth
             auth_fields = await self._validate_auth_fields(
