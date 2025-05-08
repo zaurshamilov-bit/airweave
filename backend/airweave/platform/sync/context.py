@@ -99,10 +99,18 @@ class SyncContextFactory:
         sync_job: schemas.SyncJob,
         dag: schemas.SyncDag,
         current_user: schemas.User,
-        white_label: Optional[schemas.WhiteLabel] = None,
     ) -> SyncContext:
         """Create a sync context."""
-        source = await cls._create_source_instance(db=db, sync=sync, current_user=current_user)
+        # Fetch white label if set in sync
+        white_label = None
+        if sync.white_label_id:
+            white_label = await crud.white_label.get(
+                db, id=sync.white_label_id, current_user=current_user
+            )
+
+        source = await cls._create_source_instance(
+            db=db, sync=sync, current_user=current_user, white_label=white_label
+        )
         embedding_model = cls._get_embedding_model(sync=sync)
         destinations = await cls._create_destination_instances(
             db=db, sync=sync, current_user=current_user, embedding_model=embedding_model
@@ -146,6 +154,7 @@ class SyncContextFactory:
         db: AsyncSession,
         sync: schemas.Sync,
         current_user: schemas.User,
+        white_label: Optional[schemas.WhiteLabel] = None,
     ) -> BaseSource:
         """Create and configure the source instance based on authentication type."""
         source_connection = await crud.connection.get(db, sync.source_connection_id, current_user)
@@ -166,7 +175,7 @@ class SyncContextFactory:
             AuthType.oauth2_with_refresh_rotating,
         ]:
             return await cls._create_oauth2_with_refresh_source(
-                db, source_model, source_class, current_user, source_connection
+                db, source_model, source_class, current_user, source_connection, white_label
             )
 
         if source_model.auth_type == AuthType.oauth2:
@@ -186,12 +195,19 @@ class SyncContextFactory:
         source_class,
         current_user: schemas.User,
         source_connection: schemas.Connection,
+        white_label: Optional[schemas.WhiteLabel] = None,
     ) -> BaseSource:
         """Create source instance for OAuth2 with refresh token."""
         credential = await cls._get_integration_credential(db, source_connection, current_user)
         decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
+
         oauth2_response = await oauth2_service.refresh_access_token(
-            db, source_model.short_name, current_user, source_connection.id, decrypted_credential
+            db,
+            source_model.short_name,
+            current_user,
+            source_connection.id,
+            decrypted_credential,
+            white_label,
         )
         return await source_class.create(oauth2_response.access_token)
 
