@@ -23,11 +23,21 @@ import { Dag } from '@/components/sync/dag';
 import {
     cleanEntityName,
     convertDagToFlowGraph
-} from '@/new/dag/DagToFlow';
+} from '@/components/collection/DagToFlow';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { SyncSchedule, SyncScheduleConfig } from '@/components/sync/SyncSchedule';
-import { QueryTool } from '@/new/query/QueryTool';
-import { LiveApiDoc } from '@/new/live-api-doc/LiveApiDoc';
+import { QueryTool } from '@/components/collection/QueryTool';
+import { LiveApiDoc } from '@/components/collection/LiveApiDoc';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Register all node types
 const nodeTypes = {
@@ -96,6 +106,58 @@ interface SyncJob {
     modified_by_email: string;
 }
 
+// DeleteCollectionDialog component
+interface DeleteCollectionDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+  includeData: boolean;
+  setIncludeData: (include: boolean) => void;
+}
+
+const DeleteCollectionDialog = ({
+  open,
+  onOpenChange,
+  onConfirm,
+  includeData,
+  setIncludeData
+}: DeleteCollectionDialogProps) => {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Collection</AlertDialogTitle>
+          <AlertDialogDescription className="text-foreground dark:text-gray-200">
+            <p className="mb-4">This will permanently delete this collection and all its source connections. This action cannot be undone.</p>
+
+            <div className="flex items-center gap-2 mt-4">
+              <input
+                type="checkbox"
+                id="delete-data"
+                checked={includeData}
+                onChange={(e) => setIncludeData(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <label htmlFor="delete-data" className="text-sm">
+                Also delete all data in destination systems
+              </label>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onConfirm}
+            className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-600"
+          >
+            Delete Collection
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+};
+
 const Collections = () => {
     const { readable_id } = useParams();
     const navigate = useNavigate();
@@ -132,6 +194,11 @@ const Collections = () => {
         frequency: "custom"
     });
     const [nextRunTime, setNextRunTime] = useState<string | null>(null);
+
+    // Add state for delete dialog
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [includeData, setIncludeData] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Effect to fit view when nodes or edges change
     useEffect(() => {
@@ -649,6 +716,38 @@ const Collections = () => {
         }
     }, [selectedConnection, calculateNextRunTime]);
 
+    // Handle collection deletion
+    const handleDeleteCollection = async () => {
+        if (!readable_id) return;
+
+        setIsDeleting(true);
+        try {
+            const response = await apiClient.delete(`/collections/${readable_id}?delete_data=${includeData}`);
+
+            if (response.ok) {
+                toast({
+                    title: "Success",
+                    description: "Collection deleted successfully"
+                });
+                // Navigate back to dashboard after successful deletion
+                navigate("/dashboard");
+            } else {
+                const errorText = await response.text();
+                throw new Error(`Failed to delete collection: ${errorText}`);
+            }
+        } catch (err) {
+            console.error("Error deleting collection:", err);
+            toast({
+                title: "Error",
+                description: err instanceof Error ? err.message : "Failed to delete collection",
+                variant: "destructive"
+            });
+        } finally {
+            setIsDeleting(false);
+            setShowDeleteDialog(false);
+        }
+    };
+
     if (error) {
         return (
             <div className="container mx-auto py-6">
@@ -733,6 +832,18 @@ const Collections = () => {
                         </p>
                     </div>
                 </div>
+
+                {/* Delete button */}
+                <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowDeleteDialog(true)}
+                    disabled={isDeleting}
+                    className="flex items-center gap-1"
+                >
+                    <Trash className="h-4 w-4" />
+                    Delete
+                </Button>
             </div>
             <div className="flex justify-end gap-2 mb-0">
                 <Button
@@ -1035,6 +1146,15 @@ const Collections = () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Delete Collection Dialog */}
+            <DeleteCollectionDialog
+                open={showDeleteDialog}
+                onOpenChange={setShowDeleteDialog}
+                onConfirm={handleDeleteCollection}
+                includeData={includeData}
+                setIncludeData={setIncludeData}
+            />
         </div>
     );
 };

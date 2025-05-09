@@ -1,38 +1,49 @@
-import { Link, useLocation, Outlet } from "react-router-dom";
+import { Link, useLocation, Outlet, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard,
-  RefreshCw,
   Settings,
-  Database,
-  User,
-  RefreshCcw,
-  Tag,
   Menu,
-  MessageSquare,
-  Bot,
-  BookOpen,
-  ExternalLink,
   Sun,
   Moon,
   Monitor,
   Check,
+  Plus,
+  Key,
+  Tag,
+  ChevronDown,
+  ChevronRight,
   Box,
-  Sparkles
+  ExternalLink,
+  LayoutGrid
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useTheme } from "@/lib/theme-provider";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { GradientBackground, GradientCard } from "@/components/ui/gradient-background";
 import { DiscordIcon } from "@/components/ui/discord-icon";
 import { cn } from "@/lib/utils";
-import { LogoutButton } from "@/components/LogoutButton";
 import { UserProfileDropdown } from "@/components/UserProfileDropdown";
+import { useState, useEffect } from "react";
+import { apiClient } from "@/lib/api";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+// Interface for Collection type
+interface Collection {
+  id: string;
+  name: string;
+  readable_id: string;
+  status: string;
+}
 
 const DashboardLayout = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { resolvedTheme, setTheme } = useTheme();
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [isLoadingCollections, setIsLoadingCollections] = useState(false);
+  const [collectionError, setCollectionError] = useState<string | null>(null);
+  const [collectionsOpen, setCollectionsOpen] = useState(true);
 
   // Determine which logo to use based on theme
   const logoSrc = resolvedTheme === "dark" ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg";
@@ -44,91 +55,200 @@ const DashboardLayout = () => {
   const isNonScrollable = nonScrollableRoutes.some(route =>
     location.pathname === route || location.pathname.startsWith('/chat/'));
 
-  const isRouteActive = (path: string) => {
-    if (path === "/white-label") {
-      return location.pathname.startsWith("/white-label");
-    }
-    if (path === "/sync") {
-      if (location.pathname === "/sync/create") {
-        return false;
+  // Fetch collections from the API
+  useEffect(() => {
+    const fetchCollections = async () => {
+      setIsLoadingCollections(true);
+      setCollectionError(null);
+
+      try {
+        const response = await apiClient.get('/collections');
+
+        if (response.ok) {
+          const data = await response.json();
+          setCollections(data);
+        } else {
+          const errorText = await response.text();
+          setCollectionError(`Failed to load collections: ${errorText}`);
+        }
+      } catch (err) {
+        setCollectionError(`An error occurred: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setIsLoadingCollections(false);
       }
-      return location.pathname.startsWith("/sync");
-    }
-    if (path === "/chat") {
-      return location.pathname.startsWith("/chat");
-    }
-    return location.pathname === path;
+    };
+
+    fetchCollections();
+  }, []);
+
+  const handleCreateCollection = () => {
+    navigate('/collections/create');
   };
 
-  const navigation = [
-    {
-      name: "Set up sync",
-      href: "/sync/create",
-      icon: RefreshCcw,
-      isSpecial: true,
-    },
-    {
-      name: "Dashboard",
-      href: "/dashboard",
-      icon: LayoutDashboard,
-    },
-    {
-      name: "Chat Playground",
-      href: "/chat",
-      icon: Bot,
-    },
-    {
-      name: "UI Playground",
-      href: "/playground",
-      icon: Sparkles,
-    },
-  ];
-
-  const configureNavigation = [
-    {
-      name: "Synchronizations",
-      href: "/sync",
-      icon: RefreshCw,
-    },
-    {
-      name: "Sources",
-      href: "/sources",
-      icon: Box,
-    },
-    {
-      name: "Destinations",
-      href: "/destinations",
-      icon: Database,
-    },
-    {
-      name: "White Label",
-      href: "/white-label",
-      icon: Tag,
-    },
-    {
-      name: "Settings",
-      href: "/settings",
-      icon: Settings,
+  // Active status for nav items
+  const isActive = (path: string) => {
+    if (path.startsWith('/collections/')) {
+      return location.pathname === path;
     }
-  ];
+    if (path === '/sources') {
+      return location.pathname === '/sources';
+    }
+    if (path === '/white-label') {
+      return location.pathname.startsWith('/white-label');
+    }
+    if (path === '/settings/api-keys') {
+      return location.pathname === '/settings/api-keys';
+    }
+    if (path === '/settings') {
+      return location.pathname === '/settings';
+    }
+    return false;
+  };
 
-  const bottomNavigation = [];
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full">
+      <div className="flex h-14 items-center px-4 mb-2">
+        <Link to="/" className="flex items-center">
+          <img src={logoSrc} alt="Airweave" className="h-8" />
+        </Link>
+      </div>
 
-  const NavLink = ({ item, isActive }: { item: typeof navigation[0], isActive: boolean }) => (
-    <Link
-      to={item.href}
-      className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 ease-in-out ${isActive
-          ? item.isSpecial
-            ? "bg-gradient-to-r from-primary-300/90 to-secondary-300/90 dark:from-primary-700/70 dark:to-secondary-700/70 text-primary-900 dark:text-primary-100 shadow-sm"
-            : "bg-primary/10 text-primary"
-          : item.isSpecial
-            ? "bg-gradient-to-r from-primary-300/70 to-secondary-300/70 dark:from-primary-500/50 dark:to-secondary-400/50 text-primary-800 dark:text-primary-100 shadow-sm hover:from-primary-400/80 hover:to-secondary-400/80 dark:hover:from-primary-400/60 dark:hover:to-secondary-300/60 hover:shadow transition-all duration-200 ease-in-out"
-            : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        }`}
-    >
-      <item.icon className="mr-3 h-5 w-5" />
-      {item.name}
-    </Link>
+      <ScrollArea className="flex-1 px-3 py-1">
+        <div className="space-y-6">
+          {/* Create Collection Button */}
+          <Button
+            onClick={handleCreateCollection}
+            className="w-full flex items-center justify-center gap-2 bg-transparent border-2 border-primary text-primary hover:bg-primary hover:text-white font-medium rounded-xl transition-all duration-200"
+          >
+            <Plus className="h-4 w-4" />
+            Create collection
+          </Button>
+
+          {/* Collections Section */}
+          <Collapsible
+            open={collectionsOpen}
+            onOpenChange={setCollectionsOpen}
+            className="space-y-1"
+          >
+            <CollapsibleTrigger className="flex items-center justify-between w-full px-2 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              <span className="font-semibold">Collections</span>
+              {collectionsOpen ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-1">
+              <div className="ml-1 pl-1 border-l border-border/50 space-y-0.5">
+                {isLoadingCollections ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">Loading...</div>
+                ) : collectionError ? (
+                  <div className="px-2 py-1.5 text-xs text-destructive">{collectionError}</div>
+                ) : collections.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">No collections</div>
+                ) : (
+                  collections.map((collection) => (
+                    <Link
+                      key={collection.id}
+                      to={`/collections/${collection.readable_id}`}
+                      className={cn(
+                        "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
+                        isActive(`/collections/${collection.readable_id}`)
+                          ? "text-primary font-medium bg-primary/5"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                      )}
+                    >
+                      {isActive(`/collections/${collection.readable_id}`) && (
+                        <div className="absolute left-[-2px] top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
+                      )}
+                      <LayoutGrid className="mr-2 h-3.5 w-3.5 opacity-70" />
+                      <span className="truncate">{collection.name}</span>
+                    </Link>
+                  ))
+                )}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* API Keys Section */}
+          <div className="space-y-1">
+            <h3 className="font-semibold px-2 py-1.5 text-sm text-muted-foreground">API keys</h3>
+            <Link
+              to="/settings/api-keys"
+              className={cn(
+                "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
+                isActive('/settings/api-keys')
+                  ? "text-primary font-medium bg-primary/5"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+              )}
+            >
+              {isActive('/settings/api-keys') && (
+                <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
+              )}
+              <Key className="mr-2 h-4 w-4 opacity-70" />
+              API keys
+            </Link>
+          </div>
+
+          {/* Configure Section */}
+          <div className="space-y-1">
+            <h3 className="font-semibold px-2 py-1.5 text-sm text-muted-foreground">Configure</h3>
+            <div className="space-y-0.5">
+              <Link
+                to="/sources"
+                className={cn(
+                  "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
+                  isActive('/sources')
+                    ? "text-primary font-medium bg-primary/5"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                )}
+              >
+                {isActive('/sources') && (
+                  <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
+                )}
+                <Box className="mr-2 h-4 w-4 opacity-70" />
+                Sources
+              </Link>
+              <Link
+                to="/white-label"
+                className={cn(
+                  "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
+                  isActive('/white-label')
+                    ? "text-primary font-medium bg-primary/5"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                )}
+              >
+                {isActive('/white-label') && (
+                  <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
+                )}
+                <Tag className="mr-2 h-4 w-4 opacity-70" />
+                White Label
+              </Link>
+              <Link
+                to="/settings"
+                className={cn(
+                  "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
+                  isActive('/settings')
+                    ? "text-primary font-medium bg-primary/5"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                )}
+              >
+                {isActive('/settings') && (
+                  <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
+                )}
+                <Settings className="mr-2 h-4 w-4 opacity-70" />
+                Settings
+              </Link>
+            </div>
+          </div>
+        </div>
+      </ScrollArea>
+
+      {/* User Profile Section */}
+      <div className="mt-auto pt-2 pb-4 px-3 border-t border-border/30">
+        <UserProfileDropdown />
+      </div>
+    </div>
   );
 
   return (
@@ -144,114 +264,24 @@ const DashboardLayout = () => {
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0 bg-background-alpha-90 backdrop-blur-md">
-                <div className="flex h-16 items-center px-6">
-                  <Link to="/" className="flex items-center">
-                    <img
-                      src={logoSrc}
-                      alt="Airweave"
-                      className="h-6 pr-4"
-                    />
-                  </Link>
-                </div>
-                <nav className="flex flex-col justify-between h-[calc(100%-4rem)]">
-                  <div className="space-y-1 px-3">
-                    {navigation.map((item) => (
-                      <NavLink
-                        key={item.name}
-                        item={item}
-                        isActive={isRouteActive(item.href)}
-                      />
-                    ))}
-                    <div className="mt-8">
-                      <span className="px-3 text-xs font-semibold text-muted-foreground/70 tracking-wider">
-                        CONFIGURE
-                      </span>
-                      <div className="mt-2">
-                        {configureNavigation.map((item) => (
-                          <NavLink
-                            key={item.name}
-                            item={item}
-                            isActive={isRouteActive(item.href)}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-1 px-3 mb-6">
-                    {bottomNavigation.map((item) => (
-                      <NavLink
-                        key={item.name}
-                        item={item}
-                        isActive={isRouteActive(item.href)}
-                      />
-                    ))}
-                    <UserProfileDropdown />
-                  </div>
-                </nav>
+                <SidebarContent />
               </SheetContent>
             </Sheet>
           </div>
 
           {/* Desktop Sidebar */}
-          <div className="hidden w-64 lg:block fixed h-screen pl-2 pt-1 transition-all duration-300 ease-in-out z-20 shadow-sm border-r ">
-            <div className="flex h-14 items-center px-4">
-              <Link
-                to="/"
-                className="flex items-center transition-transform duration-200"
-              >
-                <img
-                  src={logoSrc}
-                  alt="Airweave"
-                  className="h-8 pr-4"
-                />
-              </Link>
-            </div>
-            <nav className="flex flex-col justify-between h-[calc(100%-3.5rem)]">
-              <div className="space-y-1 px-3 pt-3">
-                {navigation.map((item) => (
-                  <NavLink
-                    key={item.name}
-                    item={item}
-                    isActive={isRouteActive(item.href)}
-                  />
-                ))}
-                <div className="mt-8">
-                  <span className="px-3 text-xs font-semibold text-muted-foreground/70 tracking-wider">
-                    CONFIGURE
-                  </span>
-                  <div className="mt-2">
-                    {configureNavigation.map((item) => (
-                      <NavLink
-                        key={item.name}
-                        item={item}
-                        isActive={isRouteActive(item.href)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-1 px-3 mb-6">
-                {bottomNavigation.map((item) => (
-                  <NavLink
-                    key={item.name}
-                    item={item}
-                    isActive={isRouteActive(item.href)}
-                  />
-                ))}
-                <UserProfileDropdown />
-              </div>
-            </nav>
+          <div className="hidden w-[240px] lg:block fixed h-screen transition-all duration-300 ease-in-out z-20 border-r border-border/40 bg-background/95">
+            <SidebarContent />
           </div>
 
           {/* Main content with conditionally scrollable area */}
-          <div className="w-full lg:pl-64 flex flex-col h-screen">
+          <div className="w-full lg:pl-[240px] flex flex-col h-screen">
             <div className={cn(
               "flex-1",
               isNonScrollable ? "overflow-hidden" : "overflow-auto"
             )}>
               {/* Top Navigation Bar - Now inside the scrollable area */}
-              <header className={`h-16 sticky top-0 pr-2 backdrop-blur-sm z-10 ${resolvedTheme === 'dark' ? 'bg-black/20' : 'bg-background-alpha-10'}`}>
-
+              <header className={`h-16 sticky top-0 pr-2 backdrop-blur-sm z-10 ${resolvedTheme === 'dark' ? 'bg-background/80' : 'bg-background/95'} border-b border-border/30`}>
                 <div className="flex justify-end items-center h-full px-6">
                   <nav className="flex items-center space-x-4">
                     {/* Discord icon */}
@@ -261,7 +291,7 @@ const DashboardLayout = () => {
                       rel="noopener noreferrer"
                       className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-md"
                     >
-                      <DiscordIcon size={22} />
+                      <DiscordIcon size={20} />
                     </a>
 
                     {/* Get a demo button */}
@@ -272,7 +302,7 @@ const DashboardLayout = () => {
                     >
                       <Button
                         variant="outline"
-                        className="hidden md:flex border-primary/60 border-[1px] text-primary/90 hover:bg-primary/20 hover:text-foreground/65 h-8 px-3 text-sm"
+                        className="hidden md:flex border-primary/60 border-[1px] text-primary/90 hover:bg-primary/10 hover:text-foreground/65 h-8 px-3 text-sm"
                       >
                         Get a demo
                       </Button>
@@ -283,9 +313,9 @@ const DashboardLayout = () => {
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="rounded-md h-8 w-8 hover:bg-background-alpha-40 text-muted-foreground">
                           {resolvedTheme === 'dark' ? (
-                            <Moon className="h-6 w-6" />
+                            <Moon className="h-[18px] w-[18px]" />
                           ) : (
-                            <Sun className="h-6 w-6" />
+                            <Sun className="h-[18px] w-[18px]" />
                           )}
                         </Button>
                       </DropdownMenuTrigger>
