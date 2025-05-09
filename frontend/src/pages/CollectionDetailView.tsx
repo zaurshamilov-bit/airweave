@@ -29,17 +29,18 @@ import { SyncSchedule, SyncScheduleConfig } from '@/components/sync/SyncSchedule
 import { QueryTool } from '@/components/collection/QueryTool';
 import { LiveApiDoc } from '@/components/collection/LiveApiDoc';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useSyncSubscription } from "@/hooks/useSyncSubscription";
+import { SyncProgress } from '@/components/sync/SyncProgress';
 
-// Register all node types
 const nodeTypes = {
     sourceNode: SourceNode,
     transformerNode: TransformerNode,
@@ -47,7 +48,6 @@ const nodeTypes = {
     entityNode: EntityNode
 };
 
-// Collection interface based on collection.py
 interface Collection {
     name: string;
     readable_id: string;
@@ -60,7 +60,6 @@ interface Collection {
     status?: string;
 }
 
-// Source Connection interface based on source_connection.py
 interface SourceConnection {
     id: string;
     name: string;
@@ -84,7 +83,6 @@ interface SourceConnection {
     cron_schedule?: string;
 }
 
-// Add SyncJob interface
 interface SyncJob {
     id: string;
     sync_id: string;
@@ -108,77 +106,86 @@ interface SyncJob {
 
 // DeleteCollectionDialog component
 interface DeleteCollectionDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
-  includeData: boolean;
-  setIncludeData: (include: boolean) => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onConfirm: () => void;
+    includeData: boolean;
+    setIncludeData: (include: boolean) => void;
 }
 
 const DeleteCollectionDialog = ({
-  open,
-  onOpenChange,
-  onConfirm,
-  includeData,
-  setIncludeData
+    open,
+    onOpenChange,
+    onConfirm,
+    includeData,
+    setIncludeData
 }: DeleteCollectionDialogProps) => {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete Collection</AlertDialogTitle>
-          <AlertDialogDescription className="text-foreground dark:text-gray-200">
-            <p className="mb-4">This will permanently delete this collection and all its source connections. This action cannot be undone.</p>
+    return (
+        <AlertDialog open={open} onOpenChange={onOpenChange}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Collection</AlertDialogTitle>
+                    <AlertDialogDescription className="text-foreground dark:text-gray-200">
+                        <p className="mb-4">This will permanently delete this collection and all its source connections. This action cannot be undone.</p>
 
-            <div className="flex items-center gap-2 mt-4">
-              <input
-                type="checkbox"
-                id="delete-data"
-                checked={includeData}
-                onChange={(e) => setIncludeData(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <label htmlFor="delete-data" className="text-sm">
-                Also delete all data in destination systems
-              </label>
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirm}
-            className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-600"
-          >
-            Delete Collection
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+                        <div className="flex items-center gap-2 mt-4">
+                            <input
+                                type="checkbox"
+                                id="delete-data"
+                                checked={includeData}
+                                onChange={(e) => setIncludeData(e.target.checked)}
+                                className="h-4 w-4"
+                            />
+                            <label htmlFor="delete-data" className="text-sm">
+                                Also delete all data in destination systems
+                            </label>
+                        </div>
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={onConfirm}
+                        className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-600"
+                    >
+                        Delete Collection
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
 };
 
 const Collections = () => {
+    /********************************************
+     * COMPONENT STATE
+     ********************************************/
     const { readable_id } = useParams();
+    const { resolvedTheme } = useTheme();
     const navigate = useNavigate();
-    const [collection, setCollection] = useState<Collection | null>(null);
-    const [sourceConnections, setSourceConnections] = useState<SourceConnection[]>([]);
+
+    // Page state
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isReloading, setIsReloading] = useState(false);
+
+    // Collection state
+    const [collection, setCollection] = useState<Collection | null>(null);
     const [isEditingName, setIsEditingName] = useState(false);
     const nameInputRef = useRef<HTMLInputElement>(null);
-    const { resolvedTheme } = useTheme();
+
+    // Source connection state
+    const [sourceConnections, setSourceConnections] = useState<SourceConnection[]>([]);
     const [selectedConnection, setSelectedConnection] = useState<SourceConnection | null>(null);
 
-    // Add new state variables for sync job
+    // Sync job state
     const [lastSyncJob, setLastSyncJob] = useState<SyncJob | null>(null);
     const [isLoadingSyncJob, setIsLoadingSyncJob] = useState(false);
-    const [isRunningSyncJob, setIsRunningSyncJob] = useState(false);
+    const [isInitiatingSyncJob, setIsInitiatingSyncJob] = useState(false);
     const [totalEntities, setTotalEntities] = useState<number>(0);
     const [totalRuntime, setTotalRuntime] = useState<number | null>(null);
 
-    // Add ReactFlow state variables
+    // ReactFlow visualization state
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
@@ -187,7 +194,7 @@ const Collections = () => {
     const [entityDict, setEntityDict] = useState<Record<string, number>>({});
     const [selectedEntity, setSelectedEntity] = useState<string>('');
 
-    // Add schedule related state variables
+    // Schedule state
     const [showScheduleDialog, setShowScheduleDialog] = useState(false);
     const [scheduleConfig, setScheduleConfig] = useState<SyncScheduleConfig>({
         type: "one-time",
@@ -200,17 +207,33 @@ const Collections = () => {
     const [includeData, setIncludeData] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    // Effect to fit view when nodes or edges change
-    useEffect(() => {
-        if (reactFlowInstance) {
-            reactFlowInstance.fitView({
-                padding: 0.2,
-                duration: 200
-            });
-        }
-    }, [nodes, edges, reactFlowInstance]);
+    // Realtime updates state
+    const liveUpdates = useSyncSubscription(lastSyncJob?.id || null);
+    const latestUpdate = liveUpdates.length > 0 ? liveUpdates[liveUpdates.length - 1] : null;
 
-    // Move fetchCollection outside of useEffect
+    // Derive status from the update flags
+    let status = lastSyncJob?.status || "";
+
+    // Override with live status from PubSub if available
+    if (latestUpdate) {
+        if (latestUpdate.is_complete === true) {
+            status = "completed";
+        } else if (latestUpdate.is_failed === true) {
+            status = "failed";
+        } else {
+            // If we have updates but neither complete nor failed, it must be in progress
+            status = "in_progress";
+        }
+    }
+
+    // Determine if sync is currently running
+    const isActiveSyncJob = status === "in_progress" || status === "pending";
+
+    /********************************************
+     * API AND DATA FETCHING FUNCTIONS
+     ********************************************/
+
+    // Initial entry point for data loading
     const fetchCollection = async () => {
         if (!readable_id) return;
 
@@ -240,12 +263,7 @@ const Collections = () => {
         }
     };
 
-    // Modify useEffect to use the function
-    useEffect(() => {
-        fetchCollection();
-    }, [readable_id]);
-
-    // Fetch source connections for this collection
+    // Gets list of source connections associated with a collection
     const fetchSourceConnections = async (collectionId: string) => {
         try {
             const response = await apiClient.get(`/source-connections/?collection=${collectionId}`);
@@ -257,8 +275,7 @@ const Collections = () => {
                 // Select first connection by default if there are any connections
                 // and no connection is currently selected
                 if (data.length > 0 && !selectedConnection) {
-                    setSelectedConnection(data[0]);
-                    await fetchSyncJobDetails(data[0]);
+                    await fetchSourceConnectionDetails(data[0].id);
                 }
             } else {
                 console.error("Failed to load source connections:", await response.text());
@@ -272,9 +289,24 @@ const Collections = () => {
         }
     };
 
-    // TODO: fetch source connection details, the above fetch gets listitem
+    // Gets complete info for a specific source connection
+    const fetchSourceConnectionDetails = async (connectionId: string) => {
+        try {
+            const response = await apiClient.get(`/source-connections/${connectionId}`);
 
-    // Fetch sync job details using latest_sync_job_id or fetching the most recent job by sync_id
+            if (response.ok) {
+                const detailedData = await response.json();
+                setSelectedConnection(detailedData);
+                await fetchSyncJobDetails(detailedData);
+            } else {
+                console.error("Failed to load source connection details:", await response.text());
+            }
+        } catch (err) {
+            console.error("Error fetching source connection details:", err);
+        }
+    };
+
+    // Gets information about the latest sync job for a connection
     const fetchSyncJobDetails = async (connection: SourceConnection) => {
         if (!connection.sync_id) {
             // Reset states if no sync ID available
@@ -288,18 +320,8 @@ const Collections = () => {
         try {
             let syncJobData: SyncJob;
 
-            // If we have latest_sync_job_id, use it to fetch the specific job
-            if (connection.latest_sync_job_id) {
-                const response = await apiClient.get(`/sync/${connection.sync_id}/jobs/${connection.latest_sync_job_id}`);
-
-                if (!response.ok) {
-                    throw new Error("Failed to fetch sync job details");
-                }
-
-                syncJobData = await response.json();
-            }
-            // Otherwise, fetch all jobs for this sync and get the most recent one
-            else {
+            // Helper function to fetch all jobs and get the most recent one
+            const fetchAllJobs = async (): Promise<SyncJob | null> => {
                 const jobsResponse = await apiClient.get(`/sync/${connection.sync_id}/jobs`);
 
                 if (!jobsResponse.ok) {
@@ -313,8 +335,46 @@ const Collections = () => {
                     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
                 );
 
-                // If there are no jobs, return early
+                // Return null if no jobs exist
                 if (sortedJobs.length === 0) {
+                    return null;
+                }
+
+                // Return most recent job
+                return sortedJobs[0];
+            };
+
+            // If we have latest_sync_job_id, try to fetch the specific job
+            if (connection.latest_sync_job_id) {
+                try {
+                    const response = await apiClient.get(`/sync/${connection.sync_id}/jobs/${connection.latest_sync_job_id}`);
+
+                    if (response.ok) {
+                        syncJobData = await response.json();
+                    } else {
+                        // If specific job fetch fails, fall back to fetching all jobs
+                        console.log("Specific job not found, fetching all jobs instead");
+                        throw new Error("Job not found");
+                    }
+                } catch (error) {
+                    // Fallback to fetching all jobs
+                    const allJobsData = await fetchAllJobs();
+
+                    if (!allJobsData) {
+                        setLastSyncJob(null);
+                        setTotalEntities(0);
+                        setTotalRuntime(null);
+                        setIsLoadingSyncJob(false);
+                        return;
+                    }
+
+                    syncJobData = allJobsData;
+                }
+            } else {
+                // No specific job ID, fetch all jobs
+                const allJobsData = await fetchAllJobs();
+
+                if (!allJobsData) {
                     setLastSyncJob(null);
                     setTotalEntities(0);
                     setTotalRuntime(null);
@@ -322,8 +382,7 @@ const Collections = () => {
                     return;
                 }
 
-                // Use the most recent job
-                syncJobData = sortedJobs[0];
+                syncJobData = allJobsData;
             }
 
             setLastSyncJob(syncJobData);
@@ -376,13 +435,20 @@ const Collections = () => {
         }
     };
 
-    // Add a function to process entities_encountered after DAGs are loaded
-    const updateEntityDictionary = useCallback(() => {
-        if (!lastSyncJob?.entities_encountered || !entityDags.length) {
-            return; // Need both sync job and DAGs
-        }
+    /********************************************
+     * DATA PROCESSING FUNCTIONS
+     ********************************************/
 
-        console.log('Updating entity dictionary with DAGs and entities_encountered');
+    // Process entities_encountered after DAGs are loaded
+    const updateEntityDictionary = useCallback(() => {
+        // Get entities from either job data or live updates
+        const entitiesEncountered = (isActiveSyncJob && latestUpdate?.entities_encountered)
+            ? latestUpdate.entities_encountered
+            : lastSyncJob?.entities_encountered;
+
+        if (!entitiesEncountered || !entityDags.length) {
+            return; // Need both entities and DAGs
+        }
 
         // Get source name from entityDags
         const sourceName = entityDags[0].nodes
@@ -390,9 +456,9 @@ const Collections = () => {
             .map(node => node.name)[0] || '';
 
         // Process the entities_encountered data with source name
-        const cleanedDict = Object.entries(lastSyncJob.entities_encountered).reduce((acc, [key, value]) => {
+        const cleanedDict = Object.entries(entitiesEncountered).reduce((acc, [key, value]) => {
             const cleanedName = cleanEntityName(key, sourceName);
-            acc[cleanedName] = value;
+            acc[cleanedName] = value as number;
             return acc;
         }, {} as Record<string, number>);
 
@@ -400,47 +466,20 @@ const Collections = () => {
 
         setEntityDict(cleanedDict);
 
-        // If we have a new entity dict but no selected entity yet, select the first one
+        // Select first entity if none selected
         if (Object.keys(cleanedDict).length > 0 && !selectedEntity) {
             setSelectedEntity(Object.keys(cleanedDict)[0]);
         }
-    }, [lastSyncJob?.entities_encountered, entityDags, selectedEntity]);
+    }, [lastSyncJob?.entities_encountered, entityDags, selectedEntity, latestUpdate, isActiveSyncJob]);
 
-    // Add useEffect to run updateEntityDictionary when dependencies change
-    useEffect(() => {
-        updateEntityDictionary();
-    }, [updateEntityDictionary]);
+    /********************************************
+     * UI EVENT HANDLERS
+     ********************************************/
 
-    // Add useEffect to update the selected DAG when the selected entity changes
-    useEffect(() => {
-        if (!selectedEntity || entityDags.length === 0) {
-            setSelectedDag(null);
-            return;
-        }
-
-        // Find DAG that has name exactly matching the selected entity
-        const exactMatch = entityDags.find(dag =>
-            dag.name && dag.name.includes(selectedEntity + "Entity")
-        );
-        // Fall back to partial match if exact match not found
-        const matchingDag = exactMatch || entityDags.find(dag =>
-            dag.name && dag.name.includes(selectedEntity)
-        );
-
-        if (matchingDag) {
-            setSelectedDag(matchingDag);
-            console.log(`Selected DAG for entity "${selectedEntity}":`, matchingDag);
-        } else {
-            console.warn(`No DAG found for entity "${selectedEntity}"`);
-            setSelectedDag(null);
-        }
-    }, [selectedEntity, entityDags]);
-
-    // Add useEffect to update the flow graph when the selected DAG changes
-    useEffect(() => {
-        // First convert the DAG to basic flow graph
-        convertDagToFlowGraph(selectedDag, setNodes, setEdges);
-    }, [selectedDag, setNodes, setEdges]);
+    // Update selected connection and fetch sync job details
+    const handleSelectConnection = async (connection: SourceConnection) => {
+        await fetchSourceConnectionDetails(connection.id);
+    };
 
     // Run sync job using source-connection endpoint
     const handleRunSync = async () => {
@@ -454,7 +493,7 @@ const Collections = () => {
         }
 
         try {
-            setIsRunningSyncJob(true);
+            setIsInitiatingSyncJob(true);
             const response = await apiClient.post(`/source-connections/${selectedConnection.id}/run`);
 
             if (!response.ok) {
@@ -470,7 +509,7 @@ const Collections = () => {
             });
 
             // Refresh the connection data to update status
-            setTimeout(() => refreshData(), 1000);
+            setTimeout(() => reloadData(), 1000);
         } catch (error) {
             console.error("Error running sync:", error);
             toast({
@@ -479,40 +518,7 @@ const Collections = () => {
                 variant: "destructive"
             });
         } finally {
-            setIsRunningSyncJob(false);
-        }
-    };
-
-    // Format milliseconds to human-readable time
-    const formatTotalRuntime = (ms: number) => {
-        const seconds = Math.floor(ms / 1000);
-        const minutes = Math.floor(seconds / 60);
-        const hours = Math.floor(minutes / 60);
-
-        if (hours > 0) {
-            return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
-        } else if (minutes > 0) {
-            return `${minutes}m ${seconds % 60}s`;
-        } else {
-            return `${seconds}s`;
-        }
-    };
-
-    // Format time since last run
-    const formatTimeSince = (dateStr: string) => {
-        const now = new Date();
-        const date = new Date(dateStr);
-        const diffMs = now.getTime() - date.getTime();
-        const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-        if (diffHrs > 24) {
-            const days = Math.floor(diffHrs / 24);
-            return `${days}d ago`;
-        } else if (diffHrs > 0) {
-            return `${diffHrs}h ${diffMins}m ago`;
-        } else {
-            return `${diffMins}m ago`;
+            setIsInitiatingSyncJob(false);
         }
     };
 
@@ -558,28 +564,11 @@ const Collections = () => {
         }
     };
 
-    // Enhanced refresh function
-    const refreshData = async () => {
-        if (!readable_id) return;
+    /********************************************
+     * SCHEDULE-RELATED FUNCTIONS
+     ********************************************/
 
-        setIsReloading(true);
-        try {
-            await fetchCollection();
-            if (selectedConnection) {
-                await fetchSyncJobDetails(selectedConnection);
-            }
-        } finally {
-            setIsReloading(false);
-        }
-    };
-
-    // Update selected connection and fetch sync job details
-    const handleSelectConnection = async (connection: SourceConnection) => {
-        setSelectedConnection(connection);
-        await fetchSyncJobDetails(connection);
-    };
-
-    // Add this function to calculate the next run time based on cron
+    // Calculate the next run time based on cron expression
     const calculateNextRunTime = useCallback((cronExpression: string | null) => {
         if (!cronExpression) {
             return null;
@@ -646,7 +635,7 @@ const Collections = () => {
         }
     }, []);
 
-    // Add a function to refresh schedule data
+    // Refresh schedule data
     const refreshScheduleData = async () => {
         if (!selectedConnection?.sync_id) return;
 
@@ -700,7 +689,126 @@ const Collections = () => {
         }
     };
 
-    // Update useEffect to initialize scheduleConfig and nextRunTime when selectedConnection changes
+    /********************************************
+     * UTILITY FUNCTIONS
+     ********************************************/
+
+    // Format milliseconds to human-readable time
+    const formatTotalRuntime = (ms: number) => {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+
+        if (hours > 0) {
+            return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+        } else if (minutes > 0) {
+            return `${minutes}m ${seconds % 60}s`;
+        } else {
+            return `${seconds}s`;
+        }
+    };
+
+    // Format time since last run
+    const formatTimeSince = (dateStr: string) => {
+        const now = new Date();
+        const date = new Date(dateStr);
+        const diffMs = now.getTime() - date.getTime();
+        const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+        if (diffHrs > 24) {
+            const days = Math.floor(diffHrs / 24);
+            return `${days}d ago`;
+        } else if (diffHrs > 0) {
+            return `${diffHrs}h ${diffMins}m ago`;
+        } else {
+            return `${diffMins}m ago`;
+        }
+    };
+
+    // Reload data
+    const reloadData = async () => {
+        if (!readable_id) return;
+
+        setIsReloading(true);
+        try {
+            await fetchCollection();
+            if (selectedConnection) {
+                await fetchSyncJobDetails(selectedConnection);
+            }
+        } finally {
+            setIsReloading(false);
+        }
+    };
+
+    /********************************************
+     * SIDE EFFECTS
+     ********************************************/
+
+    // Initial data loading
+    useEffect(() => {
+        fetchCollection();
+    }, [readable_id]);
+
+    // Effect to fit view when nodes or edges change
+    useEffect(() => {
+        if (reactFlowInstance) {
+            reactFlowInstance.fitView({
+                padding: 0.2,
+                duration: 200
+            });
+        }
+    }, [nodes, edges, reactFlowInstance]);
+
+    // Effect to update entity dictionary
+    useEffect(() => {
+        updateEntityDictionary();
+    }, [updateEntityDictionary]);
+
+    // Effect to update the selected DAG when the selected entity changes
+    useEffect(() => {
+        if (!selectedEntity || entityDags.length === 0) {
+            setSelectedDag(null);
+            return;
+        }
+
+        // Find DAG that has name exactly matching the selected entity
+        const exactMatch = entityDags.find(dag =>
+            dag.name && dag.name.includes(selectedEntity + "Entity")
+        );
+        // Fall back to partial match if exact match not found
+        const matchingDag = exactMatch || entityDags.find(dag =>
+            dag.name && dag.name.includes(selectedEntity)
+        );
+
+        if (matchingDag) {
+            setSelectedDag(matchingDag);
+            console.log(`Selected DAG for entity "${selectedEntity}":`, matchingDag);
+        } else {
+            console.warn(`No DAG found for entity "${selectedEntity}"`);
+            setSelectedDag(null);
+        }
+    }, [selectedEntity, entityDags]);
+
+    // Effect to update the flow graph when the selected DAG changes
+    useEffect(() => {
+        // Convert the DAG to basic flow graph
+        convertDagToFlowGraph(selectedDag, setNodes, setEdges);
+    }, [selectedDag, setNodes, setEdges]);
+
+    // Effect to refresh data when a job completes via PubSub
+    useEffect(() => {
+        if (latestUpdate?.is_complete || latestUpdate?.is_failed) {
+            // Refresh data to get final stats from database
+            setTimeout(() => {
+                if (selectedConnection) {
+                    fetchSyncJobDetails(selectedConnection);
+                }
+            }, 500);
+        }
+    }, [latestUpdate?.is_complete, latestUpdate?.is_failed, selectedConnection]);
+
+    // Effect to initialize scheduleConfig and nextRunTime when selectedConnection changes
     useEffect(() => {
         if (selectedConnection?.sync_id) {
             // If the selected connection has sync_id, set up the schedule config
@@ -848,7 +956,7 @@ const Collections = () => {
             <div className="flex justify-end gap-2 mb-0">
                 <Button
                     variant="outline"
-                    onClick={refreshData}
+                    onClick={reloadData}
                     disabled={isReloading}
                     className="gap-1 border-[2px] border-transparent shadow-[inset_0_0_0_1px_#d1d5db] hover:bg-gray-100 hover:shadow-[inset_0_0_0_1px_#000000]"
                 >
@@ -923,7 +1031,7 @@ const Collections = () => {
             </div>
 
             {/* Visualization Section */}
-            {lastSyncJob && Object.keys(entityDict).length > 0 && (
+            {(lastSyncJob && (Object.keys(entityDict).length > 0 || isActiveSyncJob)) && (
                 <div className="py-3 space-y-0 mt-10">
                     <div className="flex justify-between w-full mb-0 -mb-3">
                         <div className="flex gap-2 relative top-3">
@@ -1057,6 +1165,16 @@ const Collections = () => {
                             >
                                 View details
                             </Button>
+                            <Button
+                                key="run-sync"
+                                variant="default"
+                                className="flex items-center gap-1 h-10 text-[15px] min-w-[90px] border border-black shrink-0"
+                                onClick={handleRunSync}
+                                disabled={isInitiatingSyncJob || isActiveSyncJob}
+                            >
+                                {isInitiatingSyncJob ? 'Starting...' : 'Run sync'}
+                                <Play className="h-4 w-4 ml-1" />
+                            </Button>
                         </div>
 
                         {/* Add the schedule information box */}
@@ -1138,7 +1256,7 @@ const Collections = () => {
                                 console.log("Done button clicked");
                                 setShowScheduleDialog(false);
                                 // Simple and direct approach - reload the data when the dialog closes
-                                setTimeout(() => refreshData(), 300);
+                                setTimeout(() => reloadData(), 300);
                             }}
                         >
                             Done
@@ -1155,6 +1273,18 @@ const Collections = () => {
                 includeData={includeData}
                 setIncludeData={setIncludeData}
             />
+
+            {/* Add SyncProgress component after the entity visualization section */}
+            {lastSyncJob && (
+                <div className="w-full my-6">
+                    <SyncProgress
+                        syncId={selectedConnection?.sync_id || null}
+                        syncJobId={lastSyncJob.id}
+                        lastSync={lastSyncJob}
+                        isLive={isActiveSyncJob}
+                    />
+                </div>
+            )}
         </div>
     );
 };

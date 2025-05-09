@@ -218,9 +218,7 @@ async def run_source_connection(
     sync = schemas.Sync.model_validate(sync, from_attributes=True)
     sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
     collection = schemas.Collection.model_validate(collection, from_attributes=True)
-    source_connection = schemas.SourceConnection.model_validate(
-        source_connection, from_attributes=True
-    )
+    source_connection = schemas.SourceConnection.from_orm_with_collection_mapping(source_connection)
 
     background_tasks.add_task(
         sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user

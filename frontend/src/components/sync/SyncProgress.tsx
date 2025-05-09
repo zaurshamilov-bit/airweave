@@ -194,16 +194,6 @@ export const SyncProgress = ({ syncId, syncJobId, lastSync, onClose, isLive = fa
         </div>
       </CardContent>
 
-      {isComplete && (
-        <CardFooter className="pt-0 relative z-10">
-          <div className="w-full flex justify-end">
-            <Button onClick={handleTryChat} className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
-              Chat with your synced data
-            </Button>
-          </div>
-        </CardFooter>
-      )}
     </Card>
   );
 };
