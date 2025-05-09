@@ -1,6 +1,6 @@
 """API endpoints for collections."""
 
-from typing import List, Optional
+from typing import List
 
 from fastapi import Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,7 @@ from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
+from airweave.core.search_service import search_service
 from airweave.models.user import User
 
 router = TrailingSlashRouter()
@@ -114,23 +115,10 @@ async def delete_collection(
 async def search_collection(
     readable_id: str,
     query: str = Query(..., description="Search query"),
-    source_name: Optional[str] = Query(None, description="Optional source name filter"),
-    limit: int = Query(10, description="Number of results to return"),
-    offset: int = Query(0, description="Pagination offset"),
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
 ) -> List[dict]:
     """Search within a collection identified by readable ID."""
-    db_obj = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, current_user=current_user
+    return await search_service.search(
+        db, readable_id=readable_id, query=query, current_user=current_user
     )
-    if db_obj is None:
-        raise HTTPException(status_code=404, detail="Collection not found")
-
-    # search_query = schemas.CollectionSearchQuery(
-    #     query=query, source_name=source_name, limit=limit, offset=offset
-    # )
-
-    # Note: This would require additional implementation for the actual search functionality
-    # This is just a placeholder that follows the schema defined in collection.py
-    return []  # Replace with actual search implementation

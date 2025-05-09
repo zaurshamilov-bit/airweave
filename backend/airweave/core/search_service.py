@@ -1,7 +1,6 @@
 """Search service for vector database integrations."""
 
 import logging
-from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +21,7 @@ class SearchService:
         self,
         db: AsyncSession,
         query: str,
-        sync_id: UUID,
+        readable_id: str,
         current_user: schemas.User,
     ) -> list[dict]:
         """Search across vector database using existing connections.
@@ -30,7 +29,7 @@ class SearchService:
         Args:
             db (AsyncSession): Database session
             query (str): Search query text
-            sync_id (UUID): ID of the sync to search within
+            readable_id (str): Readable ID of the collection to search within
             current_user (schemas.User): Current user performing the search
 
         Returns:
@@ -40,63 +39,34 @@ class SearchService:
             NotFoundException: If sync or connections not found
         """
         try:
-            # Get sync configuration
-            sync = await crud.sync.get(db, id=sync_id, current_user=current_user)
-            if not sync:
-                raise NotFoundException("Sync not found")
-
-            # Check if there are destination connections
-            if not sync.destination_connection_ids or len(sync.destination_connection_ids) == 0:
-                raise NotFoundException("No destination connections found for this sync")
-
-            # TODO: In the future, implement multi-destination search capability,
-            # e.g., neo4j + qdrant for GraphRAG.
-            # Currently, we only use the first destination for searching, but eventually
-            # we should support searching across all destinations and aggregating results
-            destination_connection_id = sync.destination_connection_ids[0]
-
-            # Get the destination connection
-            connection = await crud.connection.get(db, destination_connection_id, current_user)
-            if not connection:
-                raise NotFoundException("Destination connection not found")
+            collection = await crud.collection.get_by_readable_id(db, readable_id, current_user)
+            if not collection:
+                raise NotFoundException("Collection not found")
 
             # Get the destination model
-            destination_model = await crud.destination.get_by_short_name(db, connection.short_name)
+            destination_model = await crud.destination.get_by_short_name(db, "qdrant_native")
             if not destination_model:
                 raise NotFoundException("Destination not found")
-
-            # Check if this is a native connection
-            is_native = crud.connection._is_native_connection(connection)
-
-            # Get credentials if not a native connection
-            if not is_native:
-                if connection.integration_credential_id:
-                    integration_credential = await crud.integration_credential.get(
-                        db,
-                        connection.integration_credential_id,
-                        current_user,
-                    )
-                    if not integration_credential:
-                        raise NotFoundException("Destination credentials not found")
-                else:
-                    logger.warning(
-                        f"Non-native connection {connection.id} does not have "
-                        f"integration credentials, but will attempt to continue with search."
-                    )
 
             # Initialize destination class
             destination_class = resource_locator.get_destination(destination_model)
 
             # Use OpenAI embeddings if API key is available
             if settings.OPENAI_API_KEY:
-                logger.info(f"Using OpenAI embedding model for search in sync {sync_id}")
+                logger.info(
+                    "Using OpenAI embedding model for search in "
+                    f"collection {readable_id} {collection.id}"
+                )
                 embedding_model = OpenAIText2Vec(api_key=settings.OPENAI_API_KEY)
             else:
-                logger.info(f"Using local embedding model for search in sync {sync_id}")
+                logger.info(
+                    "Using local embedding model for search in "
+                    f"collection {readable_id} {collection.id}"
+                )
                 embedding_model = LocalText2Vec()
 
             vector = await embedding_model.embed(query)
-            destination = await destination_class.create(sync_id=sync_id)
+            destination = await destination_class.create(collection_id=collection.id)
 
             # Perform search
             results = await destination.search(vector)
