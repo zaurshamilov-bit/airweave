@@ -39,7 +39,7 @@ class CRUDCollection(CRUDBase[Collection, CollectionCreate, CollectionUpdate]):
         """
         # Get all source connections for this collection
         source_connections = await crud_source_connection.get_for_collection(
-            db, collection_id=collection.readable_id, current_user=current_user
+            db, readable_collection_id=collection.readable_id, current_user=current_user
         )
 
         # If no source connections, the collection needs one

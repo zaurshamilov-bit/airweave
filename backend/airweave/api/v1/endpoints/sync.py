@@ -8,7 +8,7 @@ from fastapi import BackgroundTasks, Body, Depends, HTTPException, Query, Reques
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airweave import schemas
+from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.config import settings
@@ -126,11 +126,24 @@ async def create_sync(
     sync, sync_job = await sync_service.create_and_run_sync(
         db=db, sync_in=sync_in, current_user=user
     )
+    source_connection = await crud.source_connection.get(
+        db=db, id=sync_in.source_connection_id, current_user=user
+    )
+    collection = await crud.collection.get_by_readable_id(
+        db=db, readable_id=source_connection.readable_collection_id, current_user=user
+    )
+    collection = schemas.Collection.model_validate(collection, from_attributes=True)
+
+    source_connection = schemas.SourceConnection.model_validate(
+        source_connection, from_attributes=True
+    )
 
     # If job was created and should run immediately, start it in background
     if sync_job and sync_in.run_immediately:
         sync_dag = await sync_service.get_sync_dag(db=db, sync_id=sync.id, current_user=user)
-        background_tasks.add_task(sync_service.run, sync, sync_job, sync_dag, user)
+        background_tasks.add_task(
+            sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user
+        )
 
     return sync
 

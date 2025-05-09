@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core import credentials
+from airweave.core.collection_service import collection_service
 from airweave.core.constants.native_connections import NATIVE_QDRANT_UUID, NATIVE_TEXT2VEC_UUID
 from airweave.core.logging import logger
 from airweave.core.shared_models import ConnectionStatus, SourceConnectionStatus, SyncStatus
@@ -195,14 +196,18 @@ class SourceConnectionService:
             # 3. Check if we need to create a collection first
             if "collection" not in core_attrs:
                 # Create a collection with the same name as the source connection
-                collection_in = schemas.CollectionCreate(
+
+                collection_create = schemas.CollectionCreate(
                     name=f"Collection for {source_connection_in.name}",
                     description=f"Auto-generated collection for {source_connection_in.name}",
                 )
-                collection = await crud.collection.create(
-                    db=uow.session, obj_in=collection_in, current_user=current_user, uow=uow
+
+                collection = await collection_service.create(
+                    db=uow.session,
+                    collection_in=collection_create,
+                    current_user=current_user,
+                    uow=uow,
                 )
-                await uow.session.flush()
             else:
                 readable_collection_id = core_attrs["collection"]
                 if "collection" in core_attrs:
@@ -373,6 +378,55 @@ class SourceConnectionService:
         # Get all source connections for the user
         source_connections = await crud.source_connection.get_all_for_user(
             db=db, current_user=current_user, skip=skip, limit=limit
+        )
+
+        if not source_connections:
+            return []
+
+        # Create list items directly from source connections
+        list_items = [
+            schemas.SourceConnectionListItem(
+                id=sc.id,
+                name=sc.name,
+                description=sc.description,
+                short_name=sc.short_name,
+                status=sc.status,
+                created_at=sc.created_at,
+                modified_at=sc.modified_at,
+                sync_id=sc.sync_id,
+                collection=sc.readable_collection_id,  # map to collection
+            )
+            for sc in source_connections
+        ]
+
+        return list_items
+
+    async def get_source_connections_by_collection(
+        self,
+        db: AsyncSession,
+        collection: str,
+        current_user: schemas.User,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> List[schemas.SourceConnectionListItem]:
+        """Get all source connections for a user by collection.
+
+        Args:
+            db: The database session
+            collection: The collection to filter by
+            current_user: The current user
+            skip: The number of source connections to skip
+            limit: The maximum number of source connections to return
+
+        Returns:
+            A list of source connections
+        """
+        source_connections = await crud.source_connection.get_for_collection(
+            db=db,
+            readable_collection_id=collection,
+            current_user=current_user,
+            skip=skip,
+            limit=limit,
         )
 
         if not source_connections:

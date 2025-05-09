@@ -13,7 +13,7 @@ from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import LoggerConfigurator, _ContextualLogger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.auth.services import oauth2_service
-from airweave.platform.destinations._base import BaseDestination, VectorDBDestination
+from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
@@ -37,6 +37,8 @@ class SyncContext:
     - dag - the DAG that is created for the sync
     - progress - the progress tracker, interfaces with PubSub
     - router - the DAG router
+    - collection - the collection that the sync is for
+    - source connection - the source connection that the sync is for
     - white label (optional)
     - logger - contextual logger with sync job metadata
     """
@@ -50,6 +52,8 @@ class SyncContext:
     dag: schemas.SyncDag
     progress: SyncProgress
     router: SyncDAGRouter
+    collection: schemas.Collection
+    source_connection: schemas.Connection
     entity_map: dict[type[BaseEntity], UUID]
     current_user: schemas.User
     logger: _ContextualLogger
@@ -67,6 +71,8 @@ class SyncContext:
         dag: schemas.SyncDag,
         progress: SyncProgress,
         router: SyncDAGRouter,
+        collection: schemas.Collection,
+        source_connection: schemas.Connection,
         entity_map: dict[type[BaseEntity], UUID],
         current_user: schemas.User,
         logger: _ContextualLogger,
@@ -82,6 +88,8 @@ class SyncContext:
         self.dag = dag
         self.progress = progress
         self.router = router
+        self.collection = collection
+        self.source_connection = source_connection
         self.entity_map = entity_map
         self.current_user = current_user
         self.white_label = white_label
@@ -98,6 +106,8 @@ class SyncContextFactory:
         sync: schemas.Sync,
         sync_job: schemas.SyncJob,
         dag: schemas.SyncDag,
+        collection: schemas.Collection,
+        source_connection: schemas.Connection,
         current_user: schemas.User,
     ) -> SyncContext:
         """Create a sync context."""
@@ -113,7 +123,10 @@ class SyncContextFactory:
         )
         embedding_model = cls._get_embedding_model(sync=sync)
         destinations = await cls._create_destination_instances(
-            db=db, sync=sync, current_user=current_user, embedding_model=embedding_model
+            db=db,
+            sync=sync,
+            collection=collection,
+            current_user=current_user,
         )
         transformers = await cls._get_transformer_callables(db=db, sync=sync)
         entity_map = await cls._get_entity_definition_map(db=db)
@@ -140,6 +153,8 @@ class SyncContextFactory:
             sync=sync,
             sync_job=sync_job,
             dag=dag,
+            collection=collection,
+            source_connection=source_connection,
             progress=progress,
             router=router,
             entity_map=entity_map,
@@ -293,8 +308,8 @@ class SyncContextFactory:
         cls,
         db: AsyncSession,
         sync: schemas.Sync,
+        collection: schemas.Collection,
         current_user: schemas.User,
-        embedding_model: BaseEmbeddingModel,
     ) -> list[BaseDestination]:
         """Create destination instances.
 
@@ -302,46 +317,38 @@ class SyncContextFactory:
         -----
             db (AsyncSession): The database session
             sync (schemas.Sync): The sync object
+            collection (schemas.Collection): The collection object
             current_user (schemas.User): The current user
-            embedding_model (BaseEmbeddingModel): The embedding model to use for vector destinations
 
         Returns:
         --------
             list[BaseDestination]: A list of destination instances
         """
-        destinations = []
+        destination_connection_id = sync.destination_connection_ids[0]
 
-        for destination_connection_id in sync.destination_connection_ids:
-            destination_connection = await crud.connection.get(
-                db, destination_connection_id, current_user
+        destination_connection = await crud.connection.get(
+            db, destination_connection_id, current_user
+        )
+        if not destination_connection:
+            raise NotFoundException(
+                (
+                    f"Destination connection not found for user {current_user.email}"
+                    f" and connection id {destination_connection_id}"
+                )
             )
-            if not destination_connection:
-                raise NotFoundException(
-                    (
-                        f"Destination connection not found for user {current_user.email}"
-                        f" and connection id {destination_connection_id}"
-                    )
-                )
-            destination_model = await crud.destination.get_by_short_name(
-                db, destination_connection.short_name
+        destination_model = await crud.destination.get_by_short_name(
+            db, destination_connection.short_name
+        )
+        destination_schema = schemas.Destination.model_validate(destination_model)
+        if not destination_model:
+            raise NotFoundException(
+                f"Destination not found for connection {destination_connection.short_name}"
             )
-            destination_schema = schemas.Destination.model_validate(destination_model)
-            if not destination_model:
-                raise NotFoundException(
-                    f"Destination not found for connection {destination_connection.short_name}"
-                )
 
-            destination_class = resource_locator.get_destination(destination_schema)
-            if issubclass(destination_class, VectorDBDestination):
-                destination = await destination_class.create(
-                    sync_id=sync.id, vector_size=embedding_model.vector_dimensions
-                )
-            else:
-                destination = await destination_class.create(sync_id=sync.id)
+        destination_class = resource_locator.get_destination(destination_schema)
+        destination = await destination_class.create(collection_id=collection.id)
 
-            destinations.append(destination)
-
-        return destinations
+        return [destination]
 
     @classmethod
     async def _get_transformer_callables(

@@ -1,9 +1,9 @@
 """API endpoints for managing source connections."""
 
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
-from fastapi import BackgroundTasks, Body, Depends
+from fastapi import BackgroundTasks, Body, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
@@ -20,6 +20,7 @@ router = TrailingSlashRouter()
 async def list_source_connections(
     *,
     db: AsyncSession = Depends(deps.get_db),
+    collection: Optional[str] = Query(None, description="Filter by collection"),
     skip: int = 0,
     limit: int = 100,
     user: schemas.User = Depends(deps.get_user),
@@ -28,6 +29,7 @@ async def list_source_connections(
 
     Args:
         db: The database session
+        collection: The collection to filter by
         skip: The number of connections to skip
         limit: The number of connections to return
         user: The current user
@@ -35,6 +37,15 @@ async def list_source_connections(
     Returns:
         A list of source connection list items with essential information
     """
+    if collection:
+        return await source_connection_service.get_source_connections_by_collection(
+            db=db,
+            collection=collection,
+            current_user=user,
+            skip=skip,
+            limit=limit,
+        )
+
     return await source_connection_service.get_all_source_connections(
         db=db, current_user=user, skip=skip, limit=limit
     )
@@ -109,8 +120,13 @@ async def create_source_connection(
             sync = schemas.Sync.model_validate(sync, from_attributes=True)
             sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
             sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
-
-    background_tasks.add_task(sync_service.run, sync, sync_job, sync_dag, user)
+            collection = await crud.collection.get_by_readable_id(
+                db=db, readable_id=source_connection.collection, current_user=user
+            )
+            collection = schemas.Collection.model_validate(collection, from_attributes=True)
+    background_tasks.add_task(
+        sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user
+    )
 
     return source_connection
 
@@ -192,11 +208,23 @@ async def run_source_connection(
     # Start the sync job in the background
     sync = await crud.sync.get(db=db, id=sync_job.sync_id, current_user=user, with_connections=True)
     sync_dag = await sync_service.get_sync_dag(db=db, sync_id=sync_job.sync_id, current_user=user)
+    source_connection = await crud.source_connection.get(
+        db=db, id=source_connection_id, current_user=user
+    )
+    collection = await crud.collection.get_by_readable_id(
+        db=db, readable_id=source_connection.readable_collection_id, current_user=user
+    )
 
     sync = schemas.Sync.model_validate(sync, from_attributes=True)
     sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+    collection = schemas.Collection.model_validate(collection, from_attributes=True)
+    source_connection = schemas.SourceConnection.model_validate(
+        source_connection, from_attributes=True
+    )
 
-    background_tasks.add_task(sync_service.run, sync, sync_job, sync_dag, user)
+    background_tasks.add_task(
+        sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user
+    )
 
     return sync_job.to_source_connection_job(source_connection_id)
 

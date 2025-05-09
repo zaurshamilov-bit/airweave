@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
+from airweave.core.collection_service import collection_service
 from airweave.models.user import User
 
 router = TrailingSlashRouter()
@@ -22,7 +23,11 @@ async def list_collections(
 ) -> List[schemas.Collection]:
     """List all collections for the current user's organization."""
     return await crud.collection.get_multi_by_organization(
-        db, organization_id=current_user.organization_id, skip=skip, limit=limit
+        db,
+        organization_id=current_user.organization_id,
+        current_user=current_user,
+        skip=skip,
+        limit=limit,
     )
 
 
@@ -33,7 +38,7 @@ async def create_collection(
     current_user: User = Depends(deps.get_user),
 ) -> schemas.Collection:
     """Create a new collection."""
-    return await crud.collection.create(db, obj_in=collection, current_user=current_user)
+    return await collection_service.create(db, collection_in=collection, current_user=current_user)
 
 
 @router.get("/{readable_id}", response_model=schemas.Collection)

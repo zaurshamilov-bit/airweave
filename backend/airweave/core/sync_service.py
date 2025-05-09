@@ -63,6 +63,8 @@ class SyncService:
         sync: schemas.Sync,
         sync_job: schemas.SyncJob,
         dag: schemas.SyncDag,
+        collection: schemas.Collection,
+        source_connection: schemas.Connection,
         current_user: schemas.User,
     ) -> schemas.Sync:
         """Run a sync.
@@ -73,6 +75,8 @@ class SyncService:
             sync_job (schemas.SyncJob): The sync job to run.
             dag (schemas.SyncDag): The DAG to run.
             current_user (schemas.User): The current user.
+            collection (schemas.Collection): The collection to sync.
+            source_connection (schemas.Connection): The source connection to sync.
 
         Returns:
         -------
@@ -81,7 +85,7 @@ class SyncService:
         try:
             async with get_db_context() as db:
                 sync_context = await SyncContextFactory.create(
-                    db, sync, sync_job, dag, current_user
+                    db, sync, sync_job, dag, collection, source_connection, current_user
                 )
         except Exception as e:
             logger.error(f"Error during sync context creation: {e}")

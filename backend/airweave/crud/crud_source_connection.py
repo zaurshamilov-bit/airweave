@@ -5,7 +5,6 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
 from airweave.core.shared_models import SourceConnectionStatus, SyncJobStatus
 from airweave.models.source_connection import SourceConnection
@@ -168,51 +167,40 @@ class CRUDSourceConnection(
         return await self._attach_latest_sync_job_info(db, source_connections)
 
     async def get_for_collection(
-        self, db: AsyncSession, *, collection_id: str, current_user: User
+        self,
+        db: AsyncSession,
+        *,
+        readable_collection_id: str,
+        skip: int = 0,
+        limit: int = 100,
+        current_user: User,
     ) -> List[SourceConnection]:
         """Get all source connections for a specific collection with ephemeral statuses.
 
         Args:
             db: The database session
-            collection_id: The readable ID of the collection
+            readable_collection_id: The readable ID of the collection
             current_user: The current user
+            skip: The number of source connections to skip
+            limit: The maximum number of source connections to return
 
         Returns:
             A list of source connections with ephemeral statuses
         """
-        query = select(self.model).where(
-            self.model.readable_collection_id == collection_id,
-            self.model.organization_id == current_user.organization_id,
+        query = (
+            select(self.model)
+            .where(
+                self.model.readable_collection_id == readable_collection_id,
+                self.model.organization_id == current_user.organization_id,
+            )
+            .offset(skip)
+            .limit(limit)
         )
         result = await db.execute(query)
         source_connections = list(result.scalars().all())
 
         # Attach latest sync job info and compute statuses
         return await self._attach_latest_sync_job_info(db, source_connections)
-
-    async def get_active_for_user(
-        self, db: AsyncSession, *, current_user: User, skip: int = 0, limit: int = 100
-    ) -> List[SourceConnection]:
-        """Get all active source connections for the current user.
-
-        This method now looks up the ephemeral active status rather than using a stored status.
-
-        Args:
-            db: The database session
-            current_user: The current user
-            skip: The number of connections to skip
-            limit: The number of connections to return
-
-        Returns:
-            A list of active source connections
-        """
-        # Get all connections first - we'll filter by active status after computing it
-        all_connections = await self.get_all_for_user(
-            db, current_user=current_user, skip=skip, limit=limit
-        )
-
-        # Filter to only return the ones with ACTIVE status
-        return [sc for sc in all_connections if sc.status == SourceConnectionStatus.ACTIVE]
 
     async def get_by_sync_id(
         self, db: AsyncSession, *, sync_id: UUID, current_user: User
@@ -230,67 +218,6 @@ class CRUDSourceConnection(
         query = select(self.model).where(
             self.model.sync_id == sync_id,
             self.model.organization_id == current_user.organization_id,
-        )
-        result = await db.execute(query)
-        source_connection = result.scalar_one_or_none()
-
-        if source_connection:
-            # Attach latest sync job info and compute status
-            return (await self._attach_latest_sync_job_info(db, [source_connection]))[0]
-
-        return None
-
-    async def get_by_credential_id(
-        self, db: AsyncSession, *, credential_id: UUID, current_user: User
-    ) -> Optional[SourceConnection]:
-        """Get a source connection by integration credential ID.
-
-        Args:
-            db: The database session
-            credential_id: The ID of the integration credential
-            current_user: The current user
-
-        Returns:
-            The source connection for the credential
-        """
-        query = select(self.model).where(
-            self.model.integration_credential_id == credential_id,
-            self.model.organization_id == current_user.organization_id,
-        )
-        result = await db.execute(query)
-        source_connection = result.scalar_one_or_none()
-
-        if source_connection:
-            # Attach latest sync job info and compute status
-            return (await self._attach_latest_sync_job_info(db, [source_connection]))[0]
-
-        return None
-
-    async def get_with_related(
-        self, db: AsyncSession, *, id: UUID, current_user: User
-    ) -> Optional[SourceConnection]:
-        """Get a source connection with its related objects.
-
-        Args:
-            db: The database session
-            id: The ID of the source connection
-            current_user: The current user
-
-        Returns:
-            The source connection with related objects
-        """
-        query = (
-            select(self.model)
-            .options(
-                joinedload(self.model.sync),
-                joinedload(self.model.integration_credential),
-                joinedload(self.model.dag),
-                joinedload(self.model.collection),
-            )
-            .where(
-                self.model.id == id,
-                self.model.organization_id == current_user.organization_id,
-            )
         )
         result = await db.execute(query)
         source_connection = result.scalar_one_or_none()
