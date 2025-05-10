@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
-import { AlertCircle, RefreshCw, Pencil, Trash, Plus, Clock, Play } from "lucide-react";
+import { AlertCircle, RefreshCw, Pencil, Trash, Plus, Clock, Play, Plug, Copy, Check } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
+import { cn } from "@/lib/utils";
 import ReactFlow, {
     useNodesState,
     useEdgesState,
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 import { SyncProgress } from '@/components/sync/SyncProgress';
+import { emitCollectionEvent, COLLECTION_DELETED } from "@/lib/events";
 
 const nodeTypes = {
     sourceNode: SourceNode,
@@ -109,44 +111,55 @@ interface DeleteCollectionDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onConfirm: () => void;
-    includeData: boolean;
-    setIncludeData: (include: boolean) => void;
+    collectionReadableId: string;
+    confirmText: string;
+    setConfirmText: (text: string) => void;
 }
 
 const DeleteCollectionDialog = ({
     open,
     onOpenChange,
     onConfirm,
-    includeData,
-    setIncludeData
+    collectionReadableId,
+    confirmText,
+    setConfirmText
 }: DeleteCollectionDialogProps) => {
+    const { resolvedTheme } = useTheme();
+    const isDark = resolvedTheme === 'dark';
+
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
-            <AlertDialogContent>
+            <AlertDialogContent className={cn(
+                "border-border",
+                isDark ? "bg-card-solid text-foreground" : "bg-white"
+            )}>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Collection</AlertDialogTitle>
-                    <AlertDialogDescription className="text-foreground dark:text-gray-200">
+                    <AlertDialogTitle className="text-foreground">Delete Collection</AlertDialogTitle>
+                    <AlertDialogDescription className={isDark ? "text-gray-300" : "text-foreground"}>
                         <p className="mb-4">This will permanently delete this collection and all its source connections. This action cannot be undone.</p>
 
-                        <div className="flex items-center gap-2 mt-4">
-                            <input
-                                type="checkbox"
-                                id="delete-data"
-                                checked={includeData}
-                                onChange={(e) => setIncludeData(e.target.checked)}
-                                className="h-4 w-4"
-                            />
-                            <label htmlFor="delete-data" className="text-sm">
-                                Also delete all data in destination systems
+                        <div className="mt-4">
+                            <label htmlFor="confirm-delete" className="text-sm font-medium block mb-2">
+                                Type <span className="font-bold">{collectionReadableId}</span> to confirm deletion
                             </label>
+                            <Input
+                                id="confirm-delete"
+                                value={confirmText}
+                                onChange={(e) => setConfirmText(e.target.value)}
+                                className="w-full"
+                                placeholder={collectionReadableId}
+                            />
                         </div>
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogCancel className={isDark ? "bg-gray-800 text-white hover:bg-gray-700" : ""}>
+                        Cancel
+                    </AlertDialogCancel>
                     <AlertDialogAction
                         onClick={onConfirm}
-                        className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-600"
+                        disabled={confirmText !== collectionReadableId}
+                        className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-600 disabled:opacity-50"
                     >
                         Delete Collection
                     </AlertDialogAction>
@@ -162,6 +175,7 @@ const Collections = () => {
      ********************************************/
     const { readable_id } = useParams();
     const { resolvedTheme } = useTheme();
+    const isDark = resolvedTheme === 'dark';
     const navigate = useNavigate();
 
     // Page state
@@ -204,7 +218,7 @@ const Collections = () => {
 
     // Add state for delete dialog
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-    const [includeData, setIncludeData] = useState(false);
+    const [confirmText, setConfirmText] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
 
     // Realtime updates state
@@ -228,6 +242,9 @@ const Collections = () => {
 
     // Determine if sync is currently running
     const isActiveSyncJob = status === "in_progress" || status === "pending";
+
+    // Add state for copy animation
+    const [isCopied, setIsCopied] = useState(false);
 
     /********************************************
      * API AND DATA FETCHING FUNCTIONS
@@ -564,6 +581,24 @@ const Collections = () => {
         }
     };
 
+    // Handle copy to clipboard
+    const handleCopyId = () => {
+        if (collection?.readable_id) {
+            navigator.clipboard.writeText(collection.readable_id);
+            setIsCopied(true);
+
+            // Reset after animation completes
+            setTimeout(() => {
+                setIsCopied(false);
+            }, 1500);
+
+            toast({
+                title: "Copied",
+                description: "ID copied to clipboard"
+            });
+        }
+    };
+
     /********************************************
      * SCHEDULE-RELATED FUNCTIONS
      ********************************************/
@@ -826,13 +861,16 @@ const Collections = () => {
 
     // Handle collection deletion
     const handleDeleteCollection = async () => {
-        if (!readable_id) return;
+        if (!readable_id || confirmText !== readable_id) return;
 
         setIsDeleting(true);
         try {
-            const response = await apiClient.delete(`/collections/${readable_id}?delete_data=${includeData}`);
+            const response = await apiClient.delete(`/collections/${readable_id}`);
 
             if (response.ok) {
+                // Emit event that collection was deleted
+                emitCollectionEvent(COLLECTION_DELETED, { id: readable_id });
+
                 toast({
                     title: "Success",
                     description: "Collection deleted successfully"
@@ -853,13 +891,14 @@ const Collections = () => {
         } finally {
             setIsDeleting(false);
             setShowDeleteDialog(false);
+            setConfirmText(''); // Reset confirm text
         }
     };
 
     if (error) {
         return (
             <div className="container mx-auto py-6">
-                <h1 className="text-3xl font-bold mb-6">Collection Error</h1>
+                <h1 className="text-3xl font-bold mb-6 text-foreground">Collection Error</h1>
                 <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <div className="font-medium">Error</div>
@@ -875,19 +914,24 @@ const Collections = () => {
     }
 
     return (
-        <div className="container mx-auto py-6">
+        <div className={cn(
+            "container mx-auto py-6",
+            isDark ? "text-foreground" : ""
+        )}>
             {/* Header with Title and Status Badge */}
             <div className="flex items-center justify-between py-4">
                 <div className="flex items-center gap-4">
                     {/* Source Icons */}
-                    <div className="relative" style={{ width: "4rem", height: "2rem" }}>
+                    <div className="flex justify-start" style={{ minWidth: "4.5rem" }}>
                         {sourceConnections.map((connection, index) => (
                             <div
                                 key={connection.id}
-                                className="absolute w-12 h-12 rounded-md border border-black p-1 flex items-center justify-center overflow-hidden bg-background"
+                                className={cn(
+                                    "w-14 h-14 rounded-md border p-1 flex items-center justify-center overflow-hidden",
+                                    isDark ? "bg-gray-800 border-gray-700" : "bg-background border-gray-300"
+                                )}
                                 style={{
-                                    bottom: `${index * 10}px`,
-                                    right: `${index * 20}px`,
+                                    marginLeft: index > 0 ? `-${Math.min(index * 8, 24)}px` : "0px",
                                     zIndex: sourceConnections.length - index
                                 }}
                             >
@@ -900,13 +944,13 @@ const Collections = () => {
                         ))}
                     </div>
 
-                    <div>
+                    <div className="flex flex-col justify-center">
                         {isEditingName ? (
                             <div className="flex items-center gap-2">
                                 <Input
                                     ref={nameInputRef}
                                     defaultValue={collection?.name || ""}
-                                    className="text-xl font-bold h-9 min-w-[300px]"
+                                    className="text-2xl font-bold h-10 min-w-[300px]"
                                     autoFocus
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
@@ -921,11 +965,11 @@ const Collections = () => {
                             </div>
                         ) : (
                             <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold tracking-tight">{collection?.name}</h1>
+                                <h1 className="text-3xl font-bold tracking-tight text-foreground">{collection?.name}</h1>
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-6 w-6"
+                                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
                                     onClick={startEditingName}
                                 >
                                     <Pencil className="h-3.5 w-3.5" />
@@ -935,47 +979,79 @@ const Collections = () => {
                                 )}
                             </div>
                         )}
-                        <p className="text-muted-foreground text-sm mt-1">
+                        <p className="text-muted-foreground text-sm group relative flex items-center">
                             {collection?.readable_id}
+                            <button
+                                className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
+                                onClick={handleCopyId}
+                                title="Copy ID"
+                            >
+                                {isCopied ? (
+                                    <Check className="h-3.5 w-3.5 text-muted-foreground  transition-all" />
+                                ) : (
+                                    <Copy className="h-3.5 w-3.5 text-muted-foreground transition-all" />
+                                )}
+                            </button>
                         </p>
                     </div>
                 </div>
 
-                {/* Delete button */}
-                <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setShowDeleteDialog(true)}
-                    disabled={isDeleting}
-                    className="flex items-center gap-1"
-                >
-                    <Trash className="h-4 w-4" />
-                    Delete
-                </Button>
+                {/* Header action buttons */}
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={reloadData}
+                        disabled={isReloading}
+                        className={cn(
+                            "h-8 w-8 rounded-full transition-all duration-200",
+                            isDark ? "hover:bg-gray-800" : "hover:bg-gray-100",
+                        )}
+                        title="Reload page"
+                    >
+                        <RefreshCw className={cn(
+                            "h-4 w-4 transition-transform duration-500",
+                            isReloading ? "animate-spin" : "hover:rotate-90"
+                        )} />
+                    </Button>
+
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowDeleteDialog(true)}
+                        disabled={isDeleting}
+                        className={cn(
+                            "h-8 w-8 rounded-full transition-all",
+                            isDark ? "hover:bg-gray-800 text-muted-foreground hover:text-destructive"
+                                  : "hover:bg-gray-100 text-muted-foreground hover:text-destructive"
+                        )}
+                        title="Delete collection"
+                    >
+                        <Trash className="h-4 w-4" />
+                    </Button>
+                </div>
             </div>
             <div className="flex justify-end gap-2 mb-0">
                 <Button
                     variant="outline"
-                    onClick={reloadData}
-                    disabled={isReloading}
-                    className="gap-1 border-[2px] border-transparent shadow-[inset_0_0_0_1px_#d1d5db] hover:bg-gray-100 hover:shadow-[inset_0_0_0_1px_#000000]"
-                >
-                    <RefreshCw className="h-4 w-4" />
-                    {isReloading ? 'Reloading...' : 'Reload page'}
-                </Button>
-                <Button
-                    variant="outline"
                     onClick={() => { }}
-                    className="gap-1 border-[2px] border-transparent shadow-[inset_0_0_0_1px_#d1d5db] hover:bg-gray-100 hover:shadow-[inset_0_0_0_1px_#000000]"
+                    className={cn(
+                        "gap-1 text-xs font-medium h-8 px-3",
+                        isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
+                    )}
                 >
-                    <Plus className="h-4 w-4 border border-black" />
+                    <Plus className="h-3.5 w-3.5" />
                     Add Source
                 </Button>
                 <Button
                     variant="outline"
                     onClick={() => { }}
-                    className="gap-1 border-[2px] border-transparent shadow-[inset_0_0_0_1px_#d1d5db] hover:bg-gray-100 hover:shadow-[inset_0_0_0_1px_#000000]"
+                    className={cn(
+                        "gap-1 text-xs font-medium h-8 px-3",
+                        isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
+                    )}
                 >
+                    <Plug className="h-3.5 w-3.5 mr-1" />
                     Refresh all sources
                 </Button>
             </div>
@@ -983,33 +1059,46 @@ const Collections = () => {
             {/* Add QueryTool and LiveApiDoc when a connection with syncId is selected */}
             {selectedConnection?.sync_id && (
                 <>
-                    <div className='py-3 space-y-1 mt-0'>
-                        <QueryTool syncId={selectedConnection.sync_id} />
+                    <div className='py-3 space-y-2 mt-1'>
+                        <QueryTool
+                            syncId={selectedConnection.sync_id}
+                            collectionReadableId={collection?.readable_id}
+                        />
                     </div>
-                    <div className='py-0 space-y-1'>
+                    <div className='py-1 space-y-1 mt-2'>
                         <LiveApiDoc syncId={selectedConnection.sync_id} />
                     </div>
                 </>
             )}
 
-            <hr className="border-t border-gray-300 my-2 max-w-full" />
+            <hr className={cn(
+                "border-t my-2 max-w-full",
+                isDark ? "border-gray-700" : "border-gray-300"
+            )} />
 
             {/* Source Connections Section */}
             <div className="mt-6">
-                <h2 className="text-2xl font-bold tracking-tight mb-4">Source Connections</h2>
+                <h2 className="text-2xl font-bold tracking-tight mb-4 text-foreground">Source Connections</h2>
 
                 <div className="flex flex-wrap gap-3">
                     {sourceConnections.map((connection) => (
                         <Button
                             key={connection.id}
                             variant="outline"
-                            className={`w-60 h-13 flex items-center gap-2 justify-start overflow-hidden flex-shrink-0 flex-grow-0 border-[2px] ${selectedConnection?.id === connection.id
-                                ? "border-black"
-                                : "border-transparent shadow-[inset_0_0_0_1px_#d1d5db] hover:bg-gray-100 hover:shadow-[inset_0_0_0_1px_#000000]"
-                                }`}
+                            className={cn(
+                                "w-60 h-13 flex items-center gap-2 justify-start overflow-hidden flex-shrink-0 flex-grow-0",
+                                selectedConnection?.id === connection.id
+                                    ? "border-2 border-primary"
+                                    : isDark
+                                        ? "border border-gray-700 bg-gray-800/50 hover:bg-gray-800"
+                                        : "border border-gray-300 hover:bg-gray-100"
+                            )}
                             onClick={() => handleSelectConnection(connection)}
                         >
-                            <div className="w-10 h-10 rounded-md flex items-center justify-center overflow-hidden bg-background flex-shrink-0">
+                            <div className={cn(
+                                "w-10 h-10 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0",
+                                isDark ? "bg-gray-800" : "bg-background"
+                            )}>
                                 <img
                                     src={getAppIconUrl(connection.short_name, resolvedTheme)}
                                     alt={connection.name}
@@ -1017,15 +1106,29 @@ const Collections = () => {
                                 />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <span className="text-[18px] font-medium truncate block text-left">{connection.name}</span>
+                                <span className="text-[18px] font-medium truncate block text-left text-foreground">{connection.name}</span>
                             </div>
                         </Button>
                     ))}
                 </div>
 
                 {sourceConnections.length === 0 && (
-                    <div className="text-center py-6 text-muted-foreground">
-                        No source connections found. Add a source connection to get started.
+                    <div className={cn(
+                        "text-center py-6 rounded-md border",
+                        isDark ? "border-gray-700 bg-gray-800/20 text-gray-400" : "border-gray-200 bg-gray-50 text-muted-foreground"
+                    )}>
+                        <p className="mb-2">No source connections found.</p>
+                        <Button
+                            variant="outline"
+                            className={cn(
+                                "mt-2",
+                                isDark ? "border-gray-700 hover:bg-gray-800" : ""
+                            )}
+                            onClick={() => {}}
+                        >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add a source connection
+                        </Button>
                     </div>
                 )}
             </div>
@@ -1036,13 +1139,19 @@ const Collections = () => {
                     <div className="flex justify-between w-full mb-0 -mb-3">
                         <div className="flex gap-2 relative top-3">
                             {/* Entities count div */}
-                            <div className="min-w-[120px] bg-gray-200 px-3 py-2 rounded-md shadow-sm text-center text-[15px] flex items-center justify-center overflow-hidden whitespace-nowrap text-ellipsis h-10">
+                            <div className={cn(
+                                "min-w-[120px] px-3 py-2 rounded-md shadow-sm text-center text-[15px] flex items-center justify-center overflow-hidden whitespace-nowrap text-ellipsis h-10",
+                                isDark ? "bg-gray-800 text-gray-200" : "bg-gray-200 text-gray-800"
+                            )}>
                                 {totalEntities > 0 ? `${totalEntities} total entities` : 'No entities yet'}
                             </div>
 
                             {/* Status div */}
                             {lastSyncJob && (
-                                <div className="min-w-[120px] bg-gray-200 px-3 py-2 rounded-md shadow-sm text-center text-[15px] flex items-center justify-center overflow-hidden whitespace-nowrap text-ellipsis h-10">
+                                <div className={cn(
+                                    "min-w-[120px] px-3 py-2 rounded-md shadow-sm text-center text-[15px] flex items-center justify-center overflow-hidden whitespace-nowrap text-ellipsis h-10",
+                                    isDark ? "bg-gray-800 text-gray-200" : "bg-gray-200 text-gray-800"
+                                )}>
                                     <div className="flex items-center">
                                         <span className={`inline-flex h-2.5 w-2.5 rounded-full mr-1.5
                                             ${lastSyncJob.status === 'completed' ? 'bg-green-500' :
@@ -1270,8 +1379,9 @@ const Collections = () => {
                 open={showDeleteDialog}
                 onOpenChange={setShowDeleteDialog}
                 onConfirm={handleDeleteCollection}
-                includeData={includeData}
-                setIncludeData={setIncludeData}
+                collectionReadableId={collection?.readable_id || ''}
+                confirmText={confirmText}
+                setConfirmText={setConfirmText}
             />
 
             {/* Add SyncProgress component after the entity visualization section */}

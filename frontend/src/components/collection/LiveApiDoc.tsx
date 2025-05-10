@@ -1,10 +1,6 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { apiClient } from '@/lib/api';
-import { Copy, Check, Terminal, Settings, Code } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Terminal, Code } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CodeBlock } from '@/components/ui/code-block';
 import { PythonIcon } from '@/components/icons/PythonIcon';
@@ -13,13 +9,20 @@ import { McpIcon } from '@/components/icons/McpIcon';
 import { ClaudeIcon } from '@/components/icons/ClaudeIcon';
 import { CursorIcon } from '@/components/icons/CursorIcon';
 import { WindsurfIcon } from '@/components/icons/WindsurfIcon';
+import { useTheme } from '@/lib/theme-provider';
 
-export const LiveApiDoc = ({ syncId }) => {
+interface LiveApiDocProps {
+    syncId: string;
+}
+
+export const LiveApiDoc = ({ syncId }: LiveApiDocProps) => {
     // Add new state for tracking view mode (RestAPI or MCP Server)
     const [viewMode, setViewMode] = useState<"restapi" | "mcpserver">("mcpserver");
     // Updated to handle both RestAPI and MCP Server tabs
     const [apiTab, setApiTab] = useState<"rest" | "python" | "node" | "claude" | "cursor" | "windsurf" | "server">("claude");
-    const lastUserMessage = "Your search query here";
+    const { resolvedTheme } = useTheme();
+    const isDark = resolvedTheme === 'dark';
+    const lastUserMessage = "What are the key features of this product?";
 
     // Reset tab when switching view modes to avoid invalid states
     const handleViewModeChange = (mode: "restapi" | "mcpserver") => {
@@ -65,7 +68,11 @@ await client.search.search({
 
         // MCP Server code examples
         const configSnippet =
-            `# MCP Server Configuration
+            `  "mcpServers": {
+    "airweave_${syncId.substring(0, 8)}": {
+      "url": "https://mcp.airweave.ai/airweave/server/${syncId}?agent=cursor"
+    }
+  }
 `;
 
 
@@ -85,13 +92,16 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
     };
 
     const docLinkFooter = (
-        <div className="text-xs flex items-center gap-2 text-white">
-            <span>→</span>
+        <div className="text-xs flex items-center gap-2">
+            <span className={isDark ? "text-gray-400" : "text-gray-500"}>→</span>
             <a
                 href="https://docs.airweave.ai/api-reference/search"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white hover:text-white hover:underline transition-all"
+                className={cn(
+                    "hover:underline transition-all",
+                    isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-700"
+                )}
             >
                 Explore the full API documentation
             </a>
@@ -99,45 +109,57 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
     );
 
     return (
-        <Card className="mb-8 border-none">
-            <CardHeader className="pt-5 pb-1 pl-4">
-                <CardTitle className="text-[18px]">Integrate with the endpoint</CardTitle>
-            </CardHeader>
+        <div className="mb-8">
+            {/* Header with title */}
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-medium text-foreground opacity-90">Integrate with the endpoint</h2>
+                </div>
+            </div>
 
-            <div className="flex w-full">
-                {/* Left 1/4 with view mode buttons */}
-                <div className="w-1/4 pl-4 pr-2 flex flex-col gap-2">
+            <div className="flex w-full flex-col md:flex-row gap-4 opacity-95">
+                {/* Left section with view mode buttons */}
+                <div className="w-full md:w-1/4 flex flex-row md:flex-col gap-3">
                     <Button
-                        variant="ghost"
+                        variant="outline"
                         onClick={() => handleViewModeChange("mcpserver")}
                         className={cn(
-                            "w-full max-w-[200px] justify-start rounded-sm text-sm flex items-center gap-2 bg-white hover:bg-white text-black hover:text-black font-semibold border-[2px]",
-                            viewMode === "mcpserver"
-                                ? "border-black"
-                                : "border-transparent shadow-[inset_0_0_0_1px_rgba(0,0,0,0.3)] hover:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7)]"
+                            "w-full justify-start p-4 rounded-md text-sm flex items-center gap-3 transition-all",
+                            "border-input bg-background text-muted-foreground hover:text-foreground hover:bg-accent/10 dark:border-border dark:bg-card dark:hover:bg-muted",
+                            viewMode === "mcpserver" && "border-primary bg-primary/5 dark:bg-primary/10 text-primary dark:text-primary-foreground font-medium"
                         )}
                     >
-                        MCP Server
+                        <McpIcon className={cn(
+                            "h-5 w-5",
+                            viewMode === "mcpserver" ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <span>MCP Server</span>
                     </Button>
                     <Button
-                        variant="ghost"
+                        variant="outline"
                         onClick={() => handleViewModeChange("restapi")}
                         className={cn(
-                            "w-full max-w-[200px] justify-start rounded-sm text-sm flex items-center gap-2 bg-white hover:bg-white text-black hover:text-black font-semibold border-[2px]",
-                            viewMode === "restapi"
-                                ? "border-black"
-                                : "border-transparent shadow-[inset_0_0_0_1px_rgba(0,0,0,0.3)] hover:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.7)]"
+                            "w-full justify-start p-4 rounded-md text-sm flex items-center gap-3 transition-all",
+                            "border-input bg-background text-muted-foreground hover:text-foreground hover:bg-accent/10 dark:border-border dark:bg-card dark:hover:bg-muted",
+                            viewMode === "restapi" && "border-primary bg-primary/5 dark:bg-primary/10 text-primary dark:text-primary-foreground font-medium"
                         )}
                     >
-                        RestAPI
+                        <Code className={cn(
+                            "h-5 w-5",
+                            viewMode === "restapi" ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <span>RestAPI</span>
                     </Button>
                 </div>
 
-                {/* Right 3/4 content */}
-                <div className="w-3/4">
-                    <div className="bg-black rounded-md p-1">
+                {/* Right content area */}
+                <div className="w-full md:w-3/4">
+                    <div className={cn(
+                        "rounded-lg overflow-hidden border",
+                        isDark ? "bg-gray-900 border-gray-800" : "bg-gray-100 border-gray-200"
+                    )}>
                         {/* Tabs - Different tabs based on view mode */}
-                        <div className="flex space-x-1 p-1 rounded-md mb-1 w-fit">
+                        <div className="flex space-x-1 p-2 w-fit overflow-x-auto border-b border-b-gray-200 dark:border-b-gray-800">
                             {viewMode === "restapi" ? (
                                 <>
                                     <Button
@@ -145,10 +167,13 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                         size="sm"
                                         onClick={() => setApiTab("rest")}
                                         className={cn(
-                                            "rounded-sm text-sm flex items-center gap-2 bg-black hover:bg-black text-white hover:text-white border-[2px]",
+                                            "rounded-md text-sm flex items-center gap-2",
+                                            isDark
+                                                ? "text-gray-200 hover:bg-gray-800/80"
+                                                : "text-gray-700 hover:bg-gray-200/80",
                                             apiTab === "rest"
-                                                ? "border-white"
-                                                : "border-transparent shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.7)]"
+                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                : ""
                                         )}
                                     >
                                         <Terminal className="h-5 w-5" />
@@ -159,10 +184,13 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                         size="sm"
                                         onClick={() => setApiTab("python")}
                                         className={cn(
-                                            "rounded-sm text-sm flex items-center gap-2 bg-black hover:bg-black text-white hover:text-white border-[2px]",
+                                            "rounded-md text-sm flex items-center gap-2",
+                                            isDark
+                                                ? "text-gray-200 hover:bg-gray-800/80"
+                                                : "text-gray-700 hover:bg-gray-200/80",
                                             apiTab === "python"
-                                                ? "border-white"
-                                                : "border-transparent shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.7)]"
+                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                : ""
                                         )}
                                     >
                                         <PythonIcon className="h-5 w-5" />
@@ -173,10 +201,13 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                         size="sm"
                                         onClick={() => setApiTab("node")}
                                         className={cn(
-                                            "rounded-sm text-sm flex items-center gap-2 bg-black hover:bg-black text-white hover:text-white border-[2px]",
+                                            "rounded-md text-sm flex items-center gap-2",
+                                            isDark
+                                                ? "text-gray-200 hover:bg-gray-800/80"
+                                                : "text-gray-700 hover:bg-gray-200/80",
                                             apiTab === "node"
-                                                ? "border-white"
-                                                : "border-transparent shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.7)]"
+                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                : ""
                                         )}
                                     >
                                         <NodeIcon className="h-5 w-5" />
@@ -190,13 +221,16 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                         size="sm"
                                         onClick={() => setApiTab("claude")}
                                         className={cn(
-                                            "rounded-sm text-sm flex items-center gap-2 bg-black hover:bg-black text-white hover:text-white border-[2px]",
+                                            "rounded-md text-sm flex items-center gap-2",
+                                            isDark
+                                                ? "text-gray-200 hover:bg-gray-800/80"
+                                                : "text-gray-700 hover:bg-gray-200/80",
                                             apiTab === "claude"
-                                                ? "border-white"
-                                                : "border-transparent shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.7)]"
+                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                : ""
                                         )}
                                     >
-                                        <ClaudeIcon className="h-8 w-8" />
+                                        <ClaudeIcon className="h-6 w-6" />
                                         <span>Claude</span>
                                     </Button>
                                     <Button
@@ -204,13 +238,16 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                         size="sm"
                                         onClick={() => setApiTab("cursor")}
                                         className={cn(
-                                            "rounded-sm text-sm flex items-center gap-2 bg-black hover:bg-black text-white hover:text-white border-[2px]",
+                                            "rounded-md text-sm flex items-center gap-2",
+                                            isDark
+                                                ? "text-gray-200 hover:bg-gray-800/80"
+                                                : "text-gray-700 hover:bg-gray-200/80",
                                             apiTab === "cursor"
-                                                ? "border-white"
-                                                : "border-transparent shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.7)]"
+                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                : ""
                                         )}
                                     >
-                                        <CursorIcon className="h-7 w-7" />
+                                        <CursorIcon className="h-6 w-6" />
                                         <span>Cursor</span>
                                     </Button>
                                     <Button
@@ -218,10 +255,13 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                         size="sm"
                                         onClick={() => setApiTab("windsurf")}
                                         className={cn(
-                                            "rounded-sm text-sm flex items-center gap-2 bg-black hover:bg-black text-white hover:text-white border-[2px]",
+                                            "rounded-md text-sm flex items-center gap-2",
+                                            isDark
+                                                ? "text-gray-200 hover:bg-gray-800/80"
+                                                : "text-gray-700 hover:bg-gray-200/80",
                                             apiTab === "windsurf"
-                                                ? "border-white"
-                                                : "border-transparent shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.7)]"
+                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                : ""
                                         )}
                                     >
                                         <WindsurfIcon className="h-6 w-6" />
@@ -232,10 +272,13 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                         size="sm"
                                         onClick={() => setApiTab("server")}
                                         className={cn(
-                                            "rounded-sm text-sm flex items-center gap-2 bg-black hover:bg-black text-white hover:text-white border-[2px]",
+                                            "rounded-md text-sm flex items-center gap-2",
+                                            isDark
+                                                ? "text-gray-200 hover:bg-gray-800/80"
+                                                : "text-gray-700 hover:bg-gray-200/80",
                                             apiTab === "server"
-                                                ? "border-white"
-                                                : "border-transparent shadow-[inset_0_0_0_1px_rgba(255,255,255,0.3)] hover:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.7)]"
+                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                : ""
                                         )}
                                     >
                                         <McpIcon className="h-5 w-5" />
@@ -245,7 +288,7 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                             )}
                         </div>
 
-                        {/* Tab Content - Different content based on both view mode and tab */}
+                        {/* Tab Content */}
                         <div className="h-[250px]">
                             {viewMode === "restapi" && (
                                 <>
@@ -258,7 +301,7 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                             title="/search"
                                             footerContent={docLinkFooter}
                                             height="100%"
-                                            className="h-full"
+                                            className="h-full rounded-none border-none"
                                         />
                                     )}
 
@@ -271,7 +314,7 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                             title="AirweaveSDK"
                                             footerContent={docLinkFooter}
                                             height="100%"
-                                            className="h-full"
+                                            className="h-full rounded-none border-none"
                                         />
                                     )}
 
@@ -284,7 +327,7 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                             title="AirweaveSDKClient"
                                             footerContent={docLinkFooter}
                                             height="100%"
-                                            className="h-full"
+                                            className="h-full rounded-none border-none"
                                         />
                                     )}
                                 </>
@@ -301,7 +344,7 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                             title="MCP Server Configuration"
                                             footerContent={docLinkFooter}
                                             height="100%"
-                                            className="h-full"
+                                            className="h-full rounded-none border-none"
                                         />
                                     )}
 
@@ -314,7 +357,7 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                             title="MCP Server Configuration"
                                             footerContent={docLinkFooter}
                                             height="100%"
-                                            className="h-full"
+                                            className="h-full rounded-none border-none"
                                         />
                                     )}
 
@@ -327,7 +370,7 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                             title="MCP Server Configuration"
                                             footerContent={docLinkFooter}
                                             height="100%"
-                                            className="h-full"
+                                            className="h-full rounded-none border-none"
                                         />
                                     )}
 
@@ -340,7 +383,7 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                                             title="MCP Command Line"
                                             footerContent={docLinkFooter}
                                             height="100%"
-                                            className="h-full"
+                                            className="h-full rounded-none border-none"
                                         />
                                     )}
                                 </>
@@ -349,6 +392,6 @@ mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
                     </div>
                 </div>
             </div>
-        </Card>
+        </div>
     );
 };

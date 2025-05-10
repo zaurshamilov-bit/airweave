@@ -7,3 +7,7 @@ export * from "./DocsCard";
 export * from "./CreateSyncCTA";
 export { ResourceCards, ResourceCard } from "./ResourceCards";
 export * from "./SyncTableComponent";
+export * from './CollectionCard';
+export * from './SourceButton';
+export * from './ApiKeyCard';
+export * from './ExampleProjectCard';

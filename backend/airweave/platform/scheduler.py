@@ -398,8 +398,8 @@ class PlatformScheduler:
             sync_job_schema = schemas.SyncJob.model_validate(sync_job)
             sync_dag_schema = schemas.SyncDag.model_validate(sync_dag)
             collection = schemas.Collection.model_validate(collection, from_attributes=True)
-            source_connection = schemas.SourceConnection.model_validate(
-                source_connection, from_attributes=True
+            source_connection = schemas.SourceConnection.from_orm_with_collection_mapping(
+                source_connection
             )
 
             # Run the sync using the original user

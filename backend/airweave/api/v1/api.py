@@ -12,7 +12,6 @@ from airweave.api.v1.endpoints import (
     embedding_models,
     entities,
     health,
-    search,
     source_connections,
     sources,
     sync,
@@ -38,7 +37,6 @@ api_router.include_router(
     source_connections.router, prefix="/source-connections", tags=["source_connections"]
 )
 api_router.include_router(sync.router, prefix="/sync", tags=["sync"])
-api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(white_label.router, prefix="/white_labels", tags=["white_labels"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(dag.router, prefix="/dag", tags=["dag"])

@@ -9,7 +9,7 @@ from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
-from airweave.core.search_service import search_service
+from airweave.core.search_service import ResponseType, search_service
 from airweave.models.user import User
 
 router = TrailingSlashRouter()
@@ -111,14 +111,32 @@ async def delete_collection(
     return await crud.collection.remove(db, id=db_obj.id, current_user=current_user)
 
 
-@router.get("/{readable_id}/search", response_model=List[dict])
+@router.get("/{readable_id}/search", response_model=schemas.SearchResponse)
 async def search_collection(
     readable_id: str,
     query: str = Query(..., description="Search query"),
+    response_type: ResponseType = Query(
+        ResponseType.RAW, description="Type of response: raw search results or AI completion"
+    ),
     db: AsyncSession = Depends(deps.get_db),
     current_user: User = Depends(deps.get_user),
-) -> List[dict]:
-    """Search within a collection identified by readable ID."""
-    return await search_service.search(
-        db, readable_id=readable_id, query=query, current_user=current_user
+) -> schemas.SearchResponse:
+    """Search within a collection identified by readable ID.
+
+    Args:
+        readable_id: The readable ID of the collection to search
+        query: The search query
+        response_type: Type of response (raw results or AI completion)
+        db: The database session
+        current_user: The current user
+
+    Returns:
+        dict: Search results or AI completion response
+    """
+    return await search_service.search_with_completion(
+        db,
+        readable_id=readable_id,
+        query=query,
+        current_user=current_user,
+        response_type=response_type,
     )

@@ -65,6 +65,7 @@ from .organization import (
     OrganizationInDBBase,
     OrganizationUpdate,
 )
+from .search import SearchResponse
 from .source import (
     Source,
     SourceCreate,

@@ -23,10 +23,11 @@ import { GradientBackground, GradientCard } from "@/components/ui/gradient-backg
 import { DiscordIcon } from "@/components/ui/discord-icon";
 import { cn } from "@/lib/utils";
 import { UserProfileDropdown } from "@/components/UserProfileDropdown";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { apiClient } from "@/lib/api";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_UPDATED } from "@/lib/events";
 
 // Interface for Collection type
 interface Collection {
@@ -55,31 +56,55 @@ const DashboardLayout = () => {
   const isNonScrollable = nonScrollableRoutes.some(route =>
     location.pathname === route || location.pathname.startsWith('/chat/'));
 
-  // Fetch collections from the API
-  useEffect(() => {
-    const fetchCollections = async () => {
-      setIsLoadingCollections(true);
-      setCollectionError(null);
+  // Function to fetch collections from the API
+  const fetchCollections = useCallback(async () => {
+    setIsLoadingCollections(true);
+    setCollectionError(null);
 
-      try {
-        const response = await apiClient.get('/collections');
+    try {
+      const response = await apiClient.get('/collections');
 
-        if (response.ok) {
-          const data = await response.json();
-          setCollections(data);
-        } else {
-          const errorText = await response.text();
-          setCollectionError(`Failed to load collections: ${errorText}`);
-        }
-      } catch (err) {
-        setCollectionError(`An error occurred: ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        setIsLoadingCollections(false);
+      if (response.ok) {
+        const data = await response.json();
+        setCollections(data);
+      } else {
+        const errorText = await response.text();
+        setCollectionError(`Failed to load collections: ${errorText}`);
       }
-    };
-
-    fetchCollections();
+    } catch (err) {
+      setCollectionError(`An error occurred: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsLoadingCollections(false);
+    }
   }, []);
+
+  // Initial fetch of collections
+  useEffect(() => {
+    fetchCollections();
+  }, [fetchCollections]);
+
+  // Listen for collection events to refresh the list
+  useEffect(() => {
+    // Subscribe to collection events
+    const unsubscribeDeleted = onCollectionEvent(COLLECTION_DELETED, () => {
+      fetchCollections();
+    });
+
+    const unsubscribeCreated = onCollectionEvent(COLLECTION_CREATED, () => {
+      fetchCollections();
+    });
+
+    const unsubscribeUpdated = onCollectionEvent(COLLECTION_UPDATED, () => {
+      fetchCollections();
+    });
+
+    // Cleanup event listeners
+    return () => {
+      unsubscribeDeleted();
+      unsubscribeCreated();
+      unsubscribeUpdated();
+    };
+  }, [fetchCollections]);
 
   const handleCreateCollection = () => {
     navigate('/collections/create');
@@ -116,13 +141,17 @@ const DashboardLayout = () => {
       <ScrollArea className="flex-1 px-3 py-1">
         <div className="space-y-6">
           {/* Create Collection Button */}
-          <Button
-            onClick={handleCreateCollection}
-            className="w-full flex items-center justify-center gap-2 bg-transparent border-2 border-primary text-primary hover:bg-primary hover:text-white font-medium rounded-xl transition-all duration-200"
-          >
-            <Plus className="h-4 w-4" />
-            Create collection
-          </Button>
+          <div className="pb-2 pt-1 px-2">
+            <Button
+              onClick={handleCreateCollection}
+              variant="outline"
+              size="sm"
+              className="flex items-center justify-start pl-6 w-full gap-1.5 text-sm text-primary hover:bg-primary/10 bg-background border border-primary/60 hover:text-primary rounded-md py-1.5 font-medium transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Create collection
+            </Button>
+          </div>
 
           {/* Collections Section */}
           <Collapsible
