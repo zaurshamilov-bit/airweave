@@ -17,7 +17,9 @@
 
 <div align="center">
   
-### 🎥 [Watch Demo](https://github.com/user-attachments/assets/abdf85cb-a8f5-4b6c-b5a3-d4b5177e6bda)
+### 🎥 Watch Demo
+
+https://github.com/user-attachments/assets/abdf85cb-a8f5-4b6c-b5a3-d4b5177e6bda
 
 </div>
 
