@@ -88,14 +88,6 @@ class SourceConnectionCreate(SourceConnectionBase):
         return core_attrs, auxiliary_attrs
 
 
-class SourceConnectionCreateWithRelatedIds(SourceConnectionCreate):
-    """Schema for creating a source connection with a connection."""
-
-    connection_id: UUID
-    readable_collection_id: str
-    sync_id: UUID
-
-
 class SourceConnectionUpdate(BaseModel):
     """Schema for updating a source connection."""
 

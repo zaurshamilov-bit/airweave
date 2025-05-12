@@ -38,8 +38,7 @@ interface SourceConnection {
 
 // API Key type
 interface APIKey {
-  key_prefix: string;
-  plain_key?: string;
+  decrypted_key: string;
 }
 
 const Dashboard = () => {

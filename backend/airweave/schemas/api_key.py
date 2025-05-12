@@ -101,8 +101,7 @@ class APIKeyInDBBase(APIKeyBase):
     """Base schema for APIKey stored in DB."""
 
     id: UUID
-    key_prefix: str
-    organization: UUID  # Changed from Optional[UUID] to UUID
+    organization: UUID
     created_at: datetime
     modified_at: datetime
     last_used_date: Optional[datetime] = None
@@ -116,18 +115,12 @@ class APIKeyInDBBase(APIKeyBase):
         from_attributes = True
 
 
-class APIKeyWithPlainKey(APIKeyInDBBase):
-    """Schema for APIKey with plain key."""
+class APIKey(APIKeyInDBBase):
+    """Schema for API keys returned to clients - includes decrypted key."""
 
-    plain_key: str
+    decrypted_key: str
 
     class Config:
-        """Pydantic config for APIKeyWithPlainKey."""
+        """Pydantic config for APIKey."""
 
         from_attributes = True
-
-
-class APIKey(APIKeyInDBBase):
-    """Schema for APIKey."""
-
-    pass

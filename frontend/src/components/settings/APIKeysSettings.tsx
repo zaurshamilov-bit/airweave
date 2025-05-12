@@ -11,11 +11,10 @@ import { apiClient } from "@/lib/api";
 
 interface APIKey {
   id: string;
-  key_prefix: string;
   created_at: string;
   last_used_date: string | null;
   expiration_date: string;
-  plain_key?: string;
+  decrypted_key: string;
 }
 
 export function APIKeysSettings() {
@@ -74,7 +73,6 @@ export function APIKeysSettings() {
 
       // Add to list but don't show the plain key in regular list
       const keyForList = { ...newKey } as APIKey;
-      delete keyForList.plain_key;
       setApiKeys([keyForList, ...apiKeys]);
 
       toast.success("API key created successfully");
@@ -216,7 +214,7 @@ export function APIKeysSettings() {
           </div>
 
           {/* Newly created key alert */}
-          {newlyCreatedKey && newlyCreatedKey.plain_key && (
+          {newlyCreatedKey && newlyCreatedKey.decrypted_key && (
             <div className="my-4 rounded-lg border bg-primary/5 border-primary/20 p-4">
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-full bg-primary/10">
@@ -231,17 +229,17 @@ export function APIKeysSettings() {
                   <div className="flex items-stretch gap-2 mt-2">
                     <Input
                       type="text"
-                      value={newlyCreatedKey.plain_key}
+                      value={newlyCreatedKey.decrypted_key}
                       readOnly
                       className="font-mono bg-background border-primary/20 text-sm h-9"
                     />
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleCopyKey(newlyCreatedKey.plain_key || "")}
+                      onClick={() => handleCopyKey(newlyCreatedKey.decrypted_key || "")}
                       className="border-primary/20 hover:bg-primary/10 hover:text-primary"
                     >
-                      {copySuccess === newlyCreatedKey.plain_key ? (
+                      {copySuccess === newlyCreatedKey.decrypted_key ? (
                         <CheckCircle className="h-4 w-4" />
                       ) : (
                         <Copy className="h-4 w-4" />
@@ -306,9 +304,22 @@ export function APIKeysSettings() {
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-2">
-                                    <h4 className="font-medium text-sm">
-                                      {apiKey.key_prefix}...
+                                    <h4 className="font-medium text-sm font-mono">
+                                      {apiKey.decrypted_key}
                                     </h4>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 text-xs"
+                                      onClick={() => handleCopyKey(apiKey.decrypted_key)}
+                                    >
+                                      {copySuccess === apiKey.decrypted_key ? (
+                                        <CheckCircle className="h-3 w-3 mr-1" />
+                                      ) : (
+                                        <Copy className="h-3 w-3 mr-1" />
+                                      )}
+                                      Copy
+                                    </Button>
                                   </div>
                                 </div>
                               </div>

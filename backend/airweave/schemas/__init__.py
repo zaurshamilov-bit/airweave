@@ -6,7 +6,6 @@ from .api_key import (
     APIKeyCreate,
     APIKeyInDBBase,
     APIKeyUpdate,
-    APIKeyWithPlainKey,
 )
 from .chat import Chat, ChatCreate, ChatMessage, ChatMessageCreate, ChatUpdate
 from .collection import (
@@ -76,7 +75,6 @@ from .source import (
 from .source_connection import (
     SourceConnection,
     SourceConnectionCreate,
-    SourceConnectionCreateWithRelatedIds,
     SourceConnectionInDBBase,
     SourceConnectionListItem,
     SourceConnectionUpdate,

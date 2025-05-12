@@ -6,8 +6,7 @@ import { toast } from "sonner";
 
 interface ApiKeyCardProps {
   apiKey: {
-    key_prefix: string;
-    plain_key?: string;
+    decrypted_key?: string;
   } | null;
   onRequestNewKey?: () => void;
 }
@@ -16,8 +15,8 @@ export const ApiKeyCard = ({ apiKey, onRequestNewKey }: ApiKeyCardProps) => {
   const [copySuccess, setCopySuccess] = useState(false);
 
   const handleCopyApiKey = () => {
-    if (apiKey?.plain_key) {
-      navigator.clipboard.writeText(apiKey.plain_key);
+    if (apiKey?.decrypted_key) {
+      navigator.clipboard.writeText(apiKey.decrypted_key);
       setCopySuccess(true);
       toast.success("API key copied to clipboard");
       setTimeout(() => setCopySuccess(false), 2000);
@@ -34,7 +33,7 @@ export const ApiKeyCard = ({ apiKey, onRequestNewKey }: ApiKeyCardProps) => {
         <p className="text-xs text-muted-foreground mb-4">Store your API keys securely away</p>
         <div className="flex items-center">
           <Input
-            value={apiKey?.plain_key || `tc-${Array(30).fill("*").join("")}0007`}
+            value={apiKey?.decrypted_key || `tc-${Array(30).fill("*").join("")}0007`}
             className="text-xs font-mono h-9 bg-muted border-border"
             readOnly
           />

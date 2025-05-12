@@ -328,29 +328,13 @@ class SourceConnectionService:
                     else:
                         source_connection_schema.auth_fields = "********"
 
-        # 2. Load sync information and latest job status if it exists
-        if source_connection.sync_id:
-            # Get detailed sync information
-            sync = await crud.sync.get(
-                db=db, id=source_connection.sync_id, current_user=current_user
-            )
-
-            if sync:
-                # Get the most recent sync job
-                latest_jobs = await sync_service.list_sync_jobs(
-                    db=db,
-                    current_user=current_user,
-                    sync_id=source_connection.sync_id,
-                    limit=1,  # Just get the latest job
-                )
-
-                if latest_jobs:
-                    latest_job = latest_jobs[0]
-                    # Add latest job info to the source connectio
-                    source_connection_schema.latest_sync_job_status = latest_job.status
-                    source_connection_schema.latest_sync_job_id = latest_job.id
-                    source_connection_schema.latest_sync_job_started_at = latest_job.started_at
-                    source_connection_schema.latest_sync_job_completed_at = latest_job.completed_at
+        # Before returning, add a log to see what's actually being sent
+        logger.info(
+            "\nRETURNING SOURCE CONNECTION: "
+            f"latest_sync_job_id={source_connection_schema.latest_sync_job_id},\n"
+            "all job info="
+            f"{source_connection_schema if 'source_connection_schema' in locals() else 'None'}\n"
+        )
 
         return source_connection_schema
 

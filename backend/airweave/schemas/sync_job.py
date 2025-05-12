@@ -91,9 +91,11 @@ class SyncJob(SyncJobInDBBase):
             entities_deleted=self.entities_deleted,
             entities_kept=self.entities_kept,
             entities_skipped=self.entities_skipped,
+            entities_encountered=self.entities_encountered,
             started_at=self.started_at,
             completed_at=self.completed_at,
             failed_at=self.failed_at,
+            error=self.error,
         )
 
 
@@ -117,6 +119,7 @@ class SourceConnectionJob(BaseModel):
     entities_deleted: Optional[int] = 0
     entities_kept: Optional[int] = 0
     entities_skipped: Optional[int] = 0
+    entities_encountered: Optional[dict[str, int]] = {}
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     failed_at: Optional[datetime] = None

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Terminal, Code } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -10,6 +10,7 @@ import { ClaudeIcon } from '@/components/icons/ClaudeIcon';
 import { CursorIcon } from '@/components/icons/CursorIcon';
 import { WindsurfIcon } from '@/components/icons/WindsurfIcon';
 import { useTheme } from '@/lib/theme-provider';
+import { apiClient } from '@/lib/api';
 
 interface LiveApiDocProps {
     syncId: string;
@@ -23,6 +24,31 @@ export const LiveApiDoc = ({ syncId }: LiveApiDocProps) => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
     const lastUserMessage = "What are the key features of this product?";
+    const [apiKey, setApiKey] = useState<string>("YOUR_API_KEY");
+    const [isLoadingApiKey, setIsLoadingApiKey] = useState(true);
+
+    // Fetch API key
+    useEffect(() => {
+        const fetchApiKey = async () => {
+            setIsLoadingApiKey(true);
+            try {
+                const response = await apiClient.get("/api-keys");
+                if (response.ok) {
+                    const data = await response.json();
+                    // Get the first API key if available
+                    if (Array.isArray(data) && data.length > 0 && data[0].decrypted_key) {
+                        setApiKey(data[0].decrypted_key);
+                    }
+                }
+            } catch (err) {
+                console.error("Error fetching API key:", err);
+            } finally {
+                setIsLoadingApiKey(false);
+            }
+        };
+
+        fetchApiKey();
+    }, []);
 
     // Reset tab when switching view modes to avoid invalid states
     const handleViewModeChange = (mode: "restapi" | "mcpserver") => {
@@ -40,16 +66,22 @@ export const LiveApiDoc = ({ syncId }: LiveApiDocProps) => {
         const apiUrl = `${baseUrl}/search`;
 
         // Create the cURL command
-        const curlSnippet = `curl -G ${apiUrl}/ \\
-         -d sync_id="${syncId}" \\
-         -d query="${lastUserMessage}"`;
+        const curlSnippet = `curl -X 'POST' \\
+  '${apiUrl}' \\
+  -H 'accept: application/json' \\
+  -H 'x-api-key: ${apiKey}' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+  "sync_id": "${syncId}",
+  "query": "${lastUserMessage}"
+}'`;
 
         // Create the Python code
         const pythonSnippet =
             `from airweave import AirweaveSDK
 
 client = AirweaveSDK(
-    api_key="YOUR_API_KEY",
+    api_key="${apiKey}",
 )
 client.search.search(
     sync_id="${syncId}",
@@ -60,7 +92,7 @@ client.search.search(
         const nodeSnippet =
             `import { AirweaveSDKClient } from "@airweave/sdk";
 
-const client = new AirweaveSDKClient({ apiKey: "YOUR_API_KEY" });
+const client = new AirweaveSDKClient({ apiKey: "${apiKey}" });
 await client.search.search({
     syncId: "${syncId}",
     query: "${lastUserMessage}"
@@ -78,7 +110,7 @@ await client.search.search({
 
         const cliSnippet =
             `# MCP Server CLI
-mcp-cli connect --server localhost:8000 --auth-token YOUR_API_KEY
+mcp-cli connect --server localhost:8000 --auth-token ${apiKey}
 mcp-cli query search --sync-id ${syncId} --query "${lastUserMessage}"
 `;
 

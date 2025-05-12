@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from airweave.crud._base import CRUDBase
-from airweave.models.api_key import APIKey
 from airweave.models.user import User
 from airweave.schemas.user import UserCreate, UserUpdate
 
@@ -173,20 +172,18 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         return result.scalar_one_or_none() or updated_user
 
     async def get_by_api_key(self, db: AsyncSession, *, api_key: str) -> Optional[User]:
-        """Get a user by API key."""
-        # Hash the provided key to compare against stored SHA256-hashed keys
-        from hashlib import sha256
+        """Get a user by API key using the encrypted key validation."""
+        try:
+            # Use the crud_api_key function that handles decryption
+            from airweave.crud.crud_api_key import api_key as crud_api_key
 
-        hashed_key = sha256(api_key.encode()).hexdigest()
-        # Join User with APIKey to find the user associated with this hashed key
-        stmt = (
-            select(User)
-            .join(APIKey, User.email == APIKey.created_by_email)
-            .where(APIKey.key == hashed_key)
-            .options(selectinload(User.organization))
-        )
-        result = await db.execute(stmt)
-        return result.scalar_one_or_none()
+            # This will handle the decryption and validation
+            api_key_obj = await crud_api_key.get_by_key(db, key=api_key)
+
+            # Get the user by email
+            return await self.get_by_email(db, email=api_key_obj.created_by_email)
+        except Exception:
+            return None
 
 
 user = CRUDUser(User)
