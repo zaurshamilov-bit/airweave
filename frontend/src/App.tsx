@@ -38,8 +38,6 @@ function App() {
           <Route path="/sync">
             <Route index element={<SyncTableView />} />
             <Route path="create" element={<SyncCreate />} />
-            <Route path=":id" element={<ViewEditSync />} />
-            <Route path=":id/job/:jobId" element={<ViewEditSync />} />
           </Route>
 
           <Route path="/sources" element={<Sources />} />
