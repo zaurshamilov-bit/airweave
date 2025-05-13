@@ -193,24 +193,38 @@ const DashboardLayout = () => {
                 ) : collections.length === 0 ? (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">No collections</div>
                 ) : (
-                  collections.map((collection) => (
-                    <Link
-                      key={collection.id}
-                      to={`/collections/${collection.readable_id}`}
-                      className={cn(
-                        "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
-                        isActive(`/collections/${collection.readable_id}`)
-                          ? "text-primary font-medium bg-primary/5"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
-                      )}
-                    >
-                      {isActive(`/collections/${collection.readable_id}`) && (
-                        <div className="absolute left-[-2px] top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
-                      )}
-                      <LayoutGrid className="mr-2 h-3.5 w-3.5 opacity-70" />
-                      <span className="truncate">{collection.name}</span>
-                    </Link>
-                  ))
+                  <>
+                    {/* Display maximum 20 collections */}
+                    {collections.slice(0, 20).map((collection) => (
+                      <Link
+                        key={collection.id}
+                        to={`/collections/${collection.readable_id}`}
+                        className={cn(
+                          "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
+                          isActive(`/collections/${collection.readable_id}`)
+                            ? "text-primary font-medium bg-primary/5"
+                            : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+                        )}
+                      >
+                        {isActive(`/collections/${collection.readable_id}`) && (
+                          <div className="absolute left-[-2px] top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
+                        )}
+                        <LayoutGrid className="mr-2 h-3.5 w-3.5 opacity-70" />
+                        <span className="truncate">{collection.name}</span>
+                      </Link>
+                    ))}
+
+                    {/* Show "See more" link if there are more than 20 collections */}
+                    {collections.length > 20 && (
+                      <Link
+                        to="/collections"
+                        className="flex items-center px-2 py-1.5 text-sm rounded-md text-primary hover:text-primary/80 hover:bg-accent/30 mt-1"
+                      >
+                        <ExternalLink className="mr-2 h-3.5 w-3.5 opacity-70" />
+                        <span>See all ({collections.length})</span>
+                      </Link>
+                    )}
+                  </>
                 )}
               </div>
             </CollapsibleContent>

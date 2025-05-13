@@ -131,6 +131,9 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
     });
     const [nextRunTime, setNextRunTime] = useState<string | null>(null);
 
+    // Add this near other useRef declarations:
+    const flowContainerRef = useRef<HTMLDivElement>(null);
+
     /********************************************
      * COMPUTED VALUES & DERIVED STATE
      ********************************************/
@@ -640,7 +643,7 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
         if (reactFlowInstance) {
             reactFlowInstance.fitView({
                 padding: 0.2,
-                duration: 200
+                duration: 0
             });
         }
     }, [nodes, edges, reactFlowInstance]);
@@ -681,6 +684,28 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
             });
         }
     }, [updates, latestUpdate, lastSyncJob?.id]);
+
+    // Add this effect to handle resizing
+    useEffect(() => {
+        if (!reactFlowInstance || !flowContainerRef.current) return;
+
+        const resizeObserver = new ResizeObserver(() => {
+            setTimeout(() => {
+                reactFlowInstance.fitView({
+                    padding: 0.2,
+                    duration: 0
+                });
+            }, 0);
+        });
+
+        resizeObserver.observe(flowContainerRef.current);
+
+        return () => {
+            if (flowContainerRef.current) {
+                resizeObserver.unobserve(flowContainerRef.current);
+            }
+        };
+    }, [reactFlowInstance]);
 
     console.log(`[PubSub] Data source for job ${lastSyncJob?.id}: ${isShowingRealtimeUpdates ? 'LIVE UPDATES' : 'DATABASE'}`);
 
@@ -803,7 +828,10 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                         </CardHeader>
                         <CardContent className="p-1 pb-4">
                             {/* Flow Diagram */}
-                            <div className="h-[200px] -mt-4 w-full overflow-hidden">
+                            <div
+                                ref={flowContainerRef}
+                                className="h-[calc(200px+5vw)] min-h-[200px] max-h-[300px] -mt-4 w-full overflow-hidden"
+                            >
                                 <ReactFlow
                                     nodes={nodes}
                                     edges={edges}
@@ -815,7 +843,7 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                                         padding: 0.2,
                                         minZoom: 0.1,
                                         maxZoom: 1.5,
-                                        duration: 200
+                                        duration: 0
                                     }}
                                     onInit={setReactFlowInstance}
                                     defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}

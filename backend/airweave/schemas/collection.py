@@ -87,7 +87,12 @@ class CollectionCreate(CollectionBase):
 class CollectionUpdate(BaseModel):
     """Schema for updating a collection."""
 
-    name: Optional[str] = None
+    name: Optional[str] = Field(
+        None,
+        description="Display name for the collection",
+        min_length=4,
+        max_length=64,
+    )
 
 
 class CollectionInDBBase(CollectionBase):
