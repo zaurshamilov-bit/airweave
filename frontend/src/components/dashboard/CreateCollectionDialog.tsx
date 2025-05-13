@@ -17,6 +17,9 @@ import {
     DialogContent,
     DialogPortal,
     DialogOverlay,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
@@ -347,155 +350,153 @@ export const CreateCollectionDialog: React.FC<CreateCollectionDialogProps> = ({
             }}>
                 <DialogPortal>
                     <DialogOverlay className="bg-black/75" />
-                    <div className="fixed inset-0 z-50 flex items-center justify-center">
-                        <div className={cn(
-                            "w-[600px] p-8 max-w-[90vw] max-h-[90vh] overflow-auto rounded-xl border",
-                            isDark
-                                ? "bg-background border-gray-800"
-                                : "bg-background border-gray-200"
-                        )}>
-                            {/* Heading */}
-                            <h1 className="text-4xl font-semibold text-left mb-10">
-                                Create collection
-                            </h1>
+                    <DialogContent className={cn(
+                        "w-[600px] p-8 max-w-[90vw] max-h-[90vh] overflow-auto rounded-xl border",
+                        isDark
+                            ? "bg-background border-gray-800"
+                            : "bg-background border-gray-200"
+                    )}>
+                        {/* Heading */}
+                        <DialogTitle className="text-4xl font-semibold text-left mb-10">
+                            Create collection
+                        </DialogTitle>
 
-                            {/* Source Icon */}
-                            <div className="flex justify-center mb-16">
-                                <div className={cn(
-                                    "w-36 h-36 flex items-center justify-center border border-black rounded-lg p-2",
-                                    isDark ? "border-gray-700" : "border-gray-800"
-                                )}>
-                                    <img
-                                        src={getAppIconUrl(sourceShortName, resolvedTheme)}
-                                        alt={`${sourceName} icon`}
-                                        className="w-full h-full object-contain"
-                                        onError={(e) => {
-                                            console.log("🖼️ [CreateCollectionDialog] Image error, using fallback");
-                                            e.currentTarget.style.display = 'none';
-                                            e.currentTarget.parentElement!.innerHTML = `
-                                                <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'
-                                                }">
-                                                    <span class="text-4xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'
-                                                }">
-                                                        ${sourceShortName.substring(0, 2).toUpperCase()}
-                                                    </span>
-                                                </div>
-                                            `;
-                                        }}
+                        {/* Source Icon */}
+                        <div className="flex justify-center mb-16">
+                            <div className={cn(
+                                "w-36 h-36 flex items-center justify-center border border-black rounded-lg p-2",
+                                isDark ? "border-gray-700" : "border-gray-800"
+                            )}>
+                                <img
+                                    src={getAppIconUrl(sourceShortName, resolvedTheme)}
+                                    alt={`${sourceName} icon`}
+                                    className="w-full h-full object-contain"
+                                    onError={(e) => {
+                                        console.log("🖼️ [CreateCollectionDialog] Image error, using fallback");
+                                        e.currentTarget.style.display = 'none';
+                                        e.currentTarget.parentElement!.innerHTML = `
+                                            <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'
+                                            }">
+                                                <span class="text-4xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'
+                                            }">
+                                                    ${sourceShortName.substring(0, 2).toUpperCase()}
+                                                </span>
+                                            </div>
+                                        `;
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Form */}
+                        <form onSubmit={(e) => {
+                            console.log("📝 [CreateCollectionDialog] Form submit event triggered");
+                            form.handleSubmit(onSubmit)(e);
+                        }} className="space-y-4">
+                            {/* Name field */}
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium ml-1">name</label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        className={cn(
+                                            "w-full py-2 px-3 rounded-md border bg-transparent pr-10",
+                                            isDark
+                                                ? "border-gray-700 focus:border-blue-500"
+                                                : "border-gray-300 focus:border-blue-500",
+                                            "focus:outline-none"
+                                        )}
+                                        value={nameValue}
+                                        onChange={handleNameChange}
+                                        placeholder="My Collection"
                                     />
+                                    <Pencil className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-70" />
                                 </div>
+                                {form.formState.errors.name && (
+                                    <p className="text-sm text-red-500 mt-1">
+                                        {form.formState.errors.name.message}
+                                    </p>
+                                )}
                             </div>
 
-                            {/* Form */}
-                            <form onSubmit={(e) => {
-                                console.log("📝 [CreateCollectionDialog] Form submit event triggered");
-                                form.handleSubmit(onSubmit)(e);
-                            }} className="space-y-4">
-                                {/* Name field */}
-                                <div className="space-y-1">
-                                    <label className="text-sm font-medium ml-1">name</label>
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            className={cn(
-                                                "w-full py-2 px-3 rounded-md border bg-transparent pr-10",
-                                                isDark
-                                                    ? "border-gray-700 focus:border-blue-500"
-                                                    : "border-gray-300 focus:border-blue-500",
-                                                "focus:outline-none"
-                                            )}
-                                            value={nameValue}
-                                            onChange={handleNameChange}
-                                            placeholder="My Collection"
-                                        />
-                                        <Pencil className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-70" />
-                                    </div>
-                                    {form.formState.errors.name && (
-                                        <p className="text-sm text-red-500 mt-1">
-                                            {form.formState.errors.name.message}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {/* Readable ID field */}
-                                <div className="space-y-1">
-                                    <label className="text-sm font-medium ml-1">readable id</label>
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            className={cn(
-                                                "w-full py-2 px-3 rounded-md border bg-transparent pr-10",
-                                                isDark
-                                                    ? "border-gray-700 focus:border-blue-500"
-                                                    : "border-gray-300 focus:border-blue-500",
-                                                "focus:outline-none"
-                                            )}
-                                            value={readableIdValue}
-                                            onChange={handleReadableIdChange}
-                                            placeholder="Auto-generated"
-                                        />
-                                        <Pencil className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-70" />
-                                    </div>
-                                    {form.formState.errors.readable_id && (
-                                        <p className="text-sm text-red-500 mt-1">
-                                            {form.formState.errors.readable_id.message}
-                                        </p>
-                                    )}
-                                </div>
-
-                                {/* Message about next steps */}
-                                <div className={cn(
-                                    "flex items-start space-x-2 rounded-md border p-3 mt-3",
-                                    isDark
-                                        ? "bg-blue-900/30 border-blue-800 text-blue-300"
-                                        : "bg-blue-50 border-blue-200 text-blue-800"
-                                )}>
-                                    <Info size={18} className={cn(
-                                        "mt-0.5",
-                                        isDark ? "text-blue-400" : "text-blue-500"
-                                    )} />
-                                    <div className="text-sm">
-                                        {getInfoMessage()}
-                                    </div>
-                                </div>
-
-                                {/* Actions */}
-                                <div className="flex justify-end gap-3 pt-0">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => {
-                                            console.log("🔄 [CreateCollectionDialog] Cancel button clicked");
-                                            onClose();
-                                        }}
+                            {/* Readable ID field */}
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium ml-1">readable id</label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
                                         className={cn(
-                                            "px-6",
-                                            isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
+                                            "w-full py-2 px-3 rounded-md border bg-transparent pr-10",
+                                            isDark
+                                                ? "border-gray-700 focus:border-blue-500"
+                                                : "border-gray-300 focus:border-blue-500",
+                                            "focus:outline-none"
                                         )}
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        type="submit"
-                                        disabled={isSubmitting || isCheckingSource}
-                                        className="px-6 bg-blue-600 hover:bg-blue-700 text-white"
-                                        onClick={() => {
-                                            console.log("🔄 [CreateCollectionDialog] Create button clicked");
-                                        }}
-                                    >
-                                        {isSubmitting || isCheckingSource ? (
-                                            <>
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                Creating...
-                                            </>
-                                        ) : (
-                                            "Create"
-                                        )}
-                                    </Button>
+                                        value={readableIdValue}
+                                        onChange={handleReadableIdChange}
+                                        placeholder="Auto-generated"
+                                    />
+                                    <Pencil className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-70" />
                                 </div>
-                            </form>
-                        </div>
-                    </div>
+                                {form.formState.errors.readable_id && (
+                                    <p className="text-sm text-red-500 mt-1">
+                                        {form.formState.errors.readable_id.message}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Message about next steps */}
+                            <div className={cn(
+                                "flex items-start space-x-2 rounded-md border p-3 mt-3",
+                                isDark
+                                    ? "bg-blue-900/30 border-blue-800 text-blue-300"
+                                    : "bg-blue-50 border-blue-200 text-blue-800"
+                            )}>
+                                <Info size={18} className={cn(
+                                    "mt-0.5",
+                                    isDark ? "text-blue-400" : "text-blue-500"
+                                )} />
+                                <DialogDescription className="text-sm">
+                                    {getInfoMessage()}
+                                </DialogDescription>
+                            </div>
+
+                            {/* Actions */}
+                            <DialogFooter className="flex justify-end gap-3 pt-0">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => {
+                                        console.log("🔄 [CreateCollectionDialog] Cancel button clicked");
+                                        onClose();
+                                    }}
+                                    className={cn(
+                                        "px-6",
+                                        isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
+                                    )}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={isSubmitting || isCheckingSource}
+                                    className="px-6 bg-blue-600 hover:bg-blue-700 text-white"
+                                    onClick={() => {
+                                        console.log("🔄 [CreateCollectionDialog] Create button clicked");
+                                    }}
+                                >
+                                    {isSubmitting || isCheckingSource ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                            Creating...
+                                        </>
+                                    ) : (
+                                        "Create"
+                                    )}
+                                </Button>
+                            </DialogFooter>
+                        </form>
+                    </DialogContent>
                 </DialogPortal>
             </Dialog>
 

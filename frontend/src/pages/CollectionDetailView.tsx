@@ -24,6 +24,7 @@ import SourceConnectionDetailView from "@/components/collection/SourceConnection
 import { emitCollectionEvent, COLLECTION_DELETED } from "@/lib/events";
 import { QueryTool } from '@/components/collection/QueryTool';
 import { LiveApiDoc } from '@/components/collection/LiveApiDoc';
+import AddSourceConnectionDialog from "@/components/collection/AddSourceConnectionDialog";
 
 interface Collection {
     name: string;
@@ -155,6 +156,9 @@ const Collections = () => {
 
     // Add state for copy animation
     const [isCopied, setIsCopied] = useState(false);
+
+    // Add state for add source dialog
+    const [showAddSourceDialog, setShowAddSourceDialog] = useState(false);
 
     /********************************************
      * API AND DATA FETCHING FUNCTIONS
@@ -519,7 +523,7 @@ const Collections = () => {
                     <div className="flex justify-end gap-2 mb-0">
                         <Button
                             variant="outline"
-                            onClick={() => { }}
+                            onClick={() => setShowAddSourceDialog(true)}
                             className={cn(
                                 "gap-1 text-xs font-medium h-8 px-3",
                                 isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
@@ -632,6 +636,19 @@ const Collections = () => {
                         confirmText={confirmText}
                         setConfirmText={setConfirmText}
                     />
+
+                    {/* Add Source Connection Dialog */}
+                    {collection && (
+                        <AddSourceConnectionDialog
+                            isOpen={showAddSourceDialog}
+                            onClose={() => {
+                                setShowAddSourceDialog(false);
+                                reloadData(); // Reload data after adding a source
+                            }}
+                            collectionId={collection.readable_id}
+                            collectionName={collection.name}
+                        />
+                    )}
                 </>
             )}
         </div>
