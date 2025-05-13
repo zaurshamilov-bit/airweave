@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
+import { cn } from "@/lib/utils";
 
 interface SourceButtonProps {
   id: string;
@@ -12,6 +13,7 @@ interface SourceButtonProps {
 
 export const SourceButton = ({ id, name, shortName, onClick }: SourceButtonProps) => {
   const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
 
   // Get color class based on shortName
   const getColorClass = (shortName: string) => {
@@ -33,16 +35,16 @@ export const SourceButton = ({ id, name, shortName, onClick }: SourceButtonProps
 
   // Source icon component
   const SourceIcon = () => (
-    <div className="flex items-center justify-center w-10 h-10 overflow-hidden">
+    <div className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 overflow-hidden rounded-md flex-shrink-0">
       <img
         src={getAppIconUrl(shortName, resolvedTheme)}
         alt={`${shortName} icon`}
-        className="w-9 h-9 object-contain"
+        className="w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 object-contain"
         onError={(e) => {
           // Fallback to initials if icon fails to load
           e.currentTarget.style.display = 'none';
           e.currentTarget.parentElement!.classList.add(getColorClass(shortName));
-          e.currentTarget.parentElement!.innerHTML = `<span class="text-white font-semibold text-sm">${shortName.substring(0, 2).toUpperCase()}</span>`;
+          e.currentTarget.parentElement!.innerHTML = `<span class="text-white font-semibold text-xs sm:text-sm">${shortName.substring(0, 2).toUpperCase()}</span>`;
         }}
       />
     </div>
@@ -50,20 +52,30 @@ export const SourceButton = ({ id, name, shortName, onClick }: SourceButtonProps
 
   return (
     <div
-      className="border border-border rounded-lg hover:border-border/60 hover:shadow-sm transition-all cursor-pointer overflow-hidden group"
+      className={cn(
+        "border rounded-lg overflow-hidden cursor-pointer group transition-all",
+        isDark
+          ? "border-gray-800 hover:border-gray-700 bg-gray-900/50 hover:bg-gray-900"
+          : "border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50"
+      )}
       onClick={onClick}
     >
-      <div className="p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="p-2 sm:p-3 md:p-4 flex items-center justify-between">
+        <div className="flex items-center gap-2 sm:gap-3">
           <SourceIcon />
-          <span className="text-sm font-medium">{name}</span>
+          <span className="text-xs sm:text-sm font-medium truncate">{name}</span>
         </div>
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8 rounded-full bg-primary/5 hover:bg-primary/10 group-hover:bg-primary/15 group-hover:text-primary transition-all"
+          className={cn(
+            "h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 rounded-full flex-shrink-0",
+            isDark
+              ? "bg-gray-800/80 text-blue-400 hover:bg-blue-600/20 hover:text-blue-300 group-hover:bg-blue-600/30"
+              : "bg-gray-100/80 text-blue-500 hover:bg-blue-100 hover:text-blue-600 group-hover:bg-blue-100/80"
+          )}
         >
-          <Plus className="h-4 w-4 group-hover:h-5 group-hover:w-5 transition-all" />
+          <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 group-hover:h-4 group-hover:w-4 sm:group-hover:h-4.5 sm:group-hover:w-4.5 md:group-hover:h-5 md:group-hover:w-5 transition-all" />
         </Button>
       </div>
     </div>

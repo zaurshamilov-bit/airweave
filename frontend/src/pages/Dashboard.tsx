@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
 import { CollectionCard, SourceButton, ApiKeyCard, ExampleProjectCard } from "@/components/dashboard";
+import { CreateCollectionDialog } from "@/components/collections/CreateCollectionDialog";
+import { UnifiedDataSourceGrid } from "@/components/data-sources/UnifiedDataSourceGrid";
 
 // Collection type definition
 interface Collection {
@@ -51,6 +53,8 @@ const Dashboard = () => {
   const [isLoadingSources, setIsLoadingSources] = useState(true);
   const [isLoadingApiKey, setIsLoadingApiKey] = useState(true);
   const [collectionsWithSources, setCollectionsWithSources] = useState<Record<string, SourceConnection[]>>({});
+  const [showCreateCollectionDialog, setShowCreateCollectionDialog] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<Source | null>(null);
 
   // Fetch collections
   useEffect(() => {
@@ -159,8 +163,41 @@ const Dashboard = () => {
   };
 
   const handleSourceClick = (sourceId: string) => {
-    // Navigate to create collection with source pre-selected
-    navigate(`/collections/create?source=${sourceId}`);
+    // Find the source with more detailed information
+    const source = sources.find(s => s.id === sourceId);
+    if (source) {
+      // Include description if available
+      const enhancedSource = {
+        ...source,
+        description: source.description || `Connect to your ${source.name} account`
+      };
+      setSelectedSource(enhancedSource);
+      setShowCreateCollectionDialog(true);
+    } else {
+      toast.error("Source not found");
+    }
+  };
+
+  // Handle collection creation
+  const handleCollectionCreated = (collectionId: string, collection: any) => {
+    // Now that we have the collection, we need to start the source integration flow
+    // Trigger the source connection dialog/flow
+    startSourceIntegration(collectionId, selectedSource!);
+  };
+
+  // Start the source integration process
+  const startSourceIntegration = (collectionId: string, source: Source) => {
+    // Create a custom event to trigger the source connection dialog/flow
+    const event = new CustomEvent('initiate-connection', {
+      detail: {
+        source,
+        collectionId
+      }
+    });
+    document.dispatchEvent(event);
+
+    // Navigate to the collection detail page where the user can see it being set up
+    navigate(`/collections/${collectionId}`);
   };
 
   // Top 3 collections
@@ -196,14 +233,14 @@ const Dashboard = () => {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="mx-auto w-full max-w-[1800px] px-4 sm:px-6 py-6 pb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
         {/* Main content (left column) */}
-        <div className="lg:col-span-2 space-y-10">
+        <div className="md:col-span-2 lg:col-span-3 space-y-8 sm:space-y-10">
           {/* Collections Section */}
           <section>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-3xl font-bold">Collections</h2>
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h2 className="text-2xl sm:text-3xl font-bold">Collections</h2>
               <button
                 onClick={() => navigate("/collections")}
                 className="text-sm text-blue-600 hover:underline"
@@ -212,11 +249,11 @@ const Dashboard = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {isLoadingCollections ? (
-                <div className="col-span-3 text-center py-10 text-muted-foreground">Loading collections...</div>
+                <div className="col-span-full text-center py-10 text-muted-foreground">Loading collections...</div>
               ) : topCollections.length === 0 ? (
-                <div className="col-span-3 text-center py-10 text-muted-foreground">No collections found</div>
+                <div className="col-span-full text-center py-10 text-muted-foreground">No collections found</div>
               ) : (
                 topCollections.map((collection) => (
                   <CollectionCard
@@ -234,14 +271,24 @@ const Dashboard = () => {
 
           {/* Create Collection Section */}
           <section>
-            <h2 className="text-2xl font-semibold mb-2">Create collection</h2>
-            <p className="text-sm text-muted-foreground mb-5">Start with a source to add to the new collection</p>
+            <h2 className="text-xl sm:text-2xl font-semibold mb-1 sm:mb-2">Create collection</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-5">
+              Start with a source to add to the new collection
+            </p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
               {isLoadingSources ? (
-                <div className="col-span-4 text-center py-10 text-muted-foreground">Loading sources...</div>
+                <div className="col-span-full h-40 flex items-center justify-center">
+                  <div className="animate-pulse flex flex-col items-center">
+                    <div className="h-10 w-10 bg-gray-200 dark:bg-gray-700 rounded-md mb-4"></div>
+                    <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded mb-2"></div>
+                    <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  </div>
+                </div>
               ) : sources.length === 0 ? (
-                <div className="col-span-4 text-center py-10 text-muted-foreground">No sources found</div>
+                <div className="col-span-full text-center py-10 text-muted-foreground">
+                  No sources found
+                </div>
               ) : (
                 sources.map((source) => (
                   <SourceButton
@@ -258,7 +305,7 @@ const Dashboard = () => {
         </div>
 
         {/* Right Column */}
-        <div className="space-y-8">
+        <div className="space-y-6 sm:space-y-8">
           {/* API Key Card */}
           <ApiKeyCard
             apiKey={apiKey}
@@ -267,10 +314,10 @@ const Dashboard = () => {
 
           {/* Example Projects */}
           <section>
-            <h2 className="text-2xl font-semibold mb-2">Example projects</h2>
-            <p className="text-sm text-muted-foreground mb-5">Use a template to get started</p>
+            <h2 className="text-xl sm:text-2xl font-semibold mb-1 sm:mb-2">Example projects</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-5">Use a template to get started</p>
 
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {exampleProjects.map((project) => (
                 <ExampleProjectCard
                   key={project.id}
@@ -284,6 +331,14 @@ const Dashboard = () => {
           </section>
         </div>
       </div>
+
+      {/* Create Collection Dialog */}
+      <CreateCollectionDialog
+        open={showCreateCollectionDialog}
+        onOpenChange={setShowCreateCollectionDialog}
+        source={selectedSource}
+        onCollectionCreated={handleCollectionCreated}
+      />
     </div>
   );
 };
