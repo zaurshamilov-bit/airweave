@@ -53,7 +53,7 @@ export const SourceButton = ({ id, name, shortName, onClick }: SourceButtonProps
   return (
     <div
       className={cn(
-        "border rounded-lg overflow-hidden cursor-pointer group transition-all",
+        "border rounded-lg overflow-hidden cursor-pointer group transition-all min-w-[150px]",
         isDark
           ? "border-gray-800 hover:border-gray-700 bg-gray-900/50 hover:bg-gray-900"
           : "border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50"

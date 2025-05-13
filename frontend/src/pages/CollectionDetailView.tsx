@@ -10,6 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -24,41 +25,6 @@ import SourceConnectionDetailView from "@/components/collection/SourceConnection
 import { emitCollectionEvent, COLLECTION_DELETED } from "@/lib/events";
 import { QueryTool } from '@/components/collection/QueryTool';
 import { LiveApiDoc } from '@/components/collection/LiveApiDoc';
-
-interface Collection {
-    name: string;
-    readable_id: string;
-    id: string;
-    created_at: string;
-    modified_at: string;
-    organization_id: string;
-    created_by_email: string;
-    modified_by_email: string;
-    status?: string;
-}
-
-interface SourceConnection {
-    id: string;
-    name: string;
-    description?: string;
-    short_name: string;
-    config_fields?: Record<string, any>;
-    sync_id?: string;
-    organization_id: string;
-    created_at: string;
-    modified_at: string;
-    connection_id?: string;
-    collection: string;
-    created_by_email: string;
-    modified_by_email: string;
-    auth_fields?: Record<string, any> | string;
-    status?: string;
-    latest_sync_job_status?: string;
-    latest_sync_job_id?: string;
-    latest_sync_job_started_at?: string;
-    latest_sync_job_completed_at?: string;
-    cron_schedule?: string;
-}
 
 // DeleteCollectionDialog component
 interface DeleteCollectionDialogProps {
@@ -122,6 +88,41 @@ const DeleteCollectionDialog = ({
         </AlertDialog>
     );
 };
+
+interface Collection {
+    name: string;
+    readable_id: string;
+    id: string;
+    created_at: string;
+    modified_at: string;
+    organization_id: string;
+    created_by_email: string;
+    modified_by_email: string;
+    status?: string;
+}
+
+interface SourceConnection {
+    id: string;
+    name: string;
+    description?: string;
+    short_name: string;
+    config_fields?: Record<string, any>;
+    sync_id?: string;
+    organization_id: string;
+    created_at: string;
+    modified_at: string;
+    connection_id?: string;
+    collection: string;
+    created_by_email: string;
+    modified_by_email: string;
+    auth_fields?: Record<string, any> | string;
+    status?: string;
+    latest_sync_job_status?: string;
+    latest_sync_job_id?: string;
+    latest_sync_job_started_at?: string;
+    latest_sync_job_completed_at?: string;
+    cron_schedule?: string;
+}
 
 const Collections = () => {
     /********************************************
@@ -465,7 +466,7 @@ const Collections = () => {
                                     <Pencil className="h-3.5 w-3.5" />
                                 </Button>
                                 {collection?.status && (
-                                    <Badge className="rounded-full font-semibold">{collection.status.toUpperCase()}</Badge>
+                                    <StatusBadge status={collection.status} />
                                 )}
                             </div>
                         )}

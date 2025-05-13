@@ -15,7 +15,7 @@ import ViewEditWhiteLabel from "./pages/ViewEditWhiteLabel";
 import { LoginPage } from "./pages/LoginPage";
 import { CallbackPage } from "./pages/CallbackPage";
 import { AuthGuard } from "./components/AuthGuard";
-
+import CollectionsView from "./pages/CollectionsView";
 import CollectionDetailView from "./pages/CollectionDetailView";
 
 function App() {
@@ -48,6 +48,7 @@ function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/chat/:id" element={<Chat />} />
+          <Route path="/collections" element={<CollectionsView />} />
           <Route path="/collections/:readable_id" element={<CollectionDetailView />} />
         </Route>
 

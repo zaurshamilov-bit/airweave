@@ -57,8 +57,6 @@ const Dashboard = () => {
   const [isLoadingSources, setIsLoadingSources] = useState(true);
   const [isLoadingApiKey, setIsLoadingApiKey] = useState(true);
   const [collectionsWithSources, setCollectionsWithSources] = useState<Record<string, SourceConnection[]>>({});
-  const [showCreateCollectionDialog, setShowCreateCollectionDialog] = useState(false);
-  const [selectedSource, setSelectedSource] = useState<Source | null>(null);
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -232,9 +230,9 @@ const Dashboard = () => {
         />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
         {/* Main content (left column) */}
-        <div className="md:col-span-2 lg:col-span-3 space-y-8 sm:space-y-10">
+        <div className="sm:col-span-2 space-y-8 sm:space-y-10">
           {/* Collections Section */}
           <section>
             <div className="flex items-center justify-between mb-4 sm:mb-6">
@@ -247,9 +245,14 @@ const Dashboard = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 auto-rows-fr">
               {isLoadingCollections ? (
-                <div className="col-span-full text-center py-10 text-muted-foreground">Loading collections...</div>
+                Array.from({ length: 3 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="h-[220px] rounded-xl animate-pulse bg-slate-100 dark:bg-slate-800/50"
+                  />
+                ))
               ) : topCollections.length === 0 ? (
                 <div className="col-span-full text-center py-10 text-muted-foreground">No collections found</div>
               ) : (
@@ -260,6 +263,7 @@ const Dashboard = () => {
                     name={collection.name}
                     readableId={collection.readable_id}
                     sourceConnections={collectionsWithSources[collection.readable_id] || []}
+                    status={collection.status}
                     onClick={() => navigate(`/collections/${collection.readable_id}`)}
                   />
                 ))
@@ -274,7 +278,7 @@ const Dashboard = () => {
               Start with a source to add to the new collection
             </p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 auto-rows-fr">
               {isLoadingSources ? (
                 <div className="col-span-full h-40 flex items-center justify-center">
                   <div className="animate-pulse flex flex-col items-center">
@@ -303,7 +307,7 @@ const Dashboard = () => {
         </div>
 
         {/* Right Column */}
-        <div className="space-y-6 sm:space-y-8">
+        <div className="sm:col-span-1 space-y-6 sm:space-y-8">
           {/* API Key Card */}
           <ApiKeyCard
             apiKey={apiKey}
@@ -329,14 +333,6 @@ const Dashboard = () => {
           </section>
         </div>
       </div>
-
-      {/* Create Collection Dialog */}
-      <CreateCollectionDialog
-        open={showCreateCollectionDialog}
-        onOpenChange={setShowCreateCollectionDialog}
-        source={selectedSource}
-        onCollectionCreated={handleCollectionCreated}
-      />
     </div>
   );
 };

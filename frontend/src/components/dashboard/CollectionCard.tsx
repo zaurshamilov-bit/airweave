@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { Eye } from "lucide-react";
+import { Eye, ExternalLink, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
+import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 // Interface for source connections
 interface SourceConnection {
@@ -18,6 +20,7 @@ interface CollectionCardProps {
   name: string;
   readableId: string;
   sourceConnections: SourceConnection[];
+  status?: string;
   onClick?: () => void;
 }
 
@@ -26,6 +29,7 @@ export const CollectionCard = ({
   name,
   readableId,
   sourceConnections = [],
+  status = "active",
   onClick,
 }: CollectionCardProps) => {
   const navigate = useNavigate();
@@ -46,52 +50,86 @@ export const CollectionCard = ({
 
   return (
     <div
-      className="relative border border-border hover:border-border/60 rounded-lg hover:shadow-sm transition-all cursor-pointer bg-card text-card-foreground overflow-hidden"
+      className={cn(
+        "relative rounded-xl overflow-hidden cursor-pointer min-w-[240px] h-full",
+        "border border-slate-200 dark:border-slate-800",
+        "bg-white dark:bg-slate-900",
+        "hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+      )}
       onClick={handleClick}
     >
-      <div className="p-3 sm:p-4 md:p-5 pb-16 sm:pb-18 md:pb-20">
-        {/* Collection title & URL - large handwritten style */}
-        <div>
-          <h3 className="text-base sm:text-lg md:text-xl font-medium mb-1" style={{ fontFamily: 'var(--font-sans)' }}>
-            {name}
-          </h3>
-          <p className="text-xs sm:text-sm text-muted-foreground truncate">
+      {/* Card Content */}
+      <div className="relative h-full flex flex-col">
+        {/* Card Header */}
+        <div className="p-4 flex-1">
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
+              {name}
+            </h3>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-3 truncate">
             {readableId}.airweave.ai
           </p>
-        </div>
-      </div>
 
-      {/* Source connection icons - bottom right */}
-      <div className="absolute bottom-3 sm:bottom-4 md:bottom-5 right-3 sm:right-4 md:right-5">
-        <div className="relative" style={{ width: "4rem", height: "2.5rem" }}>
-          {sourceConnections.map((connection, index, arr) => (
-            <div
-              key={connection.id}
-              className="absolute w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-md border border-border p-1 flex items-center justify-center overflow-hidden bg-card shadow-sm"
-              style={{
-                right: `${index * 12}px`,
-                zIndex: arr.length - index
-              }}
-            >
-              <img
-                src={getAppIconUrl(connection.short_name, resolvedTheme)}
-                alt={connection.name}
-                className="max-w-full max-h-full w-auto h-auto object-contain"
-              />
+          {/* Status badge */}
+          <StatusBadge status={status} />
+        </div>
+
+        {/* Card Footer */}
+        <div className="border-t border-slate-100 dark:border-slate-800 p-2 flex justify-between items-center">
+          {/* View & Edit Button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-sm"
+            onClick={handleViewClick}
+          >
+            <Eye className="h-4 w-4 mr-1.5" />
+            View & edit
+          </Button>
+
+          {/* Source connection icons */}
+          {sourceConnections.length > 0 ? (
+            sourceConnections.length === 1 ? (
+              <div className="flex items-center justify-center">
+                <div className="h-12 w-12 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={getAppIconUrl(sourceConnections[0].short_name, resolvedTheme)}
+                    alt={sourceConnections[0].name}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center">
+                <div className="flex -space-x-1">
+                  {sourceConnections.slice(0, 2).map((connection, index) => (
+                    <div
+                      key={connection.id}
+                      className="h-10 w-10 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1.5 flex items-center justify-center overflow-hidden"
+                      style={{ zIndex: 2 - index }}
+                    >
+                      <img
+                        src={getAppIconUrl(connection.short_name, resolvedTheme)}
+                        alt={connection.name}
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                  ))}
+                </div>
+                {sourceConnections.length > 2 && (
+                  <div className="ml-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    +{sourceConnections.length - 2}
+                  </div>
+                )}
+              </div>
+            )
+          ) : (
+            <div className="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 flex items-center justify-center">
+              <Plus className="h-full w-full text-slate-400" />
             </div>
-          ))}
+          )}
         </div>
-      </div>
-
-      {/* View & Edit button - left bottom */}
-      <div className="absolute bottom-3 sm:bottom-4 md:bottom-5 left-3 sm:left-4 md:left-5">
-        <Button
-          variant="outline"
-          className="h-8 sm:h-9 md:h-10 w-24 sm:w-28 md:w-32 rounded-md border-border flex items-center justify-center gap-1 sm:gap-2 hover:bg-accent text-xs sm:text-sm"
-          onClick={handleViewClick}
-        >
-          <Eye className="h-3 w-3 sm:h-4 sm:w-4" /> View & edit
-        </Button>
       </div>
     </div>
   );
