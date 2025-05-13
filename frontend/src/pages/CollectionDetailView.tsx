@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Alert } from "@/components/ui/alert";
 import { AlertCircle, RefreshCw, Pencil, Trash, Plus, Clock, Play, Plug, Copy, Check } from "lucide-react";
 import { apiClient } from "@/lib/api";
@@ -131,6 +131,11 @@ const Collections = () => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const isFromOAuthSuccess = searchParams.get("connected") === "success";
+    const retryAttemptsRef = useRef(0);
+    const MAX_RETRY_ATTEMPTS = 3;
+    const RETRY_DELAY = 2000; // 2 seconds
 
     // Page state
     const [isLoading, setIsLoading] = useState(true);
@@ -158,38 +163,8 @@ const Collections = () => {
      * API AND DATA FETCHING FUNCTIONS
      ********************************************/
 
-    // Initial entry point for data loading
-    const fetchCollection = async () => {
-        if (!readable_id) return;
-
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            const response = await apiClient.get(`/collections/${readable_id}`);
-
-            if (response.ok) {
-                const data = await response.json();
-                setCollection(data);
-                // After successful collection fetch, fetch source connections
-                fetchSourceConnections(data.readable_id);
-            } else {
-                if (response.status === 404) {
-                    setError("Collection not found");
-                } else {
-                    const errorText = await response.text();
-                    setError(`Failed to load collection: ${errorText}`);
-                }
-                setIsLoading(false);
-            }
-        } catch (err) {
-            setError(`An error occurred: ${err instanceof Error ? err.message : String(err)}`);
-            setIsLoading(false);
-        }
-    };
-
-    // Gets list of source connections associated with a collection
-    const fetchSourceConnections = async (collectionId: string) => {
+    // Add this function for retrying connection loading
+    const fetchSourceConnectionsWithRetry = async (collectionId: string) => {
         try {
             console.log("Fetching source connections for collection:", collectionId);
             const response = await apiClient.get(`/source-connections/?collection=${collectionId}`);
@@ -197,6 +172,19 @@ const Collections = () => {
             if (response.ok) {
                 const data = await response.json();
                 console.log("Loaded source connections:", data);
+
+                // If we came from OAuth success but found no connections and haven't exceeded retry limit
+                if (isFromOAuthSuccess && data.length === 0 && retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
+                    retryAttemptsRef.current++;
+                    console.log(`No connections found yet after OAuth. Retry attempt ${retryAttemptsRef.current}/${MAX_RETRY_ATTEMPTS}...`);
+
+                    // Schedule another attempt
+                    setTimeout(() => {
+                        fetchSourceConnectionsWithRetry(collectionId);
+                    }, RETRY_DELAY);
+                    return;
+                }
+
                 setSourceConnections(data);
 
                 // Select first connection by default if there are any connections
@@ -215,6 +203,39 @@ const Collections = () => {
             console.error("Error fetching source connections:", err);
             setSourceConnections([]);
         } finally {
+            // Only set loading to false if we're not going to retry
+            if (!isFromOAuthSuccess || retryAttemptsRef.current >= MAX_RETRY_ATTEMPTS) {
+                setIsLoading(false);
+            }
+        }
+    };
+
+    // Update the existing fetchCollection function to use our new retry function
+    const fetchCollection = async () => {
+        if (!readable_id) return;
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const response = await apiClient.get(`/collections/${readable_id}`);
+
+            if (response.ok) {
+                const data = await response.json();
+                setCollection(data);
+                // After successful collection fetch, fetch source connections with retry logic
+                fetchSourceConnectionsWithRetry(data.readable_id);
+            } else {
+                if (response.status === 404) {
+                    setError("Collection not found");
+                } else {
+                    const errorText = await response.text();
+                    setError(`Failed to load collection: ${errorText}`);
+                }
+                setIsLoading(false);
+            }
+        } catch (err) {
+            setError(`An error occurred: ${err instanceof Error ? err.message : String(err)}`);
             setIsLoading(false);
         }
     };

@@ -6,13 +6,10 @@ import Settings from "@/pages/Settings";
 import WhiteLabel from "@/pages/WhiteLabel";
 import CreateWhiteLabel from "@/pages/CreateWhiteLabel";
 import { NotFound } from "@/pages/NotFound";
-import SyncCreate from "@/pages/SyncCreate";
 import SyncTableView from "@/pages/SyncTableView";
-import ViewEditSync from "@/pages/ViewEditSync";
 import Destinations from "@/pages/Destinations";
 import Profile from "@/pages/Profile";
 import Chat from "@/pages/Chat";
-import Sources from "@/pages/Sources";
 import { AuthCallback } from "./pages/AuthCallback";
 import ViewEditWhiteLabel from "./pages/ViewEditWhiteLabel";
 import { LoginPage } from "./pages/LoginPage";
@@ -37,10 +34,8 @@ function App() {
 
           <Route path="/sync">
             <Route index element={<SyncTableView />} />
-            <Route path="create" element={<SyncCreate />} />
           </Route>
 
-          <Route path="/sources" element={<Sources />} />
           <Route path="/destinations" element={<Destinations />} />
 
           <Route path="/white-label">

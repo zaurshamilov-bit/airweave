@@ -13,6 +13,7 @@ from airweave.api.router import TrailingSlashRouter
 from airweave.core.connection_service import connection_service
 from airweave.core.constants.native_connections import NATIVE_QDRANT_UUID
 from airweave.core.shared_models import SyncStatus
+from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.db.session import get_db_context
 from airweave.db.unit_of_work import UnitOfWork
@@ -256,6 +257,81 @@ async def send_oauth2_code(
     return await connection_service.connect_with_oauth2_code(
         db, short_name, code, user, connection_name, auth_fields
     )
+
+
+@router.post("/create-source-connection-from-oauth", response_model=schemas.SourceConnection)
+async def create_source_connection_from_oauth(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    connection_id: UUID = Body(...),
+    source_connection_in: schemas.SourceConnectionCreate = Body(...),
+    user: schemas.User = Depends(deps.get_user),
+    background_tasks: BackgroundTasks,
+) -> schemas.SourceConnection:
+    """Create a source connection from an existing OAuth connection.
+
+    This endpoint is specifically for the OAuth flow where the connection is created first,
+    and then a source connection needs to be created with that connection.
+
+    Args:
+    -----
+        db: The database session
+        connection_id: The ID of the existing connection
+        source_connection_in: The source connection to create
+        user: The current user
+        background_tasks: Background tasks for async operations
+
+    Returns:
+    --------
+        SourceConnection: The created source connection
+    """
+    # Verify the connection exists and get its details
+    connection = await connection_service.get_connection(db, connection_id, user)
+    if not connection:
+        raise HTTPException(status_code=404, detail="Connection not found")
+
+    # Ensure the short_name from the connection is used
+    if connection.short_name != source_connection_in.short_name:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Short name mismatch: connection has '{connection.short_name}' "
+                f"but request has '{source_connection_in.short_name}'"
+            ),
+        )
+
+    (
+        source_connection,
+        sync_job,
+    ) = await source_connection_service.create_source_connection_from_oauth(
+        db=db,
+        source_connection_in=source_connection_in,
+        connection_id=connection.id,
+        current_user=user,
+    )
+
+    # If job was created and sync_immediately is True, start it in background
+    if sync_job and source_connection_in.sync_immediately:
+        async with get_db_context() as sync_db:
+            sync_dag = await sync_service.get_sync_dag(
+                db=sync_db, sync_id=source_connection.sync_id, current_user=user
+            )
+
+            # Get the sync object
+            sync = await crud.sync.get(db=sync_db, id=source_connection.sync_id, current_user=user)
+            sync = schemas.Sync.model_validate(sync, from_attributes=True)
+            sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
+            sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+            collection = await crud.collection.get_by_readable_id(
+                db=sync_db, readable_id=source_connection.collection, current_user=user
+            )
+            collection = schemas.Collection.model_validate(collection, from_attributes=True)
+
+        background_tasks.add_task(
+            sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user
+        )
+
+    return source_connection
 
 
 @router.post("/oauth2/white-label/{white_label_id}/code", response_model=schemas.Connection)
