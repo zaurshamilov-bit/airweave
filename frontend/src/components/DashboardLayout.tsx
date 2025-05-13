@@ -166,7 +166,7 @@ const DashboardLayout = () => {
                 <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
               )}
               <Home className="mr-2 h-4 w-4 opacity-70" />
-              Home
+              Dashboard
             </Link>
           </div>
 

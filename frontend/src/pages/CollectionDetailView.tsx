@@ -25,7 +25,7 @@ import SourceConnectionDetailView from "@/components/collection/SourceConnection
 import { emitCollectionEvent, COLLECTION_DELETED } from "@/lib/events";
 import { QueryTool } from '@/components/collection/QueryTool';
 import { LiveApiDoc } from '@/components/collection/LiveApiDoc';
-import AddSourceConnectionDialog from "@/components/collection/AddSourceConnectionDialog";
+import { ConnectFlow } from '@/components/shared';
 
 // DeleteCollectionDialog component
 interface DeleteCollectionDialogProps {
@@ -652,16 +652,18 @@ const Collections = () => {
                         setConfirmText={setConfirmText}
                     />
 
-                    {/* Add Source Connection Dialog */}
+                    {/* Replace AddSourceConnectionDialog with ConnectFlow */}
                     {collection && (
-                        <AddSourceConnectionDialog
+                        <ConnectFlow
                             isOpen={showAddSourceDialog}
-                            onClose={() => {
+                            onOpenChange={setShowAddSourceDialog}
+                            mode="add-source"
+                            collectionId={collection.readable_id}
+                            collectionName={collection.name}
+                            onComplete={() => {
                                 setShowAddSourceDialog(false);
                                 reloadData(); // Reload data after adding a source
                             }}
-                            collectionId={collection.readable_id}
-                            collectionName={collection.name}
                         />
                     )}
                 </>

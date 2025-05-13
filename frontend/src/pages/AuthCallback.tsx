@@ -78,15 +78,24 @@ export function AuthCallback() {
         exchangeAttempted.current = true;
 
         // STEP 2: Retrieve stored data
-        // Get return URL and collection ID
+        // Get return URL and collection details
         const returnUrl = localStorage.getItem(OAUTH_KEYS.RETURN_URL);
-        const collectionId = localStorage.getItem(OAUTH_KEYS.COLLECTION_ID);
+        const collectionDetailsJson = localStorage.getItem(OAUTH_KEYS.COLLECTION_DETAILS);
         console.log('🔍 [AuthCallback] Retrieved from localStorage:', {
           returnUrl,
-          collectionId
+          hasCollectionDetails: !!collectionDetailsJson
         });
 
         const targetUrl = returnUrl || "/dashboard";
+        let collectionDetails;
+
+        try {
+          if (collectionDetailsJson) {
+            collectionDetails = JSON.parse(collectionDetailsJson);
+          }
+        } catch (e) {
+          console.error('❌ [AuthCallback] Failed to parse collection details:', e);
+        }
 
         // Get stored OAuth config (if any)
         const storedConfig = await retrieveStoredConfig(short_name);
@@ -94,14 +103,21 @@ export function AuthCallback() {
         // STEP 3: Exchange code for connection
         const connectionData = await exchangeCodeForConnection(code, short_name, storedConfig);
 
-        // STEP 4: Create source connection
+        // NEW STEP 4: Create collection
+        const collection = await createCollection(collectionDetails);
+        if (!collection) {
+          throw new Error("Failed to create collection");
+        }
+        const collectionId = collection.readable_id;
+
+        // STEP 5: Create source connection
         if (collectionId) {
           await createSourceConnection(connectionData, short_name, collectionId);
           // Success - navigate back to collection
-          safeNavigate(`${targetUrl}?connected=success`, { replace: true });
+          safeNavigate(`/collections/${collectionId}?connected=success`, { replace: true });
         } else {
-          console.error('❌ [AuthCallback] No collection ID found in localStorage');
-          handleError("Missing collection ID");
+          console.error('❌ [AuthCallback] No collection ID from created collection');
+          handleError("Failed to create collection");
         }
       } catch (error) {
         console.error('❌ [AuthCallback] OAuth exchange error:', error);
@@ -117,6 +133,7 @@ export function AuthCallback() {
         console.log('🧹 [AuthCallback] Cleaning up localStorage items');
         localStorage.removeItem(OAUTH_KEYS.RETURN_URL);
         localStorage.removeItem(OAUTH_KEYS.COLLECTION_ID);
+        localStorage.removeItem(OAUTH_KEYS.COLLECTION_DETAILS);
       }
     };
   }, [searchParams, short_name, navigate, auth]);
@@ -189,7 +206,7 @@ export function AuthCallback() {
     return connectionData;
   };
 
-  // Step 4: Create source connection with connection
+  // Step 4: Updated to take collection ID from our newly created collection
   const createSourceConnection = async (connectionData: any, shortName: string, collectionId: string) => {
     console.log('🔄 [AuthCallback] Creating source connection with connection ID:', connectionData.id);
 
@@ -281,6 +298,30 @@ export function AuthCallback() {
 
     // Navigate with error parameter
     safeNavigate(`${targetUrl}?connected=error`, { replace: true });
+  };
+
+  // =========================================
+  // NEW FUNCTION: Create collection
+  // =========================================
+  const createCollection = async (collectionDetails: any) => {
+    console.log('🔄 [AuthCallback] Creating collection with details:', collectionDetails);
+
+    if (!collectionDetails || !collectionDetails.name) {
+      console.error('❌ [AuthCallback] Missing collection details');
+      throw new Error("Missing collection details");
+    }
+
+    const collectionResponse = await apiClient.post('/collections/', collectionDetails);
+
+    if (!collectionResponse.ok) {
+      const errorText = await collectionResponse.text();
+      console.error('❌ [AuthCallback] Failed to create collection:', errorText);
+      throw new Error(`Failed to create collection: ${errorText}`);
+    }
+
+    const collection = await collectionResponse.json();
+    console.log('✅ [AuthCallback] Collection created successfully:', collection);
+    return collection;
   };
 
   // =========================================
