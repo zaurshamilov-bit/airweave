@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Alert } from "@/components/ui/alert";
-import { AlertCircle, RefreshCw, Pencil, Trash, Plus, Clock, Play, Plug, Copy, Check } from "lucide-react";
+import { AlertCircle, RefreshCw, Pencil, Trash, Plus, Clock, Play, Plug, Copy, Check, Loader2 } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -133,9 +133,6 @@ const Collections = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const isFromOAuthSuccess = searchParams.get("connected") === "success";
-    const retryAttemptsRef = useRef(0);
-    const MAX_RETRY_ATTEMPTS = 3;
-    const RETRY_DELAY = 2000; // 2 seconds
 
     // Page state
     const [isLoading, setIsLoading] = useState(true);
@@ -163,8 +160,8 @@ const Collections = () => {
      * API AND DATA FETCHING FUNCTIONS
      ********************************************/
 
-    // Add this function for retrying connection loading
-    const fetchSourceConnectionsWithRetry = async (collectionId: string) => {
+    // Fetch source connections for a collection
+    const fetchSourceConnections = async (collectionId: string) => {
         try {
             console.log("Fetching source connections for collection:", collectionId);
             const response = await apiClient.get(`/source-connections/?collection=${collectionId}`);
@@ -172,45 +169,32 @@ const Collections = () => {
             if (response.ok) {
                 const data = await response.json();
                 console.log("Loaded source connections:", data);
-
-                // If we came from OAuth success but found no connections and haven't exceeded retry limit
-                if (isFromOAuthSuccess && data.length === 0 && retryAttemptsRef.current < MAX_RETRY_ATTEMPTS) {
-                    retryAttemptsRef.current++;
-                    console.log(`No connections found yet after OAuth. Retry attempt ${retryAttemptsRef.current}/${MAX_RETRY_ATTEMPTS}...`);
-
-                    // Schedule another attempt
-                    setTimeout(() => {
-                        fetchSourceConnectionsWithRetry(collectionId);
-                    }, RETRY_DELAY);
-                    return;
-                }
-
                 setSourceConnections(data);
 
-                // Select first connection by default if there are any connections
-                // and no connection is currently selected
-                if (data.length > 0 && !selectedConnection) {
+                // Always select the first connection when loading a new collection
+                if (data.length > 0) {
                     console.log("Auto-selecting first connection:", data[0]);
                     setSelectedConnection(data[0]);
                 } else {
-                    console.log("Not auto-selecting connection. Current selection:", selectedConnection);
+                    // If no connections, ensure selectedConnection is null
+                    setSelectedConnection(null);
+                    console.log("No connections to select");
                 }
             } else {
                 console.error("Failed to load source connections:", await response.text());
                 setSourceConnections([]);
+                setSelectedConnection(null);
             }
         } catch (err) {
             console.error("Error fetching source connections:", err);
             setSourceConnections([]);
+            setSelectedConnection(null);
         } finally {
-            // Only set loading to false if we're not going to retry
-            if (!isFromOAuthSuccess || retryAttemptsRef.current >= MAX_RETRY_ATTEMPTS) {
-                setIsLoading(false);
-            }
+            setIsLoading(false);
         }
     };
 
-    // Update the existing fetchCollection function to use our new retry function
+    // Update the existing fetchCollection function to use our new function
     const fetchCollection = async () => {
         if (!readable_id) return;
 
@@ -223,8 +207,8 @@ const Collections = () => {
             if (response.ok) {
                 const data = await response.json();
                 setCollection(data);
-                // After successful collection fetch, fetch source connections with retry logic
-                fetchSourceConnectionsWithRetry(data.readable_id);
+                // After successful collection fetch, fetch source connections
+                fetchSourceConnections(data.readable_id);
             } else {
                 if (response.status === 404) {
                     setError("Collection not found");
@@ -246,6 +230,7 @@ const Collections = () => {
 
     // Update selected connection
     const handleSelectConnection = async (connection: SourceConnection) => {
+        console.log("Manually selecting connection:", connection.id);
         setSelectedConnection(connection);
     };
 
@@ -331,6 +316,8 @@ const Collections = () => {
 
     // Initial data loading
     useEffect(() => {
+        console.log(`\nFetching collection because of readable id change\n`)
+        setSelectedConnection(null);
         fetchCollection();
     }, [readable_id]);
 
@@ -408,235 +395,245 @@ const Collections = () => {
             "container mx-auto py-6",
             isDark ? "text-foreground" : ""
         )}>
-            {/* Header with Title and Status Badge */}
-            <div className="flex items-center justify-between py-4">
-                <div className="flex items-center gap-4">
-                    {/* Source Icons */}
-                    <div className="flex justify-start" style={{ minWidth: "4.5rem" }}>
-                        {sourceConnections.map((connection, index) => (
-                            <div
-                                key={connection.id}
-                                className={cn(
-                                    "w-14 h-14 rounded-md border p-1 flex items-center justify-center overflow-hidden",
-                                    isDark ? "bg-gray-800 border-gray-700" : "bg-background border-gray-300"
-                                )}
-                                style={{
-                                    marginLeft: index > 0 ? `-${Math.min(index * 8, 24)}px` : "0px",
-                                    zIndex: sourceConnections.length - index
-                                }}
-                            >
-                                <img
-                                    src={getAppIconUrl(connection.short_name, resolvedTheme)}
-                                    alt={connection.name}
-                                    className="max-w-full max-h-full w-auto h-auto object-contain"
-                                />
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="flex flex-col justify-center">
-                        {isEditingName ? (
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    ref={nameInputRef}
-                                    defaultValue={collection?.name || ""}
-                                    className="text-2xl font-bold h-10 min-w-[300px]"
-                                    autoFocus
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            handleSaveNameChange();
-                                        }
-                                        if (e.key === 'Escape') {
-                                            setIsEditingName(false);
-                                        }
-                                    }}
-                                    onBlur={handleSaveNameChange}
-                                />
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-3xl font-bold tracking-tight text-foreground">{collection?.name}</h1>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                                    onClick={startEditingName}
-                                >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                                {collection?.status && (
-                                    <Badge className="rounded-full font-semibold">{collection.status.toUpperCase()}</Badge>
-                                )}
-                            </div>
-                        )}
-                        <p className="text-muted-foreground text-sm group relative flex items-center">
-                            {collection?.readable_id}
-                            <button
-                                className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
-                                onClick={handleCopyId}
-                                title="Copy ID"
-                            >
-                                {isCopied ? (
-                                    <Check className="h-3.5 w-3.5 text-muted-foreground  transition-all" />
-                                ) : (
-                                    <Copy className="h-3.5 w-3.5 text-muted-foreground transition-all" />
-                                )}
-                            </button>
-                        </p>
-                    </div>
+            {/* Show loading state when isLoading or no collection data yet */}
+            {(isLoading || !collection) && !error ? (
+                <div className="w-full h-48 flex flex-col items-center justify-center space-y-4">
+                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                    <p className="text-muted-foreground">Loading collection data...</p>
                 </div>
-
-                {/* Header action buttons */}
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={reloadData}
-                        disabled={isReloading}
-                        className={cn(
-                            "h-8 w-8 rounded-full transition-all duration-200",
-                            isDark ? "hover:bg-gray-800" : "hover:bg-gray-100",
-                        )}
-                        title="Reload page"
-                    >
-                        <RefreshCw className={cn(
-                            "h-4 w-4 transition-transform duration-500",
-                            isReloading ? "animate-spin" : "hover:rotate-90"
-                        )} />
-                    </Button>
-
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setShowDeleteDialog(true)}
-                        disabled={isDeleting}
-                        className={cn(
-                            "h-8 w-8 rounded-full transition-all",
-                            isDark ? "hover:bg-gray-800 text-muted-foreground hover:text-destructive"
-                                : "hover:bg-gray-100 text-muted-foreground hover:text-destructive"
-                        )}
-                        title="Delete collection"
-                    >
-                        <Trash className="h-4 w-4" />
-                    </Button>
-                </div>
-            </div>
-            <div className="flex justify-end gap-2 mb-0">
-                <Button
-                    variant="outline"
-                    onClick={() => { }}
-                    className={cn(
-                        "gap-1 text-xs font-medium h-8 px-3",
-                        isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
-                    )}
-                >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add Source
-                </Button>
-                <Button
-                    variant="outline"
-                    onClick={() => { }}
-                    className={cn(
-                        "gap-1 text-xs font-medium h-8 px-3",
-                        isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
-                    )}
-                >
-                    <Plug className="h-3.5 w-3.5 mr-1" />
-                    Refresh all sources
-                </Button>
-            </div>
-
-            {/* Add QueryTool and LiveApiDoc when a connection with syncId is selected */}
-            {selectedConnection?.sync_id && (
+            ) : (
                 <>
-                    <div className='py-3 space-y-2 mt-1'>
-                        <QueryTool
-                            syncId={selectedConnection.sync_id}
-                            collectionReadableId={collection?.readable_id}
-                        />
+                    {/* Header with Title and Status Badge */}
+                    <div className="flex items-center justify-between py-4">
+                        <div className="flex items-center gap-4">
+                            {/* Source Icons */}
+                            <div className="flex justify-start" style={{ minWidth: "4.5rem" }}>
+                                {sourceConnections.map((connection, index) => (
+                                    <div
+                                        key={connection.id}
+                                        className={cn(
+                                            "w-14 h-14 rounded-md border p-1 flex items-center justify-center overflow-hidden",
+                                            isDark ? "bg-gray-800 border-gray-700" : "bg-background border-gray-300"
+                                        )}
+                                        style={{
+                                            marginLeft: index > 0 ? `-${Math.min(index * 8, 24)}px` : "0px",
+                                            zIndex: sourceConnections.length - index
+                                        }}
+                                    >
+                                        <img
+                                            src={getAppIconUrl(connection.short_name, resolvedTheme)}
+                                            alt={connection.name}
+                                            className="max-w-full max-h-full w-auto h-auto object-contain"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex flex-col justify-center">
+                                {isEditingName ? (
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            ref={nameInputRef}
+                                            defaultValue={collection?.name || ""}
+                                            className="text-2xl font-bold h-10 min-w-[300px]"
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    handleSaveNameChange();
+                                                }
+                                                if (e.key === 'Escape') {
+                                                    setIsEditingName(false);
+                                                }
+                                            }}
+                                            onBlur={handleSaveNameChange}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <h1 className="text-3xl font-bold tracking-tight text-foreground">{collection?.name}</h1>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                                            onClick={startEditingName}
+                                        >
+                                            <Pencil className="h-3.5 w-3.5" />
+                                        </Button>
+                                        {collection?.status && (
+                                            <Badge className="rounded-full font-semibold">{collection.status.toUpperCase()}</Badge>
+                                        )}
+                                    </div>
+                                )}
+                                <p className="text-muted-foreground text-sm group relative flex items-center">
+                                    {collection?.readable_id}
+                                    <button
+                                        className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
+                                        onClick={handleCopyId}
+                                        title="Copy ID"
+                                    >
+                                        {isCopied ? (
+                                            <Check className="h-3.5 w-3.5 text-muted-foreground  transition-all" />
+                                        ) : (
+                                            <Copy className="h-3.5 w-3.5 text-muted-foreground transition-all" />
+                                        )}
+                                    </button>
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Header action buttons */}
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={reloadData}
+                                disabled={isReloading}
+                                className={cn(
+                                    "h-8 w-8 rounded-full transition-all duration-200",
+                                    isDark ? "hover:bg-gray-800" : "hover:bg-gray-100",
+                                )}
+                                title="Reload page"
+                            >
+                                <RefreshCw className={cn(
+                                    "h-4 w-4 transition-transform duration-500",
+                                    isReloading ? "animate-spin" : "hover:rotate-90"
+                                )} />
+                            </Button>
+
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setShowDeleteDialog(true)}
+                                disabled={isDeleting}
+                                className={cn(
+                                    "h-8 w-8 rounded-full transition-all",
+                                    isDark ? "hover:bg-gray-800 text-muted-foreground hover:text-destructive"
+                                        : "hover:bg-gray-100 text-muted-foreground hover:text-destructive"
+                                )}
+                                title="Delete collection"
+                            >
+                                <Trash className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </div>
-                    <div className='py-1 space-y-1 mt-2'>
-                        <LiveApiDoc syncId={selectedConnection.sync_id} />
+                    <div className="flex justify-end gap-2 mb-0">
+                        <Button
+                            variant="outline"
+                            onClick={() => { }}
+                            className={cn(
+                                "gap-1 text-xs font-medium h-8 px-3",
+                                isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
+                            )}
+                        >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add Source
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => { }}
+                            className={cn(
+                                "gap-1 text-xs font-medium h-8 px-3",
+                                isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
+                            )}
+                        >
+                            <Plug className="h-3.5 w-3.5 mr-1" />
+                            Refresh all sources
+                        </Button>
                     </div>
+
+                    {/* Add QueryTool and LiveApiDoc when a connection with syncId is selected */}
+                    {selectedConnection?.sync_id && (
+                        <>
+                            <div className='py-3 space-y-2 mt-1'>
+                                <QueryTool
+                                    syncId={selectedConnection.sync_id}
+                                    collectionReadableId={collection?.readable_id}
+                                />
+                            </div>
+                            <div className='py-1 space-y-1 mt-2'>
+                                <LiveApiDoc syncId={selectedConnection.sync_id} />
+                            </div>
+                        </>
+                    )}
+
+                    <hr className={cn(
+                        "border-t my-2 max-w-full",
+                        isDark ? "border-gray-700" : "border-gray-300"
+                    )} />
+
+                    {/* Source Connections Section */}
+                    <div className="mt-6">
+                        <h2 className="text-2xl font-bold tracking-tight mb-4 text-foreground">Source Connections</h2>
+
+                        <div className="flex flex-wrap gap-3">
+                            {sourceConnections.map((connection) => (
+                                <Button
+                                    key={connection.id}
+                                    variant="outline"
+                                    className={cn(
+                                        "w-60 h-13 flex items-center gap-2 justify-start overflow-hidden flex-shrink-0 flex-grow-0",
+                                        selectedConnection?.id === connection.id
+                                            ? "border-2 border-primary"
+                                            : isDark
+                                                ? "border border-gray-700 bg-gray-800/50 hover:bg-gray-800"
+                                                : "border border-gray-300 hover:bg-gray-100"
+                                    )}
+                                    onClick={() => handleSelectConnection(connection)}
+                                >
+                                    <div className={cn(
+                                        "w-10 h-10 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0",
+                                        isDark ? "bg-gray-800" : "bg-background"
+                                    )}>
+                                        <img
+                                            src={getAppIconUrl(connection.short_name, resolvedTheme)}
+                                            alt={connection.name}
+                                            className="max-w-full max-h-full w-auto h-auto object-contain"
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <span className="text-[18px] font-medium truncate block text-left text-foreground">{connection.name}</span>
+                                    </div>
+                                </Button>
+                            ))}
+                        </div>
+
+                        {sourceConnections.length === 0 && (
+                            <div className={cn(
+                                "text-center py-6 rounded-md border",
+                                isDark ? "border-gray-700 bg-gray-800/20 text-gray-400" : "border-gray-200 bg-gray-50 text-muted-foreground"
+                            )}>
+                                <p className="mb-2">No source connections found.</p>
+                                <Button
+                                    variant="outline"
+                                    className={cn(
+                                        "mt-2",
+                                        isDark ? "border-gray-700 hover:bg-gray-800" : ""
+                                    )}
+                                    onClick={() => { }}
+                                >
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Add a source connection
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Render SourceConnectionDetailView when a connection is selected */}
+                    {selectedConnection && (
+                        <SourceConnectionDetailView sourceConnectionId={selectedConnection.id} />
+                    )}
+
+                    {/* Delete Collection Dialog */}
+                    <DeleteCollectionDialog
+                        open={showDeleteDialog}
+                        onOpenChange={setShowDeleteDialog}
+                        onConfirm={handleDeleteCollection}
+                        collectionReadableId={collection?.readable_id || ''}
+                        confirmText={confirmText}
+                        setConfirmText={setConfirmText}
+                    />
                 </>
             )}
-
-            <hr className={cn(
-                "border-t my-2 max-w-full",
-                isDark ? "border-gray-700" : "border-gray-300"
-            )} />
-
-            {/* Source Connections Section */}
-            <div className="mt-6">
-                <h2 className="text-2xl font-bold tracking-tight mb-4 text-foreground">Source Connections</h2>
-
-                <div className="flex flex-wrap gap-3">
-                    {sourceConnections.map((connection) => (
-                        <Button
-                            key={connection.id}
-                            variant="outline"
-                            className={cn(
-                                "w-60 h-13 flex items-center gap-2 justify-start overflow-hidden flex-shrink-0 flex-grow-0",
-                                selectedConnection?.id === connection.id
-                                    ? "border-2 border-primary"
-                                    : isDark
-                                        ? "border border-gray-700 bg-gray-800/50 hover:bg-gray-800"
-                                        : "border border-gray-300 hover:bg-gray-100"
-                            )}
-                            onClick={() => handleSelectConnection(connection)}
-                        >
-                            <div className={cn(
-                                "w-10 h-10 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0",
-                                isDark ? "bg-gray-800" : "bg-background"
-                            )}>
-                                <img
-                                    src={getAppIconUrl(connection.short_name, resolvedTheme)}
-                                    alt={connection.name}
-                                    className="max-w-full max-h-full w-auto h-auto object-contain"
-                                />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <span className="text-[18px] font-medium truncate block text-left text-foreground">{connection.name}</span>
-                            </div>
-                        </Button>
-                    ))}
-                </div>
-
-                {sourceConnections.length === 0 && (
-                    <div className={cn(
-                        "text-center py-6 rounded-md border",
-                        isDark ? "border-gray-700 bg-gray-800/20 text-gray-400" : "border-gray-200 bg-gray-50 text-muted-foreground"
-                    )}>
-                        <p className="mb-2">No source connections found.</p>
-                        <Button
-                            variant="outline"
-                            className={cn(
-                                "mt-2",
-                                isDark ? "border-gray-700 hover:bg-gray-800" : ""
-                            )}
-                            onClick={() => { }}
-                        >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add a source connection
-                        </Button>
-                    </div>
-                )}
-            </div>
-
-            {/* Render SourceConnectionDetailView when a connection is selected */}
-            {selectedConnection && (
-                <SourceConnectionDetailView sourceConnectionId={selectedConnection.id} />
-            )}
-
-            {/* Delete Collection Dialog */}
-            <DeleteCollectionDialog
-                open={showDeleteDialog}
-                onOpenChange={setShowDeleteDialog}
-                onConfirm={handleDeleteCollection}
-                collectionReadableId={collection?.readable_id || ''}
-                confirmText={confirmText}
-                setConfirmText={setConfirmText}
-            />
         </div>
     );
 };

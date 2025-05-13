@@ -164,12 +164,17 @@ export function AuthCallback() {
     console.log('📤 [AuthCallback] Sending code exchange payload:',
       { ...payload, code: '[REDACTED]' });
 
-    // Use Promise ref to ensure only one request is made
-    if (!exchangePromise.current) {
-      exchangePromise.current = apiClient.post(`/connections/oauth2/source/code`, payload);
+    // Check if we already have parsed data
+    if (exchangePromise.current && exchangePromise.current.data) {
+      return exchangePromise.current.data;
     }
 
-    const response = await exchangePromise.current;
+    // Store both promise and result
+    if (!exchangePromise.current) {
+      exchangePromise.current = { promise: apiClient.post(`/connections/oauth2/source/code`, payload) };
+    }
+
+    const response = await exchangePromise.current.promise;
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ [AuthCallback] OAuth code exchange failed:', errorText);
@@ -177,6 +182,9 @@ export function AuthCallback() {
     }
 
     const connectionData = await response.json();
+    // Store the parsed data
+    exchangePromise.current.data = connectionData;
+
     console.log('✅ [AuthCallback] OAuth code exchange successful, created connection:', connectionData);
     return connectionData;
   };

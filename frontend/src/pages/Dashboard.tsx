@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Copy, Eye, Key, Plus, ExternalLink, FileText, Github } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
@@ -15,6 +15,7 @@ import {
   ExampleProjectCard,
   CreateCollectionDialog
 } from "@/components/dashboard";
+import { cn } from "@/lib/utils";
 
 // Collection type definition
 interface Collection {
@@ -239,12 +240,13 @@ const Dashboard = () => {
           <section>
             <div className="flex items-center justify-between mb-4 sm:mb-6">
               <h2 className="text-2xl sm:text-3xl font-bold">Collections</h2>
-              <button
-                onClick={() => navigate("/collections")}
-                className="text-sm text-blue-600 hover:underline"
+              <Link
+                to="/collections"
+                className="flex items-center text-sm text-primary hover:text-primary/80 hover:bg-accent/30 px-2 py-1.5 rounded-md"
               >
-                See more
-              </button>
+                <ExternalLink className="mr-2 h-3.5 w-3.5 opacity-70" />
+                <span>See all {collections.length > 0 ? `(${collections.length})` : ''}</span>
+              </Link>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
