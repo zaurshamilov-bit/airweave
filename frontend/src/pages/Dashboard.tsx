@@ -58,8 +58,6 @@ const Dashboard = () => {
   const [isLoadingSources, setIsLoadingSources] = useState(true);
   const [isLoadingApiKey, setIsLoadingApiKey] = useState(true);
   const [collectionsWithSources, setCollectionsWithSources] = useState<Record<string, SourceConnection[]>>({});
-  const [showCreateCollectionDialog, setShowCreateCollectionDialog] = useState(false);
-  const [selectedSource, setSelectedSource] = useState<Source | null>(null);
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -184,6 +182,11 @@ const Dashboard = () => {
     setDialogOpen(false);
     setSelectedSource(null);
 
+    // Refresh collections without showing loading state
+    fetchCollections(false);
+  };
+
+  const handleCollectionCreated = () => {
     // Refresh collections without showing loading state
     fetchCollections(false);
   };
@@ -331,14 +334,6 @@ const Dashboard = () => {
           </section>
         </div>
       </div>
-
-      {/* Create Collection Dialog */}
-      <CreateCollectionDialog
-        open={showCreateCollectionDialog}
-        onOpenChange={setShowCreateCollectionDialog}
-        source={selectedSource}
-        onCollectionCreated={handleCollectionCreated}
-      />
     </div>
   );
 };
