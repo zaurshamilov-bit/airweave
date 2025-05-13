@@ -8,7 +8,13 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
-import { CollectionCard, SourceButton, ApiKeyCard, ExampleProjectCard } from "@/components/dashboard";
+import {
+  CollectionCard,
+  SourceButton,
+  ApiKeyCard,
+  ExampleProjectCard,
+  CreateCollectionDialog
+} from "@/components/dashboard";
 
 // Collection type definition
 interface Collection {
@@ -52,35 +58,9 @@ const Dashboard = () => {
   const [isLoadingApiKey, setIsLoadingApiKey] = useState(true);
   const [collectionsWithSources, setCollectionsWithSources] = useState<Record<string, SourceConnection[]>>({});
 
-  // Fetch collections
-  useEffect(() => {
-    const fetchCollections = async () => {
-      setIsLoadingCollections(true);
-      try {
-        const response = await apiClient.get("/collections");
-        if (response.ok) {
-          const data = await response.json();
-          setCollections(data);
-
-          // Only fetch source connections for the top 3 collections
-          const topCollections = data.slice(0, 3);
-          const sourcesMap: Record<string, SourceConnection[]> = {};
-          for (const collection of topCollections) {
-            await fetchSourceConnectionsForCollection(collection.readable_id, sourcesMap);
-          }
-          setCollectionsWithSources(sourcesMap);
-        } else {
-          console.error("Failed to load collections:", await response.text());
-        }
-      } catch (err) {
-        console.error("Error fetching collections:", err);
-      } finally {
-        setIsLoadingCollections(false);
-      }
-    };
-
-    fetchCollections();
-  }, []);
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<Source | null>(null);
 
   // Fetch source connections for a specific collection
   const fetchSourceConnectionsForCollection = async (
@@ -101,6 +81,42 @@ const Dashboard = () => {
       sourcesMap[collectionId] = [];
     }
   };
+
+  // Define fetchCollections function at component level
+  const fetchCollections = async (showLoading: boolean = true) => {
+    if (showLoading) {
+      setIsLoadingCollections(true);
+    }
+
+    try {
+      const response = await apiClient.get("/collections");
+      if (response.ok) {
+        const data = await response.json();
+        setCollections(data);
+
+        // Only fetch source connections for the top 3 collections
+        const topCollections = data.slice(0, 3);
+        const sourcesMap: Record<string, SourceConnection[]> = {};
+        for (const collection of topCollections) {
+          await fetchSourceConnectionsForCollection(collection.readable_id, sourcesMap);
+        }
+        setCollectionsWithSources(sourcesMap);
+      } else {
+        console.error("Failed to load collections:", await response.text());
+      }
+    } catch (err) {
+      console.error("Error fetching collections:", err);
+    } finally {
+      if (showLoading) {
+        setIsLoadingCollections(false);
+      }
+    }
+  };
+
+  // Fetch collections on component mount
+  useEffect(() => {
+    fetchCollections();
+  }, []);
 
   // Fetch sources
   useEffect(() => {
@@ -149,18 +165,24 @@ const Dashboard = () => {
     fetchApiKey();
   }, []);
 
-  const handleCreateCollection = () => {
-    navigate("/collections/create");
-  };
-
   const handleRequestNewKey = () => {
     // Placeholder for requesting a new API key
     toast.info("New API key feature coming soon");
   };
 
-  const handleSourceClick = (sourceId: string) => {
-    // Navigate to create collection with source pre-selected
-    navigate(`/collections/create?source=${sourceId}`);
+  const handleSourceClick = (source: Source) => {
+    // Open the dialog with the selected source
+    setSelectedSource(source);
+    setDialogOpen(true);
+  };
+
+  // Refresh collections after creating a new one
+  const handleDialogClose = () => {
+    setDialogOpen(false);
+    setSelectedSource(null);
+
+    // Refresh collections without showing loading state
+    fetchCollections(false);
   };
 
   // Top 3 collections
@@ -197,6 +219,17 @@ const Dashboard = () => {
 
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
+      {/* Collection Creation Dialog */}
+      {selectedSource && (
+        <CreateCollectionDialog
+          isOpen={dialogOpen}
+          onClose={handleDialogClose}
+          sourceId={selectedSource.id}
+          sourceName={selectedSource.name}
+          sourceShortName={selectedSource.short_name}
+        />
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Main content (left column) */}
         <div className="lg:col-span-2 space-y-10">
@@ -249,7 +282,7 @@ const Dashboard = () => {
                     id={source.id}
                     name={source.name}
                     shortName={source.short_name}
-                    onClick={() => handleSourceClick(source.id)}
+                    onClick={() => handleSourceClick(source)}
                   />
                 ))
               )}

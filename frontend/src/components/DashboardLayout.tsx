@@ -13,7 +13,8 @@ import {
   ChevronRight,
   Box,
   ExternalLink,
-  LayoutGrid
+  LayoutGrid,
+  Home
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -115,9 +116,6 @@ const DashboardLayout = () => {
     if (path.startsWith('/collections/')) {
       return location.pathname === path;
     }
-    if (path === '/sources') {
-      return location.pathname === '/sources';
-    }
     if (path === '/white-label') {
       return location.pathname.startsWith('/white-label');
     }
@@ -151,6 +149,25 @@ const DashboardLayout = () => {
               <Plus className="h-3.5 w-3.5" />
               Create collection
             </Button>
+          </div>
+
+          {/* Home Button */}
+          <div className="pb-2 px-2">
+            <Link
+              to="/"
+              className={cn(
+                "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
+                location.pathname === "/" || location.pathname === "/dashboard"
+                  ? "text-primary font-medium bg-primary/5"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
+              )}
+            >
+              {(location.pathname === "/" || location.pathname === "/dashboard") && (
+                <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
+              )}
+              <Home className="mr-2 h-4 w-4 opacity-70" />
+              Home
+            </Link>
           </div>
 
           {/* Collections Section */}
@@ -223,21 +240,6 @@ const DashboardLayout = () => {
           <div className="space-y-1">
             <h3 className="font-semibold px-2 py-1.5 text-sm text-muted-foreground">Configure</h3>
             <div className="space-y-0.5">
-              <Link
-                to="/sources"
-                className={cn(
-                  "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
-                  isActive('/sources')
-                    ? "text-primary font-medium bg-primary/5"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
-                )}
-              >
-                {isActive('/sources') && (
-                  <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
-                )}
-                <Box className="mr-2 h-4 w-4 opacity-70" />
-                Sources
-              </Link>
               <Link
                 to="/white-label"
                 className={cn(
