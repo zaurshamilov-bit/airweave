@@ -82,9 +82,6 @@ class Settings(BaseSettings):
     MISTRAL_API_KEY: Optional[str] = None
 
     AZURE_KEYVAULT_NAME: Optional[str] = None
-    AZURE_CLIENT_ID: Optional[str] = None
-    AZURE_CLIENT_SECRET: Optional[str] = None
-    AZURE_TENANT_ID: Optional[str] = None
 
     # Custom deployment URLs - these are used to override the default URLs to allow
     # for custom domains in custom deployments
@@ -92,6 +89,21 @@ class Settings(BaseSettings):
     APP_FULL_URL: Optional[str] = None
     QDRANT_FULL_URL: Optional[str] = None
     ADDITIONAL_CORS_ORIGINS: Optional[str] = None  # Separated by commas or semicolons
+
+    @field_validator("AZURE_KEYVAULT_NAME", mode="before")
+    def validate_azure_keyvault_name(cls, v: Optional[str], info: ValidationInfo) -> Optional[str]:
+        """Create a keyvault name based on the environment.
+
+        Like: "airweave-core-dev-kv" or "airweave-core-prd-kv"
+
+        Args:
+            v: The Azure KeyVault name.
+            info: Validation context containing all field values.
+        """
+        environment = info.data.get("ENVIRONMENT", "local")
+        if environment in ["dev", "prd"] and not v:
+            return f"airweave-core-{environment}-kv"
+        return v
 
     @field_validator("ADDITIONAL_CORS_ORIGINS", mode="before")
     def parse_cors_origins(cls, v: Optional[str]) -> Optional[list[str]]:
