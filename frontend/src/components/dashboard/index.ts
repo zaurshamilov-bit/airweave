@@ -11,5 +11,5 @@ export * from './CollectionCard';
 export * from './SourceButton';
 export * from './ApiKeyCard';
 export * from './ExampleProjectCard';
-export { default as CreateCollectionDialog } from "./CreateCollectionDialog";
+
 export { ConnectFlow } from '@/components/shared';

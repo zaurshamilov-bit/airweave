@@ -24,33 +24,148 @@ import { GradientBackground, GradientCard } from "@/components/ui/gradient-backg
 import { DiscordIcon } from "@/components/ui/discord-icon";
 import { cn } from "@/lib/utils";
 import { UserProfileDropdown } from "@/components/UserProfileDropdown";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, memo, useMemo } from "react";
 import { apiClient } from "@/lib/api";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_UPDATED } from "@/lib/events";
 import { APIKeysSettings } from "@/components/settings/APIKeysSettings";
-import { motion } from "framer-motion";
+import { useCollections, Collection } from "@/lib/collectionsContext";
 
-// Interface for Collection type
-interface Collection {
-  id: string;
-  name: string;
-  readable_id: string;
-  status: string;
-}
+// Memoized Collections Section to prevent re-renders of the entire sidebar
+const CollectionsSection = memo(() => {
+  const location = useLocation();
+  const [isOpen, setIsOpen] = useState(true);
+  const { collections, isLoading: isLoadingCollections, error: collectionError } = useCollections();
 
+  // Active status for nav items
+  const isActive = useCallback((path: string) => {
+    return location.pathname === path;
+  }, [location.pathname]);
+
+  // Common navigation item styling
+  const getNavItemStyles = useCallback((active: boolean) => cn(
+    "flex items-center px-3 py-2 text-sm rounded-lg relative transition-all duration-200",
+    "hover:bg-primary/10 group max-w-[214px]",
+    active
+      ? "text-primary font-medium bg-primary/10 shadow-sm"
+      : "text-muted-foreground hover:text-foreground"
+  ), []);
+
+  // Toggle collections open/closed
+  const toggleOpen = useCallback(() => {
+    setIsOpen(prev => !prev);
+  }, []);
+
+  return (
+    <div className="space-y-0.5 w-[214px]">
+      {/* Collections Header - Consistent Width */}
+      <button
+        onClick={toggleOpen}
+        className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg text-muted-foreground hover:text-foreground hover:bg-primary/5 transition-all duration-200"
+      >
+        <span className="font-bold flex items-center">
+          <LayoutGrid className="mr-2 h-4 w-4 opacity-70" />
+          Collections
+        </span>
+        <div className="transition-transform duration-200" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+          <ChevronDown className="h-4 w-4" />
+        </div>
+      </button>
+
+      {/* Collections Content - Simple CSS Transition */}
+      <div
+        className={cn(
+          "overflow-hidden ml-1 transition-all duration-200 ease-in-out",
+          isOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+        )}
+      >
+        <div className="pl-1 border-l border-border/30 space-y-0.5">
+          {isLoadingCollections ? (
+            <div className="px-2 py-1 text-xs text-muted-foreground">Loading...</div>
+          ) : collectionError ? (
+            <div className="px-2 py-1 text-xs text-destructive">{collectionError}</div>
+          ) : collections.length === 0 ? (
+            <div className="px-2 py-1 text-xs text-muted-foreground">No collections</div>
+          ) : (
+            <>
+              {/* Display maximum 20 collections */}
+              {collections.slice(0, 20).map((collection) => (
+                <Link
+                  key={collection.id}
+                  to={`/collections/${collection.readable_id}`}
+                  className={getNavItemStyles(isActive(`/collections/${collection.readable_id}`))}
+                >
+                  <LayoutGrid className="mr-2 h-3.5 w-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
+                  <span className="truncate">{collection.name}</span>
+                  {isActive(`/collections/${collection.readable_id}`) && (
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-primary rounded-full transform -translate-x-1.5" />
+                  )}
+                </Link>
+              ))}
+
+              {/* Show "See more" link if there are more than 20 collections */}
+              {collections.length > 20 && (
+                <Link
+                  to="/collections"
+                  className="flex items-center px-3 py-1.5 text-sm rounded-lg text-primary hover:text-primary/80 hover:bg-primary/10 mt-1 transition-all duration-200"
+                >
+                  <ExternalLink className="mr-2 h-3.5 w-3.5 opacity-70" />
+                  <span>See all ({collections.length})</span>
+                </Link>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+CollectionsSection.displayName = 'CollectionsSection';
+
+// Memoized Logo component
+const Logo = memo(({ theme }: { theme: string }) => {
+  const logoSrc = theme === "dark" ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg";
+
+  return (
+    <Link to="/" className="flex items-center">
+      <img src={logoSrc} alt="Airweave" className="h-8" />
+    </Link>
+  );
+});
+
+Logo.displayName = 'Logo';
+
+// Memoized NavItem component
+const NavItem = memo(({ to, isActive, icon, children }: {
+  to: string;
+  isActive: boolean;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) => {
+  const navItemStyles = cn(
+    "flex items-center px-3 py-2 text-sm rounded-lg relative transition-all duration-200",
+    "hover:bg-primary/10 group max-w-[214px]",
+    isActive
+      ? "text-primary font-medium bg-primary/10 shadow-sm"
+      : "text-muted-foreground hover:text-foreground"
+  );
+
+  return (
+    <Link to={to} className={navItemStyles}>
+      {icon}
+      <span className="font-semibold">{children}</span>
+    </Link>
+  );
+});
+
+NavItem.displayName = 'NavItem';
+
+// Main DashboardLayout component
 const DashboardLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { resolvedTheme, setTheme } = useTheme();
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [isLoadingCollections, setIsLoadingCollections] = useState(false);
-  const [collectionError, setCollectionError] = useState<string | null>(null);
-  const [collectionsOpen, setCollectionsOpen] = useState(true);
-
-  // Determine which logo to use based on theme
-  const logoSrc = resolvedTheme === "dark" ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg";
 
   // Add array of routes that should be non-scrollable
   const nonScrollableRoutes = ['/chat', '/chat/'];
@@ -59,93 +174,32 @@ const DashboardLayout = () => {
   const isNonScrollable = nonScrollableRoutes.some(route =>
     location.pathname === route || location.pathname.startsWith('/chat/'));
 
-  // Function to fetch collections from the API
-  const fetchCollections = useCallback(async () => {
-    setIsLoadingCollections(true);
-    setCollectionError(null);
-
-    try {
-      const response = await apiClient.get('/collections');
-
-      if (response.ok) {
-        const data = await response.json();
-        setCollections(data);
-      } else {
-        const errorText = await response.text();
-        setCollectionError(`Failed to load collections: ${errorText}`);
-      }
-    } catch (err) {
-      setCollectionError(`An error occurred: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setIsLoadingCollections(false);
-    }
-  }, []);
-
-  // Initial fetch of collections
-  useEffect(() => {
-    fetchCollections();
-  }, [fetchCollections]);
-
-  // Listen for collection events to refresh the list
-  useEffect(() => {
-    // Subscribe to collection events
-    const unsubscribeDeleted = onCollectionEvent(COLLECTION_DELETED, () => {
-      fetchCollections();
-    });
-
-    const unsubscribeCreated = onCollectionEvent(COLLECTION_CREATED, () => {
-      fetchCollections();
-    });
-
-    const unsubscribeUpdated = onCollectionEvent(COLLECTION_UPDATED, () => {
-      fetchCollections();
-    });
-
-    // Cleanup event listeners
-    return () => {
-      unsubscribeDeleted();
-      unsubscribeCreated();
-      unsubscribeUpdated();
-    };
-  }, [fetchCollections]);
-
-  const handleCreateCollection = () => {
+  const handleCreateCollection = useCallback(() => {
     navigate('/collections/create');
-  };
+  }, [navigate]);
 
-  // Active status for nav items
-  const isActive = (path: string) => {
-    if (path.startsWith('/collections/')) {
-      return location.pathname === path;
-    }
-    if (path === '/white-label') {
-      return location.pathname.startsWith('/white-label');
-    }
-    if (path === '/api-keys') {
-      return location.pathname === '/api-keys';
-    }
-    return false;
-  };
+  // Memoize active status checks
+  const isDashboardActive = useMemo(() =>
+    location.pathname === "/" || location.pathname === "/dashboard",
+  [location.pathname]);
 
-  // Common navigation item styling
-  const getNavItemStyles = (isActive: boolean, isCollection = false) => cn(
-    "flex items-center px-3 py-2 text-sm rounded-lg relative transition-all duration-200",
-    "hover:bg-primary/10 group max-w-[214px]",
-    isActive
-      ? "text-primary font-medium bg-primary/10 shadow-sm"
-      : "text-muted-foreground hover:text-foreground"
-  );
+  const isWhiteLabelActive = useMemo(() =>
+    location.pathname.startsWith('/white-label'),
+  [location.pathname]);
 
-  const SidebarContent = () => (
+  const isApiKeysActive = useMemo(() =>
+    location.pathname === '/api-keys',
+  [location.pathname]);
+
+  // Fully memoized SidebarContent component
+  const SidebarContent = useMemo(() => (
     <div className="flex flex-col h-full">
       <div className="flex h-14 items-center px-4 mb-2">
-        <Link to="/" className="flex items-center">
-          <img src={logoSrc} alt="Airweave" className="h-8" />
-        </Link>
+        <Logo theme={resolvedTheme} />
       </div>
 
       <ScrollArea className="flex-1 px-2 py-1">
-        <div className="space-y-2 pr-3">
+        <div className="space-y-0 pr-3">
           {/* Create Collection Button */}
           <div className="pb-1 pt-1">
             <Button
@@ -161,101 +215,38 @@ const DashboardLayout = () => {
 
           {/* Home Button */}
           <div className="pb-1 pt-2">
-            <Link
+            <NavItem
               to="/"
-              className={getNavItemStyles(location.pathname === "/" || location.pathname === "/dashboard")}
+              isActive={isDashboardActive}
+              icon={<Home className="mr-2 h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />}
             >
-              <Home className="mr-2 h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />
-              <span className="font-semibold">Home</span>
-            </Link>
+              Dashboard
+            </NavItem>
           </div>
 
-          {/* Collections Section */}
-          <Collapsible
-            open={collectionsOpen}
-            onOpenChange={setCollectionsOpen}
-            className="space-y-0.5"
-          >
-            <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg text-muted-foreground hover:text-foreground hover:bg-primary/5 transition-all duration-200">
-              <span className="font-bold flex items-center">
-                <LayoutGrid className="mr-2 h-4 w-4 opacity-70" />
-                Collections
-              </span>
-              <motion.div
-                animate={{ rotate: collectionsOpen ? 180 : 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <ChevronDown className="h-4 w-4" />
-              </motion.div>
-            </CollapsibleTrigger>
-            <motion.div
-              initial={{ height: collectionsOpen ? "auto" : 0 }}
-              animate={{ height: collectionsOpen ? "auto" : 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="overflow-hidden"
-            >
-              <CollapsibleContent className="mt-0.5">
-                <div className="ml-1 pl-1 border-l border-border/30 space-y-0.5">
-                  {isLoadingCollections ? (
-                    <div className="px-2 py-1 text-xs text-muted-foreground">Loading...</div>
-                  ) : collectionError ? (
-                    <div className="px-2 py-1 text-xs text-destructive">{collectionError}</div>
-                  ) : collections.length === 0 ? (
-                    <div className="px-2 py-1 text-xs text-muted-foreground">No collections</div>
-                  ) : (
-                    <>
-                      {/* Display maximum 20 collections */}
-                      {collections.slice(0, 20).map((collection) => (
-                        <Link
-                          key={collection.id}
-                          to={`/collections/${collection.readable_id}`}
-                          className={getNavItemStyles(isActive(`/collections/${collection.readable_id}`), true)}
-                        >
-                          <LayoutGrid className="mr-2 h-3.5 w-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
-                          <span className="truncate">{collection.name}</span>
-                          {isActive(`/collections/${collection.readable_id}`) && (
-                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-primary rounded-full transform -translate-x-1.5" />
-                          )}
-                        </Link>
-                      ))}
-
-                      {/* Show "See more" link if there are more than 20 collections */}
-                      {collections.length > 20 && (
-                        <Link
-                          to="/collections"
-                          className="flex items-center px-3 py-1.5 text-sm rounded-lg text-primary hover:text-primary/80 hover:bg-primary/10 mt-1 transition-all duration-200"
-                        >
-                          <ExternalLink className="mr-2 h-3.5 w-3.5 opacity-70" />
-                          <span>See all ({collections.length})</span>
-                        </Link>
-                      )}
-                    </>
-                  )}
-                </div>
-              </CollapsibleContent>
-            </motion.div>
-          </Collapsible>
+          {/* Collections Section - Isolated and Memoized */}
+          <CollectionsSection />
 
           {/* API Keys Section */}
           <div>
-            <Link
+            <NavItem
               to="/api-keys"
-              className={getNavItemStyles(isActive('/api-keys'))}
+              isActive={isApiKeysActive}
+              icon={<Key className="mr-2 h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />}
             >
-              <Key className="mr-2 h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />
-              <span className="font-semibold">API keys</span>
-            </Link>
+              API keys
+            </NavItem>
           </div>
 
           {/* White Label moved outside Configure section */}
           <div>
-            <Link
+            <NavItem
               to="/white-label"
-              className={getNavItemStyles(isActive('/white-label'))}
+              isActive={isWhiteLabelActive}
+              icon={<Tag className="mr-2 h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />}
             >
-              <Tag className="mr-2 h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />
-              <span className="font-semibold">White Label</span>
-            </Link>
+              White Label
+            </NavItem>
           </div>
         </div>
       </ScrollArea>
@@ -265,8 +256,9 @@ const DashboardLayout = () => {
         <UserProfileDropdown />
       </div>
     </div>
-  );
+  ), [resolvedTheme, handleCreateCollection, isDashboardActive, isApiKeysActive, isWhiteLabelActive]);
 
+  // Main component render
   return (
     <GradientBackground className="min-h-screen">
       <GradientCard className="h-full">
@@ -280,14 +272,14 @@ const DashboardLayout = () => {
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0 bg-background-alpha-90 backdrop-blur-md">
-                <SidebarContent />
+                {SidebarContent}
               </SheetContent>
             </Sheet>
           </div>
 
           {/* Desktop Sidebar */}
           <div className="hidden w-[240px] lg:block fixed h-screen transition-all duration-300 ease-in-out z-20 border-r border-border/40 bg-background/95">
-            <SidebarContent />
+            {SidebarContent}
           </div>
 
           {/* Main content with conditionally scrollable area */}

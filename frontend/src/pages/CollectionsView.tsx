@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Search, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { CollectionCard } from "@/components/dashboard";
-import { CreateCollectionDialog } from "@/components/dashboard";
 
 // Collection type definition
 interface Collection {
@@ -119,16 +118,6 @@ const CollectionsView = () => {
 
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
-      {/* Create Collection Dialog */}
-      {selectedSourceId !== null && (
-        <CreateCollectionDialog
-          isOpen={dialogOpen}
-          onClose={handleDialogClose}
-          sourceId={selectedSourceId}
-          sourceName={""}
-          sourceShortName={""}
-        />
-      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
@@ -140,7 +129,7 @@ const CollectionsView = () => {
         </div>
         <Button
           onClick={handleCreateCollection}
-          className="bg-primary hover:bg-primary/90 text-white rounded-lg h-10 px-4"
+          className="bg-primary hover:bg-primary/90 text-white rounded-lg h-9 px-4"
         >
           <Plus className="mr-2 h-4 w-4" />
           Create Collection
@@ -154,7 +143,7 @@ const CollectionsView = () => {
           <Input
             type="text"
             placeholder="Search collections by name or ID..."
-            className="pl-10 h-12 rounded-xl border-border"
+            className="pl-10 h-10 rounded-xl border-border focus:border-text/50 focus:ring-0 focus:ring-offset-0 focus:ring-text/50 dark:bg-background dark:focus:bg-background/80 transition-colors"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />

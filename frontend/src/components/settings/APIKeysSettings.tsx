@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Key, Copy, Loader2, AlertCircle, Clock, CalendarIcon, CheckCircle, Trash2 } from "lucide-react";
+import { Key, Copy, Loader2, AlertCircle, Clock, CalendarIcon, CheckCircle, Trash2, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { format, differenceInDays } from "date-fns";
@@ -9,6 +9,14 @@ import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme-provider";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface APIKey {
   id: string;
@@ -27,6 +35,9 @@ export function APIKeysSettings() {
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [keyToDelete, setKeyToDelete] = useState<APIKey | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchApiKeys();
@@ -112,7 +123,13 @@ export function APIKeysSettings() {
     );
   };
 
+  const openDeleteDialog = (apiKey: APIKey) => {
+    setKeyToDelete(apiKey);
+    setDeleteDialogOpen(true);
+  };
+
   const handleDeleteKey = async (id: string) => {
+    setDeleting(true);
     try {
       const response = await apiClient.delete("/api-keys", { id });
 
@@ -127,11 +144,16 @@ export function APIKeysSettings() {
       if (newlyCreatedKey && newlyCreatedKey.id === id) {
         setNewlyCreatedKey(null);
       }
+
+      setDeleteDialogOpen(false);
+      setKeyToDelete(null);
     } catch (err) {
       console.error("Failed to delete API key:", err);
       toast.error(typeof err === 'object' && err !== null && 'message' in err
         ? String(err.message)
         : "Failed to delete API key. Please try again.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -353,7 +375,7 @@ export function APIKeysSettings() {
                                     "h-7 w-7 rounded-full hover:bg-transparent",
                                     isDark ? "hover:text-red-300" : "hover:text-red-600"
                                   )}
-                                  onClick={() => handleDeleteKey(apiKey.id)}
+                                  onClick={() => openDeleteDialog(apiKey)}
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
@@ -396,6 +418,61 @@ export function APIKeysSettings() {
           </>
         )}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className={cn("h-5 w-5", isDark ? "text-amber-400" : "text-amber-500")} />
+              Confirm API Key Deletion
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. The API key will be permanently deleted and any applications using it will no longer be able to authenticate.
+            </DialogDescription>
+          </DialogHeader>
+
+          {keyToDelete && (
+            <div className={cn(
+              "my-4 p-3 rounded-md",
+              isDark ? "bg-slate-900 border border-slate-800" : "bg-slate-50 border border-slate-200"
+            )}>
+              <div className="flex items-center gap-2 font-mono text-sm">
+                <Key className={cn("h-4 w-4", isDark ? "text-blue-400" : "text-blue-500")} />
+                {maskApiKey(keyToDelete.decrypted_key)}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="sm:justify-between gap-3 mt-2">
+            <Button
+              variant="ghost"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => keyToDelete && handleDeleteKey(keyToDelete.id)}
+              disabled={deleting}
+              className="sm:w-auto w-full"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete API Key
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

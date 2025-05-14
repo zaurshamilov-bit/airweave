@@ -16,10 +16,11 @@ import { CallbackPage } from "./pages/CallbackPage";
 import { AuthGuard } from "./components/AuthGuard";
 import CollectionsView from "./pages/CollectionsView";
 import CollectionDetailView from "./pages/CollectionDetailView";
+import { CollectionsProvider } from "./lib/collectionsContext";
 
 function App() {
   return (
-    <>
+    <CollectionsProvider>
       <Routes>
         <Route
           element={
@@ -61,7 +62,7 @@ function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster />
-    </>
+    </CollectionsProvider>
   );
 }
 

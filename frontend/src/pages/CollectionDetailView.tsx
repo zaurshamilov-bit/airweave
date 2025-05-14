@@ -454,7 +454,7 @@ const Collections = () => {
                                         <div
                                             ref={nameInputRef}
                                             contentEditable
-                                            className="text-3xl font-bold tracking-tight text-foreground outline-none min-w-[300px] py-1 pl-0 pr-2 rounded border border-primary/30 bg-primary/5 transition-all duration-150"
+                                            className="text-3xl font-bold tracking-tight text-foreground outline-none p-1 pl-0 pr-3 rounded border border-border/40 transition-all duration-150"
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter') {
                                                     e.preventDefault();
@@ -577,42 +577,40 @@ const Collections = () => {
 
                     <hr className={cn(
                         "border-t my-2 max-w-full",
-                        isDark ? "border-gray-700" : "border-gray-300"
+                        isDark ? "border-gray-700/30" : "border-gray-300/30"
                     )} />
 
                     {/* Source Connections Section */}
                     <div className="mt-6">
-                        <h2 className="text-2xl font-bold tracking-tight mb-4 text-foreground">Source Connections</h2>
+                        <h2 className="text-xl font-semibold tracking-tight mb-4 text-foreground">Source Connections</h2>
 
                         <div className="flex flex-wrap gap-3">
                             {sourceConnections.map((connection) => (
-                                <Button
+                                <div
                                     key={connection.id}
-                                    variant="outline"
                                     className={cn(
-                                        "w-60 h-13 flex items-center gap-2 justify-start overflow-hidden flex-shrink-0 flex-grow-0",
+                                        "h-10 flex items-center gap-2 overflow-hidden flex-shrink-0 flex-grow-0 px-3 py-2 rounded-md cursor-pointer transition-colors",
                                         selectedConnection?.id === connection.id
                                             ? "border-2 border-primary"
                                             : isDark
-                                                ? "border border-gray-700 bg-gray-800/50 hover:bg-gray-800"
-                                                : "border border-gray-300 hover:bg-gray-100"
+                                            ? "border border-gray-700 bg-gray-800/50 hover:bg-gray-700/70"
+                                            : "border border-gray-300 hover:bg-gray-100"
                                     )}
                                     onClick={() => handleSelectConnection(connection)}
                                 >
                                     <div className={cn(
-                                        "w-10 h-10 rounded-md flex items-center justify-center overflow-hidden flex-shrink-0",
-                                        isDark ? "bg-gray-800" : "bg-background"
+                                        "rounded-md flex items-center justify-center overflow-hidden flex-shrink-0",
                                     )}>
                                         <img
                                             src={getAppIconUrl(connection.short_name, resolvedTheme)}
                                             alt={connection.name}
-                                            className="max-w-full max-h-full w-auto h-auto object-contain"
+                                            className="h-6 w-6 object-contain"
                                         />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <span className="text-[18px] font-medium truncate block text-left text-foreground">{connection.name}</span>
+                                        <span className="text-[16px] font-medium truncate block text-foreground">{connection.name}</span>
                                     </div>
-                                </Button>
+                                </div>
                             ))}
                         </div>
 

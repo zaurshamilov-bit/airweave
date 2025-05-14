@@ -729,70 +729,173 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
         <div className={cn(isDark ? "text-foreground" : "")}>
             {/* Visualization Section */}
             {lastSyncJob && (
-                <div className="py-3 space-y-0 mt-10">
-                    {/* Status Header */}
-                    <div className="flex justify-between w-full mb-0 -mb-3">
-                        <div className="flex gap-2 relative top-3">
-                            {/* Entities count div */}
+                <div className="py-2 space-y-3 mt-4">
+                    {/* Status Dashboard */}
+                    <div className="grid grid-cols-12 gap-3">
+                        {/* Status Stats Cards */}
+                        <div className="col-span-12 md:col-span-8 grid grid-cols-3 gap-3">
+                            {/* Entities Card */}
                             <div className={cn(
-                                "min-w-[120px] px-3 py-2 rounded-md shadow-sm text-center text-[15px] flex items-center justify-center overflow-hidden whitespace-nowrap text-ellipsis h-10",
-                                isDark ? "bg-gray-800" : "bg-gray-200"
+                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200",
+                                isDark
+                                  ? "bg-gray-800/60 border border-gray-700/50"
+                                  : "bg-white border border-gray-100"
                             )}>
-                                {totalEntities > 0 ? `${totalEntities} total entities` : 'No entities yet'}
+                                <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
+                                    Entities
+                                </div>
+                                <div className="text-2xl font-semibold">
+                                    {totalEntities.toLocaleString()}
+                                </div>
                             </div>
 
-                            {/* Status div */}
+                            {/* Status Card */}
                             <div className={cn(
-                                "min-w-[120px] px-3 py-2 rounded-md shadow-sm text-center text-[15px] flex items-center justify-center overflow-hidden whitespace-nowrap text-ellipsis h-10",
-                                isDark ? "bg-gray-800" : "bg-gray-200"
+                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200",
+                                isDark
+                                  ? "bg-gray-800/60 border border-gray-700/50"
+                                  : "bg-white border border-gray-100"
                             )}>
-                                <div className="flex items-center">
-                                    <span className={`inline-flex h-2.5 w-2.5 rounded-full mr-1.5
+                                <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
+                                    Status
+                                </div>
+                                <div className="text-lg font-medium flex items-center">
+                                    <span className={`inline-flex h-3 w-3 rounded-full mr-2
                                         ${status === 'completed' ? 'bg-green-500' :
                                             status === 'failed' ? 'bg-red-500' :
                                                 status === 'in_progress' ? 'bg-blue-500 animate-pulse' :
                                                     'bg-amber-500'}`}
                                     />
                                     <span className="capitalize">
-                                        {status === 'in_progress' ? 'running' : status}
+                                        {status === 'in_progress' ? 'Running' : status}
                                         {(status === 'in_progress' || status === 'pending') &&
-                                            <span className="animate-pulse">...</span>
+                                            <span className="animate-pulse ml-1">•••</span>
                                         }
                                     </span>
                                 </div>
                             </div>
+
+                            {/* Runtime Card */}
+                            <div className={cn(
+                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200",
+                                isDark
+                                  ? "bg-gray-800/60 border border-gray-700/50"
+                                  : "bg-white border border-gray-100"
+                            )}>
+                                <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
+                                    Runtime
+                                </div>
+                                <div className="text-lg font-medium">
+                                    {totalRuntime ? formatTotalRuntime(totalRuntime) : 'N/A'}
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Last run info div */}
+                        {/* Schedule Card */}
                         <div className={cn(
-                            "min-w-[150px] max-w-[35%] p-3 rounded-md shadow-sm flex flex-col text-[13px] items-end justify-center overflow-hidden",
-                            isDark ? "bg-gray-800" : "bg-white"
+                            "col-span-12 md:col-span-4 rounded-lg p-3 flex flex-col justify-between shadow-sm transition-all duration-200",
+                            isDark
+                              ? "bg-gray-800/60 border border-gray-700/50"
+                              : "bg-white border border-gray-100"
                         )}>
-                            {lastSyncJob ? (
-                                <>
-                                    <span className="whitespace-nowrap text-ellipsis overflow-hidden w-full text-right">
-                                        Last run finished: {formatTimeSince(lastSyncJob.completed_at || lastSyncJob.failed_at || lastSyncJob.created_at)}
-                                    </span>
-                                    <span className="whitespace-nowrap text-ellipsis overflow-hidden w-full text-right">
-                                        Total runtime: {totalRuntime ? formatTotalRuntime(totalRuntime) : 'N/A'}
-                                    </span>
-                                </>
-                            ) : (
-                                <span className="whitespace-nowrap text-ellipsis overflow-hidden w-full text-right">
-                                    No sync jobs yet
-                                </span>
-                            )}
+                            <div className="flex items-center justify-between mb-1">
+                                <div className="text-xs uppercase tracking-wider font-medium opacity-60">
+                                    Schedule
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-1 px-1 rounded-md"
+                                    onClick={() => {
+                                        setScheduleConfig({
+                                            type: selectedConnection.cron_schedule ? "scheduled" : "one-time",
+                                            frequency: "custom",
+                                            cronExpression: selectedConnection.cron_schedule || undefined
+                                        });
+                                        setShowScheduleDialog(true);
+                                    }}
+                                >
+                                    <Pencil className="h-3 w-3" />
+                                </Button>
+                            </div>
+                            <div className="flex items-center">
+                                <Clock className={cn(
+                                    "w-5 h-5 mr-2",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                )} />
+                                <div>
+                                    {selectedConnection.cron_schedule ? (
+                                        <div className="text-lg font-medium">
+                                            {nextRunTime ? `Due in ${nextRunTime}` : 'Scheduled'}
+                                        </div>
+                                    ) : (
+                                        <div className="text-lg font-medium">
+                                            Manual Runs Only
+                                        </div>
+                                    )}
+                                    <div className="text-xs opacity-70 mt-0.5">
+                                        Last run: {formatTimeSince(lastSyncJob.completed_at || lastSyncJob.failed_at || lastSyncJob.created_at)}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     {/* Entity Visualization */}
                     <Card className={cn(
-                        "overflow-hidden",
-                        isDark ? "border-gray-700 bg-gray-800/30" : ""
+                        "overflow-hidden border rounded-lg",
+                        isDark ? "border-gray-700/50 bg-gray-800/30" : "border-gray-200 bg-white"
                     )}>
                         <CardHeader className="p-3">
+                            <div className="flex justify-between items-center">
+                                <h3 className={cn(
+                                    "text-base font-medium",
+                                    isDark ? "text-gray-200" : "text-gray-700"
+                                )}>
+                                    Entity Graph
+                                </h3>
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className={cn(
+                                            "h-8 gap-1.5 font-normal",
+                                            isDark
+                                            ? "bg-gray-800 border-gray-700"
+                                            : "bg-white"
+                                        )}
+                                        onClick={reloadData}
+                                        disabled={isReloading}
+                                    >
+                                        <RefreshCw className={cn(
+                                            "h-3.5 w-3.5",
+                                            isReloading && "animate-spin"
+                                        )} />
+                                        Refresh
+                                    </Button>
+
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className={cn(
+                                            "h-8 gap-1.5 font-normal",
+                                            isDark
+                                            ? "bg-gray-700 border-gray-600 text-white"
+                                            : "bg-gray-100 border-gray-200 text-gray-800"
+                                        )}
+                                        onClick={handleRunSync}
+                                        disabled={isInitiatingSyncJob || isSyncJobRunning}
+                                    >
+                                        <Play className="h-3.5 w-3.5" />
+                                        {isInitiatingSyncJob ? 'Starting...' : isSyncJobRunning ? 'Running...' : 'Run Sync'}
+                                    </Button>
+                                </div>
+                            </div>
+
                             {/* Entity Selection Buttons */}
-                            <div className="flex flex-wrap gap-1">
+                            <div className="flex flex-wrap gap-1.5 mt-3 mb-1">
                                 {Object.keys(entityDict)
                                     .sort() // Sort keys alphabetically
                                     .map((key) => {
@@ -802,21 +905,31 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                                         return (
                                             <Button
                                                 key={key}
-                                                variant={"outline"}
+                                                variant="outline"
                                                 className={cn(
-                                                    "flex items-center gap-1 h-10 text-[15px] min-w-[90px]",
+                                                    "flex items-center gap-1.5 h-7 py-0 px-2 text-[13px] min-w-[90px]",
                                                     isSelected
-                                                        ? "border-[2px] border-black dark:border-white"
-                                                        : "border-transparent shadow-[inset_0_0_0_1px_#d1d5db] hover:bg-gray-100 dark:shadow-[inset_0_0_0_1px_#4b5563] dark:hover:bg-gray-800"
+                                                        ? isDark
+                                                          ? "bg-gray-700 border-gray-600 border-[1.5px] text-white"
+                                                          : "bg-gray-100 border-gray-300 border-[1.5px] text-gray-800"
+                                                        : isDark
+                                                          ? "bg-gray-800/80 border-gray-700/60 text-gray-300"
+                                                          : "bg-white border-gray-200/80 text-gray-700"
                                                 )}
                                                 onClick={() => setSelectedEntity(key)}
                                             >
                                                 {key}
                                                 <Badge
-                                                    variant={isSelected ? "outline" : "default"}
+                                                    variant="outline"
                                                     className={cn(
-                                                        "pointer-events-none",
-                                                        isDark ? "bg-gray-700 text-gray-200 border-gray-600" : "bg-black-50 text-black-700 border-black-200"
+                                                        "ml-1 pointer-events-none text-[11px] px-1.5 font-normal h-5",
+                                                        isSelected
+                                                          ? isDark
+                                                            ? "bg-gray-600 text-gray-200 border-gray-500"
+                                                            : "bg-gray-200 text-gray-700 border-gray-300"
+                                                          : isDark
+                                                            ? "bg-gray-700 text-gray-300 border-gray-600"
+                                                            : "bg-gray-100 text-gray-600 border-gray-200"
                                                     )}
                                                 >
                                                     {entityDict[key]}
@@ -826,11 +939,11 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                                     })}
                             </div>
                         </CardHeader>
-                        <CardContent className="p-1 pb-4">
+                        <CardContent className="p-0 pb-0">
                             {/* Flow Diagram */}
                             <div
                                 ref={flowContainerRef}
-                                className="h-[calc(200px+5vw)] min-h-[200px] max-h-[300px] -mt-4 w-full overflow-hidden"
+                                className="h-[320px] w-full overflow-hidden"
                             >
                                 <ReactFlow
                                     nodes={nodes}
@@ -840,7 +953,7 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                                     nodeTypes={nodeTypes}
                                     fitView
                                     fitViewOptions={{
-                                        padding: 0.2,
+                                        padding: 0.3,
                                         minZoom: 0.1,
                                         maxZoom: 1.5,
                                         duration: 0
@@ -849,7 +962,8 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                                     defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
                                     style={{
                                         touchAction: 'none',
-                                        cursor: 'default'
+                                        cursor: 'default',
+                                        background: isDark ? 'transparent' : '#fafafa'
                                     }}
                                     nodesDraggable={false}
                                     nodesConnectable={false}
@@ -863,89 +977,121 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                                     proOptions={{ hideAttribution: true }}
                                 />
                             </div>
+
+                            {/* Divider between Entity Graph and Sync Progress */}
+                            <div className={cn(
+                                "border-t w-full mx-auto my-2",
+                                isDark ? "border-gray-700/50" : "border-gray-200"
+                            )} />
+
+                            {/* Sync Progress Section */}
+                            <div className="px-3 pb-3 pt-1">
+                                <h3 className={cn(
+                                    "text-base font-medium mb-4",
+                                    isDark ? "text-gray-200" : "text-gray-700"
+                                )}>
+                                    Sync Progress
+                                </h3>
+
+                                {/* Normalized multi-segment progress bar */}
+                                <div className={cn(
+                                    "relative w-full h-3 rounded-md overflow-hidden mb-6",
+                                    isDark ? "bg-gray-700/50" : "bg-gray-100"
+                                )}>
+                                    <div
+                                        className="absolute left-0 top-0 h-3 bg-green-500"
+                                        style={{ width: `${total > 0 ? (entityData.inserted / total) * 100 : 0}%` }}
+                                    />
+                                    <div
+                                        className="absolute top-0 h-3 bg-cyan-500"
+                                        style={{
+                                            left: `${total > 0 ? (entityData.inserted / total) * 100 : 0}%`,
+                                            width: `${total > 0 ? (entityData.updated / total) * 100 : 0}%`
+                                        }}
+                                    />
+                                    <div
+                                        className="absolute top-0 h-3 bg-primary"
+                                        style={{
+                                            left: `${total > 0 ? ((entityData.inserted + entityData.updated) / total) * 100 : 0}%`,
+                                            width: `${total > 0 ? (entityData.kept / total) * 100 : 0}%`
+                                        }}
+                                    />
+                                    <div
+                                        className="absolute top-0 h-3 bg-red-500"
+                                        style={{
+                                            left: `${total > 0 ? ((entityData.inserted + entityData.updated + entityData.kept) / total) * 100 : 0}%`,
+                                            width: `${total > 0 ? (entityData.deleted / total) * 100 : 0}%`
+                                        }}
+                                    />
+                                    <div
+                                        className="absolute top-0 h-3 bg-yellow-500"
+                                        style={{
+                                            left: `${total > 0 ? ((entityData.inserted + entityData.updated + entityData.kept + entityData.deleted) / total) * 100 : 0}%`,
+                                            width: `${total > 0 ? (entityData.skipped / total) * 100 : 0}%`
+                                        }}
+                                    />
+                                </div>
+
+                                {/* Stats grid */}
+                                <div className="grid grid-cols-5 gap-3 mt-5">
+                                    <div className={cn(
+                                        "rounded-md p-3 flex flex-col items-center",
+                                        isDark ? "bg-gray-700/30" : "bg-gray-50"
+                                    )}>
+                                        <div className="flex items-center space-x-1 mb-1">
+                                            <span className="w-3 h-3 block bg-green-500 rounded-full" />
+                                            <span className="text-xs font-medium">Inserted</span>
+                                        </div>
+                                        <span className="text-lg font-semibold">{entityData.inserted.toLocaleString()}</span>
+                                    </div>
+
+                                    <div className={cn(
+                                        "rounded-md p-3 flex flex-col items-center",
+                                        isDark ? "bg-gray-700/30" : "bg-gray-50"
+                                    )}>
+                                        <div className="flex items-center space-x-1 mb-1">
+                                            <span className="w-3 h-3 block bg-cyan-500 rounded-full" />
+                                            <span className="text-xs font-medium">Updated</span>
+                                        </div>
+                                        <span className="text-lg font-semibold">{entityData.updated.toLocaleString()}</span>
+                                    </div>
+
+                                    <div className={cn(
+                                        "rounded-md p-3 flex flex-col items-center",
+                                        isDark ? "bg-gray-700/30" : "bg-gray-50"
+                                    )}>
+                                        <div className="flex items-center space-x-1 mb-1">
+                                            <span className="w-3 h-3 block bg-primary rounded-full" />
+                                            <span className="text-xs font-medium">Kept</span>
+                                        </div>
+                                        <span className="text-lg font-semibold">{entityData.kept.toLocaleString()}</span>
+                                    </div>
+
+                                    <div className={cn(
+                                        "rounded-md p-3 flex flex-col items-center",
+                                        isDark ? "bg-gray-700/30" : "bg-gray-50"
+                                    )}>
+                                        <div className="flex items-center space-x-1 mb-1">
+                                            <span className="w-3 h-3 block bg-red-500 rounded-full" />
+                                            <span className="text-xs font-medium">Deleted</span>
+                                        </div>
+                                        <span className="text-lg font-semibold">{entityData.deleted.toLocaleString()}</span>
+                                    </div>
+
+                                    <div className={cn(
+                                        "rounded-md p-3 flex flex-col items-center",
+                                        isDark ? "bg-gray-700/30" : "bg-gray-50"
+                                    )}>
+                                        <div className="flex items-center space-x-1 mb-1">
+                                            <span className="w-3 h-3 block bg-yellow-500 rounded-full" />
+                                            <span className="text-xs font-medium">Skipped</span>
+                                        </div>
+                                        <span className="text-lg font-semibold">{entityData.skipped.toLocaleString()}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </CardContent>
                     </Card>
-
-                    {/* Action Buttons */}
-                    <div className="flex justify-between mt-2 pt-1">
-                        <div className="flex gap-2 flex-wrap pt-1">
-                            <Button
-                                key="sync-history"
-                                variant="default"
-                                className={cn(
-                                    "flex items-center gap-1 h-10 text-[15px] min-w-[90px] border shrink-0",
-                                    isDark ? "border-gray-600" : "border-black"
-                                )}
-                                onClick={() => { }}
-                            >
-                                See sync history
-                            </Button>
-                            <Button
-                                key="second-button"
-                                variant="default"
-                                className={cn(
-                                    "flex items-center gap-1 h-10 text-[15px] min-w-[90px] border shrink-0",
-                                    isDark ? "border-gray-600" : "border-black"
-                                )}
-                                onClick={() => { }}
-                            >
-                                View details
-                            </Button>
-                            <Button
-                                key="run-sync"
-                                variant="default"
-                                className={cn(
-                                    "flex items-center gap-1 h-10 text-[15px] min-w-[90px] border shrink-0",
-                                    isDark ? "border-gray-600" : "border-black"
-                                )}
-                                onClick={handleRunSync}
-                                disabled={isInitiatingSyncJob || isSyncJobRunning}
-                            >
-                                {isInitiatingSyncJob ? 'Starting...' : 'Run sync'}
-                                <Play className="h-4 w-4 ml-1" />
-                            </Button>
-                        </div>
-
-                        {/* Schedule information box */}
-                        {selectedConnection?.sync_id && (
-                            <div className={cn(
-                                "min-w-[150px] max-w-[35%] p-3 rounded-md shadow-sm flex flex-col text-[13px] items-end justify-center overflow-hidden pt-1",
-                                isDark ? "bg-gray-800" : "bg-white"
-                            )}>
-                                <div className="flex items-center justify-end gap-2 w-full">
-                                    <Clock className="w-4 h-4 text-black-500" />
-                                    {selectedConnection.cron_schedule ? (
-                                        <>
-                                            <span className="whitespace-nowrap text-ellipsis overflow-hidden text-right">
-                                                {nextRunTime ? `Sync due in ${nextRunTime}` : 'Scheduled'}
-                                            </span>
-                                        </>
-                                    ) : (
-                                        <span className="whitespace-nowrap text-ellipsis overflow-hidden text-right">
-                                            No schedule set
-                                        </span>
-                                    )}
-                                </div>
-                                <span
-                                    className={cn(
-                                        "cursor-pointer hover:underline flex items-center justify-end gap-1 whitespace-nowrap",
-                                        isDark ? "text-gray-400" : "text-black-500"
-                                    )}
-                                    onClick={() => {
-                                        setScheduleConfig({
-                                            type: selectedConnection.cron_schedule ? "scheduled" : "one-time",
-                                            frequency: "custom",
-                                            cronExpression: selectedConnection.cron_schedule || undefined
-                                        });
-                                        setShowScheduleDialog(true);
-                                    }}
-                                >
-                                    Change this
-                                    <Pencil className="h-3 w-3" />
-                                </span>
-                            </div>
-                        )}
-                    </div>
                 </div>
             )}
 
@@ -992,106 +1138,6 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-
-            {/* Sync Progress */}
-            {lastSyncJob && (
-                <div className="w-full my-6">
-                    <Card className={cn(
-                        "w-full max-w-none shadow-sm relative overflow-hidden",
-                        isSyncJobRunning ? 'live-pulsing-bg' : '',
-                        isDark ? "border-gray-700 bg-gray-800/30" : ""
-                    )}>
-                        <CardContent className="space-y-4 relative z-10 mt-4">
-                            {/* Normalized multi-segment progress bar */}
-                            <div className={cn(
-                                "relative w-full h-3 rounded-md overflow-hidden",
-                                isDark ? "bg-gray-700/50" : "bg-secondary/20"
-                            )}>
-                                <div
-                                    className="absolute left-0 top-0 h-3 bg-green-500"
-                                    style={{ width: `${total > 0 ? (entityData.inserted / total) * 100 : 0}%` }}
-                                />
-                                <div
-                                    className="absolute top-0 h-3 bg-cyan-500"
-                                    style={{
-                                        left: `${total > 0 ? (entityData.inserted / total) * 100 : 0}%`,
-                                        width: `${total > 0 ? (entityData.updated / total) * 100 : 0}%`
-                                    }}
-                                />
-                                <div
-                                    className="absolute top-0 h-3 bg-primary"
-                                    style={{
-                                        left: `${total > 0 ? ((entityData.inserted + entityData.updated) / total) * 100 : 0}%`,
-                                        width: `${total > 0 ? (entityData.kept / total) * 100 : 0}%`
-                                    }}
-                                />
-                                <div
-                                    className="absolute top-0 h-3 bg-red-500"
-                                    style={{
-                                        left: `${total > 0 ? ((entityData.inserted + entityData.updated + entityData.kept) / total) * 100 : 0}%`,
-                                        width: `${total > 0 ? (entityData.deleted / total) * 100 : 0}%`
-                                    }}
-                                />
-                                <div
-                                    className="absolute top-0 h-3 bg-yellow-500"
-                                    style={{
-                                        left: `${total > 0 ? ((entityData.inserted + entityData.updated + entityData.kept + entityData.deleted) / total) * 100 : 0}%`,
-                                        width: `${total > 0 ? (entityData.skipped / total) * 100 : 0}%`
-                                    }}
-                                />
-                            </div>
-
-                            {/* Legend */}
-                            <div className="text-xs mt-2 flex items-center justify-between flex-wrap gap-2">
-                                <div className="flex items-center space-x-1">
-                                    <span className="w-3 h-3 block bg-green-500 rounded-full" />
-                                    <span>Inserted</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                    <span className="w-3 h-3 block bg-cyan-500 rounded-full" />
-                                    <span>Updated</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                    <span className="w-3 h-3 block bg-primary rounded-full" />
-                                    <span>Kept</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                    <span className="w-3 h-3 block bg-red-500 rounded-full" />
-                                    <span>Deleted</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                    <span className="w-3 h-3 block bg-yellow-500 rounded-full" />
-                                    <span>Skipped</span>
-                                </div>
-                            </div>
-
-                            {/* Tally so far */}
-                            <div className="space-y-2 text-sm mt-4">
-                                <div className="flex justify-between">
-                                    <span>Inserted</span>
-                                    <span>{entityData.inserted.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Updated</span>
-                                    <span>{entityData.updated.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Kept</span>
-                                    <span>{entityData.kept.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Deleted</span>
-                                    <span>{entityData.deleted.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Skipped</span>
-                                    <span>{entityData.skipped.toLocaleString()}</span>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
         </div>
     );
 };

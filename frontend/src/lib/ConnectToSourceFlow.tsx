@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { SourceConfigDialog } from "@/components/sync";
 import { apiClient } from "@/lib/api";
 
 // Interface for source details
@@ -130,7 +129,6 @@ export const useConnectToSourceFlow = () => {
         });
         setConfigDialogOpen(true);
 
-        console.log("👋 [ConnectToSourceFlow] Control passed to SourceConfigDialog");
     };
 
     // =========================================
