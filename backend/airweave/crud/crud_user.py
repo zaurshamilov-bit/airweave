@@ -75,6 +75,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         """Create a new user.
 
         Always creates a default organization for the user if one is not provided.
+        Also creates a default API key for the user.
 
         Args:
             db (AsyncSession): The database session.
@@ -109,6 +110,13 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
             obj_in = UserCreate(**user_data)
 
         user = await super().create(db, obj_in=obj_in)
+
+        # Create a default API key for the user
+        from airweave.crud.crud_api_key import api_key as crud_api_key
+        from airweave.schemas.api_key import APIKeyCreate
+
+        api_key_in = APIKeyCreate()  # Use default expiration
+        await crud_api_key.create_with_user(db=db, obj_in=api_key_in, current_user=user)
 
         # Explicitly load the organization after creation
         stmt = select(User).where(User.id == user.id).options(selectinload(User.organization))

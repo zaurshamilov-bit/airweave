@@ -239,44 +239,44 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
         {/* Main content (left column) */}
         <div className="sm:col-span-2 space-y-8 sm:space-y-10">
-          {/* Collections Section */}
-          <section>
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h2 className="text-2xl sm:text-3xl font-bold">Collections</h2>
-              <Link
-                to="/collections"
-                className="flex items-center text-sm text-primary hover:text-primary/80 hover:bg-accent/30 px-2 py-1.5 rounded-md"
-              >
-                <ExternalLink className="mr-2 h-3.5 w-3.5 opacity-70" />
-                <span>See all {collections.length > 0 ? `(${collections.length})` : ''}</span>
-              </Link>
-            </div>
+          {/* Collections Section - only show when loading or has collections */}
+          {(isLoadingCollections || collections.length > 0) && (
+            <section>
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className="text-2xl sm:text-3xl font-bold">Collections</h2>
+                <Link
+                  to="/collections"
+                  className="flex items-center text-sm text-primary hover:text-primary/80 hover:bg-accent/30 px-2 py-1.5 rounded-md"
+                >
+                  <ExternalLink className="mr-2 h-3.5 w-3.5 opacity-70" />
+                  <span>See all {collections.length > 0 ? `(${collections.length})` : ''}</span>
+                </Link>
+              </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 auto-rows-fr">
-              {isLoadingCollections ? (
-                Array.from({ length: 3 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="h-[220px] rounded-xl animate-pulse bg-slate-100 dark:bg-slate-800/50"
-                  />
-                ))
-              ) : topCollections.length === 0 ? (
-                <div className="col-span-full text-center py-10 text-muted-foreground">No collections found</div>
-              ) : (
-                topCollections.map((collection) => (
-                  <CollectionCard
-                    key={collection.id}
-                    id={collection.id}
-                    name={collection.name}
-                    readableId={collection.readable_id}
-                    sourceConnections={collectionsWithSources[collection.readable_id] || []}
-                    status={collection.status}
-                    onClick={() => navigate(`/collections/${collection.readable_id}`)}
-                  />
-                ))
-              )}
-            </div>
-          </section>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 auto-rows-fr">
+                {isLoadingCollections ? (
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="h-[220px] rounded-xl animate-pulse bg-slate-100 dark:bg-slate-800/50"
+                    />
+                  ))
+                ) : (
+                  topCollections.map((collection) => (
+                    <CollectionCard
+                      key={collection.id}
+                      id={collection.id}
+                      name={collection.name}
+                      readableId={collection.readable_id}
+                      sourceConnections={collectionsWithSources[collection.readable_id] || []}
+                      status={collection.status}
+                      onClick={() => navigate(`/collections/${collection.readable_id}`)}
+                    />
+                  ))
+                )}
+              </div>
+            </section>
+          )}
 
           {/* Create Collection Section */}
           <section>

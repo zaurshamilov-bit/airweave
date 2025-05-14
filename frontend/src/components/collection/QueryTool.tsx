@@ -340,7 +340,7 @@ export const QueryTool = ({ collectionReadableId }: QueryToolProps) => {
                 {/* Content Section */}
                 <div className="flex flex-col">
                     {/* Completion Section */}
-                    {(completion && responseType === 'completion') || isLoading ? (
+                    {responseType === 'completion' && (completion || isLoading) ? (
                         <div className={cn(
                             "border-t",
                             isDark ? "border-gray-800/50" : "border-gray-200/50"

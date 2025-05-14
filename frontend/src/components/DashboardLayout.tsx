@@ -29,6 +29,8 @@ import { apiClient } from "@/lib/api";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_UPDATED } from "@/lib/events";
+import { APIKeysSettings } from "@/components/settings/APIKeysSettings";
+import { motion } from "framer-motion";
 
 // Interface for Collection type
 interface Collection {
@@ -119,14 +121,20 @@ const DashboardLayout = () => {
     if (path === '/white-label') {
       return location.pathname.startsWith('/white-label');
     }
-    if (path === '/settings/api-keys') {
-      return location.pathname === '/settings/api-keys';
-    }
-    if (path === '/settings') {
-      return location.pathname === '/settings';
+    if (path === '/api-keys') {
+      return location.pathname === '/api-keys';
     }
     return false;
   };
+
+  // Common navigation item styling
+  const getNavItemStyles = (isActive: boolean, isCollection = false) => cn(
+    "flex items-center px-3 py-2 text-sm rounded-lg relative transition-all duration-200",
+    "hover:bg-primary/10 group max-w-[214px]",
+    isActive
+      ? "text-primary font-medium bg-primary/10 shadow-sm"
+      : "text-muted-foreground hover:text-foreground"
+  );
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -136,15 +144,15 @@ const DashboardLayout = () => {
         </Link>
       </div>
 
-      <ScrollArea className="flex-1 px-3 py-1">
-        <div className="space-y-6">
+      <ScrollArea className="flex-1 px-2 py-1">
+        <div className="space-y-2 pr-3">
           {/* Create Collection Button */}
-          <div className="pb-2 pt-1 px-2">
+          <div className="pb-1 pt-1">
             <Button
               onClick={handleCreateCollection}
               variant="outline"
               size="sm"
-              className="flex items-center justify-start pl-6 w-full gap-1.5 text-sm text-primary hover:bg-primary/10 bg-background border border-primary/60 hover:text-primary rounded-md py-1.5 font-medium transition-colors"
+              className="flex items-center justify-start pl-5 w-[214px] gap-1.5 text-sm text-primary hover:bg-primary/15 bg-background border border-primary/60 hover:text-primary rounded-lg py-2 font-medium transition-all duration-200 hover:shadow-sm"
             >
               <Plus className="h-3.5 w-3.5" />
               Create collection
@@ -152,21 +160,13 @@ const DashboardLayout = () => {
           </div>
 
           {/* Home Button */}
-          <div className="pb-2 px-2">
+          <div className="pb-1 pt-2">
             <Link
               to="/"
-              className={cn(
-                "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
-                location.pathname === "/" || location.pathname === "/dashboard"
-                  ? "text-primary font-medium bg-primary/5"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
-              )}
+              className={getNavItemStyles(location.pathname === "/" || location.pathname === "/dashboard")}
             >
-              {(location.pathname === "/" || location.pathname === "/dashboard") && (
-                <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
-              )}
-              <Home className="mr-2 h-4 w-4 opacity-70" />
-              Home
+              <Home className="mr-2 h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />
+              <span className="font-semibold">Home</span>
             </Link>
           </div>
 
@@ -174,123 +174,94 @@ const DashboardLayout = () => {
           <Collapsible
             open={collectionsOpen}
             onOpenChange={setCollectionsOpen}
-            className="space-y-1"
+            className="space-y-0.5"
           >
-            <CollapsibleTrigger className="flex items-center justify-between w-full px-2 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              <span className="font-semibold">Collections</span>
-              {collectionsOpen ? (
+            <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg text-muted-foreground hover:text-foreground hover:bg-primary/5 transition-all duration-200">
+              <span className="font-bold flex items-center">
+                <LayoutGrid className="mr-2 h-4 w-4 opacity-70" />
+                Collections
+              </span>
+              <motion.div
+                animate={{ rotate: collectionsOpen ? 180 : 0 }}
+                transition={{ duration: 0.2 }}
+              >
                 <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
+              </motion.div>
             </CollapsibleTrigger>
-            <CollapsibleContent className="mt-1">
-              <div className="ml-1 pl-1 border-l border-border/50 space-y-0.5">
-                {isLoadingCollections ? (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">Loading...</div>
-                ) : collectionError ? (
-                  <div className="px-2 py-1.5 text-xs text-destructive">{collectionError}</div>
-                ) : collections.length === 0 ? (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">No collections</div>
-                ) : (
-                  <>
-                    {/* Display maximum 20 collections */}
-                    {collections.slice(0, 20).map((collection) => (
-                      <Link
-                        key={collection.id}
-                        to={`/collections/${collection.readable_id}`}
-                        className={cn(
-                          "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
-                          isActive(`/collections/${collection.readable_id}`)
-                            ? "text-primary font-medium bg-primary/5"
-                            : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
-                        )}
-                      >
-                        {isActive(`/collections/${collection.readable_id}`) && (
-                          <div className="absolute left-[-2px] top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
-                        )}
-                        <LayoutGrid className="mr-2 h-3.5 w-3.5 opacity-70" />
-                        <span className="truncate">{collection.name}</span>
-                      </Link>
-                    ))}
+            <motion.div
+              initial={{ height: collectionsOpen ? "auto" : 0 }}
+              animate={{ height: collectionsOpen ? "auto" : 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="overflow-hidden"
+            >
+              <CollapsibleContent className="mt-0.5">
+                <div className="ml-1 pl-1 border-l border-border/30 space-y-0.5">
+                  {isLoadingCollections ? (
+                    <div className="px-2 py-1 text-xs text-muted-foreground">Loading...</div>
+                  ) : collectionError ? (
+                    <div className="px-2 py-1 text-xs text-destructive">{collectionError}</div>
+                  ) : collections.length === 0 ? (
+                    <div className="px-2 py-1 text-xs text-muted-foreground">No collections</div>
+                  ) : (
+                    <>
+                      {/* Display maximum 20 collections */}
+                      {collections.slice(0, 20).map((collection) => (
+                        <Link
+                          key={collection.id}
+                          to={`/collections/${collection.readable_id}`}
+                          className={getNavItemStyles(isActive(`/collections/${collection.readable_id}`), true)}
+                        >
+                          <LayoutGrid className="mr-2 h-3.5 w-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
+                          <span className="truncate">{collection.name}</span>
+                          {isActive(`/collections/${collection.readable_id}`) && (
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-primary rounded-full transform -translate-x-1.5" />
+                          )}
+                        </Link>
+                      ))}
 
-                    {/* Show "See more" link if there are more than 20 collections */}
-                    {collections.length > 20 && (
-                      <Link
-                        to="/collections"
-                        className="flex items-center px-2 py-1.5 text-sm rounded-md text-primary hover:text-primary/80 hover:bg-accent/30 mt-1"
-                      >
-                        <ExternalLink className="mr-2 h-3.5 w-3.5 opacity-70" />
-                        <span>See all ({collections.length})</span>
-                      </Link>
-                    )}
-                  </>
-                )}
-              </div>
-            </CollapsibleContent>
+                      {/* Show "See more" link if there are more than 20 collections */}
+                      {collections.length > 20 && (
+                        <Link
+                          to="/collections"
+                          className="flex items-center px-3 py-1.5 text-sm rounded-lg text-primary hover:text-primary/80 hover:bg-primary/10 mt-1 transition-all duration-200"
+                        >
+                          <ExternalLink className="mr-2 h-3.5 w-3.5 opacity-70" />
+                          <span>See all ({collections.length})</span>
+                        </Link>
+                      )}
+                    </>
+                  )}
+                </div>
+              </CollapsibleContent>
+            </motion.div>
           </Collapsible>
 
           {/* API Keys Section */}
-          <div className="space-y-1">
-            <h3 className="font-semibold px-2 py-1.5 text-sm text-muted-foreground">API keys</h3>
+          <div>
             <Link
-              to="/settings/api-keys"
-              className={cn(
-                "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
-                isActive('/settings/api-keys')
-                  ? "text-primary font-medium bg-primary/5"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
-              )}
+              to="/api-keys"
+              className={getNavItemStyles(isActive('/api-keys'))}
             >
-              {isActive('/settings/api-keys') && (
-                <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
-              )}
-              <Key className="mr-2 h-4 w-4 opacity-70" />
-              API keys
+              <Key className="mr-2 h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />
+              <span className="font-semibold">API keys</span>
             </Link>
           </div>
 
-          {/* Configure Section */}
-          <div className="space-y-1">
-            <h3 className="font-semibold px-2 py-1.5 text-sm text-muted-foreground">Configure</h3>
-            <div className="space-y-0.5">
-              <Link
-                to="/white-label"
-                className={cn(
-                  "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
-                  isActive('/white-label')
-                    ? "text-primary font-medium bg-primary/5"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
-                )}
-              >
-                {isActive('/white-label') && (
-                  <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
-                )}
-                <Tag className="mr-2 h-4 w-4 opacity-70" />
-                White Label
-              </Link>
-              <Link
-                to="/settings"
-                className={cn(
-                  "flex items-center px-2 py-1.5 text-sm rounded-md relative transition-colors",
-                  isActive('/settings')
-                    ? "text-primary font-medium bg-primary/5"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/30"
-                )}
-              >
-                {isActive('/settings') && (
-                  <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary rounded-r-sm" />
-                )}
-                <Settings className="mr-2 h-4 w-4 opacity-70" />
-                Settings
-              </Link>
-            </div>
+          {/* White Label moved outside Configure section */}
+          <div>
+            <Link
+              to="/white-label"
+              className={getNavItemStyles(isActive('/white-label'))}
+            >
+              <Tag className="mr-2 h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />
+              <span className="font-semibold">White Label</span>
+            </Link>
           </div>
         </div>
       </ScrollArea>
 
       {/* User Profile Section */}
-      <div className="mt-auto pt-2 pb-4 px-3 border-t border-border/30">
+      <div className="mt-auto pt-2 pb-3 px-3 border-t border-border/30">
         <UserProfileDropdown />
       </div>
     </div>
@@ -304,7 +275,7 @@ const DashboardLayout = () => {
           <div className="lg:hidden fixed top-4 left-4 z-[30]">
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="bg-background-alpha-90">
+                <Button variant="outline" size="icon" className="bg-background-alpha-90 rounded-lg shadow-sm hover:bg-background-alpha-100 transition-all duration-200">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
@@ -334,7 +305,7 @@ const DashboardLayout = () => {
                       href="https://discord.com/invite/484HY9Ehxt"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-md"
+                      className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-lg transition-all duration-200"
                     >
                       <DiscordIcon size={20} />
                     </a>
@@ -347,7 +318,7 @@ const DashboardLayout = () => {
                     >
                       <Button
                         variant="outline"
-                        className="hidden md:flex border-primary/60 border-[1px] text-primary/90 hover:bg-primary/10 hover:text-foreground/65 h-8 px-3 text-sm"
+                        className="hidden md:flex border-primary/60 border-[1px] text-primary/90 hover:bg-primary/10 hover:text-foreground/65 h-9 px-4 text-sm rounded-lg transition-all duration-200 hover:shadow-sm"
                       >
                         Get a demo
                       </Button>
@@ -356,7 +327,7 @@ const DashboardLayout = () => {
                     {/* Theme Switcher */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="rounded-md h-8 w-8 hover:bg-background-alpha-40 text-muted-foreground">
+                        <Button variant="ghost" size="icon" className="rounded-lg h-8 w-8 hover:bg-background-alpha-40 text-muted-foreground transition-all duration-200">
                           {resolvedTheme === 'dark' ? (
                             <Moon className="h-[18px] w-[18px]" />
                           ) : (
@@ -364,10 +335,10 @@ const DashboardLayout = () => {
                           )}
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-32">
+                      <DropdownMenuContent align="end" className="w-32 rounded-lg overflow-hidden">
                         <DropdownMenuItem
                           onClick={() => setTheme('light')}
-                          className="flex items-center justify-between cursor-pointer"
+                          className="flex items-center justify-between cursor-pointer transition-colors"
                         >
                           <div className="flex items-center">
                             <Sun className="mr-2 h-4 w-4" />
@@ -377,7 +348,7 @@ const DashboardLayout = () => {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => setTheme('dark')}
-                          className="flex items-center justify-between cursor-pointer"
+                          className="flex items-center justify-between cursor-pointer transition-colors"
                         >
                           <div className="flex items-center">
                             <Moon className="mr-2 h-4 w-4" />
@@ -387,7 +358,7 @@ const DashboardLayout = () => {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => setTheme('system')}
-                          className="flex items-center justify-between cursor-pointer"
+                          className="flex items-center justify-between cursor-pointer transition-colors"
                         >
                           <div className="flex items-center">
                             <Monitor className="mr-2 h-4 w-4" />
@@ -405,7 +376,19 @@ const DashboardLayout = () => {
                 "h-[calc(100%-4rem)]",
                 isNonScrollable ? "overflow-hidden" : "pb-8"
               )}>
-                <Outlet />
+                {location.pathname === "/api-keys" ? (
+                  <div className="container pb-8 pt-8">
+                    <div className="flex items-center gap-2 mb-8">
+                      <Key className="h-8 w-8 text-primary" />
+                      <h1 className="text-3xl font-bold">API Keys</h1>
+                    </div>
+                    <div className="max-w-4xl">
+                      <APIKeysSettings />
+                    </div>
+                  </div>
+                ) : (
+                  <Outlet />
+                )}
               </div>
             </div>
           </div>

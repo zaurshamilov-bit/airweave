@@ -2,7 +2,6 @@ import { Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import Dashboard from "@/pages/Dashboard";
 import DashboardLayout from "@/components/DashboardLayout";
-import Settings from "@/pages/Settings";
 import WhiteLabel from "@/pages/WhiteLabel";
 import CreateWhiteLabel from "@/pages/CreateWhiteLabel";
 import { NotFound } from "@/pages/NotFound";
@@ -36,6 +35,8 @@ function App() {
             <Route index element={<SyncTableView />} />
           </Route>
 
+          <Route path="/api-keys" />
+
           <Route path="/destinations" element={<Destinations />} />
 
           <Route path="/white-label">
@@ -44,7 +45,6 @@ function App() {
             <Route path=":id" element={<ViewEditWhiteLabel />} />
           </Route>
 
-          <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/chat/:id" element={<Chat />} />
