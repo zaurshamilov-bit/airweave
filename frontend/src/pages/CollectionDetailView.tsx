@@ -165,9 +165,6 @@ const Collections = () => {
     const [isRefreshingAll, setIsRefreshingAll] = useState(false);
     const [refreshingSourceIds, setRefreshingSourceIds] = useState<string[]>([]);
 
-    // Add this near the other state declarations
-    const [scrollPosition, setScrollPosition] = useState(0);
-
     /********************************************
      * API AND DATA FETCHING FUNCTIONS
      ********************************************/
@@ -243,8 +240,6 @@ const Collections = () => {
     // Update selected connection
     const handleSelectConnection = async (connection: SourceConnection) => {
         console.log("Manually selecting connection:", connection.id);
-        // Store current scroll position
-        setScrollPosition(window.scrollY);
         setSelectedConnection(connection);
     };
 
@@ -457,17 +452,6 @@ const Collections = () => {
             return newIds;
         });
     }, [selectedConnection?.id]);
-
-    // Add this effect to restore scroll position when source connection changes
-    useEffect(() => {
-        if (selectedConnection && scrollPosition > 0) {
-            // Restore scroll position after component rerenders
-            const timer = setTimeout(() => {
-                window.scrollTo(0, scrollPosition);
-            }, 100);
-            return () => clearTimeout(timer);
-        }
-    }, [selectedConnection, scrollPosition]);
 
     if (error) {
         return (
@@ -716,7 +700,6 @@ const Collections = () => {
                     {/* Render SourceConnectionDetailView when a connection is selected */}
                     {selectedConnection && (
                         <SourceConnectionDetailView
-                            key={selectedConnection.id}
                             sourceConnectionId={selectedConnection.id}
                             shouldForceSubscribe={refreshingSourceIds.includes(selectedConnection.id)}
                             onSubscriptionComplete={handleSubscriptionComplete}

@@ -140,12 +140,6 @@ const SourceConnectionDetailView = ({
     // Add this near other useRef declarations:
     const flowContainerRef = useRef<HTMLDivElement>(null);
 
-    const pageRef = useRef(null);
-    const scrollPos = useRef(0);
-
-    // 1. Add this state to store scroll position
-    const [scrollRestorationAttempted, setScrollRestorationAttempted] = useState(false);
-
     /********************************************
      * COMPUTED VALUES & DERIVED STATE
      ********************************************/
@@ -216,6 +210,15 @@ const SourceConnectionDetailView = ({
 
     // 6. Display metrics for UI
     const total = entityData.inserted + entityData.updated + entityData.kept + entityData.deleted + entityData.skipped;
+
+    // Add this to prevent entity dictionary from completely emptying during transitions
+    // This preserves the previous entity dictionary if new data doesn't have entities yet
+    const stableEntityDict = useMemo(() => {
+        if (Object.keys(entityDict).length > 0) {
+            return entityDict;
+        }
+        return prevEntityDictRef.current;
+    }, [entityDict]);
 
     /********************************************
      * API AND DATA FETCHING FUNCTIONS
@@ -724,54 +727,27 @@ const SourceConnectionDetailView = ({
         };
     }, [reactFlowInstance]);
 
-    // Add this effect to reset nodes and edges when source connection changes
+    // Modify the Reset ReactFlow instance when connection changes
     useEffect(() => {
         // Clear the graph when connection changes
         setNodes([]);
         setEdges([]);
         setSelectedEntity('');
         setEntityDict({});
-    }, [sourceConnectionId]);
+        setSelectedDag(null);
+        setEntityDags([]); // Reset entity DAGs too
 
-    // Reset ReactFlow instance when connection changes
-    useEffect(() => {
+        // If we have a ReactFlow instance, force a complete reset
         if (reactFlowInstance) {
-            // Force a reset of the instance
+            reactFlowInstance.setNodes([]);
+            reactFlowInstance.setEdges([]);
+
+            // Force a reset of the instance after a delay
             setTimeout(() => {
                 reactFlowInstance.fitView({ padding: 0.2 });
             }, 100);
         }
     }, [sourceConnectionId, reactFlowInstance]);
-
-    // 2. Replace the scroll effects with this version
-    useEffect(() => {
-        // On component mount, save the current page scroll position
-        const currentScrollY = window.scrollY;
-
-        // Return cleanup function that runs on component unmount
-        return () => {
-            // Store scroll position in sessionStorage when component unmounts
-            sessionStorage.setItem('sourceConnectionScrollPos', currentScrollY.toString());
-        };
-    }, []);
-
-    // 3. Add this effect for scroll restoration
-    useEffect(() => {
-        if (selectedConnection && !scrollRestorationAttempted) {
-            // Get saved position
-            const savedScrollPos = sessionStorage.getItem('sourceConnectionScrollPos');
-
-            if (savedScrollPos) {
-                // Delay scroll restoration to ensure the DOM has fully rendered
-                const timer = setTimeout(() => {
-                    window.scrollTo(0, parseInt(savedScrollPos, 10));
-                    setScrollRestorationAttempted(true);
-                }, 150);
-
-                return () => clearTimeout(timer);
-            }
-        }
-    }, [selectedConnection, scrollRestorationAttempted]);
 
     console.log(`[PubSub] Data source for job ${lastSyncJob?.id}: ${isShowingRealtimeUpdates ? 'LIVE UPDATES' : 'DATABASE'}`);
 
@@ -797,11 +773,11 @@ const SourceConnectionDetailView = ({
                 <div className="py-2 space-y-3 mt-4">
                     {/* Status Dashboard */}
                     <div className="grid grid-cols-12 gap-3">
-                        {/* Status Stats Cards */}
+                        {/* Status Stats Cards - Add stable min-height to prevent layout shifts */}
                         <div className="col-span-12 md:col-span-8 grid grid-cols-3 gap-3">
                             {/* Entities Card */}
                             <div className={cn(
-                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200",
+                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
                                 isDark
                                     ? "bg-gray-800/60 border border-gray-700/50"
                                     : "bg-white border border-gray-100"
@@ -816,7 +792,7 @@ const SourceConnectionDetailView = ({
 
                             {/* Status Card */}
                             <div className={cn(
-                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200",
+                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
                                 isDark
                                     ? "bg-gray-800/60 border border-gray-700/50"
                                     : "bg-white border border-gray-100"
@@ -842,7 +818,7 @@ const SourceConnectionDetailView = ({
 
                             {/* Runtime Card */}
                             <div className={cn(
-                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200",
+                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
                                 isDark
                                     ? "bg-gray-800/60 border border-gray-700/50"
                                     : "bg-white border border-gray-100"
@@ -858,7 +834,7 @@ const SourceConnectionDetailView = ({
 
                         {/* Schedule Card */}
                         <div className={cn(
-                            "col-span-12 md:col-span-4 rounded-lg p-3 flex flex-col justify-between shadow-sm transition-all duration-200",
+                            "col-span-12 md:col-span-4 rounded-lg p-3 flex flex-col justify-between shadow-sm transition-all duration-200 min-h-[5.5rem]",
                             isDark
                                 ? "bg-gray-800/60 border border-gray-700/50"
                                 : "bg-white border border-gray-100"
@@ -922,24 +898,7 @@ const SourceConnectionDetailView = ({
 
                                 {/* Action Buttons */}
                                 <div className="flex gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className={cn(
-                                            "h-8 gap-1.5 font-normal",
-                                            isDark
-                                                ? "bg-gray-800 border-gray-700"
-                                                : "bg-white"
-                                        )}
-                                        onClick={reloadData}
-                                        disabled={isReloading}
-                                    >
-                                        <RefreshCw className={cn(
-                                            "h-3.5 w-3.5",
-                                            isReloading && "animate-spin"
-                                        )} />
-                                        Refresh
-                                    </Button>
+
 
                                     <Button
                                         variant="outline"
@@ -959,56 +918,60 @@ const SourceConnectionDetailView = ({
                                 </div>
                             </div>
 
-                            {/* Entity Selection Buttons */}
-                            <div className="flex flex-wrap gap-1.5 mt-3 mb-1">
-                                {Object.keys(entityDict)
-                                    .sort() // Sort keys alphabetically
-                                    .map((key) => {
-                                        // Determine if this button is selected
-                                        const isSelected = key === selectedEntity;
+                            {/* Entity Selection Buttons - Add min-height container to prevent layout shifts */}
+                            <div className="flex flex-wrap gap-1.5 mt-3 mb-1 min-h-[2.25rem] transition-all">
+                                {Object.keys(stableEntityDict).length > 0 ?
+                                    Object.keys(stableEntityDict)
+                                        .sort() // Sort keys alphabetically
+                                        .map((key) => {
+                                            // Determine if this button is selected
+                                            const isSelected = key === selectedEntity;
 
-                                        return (
-                                            <Button
-                                                key={key}
-                                                variant="outline"
-                                                className={cn(
-                                                    "flex items-center gap-1.5 h-7 py-0 px-2 text-[13px] min-w-[90px]",
-                                                    isSelected
-                                                        ? isDark
-                                                            ? "bg-gray-700 border-gray-600 border-[1.5px] text-white"
-                                                            : "bg-gray-100 border-gray-300 border-[1.5px] text-gray-800"
-                                                        : isDark
-                                                            ? "bg-gray-800/80 border-gray-700/60 text-gray-300"
-                                                            : "bg-white border-gray-200/80 text-gray-700"
-                                                )}
-                                                onClick={() => setSelectedEntity(key)}
-                                            >
-                                                {key}
-                                                <Badge
+                                            return (
+                                                <Button
+                                                    key={key}
                                                     variant="outline"
                                                     className={cn(
-                                                        "ml-1 pointer-events-none text-[11px] px-1.5 font-normal h-5",
+                                                        "flex items-center gap-1.5 h-7 py-0 px-2 text-[13px] min-w-[90px]",
                                                         isSelected
                                                             ? isDark
-                                                                ? "bg-gray-600 text-gray-200 border-gray-500"
-                                                                : "bg-gray-200 text-gray-700 border-gray-300"
+                                                                ? "bg-gray-700 border-gray-600 border-[1.5px] text-white"
+                                                                : "bg-gray-100 border-gray-300 border-[1.5px] text-gray-800"
                                                             : isDark
-                                                                ? "bg-gray-700 text-gray-300 border-gray-600"
-                                                                : "bg-gray-100 text-gray-600 border-gray-200"
+                                                                ? "bg-gray-800/80 border-gray-700/60 text-gray-300"
+                                                                : "bg-white border-gray-200/80 text-gray-700"
                                                     )}
+                                                    onClick={() => setSelectedEntity(key)}
                                                 >
-                                                    {entityDict[key]}
-                                                </Badge>
-                                            </Button>
-                                        );
-                                    })}
+                                                    {key}
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={cn(
+                                                            "ml-1 pointer-events-none text-[11px] px-1.5 font-normal h-5",
+                                                            isSelected
+                                                                ? isDark
+                                                                    ? "bg-gray-600 text-gray-200 border-gray-500"
+                                                                    : "bg-gray-200 text-gray-700 border-gray-300"
+                                                                : isDark
+                                                                    ? "bg-gray-700 text-gray-300 border-gray-600"
+                                                                    : "bg-gray-100 text-gray-600 border-gray-200"
+                                                        )}
+                                                    >
+                                                        {stableEntityDict[key]}
+                                                    </Badge>
+                                                </Button>
+                                            );
+                                        })
+                                    : null
+                                }
                             </div>
                         </CardHeader>
                         <CardContent className="p-0 pb-0">
-                            {/* Flow Diagram */}
+                            {/* Flow Diagram - Add fixed height to prevent resizing during transitions */}
                             <div
                                 ref={flowContainerRef}
                                 className="h-[320px] w-full overflow-hidden"
+                                style={{ minHeight: '320px' }}
                             >
                                 <ReactFlow
                                     key={selectedConnection.id || 'no-connection'}
@@ -1059,7 +1022,7 @@ const SourceConnectionDetailView = ({
                                     Sync Progress
                                 </h3>
 
-                                {/* Normalized multi-segment progress bar */}
+                                {/* Normalized multi-segment progress bar - Add min-height to prevent layout shifts */}
                                 <div className={cn(
                                     "relative w-full h-3 rounded-md overflow-hidden mb-6",
                                     isDark ? "bg-gray-700/50" : "bg-gray-100"
@@ -1098,8 +1061,8 @@ const SourceConnectionDetailView = ({
                                     />
                                 </div>
 
-                                {/* Stats grid */}
-                                <div className="grid grid-cols-5 gap-3 mt-5">
+                                {/* Stats grid - Add min-height for containers */}
+                                <div className="grid grid-cols-5 gap-3 mt-5 min-h-[5rem]">
                                     <div className={cn(
                                         "rounded-md p-3 flex flex-col items-center",
                                         isDark ? "bg-gray-700/30" : "bg-gray-50"
