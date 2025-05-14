@@ -385,15 +385,34 @@ class PlatformScheduler:
                 f"Found DAG {sync_dag.id} for sync {sync.id} with "
                 f"{len(sync_dag.nodes)} nodes and {len(sync_dag.edges)} edges"
             )
+            source_connection = await crud.source_connection.get_by_sync_id(
+                db=db, sync_id=sync.id, current_user=current_user
+            )
+            collection = await crud.collection.get_by_readable_id(
+                db=db,
+                readable_id=source_connection.readable_collection_id,
+                current_user=current_user,
+            )
 
             # Convert to schemas
             sync_job_schema = schemas.SyncJob.model_validate(sync_job)
             sync_dag_schema = schemas.SyncDag.model_validate(sync_dag)
+            collection = schemas.Collection.model_validate(collection, from_attributes=True)
+            source_connection = schemas.SourceConnection.from_orm_with_collection_mapping(
+                source_connection
+            )
 
             # Run the sync using the original user
             logger.info(f"Starting sync task for job {sync_job.id} (sync {sync.id})")
             asyncio.create_task(
-                sync_service.run(sync, sync_job_schema, sync_dag_schema, current_user)
+                sync_service.run(
+                    sync,
+                    sync_job_schema,
+                    sync_dag_schema,
+                    collection,
+                    source_connection,
+                    current_user,
+                )
             )
 
             logger.info(

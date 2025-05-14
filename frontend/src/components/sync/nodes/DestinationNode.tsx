@@ -36,34 +36,33 @@ export const DestinationNode = memo(({ data, selected, ...props }: NodeProps) =>
   const name = connection?.name || data.name || "Native Qdrant";
 
   return (
-    <div className="w-24 h-24">
+    <div className="w-10 h-10">
       <div
         className={cn(
           "w-full h-full flex flex-col bg-background/80 backdrop-blur-sm",
-          "border-2 transition-colors duration-200 cursor-pointer",
-          "border-muted-foreground/50 hover:border-primary rounded-l-lg rounded-r-2xl",
+          "border-[1px] transition-colors duration-200 cursor-pointer",
+          "border-muted-foreground/50 hover:border-primary rounded-lg",
           selected ? "border-primary shadow-sm shadow-primary/20" : ""
         )}
       >
         <Handle
           type="target"
           position={Position.Left}
-          className="w-3 h-3 -ml-[3px] border border-background bg-muted-foreground"
+          className="w-1 h-1 ml-[1px] border border-background bg-muted-foreground"
         />
 
         <div className="w-full h-full flex items-center justify-center">
-          <div className="w-16 h-16 flex flex-col items-center">
+          <div className="flex items-center justify-center p-2">
             <img
               src={getDestinationIconUrl("qdrant")}
               alt="Native Qdrant"
-              className="w-12 h-12 object-contain"
+              className="max-w-full max-h-full w-auto h-auto object-contain"
             />
-            <span className="text-[10px] mt-2 text-center">Qdrant</span>
           </div>
         </div>
       </div>
-      <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap">
-        <span className="text-sm font-semibold text-foreground text-center">Native Qdrant</span>
+      <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap">
+        <span className="text-[8px] text-foreground text-center">Qdrant</span>
       </div>
     </div>
   );

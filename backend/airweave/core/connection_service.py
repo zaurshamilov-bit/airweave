@@ -189,17 +189,17 @@ class ConnectionService:
         Raises:
             HTTPException: If the integration doesn't support OAuth2
         """
-        settings = integration_settings.get_by_short_name(short_name)
+        settings = await integration_settings.get_by_short_name(short_name)
         if not settings:
             raise HTTPException(status_code=404, detail="Integration not found")
 
         if short_name == "trello":
-            return oauth2_service.generate_auth_url_for_trello()
+            return await oauth2_service.generate_auth_url_for_trello()
 
         if not self._supports_oauth2(settings.auth_type):
             raise HTTPException(status_code=400, detail="Integration does not support OAuth2")
 
-        return oauth2_service.generate_auth_url(settings, auth_fields)
+        return await oauth2_service.generate_auth_url(settings, auth_fields)
 
     async def connect_with_oauth2_code(
         self,
@@ -238,7 +238,7 @@ class ConnectionService:
                 raise HTTPException(status_code=404, detail="Source not found")
 
             # Get OAuth2 settings
-            settings = integration_settings.get_by_short_name(short_name)
+            settings = await integration_settings.get_by_short_name(short_name)
             if not settings:
                 raise HTTPException(status_code=404, detail="Integration settings not found")
 

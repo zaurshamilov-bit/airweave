@@ -49,3 +49,20 @@ class ChatRole(str, Enum):
     USER = "user"
     ASSISTANT = "assistant"
     SYSTEM = "system"
+
+
+class SourceConnectionStatus(str, Enum):
+    """Source connection status enum."""
+
+    ACTIVE = "active"
+    IN_PROGRESS = "in_progress"
+    FAILING = "failing"
+
+
+class CollectionStatus(str, Enum):
+    """Collection status enum."""
+
+    ACTIVE = "ACTIVE"
+    PARTIAL_ERROR = "PARTIAL ERROR"
+    NEEDS_SOURCE = "NEEDS SOURCE"
+    ERROR = "ERROR"

@@ -39,7 +39,7 @@ async def check_connection_status(
 
     """
     try:
-        integration_settings.get_by_short_name(short_name)
+        await integration_settings.get_by_short_name(short_name)
     except Exception as e:
         raise HTTPException(
             status_code=404,
@@ -113,14 +113,14 @@ async def test_sync(
         )
 
     # Use the first available connection
-    source_connection = active_source_connections[0]
+    source_system_connection = active_source_connections[0]
 
     # Create a new sync
     async with UnitOfWork(db) as uow:
         # Create a sync using the first destination found
         sync_in = schemas.SyncCreate(
             name=f"Test Sync for {short_name}",
-            source_connection_id=source_connection.id,
+            source_connection_id=source_system_connection.id,
         )
 
         sync = await sync_service.create(db=db, sync=sync_in.to_base(), current_user=user, uow=uow)

@@ -18,6 +18,7 @@ class SyncProgressUpdate(BaseModel):
     deleted: int = 0
     kept: int = 0
     skipped: int = 0
+    entities_encountered: dict[str, int] = {}
     is_complete: bool = False  # Add completion flag
     is_failed: bool = False  # Add failure flag
 
@@ -131,6 +132,14 @@ class SyncProgress:
     def to_dict(self) -> dict:
         """Convert progress to a dictionary."""
         return self.stats.model_dump()
+
+    async def update_entities_encountered(self, entities_encountered: dict[str, set[str]]) -> None:
+        """Update the entities encountered tracking."""
+        self.stats.entities_encountered = {
+            entity_type: len(entity_ids) for entity_type, entity_ids in entities_encountered.items()
+        }
+        # We don't publish here to avoid too frequent updates
+        # Regular increment will trigger publishing based on threshold
 
 
 # Create a global instance for the entire app

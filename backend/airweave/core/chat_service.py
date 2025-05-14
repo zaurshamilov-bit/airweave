@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core.config import settings
-from airweave.core.search_service import search_service
 from airweave.models.chat import ChatMessage, ChatRole
 
 logger = logging.getLogger(__name__)
@@ -222,10 +221,13 @@ class ChatService:
             return ""
 
         try:
+            # Lazy import to avoid circular dependency
+            from airweave.core.search_service import search_service
+
             search_results = await search_service.search(
                 db=db,
                 query=query,
-                sync_id=chat.sync_id,
+                readable_id=chat.sync_id,
                 current_user=user,
             )
 

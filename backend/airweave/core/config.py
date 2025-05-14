@@ -17,7 +17,7 @@ class Settings(BaseSettings):
         PROJECT_NAME (str): The name of the project.
         LOCAL_DEVELOPMENT (bool): Whether the application is running locally.
         LOCAL_CURSOR_DEVELOPMENT (bool): Whether cursor development features are enabled.
-        DTAP_ENVIRONMENT (str): The deployment environment (local, dev, test, prod).
+        ENVIRONMENT (str): The deployment environment (local, dev, test, prod).
         FRONTEND_LOCAL_DEVELOPMENT_PORT (int): Port for local frontend development.
         FIRST_SUPERUSER (str): The email address of the first superuser.
         FIRST_SUPERUSER_PASSWORD (str): The password of the first superuser.
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Airweave"
     LOCAL_DEVELOPMENT: bool = False
     LOCAL_CURSOR_DEVELOPMENT: bool = False
-    DTAP_ENVIRONMENT: str = "local"
+    ENVIRONMENT: str = "local"
     FRONTEND_LOCAL_DEVELOPMENT_PORT: int = 8080
 
     FIRST_SUPERUSER: str
@@ -81,12 +81,29 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: Optional[str] = None
     MISTRAL_API_KEY: Optional[str] = None
 
+    AZURE_KEYVAULT_NAME: Optional[str] = None
+
     # Custom deployment URLs - these are used to override the default URLs to allow
     # for custom domains in custom deployments
     API_FULL_URL: Optional[str] = None
     APP_FULL_URL: Optional[str] = None
     QDRANT_FULL_URL: Optional[str] = None
     ADDITIONAL_CORS_ORIGINS: Optional[str] = None  # Separated by commas or semicolons
+
+    @field_validator("AZURE_KEYVAULT_NAME", mode="before")
+    def validate_azure_keyvault_name(cls, v: Optional[str], info: ValidationInfo) -> Optional[str]:
+        """Create a keyvault name based on the environment.
+
+        Like: "airweave-core-dev-kv" or "airweave-core-prd-kv"
+
+        Args:
+            v: The Azure KeyVault name.
+            info: Validation context containing all field values.
+        """
+        environment = info.data.get("ENVIRONMENT", "local")
+        if environment in ["dev", "prd"] and not v:
+            return f"airweave-core-{environment}-kv"
+        return v
 
     @field_validator("ADDITIONAL_CORS_ORIGINS", mode="before")
     def parse_cors_origins(cls, v: Optional[str]) -> Optional[list[str]]:
@@ -185,11 +202,11 @@ class Settings(BaseSettings):
         if self.API_FULL_URL:
             return self.API_FULL_URL
 
-        if self.DTAP_ENVIRONMENT == "local":
+        if self.ENVIRONMENT == "local":
             return self.LOCAL_NGROK_SERVER or "http://localhost:8001"
-        if self.DTAP_ENVIRONMENT == "prod":
+        if self.ENVIRONMENT == "prod":
             return "https://api.airweave.ai"
-        return f"https://api.{self.DTAP_ENVIRONMENT}-airweave.com"
+        return f"https://api.{self.ENVIRONMENT}-airweave.com"
 
     @property
     def app_url(self) -> str:
@@ -201,11 +218,11 @@ class Settings(BaseSettings):
         if self.APP_FULL_URL:
             return self.APP_FULL_URL
 
-        if self.DTAP_ENVIRONMENT == "local":
+        if self.ENVIRONMENT == "local":
             return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
-        if self.DTAP_ENVIRONMENT == "prod":
+        if self.ENVIRONMENT == "prod":
             return "https://app.airweave.ai"
-        return f"https://app.{self.DTAP_ENVIRONMENT}-airweave.com"
+        return f"https://app.{self.ENVIRONMENT}-airweave.com"
 
     @property
     def docs_url(self) -> str:
@@ -214,11 +231,11 @@ class Settings(BaseSettings):
         Returns:
             str: The docs URL.
         """
-        if self.DTAP_ENVIRONMENT == "local":
+        if self.ENVIRONMENT == "local":
             return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
-        if self.DTAP_ENVIRONMENT == "prod":
+        if self.ENVIRONMENT == "prod":
             return "https://docs.airweave.ai"
-        return f"https://docs.{self.DTAP_ENVIRONMENT}-airweave.com"
+        return f"https://docs.{self.ENVIRONMENT}-airweave.com"
 
 
 settings = Settings()

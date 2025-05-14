@@ -16,12 +16,12 @@ class BaseDestination(ABC):
     _labels: ClassVar[List[str]] = []
 
     @abstractmethod
-    async def create(self, sync_id: UUID) -> "BaseDestination":
+    async def create(self, collection_id: UUID) -> "BaseDestination":
         """Create a new destination."""
         pass
 
     @abstractmethod
-    async def setup_collection(self, sync_id: UUID) -> None:
+    async def setup_collection(self, collection_id: UUID, vector_size: int) -> None:
         """Set up the collection for storing entities."""
         pass
 
@@ -43,6 +43,11 @@ class BaseDestination(ABC):
     @abstractmethod
     async def bulk_delete(self, entity_ids: list[str]) -> None:
         """Bulk delete entities from the destination."""
+        pass
+
+    @abstractmethod
+    async def delete_by_sync_id(self, sync_id: UUID) -> None:
+        """Delete entities from the destination by sync ID."""
         pass
 
     @abstractmethod

@@ -37,6 +37,9 @@ integrations:
     additional_frontend_params:
       token_access_type: "offline"
 
+  github:
+    auth_type: "config_class"
+
   gmail:
     auth_type: "oauth2_with_refresh"
     url: "https://accounts.google.com/o/oauth2/auth"
@@ -95,8 +98,8 @@ integrations:
     url: "https://app.intercom.com/oauth"
     backend_url: "https://api.intercom.io/auth/eagle/token"
     grant_type: "authorization_code"
-    client_id: "1f6fa99d-dea8-4b1c-a79b-cf82a1389e4c"
-    client_secret_keyvault_name: "3a7cd4a1-f0ca-4d83-8d8e-01706f175c0b"
+    client_id: "fc803750-559c-4a89-a59f-e5b7f00e7773"
+    client_secret_keyvault_name: "821234a7-5a5c-489c-b013-8ea54d8528cc"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
     scope: "read write"
@@ -205,7 +208,8 @@ integrations:
   trello:
     auth_type: "trello_auth"
     url: "https://trello.com/1/authorize"
-    key: "2d051c43173fdbd0e89ac5b71333d310"
+    key: "e49e51c7f9127b9b55aeb839de421305"
+    secret: "dd89259aad6124cbb329931c60ce78b2fc74e2d55b7dd08799f745bf843a355c"
     scope: "read"
     callback_method: "fragment"
     expiration: "never"
@@ -216,8 +220,8 @@ integrations:
     url: "https://app.clickup.com/api"
     backend_url: "https://api.clickup.com/api/v2/oauth/token"
     grant_type: "authorization_code"
-    client_id: "TUT9AEAK4ADT8U20AZUAW6NF70FOE1OQ"
-    client_secret: "A3UZN8BISGPZ38BS1LXJ5E2LX65SM0CJJA2UYDDJX02SVYIKLY6N7W46Z7LUC3A3"
+    client_id: "HK1CY3S4A1WHTLXVXAIOW2WMGIB3FMRW"
+    client_secret: "FHN5F0W4HFELAOZ94ASAW72KVX8DON5R3FVKKHKJ4LSBUAUP60F3ZL11IIHJ443A"
     content_type: "application/x-www-form-urlencoded"
     client_credential_location: "body"
     scope: "public data:read team:read space:read list:read folder:read task:read comment:read"
@@ -226,7 +230,4 @@ integrations:
       prompt: "consent"
 
   qdrant:
-    auth_type: "config_class"
-
-  github:
     auth_type: "config_class"

@@ -1,4 +1,10 @@
-"""Connection schemas."""
+"""Connection schemas.
+
+This is a system table that contains the connection information for all integrations.
+Not to be confused with the source connection model, which is a user-facing model that
+encompasses the connection and sync information for a specific source.
+
+"""
 
 from typing import Optional
 from uuid import UUID

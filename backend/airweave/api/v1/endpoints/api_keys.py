@@ -8,17 +8,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
+from airweave.core import credentials
 
 router = TrailingSlashRouter()
 
 
-@router.post("/", response_model=schemas.APIKeyWithPlainKey)
+@router.post("/", response_model=schemas.APIKey)
 async def create_api_key(
     *,
     db: AsyncSession = Depends(deps.get_db),
     api_key_in: schemas.APIKeyCreate = Body({}),  # Default to empty dict if not provided
     user: schemas.User = Depends(deps.get_user),
-) -> schemas.APIKeyWithPlainKey:
+) -> schemas.APIKey:
     """Create a new API key for the current user.
 
     Returns a temporary plain key for the user to store securely.
@@ -32,15 +33,17 @@ async def create_api_key(
 
     Returns:
     -------
-        schemas.APIKeyWithPlainKey: The created API key object, including the key.
+        schemas.APIKey: The created API key object, including the key.
 
     """
     api_key_obj = await crud.api_key.create_with_user(db=db, obj_in=api_key_in, current_user=user)
 
-    # Create a dictionary with all required data to avoid async ORM attribute access issues
+    # Decrypt the key for the response
+    decrypted_data = credentials.decrypt(api_key_obj.encrypted_key)
+    decrypted_key = decrypted_data["key"]
+
     api_key_data = {
         "id": api_key_obj.id,
-        "key_prefix": api_key_obj.key_prefix,
         "organization": user.organization_id,  # Use the user's organization_id
         "created_at": api_key_obj.created_at,
         "modified_at": api_key_obj.modified_at,
@@ -48,10 +51,10 @@ async def create_api_key(
         "expiration_date": api_key_obj.expiration_date,
         "created_by_email": api_key_obj.created_by_email,
         "modified_by_email": api_key_obj.modified_by_email,
-        "plain_key": api_key_obj.plain_key,
+        "decrypted_key": decrypted_key,
     }
 
-    return schemas.APIKeyWithPlainKey(**api_key_data)
+    return schemas.APIKey(**api_key_data)
 
 
 @router.get("/{id}", response_model=schemas.APIKey)
@@ -71,21 +74,22 @@ async def read_api_key(
 
     Returns:
     -------
-        schemas.APIKey: The API key object.
+        schemas.APIKey: The API key object with decrypted key.
 
     Raises:
     ------
         HTTPException: If the API key is not found.
-
     """
     api_key = await crud.api_key.get(db=db, id=id, current_user=user)
     if not api_key:
         raise HTTPException(status_code=404, detail="API key not found")
 
-    # Create a dictionary with all required data to avoid async ORM attribute access issues
+    # Decrypt the key for the response
+    decrypted_data = credentials.decrypt(api_key.encrypted_key)
+    decrypted_key = decrypted_data["key"]
+
     api_key_data = {
         "id": api_key.id,
-        "key_prefix": api_key.key_prefix,
         "organization": user.organization_id,
         "created_at": api_key.created_at,
         "modified_at": api_key.modified_at,
@@ -93,6 +97,7 @@ async def read_api_key(
         "expiration_date": api_key.expiration_date,
         "created_by_email": api_key.created_by_email,
         "modified_by_email": api_key.modified_by_email,
+        "decrypted_key": decrypted_key,
     }
 
     return schemas.APIKey(**api_key_data)
@@ -117,26 +122,28 @@ async def read_api_keys(
 
     Returns:
     -------
-        List[schemas.APIKey]: A list of API keys.
-
+        List[schemas.APIKey]: A list of API keys with decrypted keys.
     """
     api_keys = await crud.api_key.get_all_for_user(db=db, skip=skip, limit=limit, current_user=user)
 
-    # Process each API key to avoid async ORM attribute access issues
     result = []
     for api_key in api_keys:
+        # Decrypt each key
+        decrypted_data = credentials.decrypt(api_key.encrypted_key)
+        decrypted_key = decrypted_data["key"]
+
         api_key_data = {
             "id": api_key.id,
-            "key_prefix": api_key.key_prefix,
             "organization": user.organization_id,
             "created_at": api_key.created_at,
             "modified_at": api_key.modified_at,
-            "last_used_date": (
-                api_key.last_used_date if hasattr(api_key, "last_used_date") else None
-            ),
+            "last_used_date": api_key.last_used_date
+            if hasattr(api_key, "last_used_date")
+            else None,
             "expiration_date": api_key.expiration_date,
             "created_by_email": api_key.created_by_email,
             "modified_by_email": api_key.modified_by_email,
+            "decrypted_key": decrypted_key,
         }
         result.append(schemas.APIKey(**api_key_data))
 
@@ -171,10 +178,13 @@ async def delete_api_key(
     if not api_key:
         raise HTTPException(status_code=404, detail="API key not found")
 
+    # Decrypt the key for the response
+    decrypted_data = credentials.decrypt(api_key.encrypted_key)
+    decrypted_key = decrypted_data["key"]
+
     # Create a copy of the data before deletion
     api_key_data = {
         "id": api_key.id,
-        "key_prefix": api_key.key_prefix,
         "organization": user.organization_id,
         "created_at": api_key.created_at,
         "modified_at": api_key.modified_at,
@@ -182,6 +192,7 @@ async def delete_api_key(
         "expiration_date": api_key.expiration_date,
         "created_by_email": api_key.created_by_email,
         "modified_by_email": api_key.modified_by_email,
+        "decrypted_key": decrypted_key,
     }
 
     # Now delete the API key

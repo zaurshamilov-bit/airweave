@@ -14,7 +14,6 @@ from airweave.api.router import TrailingSlashRouter
 from airweave.core.config import settings
 from airweave.core.logging import logger
 from airweave.core.sync_service import sync_service
-from airweave.db.unit_of_work import UnitOfWork
 from airweave.platform.sync.pubsub import sync_pubsub
 
 router = TrailingSlashRouter()
@@ -43,11 +42,13 @@ async def list_syncs(
     --------
         list[schemas.Sync] | list[schemas.SyncWithSourceConnection]: A list of syncs
     """
-    if with_source_connection:
-        syncs = await crud.sync.get_all_syncs_join_with_source_connection(db=db, current_user=user)
-    else:
-        syncs = await crud.sync.get_all_for_user(db=db, current_user=user, skip=skip, limit=limit)
-    return syncs
+    return await sync_service.list_syncs(
+        db=db,
+        current_user=user,
+        skip=skip,
+        limit=limit,
+        with_source_connection=with_source_connection,
+    )
 
 
 @router.get("/jobs", response_model=list[schemas.SyncJob])
@@ -59,7 +60,7 @@ async def list_all_jobs(
     status: Optional[List[str]] = Query(None, description="Filter by job status"),
     user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.SyncJob]:
-    """List all sync jobs across all syncs.
+    """List all jobs across all syncs.
 
     Args:
     -----
@@ -73,10 +74,9 @@ async def list_all_jobs(
     --------
         list[schemas.SyncJob]: A list of all sync jobs
     """
-    jobs = await crud.sync_job.get_all_jobs(
-        db=db, skip=skip, limit=limit, current_user=user, status=status
+    return await sync_service.list_sync_jobs(
+        db=db, current_user=user, skip=skip, limit=limit, status=status
     )
-    return jobs
 
 
 @router.get("/{sync_id}", response_model=schemas.Sync)
@@ -98,10 +98,7 @@ async def get_sync(
     --------
         sync (schemas.Sync): The sync
     """
-    sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
-    if not sync:
-        raise HTTPException(status_code=404, detail="Sync not found")
-    return sync
+    return await sync_service.get_sync(db=db, sync_id=sync_id, current_user=user)
 
 
 @router.post("/", response_model=schemas.Sync)
@@ -125,21 +122,29 @@ async def create_sync(
     --------
         sync (schemas.Sync): The created sync
     """
-    async with UnitOfWork(db) as uow:
-        sync = await sync_service.create(db=db, sync=sync_in.to_base(), current_user=user, uow=uow)
-        await uow.session.flush()
-        sync_schema = schemas.Sync.model_validate(sync)
-        if sync_in.run_immediately:
-            sync_job_create = schemas.SyncJobCreate(sync_id=sync_schema.id)
-            sync_job = await crud.sync_job.create(
-                db=db, obj_in=sync_job_create, current_user=user, uow=uow
-            )
-            await uow.commit()
-            await uow.session.refresh(sync_job)
-            # Add background task to run the sync
-            sync_job_schema = schemas.SyncJob.model_validate(sync_job)
-            background_tasks.add_task(sync_service.run, sync_schema, sync_job_schema, user)
-        await uow.commit()
+    # Create the sync and sync job - kinda, not really, we'll do that in the background
+    sync, sync_job = await sync_service.create_and_run_sync(
+        db=db, sync_in=sync_in, current_user=user
+    )
+    source_connection = await crud.source_connection.get(
+        db=db, id=sync_in.source_connection_id, current_user=user
+    )
+    collection = await crud.collection.get_by_readable_id(
+        db=db, readable_id=source_connection.readable_collection_id, current_user=user
+    )
+    collection = schemas.Collection.model_validate(collection, from_attributes=True)
+
+    source_connection = schemas.SourceConnection.model_validate(
+        source_connection, from_attributes=True
+    )
+
+    # If job was created and should run immediately, start it in background
+    if sync_job and sync_in.run_immediately:
+        sync_dag = await sync_service.get_sync_dag(db=db, sync_id=sync.id, current_user=user)
+        background_tasks.add_task(
+            sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user
+        )
+
     return sync
 
 
@@ -164,15 +169,9 @@ async def delete_sync(
     --------
         sync (schemas.Sync): The deleted sync
     """
-    sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
-    if not sync:
-        raise HTTPException(status_code=404, detail="Sync not found")
-
-    if delete_data:
-        # TODO: Implement data deletion logic, should be part of destination interface
-        pass
-
-    return await crud.sync.remove(db=db, id=sync_id, current_user=user)
+    return await sync_service.delete_sync(
+        db=db, sync_id=sync_id, current_user=user, delete_data=delete_data
+    )
 
 
 @router.post("/{sync_id}/run", response_model=schemas.SyncJob)
@@ -196,25 +195,13 @@ async def run_sync(
     --------
         sync_job (schemas.SyncJob): The sync job
     """
-    sync = await crud.sync.get(db=db, id=sync_id, current_user=user, with_connections=True)
-    if not sync:
-        raise HTTPException(status_code=404, detail="Sync not found")
-
-    sync_schema = schemas.Sync.model_validate(sync)
-
-    sync_job_in = schemas.SyncJobCreate(sync_id=sync_id)
-    sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_in, current_user=user)
-    sync_job_schema = schemas.SyncJob.model_validate(sync_job)
-
-    sync_dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, current_user=user)
-    sync_dag_schema = schemas.SyncDag.model_validate(sync_dag)
-
-    user_schema = schemas.User.model_validate(user)
-
-    # will be swapped for redis queue
-    background_tasks.add_task(
-        sync_service.run, sync_schema, sync_job_schema, sync_dag_schema, user_schema
+    # Trigger the sync run - kinda, not really, we'll do that in the background
+    sync, sync_job, sync_dag = await sync_service.trigger_sync_run(
+        db=db, sync_id=sync_id, current_user=user
     )
+
+    # Start the sync job in the background - this is where the sync actually runs
+    background_tasks.add_task(sync_service.run, sync, sync_job, sync_dag, user)
 
     return sync_job
 
@@ -238,11 +225,7 @@ async def list_sync_jobs(
     --------
         list[schemas.SyncJob]: A list of sync jobs
     """
-    sync = await crud.sync.get(db=db, id=sync_id, current_user=user)
-    if not sync:
-        raise HTTPException(status_code=404, detail="Sync not found")
-
-    return await crud.sync_job.get_all_by_sync_id(db=db, sync_id=sync_id)
+    return await sync_service.list_sync_jobs(db=db, current_user=user, sync_id=sync_id)
 
 
 @router.get("/{sync_id}/job/{job_id}", response_model=schemas.SyncJob)
@@ -266,10 +249,7 @@ async def get_sync_job(
     --------
         sync_job (schemas.SyncJob): The sync job
     """
-    sync_job = await crud.sync_job.get(db=db, id=job_id, current_user=user)
-    if not sync_job or sync_job.sync_id != sync_id:
-        raise HTTPException(status_code=404, detail="Sync job not found")
-    return sync_job
+    return await sync_service.get_sync_job(db=db, job_id=job_id, current_user=user, sync_id=sync_id)
 
 
 @router.get("/job/{job_id}/subscribe")
@@ -290,8 +270,7 @@ async def subscribe_sync_job(
     --------
         StreamingResponse: The streaming response
     """
-    # Get auth token from query parameter
-
+    # Authenticate user if auth is enabled
     if settings.AUTH_ENABLED:
         token = request.query_params.get("token")
         if not token:
@@ -308,10 +287,8 @@ async def subscribe_sync_job(
 
         logger.info(f"SSE sync subscription authenticated for user: {user.id}, job: {job_id}")
 
-    queue = await sync_pubsub.subscribe(job_id)
-
-    if not queue:
-        raise HTTPException(status_code=404, detail="Sync job not found or completed")
+    # Get queue from service
+    queue = await sync_service.subscribe_to_sync_job(job_id=job_id)
 
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
@@ -344,10 +321,7 @@ async def get_sync_dag(
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.SyncDag:
     """Get the DAG for a specific sync."""
-    dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, current_user=user)
-    if not dag:
-        raise HTTPException(status_code=404, detail=f"DAG for sync {sync_id} not found")
-    return dag
+    return await sync_service.get_sync_dag(db=db, sync_id=sync_id, current_user=user)
 
 
 @router.patch("/{sync_id}", response_model=schemas.Sync)
@@ -371,10 +345,6 @@ async def update_sync(
     --------
         sync (schemas.Sync): The updated sync
     """
-    sync = await crud.sync.get(db=db, id=sync_id, current_user=user, with_connections=False)
-    if not sync:
-        raise HTTPException(status_code=404, detail="Sync not found")
-
-    updated_sync = await crud.sync.update(db=db, db_obj=sync, obj_in=sync_update, current_user=user)
-    updated_sync = await crud.sync.get(db=db, id=sync_id, current_user=user, with_connections=True)
-    return updated_sync
+    return await sync_service.update_sync(
+        db=db, sync_id=sync_id, sync_update=sync_update, current_user=user
+    )

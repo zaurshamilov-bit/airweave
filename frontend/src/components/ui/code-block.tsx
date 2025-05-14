@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { materialOceanic, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTheme } from "@/lib/theme-provider";
+import { cn } from "@/lib/utils";
 
 interface CodeBlockProps {
   code: string;
@@ -15,6 +16,9 @@ interface CodeBlockProps {
   title?: string;
   footerContent?: React.ReactNode;
   disabled?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+  height?: string | number;
 }
 
 export function CodeBlock({
@@ -24,15 +28,18 @@ export function CodeBlock({
   badgeColor = "bg-blue-600 hover:bg-blue-600",
   title,
   footerContent,
-  disabled = false
+  disabled = false,
+  className,
+  style,
+  height
 }: CodeBlockProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
-  const { theme } = useTheme();
-  const isDarkTheme = theme === "dark";
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
 
-  // Choose base style based on theme
-  const baseStyle = isDarkTheme ? materialOceanic : oneLight;
+  // Use theme-appropriate styling
+  const baseStyle = isDark ? materialOceanic : oneLight;
 
   // Create a custom style that removes backgrounds but keeps text coloring
   const customStyle = {
@@ -70,28 +77,48 @@ export function CodeBlock({
     tsx: "React",
   }[language] || language;
 
+  // Combine styles including height if provided
+  const containerStyle = {
+    ...style,
+    height: height || style?.height,
+    display: 'flex',
+    flexDirection: 'column' as const
+  };
+
   return (
-    <div className="rounded-md overflow-hidden border border-border/50 bg-muted/30 text-card-foreground">
-      <div className="flex items-center px-3 py-1.5 justify-between border-b border-border/40">
+    <div
+      className={cn(
+        "rounded-md overflow-hidden border",
+        isDark
+          ? "border-gray-800 bg-black text-gray-100"
+          : "border-gray-200 bg-white text-gray-900",
+        className
+      )}
+      style={containerStyle}
+    >
+      <div className={cn(
+        "flex items-center px-4 py-2 justify-between border-b",
+        isDark ? "border-gray-800" : "border-gray-200"
+      )}>
         <div className="flex items-center gap-2">
           {badgeText && (
             <Badge className={`${badgeColor} text-white text-xs px-1.5 py-0 rounded h-5`}>
               {badgeText}
             </Badge>
           )}
-          {title && <span className="text-xs font-medium">{title}</span>}
+          {title && <span className={cn("text-xs font-medium", isDark ? "text-gray-200" : "text-gray-700")}>{title}</span>}
         </div>
         <Button
           size="sm"
           variant="ghost"
-          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+          className={cn("h-6 w-6 p-0", isDark ? "text-gray-400 hover:text-white" : "text-gray-500 hover:text-gray-900")}
           onClick={handleCopyCode}
           disabled={disabled}
         >
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
         </Button>
       </div>
-      <div className="p-2 bg-muted/30">
+      <div className={cn("px-4 py-3 flex-1 overflow-auto", isDark ? "bg-black" : "bg-gray-50")}>
         <SyntaxHighlighter
           language={language}
           style={customStyle}
@@ -100,6 +127,7 @@ export function CodeBlock({
             background: 'transparent',
             margin: 0,
             padding: 0,
+            height: '100%'
           }}
           wrapLongLines={false}
           showLineNumbers={false}
@@ -113,7 +141,14 @@ export function CodeBlock({
           {code}
         </SyntaxHighlighter>
       </div>
-      {footerContent && <div className="px-3 py-1 border-t border-border/40">{footerContent}</div>}
+      {footerContent && (
+        <div className={cn(
+          "px-4 py-2 border-t",
+          isDark ? "border-gray-800 text-white" : "border-gray-200 text-gray-700"
+        )}>
+          {footerContent}
+        </div>
+      )}
     </div>
   );
 }

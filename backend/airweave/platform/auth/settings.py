@@ -5,7 +5,8 @@ from typing import Any
 
 import yaml
 
-from airweave.core.config import settings
+from airweave.core.config import settings as core_settings
+from airweave.core.secrets import secret_client
 from airweave.platform.auth.schemas import (
     APIKeyAuthSettings,
     AuthType,
@@ -84,7 +85,19 @@ class IntegrationSettings:
             for name, config in data.items():
                 self._settings[name] = self._parse_integration(name, config)
 
-    def get_by_short_name(self, short_name: str) -> BaseAuthSettings:
+    async def _get_client_secret(self, settings: BaseAuthSettings) -> str:
+        """Retrieves the client secret for a specific integration.
+
+        Args:
+        ----
+            settings (BaseAuthSettings): The settings for the integration.
+        """
+        if core_settings.ENVIRONMENT == "prd":
+            return await secret_client.get_secret(settings.client_secret)
+        else:
+            return settings.client_secret
+
+    async def get_by_short_name(self, short_name: str) -> BaseAuthSettings:
         """Retrieves settings for a specific integration by its short name.
 
         Args:
@@ -104,12 +117,19 @@ class IntegrationSettings:
         if not settings:
             raise KeyError(f"Integration settings not found for {short_name}")
 
+        # Enrich with client secret for PRD
+        if settings.auth_type in [
+            AuthType.oauth2,
+            AuthType.oauth2_with_refresh,
+            AuthType.oauth2_with_refresh_rotating,
+        ]:
+            settings.client_secret = await self._get_client_secret(settings)
         return settings
 
 
 current_file_path = Path(__file__)
 parent_directory = current_file_path.parent
-environment = settings.DTAP_ENVIRONMENT
+environment = core_settings.ENVIRONMENT
 if environment == "local":
     env_prefix = "dev"
 else:

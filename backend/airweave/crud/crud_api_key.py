@@ -1,6 +1,5 @@
 """CRUD operations for the APIKey model."""
 
-import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -9,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airweave.core import credentials
 from airweave.core.exceptions import NotFoundException
 from airweave.crud._base import CRUDBase
 from airweave.db.unit_of_work import UnitOfWork
@@ -42,16 +42,14 @@ class CRUDAPIKey(CRUDBase[APIKey, APIKeyCreate, APIKeyUpdate]):
 
         """
         key = secrets.token_urlsafe(32)
-        hashed_key = hashlib.sha256(key.encode()).hexdigest()
-        key_prefix = key[:8]
+        encrypted_key = credentials.encrypt({"key": key})
 
         expiration_date = obj_in.expiration_date or (
             datetime.now(timezone.utc) + timedelta(days=180)  # Default to 180 days
         )
 
         db_obj = APIKey(
-            key=hashed_key,
-            key_prefix=key_prefix,
+            encrypted_key=encrypted_key,
             created_by_email=current_user.email,
             modified_by_email=current_user.email,
             expiration_date=expiration_date,
@@ -62,9 +60,6 @@ class CRUDAPIKey(CRUDBase[APIKey, APIKeyCreate, APIKeyUpdate]):
         if not uow:
             await db.commit()
             await db.refresh(db_obj)
-
-        # Attach the plain key to the object for the response, this is not stored in the db
-        db_obj.plain_key = key
         return db_obj
 
     async def get_all_for_user(
@@ -136,38 +131,50 @@ class CRUDAPIKey(CRUDBase[APIKey, APIKeyCreate, APIKeyUpdate]):
         await db.commit()
 
     async def get_by_key(self, db: AsyncSession, *, key: str) -> Optional[APIKey]:
-        """Get an API key by its hashed value.
+        """Get an API key by validating the provided plain key against all stored encrypted keys.
+
+        This method decrypts each stored API key and compares it with the provided key.
+        If a match is found and the key hasn't expired, returns the API key object.
 
         Args:
         ----
-            db (AsyncSession): The database session
-            key (str): The plain API key to look up
+            db (AsyncSession): The database session.
+            key (str): The plain API key to validate.
 
         Returns:
         -------
-            Optional[APIKey]: The API key if found and valid
+            Optional[APIKey]: The API key if found and valid.
 
         Raises:
         ------
-            ValueError: If the API key has expired
-            NotFoundException: If the API key is not found
+            NotFoundException: If no matching API key is found.
+            ValueError: If the matching API key has expired.
+
+        Note:
+        ----
+            This method needs to decrypt each stored key for comparison since
+            Fernet encryption is non-deterministic (same input produces different
+            encrypted outputs). This is less efficient than hash-based lookups
+            but necessary for symmetric encryption.
         """
-        # Hash the provided key for comparison
-        hashed_key = hashlib.sha256(key.encode()).hexdigest()
-
-        # Query for the API key
-        query = select(self.model).where(self.model.key == hashed_key)
+        # Query all API keys (we need to check each one)
+        query = select(self.model)
         result = await db.execute(query)
-        db_obj = result.unique().scalar_one_or_none()
+        api_keys = result.scalars().all()
 
-        if not db_obj:
-            raise NotFoundException("API key not found")
+        # Check each key
+        for api_key in api_keys:
+            try:
+                decrypted_data = credentials.decrypt(api_key.encrypted_key)
+                if decrypted_data["key"] == key:
+                    # Check expiration
+                    if api_key.expiration_date < datetime.now(timezone.utc):
+                        raise ValueError("API key has expired")
+                    return api_key
+            except Exception:
+                continue
 
-        # Check if the key has expired
-        if db_obj.expiration_date and db_obj.expiration_date < datetime.now(timezone.utc):
-            raise ValueError("API key has expired")
-
-        return db_obj
+        raise NotFoundException("API key not found")
 
 
 api_key = CRUDAPIKey(APIKey)

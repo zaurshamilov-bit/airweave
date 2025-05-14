@@ -14,11 +14,16 @@ from airweave.platform.entities._base import BaseEntity, DestinationAction
 from airweave.platform.sync.context import SyncContext
 from airweave.platform.sync.stream import AsyncSourceStream
 from airweave.platform.sync.worker_pool import AsyncWorkerPool
+from airweave.schemas.dag import NodeType
 
 
 # Pipeline Pattern
 class EntityProcessor:
     """Processes entities through a pipeline of stages."""
+
+    def __init__(self):
+        """Initialize the entity processor with empty tracking dictionary."""
+        self._entities_encountered: dict[str, set[str]] = {}
 
     async def process(
         self,
@@ -30,6 +35,28 @@ class EntityProcessor:
         """Process an entity through the complete pipeline."""
         try:
             sync_context.logger.debug(f"Processing entity {entity.entity_id} through pipeline")
+
+            # Track the current entity
+            entity_type = entity.__class__.__name__
+
+            # Validate entity type is known
+            if entity_type not in self._entities_encountered:
+                raise ValueError(
+                    f"Encountered unknown entity type: {entity_type}. This entity type is not "
+                    f"registered in the system. Entity ID: {entity.entity_id}"
+                )
+
+            # If we encounter the same entity from a different path, silently skip it
+            if entity.entity_id in self._entities_encountered[entity_type]:
+                sync_context.logger.info("\nalready encountered this entity, so silently skip\n")
+                return []
+
+            # Add the entity id to the entity_type set - we're processing it now
+            self._entities_encountered[entity_type].add(entity.entity_id)
+
+            # Update progress tracker with latest entities encountered
+            # NOTE: this will only be published when the other stats are being published
+            await sync_context.progress.update_entities_encountered(self._entities_encountered)
 
             # Stage 1: Enrich entity with metadata
             enriched_entity = await self._enrich(entity, sync_context)
@@ -375,6 +402,9 @@ class SyncOrchestrator:
                 f"Starting sync job {sync_context.sync_job.id} for sync {sync_context.sync.id}"
             )
 
+            # Initialize entity tracking with all known entity types
+            self._initialize_entity_tracking(sync_context)
+
             # Mark job as started
             await sync_job_service.update_status(
                 sync_job_id=sync_context.sync_job.id,
@@ -478,6 +508,19 @@ class SyncOrchestrator:
             await self.entity_processor.process(
                 entity=entity, source_node=source_node, sync_context=sync_context, db=db
             )
+
+    def _initialize_entity_tracking(self, sync_context: SyncContext) -> None:
+        """Initialize entity tracking with entity types from the DAG."""
+        self.entity_processor._entities_encountered.clear()
+
+        # Get all entity nodes from the DAG
+        entity_nodes = [node for node in sync_context.dag.nodes if node.type == NodeType.entity]
+
+        # TODO: use the
+        # Create a dictionary with entity names as keys and empty sets as values
+        for node in entity_nodes:
+            if node.name.endswith("Entity"):
+                self.entity_processor._entities_encountered[node.name] = set()
 
 
 # Singleton instance

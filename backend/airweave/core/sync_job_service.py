@@ -43,6 +43,10 @@ class SyncJobService:
                     update_data["entities_kept"] = stats.kept
                     update_data["entities_skipped"] = stats.skipped
 
+                    # Use the counts directly - they're already in the right format
+                    if hasattr(stats, "entities_encountered"):
+                        update_data["entities_encountered"] = stats.entities_encountered
+
                 if started_at:
                     update_data["started_at"] = started_at
                 if status == SyncJobStatus.COMPLETED and completed_at:

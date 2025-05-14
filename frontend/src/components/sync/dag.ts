@@ -2,7 +2,7 @@ import { Node, Edge, Position, addEdge } from 'reactflow';
 
 interface DagNode {
   id: string;
-  type: 'SOURCE' | 'DESTINATION' | 'ENTITY' | 'TRANSFORMER';
+  type: 'source' | 'destination' | 'entity' | 'transformer';
   name: string;
   shortName?: string;
   config?: Record<string, any>;

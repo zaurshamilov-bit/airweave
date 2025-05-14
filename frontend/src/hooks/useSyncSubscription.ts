@@ -45,6 +45,7 @@ export function useSyncSubscription(jobId?: string | null) {
         eventSourceRef.current = es;
 
         es.onmessage = (event) => {
+          console.log('[PubSub] Raw event received:', event.data);
           if (!isMounted) return;
 
           try {
@@ -75,5 +76,9 @@ export function useSyncSubscription(jobId?: string | null) {
     };
   }, [jobId]);
 
-  return updates;
+  return {
+    updates,
+    latestUpdate: updates.length > 0 ? updates[updates.length - 1] : null,
+    isConnected: eventSourceRef.current?.readyState === EventSource.OPEN
+  };
 }

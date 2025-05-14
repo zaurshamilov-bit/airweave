@@ -4,6 +4,7 @@ from airweave.api.router import TrailingSlashRouter
 from airweave.api.v1.endpoints import (
     api_keys,
     chat,
+    collections,
     connections,
     cursor_dev,
     dag,
@@ -11,7 +12,7 @@ from airweave.api.v1.endpoints import (
     embedding_models,
     entities,
     health,
-    search,
+    source_connections,
     sources,
     sync,
     transformers,
@@ -30,9 +31,12 @@ api_router.include_router(destinations.router, prefix="/destinations", tags=["de
 api_router.include_router(
     embedding_models.router, prefix="/embedding_models", tags=["embedding_models"]
 )
+api_router.include_router(collections.router, prefix="/collections", tags=["collections"])
 api_router.include_router(connections.router, prefix="/connections", tags=["connections"])
+api_router.include_router(
+    source_connections.router, prefix="/source-connections", tags=["source_connections"]
+)
 api_router.include_router(sync.router, prefix="/sync", tags=["sync"])
-api_router.include_router(search.router, prefix="/search", tags=["search"])
 api_router.include_router(white_label.router, prefix="/white_labels", tags=["white_labels"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(dag.router, prefix="/dag", tags=["dag"])
