@@ -17,7 +17,7 @@ class Settings(BaseSettings):
         PROJECT_NAME (str): The name of the project.
         LOCAL_DEVELOPMENT (bool): Whether the application is running locally.
         LOCAL_CURSOR_DEVELOPMENT (bool): Whether cursor development features are enabled.
-        DTAP_ENVIRONMENT (str): The deployment environment (local, dev, test, prod).
+        ENVIRONMENT (str): The deployment environment (local, dev, test, prod).
         FRONTEND_LOCAL_DEVELOPMENT_PORT (int): Port for local frontend development.
         FIRST_SUPERUSER (str): The email address of the first superuser.
         FIRST_SUPERUSER_PASSWORD (str): The password of the first superuser.
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Airweave"
     LOCAL_DEVELOPMENT: bool = False
     LOCAL_CURSOR_DEVELOPMENT: bool = False
-    DTAP_ENVIRONMENT: str = "local"
+    ENVIRONMENT: str = "local"
     FRONTEND_LOCAL_DEVELOPMENT_PORT: int = 8080
 
     FIRST_SUPERUSER: str
@@ -190,11 +190,11 @@ class Settings(BaseSettings):
         if self.API_FULL_URL:
             return self.API_FULL_URL
 
-        if self.DTAP_ENVIRONMENT == "local":
+        if self.ENVIRONMENT == "local":
             return self.LOCAL_NGROK_SERVER or "http://localhost:8001"
-        if self.DTAP_ENVIRONMENT == "prod":
+        if self.ENVIRONMENT == "prod":
             return "https://api.airweave.ai"
-        return f"https://api.{self.DTAP_ENVIRONMENT}-airweave.com"
+        return f"https://api.{self.ENVIRONMENT}-airweave.com"
 
     @property
     def app_url(self) -> str:
@@ -206,11 +206,11 @@ class Settings(BaseSettings):
         if self.APP_FULL_URL:
             return self.APP_FULL_URL
 
-        if self.DTAP_ENVIRONMENT == "local":
+        if self.ENVIRONMENT == "local":
             return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
-        if self.DTAP_ENVIRONMENT == "prod":
+        if self.ENVIRONMENT == "prod":
             return "https://app.airweave.ai"
-        return f"https://app.{self.DTAP_ENVIRONMENT}-airweave.com"
+        return f"https://app.{self.ENVIRONMENT}-airweave.com"
 
     @property
     def docs_url(self) -> str:
@@ -219,11 +219,11 @@ class Settings(BaseSettings):
         Returns:
             str: The docs URL.
         """
-        if self.DTAP_ENVIRONMENT == "local":
+        if self.ENVIRONMENT == "local":
             return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
-        if self.DTAP_ENVIRONMENT == "prod":
+        if self.ENVIRONMENT == "prod":
             return "https://docs.airweave.ai"
-        return f"https://docs.{self.DTAP_ENVIRONMENT}-airweave.com"
+        return f"https://docs.{self.ENVIRONMENT}-airweave.com"
 
 
 settings = Settings()

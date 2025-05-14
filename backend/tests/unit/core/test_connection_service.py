@@ -259,7 +259,7 @@ class TestConnectionService:
         short_name = "test_source"
         mock_settings = MagicMock()
         mock_settings.auth_type = AuthType.oauth2
-        mock_integration_settings.get_by_short_name.return_value = mock_settings
+        mock_await integration_settings.get_by_short_name.return_value = mock_settings
 
         expected_url = "https://example.com/oauth2/authorize"
         mock_oauth2_service.generate_auth_url.return_value = expected_url
@@ -268,7 +268,7 @@ class TestConnectionService:
         result = await connection_service.get_oauth2_auth_url(short_name)
 
         # Assert
-        mock_integration_settings.get_by_short_name.assert_called_once_with(short_name)
+        mock_await integration_settings.get_by_short_name.assert_called_once_with(short_name)
         mock_oauth2_service.generate_auth_url.assert_called_once_with(mock_settings, None)
         assert result == expected_url
 
@@ -276,7 +276,7 @@ class TestConnectionService:
     async def test_get_oauth2_auth_url_integration_not_found(self, mock_integration_settings):
         # Arrange
         short_name = "non_existent"
-        mock_integration_settings.get_by_short_name.return_value = None
+        mock_await integration_settings.get_by_short_name.return_value = None
 
         # Act & Assert
         with pytest.raises(HTTPException) as excinfo:
@@ -307,7 +307,7 @@ class TestConnectionService:
         crud.source.get_by_short_name = AsyncMock(return_value=mock_source)
 
         mock_settings = MagicMock()
-        mock_integration_settings.get_by_short_name.return_value = mock_settings
+        mock_await integration_settings.get_by_short_name.return_value = mock_settings
 
         mock_connection = MagicMock(spec=schemas.Connection)
         connection_service._create_oauth2_connection = AsyncMock(return_value=mock_connection)
@@ -322,7 +322,7 @@ class TestConnectionService:
             short_name, code, None
         )
         crud.source.get_by_short_name.assert_called_once_with(mock_db, short_name)
-        mock_integration_settings.get_by_short_name.assert_called_once_with(short_name)
+        mock_await integration_settings.get_by_short_name.assert_called_once_with(short_name)
         connection_service._create_oauth2_connection.assert_called_once_with(
             db=mock_db,
             source=mock_source,

@@ -118,10 +118,6 @@ const CollectionsSection = memo(() => {
                 <span>See all{collections.length > 0 ? ` (${collections.length})` : ''}</span>
               </Link>
 
-              {/* Visual indicator to check scroll boundaries */}
-              <div className="px-3 py-1 text-xs text-gray-400 opacity-60">
-                --- End of collections list ---
-              </div>
             </>
           )}
         </div>

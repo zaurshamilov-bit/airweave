@@ -177,7 +177,7 @@ async def get_white_label_oauth2_auth_url(
     if white_label.organization_id != user.organization_id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
-    return oauth2_service.generate_auth_url_for_whitelabel(white_label)
+    return await oauth2_service.generate_auth_url_for_whitelabel(white_label)
 
 
 @router.post("/{white_label_id}/oauth2/code", response_model=schemas.Connection)

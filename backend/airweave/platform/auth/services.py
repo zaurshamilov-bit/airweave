@@ -34,7 +34,7 @@ class OAuth2Service:
     """Service class for handling OAuth2 authentication and token exchange."""
 
     @staticmethod
-    def generate_auth_url(
+    async def generate_auth_url(
         oauth2_settings: OAuth2Settings, auth_fields: Optional[dict] = None
     ) -> str:
         """Generate the OAuth2 authorization URL with the required query parameters.
@@ -68,7 +68,7 @@ class OAuth2Service:
         return auth_url
 
     @staticmethod
-    def generate_auth_url_for_trello() -> str:
+    async def _url_for_trello() -> str:
         """Generate the authorization URL for Trello.
 
         This method could potentially be generalized to work with similar authorization flows.
@@ -79,8 +79,8 @@ class OAuth2Service:
 
         """
         integration_short_name = "trello"
-        integration_config = integration_settings.get_by_short_name(integration_short_name)
-        redirect_uri = OAuth2Service._get_redirect_url(integration_short_name)
+        integration_config = await integration_settings.get_by_short_name(integration_short_name)
+        redirect_uri = await OAuth2Service._get_redirect_url(integration_short_name)
 
         params = {
             "response_type": "token",
@@ -115,7 +115,7 @@ class OAuth2Service:
         ------
             NotFoundException: If the integration is not found
         """
-        integration_config = integration_settings.get_by_short_name(integration_short_name)
+        integration_config = await integration_settings.get_by_short_name(integration_short_name)
         if not integration_config:
             raise NotFoundException(f"Integration {integration_short_name} not found.")
 
@@ -231,7 +231,7 @@ class OAuth2Service:
         return refresh_token
 
     @staticmethod
-    def _get_integration_config(
+    async def _get_integration_config(
         integration_short_name: str,
     ) -> schemas.Source | schemas.Destination | schemas.EmbeddingModel:
         """Get and validate integration configuration exists.
@@ -250,7 +250,7 @@ class OAuth2Service:
             NotFoundException: If integration configuration is not found
 
         """
-        integration_config = integration_settings.get_by_short_name(integration_short_name)
+        integration_config = await integration_settings.get_by_short_name(integration_short_name)
         if not integration_config:
             error_message = f"Configuration for {integration_short_name} not found"
             oauth2_service_logger.error(error_message)
@@ -258,7 +258,7 @@ class OAuth2Service:
         return integration_config
 
     @staticmethod
-    def _get_client_credentials(
+    async def _get_client_credentials(
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
         auth_fields: Optional[dict] = None,
         decrypted_credential: Optional[dict] = None,
@@ -481,7 +481,7 @@ class OAuth2Service:
         if not source:
             raise NotFoundException(f"Source not found: {white_label.source_short_name}")
 
-        integration_config = integration_settings.get_by_short_name(source.short_name)
+        integration_config = await integration_settings.get_by_short_name(source.short_name)
 
         if not integration_config:
             raise NotFoundException("Integration not found")
@@ -520,7 +520,9 @@ class OAuth2Service:
         ------
             NotFoundException: If the integration is not found
         """
-        integration_config = integration_settings.get_by_short_name(white_label.source_short_name)
+        integration_config = await integration_settings.get_by_short_name(
+            white_label.source_short_name
+        )
         if not integration_config:
             raise NotFoundException(f"Integration {white_label.source_short_name} not found.")
 
@@ -618,7 +620,7 @@ class OAuth2Service:
         -------
             schemas.Connection: The created connection
         """
-        settings = integration_settings.get_by_short_name(short_name)
+        settings = await integration_settings.get_by_short_name(short_name)
         if not settings:
             raise NotFoundException("Integration not found")
 
@@ -664,7 +666,7 @@ class OAuth2Service:
         if not source:
             raise NotFoundException(f"Source not found: {white_label.source_short_name}")
 
-        settings = integration_settings.get_by_short_name(source.short_name)
+        settings = await integration_settings.get_by_short_name(source.short_name)
         if not settings:
             raise NotFoundException("Integration not found")
 

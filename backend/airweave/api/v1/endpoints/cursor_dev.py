@@ -39,7 +39,7 @@ async def check_connection_status(
 
     """
     try:
-        integration_settings.get_by_short_name(short_name)
+        await integration_settings.get_by_short_name(short_name)
     except Exception as e:
         raise HTTPException(
             status_code=404,

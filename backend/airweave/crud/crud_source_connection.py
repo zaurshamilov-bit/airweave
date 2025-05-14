@@ -65,8 +65,6 @@ class CRUDSourceConnection(
         if not sync_ids:
             return source_connections
 
-        logger.info(f"Finding latest sync jobs for sync_ids: {sync_ids}")
-
         # Get all sync jobs for the sync_ids to log before filtering
         all_jobs_query = select(
             SyncJob.sync_id, SyncJob.id, SyncJob.status, SyncJob.created_at
@@ -84,7 +82,6 @@ class CRUDSourceConnection(
             }
             for job in all_jobs
         ]
-        logger.info(f"All sync jobs found: {job_info}")
 
         # Get the latest sync job for each sync ID in a single query
         subq = (
@@ -108,16 +105,6 @@ class CRUDSourceConnection(
 
         # Log the query results
         latest_jobs = list(result.fetchall())
-        latest_job_info = [
-            {
-                "id": str(job.id),
-                "sync_id": str(job.sync_id),
-                "status": job.status,
-                "created_at": job.created_at,
-            }
-            for job in latest_jobs
-        ]
-        logger.info(f"Latest jobs found (ordered by created_at desc): {latest_job_info}")
 
         # Create a dictionary of sync_id -> latest sync job info
         sync_job_info = {
