@@ -50,6 +50,8 @@ Airweave simplifies the process of making information retrievable for your agent
 
 ## 🚀 Quick Start
 
+Make sure docker and docker-compose are installed, then...
+
 ```bash
 # 1. Clone the repository
 git clone https://github.com/airweave-ai/airweave.git
