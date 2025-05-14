@@ -1,3 +1,22 @@
+/**
+ * SourceConfigView.tsx
+ *
+ * This component is responsible for collecting configuration credentials and settings
+ * for a data source. It's shown within the ConnectFlow dialog when a source requires
+ * additional configuration (e.g., API keys, credentials, URLs).
+ *
+ * Key responsibilities:
+ * 1. Display configuration fields based on source requirements
+ * 2. Collect and validate user-entered configuration values
+ * 3. Submit configuration to create source connection
+ * 4. Handle OAuth special cases and redirect preparation
+ *
+ * Flow context:
+ * - Appears after CreateCollectionView (if source needs configuration)
+ * - Only shown for sources that require configuration fields
+ * - For OAuth sources, prepares for redirection to provider
+ */
+
 import { useState, useEffect } from "react";
 import { DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -10,42 +29,77 @@ import { apiClient } from "@/lib/api";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { redirectWithError } from "@/lib/error-utils";
+import { useNavigate } from "react-router-dom";
 
-// Field definition from backend API
+/**
+ * Field definition structure from backend API
+ * Defines a configuration input field
+ */
 interface ConfigField {
+    /** Field identifier */
     name: string;
+    /** Display name */
     title: string;
+    /** Optional description/help text */
     description: string;
+    /** Input field type (e.g., "string", "password") */
     type: string;
 }
 
-// Source details from backend API
+/**
+ * Source details structure from backend API
+ */
 interface SourceDetails {
+    /** Source display name */
     name: string;
-    description: string;
+    /** Source description text */
+    description?: string;
+    /** Source identifier/short name */
     short_name: string;
+    /** Configuration field definitions */
     auth_fields?: {
         fields: ConfigField[];
     };
+    /** Authentication type (oauth2, basic, etc.) */
     auth_type?: string;
 }
 
-// Collection details interface
+/**
+ * Collection details interface
+ */
 interface CollectionDetails {
+    /** Collection name */
     name?: string;
+    /** Collection identifier */
     readable_id?: string;
 }
 
+/**
+ * Props for the SourceConfigView component
+ * Extends FlowDialog's common DialogViewProps
+ */
 export interface SourceConfigViewProps extends DialogViewProps {
     viewData?: {
+        /** Details for the collection being created */
         collectionDetails?: CollectionDetails;
+        /** Source ID */
         sourceId?: string;
+        /** Source display name */
         sourceName?: string;
+        /** Source short name identifier */
         sourceShortName?: string;
+        /** Optional pre-fetched source details */
         sourceDetails?: SourceDetails;
     };
 }
 
+/**
+ * SourceConfigView Component
+ *
+ * Collects and validates source configuration and creates the source connection.
+ * Handles multi-step form process, validation, and submission.
+ */
 export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
     onNext,
     onBack,
@@ -63,25 +117,97 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
 
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
+    const navigate = useNavigate();
 
     // =========================================
     // STATE MANAGEMENT
     // =========================================
+    /** Current step in the configuration process (1: configure, 2: review) */
     const [step, setStep] = useState(1);
+    /** Source details including field definitions */
     const [sourceDetails, setSourceDetails] = useState<SourceDetails | null>(null);
+    /** Form configuration values */
     const [config, setConfig] = useState<{ name: string; auth_fields: Record<string, string> }>({
         name: "",
         auth_fields: {}
     });
+    /** Form submission state */
     const [isSubmitting, setIsSubmitting] = useState(false);
+    /** API loading state */
     const [isLoading, setIsLoading] = useState(false);
+    /** Form validation error message */
     const [validationError, setValidationError] = useState<string | null>(null);
+
+    /**
+     * Handle API errors by redirecting to dashboard with error parameters
+     *
+     * @param error - The error that occurred
+     * @param errorType - Type of error for better context
+     * @param retryAction - Optional function to retry the operation
+     */
+    const handleError = (error: Error | string, errorType: string, retryAction?: () => void) => {
+        console.error(`❌ [SourceConfigView] ${errorType}:`, error);
+
+        // Convert string errors to Error objects
+        const errorObj = typeof error === 'string' ? new Error(error) : error;
+
+        // Extract meaningful message from the error
+        let errorMessage = errorObj.message;
+        let errorDetails = errorObj.stack || errorObj.message;
+
+        // Try to parse and extract more readable error messages
+        if (typeof errorMessage === 'string') {
+            try {
+                // Check for validation errors (common with 422 responses)
+                if (errorMessage.includes('RequestValidationError') || errorMessage.includes('body.name')) {
+                    // Parse the error JSON if present
+                    const errorMatch = errorMessage.match(/({.*})/);
+                    if (errorMatch && errorMatch[1]) {
+                        const errorJSON = JSON.parse(errorMatch[1]);
+
+                        // Format field validation errors
+                        if (errorJSON.error_messages?.errors) {
+                            const fieldErrors = errorJSON.error_messages.errors.map((err: any) => {
+                                const field = Object.keys(err)[0];
+                                // Format field name more nicely (e.g., body.name -> Name)
+                                const fieldName = field.replace('body.', '').replace(/^\w/, c => c.toUpperCase());
+                                return `${fieldName}: ${err[field]}`;
+                            });
+
+                            errorMessage = `Validation Error: ${fieldErrors.join(', ')}`;
+                            errorDetails = `The following fields have validation errors:\n${fieldErrors.join('\n')}`;
+                        }
+                    }
+                } else if (errorMessage.includes("Failed to")) {
+                    const match = errorMessage.match(/Failed to ([^:]+):/);
+                    if (match) {
+                        errorMessage = match[0];
+                    }
+                }
+            } catch (e) {
+                // If parsing fails, keep the original message
+                console.warn("Error parsing error details:", e);
+            }
+        }
+
+        // Create enhanced error with parsed message and details
+        const enhancedError = new Error(errorMessage);
+        Object.defineProperty(enhancedError, 'stack', {
+            value: errorDetails
+        });
+
+        // Use the common error utility to redirect
+        redirectWithError(navigate, enhancedError, sourceName || sourceShortName);
+    };
 
     // =========================================
     // INITIALIZATION & CLEANUP
     // =========================================
 
-    // Initialize from passed source details
+    /**
+     * Initialize from passed source details
+     * If sourceDetails are passed through props, use them directly
+     */
     useEffect(() => {
         if (passedSourceDetails) {
             console.log("📋 [SourceConfigView] Using passed source details");
@@ -101,13 +227,19 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
         }
     }, [passedSourceDetails, sourceName]);
 
-    // Fetch source details if not passed
+    /**
+     * Fetch source details if not passed as props
+     */
     useEffect(() => {
         if (!passedSourceDetails && sourceShortName) {
             fetchSourceDetails();
         }
     }, [passedSourceDetails, sourceShortName]);
 
+    /**
+     * Fetches source details from the API
+     * Gets field definitions and authentication requirements
+     */
     const fetchSourceDetails = async () => {
         try {
             setIsLoading(true);
@@ -115,7 +247,8 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
 
             const response = await apiClient.get(`/sources/detail/${sourceShortName}`);
             if (!response.ok) {
-                throw new Error("Failed to fetch source details");
+                const errorText = await response.text();
+                throw new Error(`Failed to fetch source details: ${errorText}`);
             }
 
             const data = await response.json();
@@ -145,10 +278,20 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
                             // Store the collection details in localStorage
                             localStorage.setItem("oauth_collection_details", JSON.stringify(collectionDetails));
 
+                            // Also store the collection ID directly to ensure it's available
+                            if (collectionDetails.readable_id) {
+                                localStorage.setItem("oauth_collection_id", collectionDetails.readable_id);
+                                localStorage.setItem("oauth_return_url", `/collections/${collectionDetails.readable_id}`);
+                                console.log("💾 [SourceConfigView] Stored collection ID for OAuth:", collectionDetails.readable_id);
+                            } else {
+                                console.error("❌ [SourceConfigView] No collection ID available for OAuth flow");
+                            }
+
                             // Get the auth URL
                             const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${sourceShortName}`);
                             if (!resp.ok) {
-                                throw new Error("Failed to retrieve auth URL");
+                                const errorText = await resp.text();
+                                throw new Error(`Failed to retrieve auth URL: ${errorText}`);
                             }
 
                             const authUrl = await resp.text();
@@ -159,12 +302,16 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
                             // Complete with OAuth redirect info
                             onComplete?.({
                                 oauthRedirect: true,
-                                collectionId: collectionDetails.readable_id,
+                                collectionId: collectionDetails.readable_id, // Only use the real collection ID
                                 authUrl: cleanUrl
                             });
                         } catch (error) {
                             console.error("❌ [SourceConfigView] OAuth initialization error:", error);
-                            onCancel?.();
+                            handleError(
+                                error instanceof Error ? error : new Error(String(error)),
+                                "OAuth initialization error",
+                                () => fetchSourceDetails()
+                            );
                         }
                     };
 
@@ -176,7 +323,11 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
             }
         } catch (error) {
             console.error("❌ [SourceConfigView] Error fetching source details:", error);
-            toast.error("Failed to load source configuration");
+            handleError(
+                error instanceof Error ? error : new Error(String(error)),
+                "Error fetching source details",
+                () => fetchSourceDetails()
+            );
         } finally {
             setIsLoading(false);
         }
@@ -185,6 +336,12 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
     // =========================================
     // VALIDATION & NAVIGATION
     // =========================================
+    /**
+     * Validates the configuration form
+     * Checks for required fields and formats
+     *
+     * @returns Boolean indicating if form is valid
+     */
     const validateConfig = () => {
         console.log("🔍 [SourceConfigView] Validating config");
         setValidationError(null);
@@ -207,6 +364,10 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
         return true;
     };
 
+    /**
+     * Handler for back button click
+     * Returns to previous step or view
+     */
     const handleBack = () => {
         if (step > 1) {
             setStep(1);
@@ -215,11 +376,21 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
         }
     };
 
+    /**
+     * Handler for next button click
+     * Validates and proceeds to review step
+     */
     const handleNext = () => {
         if (validateConfig()) setStep(2);
     };
 
-    // Helper to mask sensitive values in review screen
+    /**
+     * Helper to mask sensitive values in review screen
+     * Displays first few characters and masks the rest
+     *
+     * @param value The sensitive value to mask
+     * @returns Masked string
+     */
     const maskSensitiveValue = (value: string) => {
         if (!value) return '';
         return value.slice(0, 3) + '*'.repeat(Math.max(value.length - 3, 3));
@@ -228,6 +399,10 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
     // =========================================
     // SUBMIT HANDLER
     // =========================================
+    /**
+     * Handles form submission
+     * Creates collection and source connection with configuration
+     */
     const handleSubmit = async () => {
         if (!validateConfig()) return;
 
@@ -238,17 +413,24 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
             // First create the collection
             let collectionId;
             if (collectionDetails) {
-                console.log("📝 [SourceConfigView] Creating collection first:", collectionDetails);
-                const collectionResponse = await apiClient.post("/collections/", collectionDetails);
+                // If we already have a readable_id, use it directly (adding to existing collection)
+                if (collectionDetails.readable_id) {
+                    console.log("ℹ️ [SourceConfigView] Using existing collection:", collectionDetails.readable_id);
+                    collectionId = collectionDetails.readable_id;
+                } else {
+                    // Create a new collection if no readable_id (original flow)
+                    console.log("📝 [SourceConfigView] Creating collection first:", collectionDetails);
+                    const collectionResponse = await apiClient.post("/collections/", collectionDetails);
 
-                if (!collectionResponse.ok) {
-                    const errorText = await collectionResponse.text();
-                    throw new Error(`Failed to create collection: ${errorText}`);
+                    if (!collectionResponse.ok) {
+                        const errorText = await collectionResponse.text();
+                        throw new Error(`Failed to create collection: ${errorText}`);
+                    }
+
+                    const collection = await collectionResponse.json();
+                    collectionId = collection.readable_id;
+                    console.log("✅ [SourceConfigView] Collection created successfully:", collection);
                 }
-
-                const collection = await collectionResponse.json();
-                collectionId = collection.readable_id;
-                console.log("✅ [SourceConfigView] Collection created successfully:", collection);
             } else {
                 throw new Error("Collection details are required");
             }
@@ -272,7 +454,8 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
                 // Get the auth URL
                 const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${sourceShortName}`);
                 if (!resp.ok) {
-                    throw new Error("Failed to retrieve auth URL");
+                    const errorText = await resp.text();
+                    throw new Error(`Failed to retrieve OAuth authorization URL: ${errorText}`);
                 }
 
                 const authUrl = await resp.text();
@@ -301,6 +484,13 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
             };
 
             console.log("📤 [SourceConfigView] Creating source connection");
+
+            // =====================================================================
+            // BACKEND SOURCE CONNECTION CREATION - IMPORTANT DATABASE OPERATION
+            // This is where a new SOURCE CONNECTION is created in the database
+            // POST /source-connections/ endpoint creates a persistent source connection
+            // record with the provided authentication fields in source_connections.py
+            // =====================================================================
             const response = await apiClient.post(
                 `/source-connections/`,
                 sourceConnectionPayload
@@ -326,7 +516,11 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
             });
         } catch (error) {
             console.error("❌ [SourceConfigView] Error:", error);
-            toast.error(error instanceof Error ? error.message : "Failed to create connection");
+            handleError(
+                error instanceof Error ? error : new Error(String(error)),
+                "Connection creation error",
+                () => handleSubmit()
+            );
         } finally {
             setIsSubmitting(false);
         }

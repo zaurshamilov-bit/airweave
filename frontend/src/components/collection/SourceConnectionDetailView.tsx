@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
-import { AlertCircle, RefreshCw, Pencil, Play, Clock } from "lucide-react";
+import { AlertCircle, RefreshCw, Pencil, Play, Clock, Loader2 } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -82,9 +82,15 @@ interface SourceConnectionJob {
 
 interface SourceConnectionDetailViewProps {
     sourceConnectionId: string;
+    shouldForceSubscribe?: boolean;
+    onSubscriptionComplete?: () => void;
 }
 
-const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDetailViewProps) => {
+const SourceConnectionDetailView = ({
+    sourceConnectionId,
+    shouldForceSubscribe = false,
+    onSubscriptionComplete
+}: SourceConnectionDetailViewProps) => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
 
@@ -107,7 +113,7 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
     } | null>(null);
 
     // 2. Real-time updates state
-    const [shouldForceSubscribe, setShouldForceSubscribe] = useState(false);
+    const [internalShouldForceSubscribe, setInternalShouldForceSubscribe] = useState(false);
 
     // 3. Entity processing and visualization state
     const [totalEntities, setTotalEntities] = useState<number>(0);
@@ -134,15 +140,21 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
     // Add this near other useRef declarations:
     const flowContainerRef = useRef<HTMLDivElement>(null);
 
+    const pageRef = useRef(null);
+    const scrollPos = useRef(0);
+
+    // 1. Add this state to store scroll position
+    const [scrollRestorationAttempted, setScrollRestorationAttempted] = useState(false);
+
     /********************************************
      * COMPUTED VALUES & DERIVED STATE
      ********************************************/
 
     // 1. Subscription control logic
     const shouldSubscribe = useMemo(() => {
-        return shouldForceSubscribe ||
+        return shouldForceSubscribe || internalShouldForceSubscribe ||
             (lastSyncJob?.status === 'pending' || lastSyncJob?.status === 'in_progress');
-    }, [lastSyncJob?.status, shouldForceSubscribe]);
+    }, [lastSyncJob?.status, internalShouldForceSubscribe, shouldForceSubscribe]);
 
     // Subscribe to real-time updates when necessary
     const { updates, latestUpdate, isConnected: isPubSubConnected } = useSyncSubscription(
@@ -381,7 +393,7 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
             setLastSyncJob(newJob);
 
             // Force subscription for this new job
-            setShouldForceSubscribe(true);
+            setInternalShouldForceSubscribe(true);
             // PubSub will handle updates - no need for manual reloading
 
         } catch (error) {
@@ -566,9 +578,14 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
     useEffect(() => {
         if (latestUpdate?.is_complete || latestUpdate?.is_failed ||
             lastSyncJob?.status === 'completed' || lastSyncJob?.status === 'failed') {
-            setShouldForceSubscribe(false);
+            setInternalShouldForceSubscribe(false);
+
+            // Call the completion callback if provided
+            if (onSubscriptionComplete) {
+                onSubscriptionComplete();
+            }
         }
-    }, [latestUpdate, lastSyncJob?.status]);
+    }, [latestUpdate, lastSyncJob?.status, onSubscriptionComplete]);
 
     // 3. PubSub completion handling
     useEffect(() => {
@@ -707,6 +724,55 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
         };
     }, [reactFlowInstance]);
 
+    // Add this effect to reset nodes and edges when source connection changes
+    useEffect(() => {
+        // Clear the graph when connection changes
+        setNodes([]);
+        setEdges([]);
+        setSelectedEntity('');
+        setEntityDict({});
+    }, [sourceConnectionId]);
+
+    // Reset ReactFlow instance when connection changes
+    useEffect(() => {
+        if (reactFlowInstance) {
+            // Force a reset of the instance
+            setTimeout(() => {
+                reactFlowInstance.fitView({ padding: 0.2 });
+            }, 100);
+        }
+    }, [sourceConnectionId, reactFlowInstance]);
+
+    // 2. Replace the scroll effects with this version
+    useEffect(() => {
+        // On component mount, save the current page scroll position
+        const currentScrollY = window.scrollY;
+
+        // Return cleanup function that runs on component unmount
+        return () => {
+            // Store scroll position in sessionStorage when component unmounts
+            sessionStorage.setItem('sourceConnectionScrollPos', currentScrollY.toString());
+        };
+    }, []);
+
+    // 3. Add this effect for scroll restoration
+    useEffect(() => {
+        if (selectedConnection && !scrollRestorationAttempted) {
+            // Get saved position
+            const savedScrollPos = sessionStorage.getItem('sourceConnectionScrollPos');
+
+            if (savedScrollPos) {
+                // Delay scroll restoration to ensure the DOM has fully rendered
+                const timer = setTimeout(() => {
+                    window.scrollTo(0, parseInt(savedScrollPos, 10));
+                    setScrollRestorationAttempted(true);
+                }, 150);
+
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [selectedConnection, scrollRestorationAttempted]);
+
     console.log(`[PubSub] Data source for job ${lastSyncJob?.id}: ${isShowingRealtimeUpdates ? 'LIVE UPDATES' : 'DATABASE'}`);
 
     /********************************************
@@ -716,11 +782,10 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
     if (!selectedConnection) {
         return (
             <div className="w-full py-6">
-                <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <div className="font-medium">Error</div>
-                    <div>Failed to load source connection details</div>
-                </Alert>
+                <div className="flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <span className="ml-2">Loading connection details...</span>
+                </div>
             </div>
         );
     }
@@ -738,8 +803,8 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                             <div className={cn(
                                 "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200",
                                 isDark
-                                  ? "bg-gray-800/60 border border-gray-700/50"
-                                  : "bg-white border border-gray-100"
+                                    ? "bg-gray-800/60 border border-gray-700/50"
+                                    : "bg-white border border-gray-100"
                             )}>
                                 <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
                                     Entities
@@ -753,8 +818,8 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                             <div className={cn(
                                 "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200",
                                 isDark
-                                  ? "bg-gray-800/60 border border-gray-700/50"
-                                  : "bg-white border border-gray-100"
+                                    ? "bg-gray-800/60 border border-gray-700/50"
+                                    : "bg-white border border-gray-100"
                             )}>
                                 <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
                                     Status
@@ -779,8 +844,8 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                             <div className={cn(
                                 "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200",
                                 isDark
-                                  ? "bg-gray-800/60 border border-gray-700/50"
-                                  : "bg-white border border-gray-100"
+                                    ? "bg-gray-800/60 border border-gray-700/50"
+                                    : "bg-white border border-gray-100"
                             )}>
                                 <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
                                     Runtime
@@ -795,8 +860,8 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                         <div className={cn(
                             "col-span-12 md:col-span-4 rounded-lg p-3 flex flex-col justify-between shadow-sm transition-all duration-200",
                             isDark
-                              ? "bg-gray-800/60 border border-gray-700/50"
-                              : "bg-white border border-gray-100"
+                                ? "bg-gray-800/60 border border-gray-700/50"
+                                : "bg-white border border-gray-100"
                         )}>
                             <div className="flex items-center justify-between mb-1">
                                 <div className="text-xs uppercase tracking-wider font-medium opacity-60">
@@ -863,8 +928,8 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                                         className={cn(
                                             "h-8 gap-1.5 font-normal",
                                             isDark
-                                            ? "bg-gray-800 border-gray-700"
-                                            : "bg-white"
+                                                ? "bg-gray-800 border-gray-700"
+                                                : "bg-white"
                                         )}
                                         onClick={reloadData}
                                         disabled={isReloading}
@@ -882,8 +947,8 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                                         className={cn(
                                             "h-8 gap-1.5 font-normal",
                                             isDark
-                                            ? "bg-gray-700 border-gray-600 text-white"
-                                            : "bg-gray-100 border-gray-200 text-gray-800"
+                                                ? "bg-gray-700 border-gray-600 text-white"
+                                                : "bg-gray-100 border-gray-200 text-gray-800"
                                         )}
                                         onClick={handleRunSync}
                                         disabled={isInitiatingSyncJob || isSyncJobRunning}
@@ -910,11 +975,11 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                                                     "flex items-center gap-1.5 h-7 py-0 px-2 text-[13px] min-w-[90px]",
                                                     isSelected
                                                         ? isDark
-                                                          ? "bg-gray-700 border-gray-600 border-[1.5px] text-white"
-                                                          : "bg-gray-100 border-gray-300 border-[1.5px] text-gray-800"
+                                                            ? "bg-gray-700 border-gray-600 border-[1.5px] text-white"
+                                                            : "bg-gray-100 border-gray-300 border-[1.5px] text-gray-800"
                                                         : isDark
-                                                          ? "bg-gray-800/80 border-gray-700/60 text-gray-300"
-                                                          : "bg-white border-gray-200/80 text-gray-700"
+                                                            ? "bg-gray-800/80 border-gray-700/60 text-gray-300"
+                                                            : "bg-white border-gray-200/80 text-gray-700"
                                                 )}
                                                 onClick={() => setSelectedEntity(key)}
                                             >
@@ -924,12 +989,12 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                                                     className={cn(
                                                         "ml-1 pointer-events-none text-[11px] px-1.5 font-normal h-5",
                                                         isSelected
-                                                          ? isDark
-                                                            ? "bg-gray-600 text-gray-200 border-gray-500"
-                                                            : "bg-gray-200 text-gray-700 border-gray-300"
-                                                          : isDark
-                                                            ? "bg-gray-700 text-gray-300 border-gray-600"
-                                                            : "bg-gray-100 text-gray-600 border-gray-200"
+                                                            ? isDark
+                                                                ? "bg-gray-600 text-gray-200 border-gray-500"
+                                                                : "bg-gray-200 text-gray-700 border-gray-300"
+                                                            : isDark
+                                                                ? "bg-gray-700 text-gray-300 border-gray-600"
+                                                                : "bg-gray-100 text-gray-600 border-gray-200"
                                                     )}
                                                 >
                                                     {entityDict[key]}
@@ -946,6 +1011,7 @@ const SourceConnectionDetailView = ({ sourceConnectionId }: SourceConnectionDeta
                                 className="h-[320px] w-full overflow-hidden"
                             >
                                 <ReactFlow
+                                    key={selectedConnection.id || 'no-connection'}
                                     nodes={nodes}
                                     edges={edges}
                                     onNodesChange={onNodesChange}

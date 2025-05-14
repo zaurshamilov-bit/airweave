@@ -1,3 +1,23 @@
+/**
+ * CreateCollectionView.tsx
+ *
+ * This component is responsible for creating a new collection in the ConnectFlow dialog.
+ * It provides a form for users to enter collection details and handles the validation
+ * and processing of this information.
+ *
+ * Key responsibilities:
+ * 1. Present a form for users to enter collection name
+ * 2. Auto-generate a readable ID based on the name
+ * 3. Allow users to customize the readable ID if desired
+ * 4. Validate entries and provide feedback
+ * 5. Pass collection details to the next step in the flow
+ *
+ * Flow context:
+ * - This is typically the first or second view in the ConnectFlow
+ * - If source is pre-selected, shows source emblem prominently
+ * - On completion, may lead to SourceConfigView if configuration is needed
+ */
+
 import React, { useState, useRef, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -14,8 +34,15 @@ import {
 } from "@/components/ui/dialog";
 import { DialogViewProps } from "../FlowDialog";
 import { getAppIconUrl } from "@/lib/utils/icons";
+import { useNavigate } from "react-router-dom";
+import { redirectWithError } from "@/lib/error-utils";
 
-// Generate a random suffix for the readable ID
+/**
+ * Generates a random suffix for the readable ID
+ * This ensures uniqueness for similar collection names
+ *
+ * @returns Random alphanumeric string of length 6
+ */
 const generateRandomSuffix = () => {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
     let result = '';
@@ -25,7 +52,13 @@ const generateRandomSuffix = () => {
     return result;
 };
 
-// Helper to generate readable ID base from name (without suffix)
+/**
+ * Helper to generate the base readable ID from a name
+ * Transforms name to lowercase, replaces spaces with hyphens, and removes special characters
+ *
+ * @param name Collection name to transform
+ * @returns Sanitized base readable ID (without suffix)
+ */
 const generateReadableIdBase = (name: string): string => {
     if (!name || name.trim() === "") return "";
 
@@ -47,7 +80,10 @@ const generateReadableIdBase = (name: string): string => {
     return readable_id;
 };
 
-// Form schema validation with Zod
+/**
+ * Form validation schema using Zod
+ * Defines validation rules for collection name and readable ID
+ */
 const formSchema = z.object({
     name: z.string().min(4, "Name must be at least 4 characters").max(64, "Name must be less than 64 characters"),
     readable_id: z.string().optional().refine(
@@ -56,14 +92,27 @@ const formSchema = z.object({
     ),
 });
 
+/**
+ * Props for the CreateCollectionView component
+ * Extends FlowDialog's common DialogViewProps
+ */
 export interface CreateCollectionViewProps extends DialogViewProps {
     viewData?: {
+        /** Name of the source (if pre-selected) */
         sourceName?: string;
+        /** Short name/identifier of the source (if pre-selected) */
         sourceShortName?: string;
+        /** ID of the source (if pre-selected) */
         sourceId?: string;
     };
 }
 
+/**
+ * CreateCollectionView Component
+ *
+ * Form view for creating a new collection, with automatic ID generation
+ * and validation.
+ */
 export const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
     onNext,
     onCancel,
@@ -73,20 +122,34 @@ export const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
     const { sourceName, sourceShortName, sourceId } = viewData;
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
+    const navigate = useNavigate();
 
+    /** Form submission state */
     const [isSubmitting, setIsSubmitting] = useState(false);
+    /** Default name for the collection */
     const defaultCollectionName = sourceName ? `My ${sourceName} Collection` : "My Collection";
 
-    // Use a ref to store the random suffix, so it persists across renders
+    /**
+     * Random suffix for readable ID
+     * Stored in a ref to persist across renders
+     */
     const randomSuffixRef = useRef(generateRandomSuffix());
+    /** Previous name to track changes */
     const previousNameRef = useRef(defaultCollectionName);
+    /** Flag indicating if user manually edited the ID */
     const [userEditedId, setUserEditedId] = useState(false);
 
-    // Directly manage input values to avoid the one-keypress delay
+    /**
+     * Direct input values to avoid one-keypress delay
+     * Allows immediate UI updates on typing
+     */
     const [nameValue, setNameValue] = useState(defaultCollectionName);
     const [readableIdValue, setReadableIdValue] = useState("");
 
-    // Initialize form with react-hook-form
+    /**
+     * Initialize form with react-hook-form
+     * Sets up validation and default values
+     */
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
@@ -95,7 +158,10 @@ export const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
         },
     });
 
-    // Reset form when dialog opens with default values
+    /**
+     * Reset form when dialog opens
+     * Initializes with fresh values
+     */
     useEffect(() => {
         // Generate a new random suffix
         randomSuffixRef.current = generateRandomSuffix();
@@ -113,7 +179,13 @@ export const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
         setUserEditedId(false);
     }, [defaultCollectionName, form]);
 
-    // Get the base readable ID from the name
+    /**
+     * Generates a complete readable ID from the name
+     * Combines base ID with random suffix
+     *
+     * @param name Collection name
+     * @returns Complete readable ID (base + suffix)
+     */
     function getReadableId(name: string) {
         // If name is empty or just whitespace, return empty string
         if (!name || name.trim() === "") {
@@ -124,7 +196,12 @@ export const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
         return base ? `${base}-${randomSuffixRef.current}` : "";
     }
 
-    // Handle name change - immediate update for both name and readable_id
+    /**
+     * Handles name field changes
+     * Updates both name and auto-generates readable ID if not manually edited
+     *
+     * @param e Change event
+     */
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newName = e.target.value;
 
@@ -154,7 +231,12 @@ export const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
         previousNameRef.current = newName;
     };
 
-    // Handle readable ID change
+    /**
+     * Handles readable ID field changes
+     * Detects if user is manually editing the ID
+     *
+     * @param e Change event
+     */
     const handleReadableIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newId = e.target.value;
 
@@ -178,6 +260,25 @@ export const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
         }
     };
 
+    /**
+     * Handle errors by redirecting to dashboard with error parameters
+     *
+     * @param error - The error that occurred
+     * @param errorType - Type of error for better context
+     */
+    const handleError = (error: Error | string, errorType: string) => {
+        console.error(`❌ [CreateCollectionView] ${errorType}:`, error);
+
+        // Use the common error utility to redirect
+        redirectWithError(navigate, error, sourceName || sourceShortName);
+    };
+
+    /**
+     * Handles form submission
+     * Validates and passes collection details to next step
+     *
+     * @param e Submit event
+     */
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -194,8 +295,17 @@ export const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
                 readable_id: readableIdValue || undefined,
             };
 
+            console.log("🚀 [CreateCollectionView] Creating collection with:", {
+                name: collectionDetails.name,
+                readable_id: collectionDetails.readable_id,
+                sourceId,
+                sourceName,
+                sourceShortName
+            });
+
             // If sourceId and sourceShortName are provided, continue to source config
             if (sourceId && sourceShortName) {
+                console.log("🔄 [CreateCollectionView] Source details available, proceeding to source config");
                 // Pass data to the next view (SourceConfigView)
                 onNext?.({
                     view: 'sourceConfig',
@@ -208,10 +318,12 @@ export const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
                 });
             } else {
                 // Complete the flow with collection details
+                console.log("🔄 [CreateCollectionView] No source details, completing flow with collection only");
                 onComplete?.(collectionDetails);
             }
         } catch (error) {
-            console.error("Error in collection creation:", error);
+            console.error("❌ [CreateCollectionView] Error in collection creation:", error);
+            handleError(error instanceof Error ? error : new Error(String(error)), "Collection creation error");
         } finally {
             setIsSubmitting(false);
         }

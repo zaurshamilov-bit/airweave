@@ -30,12 +30,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_UPDATED } from "@/lib/events";
 import { APIKeysSettings } from "@/components/settings/APIKeysSettings";
 import { useCollections, Collection } from "@/lib/collectionsContext";
+import { ConnectFlow } from '@/components/shared';
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(true);
   const { collections, isLoading: isLoadingCollections, error: collectionError } = useCollections();
+
+  // Log the actual collections count for debugging
+  useEffect(() => {
+    console.log(`🔍 [CollectionsSection] Total collections: ${collections.length}`);
+  }, [collections]);
 
   // Active status for nav items
   const isActive = useCallback((path: string) => {
@@ -76,7 +82,7 @@ const CollectionsSection = memo(() => {
       <div
         className={cn(
           "overflow-hidden ml-1 transition-all duration-200 ease-in-out",
-          isOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+          isOpen ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"
         )}
       >
         <div className="pl-1 border-l border-border/30 space-y-0.5">
@@ -103,16 +109,19 @@ const CollectionsSection = memo(() => {
                 </Link>
               ))}
 
-              {/* Show "See more" link if there are more than 20 collections */}
-              {collections.length > 20 && (
-                <Link
-                  to="/collections"
-                  className="flex items-center px-3 py-1.5 text-sm rounded-lg text-primary hover:text-primary/80 hover:bg-primary/10 mt-1 transition-all duration-200"
-                >
-                  <ExternalLink className="mr-2 h-3.5 w-3.5 opacity-70" />
-                  <span>See all ({collections.length})</span>
-                </Link>
-              )}
+              {/* Always show "See all" link with more padding and margin for visibility */}
+              <Link
+                to="/collections"
+                className="flex items-center px-3 py-2.5 text-sm rounded-lg text-primary hover:text-primary/80 hover:bg-primary/10 mt-3 mb-2 transition-all duration-200"
+              >
+                <ExternalLink className="mr-2 h-3.5 w-3.5 opacity-70" />
+                <span>See all{collections.length > 0 ? ` (${collections.length})` : ''}</span>
+              </Link>
+
+              {/* Visual indicator to check scroll boundaries */}
+              <div className="px-3 py-1 text-xs text-gray-400 opacity-60">
+                --- End of collections list ---
+              </div>
             </>
           )}
         </div>
@@ -167,6 +176,9 @@ const DashboardLayout = () => {
   const navigate = useNavigate();
   const { resolvedTheme, setTheme } = useTheme();
 
+  // State for the create collection dialog
+  const [showCreateCollectionFlow, setShowCreateCollectionFlow] = useState(false);
+
   // Add array of routes that should be non-scrollable
   const nonScrollableRoutes = ['/chat', '/chat/'];
 
@@ -175,21 +187,32 @@ const DashboardLayout = () => {
     location.pathname === route || location.pathname.startsWith('/chat/'));
 
   const handleCreateCollection = useCallback(() => {
-    navigate('/collections/create');
+    // Open the ConnectFlow with source-first-collection mode instead of navigating
+    setShowCreateCollectionFlow(true);
+  }, []);
+
+  // Handle completion of collection creation
+  const handleCreateCollectionComplete = useCallback((result) => {
+    setShowCreateCollectionFlow(false);
+
+    // Navigate to the new collection if we have a collectionId
+    if (result?.collectionId) {
+      navigate(`/collections/${result.collectionId}?connected=success`);
+    }
   }, [navigate]);
 
   // Memoize active status checks
   const isDashboardActive = useMemo(() =>
     location.pathname === "/" || location.pathname === "/dashboard",
-  [location.pathname]);
+    [location.pathname]);
 
   const isWhiteLabelActive = useMemo(() =>
     location.pathname.startsWith('/white-label'),
-  [location.pathname]);
+    [location.pathname]);
 
   const isApiKeysActive = useMemo(() =>
     location.pathname === '/api-keys',
-  [location.pathname]);
+    [location.pathname]);
 
   // Fully memoized SidebarContent component
   const SidebarContent = useMemo(() => (
@@ -198,15 +221,15 @@ const DashboardLayout = () => {
         <Logo theme={resolvedTheme} />
       </div>
 
-      <ScrollArea className="flex-1 px-2 py-1">
-        <div className="space-y-0 pr-3">
+      <ScrollArea className="flex-1 px-2 py-1 min-h-[300px]">
+        <div className="space-y-0 pr-3 pb-4">
           {/* Create Collection Button */}
           <div className="pb-1 pt-1">
             <Button
               onClick={handleCreateCollection}
               variant="outline"
               size="sm"
-              className="flex items-center justify-start pl-5 w-[214px] gap-1.5 text-sm text-primary hover:bg-primary/15 bg-background border border-primary/60 hover:text-primary rounded-lg py-2 font-medium transition-all duration-200 hover:shadow-sm"
+              className="flex items-center justify-center w-[214px] gap-1.5 text-sm text-primary hover:bg-primary/15 bg-background border border-primary/60 hover:text-primary rounded-lg py-2 font-medium transition-all duration-200 hover:shadow-sm"
             >
               <Plus className="h-3.5 w-3.5" />
               Create collection
@@ -386,6 +409,14 @@ const DashboardLayout = () => {
           </div>
         </div>
       </GradientCard>
+
+      {/* ConnectFlow for creating a new collection starting with source selection */}
+      <ConnectFlow
+        isOpen={showCreateCollectionFlow}
+        onOpenChange={setShowCreateCollectionFlow}
+        mode="source-first-collection"
+        onComplete={handleCreateCollectionComplete}
+      />
     </GradientBackground>
   );
 };

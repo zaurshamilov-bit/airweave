@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Alert } from "@/components/ui/alert";
 import { AlertCircle, RefreshCw, Pencil, Trash, Plus, Clock, Play, Plug, Copy, Check, Loader2 } from "lucide-react";
@@ -161,6 +161,13 @@ const Collections = () => {
     // Add state for add source dialog
     const [showAddSourceDialog, setShowAddSourceDialog] = useState(false);
 
+    // Add state for refreshing all sources
+    const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+    const [refreshingSourceIds, setRefreshingSourceIds] = useState<string[]>([]);
+
+    // Add this near the other state declarations
+    const [scrollPosition, setScrollPosition] = useState(0);
+
     /********************************************
      * API AND DATA FETCHING FUNCTIONS
      ********************************************/
@@ -236,6 +243,8 @@ const Collections = () => {
     // Update selected connection
     const handleSelectConnection = async (connection: SourceConnection) => {
         console.log("Manually selecting connection:", connection.id);
+        // Store current scroll position
+        setScrollPosition(window.scrollY);
         setSelectedConnection(connection);
     };
 
@@ -390,6 +399,75 @@ const Collections = () => {
         count: sourceConnections.length,
         selectedId: selectedConnection?.id
     });
+
+    // Handle refreshing all sources
+    const handleRefreshAllSources = async () => {
+        if (!collection?.readable_id) return;
+
+        setIsRefreshingAll(true);
+        try {
+            const response = await apiClient.post(`/collections/${collection.readable_id}/refresh_all`);
+
+            if (response.ok) {
+                const jobs = await response.json();
+                // Store IDs of sources being refreshed
+                const sourceIds = jobs.map(job => job.source_connection_id);
+                setRefreshingSourceIds(sourceIds);
+
+                toast({
+                    title: "Success",
+                    description: `Started refreshing ${sourceIds.length} source connection${sourceIds.length !== 1 ? 's' : ''}`
+                });
+
+                // Reload data after starting the jobs
+                reloadData();
+
+                // If you have a currently selected connection, reload its data too
+                if (selectedConnection) {
+                    // Force a complete re-render by briefly setting selectedConnection to null
+                    // This will ensure the SourceConnectionDetailView fully reloads
+                    setSelectedConnection(null);
+                    setTimeout(() => {
+                        // After a brief delay, select the connection again
+                        const reselect = sourceConnections.find(sc => sc.id === selectedConnection.id);
+                        if (reselect) setSelectedConnection(reselect);
+                        // Or reselect the first connection
+                        else if (sourceConnections.length > 0) setSelectedConnection(sourceConnections[0]);
+                    }, 50);
+                }
+            } else {
+                throw new Error("Failed to refresh sources");
+            }
+        } catch (error) {
+            console.error("Error refreshing sources:", error);
+            toast({
+                title: "Error",
+                description: "Failed to refresh all sources",
+                variant: "destructive"
+            });
+        }
+    };
+
+    const handleSubscriptionComplete = useCallback(() => {
+        setRefreshingSourceIds(prev => {
+            const newIds = prev.filter(id => id !== selectedConnection?.id);
+            if (newIds.length === 0) {
+                setIsRefreshingAll(false);
+            }
+            return newIds;
+        });
+    }, [selectedConnection?.id]);
+
+    // Add this effect to restore scroll position when source connection changes
+    useEffect(() => {
+        if (selectedConnection && scrollPosition > 0) {
+            // Restore scroll position after component rerenders
+            const timer = setTimeout(() => {
+                window.scrollTo(0, scrollPosition);
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [selectedConnection, scrollPosition]);
 
     if (error) {
         return (
@@ -549,7 +627,7 @@ const Collections = () => {
                         </Button>
                         <Button
                             variant="outline"
-                            onClick={() => { }}
+                            onClick={handleRefreshAllSources}
                             className={cn(
                                 "gap-1 text-xs font-medium h-8 px-3",
                                 isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
@@ -593,8 +671,8 @@ const Collections = () => {
                                         selectedConnection?.id === connection.id
                                             ? "border-2 border-primary"
                                             : isDark
-                                            ? "border border-gray-700 bg-gray-800/50 hover:bg-gray-700/70"
-                                            : "border border-gray-300 hover:bg-gray-100"
+                                                ? "border border-gray-700 bg-gray-800/50 hover:bg-gray-700/70"
+                                                : "border border-gray-300 hover:bg-gray-100"
                                     )}
                                     onClick={() => handleSelectConnection(connection)}
                                 >
@@ -637,7 +715,12 @@ const Collections = () => {
 
                     {/* Render SourceConnectionDetailView when a connection is selected */}
                     {selectedConnection && (
-                        <SourceConnectionDetailView sourceConnectionId={selectedConnection.id} />
+                        <SourceConnectionDetailView
+                            key={selectedConnection.id}
+                            sourceConnectionId={selectedConnection.id}
+                            shouldForceSubscribe={refreshingSourceIds.includes(selectedConnection.id)}
+                            onSubscriptionComplete={handleSubscriptionComplete}
+                        />
                     )}
 
                     {/* Delete Collection Dialog */}
@@ -650,7 +733,12 @@ const Collections = () => {
                         setConfirmText={setConfirmText}
                     />
 
-                    {/* Replace AddSourceConnectionDialog with ConnectFlow */}
+                    {/* ConnectFlow for adding a source to an existing collection
+                        Setting mode="add-source" with collectionId/Name ensures it will:
+                        1. Start with SourceSelectorView (skipping CreateCollectionView)
+                        2. Use the existing collection instead of creating a new one
+                        3. Only create a source connection, not a new collection
+                    */}
                     {collection && (
                         <ConnectFlow
                             isOpen={showAddSourceDialog}
@@ -660,7 +748,7 @@ const Collections = () => {
                             collectionName={collection.name}
                             onComplete={() => {
                                 setShowAddSourceDialog(false);
-                                reloadData(); // Reload data after adding a source
+                                reloadData();
                             }}
                         />
                     )}

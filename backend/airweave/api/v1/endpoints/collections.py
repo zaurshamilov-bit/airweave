@@ -2,7 +2,7 @@
 
 from typing import List
 
-from fastapi import Depends, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
@@ -10,6 +10,8 @@ from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
 from airweave.core.search_service import ResponseType, search_service
+from airweave.core.source_connection_service import source_connection_service
+from airweave.core.sync_service import sync_service
 from airweave.models.user import User
 
 router = TrailingSlashRouter()
@@ -140,3 +142,84 @@ async def search_collection(
         current_user=current_user,
         response_type=response_type,
     )
+
+
+@router.post("/{readable_id}/refresh_all", response_model=list[schemas.SourceConnectionJob])
+async def refresh_all_source_connections(
+    *,
+    readable_id: str,
+    db: AsyncSession = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_user),
+    background_tasks: BackgroundTasks,
+) -> list[schemas.SourceConnectionJob]:
+    """Start sync jobs for all source connections in the collection.
+
+    Args:
+        readable_id: The readable ID of the collection
+        db: The database session
+        current_user: The current user
+        background_tasks: Background tasks for async operations
+
+    Returns:
+        A list of created sync jobs
+    """
+    # Check if collection exists
+    collection = await crud.collection.get_by_readable_id(
+        db, readable_id=readable_id, current_user=current_user
+    )
+    if collection is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+
+    # Convert to Pydantic model immediately
+    collection_obj = schemas.Collection.model_validate(collection, from_attributes=True)
+
+    # Get all source connections for this collection
+    source_connections = await source_connection_service.get_source_connections_by_collection(
+        db=db, collection=readable_id, current_user=current_user
+    )
+
+    if not source_connections:
+        return []
+
+    # Create a sync job for each source connection and run it in the background
+    sync_jobs = []
+
+    for sc in source_connections:
+        # Create the sync job
+        sync_job = await source_connection_service.run_source_connection(
+            db=db, source_connection_id=sc.id, current_user=current_user
+        )
+
+        # Get necessary objects for running the sync
+        sync = await crud.sync.get(
+            db=db, id=sync_job.sync_id, current_user=current_user, with_connections=True
+        )
+        sync_dag = await sync_service.get_sync_dag(
+            db=db, sync_id=sync_job.sync_id, current_user=current_user
+        )
+        source_connection = await crud.source_connection.get(
+            db=db, id=sc.id, current_user=current_user
+        )
+
+        # Prepare objects for background task
+        sync = schemas.Sync.model_validate(sync, from_attributes=True)
+        sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+        source_connection = schemas.SourceConnection.from_orm_with_collection_mapping(
+            source_connection
+        )
+
+        # Add to jobs list
+        sync_jobs.append(sync_job.to_source_connection_job(sc.id))
+
+        # Start the sync job in the background
+        background_tasks.add_task(
+            sync_service.run,
+            sync,
+            sync_job,
+            sync_dag,
+            collection_obj,  # Use the already converted object
+            source_connection,
+            current_user,
+        )
+
+    return sync_jobs

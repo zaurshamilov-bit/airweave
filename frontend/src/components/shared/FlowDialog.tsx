@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
-import { AnimatePresence, motion } from "framer-motion";
 
 // Custom DialogContent without animations
 const DialogContentNoAnimation = React.forwardRef<
@@ -48,28 +47,53 @@ const DialogOverlayNoAnimation = React.forwardRef<
 ));
 DialogOverlayNoAnimation.displayName = "DialogOverlayNoAnimation";
 
-// View interface for all dialog views
+/**
+ * Props interface for all dialog views
+ * Each view should implement this interface to ensure compatible communication
+ */
 export interface DialogViewProps {
+    /** Called to move to the next step or view */
     onNext?: (data?: any) => void;
+    /** Called to go back to the previous view */
     onBack?: () => void;
+    /** Called to cancel the entire flow */
     onCancel?: () => void;
+    /** Called to complete the entire flow (success) */
     onComplete?: (data?: any) => void;
-    viewData?: any;
+    /** Data specific to this view, passed from previous steps */
+    viewData?: Record<string, any>;
 }
 
+/**
+ * FlowDialog component props
+ */
 export interface FlowDialogProps {
+    /** Controls if the dialog is open */
     isOpen: boolean;
+    /** Called when dialog open state changes */
     onOpenChange: (open: boolean) => void;
+    /** Name of the initial view to display */
     initialView: string;
-    initialData?: any;
+    /** Initial data to provide to the first view */
+    initialData?: Record<string, any>;
+    /** Map of view names to view components */
     views: Record<string, React.ComponentType<DialogViewProps>>;
+    /** Called when the entire flow completes */
     onComplete?: (data?: any) => void;
+    /** Optional handler to intercept and modify transitions */
     onNext?: (data?: any) => any;
+    /** Width of the dialog */
     width?: string;
+    /** Height of the dialog */
     height?: string;
-    disableAnimations?: boolean;
 }
 
+/**
+ * FlowDialog component
+ *
+ * A container component that manages multiple views within a single dialog.
+ * Handles navigation between views, history tracking, and data passing.
+ */
 export const FlowDialog: React.FC<FlowDialogProps> = ({
     isOpen,
     onOpenChange,
@@ -80,15 +104,14 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
     onNext,
     width = "800px",
     height = "1000px",
-    disableAnimations = false,
 }) => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
 
-    // State for the current view and transition
+    // State for managing the flow
     const [currentView, setCurrentView] = useState(initialView);
     const [viewHistory, setViewHistory] = useState<string[]>([initialView]);
-    const [viewData, setViewData] = useState<Record<string, any>>({ [initialView]: initialData });
+    const [viewData, setViewData] = useState<Record<string, Record<string, any>>>({ [initialView]: initialData });
     const [direction, setDirection] = useState<"left" | "right">("right");
 
     // Reset state when dialog opens
@@ -97,26 +120,48 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
             setCurrentView(initialView);
             setViewHistory([initialView]);
             setViewData({ [initialView]: initialData });
+            setDirection("right");
         }
     }, [isOpen, initialView, initialData]);
 
     // Get the current view component
     const CurrentViewComponent = views[currentView];
 
+    // Move the useEffect outside the conditional
+    useEffect(() => {
+        if (isOpen && !CurrentViewComponent) {
+            console.error("Closing dialog due to missing view component");
+            onOpenChange(false);
+        }
+    }, [isOpen, onOpenChange, CurrentViewComponent]);
+
+    // Handle missing view component gracefully
     if (!CurrentViewComponent) {
-        console.error(`View "${currentView}" not found in views map`);
+        console.error(`View "${currentView}" not found in views map. Available views: ${Object.keys(views).join(", ")}`);
         return null;
     }
 
-    // Handler for next view transition
+    /**
+     * Handler for next view transition
+     * @param nextView The name of the next view to display
+     * @param data Optional data to pass to the next view
+     */
     const handleNext = (nextView: string, data?: any) => {
+        // Validate the next view exists
+        if (!views[nextView]) {
+            console.error(`Cannot navigate to view "${nextView}" - not found in views map`);
+            return;
+        }
+
         setDirection("right");
         setViewHistory(prev => [...prev, nextView]);
         setViewData(prev => ({ ...prev, [nextView]: data }));
         setCurrentView(nextView);
     };
 
-    // Handler for back navigation
+    /**
+     * Handler for back navigation
+     */
     const handleBack = () => {
         if (viewHistory.length <= 1) return;
 
@@ -129,7 +174,10 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
         setCurrentView(prevView);
     };
 
-    // Handler for dialog completion
+    /**
+     * Handler for dialog completion
+     * @param data Optional result data from the flow
+     */
     const handleComplete = (data?: any) => {
         if (onComplete) {
             onComplete(data);
@@ -137,13 +185,15 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
         onOpenChange(false);
     };
 
-    // Handler for dialog cancellation
+    /**
+     * Handler for dialog cancellation
+     */
     const handleCancel = () => {
         onOpenChange(false);
     };
 
     // Common props for the current view component
-    const viewComponentProps = {
+    const viewComponentProps: DialogViewProps = {
         onNext: (data) => {
             // If custom onNext handler is provided, use it
             if (onNext) {
@@ -176,52 +226,22 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
         maxHeight: "95vh"
     };
 
-    if (disableAnimations) {
-        // Render without any animations
-        return (
-            <Dialog open={isOpen} onOpenChange={onOpenChange}>
-                <DialogPortal>
-                    <DialogOverlayNoAnimation className="bg-black/75" />
-                    <DialogContentNoAnimation
-                        className={cn(
-                            "p-0 rounded-xl border overflow-hidden",
-                            isDark ? "bg-background border-gray-800" : "bg-background border-gray-200"
-                        )}
-                        style={contentStyles}
-                    >
-                        <div className="h-full w-full overflow-hidden">
-                            <CurrentViewComponent {...viewComponentProps} />
-                        </div>
-                    </DialogContentNoAnimation>
-                </DialogPortal>
-            </Dialog>
-        );
-    }
-
+    // Render the dialog with the current view
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogPortal>
-                <DialogOverlay className="bg-black/75" />
-                <DialogContent
+                <DialogOverlayNoAnimation className="bg-black/75" />
+                <DialogContentNoAnimation
                     className={cn(
                         "p-0 rounded-xl border overflow-hidden",
                         isDark ? "bg-background border-gray-800" : "bg-background border-gray-200"
                     )}
                     style={contentStyles}
                 >
-                    <AnimatePresence mode="wait" initial={false}>
-                        <motion.div
-                            key={currentView}
-                            initial={{ opacity: 0, x: direction === "right" ? 20 : -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: direction === "right" ? -20 : 20 }}
-                            transition={{ duration: 0.2 }}
-                            className="h-full w-full overflow-hidden"
-                        >
-                            <CurrentViewComponent {...viewComponentProps} />
-                        </motion.div>
-                    </AnimatePresence>
-                </DialogContent>
+                    <div className="h-full w-full overflow-hidden">
+                        <CurrentViewComponent {...viewComponentProps} />
+                    </div>
+                </DialogContentNoAnimation>
             </DialogPortal>
         </Dialog>
     );

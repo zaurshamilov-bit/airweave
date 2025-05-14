@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Copy, Eye, Key, Plus, ExternalLink, FileText, Github } from "lucide-react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
@@ -16,6 +16,7 @@ import {
   ConnectFlow
 } from "@/components/dashboard";
 import { cn } from "@/lib/utils";
+import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
 
 // Collection type definition
 interface Collection {
@@ -50,6 +51,8 @@ interface APIKey {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { resolvedTheme } = useTheme();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
@@ -62,6 +65,59 @@ const Dashboard = () => {
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
+
+  // Error state for connection errors
+  const [connectionError, setConnectionError] = useState<any>(null);
+
+  // Check for error parameters in URL and read details from localStorage
+  useEffect(() => {
+    const connected = searchParams.get('connected');
+    if (connected === 'error') {
+      console.log("🔔 [Dashboard] Detected 'connected=error' parameter in URL");
+
+      // Retrieve error details from localStorage
+      const errorDetails = getStoredErrorDetails();
+
+      if (errorDetails) {
+        console.log("🔔 [Dashboard] Found error details in localStorage:", errorDetails);
+
+        // Set error state and open dialog
+        setConnectionError({
+          serviceName: errorDetails.serviceName || "the service",
+          errorMessage: errorDetails.errorMessage || "Connection failed",
+          errorDetails: errorDetails.errorDetails
+        });
+
+        // Open the dialog in error view mode
+        setDialogOpen(true);
+      } else {
+        console.warn("⚠️ [Dashboard] 'connected=error' detected but no error details found in localStorage");
+
+        // Fallback to URL parameters for backwards compatibility
+        const errorMessage = searchParams.get('errorMessage');
+        const errorDetails = searchParams.get('errorDetails');
+        const sourceName = searchParams.get('source');
+
+        if (errorMessage) {
+          console.log("🔔 [Dashboard] Using URL parameters for error details");
+          setConnectionError({
+            serviceName: sourceName ? decodeURIComponent(sourceName) : "the service",
+            errorMessage: decodeURIComponent(errorMessage),
+            errorDetails: errorDetails ? decodeURIComponent(errorDetails) : undefined
+          });
+
+          setDialogOpen(true);
+        }
+      }
+
+      // Clean localStorage and URL parameters
+      clearStoredErrorDetails();
+
+      // Clean URL parameters
+      const newUrl = location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [searchParams, location]);
 
   // Fetch source connections for a specific collection
   const fetchSourceConnectionsForCollection = async (
@@ -182,6 +238,8 @@ const Dashboard = () => {
   const handleDialogClose = () => {
     setDialogOpen(false);
     setSelectedSource(null);
+    setConnectionError(null);
+    clearStoredErrorDetails(); // Ensure error data is cleared
     // Refresh collections without showing loading state
     fetchCollections(false);
   };
@@ -223,12 +281,13 @@ const Dashboard = () => {
       {/* Connect Flow Dialog */}
       <ConnectFlow
         isOpen={dialogOpen}
-        onOpenChange={setDialogOpen}
-        mode="create-collection"
+        onOpenChange={handleDialogClose}
+        mode={connectionError ? "error-view" : "create-collection"}
         sourceId={selectedSource?.id}
         sourceName={selectedSource?.name}
         sourceShortName={selectedSource?.short_name}
         onComplete={() => fetchCollections(false)}
+        errorData={connectionError}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
@@ -277,7 +336,7 @@ const Dashboard = () => {
           <section>
             <h2 className="text-xl sm:text-2xl font-semibold mb-1 sm:mb-2">Create collection</h2>
             <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-5">
-              Start with a source to add to the new collection
+              Choose a first source to add to your new collection
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 auto-rows-fr">
