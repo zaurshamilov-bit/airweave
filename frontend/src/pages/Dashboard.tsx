@@ -13,7 +13,7 @@ import {
   SourceButton,
   ApiKeyCard,
   ExampleProjectCard,
-  CreateCollectionDialog
+  ConnectFlow
 } from "@/components/dashboard";
 import { cn } from "@/lib/utils";
 
@@ -172,21 +172,16 @@ const Dashboard = () => {
   };
 
   const handleSourceClick = (source: Source) => {
-    // Open the dialog with the selected source
+    // Set the selected source
     setSelectedSource(source);
+    // Open the dialog
     setDialogOpen(true);
   };
 
-  // Refresh collections after creating a new one
+  // Handle dialog close
   const handleDialogClose = () => {
     setDialogOpen(false);
     setSelectedSource(null);
-
-    // Refresh collections without showing loading state
-    fetchCollections(false);
-  };
-
-  const handleCollectionCreated = () => {
     // Refresh collections without showing loading state
     fetchCollections(false);
   };
@@ -225,16 +220,16 @@ const Dashboard = () => {
 
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
-      {/* Collection Creation Dialog */}
-      {selectedSource && (
-        <CreateCollectionDialog
-          isOpen={dialogOpen}
-          onClose={handleDialogClose}
-          sourceId={selectedSource.id}
-          sourceName={selectedSource.name}
-          sourceShortName={selectedSource.short_name}
-        />
-      )}
+      {/* Connect Flow Dialog */}
+      <ConnectFlow
+        isOpen={dialogOpen}
+        onOpenChange={setDialogOpen}
+        mode="create-collection"
+        sourceId={selectedSource?.id}
+        sourceName={selectedSource?.name}
+        sourceShortName={selectedSource?.short_name}
+        onComplete={() => fetchCollections(false)}
+      />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
         {/* Main content (left column) */}

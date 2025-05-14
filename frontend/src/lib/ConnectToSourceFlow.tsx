@@ -15,17 +15,24 @@ interface SourceDetails {
     };
 }
 
+// Add interface for collection details
+interface CollectionDetails {
+    name: string;
+    readable_id?: string;
+}
+
 interface ConnectToSourceFlowProps {
     sourceShortName: string;
     sourceName: string;
-    collectionId: string;
-    onComplete?: (connectionId: string) => void;
+    collectionDetails: CollectionDetails;
+    onComplete?: () => void;
     onError?: (error: Error) => void;
 }
 
-// Constants for local storage keys
+// Update constants for local storage keys to include collection details
 const OAUTH_RETURN_URL_KEY = "oauth_return_url";
 const OAUTH_COLLECTION_ID_KEY = "oauth_collection_id";
+const OAUTH_COLLECTION_DETAILS_KEY = "oauth_collection_details";
 
 // Hook that provides all the connection flow logic
 export const useConnectToSourceFlow = () => {
@@ -34,7 +41,7 @@ export const useConnectToSourceFlow = () => {
         name: string;
         short_name: string;
         sourceDetails?: any;
-        collectionId?: string;
+        collectionDetails?: any;
         onConfigComplete?: (connectionId: string) => void;
     } | null>(null);
     const navigate = useNavigate();
@@ -45,14 +52,14 @@ export const useConnectToSourceFlow = () => {
     const initiateConnection = async (
         sourceShortName: string,
         sourceName: string,
-        collectionId: string,
+        collectionDetails: CollectionDetails,
         sourceDetails?: SourceDetails,
         onComplete?: () => void
     ) => {
         console.log("🚀 [ConnectToSourceFlow] Initiating connection:", {
             sourceShortName,
             sourceName,
-            collectionId,
+            collectionDetails,
             hasSourceDetails: !!sourceDetails
         });
 
@@ -74,21 +81,22 @@ export const useConnectToSourceFlow = () => {
 
             // DECISION POINT: Route to appropriate flow based on auth type and config fields
             if (details?.auth_fields?.fields && details.auth_fields.fields.length > 0) {
-                // Has config fields (regardless of auth type) - open the wizard
-                await handleConfigFieldsAuth(sourceShortName, sourceName, collectionId, details, onComplete);
+                // Has config fields - open the wizard
+                await handleConfigFieldsAuth(sourceShortName, sourceName, collectionDetails, details, onComplete);
             }
             else {
                 // No config fields required - direct connection or OAuth
-                await handleDirectConnection(sourceShortName, sourceName, collectionId, details);
-                // Call onComplete immediately for direct connections
-                if (onComplete) {
+                await handleDirectConnection(sourceShortName, sourceName, collectionDetails, details);
+
+                // Only call onComplete for non-OAuth flows (OAuth will complete via redirect)
+                if (onComplete && authType !== "oauth2" && !authType?.startsWith("oauth2")) {
                     onComplete();
                 }
             }
         } catch (error) {
             console.error("❌ [ConnectToSourceFlow] Error initiating connection:", error);
             toast.error("Failed to initiate connection to source");
-            navigate(`/collections/${collectionId}?connected=error`);
+            navigate(`/dashboard?connected=error`);
         }
     };
 
@@ -98,7 +106,7 @@ export const useConnectToSourceFlow = () => {
     const handleConfigFieldsAuth = async (
         sourceShortName: string,
         sourceName: string,
-        collectionId: string,
+        collectionDetails: CollectionDetails,
         sourceDetails: SourceDetails,
         onComplete?: () => void
     ) => {
@@ -112,13 +120,13 @@ export const useConnectToSourceFlow = () => {
             }
         };
 
-        // Open configuration dialog and hand over control
+        // Open configuration dialog and hand over control with collection details
         setSourceConnectionConfig({
             name: sourceName,
             short_name: sourceShortName,
             sourceDetails: sourceDetails,
-            collectionId: collectionId,
-            onConfigComplete: handleDialogComplete // Pass the callback
+            collectionDetails: collectionDetails,
+            onConfigComplete: handleDialogComplete
         });
         setConfigDialogOpen(true);
 
@@ -131,7 +139,7 @@ export const useConnectToSourceFlow = () => {
     const handleDirectConnection = async (
         sourceShortName: string,
         sourceName: string,
-        collectionId: string,
+        collectionDetails: CollectionDetails,
         sourceDetails?: SourceDetails
     ) => {
         console.log("🔌 [ConnectToSourceFlow] Handling direct connection for auth type:", sourceDetails?.auth_type);
@@ -141,17 +149,17 @@ export const useConnectToSourceFlow = () => {
         if (authType === "none" || authType === "basic") {
             // No auth or basic auth - create source connection directly
             console.log("⚡ [ConnectToSourceFlow] Creating source connection directly (no/basic auth)");
-            await createDirectSourceConnection(sourceShortName, sourceName, collectionId);
+            await createDirectSourceConnection(sourceShortName, sourceName, collectionDetails);
         }
         else if (authType?.startsWith("oauth2")) {
             // OAuth2 with no config fields - start OAuth flow
             console.log("🔐 [ConnectToSourceFlow] Starting OAuth flow (no config fields)");
-            await initiateOAuthFlow(sourceShortName, sourceName, collectionId);
+            await initiateOAuthFlow(sourceShortName, sourceName, collectionDetails);
         }
         else {
             // Fallback for other auth types
             console.log("⚡ [ConnectToSourceFlow] Creating direct connection (unknown auth type)");
-            await createDirectSourceConnection(sourceShortName, sourceName, collectionId);
+            await createDirectSourceConnection(sourceShortName, sourceName, collectionDetails);
         }
     };
 
@@ -159,11 +167,25 @@ export const useConnectToSourceFlow = () => {
     const createDirectSourceConnection = async (
         sourceShortName: string,
         sourceName: string,
-        collectionId: string,
+        collectionDetails: CollectionDetails,
     ) => {
         console.log("📝 [ConnectToSourceFlow] Creating direct source connection for:", sourceShortName);
 
         try {
+            // First create the collection
+            console.log("📝 [ConnectToSourceFlow] Creating collection first:", collectionDetails);
+            const collectionResponse = await apiClient.post("/collections/", collectionDetails);
+
+            if (!collectionResponse.ok) {
+                const errorText = await collectionResponse.text();
+                throw new Error(`Failed to create collection: ${errorText}`);
+            }
+
+            const collection = await collectionResponse.json();
+            const collectionId = collection.readable_id;
+            console.log("✅ [ConnectToSourceFlow] Collection created successfully:", collection);
+
+            // Now create the source connection
             const payload = {
                 name: `My ${sourceName}`,
                 short_name: sourceShortName,
@@ -184,7 +206,7 @@ export const useConnectToSourceFlow = () => {
         } catch (error) {
             console.error("❌ [ConnectToSourceFlow] Error creating source connection:", error);
             toast.error("Failed to create source connection");
-            navigate(`/collections/${collectionId}?connected=error`);
+            navigate(`/dashboard?connected=error`);
         }
     };
 
@@ -194,14 +216,14 @@ export const useConnectToSourceFlow = () => {
     const initiateOAuthFlow = async (
         sourceShortName: string,
         sourceName: string,
-        collectionId: string
+        collectionDetails: CollectionDetails
     ) => {
         console.log("🔐 [ConnectToSourceFlow] Setting up OAuth flow for:", sourceShortName);
 
         try {
-            // Store the collection ID for after OAuth completes
-            localStorage.setItem(OAUTH_RETURN_URL_KEY, `/collections/${collectionId}`);
-            localStorage.setItem(OAUTH_COLLECTION_ID_KEY, collectionId);
+            // Store the collection details for after OAuth completes
+            localStorage.setItem(OAUTH_RETURN_URL_KEY, `/dashboard`);
+            localStorage.setItem(OAUTH_COLLECTION_DETAILS_KEY, JSON.stringify(collectionDetails));
             console.log("💾 [ConnectToSourceFlow] Stored OAuth data in localStorage");
 
             const storageKey = `oauth2_config_${sourceShortName}`;
@@ -239,7 +261,7 @@ export const useConnectToSourceFlow = () => {
         } catch (error) {
             console.error("❌ [ConnectToSourceFlow] OAuth initialization error:", error);
             toast.error("Failed to start authentication flow");
-            navigate(`/collections/${collectionId}?connected=error`);
+            navigate(`/dashboard?connected=error`);
         }
     };
 
@@ -249,8 +271,8 @@ export const useConnectToSourceFlow = () => {
     const handleConfigComplete = (connectionId: string) => {
         console.log("🎉 [ConnectToSourceFlow] Config dialog completed with ID:", connectionId);
 
-        if (!sourceConnectionConfig?.collectionId) {
-            console.error("❌ [ConnectToSourceFlow] No collection ID found in config");
+        if (!sourceConnectionConfig?.collectionDetails) {
+            console.error("❌ [ConnectToSourceFlow] No collection details found in config");
             return;
         }
 
@@ -261,14 +283,21 @@ export const useConnectToSourceFlow = () => {
             initiateOAuthFlow(
                 sourceConnectionConfig.short_name,
                 sourceConnectionConfig.name,
-                sourceConnectionConfig.collectionId
+                sourceConnectionConfig.collectionDetails
             );
         } else {
-            // For config_class auth types, AddSourceWizard already created the complete source connection
+            // For config_class auth types, SourceConfigDialog already created the collection and source connection
             console.log("✅ [ConnectToSourceFlow] Source connection created by wizard with ID:", connectionId);
 
-            // Just navigate to success page - no more API calls needed
-            navigate(`/collections/${sourceConnectionConfig.collectionId}?connected=success`);
+            // Just navigate to success page - we'll get the collectionId from the returned data
+            const sourceConnection = JSON.parse(sessionStorage.getItem('last_created_source_connection') || '{}');
+            const collectionId = sourceConnection.collection;
+
+            if (collectionId) {
+                navigate(`/collections/${collectionId}?connected=success`);
+            } else {
+                navigate(`/dashboard?connected=success`);
+            }
         }
     };
 
@@ -292,7 +321,7 @@ export const useConnectToSourceFlow = () => {
                 shortName={sourceConnectionConfig.short_name}
                 name={sourceConnectionConfig.name}
                 sourceDetails={sourceConnectionConfig.sourceDetails}
-                collectionId={sourceConnectionConfig.collectionId}
+                collectionDetails={sourceConnectionConfig.collectionDetails}
             />
         );
     };
@@ -308,7 +337,7 @@ export const useConnectToSourceFlow = () => {
 export const ConnectToSourceFlow: React.FC<ConnectToSourceFlowProps> = ({
     sourceShortName,
     sourceName,
-    collectionId,
+    collectionDetails,
     onComplete,
     onError
 }) => {
@@ -317,7 +346,7 @@ export const ConnectToSourceFlow: React.FC<ConnectToSourceFlowProps> = ({
     // Start the connection process on mount
     useEffect(() => {
         console.log("⚡ [ConnectToSourceFlow] Component mounted, starting connection process");
-        initiateConnection(sourceShortName, sourceName, collectionId).catch(error => {
+        initiateConnection(sourceShortName, sourceName, collectionDetails).catch(error => {
             console.error("❌ [ConnectToSourceFlow] Connection process failed:", error);
             if (onError) onError(error instanceof Error ? error : new Error(String(error)));
         });
@@ -325,7 +354,7 @@ export const ConnectToSourceFlow: React.FC<ConnectToSourceFlowProps> = ({
         return () => {
             console.log("🧹 [ConnectToSourceFlow] Component unmounting, cleanup running");
         };
-    }, [sourceShortName, sourceName, collectionId]);
+    }, [sourceShortName, sourceName, collectionDetails]);
 
     // Render the dialog if needed
     return renderConfigDialog();
@@ -334,7 +363,8 @@ export const ConnectToSourceFlow: React.FC<ConnectToSourceFlowProps> = ({
 // Export constants for use in other components like AuthCallback
 export const OAUTH_KEYS = {
     RETURN_URL: OAUTH_RETURN_URL_KEY,
-    COLLECTION_ID: OAUTH_COLLECTION_ID_KEY
+    COLLECTION_ID: OAUTH_COLLECTION_ID_KEY,
+    COLLECTION_DETAILS: OAUTH_COLLECTION_DETAILS_KEY
 };
 
 export default ConnectToSourceFlow;
