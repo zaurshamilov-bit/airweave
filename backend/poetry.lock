@@ -475,6 +475,71 @@ msal-extensions = ">=1.2.0"
 typing-extensions = ">=4.0.0"
 
 [[package]]
+name = "azure-keyvault"
+version = "4.2.0"
+description = "Microsoft Azure Key Vault Client Libraries for Python"
+optional = false
+python-versions = "*"
+files = [
+    {file = "azure-keyvault-4.2.0.zip", hash = "sha256:731add108a3e29ab4fd501a3c477256c286c34d0996b383fb6a3945462933761"},
+    {file = "azure_keyvault-4.2.0-py2.py3-none-any.whl", hash = "sha256:16b29039244cbe8b940c98a0d795626d76d2a579cb9b8c559983ad208082c0de"},
+]
+
+[package.dependencies]
+azure-keyvault-certificates = ">=4.4,<5.0"
+azure-keyvault-keys = ">=4.5,<5.0"
+azure-keyvault-secrets = ">=4.4,<5.0"
+
+[[package]]
+name = "azure-keyvault-certificates"
+version = "4.9.0"
+description = "Microsoft Azure Key Vault Certificates Client Library for Python"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "azure_keyvault_certificates-4.9.0-py3-none-any.whl", hash = "sha256:f1610a9228ce28c8a30ce04b54ee25c3838de13fd5d252effe0dad7fd561980f"},
+    {file = "azure_keyvault_certificates-4.9.0.tar.gz", hash = "sha256:9dd04f8ffe4091588282eb75480bb31e584dd9940d09f9dea67fac8363e97e59"},
+]
+
+[package.dependencies]
+azure-core = ">=1.31.0"
+isodate = ">=0.6.1"
+typing-extensions = ">=4.0.1"
+
+[[package]]
+name = "azure-keyvault-keys"
+version = "4.10.0"
+description = "Microsoft Azure Key Vault Keys Client Library for Python"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "azure_keyvault_keys-4.10.0-py3-none-any.whl", hash = "sha256:210227e0061f641a79755f0e0bcbcf27bbfb4df630a933c43a99a29962283d0d"},
+    {file = "azure_keyvault_keys-4.10.0.tar.gz", hash = "sha256:511206ae90aec1726a4d6ff5a92d754bd0c0f1e8751891368d30fb70b62955f1"},
+]
+
+[package.dependencies]
+azure-core = ">=1.31.0"
+cryptography = ">=2.1.4"
+isodate = ">=0.6.1"
+typing-extensions = ">=4.0.1"
+
+[[package]]
+name = "azure-keyvault-secrets"
+version = "4.9.0"
+description = "Microsoft Azure Key Vault Secrets Client Library for Python"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "azure_keyvault_secrets-4.9.0-py3-none-any.whl", hash = "sha256:33c7e2aca2cc2092cebc8c6e96eca36a5cc30c767e16ea429c5fa21270e9fba6"},
+    {file = "azure_keyvault_secrets-4.9.0.tar.gz", hash = "sha256:2a03bb2ffd9a0d6c8ad1c330d9d0310113985a9de06607ece378fd72a5889fe1"},
+]
+
+[package.dependencies]
+azure-core = ">=1.31.0"
+isodate = ">=0.6.1"
+typing-extensions = ">=4.0.1"
+
+[[package]]
 name = "bcrypt"
 version = "4.3.0"
 description = "Modern password hashing for your software and your servers"
@@ -5206,4 +5271,4 @@ requests = "*"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "c33c0278dc65475469c00fdec75959e26d0cb2ad7ecfe983f24e73f3cba0636a"
+content-hash = "e45f4c76590c554ad73ca9ca8e257025f503ee6b535d5c30e9eed7a2dba8e2c4"

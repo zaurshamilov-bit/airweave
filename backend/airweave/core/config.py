@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: Optional[str] = None
     MISTRAL_API_KEY: Optional[str] = None
 
+    AZURE_KEYVAULT_NAME: Optional[str] = None
+    AZURE_CLIENT_ID: Optional[str] = None
+    AZURE_CLIENT_SECRET: Optional[str] = None
+    AZURE_TENANT_ID: Optional[str] = None
+
     # Custom deployment URLs - these are used to override the default URLs to allow
     # for custom domains in custom deployments
     API_FULL_URL: Optional[str] = None
