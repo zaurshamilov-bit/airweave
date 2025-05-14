@@ -258,7 +258,7 @@ class OAuth2Service:
         return integration_config
 
     @staticmethod
-    async def _get_client_credentials(
+    def _get_client_credentials(
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
         auth_fields: Optional[dict] = None,
         decrypted_credential: Optional[dict] = None,
