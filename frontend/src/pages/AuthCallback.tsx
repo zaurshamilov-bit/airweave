@@ -472,6 +472,10 @@ export function AuthCallback() {
       throw new Error("Missing collection details");
     }
 
+    // Check if this is supposed to be a new collection
+    const isNewCollection = sessionStorage.getItem("oauth2_is_new_collection") === "true";
+    console.log(`🔍 [AuthCallback] Collection context: ${isNewCollection ? "Creating new collection" : "Using existing collection if available"}`);
+
     try {
       // First check if the collection already exists (when adding to existing collection)
       if (collectionDetails.readable_id) {
@@ -479,6 +483,12 @@ export function AuthCallback() {
         const checkResponse = await apiClient.get(`/collections/${collectionDetails.readable_id}`);
 
         if (checkResponse.ok) {
+          // Collection exists
+          if (isNewCollection) {
+            // If trying to create a new collection, error out
+            console.error(`❌ [AuthCallback] Collection with ID "${collectionDetails.readable_id}" already exists but we're trying to create a new one`);
+            throw new Error(`Collection with ID "${collectionDetails.readable_id}" already exists`);
+          }
           // Collection already exists, return it
           const existingCollection = await checkResponse.json();
           console.log('✅ [AuthCallback] Using existing collection:', existingCollection);
@@ -504,6 +514,10 @@ export function AuthCallback() {
 
       const collection = await collectionResponse.json();
       console.log('✅ [AuthCallback] Collection created successfully:', collection);
+
+      // Clean up the isNewCollection flag to avoid it affecting future operations
+      sessionStorage.removeItem("oauth2_is_new_collection");
+
       return collection;
     } catch (error) {
       console.error('❌ [AuthCallback] Collection creation error:', error);

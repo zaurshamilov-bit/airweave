@@ -218,6 +218,9 @@ export const FlowDialog: React.FC<FlowDialogProps> = ({
         viewData: viewData[currentView]
     };
 
+    // Add explicit logging to show what data is passed to each view
+    console.log(`🔍 [FlowDialog] Passing data to ${currentView} view:`, viewData[currentView]);
+
     // Common styles for dialog content
     const contentStyles = {
         width,

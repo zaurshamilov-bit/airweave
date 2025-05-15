@@ -1,49 +1,32 @@
 /**
- * ConnectFlow.tsx
- *
- * This is the orchestration layer for the source connection flow. It handles the UI flow
- * for connecting data sources to collections, managing which views to display and when.
- *
- * The component acts as a "flow controller" that:
- * 1. Manages which dialog views to show based on user actions
- * 2. Determines if source configuration is needed
- * 3. Handles bypassing unnecessary steps
- * 4. Collects necessary data before handing off to the API layer
- *
- * Flow overview:
- * - Dashboard → Click source → ConnectFlow (create-collection mode) → CreateCollectionView
- * - Collection detail → Add source → ConnectFlow (add-source mode) → SourceSelectorView → CreateCollectionView
- * - After collection creation → Check if source needs config → Show SourceConfigView or bypass to API
- * - Error handling → Show ConnectionErrorView with error details
- *
- * =====================================================================
- * IMPORTANT DATABASE OPERATION NOTE
- *
- * ConnectFlow DOES NOT directly create collections or source connections
- * in the database. It only collects the necessary information and then
- * passes it to ConnectToSourceFlow which performs the actual API calls.
- *
- * The actual database operations happen in:
- * 1. ConnectToSourceFlow.tsx - For direct creation paths
- * 2. SourceConfigView.tsx - When config is collected via form
- * 3. AuthCallback.tsx - For OAuth flow completions
- * =====================================================================
+ * ConnectFlow - UI orchestration layer for source connection flow.
+ * Manages which views to display and transitions between them.
  */
 
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
-
-import FlowDialog from './FlowDialog';
+import { useState, useEffect, useRef } from "react";
+import { apiClient } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Copy, Eye, Key, Plus, ExternalLink, FileText, Github } from "lucide-react";
+import { useNavigate, Link, useLocation, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import {
+    CollectionCard,
+    SourceButton,
+    ApiKeyCard,
+    ExampleProjectCard,
+} from "@/components/dashboard";
 import {
     CreateCollectionView,
     SourceConfigView,
     SourceSelectorView,
 } from './views';
 import ConnectionErrorView from './views/ConnectionErrorView';
-import { apiClient } from '@/lib/api';
-import { useConnectToSourceFlow } from '@/lib/ConnectToSourceFlow';
-import { redirectWithError } from '@/lib/error-utils';
+import FlowDialog from './FlowDialog';
+import { cn } from "@/lib/utils";
+import { redirectWithError } from "@/lib/error-utils";
+import { useConnectToSourceFlow } from "@/lib/ConnectToSourceFlow";
 
 /**
  * Defines the entry point modes for the connect flow
@@ -86,34 +69,11 @@ interface ConnectFlowProps {
 }
 
 /**
- * ConnectFlow Component
+ * ConnectFlow - Manages the UI flow for connecting data sources to collections
  *
- * Manages the flow of connecting data sources to collections through a series
- * of dialog views. Determines source configuration requirements and orchestrates
- * the connection process.
- *
- * Flow paths based on mode:
- *
- * 1. 'source-selector' - Default flow starting with source selection
- *    SourceSelectorView → CreateCollectionView → SourceConfigView (if needed) → API
- *
- * 2. 'create-collection' - Flow starting with collection creation (when source is pre-selected)
- *    CreateCollectionView → SourceConfigView (if needed) → API
- *
- * 3. 'add-source' - Flow for adding a source to an existing collection
- *    SourceSelectorView → SourceConfigView (if needed) → API
- *    (Skips CreateCollectionView and reuses existing collection)
- *
- * 4. 'source-first-collection' - Flow for creating a collection starting with source selection
- *    SourceSelectorView → CreateCollectionView → SourceConfigView (if needed) → API
- *    (Used by the "+ Create collection" button in the sidebar)
- *
- * 5. 'error-view' - Flow starting with error view after redirection
- *    ConnectionErrorView → retry or cancel
- *
- * Special behavior:
- * - For OAuth sources, flow may redirect to provider and continue in AuthCallback
- * - Sources without config fields bypass SourceConfigView
+ * Key separation of concerns:
+ * - ConnectFlow (this component): UI transitions and data collection
+ * - ConnectToSourceFlow: All API interactions and connection logic
  */
 export const ConnectFlow: React.FC<ConnectFlowProps> = ({
     isOpen,
@@ -133,7 +93,7 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
     /** Data for all views, keyed by view name */
     const [viewData, setViewData] = useState({});
     /** Hook that provides API methods for initiating connections */
-    const { initiateConnection, performOAuthRedirect } = useConnectToSourceFlow();
+    const { handleConnection } = useConnectToSourceFlow();
 
     /** Flag to track if we're bypassing the source config view */
     const [isBypassingSourceConfig, setIsBypassingSourceConfig] = useState(false);
@@ -153,18 +113,13 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
      * Called when dialog opens or closes
      */
     const resetAllState = () => {
-        console.log("🧹 [ConnectFlow] Resetting all state with mode:", mode);
-
-        // Determine the correct initial view based on mode
         let initialView = 'createCollection';
         if (mode === 'source-selector' || mode === 'add-source' || mode === 'source-first-collection') {
             initialView = 'sourceSelector';
         } else if (mode === 'error-view') {
-            console.log("🔔 [ConnectFlow] Initializing in error-view mode with:", errorData);
             initialView = 'connectionError';
         }
 
-        // Reset state
         setCurrentView(initialView);
         setViewData({
             sourceName,
@@ -172,14 +127,12 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
             sourceId,
             collectionId,
             collectionName,
-            isNewCollection: mode === 'source-first-collection' // Flag to indicate we're creating a new collection
+            isNewCollection: mode === 'source-first-collection'
         });
         setIsBypassingSourceConfig(false);
         setCachedSourceDetails(null);
 
-        // If in error view mode, set the error state
         if (mode === 'error-view' && errorData) {
-            console.log("🔔 [ConnectFlow] Setting connection error state for error-view mode");
             setConnectionError(errorData);
         } else {
             setConnectionError(null);
@@ -192,8 +145,7 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
      */
     const handleOpenChange = (open: boolean) => {
         if (!open) {
-            console.log("🚪 [ConnectFlow] Dialog closing, will reset state");
-            // We'll reset state in the useEffect below when isOpen becomes false
+            // State will reset when isOpen becomes false
         }
         onOpenChange(open);
     };
@@ -208,297 +160,285 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
     // Reset view when dialog opens
     useEffect(() => {
         if (isOpen) {
-            console.log("🔔 [ConnectFlow] Dialog opened with mode:", mode, "errorData:", errorData);
-            // Reset all state when opening dialog
             resetAllState();
         }
     }, [isOpen, sourceId, sourceName, sourceShortName, mode, errorData]);
-
-    useEffect(() => {
-        console.log("🔄 [ConnectFlow] Initial view:", currentView);
-        console.log("🔄 [ConnectFlow] Mode:", mode);
-    }, [currentView, mode]);
 
     /**
      * Error handler for API failures
      * Redirects to dashboard with error parameters stored in localStorage
      */
     const handleConnectionError = (error: Error, serviceName: string = sourceShortName || "the service", retryAction?: () => void) => {
-        console.error("❌ [ConnectFlow] Connection error:", error);
-
-        // Close the dialog
         onOpenChange(false);
-
-        // Use the utility function to redirect with error
         redirectWithError(navigate, error, serviceName);
     };
 
     /**
-     * Special handling for when view changes to sourceConfig
-     *
-     * This effect:
-     * 1. Checks if the source requires configuration
-     * 2. If not, bypasses the config view and initiates connection directly
-     * 3. If yes, allows the normal flow to continue
+     * Helper to create config view data from source and collection details
      */
-    useEffect(() => {
-        console.log("🔄 [ConnectFlow] Current view changed to:", currentView);
-
-        // Check if we need to run special handling when transitioning to sourceConfig
-        if (currentView === "sourceConfig" && !isBypassingSourceConfig) {
-            console.log("🔄 [ConnectFlow] Transition to sourceConfig detected, checking if we should bypass");
-
-            // Run the check asynchronously to not block the UI
-            const checkSourceConfig = async () => {
-                try {
-                    if (!sourceShortName) {
-                        console.log("⚠️ [ConnectFlow] Missing sourceShortName, cannot check source config");
-                        return;
-                    }
-
-                    // Use cached source details if available
-                    let details = cachedSourceDetails;
-                    if (!details) {
-                        const response = await apiClient.get(`/sources/detail/${sourceShortName}`);
-                        if (response.ok) {
-                            details = await response.json();
-                            // Cache the source details for reuse
-                            setCachedSourceDetails(details);
-                        } else {
-                            console.error("❌ [ConnectFlow] Failed to fetch source details");
-                            handleConnectionError(new Error(`Failed to fetch source details: ${await response.text()}`), sourceShortName);
-                            return;
-                        }
-                    }
-
-                    // Get collectionDetails from viewData
-                    const collectionDetails = viewData["sourceConfig"]?.collectionDetails;
-
-                    if (!collectionDetails) {
-                        console.log("⚠️ [ConnectFlow] Missing collection details, cannot bypass");
-                        return;
-                    }
-
-                    // Check if source has config fields
-                    const hasConfigFields = details?.auth_fields?.fields &&
-                        details.auth_fields.fields.length > 0;
-
-                    console.log("🔍 [ConnectFlow] Source details:", details);
-                    console.log("🔍 [ConnectFlow] Has config fields:", hasConfigFields);
-                    console.log("🔍 [ConnectFlow] Auth type:", details?.auth_type);
-
-                    // If OAuth with no config fields, bypass SourceConfigView
-                    if (!hasConfigFields) {
-                        console.log("🚀 [ConnectFlow] Source has no config fields, bypassing SourceConfigView");
-
-                        // Set bypassing flag to prevent loops
-                        setIsBypassingSourceConfig(true);
-
-                        // Close the dialog
-                        onOpenChange(false);
-
-                        // Create a wrapper for onComplete that matches the expected signature
-                        const onCompleteWrapper = () => {
-                            if (onComplete) {
-                                onComplete({ collectionId: collectionDetails.readable_id });
-                            }
-                        };
-
-                        // Start connection flow directly
-                        try {
-                            const result = await initiateConnection(
-                                sourceShortName,
-                                sourceName || "My Connection",
-                                collectionDetails,
-                                details, // Pass the source details we already fetched
-                                onCompleteWrapper
-                            );
-
-                            // Check if this is an OAuth redirect result
-                            if (result && result.oauthRedirect && result.authUrl) {
-                                console.log("🔀 [ConnectFlow] Redirecting to OAuth provider:", result.authUrl);
-                                // Use direct browser redirect
-                                window.location.href = result.authUrl;
-                                return;
-                            }
-                        } catch (error) {
-                            console.error("❌ [ConnectFlow] Error during connection initiation:", error);
-                            // Re-open the dialog with error view
-                            setConnectionError({
-                                serviceName: sourceName || sourceShortName,
-                                errorMessage: error instanceof Error ? error.message : "Connection failed",
-                                errorDetails: error instanceof Error ? error.stack : JSON.stringify(error),
-                                retryAction: () => checkSourceConfig()
-                            });
-                            setCurrentView("connectionError");
-                            onOpenChange(true);
-                        }
-                    }
-                } catch (error) {
-                    console.error("❌ [ConnectFlow] Error checking source config:", error);
-                    handleConnectionError(error instanceof Error ? error : new Error(String(error)), sourceShortName);
-                }
-            };
-
-            checkSourceConfig();
-        }
-    }, [currentView, isBypassingSourceConfig, sourceShortName, sourceName, viewData, onOpenChange, initiateConnection, onComplete, cachedSourceDetails]);
+    const createSourceConfigData = (sourceData, collectionDetails) => ({
+        collectionDetails,
+        sourceId: sourceData.sourceId,
+        sourceName: sourceData.sourceName,
+        sourceShortName: sourceData.sourceShortName,
+        sourceDetails: cachedSourceDetails
+    });
 
     /**
-     * Handler for when the CreateCollectionView completes
-     *
-     * This function:
-     * 1. Checks if the selected source requires configuration
-     * 2. If not, bypasses configuration and initiates connection directly
-     * 3. If yes, transitions to the SourceConfigView
+     * Helper to initiate direct connection for sources that don't need configuration
      */
-    const handleCreateCollectionNext = async (data) => {
-        console.log("🔍 [ConnectFlow] handleCreateCollectionNext called with data:", data);
-        const collectionDetails = data.data.collectionDetails;
+    const initiateDirectConnection = (
+        targetSourceShortName: string,
+        connectionDisplayName: string,
+        collectionDetails: any,
+        details: any,
+        retryAction?: () => void
+    ) => {
+        console.log("⏩ [ConnectFlow] Bypassing SourceConfigView for", targetSourceShortName, "- no config fields needed");
+        setIsBypassingSourceConfig(true);
+        onOpenChange(false);
 
-        // Check if source needs config
+        // Connect directly using the unified service method
+        handleConnection(
+            targetSourceShortName,
+            connectionDisplayName,
+            collectionDetails,
+            details,
+            undefined, // No config needed
+            mode !== 'add-source', // Pass isNewCollection based on mode
+            (result) => {
+                if (onComplete) {
+                    onComplete({ collectionId: collectionDetails.readable_id });
+                }
+            },
+            (url, details) => {
+                // Redirect callback for OAuth
+                window.location.href = url;
+            },
+            (error, source) => {
+                // Error callback
+                setConnectionError({
+                    serviceName: connectionDisplayName || targetSourceShortName,
+                    errorMessage: typeof error === 'object' && error instanceof Error ? error.message : "Connection failed",
+                    errorDetails: typeof error === 'object' && error instanceof Error ? error.stack : JSON.stringify(error),
+                    retryAction: retryAction || (() => checkAndHandleSourceConfig(collectionDetails))
+                });
+                setCurrentView("connectionError");
+                onOpenChange(true);
+            }
+        );
+    };
+
+    /**
+     * Checks if a source needs configuration and handles accordingly
+     * @param collectionDetails - Details of the collection
+     * @param retryAction - Optional retry action if the check fails
+     * @param overrideSourceInfo - Optional object containing sourceShortName and sourceName to use instead of extracting from viewData
+     */
+    const checkAndHandleSourceConfig = async (
+        collectionDetails: any,
+        retryAction?: () => void,
+        overrideSourceInfo?: { sourceShortName: string; sourceName?: string }
+    ) => {
         try {
-            // Use cached source details if available
+            // Get the correct sourceShortName, ensuring it's not undefined
+            // If overrideSourceInfo is provided, use that first
+            const targetSourceShortName = overrideSourceInfo?.sourceShortName ||
+                viewData["sourceConfig"]?.sourceShortName ||
+                (viewData as any).sourceShortName ||
+                sourceShortName;
+
+            // Similarly for sourceName
+            const targetSourceName = overrideSourceInfo?.sourceName ||
+                sourceName ||
+                viewData["sourceConfig"]?.sourceName ||
+                (viewData as any).sourceName;
+
+            if (!targetSourceShortName) {
+                console.error("❌ [ConnectFlow] Missing sourceShortName when checking source config", {
+                    viewDataSourceShortName: (viewData as any).sourceShortName,
+                    sourceConfigShortName: viewData["sourceConfig"]?.sourceShortName,
+                    propsSourceShortName: sourceShortName,
+                    override: overrideSourceInfo
+                });
+                handleConnectionError(
+                    new Error("Missing source information. Please try again."),
+                    "the service",
+                    retryAction
+                );
+                return false;
+            }
+
+            console.log("🔍 [ConnectFlow] Checking source config for:", targetSourceShortName);
+
+            // Get source details
             let details = cachedSourceDetails;
             if (!details) {
-                const response = await apiClient.get(`/sources/detail/${sourceShortName}`);
+                const response = await apiClient.get(`/sources/detail/${targetSourceShortName}`);
                 if (response.ok) {
                     details = await response.json();
-                    // Cache the source details
                     setCachedSourceDetails(details);
                 } else {
-                    console.error("❌ [ConnectFlow] Failed to fetch source details");
-                    handleConnectionError(new Error(`Failed to fetch source details: ${await response.text()}`), sourceShortName,
-                        () => handleCreateCollectionNext(data));
-                    return;
+                    handleConnectionError(
+                        new Error(`Failed to fetch source details: ${await response.text()}`),
+                        targetSourceShortName,
+                        retryAction
+                    );
+                    return false;
                 }
             }
+
+            // If this is an OAuth source and doesn't need configuration, skip the config view
+            const isOAuthSource = details?.auth_type && details.auth_type.startsWith("oauth2");
 
             // Check if source has config fields
             const hasConfigFields = details?.auth_fields?.fields &&
                 details.auth_fields.fields.length > 0;
 
-            console.log("🔍 [ConnectFlow] Source details:", details);
-            console.log("🔍 [ConnectFlow] Has config fields:", hasConfigFields);
-            console.log("🔍 [ConnectFlow] Auth type:", details?.auth_type);
+            console.log("🔍 [ConnectFlow] Source details check:", {
+                isOAuthSource,
+                hasConfigFields,
+                authType: details?.auth_type,
+                fieldsCount: details?.auth_fields?.fields?.length || 0
+            });
 
-            // If OAuth with no config fields, bypass SourceConfigView
+            // Fix: Only bypass SourceConfigView for sources without config fields
+            // This ensures OAuth sources WITH config fields still show the config screen
             if (!hasConfigFields) {
-                console.log("🚀 [ConnectFlow] Source has no config fields, bypassing SourceConfigView");
-
-                // Set bypassing flag
-                setIsBypassingSourceConfig(true);
-
-                // Close the dialog
-                onOpenChange(false);
-
-                // Create a wrapper for onComplete that matches the expected signature
-                const onCompleteWrapper = () => {
-                    if (onComplete) {
-                        onComplete({ collectionId: collectionDetails.readable_id });
-                    }
-                };
-
-                // Start connection flow directly
-                try {
-                    const result = await initiateConnection(
-                        sourceShortName,
-                        sourceName || "My Connection",
-                        collectionDetails,
-                        details, // Pass the source details we already fetched
-                        onCompleteWrapper
-                    );
-
-                    // Check if this is an OAuth flow that needs redirect
-                    if (result && result.oauthRedirect && result.authUrl) {
-                        console.log("🔀 [ConnectFlow] Handling OAuth redirect from initiateConnection");
-                        // Redirect to the OAuth provider
-                        window.location.href = result.authUrl;
-                        return;
-                    }
-                } catch (error) {
-                    console.error("❌ [ConnectFlow] Error during connection initiation:", error);
-                    // Re-open the dialog with error view
-                    handleConnectionError(
-                        error instanceof Error ? error : new Error(String(error)),
-                        sourceName || sourceShortName,
-                        () => handleCreateCollectionNext(data)
-                    );
-                }
-                return;
+                // Use helper function to initiate direct connection
+                initiateDirectConnection(
+                    targetSourceShortName,
+                    targetSourceName || details?.name || "My Connection",
+                    collectionDetails,
+                    details,
+                    retryAction
+                );
+                return false; // Indicate that we're bypassing SourceConfigView
             }
+
+            console.log("👉 [ConnectFlow] Source needs configuration:", targetSourceShortName);
+            return true; // Config is needed
         } catch (error) {
             console.error("❌ [ConnectFlow] Error checking source config:", error);
             handleConnectionError(error instanceof Error ? error : new Error(String(error)), sourceShortName);
-            return;
+            return false;
+        }
+    };
+
+    /**
+     * Common logic for transitioning to source config view
+     */
+    const transitionToSourceConfig = (sourceData, collectionDetails) => {
+        return checkAndHandleSourceConfig(
+            collectionDetails,
+            () => handleViewTransition({
+                view: 'sourceConfig',
+                data: {
+                    ...sourceData,
+                    collectionDetails
+                }
+            }),
+            sourceData
+        )
+            .then(needsConfig => {
+                if (needsConfig) {
+                    // Only proceed to sourceConfig if needed
+                    setCurrentView("sourceConfig");
+
+                    const sourceConfigData = createSourceConfigData(sourceData, collectionDetails);
+                    setViewData({
+                        ...viewData,
+                        sourceConfig: sourceConfigData
+                    });
+                }
+                // If no config needed, checkAndHandleSourceConfig already handled it
+            });
+    };
+
+    /**
+     * Handles view transitions with special logic
+     */
+    const handleViewTransition = (data) => {
+        // Special handling for createCollection -> sourceConfig transition
+        if (currentView === "createCollection" &&
+            (data === "sourceConfig" || data?.view === "sourceConfig")) {
+            const collectionDetails = data.data?.collectionDetails;
+
+            // Extract source info directly from transition data
+            const sourceDataForCheck = {
+                sourceShortName: data.data?.sourceShortName,
+                sourceName: data.data?.sourceName,
+                sourceId: data.data?.sourceId
+            };
+
+            // Use common transition function
+            transitionToSourceConfig(sourceDataForCheck, collectionDetails);
+            return null; // Prevent default transition
         }
 
-        // If we need config or check failed, proceed to source config view
-        setCurrentView("sourceConfig");
-        setViewData({ ...viewData, sourceConfig: data.data });
-    };
-
-    /**
-     * Map of view names to view components
-     * These are the steps in the connection flow
-     */
-    const views = {
-        sourceSelector: SourceSelectorView,
-        createCollection: CreateCollectionView,
-        sourceConfig: SourceConfigView,
-        connectionError: ConnectionErrorView,
-    };
-
-    /**
-     * Handler for flow completion
-     *
-     * Called when:
-     * - A view calls onComplete (flow is done)
-     * - User has finished all steps
-     * - OAuth redirect is needed
-     *
-     * Routes to appropriate destination based on result.
-     */
-    const handleComplete = (result: any) => {
-        console.log('Flow completed with result:', result);
-
-        // Check if this is an error completion
-        if (result?.error) {
-            // Close the dialog
-            onOpenChange(false);
-
-            // Create an error object
-            const errorObj = new Error(result.errorMessage || "Connection failed");
-
-            // If error details are provided, add them to the error object
-            if (result.errorDetails) {
-                Object.defineProperty(errorObj, 'stack', {
-                    value: result.errorDetails
-                });
+        // Handle sourceSelector -> sourceConfig transition
+        if (currentView === "sourceSelector" && data?.view === "sourceConfig") {
+            // If adding to existing collection, wrap collectionId in collectionDetails
+            if (data.data?.collectionId) {
+                data.data.collectionDetails = {
+                    name: collectionName,
+                    readable_id: data.data.collectionId
+                };
             }
 
-            // Redirect to dashboard with error details
-            redirectWithError(
-                navigate,
-                errorObj,
-                result.serviceName || sourceName || sourceShortName
-            );
+            // Extract source and collection details from the transition data
+            const collectionDetails = data.data?.collectionDetails;
+            const sourceDataForCheck = {
+                sourceShortName: data.data?.sourceShortName,
+                sourceName: data.data?.sourceName,
+                sourceId: data.data?.sourceId
+            };
+
+            if (collectionDetails && sourceDataForCheck.sourceShortName) {
+                console.log("🔍 [ConnectFlow] Checking source config needs in sourceSelector->sourceConfig transition", {
+                    sourceShortName: sourceDataForCheck.sourceShortName,
+                    collectionDetails
+                });
+
+                // Use common transition function
+                transitionToSourceConfig(sourceDataForCheck, collectionDetails);
+                return null; // Prevent default transition
+            }
+        }
+
+        return data;
+    };
+
+    /**
+     * Handles completion from any view
+     */
+    const handleComplete = (result: any) => {
+        // Handle error result
+        if (result?.error) {
+            onOpenChange(false);
+            const errorObj = new Error(result.errorMessage || "Connection failed");
+            if (result.errorDetails) {
+                Object.defineProperty(errorObj, 'stack', { value: result.errorDetails });
+            }
+            redirectWithError(navigate, errorObj, result.serviceName || sourceName || sourceShortName);
             return;
         }
 
-        // Handle different completion scenarios
+        // Handle direct OAuth redirect
         if (result?.oauthRedirect && result?.authUrl) {
-            // OAuth redirect case - use direct browser redirection
-            console.log("🔀 [ConnectFlow] Redirecting to OAuth provider:", result.authUrl);
+            console.log("🔄 [ConnectFlow] Processing OAuth redirect to:", result.authUrl);
+
+            // Close the dialog before redirecting
+            onOpenChange(false);
+
+            // Use a slight delay to ensure dialog is fully closed before redirect
             window.location.href = result.authUrl;
+
             return;
         }
 
+        // Handle source connection config result
         if (result?.sourceConnection) {
-            // User completed SourceConfigView with source connection config
-            console.log("🔄 [ConnectFlow] Flow completed with source config:", result);
-
-            // Close the dialog
             onOpenChange(false);
 
             const sourceConfig = {
@@ -506,103 +446,80 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
                 auth_fields: result.sourceConnection.auth_fields || {}
             };
 
-            // Instead of navigation, pass control to ConnectToSourceFlow with the collected config
-            const onCompleteWrapper = () => {
-                if (onComplete) {
-                    onComplete({ collectionId: result.collectionId });
-                }
-            };
+            // Get collection ID from various possible sources
+            const collectionId = result.collectionId ||
+                (viewData["sourceConfig"] as any)?.collectionDetails?.readable_id ||
+                (viewData as any)?.collectionDetails?.readable_id;
 
-            // Get cached source details
-            const details = cachedSourceDetails;
-
-            // Start the connection process with the collected config
-            try {
-                initiateConnection(
-                    sourceShortName,
-                    sourceName || "My Connection",
-                    { name: collectionName || "My Collection", readable_id: result.collectionId },
-                    details,
-                    onCompleteWrapper,
-                    sourceConfig
-                ).then(result => {
-                    // Handle OAuth redirect if needed
-                    if (result && result.oauthRedirect && result.authUrl) {
-                        console.log("🔀 [ConnectFlow] Redirecting to OAuth provider from source config completion");
-                        window.location.href = result.authUrl;
-                    }
-                });
-            } catch (error) {
-                console.error("❌ [ConnectFlow] Error during connection initiation with config:", error);
-                // Redirect to dashboard with error view
-                handleConnectionError(
-                    error instanceof Error ? error : new Error(String(error)),
-                    sourceName || sourceShortName,
-                    () => handleComplete(result)
-                );
+            if (!collectionId) {
+                toast.error("Failed to identify collection");
+                return;
             }
+
+            // Get sourceShortName from multiple possible places (including the new one from SourceConfigView)
+            const targetSourceShortName = result.sourceShortName ||
+                viewData["sourceConfig"]?.sourceShortName ||
+                (viewData as any).sourceShortName;
+
+            if (!targetSourceShortName) {
+                console.error("❌ [ConnectFlow] Missing sourceShortName in handleComplete");
+                toast.error("Missing source information. Please try again.");
+                return;
+            }
+
+            console.log("🔄 [ConnectFlow] Creating connection for source:", targetSourceShortName);
+
+            // Use the unified connection method
+            handleConnection(
+                targetSourceShortName,
+                sourceName || "My Connection",
+                { name: collectionName || "My Collection", readable_id: collectionId },
+                cachedSourceDetails,
+                sourceConfig,
+                mode !== 'add-source',
+                (result) => {
+                    // Success callback
+                    if (onComplete) {
+                        onComplete({ collectionId });
+                    }
+                    toast.success('Connection created successfully');
+                    navigate(`/collections/${collectionId}?connected=success`);
+                },
+                (url, details) => {
+                    // Redirect callback
+                    window.location.href = url;
+                },
+                (error, source) => {
+                    // Error callback
+                    handleConnectionError(
+                        error instanceof Error ? error : new Error(String(error)),
+                        sourceName || targetSourceShortName
+                    );
+                }
+            );
 
             return;
         }
 
+        // Handle direct connection success
         if (result?.collectionId) {
-            // Successfully created collection and/or source connection
             toast.success('Connection created successfully');
-
-            // Navigate to collection detail page
             navigate(`/collections/${result.collectionId}?connected=success`);
         }
 
-        // Close the dialog when successful
         onOpenChange(false);
 
-        // Call the onComplete callback
         if (onComplete) {
             onComplete(result);
         }
     };
 
-    /**
-     * Custom transition handler for FlowDialog
-     *
-     * Intercepts transitions between views and applies custom logic
-     * Particularly handles the transition from createCollection to sourceConfig
-     */
-    const handleViewTransition = (data) => {
-        console.log("🔄 [ConnectFlow] handleViewTransition called with data:", data);
-
-        // If transitioning from createCollection to sourceConfig, run our custom handler
-        if (currentView === "createCollection" &&
-            ((typeof data === "string" && data === "sourceConfig") ||
-                (data?.view === "sourceConfig"))) {
-
-            console.log("🔄 [ConnectFlow] Intercepting transition from createCollection to sourceConfig");
-            handleCreateCollectionNext(data);
-            return null; // Prevent default transition
-        }
-
-        // If transitioning from sourceSelector to sourceConfig, transform the data
-        if (currentView === "sourceSelector" && data?.view === "sourceConfig") {
-            console.log("🔄 [ConnectFlow] Transforming data from sourceSelector to sourceConfig");
-
-            // If collectionId exists in data, wrap it in collectionDetails
-            if (data.data && data.data.collectionId) {
-                const collectionId = data.data.collectionId;
-                console.log("🧩 [ConnectFlow] Found collectionId in source selector data:", collectionId);
-                console.log("🧩 [ConnectFlow] This indicates we're adding to an EXISTING collection (not creating a new one)");
-
-                data.data.collectionDetails = {
-                    name: collectionName,
-                    readable_id: collectionId
-                };
-                console.log("🔄 [ConnectFlow] Added collectionDetails with readable_id:", collectionId);
-            } else {
-                console.log("⚠️ [ConnectFlow] No collectionId found in data - creating a new collection");
-            }
-        }
-
-        // Default behavior for other transitions
-        return data;
+    // View components mapping
+    const views = {
+        sourceSelector: SourceSelectorView,
+        createCollection: CreateCollectionView,
+        sourceConfig: SourceConfigView,
+        connectionError: ConnectionErrorView,
     };
 
     return (
@@ -618,7 +535,6 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
                     viewData
             }
             onComplete={handleComplete}
-            // Override the onNext prop to intercept transitions
             onNext={handleViewTransition}
         />
     );

@@ -8,13 +8,12 @@
  * Key responsibilities:
  * 1. Display configuration fields based on source requirements
  * 2. Collect and validate user-entered configuration values
- * 3. Submit configuration to create source connection
- * 4. Handle OAuth special cases and redirect preparation
+ * 3. Pass collected configuration back to ConnectFlow via onComplete
  *
  * Flow context:
  * - Appears after CreateCollectionView (if source needs configuration)
  * - Only shown for sources that require configuration fields
- * - For OAuth sources, prepares for redirection to provider
+ * - Leaves OAuth handling to ConnectToSourceFlow
  */
 
 import { useState, useEffect } from "react";
@@ -91,14 +90,28 @@ export interface SourceConfigViewProps extends DialogViewProps {
         sourceShortName?: string;
         /** Optional pre-fetched source details */
         sourceDetails?: SourceDetails;
+        /** Collection ID - alternative way of passing collection ID */
+        collectionId?: string;
+        /** Collection name - alternative way of passing collection name */
+        collectionName?: string;
+        /** Flag indicating if this is creating a new collection */
+        isNewCollection?: boolean;
+        /** Source config data - alternative structure for nested data */
+        sourceConfig?: {
+            collectionDetails?: CollectionDetails;
+            sourceId?: string;
+            sourceName?: string;
+            sourceShortName?: string;
+            sourceDetails?: SourceDetails;
+        };
     };
 }
 
 /**
  * SourceConfigView Component
  *
- * Collects and validates source configuration and creates the source connection.
- * Handles multi-step form process, validation, and submission.
+ * Collects and validates source configuration.
+ * Focuses purely on the UI aspect of configuration collection.
  */
 export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
     onNext,
@@ -109,11 +122,48 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
 }) => {
     // Cast viewData to the expected interface
     const typedViewData = viewData as SourceConfigViewProps["viewData"];
-    const collectionDetails: CollectionDetails = typedViewData?.collectionDetails || {};
+
+    // Add debug logging to see what's being received
+    console.log("📥 [SourceConfigView] Received viewData:", typedViewData);
+
+    // Enhanced collection details extraction - check multiple possible locations
+    // This handles different data structures that might be passed from ConnectFlow
+    const extractCollectionDetails = (): CollectionDetails => {
+        // Check all possible locations where collection details might be
+        const possibleLocations = [
+            typedViewData?.collectionDetails, // Direct top-level access
+            typedViewData?.sourceConfig?.collectionDetails, // Nested in sourceConfig
+            { // Build from individual fields if present
+                name: typedViewData?.collectionName || "",
+                readable_id: typedViewData?.collectionId
+            }
+        ];
+
+        // Find first non-empty object with at least one property defined
+        const foundDetails = possibleLocations.find(details =>
+            details && (details.name || details.readable_id)
+        );
+
+        // If nothing was found, return empty object
+        return foundDetails || {};
+    };
+
+    // Similarly extract the sourceShortName from all possible locations
+    const extractSourceShortName = (): string => {
+        return typedViewData?.sourceShortName ||
+            typedViewData?.sourceConfig?.sourceShortName ||
+            (typedViewData?.sourceDetails?.short_name || "");
+    };
+
+    const collectionDetails: CollectionDetails = extractCollectionDetails();
     const sourceId = typedViewData?.sourceId || "";
     const sourceName = typedViewData?.sourceName || "";
-    const sourceShortName = typedViewData?.sourceShortName || "";
+    const sourceShortName = extractSourceShortName();
     const passedSourceDetails = typedViewData?.sourceDetails;
+
+    // Log what we extracted for better debugging
+    console.log("📥 [SourceConfigView] Extracted collection details:", collectionDetails);
+    console.log("📥 [SourceConfigView] Extracted sourceShortName:", sourceShortName);
 
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
@@ -265,61 +315,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
                     name: `My ${sourceName} Connection`,
                     auth_fields: initialConfig
                 });
-            } else {
-                // No config fields - shouldn't be in this view
-                console.log("⚠️ [SourceConfigView] Source has no config fields");
-
-                // If this is OAuth without fields, initiate redirect instead of just canceling
-                if (data.auth_type?.startsWith('oauth2') && sourceShortName && collectionDetails) {
-                    console.log("🔐 [SourceConfigView] Initiating OAuth flow for source without config fields");
-
-                    const initiateOAuth = async () => {
-                        try {
-                            // Store the collection details in localStorage
-                            localStorage.setItem("oauth_collection_details", JSON.stringify(collectionDetails));
-
-                            // Also store the collection ID directly to ensure it's available
-                            if (collectionDetails.readable_id) {
-                                localStorage.setItem("oauth_collection_id", collectionDetails.readable_id);
-                                localStorage.setItem("oauth_return_url", `/collections/${collectionDetails.readable_id}`);
-                                console.log("💾 [SourceConfigView] Stored collection ID for OAuth:", collectionDetails.readable_id);
-                            } else {
-                                console.error("❌ [SourceConfigView] No collection ID available for OAuth flow");
-                            }
-
-                            // Get the auth URL
-                            const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${sourceShortName}`);
-                            if (!resp.ok) {
-                                const errorText = await resp.text();
-                                throw new Error(`Failed to retrieve auth URL: ${errorText}`);
-                            }
-
-                            const authUrl = await resp.text();
-                            const cleanUrl = authUrl.replace(/^"|"$/g, ''); // Remove surrounding quotes
-
-                            console.log("🔗 [SourceConfigView] Received OAuth URL, redirecting");
-
-                            // Complete with OAuth redirect info
-                            onComplete?.({
-                                oauthRedirect: true,
-                                collectionId: collectionDetails.readable_id, // Only use the real collection ID
-                                authUrl: cleanUrl
-                            });
-                        } catch (error) {
-                            console.error("❌ [SourceConfigView] OAuth initialization error:", error);
-                            handleError(
-                                error instanceof Error ? error : new Error(String(error)),
-                                "OAuth initialization error",
-                                () => fetchSourceDetails()
-                            );
-                        }
-                    };
-
-                    initiateOAuth();
-                } else {
-                    // Not OAuth or missing details, just cancel
-                    onCancel?.();
-                }
             }
         } catch (error) {
             console.error("❌ [SourceConfigView] Error fetching source details:", error);
@@ -401,7 +396,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
     // =========================================
     /**
      * Handles form submission
-     * Creates collection and source connection with configuration
+     * Collects configuration and passes it back to ConnectFlow via onComplete
      */
     const handleSubmit = async () => {
         if (!validateConfig()) return;
@@ -410,115 +405,47 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
             setIsSubmitting(true);
             console.log("🚀 [SourceConfigView] Submitting config");
 
-            // First create the collection
-            let collectionId;
-            if (collectionDetails) {
-                // If we already have a readable_id, use it directly (adding to existing collection)
-                if (collectionDetails.readable_id) {
-                    console.log("ℹ️ [SourceConfigView] Using existing collection:", collectionDetails.readable_id);
-                    collectionId = collectionDetails.readable_id;
-                } else {
-                    // Create a new collection if no readable_id (original flow)
-                    console.log("📝 [SourceConfigView] Creating collection first:", collectionDetails);
-                    const collectionResponse = await apiClient.post("/collections/", collectionDetails);
+            // More detailed logging
+            console.log("📝 [SourceConfigView] Collection details before submit:", {
+                name: collectionDetails?.name,
+                readable_id: collectionDetails?.readable_id
+            });
 
-                    if (!collectionResponse.ok) {
-                        const errorText = await collectionResponse.text();
-                        throw new Error(`Failed to create collection: ${errorText}`);
-                    }
-
-                    const collection = await collectionResponse.json();
-                    collectionId = collection.readable_id;
-                    console.log("✅ [SourceConfigView] Collection created successfully:", collection);
-                }
-            } else {
-                throw new Error("Collection details are required");
-            }
-
-            // BRANCH 1: OAUTH2 SOURCES
-            if (sourceDetails?.auth_type?.startsWith('oauth2')) {
-                console.log("🔐 [SourceConfigView] OAuth2 source - storing config for later");
-
-                // Store config fields in session storage for AuthCallback.tsx to use
-                sessionStorage.setItem(`oauth2_config_${sourceShortName}`, JSON.stringify({
-                    connection_name: config.name,
-                    auth_fields: config.auth_fields
-                }));
-
-                // Store the collection ID and return URL for OAuth
-                localStorage.setItem("oauth_collection_id", collectionId);
-                localStorage.setItem("oauth_return_url", `/collections/${collectionId}`);
-
-                toast.success("Configuration saved, redirecting to authorization...");
-
-                // Get the auth URL
-                const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${sourceShortName}`);
-                if (!resp.ok) {
-                    const errorText = await resp.text();
-                    throw new Error(`Failed to retrieve OAuth authorization URL: ${errorText}`);
-                }
-
-                const authUrl = await resp.text();
-                const cleanUrl = authUrl.replace(/^"|"$/g, ''); // Remove surrounding quotes
-
-                // Complete the flow with OAuth redirect info
-                onComplete?.({
-                    oauthRedirect: true,
-                    collectionId,
-                    authUrl: cleanUrl
-                });
-
+            if (!collectionDetails?.readable_id) {
+                console.error("❌ [SourceConfigView] Missing collection ID before submit");
+                setValidationError("Collection information is incomplete. Please try again.");
+                setIsSubmitting(false);
                 return;
             }
 
-            // BRANCH 2: CONFIG_CLASS / API_KEY SOURCES
-            console.log("🛠️ [SourceConfigView] Config class source - creating source connection directly");
-
-            // Create source connection with config fields
-            const sourceConnectionPayload = {
-                name: config.name,
-                short_name: sourceShortName,
-                collection: collectionId,
-                auth_fields: config.auth_fields,
-                sync_immediately: true
+            // FIX: Include sourceShortName in the result data
+            const resultData = {
+                sourceConnection: {
+                    name: config.name,
+                    auth_fields: config.auth_fields
+                },
+                collectionId: collectionDetails.readable_id,
+                sourceShortName: sourceShortName // Add this to ensure it's passed back
             };
 
-            console.log("📤 [SourceConfigView] Creating source connection");
-
-            // =====================================================================
-            // BACKEND SOURCE CONNECTION CREATION - IMPORTANT DATABASE OPERATION
-            // This is where a new SOURCE CONNECTION is created in the database
-            // POST /source-connections/ endpoint creates a persistent source connection
-            // record with the provided authentication fields in source_connections.py
-            // =====================================================================
-            const response = await apiClient.post(
-                `/source-connections/`,
-                sourceConnectionPayload
-            );
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Failed to create source connection: ${errorText}`);
-            }
-
-            const data = await response.json();
-            console.log("✅ [SourceConfigView] Source connection created with ID:", data.id);
-
-            // Store the created source connection data
-            sessionStorage.setItem('last_created_source_connection', JSON.stringify(data));
-
-            toast.success("Connection created successfully!");
-
-            // Complete with source connection and collection data
-            onComplete?.({
-                sourceConnection: data,
-                collectionId
+            // Log what we're about to pass back
+            console.log("📤 [SourceConfigView] Completing with data:", {
+                ...resultData,
+                sourceConnection: {
+                    ...resultData.sourceConnection,
+                    auth_fields: "REDACTED" // Don't log sensitive data
+                }
             });
+
+            // Pass the collected configuration back to ConnectFlow
+            // Let ConnectToSourceFlow handle the actual API operations
+            onComplete?.(resultData);
+
         } catch (error) {
             console.error("❌ [SourceConfigView] Error:", error);
             handleError(
                 error instanceof Error ? error : new Error(String(error)),
-                "Connection creation error",
+                "Connection configuration error",
                 () => handleSubmit()
             );
         } finally {
@@ -689,9 +616,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({
                                 {isSubmitting ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        {sourceDetails?.auth_type?.startsWith('oauth2')
-                                            ? "Saving Configuration..."
-                                            : "Creating Connection..."}
+                                        Saving Configuration...
                                     </>
                                 ) : (
                                     <>
