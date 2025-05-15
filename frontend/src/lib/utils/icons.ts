@@ -13,6 +13,10 @@ export function getAppIconUrl(shortName: string, theme?: string): string {
     if (shortName === "github" && theme === "dark") {
       return new URL(`/src/components/icons/apps/github-light.svg`, import.meta.url).href;
     }
+    // Special handling for Linear icon in dark mode
+    if (shortName === "linear" && theme === "dark") {
+      return new URL(`/src/components/icons/apps/linear-light.svg`, import.meta.url).href;
+    }
     return new URL(`/src/components/icons/apps/${shortName}.svg`, import.meta.url).href;
   } catch {
     return new URL(`/src/components/icons/apps/default-icon.svg`, import.meta.url).href;
