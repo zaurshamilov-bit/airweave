@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { apiClient } from '@/lib/api';
+import { apiClient, API_CONFIG } from '@/lib/api';
 import { Copy, Check, Braces, SearchCode, TerminalSquare, Clock, AlertCircle, ChevronDown, ChevronRight, Code, Layers } from 'lucide-react';
 import { useTheme } from '@/lib/theme-provider';
 import { cn } from '@/lib/utils';
@@ -106,7 +106,9 @@ export const QueryTool = ({ collectionReadableId }: QueryToolProps) => {
 
     // Format API URL for display
     const getApiUrl = () => {
-        const baseUrl = `api.airweave.ai/collections/${collectionReadableId || '{collection_id}'}/search`;
+        // Extract base URL domain for display, removing protocol
+        const baseUrlDomain = API_CONFIG.baseURL.replace(/^https?:\/\//, '');
+        const baseUrl = `${baseUrlDomain}/collections/${collectionReadableId || '{collection_id}'}/search`;
         const params = [];
 
         if (query) {

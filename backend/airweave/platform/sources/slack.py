@@ -139,31 +139,53 @@ class SlackSource(BaseSource):
         url = "https://slack.com/api/conversations.history"
         params = {"channel": channel_id, "limit": 200}
 
-        while True:
-            data = await self._get_with_auth(client, url, params=params)
+        try:
+            while True:
+                try:
+                    data = await self._get_with_auth(client, url, params=params)
 
-            for message in data.get("messages", []):
-                yield SlackMessageEntity(
-                    entity_id=f"{channel_id}-{message.get('ts')}",
-                    channel_id=channel_id,
-                    user_id=message.get("user"),
-                    text=message.get("text"),
-                    ts=message.get("ts"),
-                    thread_ts=message.get("thread_ts"),
-                    team=message.get("team"),
-                    attachments=message.get("attachments", []),
-                    blocks=message.get("blocks", []),
-                    files=message.get("files", []),
-                    reactions=message.get("reactions", []),
-                    is_bot=message.get("bot_id") is not None,
-                    subtype=message.get("subtype"),
-                    edited=message.get("edited"),
+                    for message in data.get("messages", []):
+                        yield SlackMessageEntity(
+                            entity_id=f"{channel_id}-{message.get('ts')}",
+                            channel_id=channel_id,
+                            user_id=message.get("user"),
+                            text=message.get("text"),
+                            ts=message.get("ts"),
+                            thread_ts=message.get("thread_ts"),
+                            team=message.get("team"),
+                            attachments=message.get("attachments", []),
+                            blocks=message.get("blocks", []),
+                            files=message.get("files", []),
+                            reactions=message.get("reactions", []),
+                            is_bot=message.get("bot_id") is not None,
+                            subtype=message.get("subtype"),
+                            edited=message.get("edited"),
+                        )
+
+                    next_cursor = data.get("response_metadata", {}).get("next_cursor")
+                    if not next_cursor:
+                        break
+                    params["cursor"] = next_cursor
+
+                except httpx.HTTPError as e:
+                    # Check if this is a rate limit error
+                    if "429" in str(e):
+                        # Let tenacity retry with backoff
+                        raise
+                    else:
+                        # Re-raise any other HTTP errors
+                        raise
+        except httpx.HTTPError as e:
+            # Handle 'not_in_channel' error gracefully
+            if "not_in_channel" in str(e):
+                # Log a warning without yielding any messages
+                print(
+                    f"Warning: Cannot access messages in channel {channel_id}. "
+                    f"Bot is not a member of this channel."
                 )
-
-            next_cursor = data.get("response_metadata", {}).get("next_cursor")
-            if not next_cursor:
-                break
-            params["cursor"] = next_cursor
+                return
+            # Re-raise all other HTTP errors
+            raise
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Slack.

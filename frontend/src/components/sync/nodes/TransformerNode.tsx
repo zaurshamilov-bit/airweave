@@ -2,8 +2,10 @@ import { memo } from "react";
 import { Handle, NodeProps, Position } from "reactflow";
 import { cn } from "@/lib/utils";
 import { getTransformerIconUrl } from "@/lib/utils/icons";
+import { useTheme } from "@/lib/theme-provider";
 
 export const TransformerNode = memo(({ data, selected, ...props }: NodeProps) => {
+  const { resolvedTheme } = useTheme();
   // Use the model property if it exists (for embedding models), otherwise use transformerId
   const iconName = data.model || data.transformerId || 'default-transformer';
   console.log(`icon name:${getTransformerIconUrl(iconName)}`)
@@ -25,9 +27,15 @@ export const TransformerNode = memo(({ data, selected, ...props }: NodeProps) =>
         />
         <div className="flex items-center justify-center">
           <img
-            src={getTransformerIconUrl(iconName)}
+            src={getTransformerIconUrl(iconName, resolvedTheme)}
             alt={data.name}
             className="w-6 h-6"
+            onError={(e) => {
+              // Fallback to initials if icon fails to load
+              e.currentTarget.style.display = 'none';
+              const initials = data.name?.substring(0, 2).toUpperCase() || 'TR';
+              e.currentTarget.parentElement!.innerHTML = `<span class="text-foreground font-medium text-xs">${initials}</span>`;
+            }}
           />
         </div>
         <Handle

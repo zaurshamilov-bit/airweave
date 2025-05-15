@@ -10,7 +10,7 @@ import { ClaudeIcon } from '@/components/icons/ClaudeIcon';
 import { CursorIcon } from '@/components/icons/CursorIcon';
 import { WindsurfIcon } from '@/components/icons/WindsurfIcon';
 import { useTheme } from '@/lib/theme-provider';
-import { apiClient } from '@/lib/api';
+import { apiClient, API_CONFIG } from '@/lib/api';
 
 interface LiveApiDocProps {
     syncId: string;
@@ -62,8 +62,8 @@ export const LiveApiDoc = ({ syncId }: LiveApiDocProps) => {
 
     // Function to build API URLs from settings
     const getApiEndpoints = () => {
-        const baseUrl = window.location.origin;
-        const apiUrl = `${baseUrl}/search`;
+        const apiBaseUrl = API_CONFIG.baseURL;
+        const apiUrl = `${apiBaseUrl}/search`;
 
         // Create the cURL command
         const curlSnippet = `curl -X 'POST' \\
@@ -102,7 +102,7 @@ await client.search.search({
         const configSnippet =
             `  "mcpServers": {
     "airweave_${syncId.substring(0, 8)}": {
-      "url": "https://mcp.airweave.ai/airweave/server/${syncId}?agent=cursor"
+      "url": "${API_CONFIG.baseURL.replace(/^https?:\/\//, 'https://')}/airweave/server/${syncId}?agent=cursor"
     }
   }
 `;
