@@ -479,7 +479,10 @@ class SourceConnectionService:
             # 2. If cron_schedule was updated, also update the related sync
             if source_connection_in.cron_schedule is not None and source_connection.sync_id:
                 sync = await crud.sync.get(
-                    uow.session, id=source_connection.sync_id, current_user=current_user
+                    uow.session,
+                    id=source_connection.sync_id,
+                    current_user=current_user,
+                    with_connections=False,
                 )
                 if sync:
                     sync_update = schemas.SyncUpdate(

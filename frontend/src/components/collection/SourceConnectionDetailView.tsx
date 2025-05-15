@@ -22,7 +22,7 @@ import {
     convertDagToFlowGraph
 } from '@/components/collection/DagToFlow';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { SyncSchedule, SyncScheduleConfig } from '@/components/sync/SyncSchedule';
+import { SyncSchedule, SyncScheduleConfig, buildCronExpression, isValidCronExpression } from '@/components/sync/SyncSchedule';
 import { QueryTool } from '@/components/collection/QueryTool';
 import { LiveApiDoc } from '@/components/collection/LiveApiDoc';
 import { useSyncSubscription } from "@/hooks/useSyncSubscription";
@@ -56,6 +56,7 @@ interface SourceConnection {
     latest_sync_job_started_at?: string;
     latest_sync_job_completed_at?: string;
     cron_schedule?: string;
+    next_scheduled_run?: string;
 }
 
 interface SourceConnectionJob {
@@ -305,39 +306,35 @@ const SourceConnectionDetailView = ({
 
     // 4. Schedule data refreshing
     const refreshScheduleData = async () => {
-        if (!selectedConnection?.sync_id) return;
+        if (!selectedConnection?.id) return;
 
         try {
-            console.log("Starting schedule refresh");
+            console.log("Starting schedule refresh for source connection:", selectedConnection.id);
             setIsReloading(true);
 
-            // Make a targeted API call to get just the sync details
-            const response = await apiClient.get(`/sync/${selectedConnection.sync_id}`);
-            if (!response.ok) throw new Error("Failed to refresh sync data");
+            // Get source connection details
+            const response = await apiClient.get(`/source-connections/${selectedConnection.id}`);
+            if (!response.ok) throw new Error("Failed to refresh source connection data");
 
-            const syncData = await response.json();
-            console.log("Got sync data:", syncData);
+            const sourceData = await response.json();
+            console.log("Got source connection data:", sourceData);
 
             // Update the source connection state with the new schedule information
             setSelectedConnection(prev => {
                 if (!prev) return null;
-                console.log("Updating connection details with cron_schedule:", syncData.cron_schedule);
-                return {
-                    ...prev,
-                    cron_schedule: syncData.cron_schedule,
-                    modified_at: syncData.modified_at
-                };
+                console.log("Updating connection details with cron_schedule:", sourceData.cron_schedule);
+                return sourceData;
             });
 
             // Update the config state as well
             setScheduleConfig({
-                type: syncData.cron_schedule ? "scheduled" : "one-time",
+                type: sourceData.cron_schedule ? "scheduled" : "one-time",
                 frequency: "custom",
-                cronExpression: syncData.cron_schedule || undefined
+                cronExpression: sourceData.cron_schedule || undefined
             });
 
             // Update the next run time
-            const nextRun = calculateNextRunTime(syncData.cron_schedule);
+            const nextRun = calculateNextRunTime(sourceData.cron_schedule);
             setNextRunTime(nextRun);
 
             toast({
@@ -413,8 +410,73 @@ const SourceConnectionDetailView = ({
 
     // 2. Schedule dialog handling
     const handleScheduleDialogClose = () => {
+        console.log("Closing schedule dialog without submitting");
         setShowScheduleDialog(false);
-        refreshScheduleData();
+    };
+
+    // Simple function to handle the Done button click
+    const handleScheduleDone = async () => {
+        if (!selectedConnection?.id) {
+            toast({
+                title: "Error",
+                description: "No source connection selected",
+                variant: "destructive"
+            });
+            return;
+        }
+
+        try {
+            console.log("Saving schedule config:", scheduleConfig);
+
+            // Build cron expression
+            const cronExpression = scheduleConfig.type === "scheduled"
+                ? buildCronExpression(scheduleConfig)
+                : null;
+
+            // Validate if needed
+            if (scheduleConfig.type === "scheduled" &&
+                scheduleConfig.frequency === "custom" &&
+                scheduleConfig.cronExpression &&
+                !isValidCronExpression(scheduleConfig.cronExpression)) {
+
+                toast({
+                    title: "Validation Error",
+                    description: "Invalid cron expression. Please check the format.",
+                    variant: "destructive"
+                });
+                return;
+            }
+
+            // Update data to send
+            const updateData = {
+                cron_schedule: cronExpression
+            };
+
+            console.log("Updating source connection schedule:", updateData);
+
+            // Make direct API call
+            const response = await apiClient.put(
+                `/source-connections/${selectedConnection.id}`,
+                null, // No query params
+                updateData // Data as third parameter
+            );
+
+            if (!response.ok) {
+                throw new Error("Failed to update schedule");
+            }
+
+            // Refresh data and close dialog
+            await refreshScheduleData();
+            setShowScheduleDialog(false);
+
+        } catch (error) {
+            console.error("Error updating schedule:", error);
+            toast({
+                title: "Error",
+                description: "Failed to update schedule",
+                variant: "destructive"
+            });
+        }
     };
 
     /********************************************
@@ -485,34 +547,43 @@ const SourceConnectionDetailView = ({
 
             const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
 
-            // Get current date and create a copy for the next run
+            // Get current date
             const now = new Date();
-            const nextRun = new Date(now);
+            const nextRun = new Date();
 
-            // Handle simple cases
-            // If the expression is "0 0 * * *" (daily at midnight)
-            if (minute === "0" && hour === "0" && dayOfMonth === "*" && month === "*") {
+            // Handle the case for specific hour and minute (basic daily schedule)
+            if (!isNaN(parseInt(hour)) && !isNaN(parseInt(minute)) &&
+                dayOfMonth === "*" && month === "*") {
+
+                // Convert UTC cron time to local time for comparison
+                const cronMinute = parseInt(minute);
+                const cronHour = parseInt(hour);
+
+                // Create a date object with the UTC time from cron
+                const scheduleTime = new Date();
+                scheduleTime.setUTCHours(cronHour, cronMinute, 0, 0);
+
+                // Set nextRun to today's occurrence of this time
+                nextRun.setHours(scheduleTime.getHours(), scheduleTime.getMinutes(), 0, 0);
+
+                // If this time has already passed today, move to tomorrow
+                if (nextRun < now) {
+                    nextRun.setDate(nextRun.getDate() + 1);
+                }
+            }
+            // Handle other cases with the existing fallbacks
+            else if (minute === "0" && hour === "0" && dayOfMonth === "*" && month === "*") {
                 // Set to next midnight
                 nextRun.setDate(now.getDate() + 1);
                 nextRun.setHours(0, 0, 0, 0);
             }
-            // If the expression is "0 * * * *" (hourly)
             else if (minute === "0" && hour === "*") {
                 // Set to the next hour
                 nextRun.setHours(now.getHours() + 1, 0, 0, 0);
             }
-            // If specific hour with any minute (0 5 * * *) - 5am daily
-            else if (minute === "0" && !isNaN(parseInt(hour))) {
-                const hourNum = parseInt(hour);
-                // If today's occurrence has passed, move to tomorrow
-                if (now.getHours() >= hourNum) {
-                    nextRun.setDate(now.getDate() + 1);
-                }
-                nextRun.setHours(hourNum, 0, 0, 0);
-            }
-            // Default fallback for other patterns
             else {
-                // For complex patterns, we'll just add a day as a fallback
+                // For complex patterns, parse properly or fallback to +1 day
+                // This is a simplified fallback
                 nextRun.setDate(now.getDate() + 1);
             }
 
@@ -566,6 +637,36 @@ const SourceConnectionDetailView = ({
         } else {
             return `${diffMins}m ago`;
         }
+    };
+
+    const formatCronTime = (cronExpression: string): string => {
+        const parts = cronExpression.split(' ');
+        const minute = parts[0];
+        const hour = parts[1];
+
+        if (hour === '*') return `${minute} minutes past each hour`;
+        return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    };
+
+    // Add this conversion function
+    const formatCronTimeToLocal = (cronExpression: string): string => {
+        const parts = cronExpression.split(' ');
+        const utcMinute = parseInt(parts[0]);
+        const utcHour = parseInt(parts[1]);
+
+        // Skip conversion for non-specific times
+        if (isNaN(utcHour) || parts[1] === '*') return formatCronTime(cronExpression);
+
+        // Get timezone offset in hours (UTC+2 would be -120 minutes, so we use -1 to flip the sign)
+        const tzOffset = new Date().getTimezoneOffset() / -60;
+
+        // Format the timezone string (UTC+X or UTC-X)
+        const tzString = tzOffset >= 0 ? `UTC+${tzOffset}` : `UTC${tzOffset}`;
+
+        // Add timezone offset to UTC hour
+        const localHour = (utcHour + tzOffset + 24) % 24;
+
+        return `${Math.floor(localHour).toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')} (${tzString})`;
     };
 
     /********************************************
@@ -670,19 +771,36 @@ const SourceConnectionDetailView = ({
 
     // 9. Schedule configuration
     useEffect(() => {
-        if (selectedConnection?.sync_id) {
-            // If the selected connection has sync_id, set up the schedule config
+        if (selectedConnection?.sync_id && selectedConnection.cron_schedule) {
+            // Parse cron expression to get UTC time
+            const cronParts = selectedConnection.cron_schedule.split(' ');
+            const utcMinute = parseInt(cronParts[0]);
+            const utcHour = cronParts[1] !== '*' ? parseInt(cronParts[1]) : undefined;
+
+            // Convert to local time if hour is specified
+            let localHour = utcHour;
+            let localMinute = utcMinute;
+
+            if (utcHour !== undefined && !isNaN(utcHour)) {
+                // Create date in UTC and get local values
+                const date = new Date();
+                date.setUTCHours(utcHour, utcMinute, 0, 0);
+                localHour = date.getHours();
+                localMinute = date.getMinutes();
+            }
+
+            // Set config with local time values
             setScheduleConfig({
-                type: selectedConnection.cron_schedule ? "scheduled" : "one-time",
+                type: "scheduled",
                 frequency: "custom",
-                cronExpression: selectedConnection.cron_schedule || undefined
+                hour: localHour,
+                minute: localMinute,
+                cronExpression: selectedConnection.cron_schedule
             });
 
-            // Calculate next run time
-            const nextRun = calculateNextRunTime(selectedConnection.cron_schedule || null);
-            setNextRunTime(nextRun);
+            // Rest of the code...
         }
-    }, [selectedConnection, calculateNextRunTime]);
+    }, [selectedConnection]);
 
     // 10. Clean up on source change
     useEffect(() => {
@@ -748,6 +866,14 @@ const SourceConnectionDetailView = ({
             }, 100);
         }
     }, [sourceConnectionId, reactFlowInstance]);
+
+    // Add this effect to initialize nextRunTime on component mount or when cron_schedule changes
+    useEffect(() => {
+        if (selectedConnection?.cron_schedule) {
+            const nextRun = calculateNextRunTime(selectedConnection.cron_schedule);
+            setNextRunTime(nextRun);
+        }
+    }, [selectedConnection?.cron_schedule, calculateNextRunTime]);
 
     console.log(`[PubSub] Data source for job ${lastSyncJob?.id}: ${isShowingRealtimeUpdates ? 'LIVE UPDATES' : 'DATABASE'}`);
 
@@ -865,17 +991,13 @@ const SourceConnectionDetailView = ({
                                     isDark ? "text-gray-400" : "text-gray-500"
                                 )} />
                                 <div>
-                                    {selectedConnection.cron_schedule ? (
-                                        <div className="text-lg font-medium">
-                                            {nextRunTime ? `Due in ${nextRunTime}` : 'Scheduled'}
-                                        </div>
-                                    ) : (
-                                        <div className="text-lg font-medium">
-                                            Manual Runs Only
-                                        </div>
-                                    )}
+                                    <div className="text-lg font-medium">
+                                        {nextRunTime ? `Due in ${nextRunTime}` : 'Scheduled'}
+                                    </div>
                                     <div className="text-xs opacity-70 mt-0.5">
-                                        Last run: {formatTimeSince(lastSyncJob.completed_at || lastSyncJob.failed_at || lastSyncJob.created_at)}
+                                        {selectedConnection.cron_schedule && (
+                                            <span>Runs at {formatCronTimeToLocal(selectedConnection.cron_schedule)}</span>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1125,48 +1247,40 @@ const SourceConnectionDetailView = ({
             )}
 
             {/* Schedule Edit Dialog */}
-            <Dialog
-                open={showScheduleDialog}
-                onOpenChange={(open) => {
-                    setShowScheduleDialog(open);
-                    if (!open) {
-                        // Only refresh when dialog closes
-                        refreshScheduleData();
-                    }
-                }}
-            >
-                <DialogContent className={cn(
-                    "max-w-3xl",
-                    isDark ? "bg-card-solid border-border" : ""
-                )}>
-                    <DialogHeader>
-                        <DialogTitle className={isDark ? "text-foreground" : ""}>Edit Sync Schedule</DialogTitle>
-                    </DialogHeader>
+            {showScheduleDialog && (
+                <Dialog
+                    open={showScheduleDialog}
+                    onOpenChange={(open) => !open && handleScheduleDialogClose()}
+                >
+                    <DialogContent className={cn("max-w-3xl", isDark ? "bg-card-solid border-border" : "")}>
+                        <DialogHeader>
+                            <DialogTitle className={isDark ? "text-foreground" : ""}>Edit Sync Schedule</DialogTitle>
+                        </DialogHeader>
 
-                    <div className="py-4">
-                        {selectedConnection?.sync_id && (
-                            <SyncSchedule
-                                value={scheduleConfig}
-                                onChange={(newConfig) => {
-                                    console.log("Schedule config changed:", newConfig);
-                                    setScheduleConfig(newConfig);
-                                }}
-                                syncId={selectedConnection.sync_id}
-                            />
-                        )}
-                    </div>
+                        <div className="py-4">
+                            {selectedConnection?.id && (
+                                <SyncSchedule
+                                    value={scheduleConfig}
+                                    onChange={(newConfig) => {
+                                        console.log("Schedule config changed:", newConfig);
+                                        setScheduleConfig(newConfig);
+                                    }}
+                                />
+                            )}
+                        </div>
 
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            className={isDark ? "bg-gray-800 text-white hover:bg-gray-700" : ""}
-                            onClick={handleScheduleDialogClose}
-                        >
-                            Done
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                className={isDark ? "bg-gray-800 text-white hover:bg-gray-700" : ""}
+                                onClick={handleScheduleDone}
+                            >
+                                Save
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
         </div>
     );
 };

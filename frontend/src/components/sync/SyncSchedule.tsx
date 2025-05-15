@@ -1,12 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClockIcon, ZapIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { apiClient } from "@/lib/api";
-import { toast } from "@/components/ui/use-toast";
 import { CronExpressionInput, isValidCronExpression } from "./CronExpressionInput";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -31,7 +29,6 @@ export interface SyncScheduleConfig {
 interface SyncScheduleProps {
   value: SyncScheduleConfig;
   onChange: (config: SyncScheduleConfig) => void;
-  syncId?: string; // Optional syncId for updating existing syncs
 }
 
 /**
@@ -42,131 +39,77 @@ export const buildCronExpression = (config: SyncScheduleConfig): string | null =
 
   const { frequency, hour, minute, dayOfWeek, dayOfMonth, cronExpression } = config;
 
-  // If using custom cron expression
+  // If using custom cron expression, use as-is
   if (frequency === "custom" && cronExpression) {
     return cronExpression;
   }
 
-  // Build cron expression based on selected options
-  let cronExp = "";
+  // Convert local time to UTC time for storage
+  let utcMinute = minute || 0;
+  let utcHour = hour || 0;
+
+  // No need to convert if hour is not used (hourly frequency)
+  if (frequency !== "hourly" && hour !== undefined) {
+    // The hour value is already in UTC from the dropdown selection, no need to convert again
+    utcHour = hour;
+    utcMinute = minute || 0;
+  }
 
   switch (frequency) {
     case "hourly":
-      cronExp = `${minute || 0} * * * *`; // At the specified minute of every hour
-      break;
+      return `${utcMinute} * * * *`; // At the specified minute of every hour
     case "daily":
-      cronExp = `${minute || 0} ${hour || 0} * * *`; // At the specified time every day
-      break;
+      return `${utcMinute} ${utcHour} * * *`; // At the specified time every day
     case "weekly":
-      cronExp = `${minute || 0} ${hour || 0} * * ${dayOfWeek || 1}`; // At the specified time on the specified day of the week
-      break;
+      return `${utcMinute} ${utcHour} * * ${dayOfWeek || 1}`; // Specified time on specified day of week
     case "monthly":
-      cronExp = `${minute || 0} ${hour || 0} ${dayOfMonth || 1} * *`; // At the specified time on the specified day of the month
-      break;
+      return `${utcMinute} ${utcHour} ${dayOfMonth || 1} * *`; // Specified time on specified day of month
     default:
-      cronExp = "0 9 * * *"; // Default to daily at 9:00 AM
+      return "0 9 * * *"; // Default to daily at 9:00 AM UTC
   }
-
-  return cronExp;
 };
 
-export function SyncSchedule({ value, onChange, syncId }: SyncScheduleProps) {
+export function SyncSchedule({ value, onChange }: SyncScheduleProps) {
   const [activeType, setActiveType] = useState<"one-time" | "scheduled">(value.type);
-  const [isUpdating, setIsUpdating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const handleTypeChange = async (type: "one-time" | "scheduled") => {
+  const handleTypeChange = (type: "one-time" | "scheduled") => {
     setActiveType(type);
-    const newConfig = {
+    onChange({
       ...value,
       type
-    };
-
-    onChange(newConfig);
-
-    // If we have a syncId, update the sync's cron schedule
-    if (syncId) {
-      await updateSyncSchedule(newConfig);
-    }
+    });
   };
 
-  const handleFrequencyChange = async (frequency: string) => {
+  const handleFrequencyChange = (frequency: string) => {
+    // Initialize default cronExpression for custom frequency
     const newConfig = {
       ...value,
       frequency: frequency as SyncScheduleConfig["frequency"]
     };
 
-    // Initialize default cronExpression for custom frequency
     if (frequency === "custom" && !value.cronExpression) {
       newConfig.cronExpression = "* * * * *";
     }
 
     onChange(newConfig);
-
-    // If we have a syncId, update the sync's cron schedule
-    if (syncId) {
-      await updateSyncSchedule(newConfig);
-    }
+    setValidationError(null);
   };
 
-  const handleTimeChange = async (field: string, fieldValue: string | number) => {
-    const newConfig = {
+  const handleTimeChange = (field: string, fieldValue: string | number) => {
+    onChange({
       ...value,
       [field]: fieldValue
-    };
-
-    onChange(newConfig);
-
-    // Clear validation error when user makes changes
+    });
     setValidationError(null);
-
-    // If we have a syncId, update the sync's cron schedule
-    if (syncId) {
-      await updateSyncSchedule(newConfig);
-    }
   };
 
-  /**
-   * Updates the sync's cron schedule in the backend
-   */
-  const updateSyncSchedule = async (config: SyncScheduleConfig) => {
-    if (!syncId) return;
-
-    try {
-      setIsUpdating(true);
-      setValidationError(null);
-
-      const cronExpression = buildCronExpression(config);
-
-      // Validate the cron expression if it's a custom frequency
-      if (config.type === "scheduled" && config.frequency === "custom" && config.cronExpression) {
-        if (!isValidCronExpression(config.cronExpression)) {
-          setValidationError("Invalid cron expression. Please check the format.");
-          return;
-        }
-      }
-
-      // Only update if we have a syncId and a valid cron expression or we're switching to one-time
-      if (syncId && (cronExpression || config.type === "one-time")) {
-        const updateData = {
-          cron_schedule: config.type === "scheduled" ? cronExpression : null
-        };
-
-        const response = await apiClient.patch(`/sync/${syncId}`, updateData);
-
-        if (!response.ok) {
-          throw new Error("Failed to update sync schedule");
-        }
-      }
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Failed to update schedule",
-        description: error.message || "An error occurred while updating the schedule"
-      });
-    } finally {
-      setIsUpdating(false);
+  // Validate cron expression if needed
+  const isCronValid = () => {
+    if (value.type === "scheduled" && value.frequency === "custom" && value.cronExpression) {
+      return isValidCronExpression(value.cronExpression);
     }
+    return true;
   };
 
   return (
@@ -304,15 +247,23 @@ export function SyncSchedule({ value, onChange, syncId }: SyncScheduleProps) {
                           value={String(value.hour || 0)}
                           onValueChange={(val) => handleTimeChange("hour", parseInt(val))}
                         >
-                          <SelectTrigger id="hour" className="w-[120px]">
+                          <SelectTrigger id="hour" className="w-[140px]">
                             <SelectValue placeholder="Hour" />
                           </SelectTrigger>
                           <SelectContent>
-                            {Array.from({ length: 24 }).map((_, i) => (
-                              <SelectItem key={i} value={String(i)}>
-                                {i.toString().padStart(2, '0')}:00
-                              </SelectItem>
-                            ))}
+                            {Array.from({ length: 24 }).map((_, i) => {
+                              // What user sees is local time (i), but we store the corresponding UTC value
+                              const localHour = i;
+                              // Convert local to UTC by subtracting the timezone offset
+                              const tzOffsetHours = new Date().getTimezoneOffset() / 60; // This will be positive for UTC+
+                              const utcHour = (localHour + tzOffsetHours + 24) % 24;
+
+                              return (
+                                <SelectItem key={i} value={String(utcHour)}>
+                                  {localHour.toString().padStart(2, '0')}:00
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                       </div>
@@ -409,7 +360,15 @@ export function SyncSchedule({ value, onChange, syncId }: SyncScheduleProps) {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <div className="mt-2 text-xs text-muted-foreground text-center">
+          All times are shown in your local timezone but stored in UTC for consistent scheduling.
+        </div>
+
       </CardContent>
     </Card>
   );
 }
+
+// Re-export isValidCronExpression so it can be imported by other components
+export { isValidCronExpression };

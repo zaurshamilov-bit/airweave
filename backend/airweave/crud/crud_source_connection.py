@@ -152,6 +152,50 @@ class CRUDSourceConnection(
 
         return source_connections
 
+    async def _attach_sync_schedule_info(
+        self, db: AsyncSession, source_connections: List[SourceConnection]
+    ) -> List[SourceConnection]:
+        """Attach sync schedule information to source connections.
+
+        Args:
+            db: The database session
+            source_connections: List of source connections to augment
+
+        Returns:
+            The source connections with attached schedule info
+        """
+        if not source_connections:
+            return []
+
+        # Get all sync IDs
+        sync_ids = [sc.sync_id for sc in source_connections if sc.sync_id]
+        if not sync_ids:
+            return source_connections
+
+        # Get all syncs for these IDs in a single query
+        from airweave.models.sync import Sync
+
+        query = select(Sync.id, Sync.cron_schedule, Sync.next_scheduled_run).where(
+            Sync.id.in_(sync_ids)
+        )
+        result = await db.execute(query)
+        sync_schedules = {
+            row.id: {
+                "cron_schedule": row.cron_schedule,
+                "next_scheduled_run": row.next_scheduled_run,
+            }
+            for row in result.fetchall()
+        }
+
+        # Attach schedule info to each source connection
+        for sc in source_connections:
+            if sc.sync_id and sc.sync_id in sync_schedules:
+                schedule_info = sync_schedules[sc.sync_id]
+                sc.cron_schedule = schedule_info["cron_schedule"]
+                sc.next_scheduled_run = schedule_info["next_scheduled_run"]
+
+        return source_connections
+
     async def get(
         self, db: AsyncSession, id: UUID, current_user: User
     ) -> Optional[SourceConnection]:
@@ -170,9 +214,13 @@ class CRUDSourceConnection(
 
         if source_connection:
             # Attach latest sync job info and compute status
-            return (await self._attach_latest_sync_job_info(db, [source_connection]))[0]
+            source_connection = (await self._attach_latest_sync_job_info(db, [source_connection]))[
+                0
+            ]
+            # Also attach schedule info
+            source_connection = (await self._attach_sync_schedule_info(db, [source_connection]))[0]
 
-        return None
+        return source_connection
 
     async def get_all_for_user(
         self, db: AsyncSession, *, current_user: User, skip: int = 0, limit: int = 100
@@ -198,7 +246,11 @@ class CRUDSourceConnection(
         source_connections = list(result.scalars().all())
 
         # Attach latest sync job info and compute statuses
-        return await self._attach_latest_sync_job_info(db, source_connections)
+        source_connections = await self._attach_latest_sync_job_info(db, source_connections)
+        # Also attach schedule info
+        source_connections = await self._attach_sync_schedule_info(db, source_connections)
+
+        return source_connections
 
     async def get_for_collection(
         self,
@@ -234,7 +286,11 @@ class CRUDSourceConnection(
         source_connections = list(result.scalars().all())
 
         # Attach latest sync job info and compute statuses
-        return await self._attach_latest_sync_job_info(db, source_connections)
+        source_connections = await self._attach_latest_sync_job_info(db, source_connections)
+        # Also attach schedule info
+        source_connections = await self._attach_sync_schedule_info(db, source_connections)
+
+        return source_connections
 
     async def get_by_sync_id(
         self, db: AsyncSession, *, sync_id: UUID, current_user: User
@@ -258,9 +314,13 @@ class CRUDSourceConnection(
 
         if source_connection:
             # Attach latest sync job info and compute status
-            return (await self._attach_latest_sync_job_info(db, [source_connection]))[0]
+            source_connection = (await self._attach_latest_sync_job_info(db, [source_connection]))[
+                0
+            ]
+            # Also attach schedule info
+            source_connection = (await self._attach_sync_schedule_info(db, [source_connection]))[0]
 
-        return None
+        return source_connection
 
 
 source_connection = CRUDSourceConnection(SourceConnection)
