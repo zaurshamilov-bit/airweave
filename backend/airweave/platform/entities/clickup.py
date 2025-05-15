@@ -81,7 +81,7 @@ class ClickUpTaskEntity(ChunkEntity):
     assignees: List[Dict[str, Any]] = Field(
         default_factory=list, description="List of task assignees"
     )
-    tags: List[str] = Field(default_factory=list, description="List of task tags")
+    tags: List[Dict[str, Any]] = Field(default_factory=list, description="List of task tags")
     due_date: Optional[datetime] = Field(None, description="Task due date")
     start_date: Optional[datetime] = Field(None, description="Task start date")
     time_estimate: Optional[int] = Field(None, description="Estimated time in milliseconds")
