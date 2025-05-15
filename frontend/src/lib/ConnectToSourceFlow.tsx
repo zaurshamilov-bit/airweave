@@ -456,8 +456,33 @@ export const useConnectToSourceFlow = () => {
                 sessionStorage.setItem(storageKey, JSON.stringify(connectionConfig));
             }
 
-            // Get auth URL
-            const resp = await apiClient.get(`/connections/oauth2/source/auth_url?short_name=${sourceShortName}`);
+            // Get stored config
+            const storedConfig = sessionStorage.getItem(storageKey);
+            let authFieldsParam = '';
+
+            if (storedConfig) {
+                try {
+                    const configObj = JSON.parse(storedConfig);
+                    console.log(`🔍 [OAuth] Retrieved stored config for ${sourceShortName}:`, configObj);
+
+                    if (configObj.auth_fields) {
+                        console.log(`🔍 [OAuth] Found auth_fields:`, configObj.auth_fields);
+                        authFieldsParam = `&auth_fields=${encodeURIComponent(JSON.stringify(configObj.auth_fields))}`;
+                        console.log(`🔍 [OAuth] Created authFieldsParam: ${authFieldsParam}`);
+                    } else {
+                        console.log(`⚠️ [OAuth] No auth_fields in stored config`);
+                    }
+                } catch (e) {
+                    console.warn("Error parsing stored OAuth config", e);
+                }
+            }
+
+            // Before the API request, log the complete URL
+            const fullUrl = `/connections/oauth2/source/auth_url?short_name=${sourceShortName}${authFieldsParam}`;
+            console.log(`🔄 [OAuth] Requesting auth URL with: ${fullUrl}`);
+
+            // Get auth URL with auth_fields if available
+            const resp = await apiClient.get(fullUrl);
             if (!resp.ok) {
                 throw new Error(`Failed to retrieve auth URL: ${await resp.text()}`);
             }
