@@ -37,7 +37,7 @@ export const ApiKeyCard = ({ apiKey, onRequestNewKey }: ApiKeyCardProps) => {
           <Key className="h-4 w-4 mr-1.5 text-muted-foreground" />
           <h3 className="text-sm font-medium">API Key</h3>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">Store your API keys securely away</p>
+        <p className="text-xs text-muted-foreground mb-4">Store your API keys securely</p>
         <div className="flex items-center">
           <Input
             value={apiKey?.decrypted_key ? maskApiKey(apiKey.decrypted_key) : `tc-${Array(30).fill("*").join("")}0007`}
