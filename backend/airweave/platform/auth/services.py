@@ -51,7 +51,7 @@ class OAuth2Service:
         """
         redirect_uri = OAuth2Service._get_redirect_url(oauth2_settings.integration_short_name)
 
-        client_id, _ = OAuth2Service._get_client_credentials(oauth2_settings, auth_fields)
+        client_id, _ = await OAuth2Service._get_client_credentials(oauth2_settings, auth_fields)
 
         params = {
             "response_type": "code",
@@ -121,7 +121,7 @@ class OAuth2Service:
 
         redirect_uri = OAuth2Service._get_redirect_url(integration_short_name)
 
-        client_id, client_secret = OAuth2Service._get_client_credentials(
+        client_id, client_secret = await OAuth2Service._get_client_credentials(
             integration_config, auth_fields
         )
 
@@ -171,10 +171,10 @@ class OAuth2Service:
             refresh_token = await OAuth2Service._get_refresh_token(decrypted_credential)
 
             # Get and validate integration config
-            integration_config = OAuth2Service._get_integration_config(integration_short_name)
+            integration_config = await OAuth2Service._get_integration_config(integration_short_name)
 
             # Get client credentials
-            client_id, client_secret = OAuth2Service._get_client_credentials(
+            client_id, client_secret = await OAuth2Service._get_client_credentials(
                 integration_config, None, decrypted_credential
             )
 
@@ -258,7 +258,7 @@ class OAuth2Service:
         return integration_config
 
     @staticmethod
-    def _get_client_credentials(
+    async def _get_client_credentials(
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
         auth_fields: Optional[dict] = None,
         decrypted_credential: Optional[dict] = None,
