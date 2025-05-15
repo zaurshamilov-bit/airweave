@@ -33,6 +33,8 @@ navigation:
       path: docs/pages/connectors/confluence/main.mdx
     - page: Dropbox
       path: docs/pages/connectors/dropbox/main.mdx
+    - page: Elasticsearch
+      path: docs/pages/connectors/elasticsearch/main.mdx
     - page: Github
       path: docs/pages/connectors/github/main.mdx
     - page: Gmail
