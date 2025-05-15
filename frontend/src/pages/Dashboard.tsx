@@ -353,7 +353,7 @@ const Dashboard = () => {
                   No sources found
                 </div>
               ) : (
-                sources.map((source) => (
+                [...sources].sort((a, b) => a.name.localeCompare(b.name)).map((source) => (
                   <SourceButton
                     key={source.id}
                     id={source.id}

@@ -204,7 +204,7 @@ class Settings(BaseSettings):
 
         if self.ENVIRONMENT == "local":
             return self.LOCAL_NGROK_SERVER or "http://localhost:8001"
-        if self.ENVIRONMENT == "prod":
+        if self.ENVIRONMENT == "prd":
             return "https://api.airweave.ai"
         return f"https://api.{self.ENVIRONMENT}-airweave.com"
 
@@ -220,7 +220,7 @@ class Settings(BaseSettings):
 
         if self.ENVIRONMENT == "local":
             return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
-        if self.ENVIRONMENT == "prod":
+        if self.ENVIRONMENT == "prd":
             return "https://app.airweave.ai"
         return f"https://app.{self.ENVIRONMENT}-airweave.com"
 
@@ -233,7 +233,7 @@ class Settings(BaseSettings):
         """
         if self.ENVIRONMENT == "local":
             return f"http://localhost:{self.FRONTEND_LOCAL_DEVELOPMENT_PORT}"
-        if self.ENVIRONMENT == "prod":
+        if self.ENVIRONMENT == "prd":
             return "https://docs.airweave.ai"
         return f"https://docs.{self.ENVIRONMENT}-airweave.com"
 
