@@ -549,60 +549,111 @@ const SourceConnectionDetailView = ({
 
             // Get current date
             const now = new Date();
-            const nextRun = new Date();
+            let nextRun = new Date(now);
 
-            // Handle the case for specific hour and minute (basic daily schedule)
-            if (!isNaN(parseInt(hour)) && !isNaN(parseInt(minute)) &&
-                dayOfMonth === "*" && month === "*") {
+            // For weekly schedules (specific day of week)
+            if (dayOfWeek !== '*' && dayOfMonth === '*') {
+                const targetDay = parseInt(dayOfWeek) % 7; // 0-6, where 0 is Sunday
+                const currentDay = now.getDay(); // 0-6, where 0 is Sunday
 
-                // Convert UTC cron time to local time for comparison
-                const cronMinute = parseInt(minute);
-                const cronHour = parseInt(hour);
+                // Calculate days to add to get to the target day
+                let daysToAdd = (targetDay - currentDay + 7) % 7;
+                if (daysToAdd === 0) {
+                    // If today is the target day, check if the time has already passed
+                    const targetHour = parseInt(hour);
+                    const targetMinute = parseInt(minute);
 
-                // Create a date object with the UTC time from cron
-                const scheduleTime = new Date();
-                scheduleTime.setUTCHours(cronHour, cronMinute, 0, 0);
+                    if (hour !== '*' && minute !== '*') {
+                        const currentHour = now.getHours();
+                        const currentMinute = now.getMinutes();
 
-                // Set nextRun to today's occurrence of this time
-                nextRun.setHours(scheduleTime.getHours(), scheduleTime.getMinutes(), 0, 0);
+                        if (currentHour > targetHour || (currentHour === targetHour && currentMinute >= targetMinute)) {
+                            // Time already passed today, go to next week
+                            daysToAdd = 7;
+                        }
+                    }
+                }
 
-                // If this time has already passed today, move to tomorrow
-                if (nextRun < now) {
-                    nextRun.setDate(nextRun.getDate() + 1);
+                // Set the date to the next occurrence
+                nextRun.setDate(now.getDate() + daysToAdd);
+
+                // Set the time
+                if (hour !== '*') {
+                    nextRun.setHours(parseInt(hour), parseInt(minute) || 0, 0, 0);
+                } else {
+                    nextRun.setHours(now.getHours(), parseInt(minute) || 0, 0, 0);
                 }
             }
-            // Handle other cases with the existing fallbacks
-            else if (minute === "0" && hour === "0" && dayOfMonth === "*" && month === "*") {
-                // Set to next midnight
-                nextRun.setDate(now.getDate() + 1);
-                nextRun.setHours(0, 0, 0, 0);
+            // For monthly schedules (specific day of month)
+            else if (dayOfMonth !== '*') {
+                const targetDay = parseInt(dayOfMonth);
+                const currentDay = now.getDate();
+                const currentMonth = now.getMonth();
+                const currentYear = now.getFullYear();
+
+                // Create a date for the target day in current month
+                const targetDate = new Date(currentYear, currentMonth, targetDay);
+
+                // If the target day already passed this month, go to next month
+                if (targetDate <= now) {
+                    targetDate.setMonth(currentMonth + 1);
+                }
+
+                nextRun = targetDate;
+
+                // Set the time
+                if (hour !== '*') {
+                    nextRun.setHours(parseInt(hour), parseInt(minute) || 0, 0, 0);
+                } else {
+                    nextRun.setHours(now.getHours(), parseInt(minute) || 0, 0, 0);
+                }
             }
-            else if (minute === "0" && hour === "*") {
-                // Set to the next hour
-                nextRun.setHours(now.getHours() + 1, 0, 0, 0);
+            // For daily schedules
+            else if (hour !== '*' && dayOfMonth === '*' && dayOfWeek === '*') {
+                const targetHour = parseInt(hour);
+                const targetMinute = parseInt(minute) || 0;
+
+                nextRun.setHours(targetHour, targetMinute, 0, 0);
+
+                // If the time already passed today, go to tomorrow
+                if (nextRun <= now) {
+                    nextRun.setDate(now.getDate() + 1);
+                }
             }
-            else {
-                // For complex patterns, parse properly or fallback to +1 day
-                // This is a simplified fallback
-                nextRun.setDate(now.getDate() + 1);
+            // For hourly schedules
+            else if (hour === '*' && minute !== '*') {
+                const targetMinute = parseInt(minute);
+                const currentMinute = now.getMinutes();
+
+                nextRun.setMinutes(targetMinute, 0, 0);
+
+                // If the minute already passed this hour, go to next hour
+                if (currentMinute >= targetMinute) {
+                    nextRun.setHours(now.getHours() + 1);
+                }
             }
 
             // Calculate time difference
             const diffMs = nextRun.getTime() - now.getTime();
-            const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            const diffHrs = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
             const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
             // Format the time difference
-            if (diffHrs > 24) {
-                const days = Math.floor(diffHrs / 24);
-                return `${days} day${days > 1 ? 's' : ''}`;
-            } else if (diffHrs > 0) {
-                return `${diffHrs}h ${diffMins}m`;
-            } else {
-                return `${diffMins}m`;
+            let result = '';
+            if (diffDays > 0) {
+                result += `${diffDays}d `;
             }
+            if (diffHrs > 0) {
+                result += `${diffHrs}h `;
+            }
+            if (diffMins > 0 || (diffDays === 0 && diffHrs === 0)) {
+                result += `${diffMins}m`;
+            }
+
+            return result.trim();
         } catch (error) {
-            console.error("Error parsing cron expression:", error);
+            console.error("Error calculating next run time:", error);
             return null;
         }
     }, []);
@@ -653,20 +704,55 @@ const SourceConnectionDetailView = ({
         const parts = cronExpression.split(' ');
         const utcMinute = parseInt(parts[0]);
         const utcHour = parseInt(parts[1]);
+        const dayOfMonth = parts[2];
+        const month = parts[3];
+        const dayOfWeek = parts[4];
 
         // Skip conversion for non-specific times
         if (isNaN(utcHour) || parts[1] === '*') return formatCronTime(cronExpression);
 
-        // Get timezone offset in hours (UTC+2 would be -120 minutes, so we use -1 to flip the sign)
+        // Get timezone offset in hours
         const tzOffset = new Date().getTimezoneOffset() / -60;
 
-        // Format the timezone string (UTC+X or UTC-X)
+        // Format the timezone string
         const tzString = tzOffset >= 0 ? `UTC+${tzOffset}` : `UTC${tzOffset}`;
 
         // Add timezone offset to UTC hour
         const localHour = (utcHour + tzOffset + 24) % 24;
 
-        return `${Math.floor(localHour).toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')} (${tzString})`;
+        // Base time format
+        let timeInfo = `${Math.floor(localHour).toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')} (${tzString})`;
+
+        // Calculate next run date for display
+        const now = new Date();
+        const nextRun = new Date(now);
+
+        // Handle different schedule types
+        if (dayOfWeek !== '*' && dayOfMonth === '*') {
+            // Weekly schedule
+            const targetDay = parseInt(dayOfWeek) % 7;
+            const currentDay = now.getDay();
+            const daysToAdd = (targetDay - currentDay + 7) % 7;
+            nextRun.setDate(now.getDate() + daysToAdd);
+        } else if (dayOfMonth !== '*') {
+            // Monthly schedule
+            const targetDay = parseInt(dayOfMonth);
+            nextRun.setDate(targetDay);
+            // If the day has passed this month, move to next month
+            if (nextRun < now) {
+                nextRun.setMonth(nextRun.getMonth() + 1);
+            }
+        }
+
+        // Format the date part
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+        if (dayOfWeek !== '*' || dayOfMonth !== '*') {
+            // Format as "6 Jun" for specific day schedules (without day name)
+            timeInfo += ` on ${nextRun.getDate()} ${monthNames[nextRun.getMonth()]}`;
+        }
+
+        return timeInfo;
     };
 
     /********************************************
@@ -992,7 +1078,9 @@ const SourceConnectionDetailView = ({
                                 )} />
                                 <div>
                                     <div className="text-lg font-medium">
-                                        {nextRunTime ? `Due in ${nextRunTime}` : 'Scheduled'}
+                                        {selectedConnection.cron_schedule
+                                            ? (nextRunTime ? `Due in ${nextRunTime}` : 'Scheduled')
+                                            : 'Manual only'}
                                     </div>
                                     <div className="text-xs opacity-70 mt-0.5">
                                         {selectedConnection.cron_schedule && (
