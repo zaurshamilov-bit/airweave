@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { apiClient } from '@/lib/api';
 import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_UPDATED } from "@/lib/events";
+import { useAuth } from './auth-context';
 
 // Interface for Collection type
 export interface Collection {
@@ -33,9 +34,16 @@ export const CollectionsProvider = ({ children }: { children: ReactNode }) => {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { isReady } = useAuth();
 
   // Function to fetch collections from the API
   const fetchCollections = useCallback(async () => {
+    // Don't attempt to fetch if authentication is not ready
+    if (!isReady()) {
+      console.log('Auth not ready yet, deferring collections fetch');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -54,26 +62,34 @@ export const CollectionsProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isReady]);
 
-  // Initial fetch of collections
+  // Initial fetch of collections only when auth is ready
   useEffect(() => {
-    fetchCollections();
-  }, [fetchCollections]);
+    if (isReady()) {
+      fetchCollections();
+    }
+  }, [fetchCollections, isReady]);
 
   // Listen for collection events to refresh the list
   useEffect(() => {
     // Subscribe to collection events
     const unsubscribeDeleted = onCollectionEvent(COLLECTION_DELETED, () => {
-      fetchCollections();
+      if (isReady()) {
+        fetchCollections();
+      }
     });
 
     const unsubscribeCreated = onCollectionEvent(COLLECTION_CREATED, () => {
-      fetchCollections();
+      if (isReady()) {
+        fetchCollections();
+      }
     });
 
     const unsubscribeUpdated = onCollectionEvent(COLLECTION_UPDATED, () => {
-      fetchCollections();
+      if (isReady()) {
+        fetchCollections();
+      }
     });
 
     // Cleanup event listeners
@@ -82,7 +98,7 @@ export const CollectionsProvider = ({ children }: { children: ReactNode }) => {
       unsubscribeCreated();
       unsubscribeUpdated();
     };
-  }, [fetchCollections]);
+  }, [fetchCollections, isReady]);
 
   const value = {
     collections,
