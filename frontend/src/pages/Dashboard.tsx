@@ -307,7 +307,7 @@ const Dashboard = () => {
                 </Link>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 auto-rows-fr">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 auto-rows-fr">
                 {isLoadingCollections ? (
                   Array.from({ length: 3 }).map((_, index) => (
                     <div
