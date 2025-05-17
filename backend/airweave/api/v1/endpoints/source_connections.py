@@ -271,3 +271,53 @@ async def get_source_connection_job(
     return await source_connection_service.get_source_connection_job(
         db=db, source_connection_id=source_connection_id, job_id=job_id, current_user=user
     )
+
+
+@router.get("/{source_short_name}/oauth2_url", response_model=schemas.OAuth2AuthUrl)
+async def get_oauth2_authorization_url(
+    *,
+    source_short_name: str,
+    client_id: Optional[str] = None,
+) -> schemas.OAuth2AuthUrl:
+    """Get the OAuth2 authorization URL for a source.
+
+    Args:
+        source_short_name: The short name of the source
+        client_id: The OAuth2 client ID
+
+    Returns:
+        The OAuth2 authorization URL
+    """
+    return await source_connection_service.get_oauth2_authorization_url(
+        source_short_name=source_short_name, client_id=client_id
+    )
+
+
+@router.post(
+    "/{source_short_name}/exchange_authorization_code_for_token",
+    response_model=schemas.OAuth2TokenResponse,
+)
+async def exchange_authorization_code_for_token(
+    *,
+    source_short_name: str,
+    code: str,
+    client_id: Optional[str] = None,
+    client_secret: Optional[str] = None,
+) -> schemas.OAuth2TokenResponse:
+    """Exchange an OAuth2 authorization code for a token.
+
+    Args:
+        source_short_name: The short name of the source
+        code: The authorization code to exchange
+        client_id: Optional client ID to override the default
+        client_secret: Optional client secret to override the default
+
+    Returns:
+        The OAuth2 token response
+    """
+    return await source_connection_service.exchange_authorization_code_for_token(
+        source_short_name=source_short_name,
+        code=code,
+        client_id=client_id,
+        client_secret=client_secret,
+    )

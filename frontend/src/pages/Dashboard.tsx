@@ -17,6 +17,7 @@ import {
 } from "@/components/dashboard";
 import { cn } from "@/lib/utils";
 import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
+import { DialogFlow } from "@/components/shared/DialogFlow";
 
 // Collection type definition
 interface Collection {
@@ -228,9 +229,7 @@ const Dashboard = () => {
   };
 
   const handleSourceClick = (source: Source) => {
-    // Set the selected source
     setSelectedSource(source);
-    // Open the dialog
     setDialogOpen(true);
   };
 
@@ -278,8 +277,22 @@ const Dashboard = () => {
 
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
+      {/* TODO: take care of error */}
+      <DialogFlow
+        isOpen={dialogOpen}
+        onOpenChange={handleDialogClose}
+        mode="source-button"
+        sourceId={selectedSource?.id}
+        sourceName={selectedSource?.name}
+        sourceShortName={selectedSource?.short_name}
+        onComplete={() => {
+          // Handle completion
+          fetchCollections(false);
+        }}
+      />
+
       {/* Connect Flow Dialog */}
-      <ConnectFlow
+      {/* <ConnectFlow
         isOpen={dialogOpen}
         onOpenChange={handleDialogClose}
         mode={connectionError ? "error-view" : "create-collection"}
@@ -288,7 +301,7 @@ const Dashboard = () => {
         sourceShortName={selectedSource?.short_name}
         onComplete={() => fetchCollections(false)}
         errorData={connectionError}
-      />
+      /> */}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
         {/* Main content (left column) */}

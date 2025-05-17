@@ -22,7 +22,13 @@ from airweave.platform.entities.linear import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Linear", "linear", AuthType.oauth2, labels=["Project Management"])
+@source(
+    "Linear",
+    "linear",
+    AuthType.oauth2,
+    auth_config_class="LinearAuthConfig",
+    labels=["Project Management"],
+)
 class LinearSource(BaseSource):
     """Linear source implementation for syncing data from Linear into Airweave.
 

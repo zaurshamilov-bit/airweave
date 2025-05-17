@@ -1,6 +1,8 @@
 # flake8: noqa: F401
 """Schemas for the application."""
 
+from airweave.platform.auth.schemas import OAuth2AuthUrl, OAuth2TokenResponse
+
 from .api_key import (
     APIKey,
     APIKeyCreate,

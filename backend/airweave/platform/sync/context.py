@@ -11,7 +11,6 @@ from airweave.core import credentials
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import LoggerConfigurator, _ContextualLogger
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.auth.services import oauth2_service
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
@@ -172,6 +171,7 @@ class SyncContextFactory:
         white_label: Optional[schemas.WhiteLabel] = None,
     ) -> BaseSource:
         """Create and configure the source instance based on authentication type."""
+        # Retrieve source connection and model
         source_connection = await crud.connection.get(db, sync.source_connection_id, current_user)
         if not source_connection:
             raise NotFoundException("Source connection not found")
@@ -182,76 +182,7 @@ class SyncContextFactory:
 
         source_class = resource_locator.get_source(source_model)
 
-        if source_model.auth_type == AuthType.none:
-            return await source_class.create()
-
-        if source_model.auth_type in [
-            AuthType.oauth2_with_refresh,
-            AuthType.oauth2_with_refresh_rotating,
-        ]:
-            return await cls._create_oauth2_with_refresh_source(
-                db, source_model, source_class, current_user, source_connection, white_label
-            )
-
-        if source_model.auth_type == AuthType.oauth2:
-            return await cls._create_oauth2_source(
-                db, source_class, current_user, source_connection
-            )
-
-        return await cls._create_other_auth_source(
-            db, source_model, source_class, current_user, source_connection
-        )
-
-    @classmethod
-    async def _create_oauth2_with_refresh_source(
-        cls,
-        db: AsyncSession,
-        source_model: schemas.Source,
-        source_class,
-        current_user: schemas.User,
-        source_connection: schemas.Connection,
-        white_label: Optional[schemas.WhiteLabel] = None,
-    ) -> BaseSource:
-        """Create source instance for OAuth2 with refresh token."""
-        credential = await cls._get_integration_credential(db, source_connection, current_user)
-        decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
-
-        oauth2_response = await oauth2_service.refresh_access_token(
-            db,
-            source_model.short_name,
-            current_user,
-            source_connection.id,
-            decrypted_credential,
-            white_label,
-        )
-        return await source_class.create(oauth2_response.access_token)
-
-    @classmethod
-    async def _create_oauth2_source(
-        cls,
-        db: AsyncSession,
-        source_class,
-        current_user: schemas.User,
-        source_connection: schemas.Connection,
-    ) -> BaseSource:
-        """Create source instance for regular OAuth2."""
-        if not source_connection.integration_credential_id:
-            raise NotFoundException("Source connection has no integration credential")
-
-        credential = await cls._get_integration_credential(db, source_connection, current_user)
-        decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
-        return await source_class.create(decrypted_credential["access_token"])
-
-    @classmethod
-    async def _create_other_auth_source(
-        cls,
-        db: AsyncSession,
-        source_model: schemas.Source,
-        source_class,
-        current_user: schemas.User,
-        source_connection: schemas.Connection,
-    ) -> BaseSource:
-        """Create source instance for other authentication types."""
+        # Handle credentials and source creation
         if not source_connection.integration_credential_id:
             raise NotFoundException("Source connection has no integration credential")
 
@@ -259,10 +190,23 @@ class SyncContextFactory:
         decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
 
         if not source_model.auth_config_class:
-            raise ValueError(f"Auth config class required for auth type {source_model.auth_type}")
+            raise ValueError("Auth config class required.")
 
         auth_config = resource_locator.get_auth_config(source_model.auth_config_class)
         source_credentials = auth_config.model_validate(decrypted_credential)
+
+        # if the source_credential is a refresh token, we need to exchange it for an access token
+        if hasattr(source_credentials, "refresh_token") and source_credentials.refresh_token:
+            oauth2_response = await oauth2_service.refresh_access_token(
+                db,
+                source_model.short_name,
+                current_user,
+                source_connection.id,
+                decrypted_credential,
+                white_label,
+            )
+            source_credentials = oauth2_response.access_token
+
         return await source_class.create(source_credentials)
 
     @classmethod

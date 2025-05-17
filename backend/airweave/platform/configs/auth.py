@@ -179,6 +179,25 @@ class GitHubAuthConfig(AuthConfig):
     )
 
 
+class LinearAuthConfig(AuthConfig):
+    """Linear authentication credentials schema."""
+
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Linear app."
+    )
+
+
+class AsanaAuthConfig(AuthConfig):
+    """Asana authentication credentials schema."""
+
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Asana app."
+    )
+    refresh_token: str = Field(
+        title="Refresh Token", description="The refresh token for your Asana app."
+    )
+
+
 class DropboxAuthConfig(AuthConfig):
     """Dropbox authentication credentials schema."""
 
@@ -187,6 +206,12 @@ class DropboxAuthConfig(AuthConfig):
     )
     client_secret: str = Field(
         title="Client Secret", description="The OAuth client secret for your Dropbox app"
+    )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Dropbox app."
+    )
+    refresh_token: str = Field(
+        title="Refresh Token", description="The refresh token for your Dropbox app."
     )
 
 

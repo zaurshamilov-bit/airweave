@@ -30,7 +30,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_UPDATED } from "@/lib/events";
 import { APIKeysSettings } from "@/components/settings/APIKeysSettings";
 import { useCollections, Collection } from "@/lib/collectionsContext";
-import { ConnectFlow } from '@/components/shared';
+import { DialogFlow } from '@/components/shared';
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
@@ -183,19 +183,12 @@ const DashboardLayout = () => {
     location.pathname === route || location.pathname.startsWith('/chat/'));
 
   const handleCreateCollection = useCallback(() => {
-    // Open the ConnectFlow with source-first-collection mode instead of navigating
     setShowCreateCollectionFlow(true);
   }, []);
 
-  // Handle completion of collection creation
-  const handleCreateCollectionComplete = useCallback((result) => {
+  const handleCreateCollectionComplete = useCallback(() => {
     setShowCreateCollectionFlow(false);
-
-    // Navigate to the new collection if we have a collectionId
-    if (result?.collectionId) {
-      navigate(`/collections/${result.collectionId}?connected=success`);
-    }
-  }, [navigate]);
+  }, []);
 
   // Memoize active status checks
   const isDashboardActive = useMemo(() =>
@@ -407,10 +400,18 @@ const DashboardLayout = () => {
       </GradientCard>
 
       {/* ConnectFlow for creating a new collection starting with source selection */}
-      <ConnectFlow
+      {/* <ConnectFlow
         isOpen={showCreateCollectionFlow}
         onOpenChange={setShowCreateCollectionFlow}
         mode="source-first-collection"
+        onComplete={handleCreateCollectionComplete}
+      /> */}
+
+      {/* DialogFlow for creating a new collection starting with source selection */}
+      <DialogFlow
+        isOpen={showCreateCollectionFlow}
+        onOpenChange={setShowCreateCollectionFlow}
+        mode="create-collection"
         onComplete={handleCreateCollectionComplete}
       />
     </GradientBackground>
