@@ -64,6 +64,14 @@ class SourceConnectionService:
             f"for more information."
         )
 
+        # Check if auth_config_class is defined for the source
+        if not source.auth_config_class:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Source {source.name} does not have an auth configuration defined. "
+                + BASE_ERROR_MESSAGE,
+            )
+
         if auth_fields is None:
             raise HTTPException(
                 status_code=422,
@@ -102,6 +110,89 @@ class SourceConnectionService:
                 raise HTTPException(
                     status_code=422,
                     detail=f"Invalid auth fields: {str(e)}. " + BASE_ERROR_MESSAGE,
+                ) from e
+
+    async def _validate_config_fields(
+        self, db: AsyncSession, source_short_name: str, config_fields: Optional[Dict[str, Any]]
+    ) -> dict:
+        """Validate config fields based on source config class.
+
+        Args:
+            db: The database session
+            source_short_name: The short name of the source
+            config_fields: The config fields to validate
+
+        Returns:
+            The validated config fields as a dict
+
+        Raises:
+            HTTPException: If config fields are invalid or required but not provided
+        """
+        # Get the source info
+        source = await crud.source.get_by_short_name(db, short_name=source_short_name)
+        if not source:
+            raise HTTPException(status_code=404, detail=f"Source '{source_short_name}' not found")
+
+        BASE_ERROR_MESSAGE = (
+            f"See https://docs.airweave.ai/docs/connectors/{source.short_name}#configuration "
+            f"for more information."
+        )
+
+        # Check if source has a config class defined - it MUST be defined
+        if not hasattr(source, "config_class") or source.config_class is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Source {source.name} does not have a configuration class defined. "
+                + BASE_ERROR_MESSAGE,
+            )
+
+        # Config class exists but no config fields provided - check if that's allowed
+        if config_fields is None:
+            try:
+                # Get config class to check if it has required fields
+                config_class = resource_locator.get_config(source.config_class)
+                # Create an empty instance to see if it accepts no fields
+                config = config_class()
+                return config.model_dump()
+            except Exception:
+                # If it fails with no fields, config is required
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Source {source.name} requires config fields but none were provided. "
+                    + BASE_ERROR_MESSAGE,
+                ) from None
+
+        # Both config class and config fields exist, validate them
+        try:
+            config_class = resource_locator.get_config(source.config_class)
+            config = config_class(**config_fields)
+            return config.model_dump()
+        except Exception as e:
+            source_connection_logger.error(f"Failed to validate config fields: {e}")
+
+            # Check if it's a Pydantic validation error and format it nicely
+            from pydantic import ValidationError
+
+            if isinstance(e, ValidationError):
+                # Extract the field names and error messages
+                error_messages = []
+                for error in e.errors():
+                    field = ".".join(str(loc) for loc in error.get("loc", []))
+                    msg = error.get("msg", "")
+                    error_messages.append(f"Field '{field}': {msg}")
+
+                error_detail = f"Invalid configuration for {source.config_class}:\n" + "\n".join(
+                    error_messages
+                )
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid config fields: {error_detail}. " + BASE_ERROR_MESSAGE,
+                ) from e
+            else:
+                # For other types of errors
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid config fields: {str(e)}. " + BASE_ERROR_MESSAGE,
                 ) from e
 
     async def create_source_connection(
@@ -144,10 +235,18 @@ class SourceConnectionService:
                     status_code=404, detail=f"Source not found: {source_connection_in.short_name}"
                 )
 
-            # Validate auth
+            # Validate auth fields
             auth_fields = await self._validate_auth_fields(
                 db, source_connection_in.short_name, aux_attrs["auth_fields"]
             )
+
+            # Validate config fields (config_fields are in core_attrs)
+            config_fields = await self._validate_config_fields(
+                db, source_connection_in.short_name, core_attrs.get("config_fields")
+            )
+
+            # Always set the validated config_fields (even if empty)
+            core_attrs["config_fields"] = config_fields
 
             # 1. Create integration credential if auth fields are provided
             integration_credential_id = None
@@ -460,6 +559,17 @@ class SourceConnectionService:
             raise HTTPException(status_code=404, detail="Source connection not found")
 
         async with UnitOfWork(db) as uow:
+            # Validate config fields if they're being updated
+            if source_connection_in.config_fields is not None:
+                validated_config_fields = await self._validate_config_fields(
+                    uow.session,
+                    source_connection.short_name,
+                    source_connection_in.config_fields.model_dump()
+                    if hasattr(source_connection_in.config_fields, "model_dump")
+                    else source_connection_in.config_fields,
+                )
+                source_connection_in.config_fields = validated_config_fields
+
             # 1. Update source connection
             source_connection = await crud.source_connection.update(
                 db=uow.session,

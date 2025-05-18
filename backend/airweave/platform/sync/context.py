@@ -176,6 +176,16 @@ class SyncContextFactory:
         if not source_connection:
             raise NotFoundException("Source connection not found")
 
+        # Get the source_connection record to access config_fields using sync_id
+        source_connection_obj = await crud.source_connection.get_by_sync_id(
+            db, sync_id=sync.id, current_user=current_user
+        )
+        if not source_connection_obj:
+            raise NotFoundException("Source connection record not found")
+
+        # Get config fields (will be empty dict if none)
+        config_fields = source_connection_obj.config_fields or {}
+
         source_model = await crud.source.get_by_short_name(db, source_connection.short_name)
         if not source_model:
             raise NotFoundException(f"Source not found: {source_connection.short_name}")
@@ -207,7 +217,8 @@ class SyncContextFactory:
             )
             source_credentials = oauth2_response.access_token
 
-        return await source_class.create(source_credentials)
+        # Pass both credentials and config to source creation
+        return await source_class.create(source_credentials, config=config_fields)
 
     @classmethod
     async def _get_integration_credential(

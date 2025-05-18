@@ -21,10 +21,11 @@ from airweave.platform.sources._base import BaseSource
 
 
 @source(
-    "Elasticsearch",
-    "elasticsearch",
-    AuthType.config_class,
-    "ElasticsearchAuthConfig",
+    name="Elasticsearch",
+    short_name="elasticsearch",
+    auth_type=AuthType.config_class,
+    auth_config_class="ElasticsearchAuthConfig",
+    config_class="ElasticsearchConfig",
     labels=["Search", "Database"],
 )
 class ElasticsearchSource(BaseSource):

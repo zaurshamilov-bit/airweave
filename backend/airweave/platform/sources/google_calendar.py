@@ -32,10 +32,11 @@ from airweave.platform.sources._base import BaseSource
 
 
 @source(
-    "Google Calendar",
-    "google_calendar",
-    AuthType.oauth2_with_refresh,
-    auth_config_class="GoogleAuthConfig",
+    name="Google Calendar",
+    short_name="google_calendar",
+    auth_type=AuthType.oauth2_with_refresh,
+    auth_config_class="GoogleCalendarAuthConfig",
+    config_class="GoogleCalendarConfig",
     labels=["Productivity", "Calendar"],
 )
 class GoogleCalendarSource(BaseSource):

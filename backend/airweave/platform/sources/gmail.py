@@ -29,10 +29,11 @@ from airweave.platform.sources._base import BaseSource
 
 
 @source(
-    "Gmail",
-    "gmail",
-    AuthType.oauth2_with_refresh,
-    auth_config_class="GoogleAuthConfig",
+    name="Gmail",
+    short_name="gmail",
+    auth_type=AuthType.oauth2_with_refresh,
+    auth_config_class="GmailAuthConfig",
+    config_class="GmailConfig",
     labels=["Communication", "Email"],
 )
 class GmailSource(BaseSource):

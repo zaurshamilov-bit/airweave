@@ -2,7 +2,7 @@
 
 import asyncio
 import re
-from typing import AsyncGenerator, Dict, List, Union
+from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 from uuid import uuid4
 
 import httpx
@@ -23,10 +23,11 @@ from airweave.platform.sources._base import BaseSource
 
 
 @source(
-    "Linear",
-    "linear",
-    AuthType.oauth2,
+    name="Linear",
+    short_name="linear",
+    auth_type=AuthType.oauth2,
     auth_config_class="LinearAuthConfig",
+    config_class="LinearConfig",
     labels=["Project Management"],
 )
 class LinearSource(BaseSource):
@@ -53,17 +54,27 @@ class LinearSource(BaseSource):
         }
 
     @classmethod
-    async def create(cls, access_token: str) -> "LinearSource":
-        """Create instance of the Linear source with authentication token.
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "LinearSource":
+        """Create instance of the Linear source with authentication token and config.
 
         Args:
             access_token: OAuth access token for Linear API
+            config: Optional configuration parameters, like exclude_path
 
         Returns:
             Configured LinearSource instance
         """
         instance = cls()
         instance.access_token = access_token
+
+        # Store config values as instance attributes
+        if config:
+            instance.exclude_path = config.get("exclude_path", "")
+        else:
+            instance.exclude_path = ""
+
         return instance
 
     async def _wait_for_rate_limit(self):
@@ -268,6 +279,12 @@ class LinearSource(BaseSource):
         # Define processor function for issue nodes
         async def process_issue(issue):
             issue_identifier = issue.get("identifier")
+
+            # Skip issues matching exclude_path
+            if self.exclude_path and issue_identifier and self.exclude_path in issue_identifier:
+                logger.info(f"Skipping excluded issue: {issue_identifier}")
+                return
+
             issue_title = issue.get("title")
             issue_description = issue.get("description", "")
 

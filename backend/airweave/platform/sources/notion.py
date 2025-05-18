@@ -22,7 +22,14 @@ from airweave.platform.entities.notion import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Notion", "notion", AuthType.oauth2, labels=["Knowledge Base", "Productivity"])
+@source(
+    name="Notion",
+    short_name="notion",
+    auth_type=AuthType.oauth2,
+    auth_config_class="NotionAuthConfig",
+    config_class="NotionConfig",
+    labels=["Knowledge Base", "Productivity"],
+)
 class NotionSource(BaseSource):
     """Notion source implementation."""
 

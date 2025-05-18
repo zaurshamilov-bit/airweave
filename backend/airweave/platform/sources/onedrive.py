@@ -30,9 +30,11 @@ from airweave.platform.sources._base import BaseSource
 
 
 @source(
-    "OneDrive",
-    "onedrive",
-    AuthType.oauth2_with_refresh,
+    name="OneDrive",
+    short_name="onedrive",
+    auth_type=AuthType.oauth2_with_refresh,
+    auth_config_class="OneDriveAuthConfig",
+    config_class="OneDriveConfig",
     labels=["File Storage"],
 )
 class OneDriveSource(BaseSource):

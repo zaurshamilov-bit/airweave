@@ -12,7 +12,7 @@ from airweave.platform.locator import resource_locator
 router = TrailingSlashRouter()
 
 
-@router.get("/detail/{short_name}", response_model=schemas.SourceWithAuthenticationFields)
+@router.get("/detail/{short_name}", response_model=schemas.Source)
 async def read_source(
     *,
     db: AsyncSession = Depends(deps.get_db),
@@ -35,15 +35,20 @@ async def read_source(
     source = await crud.source.get_by_short_name(db, short_name)
     if not source:
         raise HTTPException(status_code=404, detail=f"Source not found: {short_name}")
-    if source.auth_config_class:
-        auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
-        fields = Fields.from_config_class(auth_config_class)
-        source_with_auth_fields = schemas.SourceWithAuthenticationFields.model_validate(
-            source, from_attributes=True
+
+    if not source.auth_config_class:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Source {short_name} does not have authentication configuration",
         )
-        source_with_auth_fields.auth_fields = fields
-        return source_with_auth_fields
-    return source
+
+    auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
+    fields = Fields.from_config_class(auth_config_class)
+
+    # Use the Source model directly instead of SourceWithAuthenticationFields
+    source_model = schemas.Source.model_validate(source, from_attributes=True)
+    source_model.auth_fields = fields
+    return source_model
 
 
 @router.get("/list", response_model=list[schemas.Source])

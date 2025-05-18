@@ -16,7 +16,14 @@ from airweave.platform.entities.slack import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Slack", "slack", AuthType.oauth2, labels=["Communication", "Team Collaboration"])
+@source(
+    name="Slack",
+    short_name="slack",
+    auth_type=AuthType.oauth2,
+    auth_config_class="SlackAuthConfig",
+    config_class="SlackConfig",
+    labels=["Communication", "Team Collaboration"],
+)
 class SlackSource(BaseSource):
     """Slack source implementation.
 

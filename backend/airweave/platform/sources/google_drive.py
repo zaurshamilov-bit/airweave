@@ -27,10 +27,11 @@ from airweave.platform.sources._base import BaseSource
 
 
 @source(
-    "Google Drive",
-    "google_drive",
-    AuthType.oauth2_with_refresh,
-    auth_config_class="GoogleAuthConfig",
+    name="Google Drive",
+    short_name="google_drive",
+    auth_type=AuthType.oauth2_with_refresh,
+    auth_config_class="GoogleDriveAuthConfig",
+    config_class="GoogleDriveConfig",
     labels=["File Storage"],
 )
 class GoogleDriveSource(BaseSource):

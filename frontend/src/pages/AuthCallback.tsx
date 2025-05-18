@@ -20,7 +20,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { OAUTH_KEYS } from "@/lib/ConnectToSourceFlow";
 import { redirectWithError } from "@/lib/error-utils";
 
 /**

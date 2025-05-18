@@ -23,7 +23,14 @@ from airweave.platform.entities.monday import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Monday", "monday", AuthType.oauth2, labels=["Project Management"])
+@source(
+    name="Monday",
+    short_name="monday",
+    auth_type=AuthType.oauth2,
+    auth_config_class="MondayAuthConfig",
+    config_class="MondayConfig",
+    labels=["Project Management"],
+)
 class MondaySource(BaseSource):
     """Monday source implementation.
 

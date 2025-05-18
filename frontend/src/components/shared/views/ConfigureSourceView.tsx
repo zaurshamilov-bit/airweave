@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useTheme } from "@/lib/theme-provider";
@@ -31,17 +31,13 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
     const {
         sourceName,
         sourceShortName,
-        // From DialogFlow's initial data:
+        // Original collection data
         collectionId,
         collectionName,
-        // From CreateCollectionView:
-        name: createdCollectionName,
-        readable_id: createdCollectionId
+        // Collection data created in CreateCollectionView
+        created_collection_id,
+        created_collection_name
     } = viewData;
-
-    // Use the most up-to-date collection data
-    const finalCollectionName = createdCollectionName || collectionName;
-    const finalCollectionId = createdCollectionId || collectionId;
 
     // Handle errors by redirecting to dashboard with error parameters
     const handleError = (error: Error | string, errorType: string) => {
@@ -73,38 +69,37 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
 
                     <DialogDescription className="text-muted-foreground mb-6">
                         {sourceName ? `Connecting ${sourceName}` : "Configure your source connection"}
-                        {finalCollectionName && ` to collection "${finalCollectionName}"`}
                     </DialogDescription>
 
+                    {/* Display both collection data sets */}
                     <div className="bg-muted p-6 rounded-lg mb-4">
-                        <h3 className="font-medium mb-4">Data Received from Previous Steps</h3>
+                        <h3 className="font-medium mb-4">Collection Information</h3>
 
-                        {/* Source Information */}
+                        {/* Existing Collection */}
                         <div className="mb-4 p-3 bg-primary/10 rounded border border-primary/20">
-                            <h4 className="font-medium text-sm mb-2">Source Information:</h4>
+                            <h4 className="font-medium text-sm mb-2">Existing Collection:</h4>
                             <ul className="space-y-1 text-sm">
-                                <li><strong>Source:</strong> <span className="font-mono">{sourceName || "Not specified"}</span></li>
-                                <li><strong>Source ID:</strong> <span className="font-mono">{viewData.sourceId || "Not specified"}</span></li>
-                                <li><strong>Source Short Name:</strong> <span className="font-mono">{sourceShortName || "Not specified"}</span></li>
+                                <li><strong>Name:</strong> <span className="font-mono">{collectionName || "undefined"}</span></li>
+                                <li><strong>ID:</strong> <span className="font-mono">{collectionId || "undefined"}</span></li>
                             </ul>
                         </div>
 
-                        {/* Collection Information */}
+                        {/* Created Collection */}
                         <div className="p-3 bg-blue-500/10 rounded border border-blue-500/20">
-                            <h4 className="font-medium text-sm mb-2">Collection Information:</h4>
+                            <h4 className="font-medium text-sm mb-2">Created Collection:</h4>
                             <ul className="space-y-1 text-sm">
-                                <li><strong>Collection Name:</strong> <span className="font-mono">{finalCollectionName || "Not specified"}</span></li>
-                                <li><strong>Collection ID:</strong> <span className="font-mono">{finalCollectionId || "Not specified"}</span></li>
+                                <li><strong>Name:</strong> <span className="font-mono">{created_collection_name || "undefined"}</span></li>
+                                <li><strong>ID:</strong> <span className="font-mono">{created_collection_id || "undefined"}</span></li>
                             </ul>
                         </div>
+                    </div>
 
-                        {/* All viewData for debugging */}
-                        <div className="mt-4 p-3 bg-gray-500/10 rounded border border-gray-500/20">
-                            <h4 className="font-medium text-sm mb-2">All Available Data:</h4>
-                            <pre className="text-xs overflow-auto max-h-40 p-2 bg-black/5 rounded">
-                                {JSON.stringify(viewData, null, 2)}
-                            </pre>
-                        </div>
+                    {/* All viewData for debugging */}
+                    <div className="mt-4 p-3 bg-gray-500/10 rounded border border-gray-500/20">
+                        <h4 className="font-medium text-sm mb-2">All Available Data:</h4>
+                        <pre className="text-xs overflow-auto max-h-40 p-2 bg-black/5 rounded">
+                            {JSON.stringify(viewData, null, 2)}
+                        </pre>
                     </div>
                 </div>
             </div>

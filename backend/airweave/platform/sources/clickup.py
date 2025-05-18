@@ -35,8 +35,12 @@ logger = logging.getLogger(__name__)
 
 
 @source(
-    "ClickUp", "clickup", AuthType.oauth2
-)  # Using oauth2 as ClickUp doesn't support refresh tokens yet (as of March 2024)
+    name="ClickUp",
+    short_name="clickup",
+    auth_type=AuthType.oauth2,
+    auth_config_class="ClickUpAuthConfig",
+    config_class="ClickUpConfig",
+)
 class ClickUpSource(BaseSource):
     """ClickUp source implementation.
 

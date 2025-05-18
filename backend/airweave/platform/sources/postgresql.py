@@ -39,7 +39,12 @@ PG_TYPE_MAP = {
 
 
 @source(
-    "PostgreSQL", "postgresql", AuthType.config_class, "PostgreSQLAuthConfig", labels=["Database"]
+    name="PostgreSQL",
+    short_name="postgresql",
+    auth_type=AuthType.config_class,
+    auth_config_class="PostgreSQLAuthConfig",
+    config_class="PostgreSQLConfig",
+    labels=["Database"],
 )
 class PostgreSQLSource(BaseSource):
     """PostgreSQL source implementation.

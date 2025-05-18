@@ -44,7 +44,12 @@ SQLSERVER_TYPE_MAP = {
 
 
 @source(
-    "SQL Server", "sql_server", AuthType.config_class, "SQLServerAuthConfig", labels=["Database"]
+    name="SQL Server",
+    short_name="sql_server",
+    auth_type=AuthType.config_class,
+    auth_config_class="SQLServerAuthConfig",
+    config_class="SQLServerConfig",
+    labels=["Database"],
 )
 class SQLServerSource(BaseSource):
     """SQL Server source implementation.

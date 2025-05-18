@@ -77,10 +77,4 @@ class SourceInDBBase(SourceBase):
 class Source(SourceInDBBase):
     """Schema for Source."""
 
-    pass
-
-
-class SourceWithAuthenticationFields(Source):
-    """Schema for Source with auth config."""
-
-    auth_fields: Fields | None = None
+    auth_fields: Fields

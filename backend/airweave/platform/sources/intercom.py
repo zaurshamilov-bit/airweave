@@ -16,7 +16,14 @@ from airweave.platform.entities.intercom import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Intercom", "intercom", AuthType.oauth2, labels=["Customer Service", "Support"])
+@source(
+    name="Intercom",
+    short_name="intercom",
+    auth_type=AuthType.oauth2,
+    auth_config_class="IntercomAuthConfig",
+    config_class="IntercomConfig",
+    labels=["Customer Service", "Support"],
+)
 class IntercomSource(BaseSource):
     """Intercom source implementation.
 

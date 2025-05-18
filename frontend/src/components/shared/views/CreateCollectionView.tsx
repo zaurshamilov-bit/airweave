@@ -291,8 +291,8 @@ export const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
 
             // Get the values
             const collectionDetails = {
-                name: nameValue,
-                readable_id: readableIdValue || undefined,
+                created_collection_name: nameValue,
+                created_collection_id: readableIdValue
             };
 
             // Simply pass the data to the next view

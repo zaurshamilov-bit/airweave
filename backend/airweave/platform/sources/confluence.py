@@ -38,9 +38,11 @@ from airweave.platform.sources._base import BaseSource
 
 
 @source(
-    "Confluence",
-    "confluence",
-    AuthType.oauth2_with_refresh,
+    name="Confluence",
+    short_name="confluence",
+    auth_type=AuthType.oauth2_with_refresh,
+    auth_config_class="ConfluenceAuthConfig",
+    config_class="ConfluenceConfig",
     labels=["Knowledge Base", "Documentation"],
 )
 class ConfluenceSource(BaseSource):

@@ -45,10 +45,11 @@ from airweave.platform.utils.file_extensions import (
 
 
 @source(
-    "GitHub",
-    "github",
-    AuthType.config_class,
-    "GitHubAuthConfig",
+    name="GitHub",
+    short_name="github",
+    auth_type=AuthType.config_class,
+    auth_config_class="GitHubAuthConfig",
+    config_class="GitHubConfig",
     labels=["Code"],
 )
 class GitHubSource(BaseSource):
