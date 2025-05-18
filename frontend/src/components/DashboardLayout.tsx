@@ -29,14 +29,21 @@ import { apiClient } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_UPDATED } from "@/lib/events";
 import { APIKeysSettings } from "@/components/settings/APIKeysSettings";
-import { useCollections, Collection } from "@/lib/collectionsContext";
 import { ConnectFlow } from '@/components/shared';
+import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(true);
-  const { collections, isLoading: isLoadingCollections, error: collectionError } = useCollections();
+  const { collections, isLoading: isLoadingCollections, error: collectionError, fetchCollections } = useCollectionsStore();
+
+  // Initialize collections and event listeners
+  useEffect(() => {
+    fetchCollections();
+    const unsubscribe = useCollectionsStore.getState().subscribeToEvents();
+    return unsubscribe;
+  }, [fetchCollections]);
 
   // Log the actual collections count for debugging
   useEffect(() => {
@@ -171,6 +178,7 @@ const DashboardLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { resolvedTheme, setTheme } = useTheme();
+  const { fetchSources } = useSourcesStore();
 
   // State for the create collection dialog
   const [showCreateCollectionFlow, setShowCreateCollectionFlow] = useState(false);
@@ -183,9 +191,19 @@ const DashboardLayout = () => {
     location.pathname === route || location.pathname.startsWith('/chat/'));
 
   const handleCreateCollection = useCallback(() => {
-    // Open the ConnectFlow with source-first-collection mode instead of navigating
-    setShowCreateCollectionFlow(true);
-  }, []);
+    // Prefetch sources before opening the dialog
+    console.log("🔍 [DashboardLayout] Pre-fetching sources before showing ConnectFlow");
+    fetchSources()
+      .then(() => {
+        // Open the ConnectFlow with source-first-collection mode
+        setShowCreateCollectionFlow(true);
+      })
+      .catch(err => {
+        console.error("❌ [DashboardLayout] Error prefetching sources:", err);
+        // Still open the dialog even if prefetch fails - the sources component will handle the error
+        setShowCreateCollectionFlow(true);
+      });
+  }, [fetchSources]);
 
   // Handle completion of collection creation
   const handleCreateCollectionComplete = useCallback((result) => {

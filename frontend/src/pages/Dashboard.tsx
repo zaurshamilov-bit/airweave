@@ -17,6 +17,7 @@ import {
 } from "@/components/dashboard";
 import { cn } from "@/lib/utils";
 import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
+import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 
 // Collection type definition
 interface Collection {
@@ -54,17 +55,25 @@ const Dashboard = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { resolvedTheme } = useTheme();
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [sources, setSources] = useState<Source[]>([]);
+
+  // Use collections store
+  const {
+    collections,
+    isLoading: isLoadingCollections,
+    fetchCollections,
+    sourceConnections,
+    fetchSourceConnections
+  } = useCollectionsStore();
+
+  // Use sources store
+  const { sources, isLoading: isLoadingSources, fetchSources } = useSourcesStore();
+
   const [apiKey, setApiKey] = useState<APIKey | null>(null);
-  const [isLoadingCollections, setIsLoadingCollections] = useState(true);
-  const [isLoadingSources, setIsLoadingSources] = useState(true);
   const [isLoadingApiKey, setIsLoadingApiKey] = useState(true);
-  const [collectionsWithSources, setCollectionsWithSources] = useState<Record<string, SourceConnection[]>>({});
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedSource, setSelectedSource] = useState<Source | null>(null);
+  const [selectedSource, setSelectedSource] = useState<{ id: string; name: string; short_name: string } | null>(null);
 
   // Error state for connection errors
   const [connectionError, setConnectionError] = useState<any>(null);
@@ -139,63 +148,28 @@ const Dashboard = () => {
     }
   };
 
-  // Define fetchCollections function at component level
-  const fetchCollections = async (showLoading: boolean = true) => {
-    if (showLoading) {
-      setIsLoadingCollections(true);
-    }
-
-    try {
-      const response = await apiClient.get("/collections");
-      if (response.ok) {
-        const data = await response.json();
-        setCollections(data);
-
-        // Only fetch source connections for the top 3 collections
-        const topCollections = data.slice(0, 3);
-        const sourcesMap: Record<string, SourceConnection[]> = {};
-        for (const collection of topCollections) {
-          await fetchSourceConnectionsForCollection(collection.readable_id, sourcesMap);
-        }
-        setCollectionsWithSources(sourcesMap);
-      } else {
-        console.error("Failed to load collections:", await response.text());
-      }
-    } catch (err) {
-      console.error("Error fetching collections:", err);
-    } finally {
-      if (showLoading) {
-        setIsLoadingCollections(false);
-      }
-    }
-  };
-
-  // Fetch collections on component mount
+  // Initialize Zustand store subscribers
   useEffect(() => {
-    fetchCollections();
-  }, []);
+    // Subscribe to collections events
+    const unsubscribeCollections = useCollectionsStore.getState().subscribeToEvents();
 
-  // Fetch sources
-  useEffect(() => {
-    const fetchSources = async () => {
-      setIsLoadingSources(true);
-      try {
-        const response = await apiClient.get("/sources/list");
-        if (response.ok) {
-          const data = await response.json();
-          setSources(data);
-        } else {
-          console.error("Failed to load sources:", await response.text());
-        }
-      } catch (err) {
-        console.error("Error fetching sources:", err);
-      } finally {
-        setIsLoadingSources(false);
-      }
+    // Initial fetch - use console logging to track API calls
+    console.log("🔄 [Dashboard] Initializing collections and sources");
+
+    // Load collections (will use cache if available)
+    fetchCollections().then(collections => {
+      console.log(`🔄 [Dashboard] Collections loaded: ${collections.length} collections available`);
+    });
+
+    // Load sources - will use cached data if available
+    fetchSources().then(sources => {
+      console.log(`🔄 [Dashboard] Sources loaded: ${sources.length} sources available`);
+    });
+
+    return () => {
+      unsubscribeCollections();
     };
-
-    fetchSources();
-  }, []);
+  }, [fetchCollections, fetchSources]);
 
   // Fetch API key
   useEffect(() => {
@@ -227,7 +201,7 @@ const Dashboard = () => {
     toast.info("New API key feature coming soon");
   };
 
-  const handleSourceClick = (source: Source) => {
+  const handleSourceClick = (source: { id: string; name: string; short_name: string }) => {
     // Set the selected source
     setSelectedSource(source);
     // Open the dialog
@@ -240,8 +214,8 @@ const Dashboard = () => {
     setSelectedSource(null);
     setConnectionError(null);
     clearStoredErrorDetails(); // Ensure error data is cleared
-    // Refresh collections without showing loading state
-    fetchCollections(false);
+    // Refresh collections
+    fetchCollections();
   };
 
   // Top 3 collections
@@ -286,7 +260,7 @@ const Dashboard = () => {
         sourceId={selectedSource?.id}
         sourceName={selectedSource?.name}
         sourceShortName={selectedSource?.short_name}
-        onComplete={() => fetchCollections(false)}
+        onComplete={() => fetchCollections()}
         errorData={connectionError}
       />
 
@@ -322,7 +296,6 @@ const Dashboard = () => {
                       id={collection.id}
                       name={collection.name}
                       readableId={collection.readable_id}
-                      sourceConnections={collectionsWithSources[collection.readable_id] || []}
                       status={collection.status}
                       onClick={() => navigate(`/collections/${collection.readable_id}`)}
                     />
