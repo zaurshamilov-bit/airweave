@@ -128,10 +128,10 @@ class CRUDSourceConnection(
                 sc.latest_sync_job_started_at = job_info["started_at"]
                 sc.latest_sync_job_completed_at = job_info["completed_at"]
 
-                logger.info(
-                    f"Source connection {sc_id} with sync_id {sc.sync_id} assigned "
-                    f"latest_sync_job_id: {job_info['id']}, created_at: {job_info['created_at']}"
-                )
+                # logger.info(
+                #     f"Source connection {sc_id} with sync_id {sc.sync_id} assigned "
+                #     f"latest_sync_job_id: {job_info['id']}, created_at: {job_info['created_at']}"
+                # )
 
                 # Set the ephemeral status based on the latest sync job
                 job = SyncJob(

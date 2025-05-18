@@ -72,7 +72,6 @@ from .source import (
     SourceCreate,
     SourceInDBBase,
     SourceUpdate,
-    SourceWithAuthenticationFields,
 )
 from .source_connection import (
     SourceConnection,

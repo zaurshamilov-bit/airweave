@@ -5,6 +5,7 @@ import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { redirectWithError } from "@/lib/error-utils";
+import { apiClient } from "@/lib/api";
 
 export interface ConfigureSourceViewProps {
     onNext?: (data?: any) => void;
@@ -26,6 +27,8 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
     const navigate = useNavigate();
+    const [loading, setLoading] = useState(false);
+    const [sourceDetails, setSourceDetails] = useState<any>(null);
 
     // Extract data passed from previous views
     const {
@@ -38,6 +41,34 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
         created_collection_id,
         created_collection_name
     } = viewData;
+
+    // Fetch source details including auth and config fields
+    useEffect(() => {
+        if (!sourceShortName) return;
+
+        const fetchSourceDetails = async () => {
+            setLoading(true);
+            try {
+                const response = await apiClient.get(`/sources/detail/${sourceShortName}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setSourceDetails(data);
+                    console.log("Source details loaded:", data);
+                } else {
+                    const errorText = await response.text();
+                    console.error(`Failed to load source details: ${errorText}`);
+                    handleError(new Error(`Failed to load source details: ${errorText}`), "Source details fetch error");
+                }
+            } catch (error) {
+                console.error("Error fetching source details:", error);
+                handleError(error instanceof Error ? error : new Error(String(error)), "Source details fetch error");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchSourceDetails();
+    }, [sourceShortName]);
 
     // Handle errors by redirecting to dashboard with error parameters
     const handleError = (error: Error | string, errorType: string) => {
@@ -70,6 +101,96 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
                     <DialogDescription className="text-muted-foreground mb-6">
                         {sourceName ? `Connecting ${sourceName}` : "Configure your source connection"}
                     </DialogDescription>
+
+                    {/* Display source configuration fields if loaded */}
+                    {loading ? (
+                        <div className="flex justify-center items-center py-8">
+                            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+                        </div>
+                    ) : sourceDetails ? (
+                        <div className="space-y-6">
+                            {/* Auth fields section */}
+                            {sourceDetails.auth_config_class && (
+                                <div className="bg-muted p-6 rounded-lg mb-4">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="font-medium">Authentication</h3>
+                                        <span className="text-xs text-muted-foreground bg-muted-foreground/20 px-2 py-1 rounded">
+                                            {sourceDetails.auth_config_class}
+                                        </span>
+                                    </div>
+
+                                    {sourceDetails.auth_fields && sourceDetails.auth_fields.fields &&
+                                        Object.keys(sourceDetails.auth_fields.fields).length > 0 ? (
+                                        <div className="space-y-4">
+                                            {Object.entries(sourceDetails.auth_fields.fields || {}).map(([key, field]: [string, any]) => (
+                                                <div key={key} className="space-y-2">
+                                                    <label className="text-sm font-medium">{field.title || key}</label>
+                                                    <input
+                                                        type={field.type === 'password' ? 'password' : 'text'}
+                                                        className={cn(
+                                                            "w-full p-2 rounded border",
+                                                            isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
+                                                        )}
+                                                        placeholder={field.description || ''}
+                                                    />
+                                                    {field.description && (
+                                                        <p className="text-xs text-muted-foreground">{field.description}</p>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="py-4 text-sm text-muted-foreground italic">
+                                            No authentication fields defined for this source.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Config schema section */}
+                            <div className="bg-muted p-6 rounded-lg mb-4">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="font-medium">Configuration</h3>
+                                    {sourceDetails.config_class && (
+                                        <span className="text-xs text-muted-foreground bg-muted-foreground/20 px-2 py-1 rounded">
+                                            {sourceDetails.config_class}
+                                        </span>
+                                    )}
+                                </div>
+
+                                {sourceDetails.config_schema &&
+                                    sourceDetails.config_schema.properties &&
+                                    Object.keys(sourceDetails.config_schema.properties).length > 0 ? (
+                                    <div className="space-y-4">
+                                        {Object.entries(sourceDetails.config_schema.properties || {}).map(([key, field]: [string, any]) => (
+                                            <div key={key} className="space-y-2">
+                                                <label className="text-sm font-medium">{field.title || key}</label>
+                                                <input
+                                                    type="text"
+                                                    className={cn(
+                                                        "w-full p-2 rounded border",
+                                                        isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
+                                                    )}
+                                                    placeholder={field.description || ''}
+                                                />
+                                                {field.description && (
+                                                    <p className="text-xs text-muted-foreground">{field.description}</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="py-4 text-sm text-muted-foreground italic">
+                                        No configuration fields defined for this source.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                            No source configuration available
+                        </div>
+                    )}
 
                     {/* Display both collection data sets */}
                     <div className="bg-muted p-6 rounded-lg mb-4">
@@ -132,6 +253,7 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
                             type="button"
                             onClick={handleComplete}
                             className="px-6 bg-blue-600 hover:bg-blue-700 text-white"
+                            disabled={loading}
                         >
                             Connect
                         </Button>

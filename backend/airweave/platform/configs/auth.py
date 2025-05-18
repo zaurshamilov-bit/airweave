@@ -120,7 +120,7 @@ class AsanaAuthConfig(AuthConfig):
     )
 
 
-class ClickupAuthConfig(AuthConfig):
+class ClickUpAuthConfig(AuthConfig):
     """Clickup authentication credentials schema."""
 
     access_token: str = Field(

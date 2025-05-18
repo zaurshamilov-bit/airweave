@@ -16,7 +16,8 @@ class SourceBase(BaseModel):
     name: str
     description: Optional[str] = None
     auth_type: Optional[AuthType] = None
-    auth_config_class: Optional[str] = None
+    auth_config_class: str
+    config_class: str  # Required field
     short_name: str
     class_name: str
     output_entity_definition_ids: Optional[List[UUID]] = None
