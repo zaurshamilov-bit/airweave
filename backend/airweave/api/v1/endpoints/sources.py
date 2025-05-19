@@ -60,17 +60,28 @@ async def read_source(
         # Get auth fields
         try:
             auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
-            fields = Fields.from_config_class(auth_config_class)
+            auth_fields = Fields.from_config_class(auth_config_class)
         except Exception as e:
             logger.error(f"Failed to get auth config for {short_name}: {str(e)}")
             raise HTTPException(
                 status_code=500, detail=f"Invalid auth configuration for source {short_name}"
             ) from e
 
-        # Create a dictionary with all required fields including auth_fields
+        # Get config fields
+        try:
+            config_class = resource_locator.get_config(source.config_class)
+            config_fields = Fields.from_config_class(config_class)
+        except Exception as e:
+            logger.error(f"Failed to get config for {short_name}: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Invalid configuration for source {short_name}"
+            ) from e
+
+        # Create a dictionary with all required fields including auth_fields and config_fields
         source_dict = {
             **{key: getattr(source, key) for key in source.__dict__ if not key.startswith("_")},
-            "auth_fields": fields,
+            "auth_fields": auth_fields,
+            "config_fields": config_fields,
         }
 
         # Validate in one step with all fields present
@@ -120,17 +131,24 @@ async def read_sources(
             # Get authentication configuration class
             try:
                 auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
+                auth_fields = Fields.from_config_class(auth_config_class)
             except AttributeError as e:
                 invalid_sources.append(f"{source.short_name} (invalid auth_config_class: {str(e)})")
                 continue
 
-            # Generate fields from config class
-            fields = Fields.from_config_class(auth_config_class)
+            # Get configuration class
+            try:
+                config_class = resource_locator.get_config(source.config_class)
+                config_fields = Fields.from_config_class(config_class)
+            except AttributeError as e:
+                invalid_sources.append(f"{source.short_name} (invalid config_class: {str(e)})")
+                continue
 
-            # Create source model with all fields including auth_fields
+            # Create source model with all fields including auth_fields and config_fields
             source_dict = {
                 **{key: getattr(source, key) for key in source.__dict__ if not key.startswith("_")},
-                "auth_fields": fields,
+                "auth_fields": auth_fields,
+                "config_fields": config_fields,
             }
 
             source_model = schemas.Source.model_validate(source_dict)
