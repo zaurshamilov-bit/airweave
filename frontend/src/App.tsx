@@ -11,6 +11,7 @@ import Chat from '@/pages/Chat';
 import WhiteLabel from '@/pages/WhiteLabel';
 import CreateWhiteLabel from '@/pages/CreateWhiteLabel';
 import WhiteLabelDetail from '@/pages/WhiteLabelDetail';
+import WhiteLabelEdit from '@/pages/WhiteLabelEdit';
 import { useCollectionsStore } from '@/lib/stores';
 import { NotFound } from '@/pages/NotFound';
 import { AuthGuard } from '@/components/AuthGuard';
@@ -45,6 +46,7 @@ function App() {
           <Route path={protectedPaths.whiteLabelTab} element={<WhiteLabelDetail />} />
           <Route path={protectedPaths.whiteLabelCreate} element={<CreateWhiteLabel />} />
           <Route path={protectedPaths.whiteLabelDetail} element={<WhiteLabelDetail />} />
+          <Route path={protectedPaths.whiteLabelEdit} element={<WhiteLabelEdit />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

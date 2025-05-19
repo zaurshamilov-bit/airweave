@@ -7,6 +7,7 @@ export const protectedPaths = {
     whiteLabelTab: "/white-label/:id",
     whiteLabelCreate: "/white-label/create",
     whiteLabelDetail: "/white-label/:id",
+    whiteLabelEdit: "/white-label/:id/edit",
     authCallback: "/auth/callback/:short_name",
 }
 

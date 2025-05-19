@@ -220,10 +220,6 @@ const WhiteLabelDetail = () => {
         <TabsContent value="connections" className="space-y-6 pt-4">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold">Source Connections</h2>
-            <Button onClick={() => window.open(`/source-connections?white_label=${whiteLabel.id}`, "_blank")}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Connection
-            </Button>
           </div>
 
           {sourceConnections.length === 0 ? (
@@ -236,10 +232,6 @@ const WhiteLabelDetail = () => {
                   <p className="text-sm text-muted-foreground mb-4">
                     Source connections will be automatically created when users authenticate with this integration.
                   </p>
-                  <Button onClick={() => window.open(`/source-connections?white_label=${whiteLabel.id}`, "_blank")}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Source Connection
-                  </Button>
                 </div>
               </CardContent>
             </Card>

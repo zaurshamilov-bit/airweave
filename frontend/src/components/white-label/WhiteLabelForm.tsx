@@ -46,6 +46,8 @@ interface WhiteLabelResponse {
 
 interface WhiteLabelFormProps {
   onSuccess?: (data: WhiteLabelResponse) => void;
+  initialData?: WhiteLabelResponse;
+  isEditing?: boolean;
 }
 
 interface WhiteLabelFormData {
@@ -67,12 +69,19 @@ const formSchema = z.object({
   allowed_origins: z.string().min(1, "Allowed origins is required"),
 });
 
-export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
+export function WhiteLabelForm({ onSuccess, initialData, isEditing }: WhiteLabelFormProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const form = useForm<WhiteLabelFormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
+    defaultValues: initialData ? {
+      name: initialData.name,
+      source_short_name: initialData.source_short_name,
+      redirect_url: initialData.redirect_url,
+      client_id: initialData.client_id,
+      client_secret: "", // Client secret is not returned from API for security
+      allowed_origins: initialData.allowed_origins || "",
+    } : {
       name: "",
       source_short_name: "",
       redirect_url: "",
@@ -107,9 +116,9 @@ export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
     fetchSources();
   }, []);
 
-  // If editing an existing WhiteLabel, fetch it
+  // If editing an existing WhiteLabel and no initialData was provided, fetch it
   useEffect(() => {
-    if (!id) return;
+    if (!id || initialData) return;
     async function fetchWhiteLabel() {
       setLoading(true);
       setError(null);
@@ -134,7 +143,7 @@ export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
       }
     }
     fetchWhiteLabel();
-  }, [id, form]);
+  }, [id, form, initialData]);
 
   const onSubmit = async (values: WhiteLabelFormData) => {
     setLoading(true);
@@ -185,7 +194,7 @@ export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
 
       const data: WhiteLabelResponse = await response.json();
 
-      if (id) {
+      if (id || isEditing) {
         navigate("/white-label");
       } else {
         // Instead of navigating, emit the created data
@@ -219,7 +228,7 @@ export function WhiteLabelForm({ onSuccess }: WhiteLabelFormProps) {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">
-        {id ? "Edit White Label" : "Create White Label"}
+        {id || isEditing ? "Edit White Label" : "Create White Label"}
       </h2>
 
       {error && <p className="text-red-500">{error}</p>}
