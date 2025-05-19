@@ -100,10 +100,6 @@ class EntityProcessor:
         entity.sync_job_id = sync_context.sync_job.id
         entity.sync_metadata = sync_context.sync.sync_metadata
 
-        if sync_context.sync.white_label_id:
-            entity.white_label_user_identifier = sync_context.sync.white_label_user_identifier
-            entity.white_label_id = sync_context.sync.white_label_id
-
         return entity
 
     async def _determine_action(

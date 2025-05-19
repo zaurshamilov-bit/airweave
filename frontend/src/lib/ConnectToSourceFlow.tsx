@@ -11,6 +11,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { redirectWithError } from "@/lib/error-utils";
+import { protectedPaths } from "@/constants/paths";
 
 /**
  * Interface for source details returned from the API
@@ -441,7 +442,7 @@ export const useConnectToSourceFlow = () => {
     ): Promise<OAuthRedirectInfo> => {
         try {
             // Store data for after OAuth redirect
-            localStorage.setItem(OAUTH_RETURN_URL_KEY, `/dashboard`);
+            localStorage.setItem(OAUTH_RETURN_URL_KEY, protectedPaths.dashboard);
             localStorage.setItem(OAUTH_COLLECTION_DETAILS_KEY, JSON.stringify(collectionDetails));
 
             const storageKey = `oauth2_config_${sourceShortName}`;

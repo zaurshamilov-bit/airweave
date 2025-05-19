@@ -11,12 +11,9 @@ from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.connection_service import connection_service
-from airweave.core.constants.native_connections import NATIVE_QDRANT_UUID
-from airweave.core.shared_models import SyncStatus
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.db.session import get_db_context
-from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.integration_credential import IntegrationType
 
 router = TrailingSlashRouter()
@@ -332,104 +329,6 @@ async def create_source_connection_from_oauth(
         )
 
     return source_connection
-
-
-@router.post("/oauth2/white-label/{white_label_id}/code", response_model=schemas.Connection)
-async def send_oauth2_white_label_code(
-    *,
-    db: AsyncSession = Depends(deps.get_db),
-    white_label_id: UUID,
-    code: str = Body(...),
-    user: schemas.User = Depends(deps.get_user),
-    background_tasks: BackgroundTasks,
-) -> schemas.Connection:
-    """Exchange the OAuth2 authorization code for a white label integration.
-
-    Args:
-    -----
-        db: The database session
-        white_label_id: The ID of the white label integration
-        code: The authorization code
-        user: The current user
-        background_tasks: The background tasks
-
-    Returns:
-    --------
-        connection (schemas.Connection): The created connection
-    """
-    connection = await connection_service.connect_with_white_label_oauth2_code(
-        db, white_label_id, code, user
-    )
-
-    # Create and run sync for the connection
-    async with get_db_context() as sync_db:
-        async with UnitOfWork(sync_db) as uow:
-            white_label = await crud.white_label.get(sync_db, id=white_label_id, current_user=user)
-
-            if not white_label:
-                raise HTTPException(status_code=404, detail="White label integration not found")
-
-            white_label_schema = schemas.WhiteLabel.model_validate(
-                white_label, from_attributes=True
-            )
-
-            # Create sync for the connection
-            sync_in = schemas.SyncBase(
-                name=f"Sync for {connection.name} from white label {white_label_schema.name}",
-                source_connection_id=connection.id,
-                destination_connection_ids=[NATIVE_QDRANT_UUID],
-                status=SyncStatus.ACTIVE,
-                white_label_id=white_label_schema.id,
-            )
-
-            sync_schema = await sync_service.create(sync_db, sync_in, user, uow)
-            sync_dag = await crud.sync_dag.get_by_sync_id(
-                db=sync_db, sync_id=sync_schema.id, current_user=user
-            )
-
-            sync_job_create = schemas.SyncJobCreate(sync_id=sync_schema.id)
-            sync_job = await crud.sync_job.create(
-                sync_db, obj_in=sync_job_create, current_user=user, uow=uow
-            )
-
-            await uow.commit()
-            await uow.session.refresh(sync_job)
-            await uow.session.refresh(sync_dag)
-
-            # Add background task to run the sync
-            sync_job_schema = schemas.SyncJob.model_validate(sync_job)
-            sync_dag_schema = schemas.SyncDag.model_validate(sync_dag)
-            background_tasks.add_task(
-                sync_service.run,
-                sync_schema,
-                sync_job_schema,
-                sync_dag_schema,
-                user,
-            )
-
-    return connection
-
-
-@router.get("/oauth2/white-label/{white_label_id}/auth_url")
-async def get_oauth2_white_label_auth_url(
-    *,
-    db: AsyncSession = Depends(deps.get_db),
-    white_label_id: UUID,
-    user: schemas.User = Depends(deps.get_user),
-) -> str:
-    """Get the OAuth2 authorization URL for a white label integration.
-
-    Args:
-    -----
-        db: The database session
-        white_label_id: The ID of the white label integration
-        user: The current user
-
-    Returns:
-    --------
-        str: The OAuth2 authorization URL
-    """
-    return await connection_service.get_white_label_oauth2_auth_url(db, white_label_id, user)
 
 
 @router.post(

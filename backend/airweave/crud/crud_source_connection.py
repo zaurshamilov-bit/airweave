@@ -317,5 +317,32 @@ class CRUDSourceConnection(
 
         return source_connection
 
+    async def get_for_white_label(
+        self, db: AsyncSession, *, white_label_id: UUID, current_user: User
+    ) -> List[SourceConnection]:
+        """Get all source connections for a specific white label.
+
+        Args:
+            db: The database session
+            white_label_id: The ID of the white label
+            current_user: The current user
+
+        Returns:
+            A list of source connections for the white label
+        """
+        query = select(self.model).where(
+            self.model.white_label_id == white_label_id,
+            self.model.organization_id == current_user.organization_id,
+        )
+        result = await db.execute(query)
+        source_connections = list(result.scalars().all())
+
+        # Attach latest sync job info and compute statuses
+        source_connections = await self._attach_latest_sync_job_info(db, source_connections)
+        # Also attach schedule info
+        source_connections = await self._attach_sync_schedule_info(db, source_connections)
+
+        return source_connections
+
 
 source_connection = CRUDSourceConnection(SourceConnection)

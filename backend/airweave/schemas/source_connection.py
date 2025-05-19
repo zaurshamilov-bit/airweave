@@ -18,6 +18,7 @@ class SourceConnectionBase(BaseModel):
     description: Optional[str] = None
     config_fields: Optional[ConfigValues] = None  # stored in core table
     short_name: str  # Short name of the source
+    white_label_id: Optional[UUID] = None  # ID of the white label integration
 
     class Config:
         """Pydantic config for SourceConnectionBase."""
@@ -99,6 +100,7 @@ class SourceConnectionUpdate(BaseModel):
     config_fields: Optional[ConfigValues] = None
     cron_schedule: Optional[str] = None
     connection_id: Optional[UUID] = None
+    white_label_id: Optional[UUID] = None
 
 
 class SourceConnectionInDBBase(SourceConnectionBase):
@@ -111,6 +113,7 @@ class SourceConnectionInDBBase(SourceConnectionBase):
     modified_at: datetime
     connection_id: Optional[UUID] = None  # ID of the underlying connection object
     collection: str
+    white_label_id: Optional[UUID] = None
     created_by_email: EmailStr
     modified_by_email: EmailStr
 
@@ -169,6 +172,7 @@ class SourceConnectionListItem(BaseModel):
     modified_at: datetime
     sync_id: UUID
     collection: str
+    white_label_id: Optional[UUID] = None
 
     class Config:
         """Pydantic config for SourceConnectionListItem."""

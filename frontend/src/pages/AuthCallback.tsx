@@ -22,6 +22,7 @@ import { apiClient } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { OAUTH_KEYS } from "@/lib/ConnectToSourceFlow";
 import { redirectWithError } from "@/lib/error-utils";
+import { protectedPaths } from "@/constants/paths";
 
 /**
  * AuthCallback Component
@@ -97,7 +98,7 @@ export function AuthCallback() {
     }
 
     // Get return URL or default to dashboard
-    const returnUrl = localStorage.getItem(OAUTH_KEYS.RETURN_URL) || "/dashboard";
+    const returnUrl = localStorage.getItem(OAUTH_KEYS.RETURN_URL) || protectedPaths.dashboard;
 
     // Use the common error utility for consistent error handling
     if (typeof window !== 'undefined') {
@@ -105,7 +106,7 @@ export function AuthCallback() {
       redirectWithError(window.location, error, sourceName);
     } else {
       // Fallback to direct URL construction
-      safeNavigate(`/dashboard?connected=error`, { replace: true });
+      safeNavigate(`${protectedPaths.dashboard}?connected=error`, { replace: true });
     }
   };
 
@@ -195,7 +196,7 @@ export function AuthCallback() {
           hasCollectionDetails: !!collectionDetailsJson
         });
 
-        const targetUrl = returnUrl || "/dashboard";
+        const targetUrl = returnUrl || protectedPaths.dashboard;
         let collectionDetails;
 
         try {

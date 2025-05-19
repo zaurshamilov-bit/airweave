@@ -29,6 +29,7 @@ import { useNavigate } from "react-router-dom";
 import { redirectWithError } from "@/lib/error-utils";
 import { SourceButton } from "@/components/dashboard/SourceButton";
 import { useSourcesStore, Source } from "@/lib/stores";
+import { protectedPaths } from "@/constants/paths";
 
 /**
  * Props for the SourceSelectorView component
