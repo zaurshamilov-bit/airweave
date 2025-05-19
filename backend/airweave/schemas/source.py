@@ -79,3 +79,4 @@ class Source(SourceInDBBase):
     """Schema for Source."""
 
     auth_fields: Fields
+    config_fields: Optional[Fields] = None  # Not stored in DB, added during API response

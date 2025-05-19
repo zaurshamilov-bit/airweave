@@ -34,7 +34,8 @@ class SourceConnectionCreate(SourceConnectionBase):
 
     collection: Optional[str] = None
     cron_schedule: Optional[str] = None
-    auth_fields: ConfigValues  # part of create, stored in integration_credential
+    auth_fields: Optional[ConfigValues] = None
+    credential_id: Optional[UUID] = None
     sync_immediately: bool = True
 
     @field_validator("cron_schedule")
@@ -78,6 +79,7 @@ class SourceConnectionCreate(SourceConnectionBase):
         # Auxiliary attributes used in the creation process but not directly in the model
         auxiliary_attrs = {
             "auth_fields": data.pop("auth_fields", None),
+            "credential_id": data.pop("credential_id", None),
             "cron_schedule": data.pop("cron_schedule", None),
             "sync_immediately": data.pop("sync_immediately", True),
         }
@@ -125,7 +127,7 @@ class SourceConnection(SourceConnectionInDBBase):
 
     # str if encrypted, ConfigValues if not
     # comes from integration_credential
-    auth_fields: ConfigValues
+    auth_fields: Optional[ConfigValues] = None
 
     # Ephemeral status derived from the latest sync job
     status: Optional[SourceConnectionStatus] = None

@@ -57,6 +57,8 @@ from .integration_credential import (
     IntegrationCredential,
     IntegrationCredentialCreate,
     IntegrationCredentialCreateEncrypted,
+    IntegrationCredentialInDB,
+    IntegrationCredentialRawCreate,
     IntegrationCredentialUpdate,
 )
 from .organization import (

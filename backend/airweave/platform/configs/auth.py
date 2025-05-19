@@ -118,6 +118,9 @@ class AsanaAuthConfig(AuthConfig):
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Asana app."
     )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Asana app."
+    )
 
 
 class ClickUpAuthConfig(AuthConfig):
@@ -134,6 +137,9 @@ class ConfluenceAuthConfig(AuthConfig):
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Confluence app."
     )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Confluence app."
+    )
 
 
 class DropboxAuthConfig(AuthConfig):
@@ -147,6 +153,9 @@ class DropboxAuthConfig(AuthConfig):
     )
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Dropbox app."
+    )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Dropbox app."
     )
 
 
@@ -201,6 +210,9 @@ class GmailAuthConfig(AuthConfig):
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Gmail app."
     )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Gmail app."
+    )
 
 
 class GoogleCalendarAuthConfig(AuthConfig):
@@ -212,6 +224,9 @@ class GoogleCalendarAuthConfig(AuthConfig):
     )
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Google Calendar app."
+    )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Google Calendar app."
     )
 
 
@@ -225,6 +240,9 @@ class GoogleDriveAuthConfig(AuthConfig):
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Google Drive app."
     )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Google Drive app."
+    )
 
 
 class HubspotAuthConfig(AuthConfig):
@@ -232,6 +250,9 @@ class HubspotAuthConfig(AuthConfig):
 
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Hubspot app."
+    )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Hubspot app."
     )
 
 
@@ -248,6 +269,9 @@ class JiraAuthConfig(AuthConfig):
 
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Jira app."
+    )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Jira app."
     )
 
 
@@ -283,6 +307,9 @@ class OneDriveAuthConfig(AuthConfig):
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your OneDrive app."
     )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your OneDrive app."
+    )
 
 
 class OracleAuthConfig(BaseDatabaseAuthConfig):
@@ -295,6 +322,9 @@ class OutlookCalendarAuthConfig(AuthConfig):
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Outlook Calendar app."
     )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Outlook Calendar app."
+    )
 
 
 class OutlookMailAuthConfig(AuthConfig):
@@ -302,6 +332,9 @@ class OutlookMailAuthConfig(AuthConfig):
 
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Outlook Mail app."
+    )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Outlook Mail app."
     )
 
 
@@ -355,4 +388,7 @@ class ZenDeskAuthConfig(AuthConfig):
 
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your ZenDesk app."
+    )
+    access_token: str = Field(
+        title="Access Token", description="The access token for your ZenDesk app."
     )

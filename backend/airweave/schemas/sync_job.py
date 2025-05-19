@@ -1,7 +1,7 @@
 """SyncJob schema."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
@@ -24,6 +24,7 @@ class SyncJobBase(BaseModel):
     completed_at: Optional[datetime] = None
     failed_at: Optional[datetime] = None
     error: Optional[str] = None
+    validated_auth_fields: Optional[Dict[str, Any]] = None
 
     class Config:
         """Pydantic config for SyncJobBase."""
