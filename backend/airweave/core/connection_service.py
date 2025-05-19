@@ -730,5 +730,160 @@ class ConnectionService:
             AuthType.oauth2_with_refresh_rotating,
         )
 
+    async def create_integration_credential(
+        self,
+        db: AsyncSession,
+        integration_type: IntegrationType,
+        short_name: str,
+        credential_in: schemas.IntegrationCredentialRawCreate,
+        user: schemas.User,
+    ) -> schemas.IntegrationCredentialInDB:
+        """Create an integration credential with validation.
+
+        Args:
+            db: The database session
+            integration_type: Type of integration
+            short_name: Short name of the integration
+            credential_in: The credential data with auth fields
+            user: The current user
+
+        Returns:
+            The created integration credential with ID
+
+        Raises:
+            HTTPException: If validation fails or integration not found
+        """
+        # Get the integration based on type
+        integration = None
+        auth_type = None
+        auth_config_class = None
+
+        if integration_type == IntegrationType.SOURCE:
+            integration = await crud.source.get_by_short_name(db, short_name=short_name)
+            if integration:
+                auth_type = integration.auth_type
+                auth_config_class = integration.auth_config_class
+        elif integration_type == IntegrationType.DESTINATION:
+            integration = await crud.destination.get_by_short_name(db, short_name=short_name)
+            if integration:
+                auth_type = integration.auth_type
+                auth_config_class = integration.auth_config_class
+        elif integration_type == IntegrationType.EMBEDDING_MODEL:
+            integration = await crud.embedding_model.get_by_short_name(db, short_name=short_name)
+            if integration:
+                auth_type = integration.auth_type
+                auth_config_class = integration.auth_config_class
+
+        if not integration:
+            raise HTTPException(
+                status_code=404, detail=f"Integration not found: {integration_type} {short_name}"
+            )
+
+        # Check if auth config class is defined
+        BASE_ERROR_MESSAGE = (
+            f"See https://docs.airweave.ai/docs/connectors/{short_name}#authentication "
+            f"for more information."
+        )
+
+        if not auth_config_class:
+            error_msg = (
+                f"{integration_type} {short_name} does not have an auth configuration defined."
+            )
+            raise HTTPException(
+                status_code=422,
+                detail=error_msg + BASE_ERROR_MESSAGE,
+            )
+
+        # Validate auth fields
+        validated_auth_fields = None
+        try:
+            from airweave.platform.locator import resource_locator
+
+            auth_config_class_obj = resource_locator.get_auth_config(auth_config_class)
+            auth_config = auth_config_class_obj(**credential_in.auth_fields)
+            validated_auth_fields = auth_config.model_dump()
+        except Exception as e:
+            connection_logger.error(f"Failed to validate auth fields: {e}")
+            self._handle_validation_error(e, auth_config_class, BASE_ERROR_MESSAGE)
+
+        # Encrypt the validated auth fields
+        encrypted_credentials = credentials.encrypt(validated_auth_fields)
+
+        # Create the integration credential
+        return await self._create_credential_in_db(
+            db,
+            credential_in,
+            integration,
+            integration_type,
+            short_name,
+            auth_type,
+            encrypted_credentials,
+            auth_config_class,
+            user,
+        )
+
+    def _handle_validation_error(self, error, auth_config_class, base_error_message):
+        """Handle validation errors for auth fields."""
+        from pydantic import ValidationError
+
+        if isinstance(error, ValidationError):
+            # Extract the field names and error messages
+            error_messages = []
+            for err in error.errors():
+                field = ".".join(str(loc) for loc in err.get("loc", []))
+                msg = err.get("msg", "")
+                error_messages.append(f"Field '{field}': {msg}")
+
+            error_detail = f"Invalid configuration for {auth_config_class}:\n" + "\n".join(
+                error_messages
+            )
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid auth fields: {error_detail}. " + base_error_message,
+            ) from error
+        else:
+            # For other types of errors
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid auth fields: {str(error)}. " + base_error_message,
+            ) from error
+
+    async def _create_credential_in_db(
+        self,
+        db,
+        credential_in,
+        integration,
+        integration_type,
+        short_name,
+        auth_type,
+        encrypted_credentials,
+        auth_config_class,
+        user,
+    ):
+        """Create the integration credential in the database."""
+        async with UnitOfWork(db) as uow:
+            integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
+                name=credential_in.name,
+                description=credential_in.description
+                or f"Credentials for {integration.name} - {user.email}",
+                integration_short_name=short_name,
+                integration_type=integration_type,
+                auth_type=auth_type,
+                encrypted_credentials=encrypted_credentials,
+                auth_config_class=auth_config_class,
+            )
+
+            integration_credential = await crud.integration_credential.create(
+                uow.session, obj_in=integration_cred_in, current_user=user, uow=uow
+            )
+
+            await uow.commit()
+            await uow.session.refresh(integration_credential)
+
+            # Get the schema model from the database object and return
+            return schemas.IntegrationCredentialInDB.model_validate(
+                integration_credential, from_attributes=True
+            )
+
 
 connection_service = ConnectionService()
