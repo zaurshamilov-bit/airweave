@@ -14,6 +14,7 @@ import { NotFound } from '@/pages/NotFound';
 import { AuthGuard } from '@/components/AuthGuard';
 import Login from '@/pages/Login';
 import Callback from '@/pages/Callback';
+import { protectedPaths, publicPaths } from '@/constants/paths';
 
 function App() {
   // Initialize collections event listeners when the app loads
@@ -26,19 +27,19 @@ function App() {
     <ThemeProvider defaultTheme="dark" storageKey="airweave-ui-theme">
       <Routes>
         {/* Public routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/callback" element={<Callback />} />
+        <Route path={publicPaths.login} element={<Login />} />
+        <Route path={publicPaths.callback} element={<Callback />} />
 
         {/* Protected routes */}
         <Route element={<AuthGuard><DashboardLayout /></AuthGuard>}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/collections" element={<CollectionsView />} />
-          <Route path="/collections/:readable_id" element={<CollectionDetailView />} />
-          <Route path="/api-keys" />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/chat/:id" element={<Chat />} />
-          <Route path="/white-label" element={<WhiteLabel />} />
-          <Route path="/white-label/:tab" element={<WhiteLabel />} />
+          <Route path={protectedPaths.dashboard} element={<Dashboard />} />
+          <Route path={protectedPaths.collections} element={<CollectionsView />} />
+          <Route path={protectedPaths.collectionDetail} element={<CollectionDetailView />} />
+          <Route path={protectedPaths.apiKeys} />
+          <Route path={protectedPaths.chat} element={<Chat />} />
+          <Route path={protectedPaths.chatDetail} element={<Chat />} />
+          <Route path={protectedPaths.whiteLabel} element={<WhiteLabel />} />
+          <Route path={protectedPaths.whiteLabelTab} element={<WhiteLabel />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
