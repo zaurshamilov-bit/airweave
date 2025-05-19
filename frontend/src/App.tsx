@@ -17,6 +17,7 @@ import { AuthGuard } from '@/components/AuthGuard';
 import Login from '@/pages/Login';
 import Callback from '@/pages/Callback';
 import { protectedPaths, publicPaths } from '@/constants/paths';
+import { AuthCallback } from '@/pages/AuthCallback';
 
 function App() {
   // Initialize collections event listeners when the app loads
@@ -32,16 +33,18 @@ function App() {
         <Route path={publicPaths.login} element={<Login />} />
         <Route path={publicPaths.callback} element={<Callback />} />
 
+
         {/* Protected routes */}
         <Route element={<AuthGuard><DashboardLayout /></AuthGuard>}>
           <Route path={protectedPaths.dashboard} element={<Dashboard />} />
           <Route path={protectedPaths.collections} element={<CollectionsView />} />
           <Route path={protectedPaths.collectionDetail} element={<CollectionDetailView />} />
           <Route path={protectedPaths.apiKeys} />
-          <Route path={protectedPaths.chat} element={<Chat />} />
-          <Route path={protectedPaths.chatDetail} element={<Chat />} />
+          <Route path={protectedPaths.authCallback} element={<AuthCallback />} />
           <Route path={protectedPaths.whiteLabel} element={<WhiteLabel />} />
-          <Route path={protectedPaths.whiteLabelTab} element={<WhiteLabel />} />
+          <Route path={protectedPaths.whiteLabelTab} element={<WhiteLabelDetail />} />
+          <Route path={protectedPaths.whiteLabelCreate} element={<CreateWhiteLabel />} />
+          <Route path={protectedPaths.whiteLabelDetail} element={<WhiteLabelDetail />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

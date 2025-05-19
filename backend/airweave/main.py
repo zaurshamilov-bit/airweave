@@ -93,7 +93,10 @@ CORS_ORIGINS = [
 
 if settings.ADDITIONAL_CORS_ORIGINS:
     additional_origins = settings.ADDITIONAL_CORS_ORIGINS.split(",")
-    CORS_ORIGINS.extend(additional_origins)
+    if settings.ENVIRONMENT == "local":
+        CORS_ORIGINS.append("*")  # Allow all origins in local environment
+    else:
+        CORS_ORIGINS.extend(additional_origins)
 
 # Add the dynamic CORS middleware that handles both default origins and white label specific origins
 app.add_middleware(
