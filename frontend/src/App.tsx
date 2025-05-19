@@ -14,7 +14,7 @@ import { NotFound } from '@/pages/NotFound';
 import { AuthGuard } from '@/components/AuthGuard';
 import Login from '@/pages/Login';
 import Callback from '@/pages/Callback';
-import { protectedPaths, publicPaths } from './constants/paths';
+import { protectedPaths, publicPaths } from '@/constants/paths';
 
 function App() {
   // Initialize collections event listeners when the app loads
