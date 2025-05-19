@@ -1,6 +1,6 @@
 """API endpoints for managing source connections."""
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import BackgroundTasks, Body, Depends, Query
@@ -187,6 +187,7 @@ async def run_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID,
+    auth_fields: Optional[Dict[str, Any]] = Body(None, embed=True),
     user: schemas.User = Depends(deps.get_user),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnectionJob:
@@ -195,6 +196,7 @@ async def run_source_connection(
     Args:
         db: The database session
         source_connection_id: The ID of the source connection to run
+        auth_fields: Optional auth fields to use instead of stored credentials
         user: The current user
         background_tasks: Background tasks for async operations
 
@@ -202,7 +204,7 @@ async def run_source_connection(
         The created sync job
     """
     sync_job = await source_connection_service.run_source_connection(
-        db=db, source_connection_id=source_connection_id, current_user=user
+        db=db, source_connection_id=source_connection_id, current_user=user, auth_fields=auth_fields
     )
 
     # Start the sync job in the background
@@ -220,8 +222,18 @@ async def run_source_connection(
     collection = schemas.Collection.model_validate(collection, from_attributes=True)
     source_connection = schemas.SourceConnection.from_orm_with_collection_mapping(source_connection)
 
+    # Pass validated auth fields to the sync service
     background_tasks.add_task(
-        sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user
+        sync_service.run,
+        sync,
+        sync_job,
+        sync_dag,
+        collection,
+        source_connection,
+        user,
+        auth_fields=sync_job.validated_auth_fields
+        if hasattr(sync_job, "validated_auth_fields")
+        else None,
     )
 
     return sync_job.to_source_connection_job(source_connection_id)
@@ -294,30 +306,47 @@ async def get_oauth2_authorization_url(
 
 
 @router.post(
-    "/{source_short_name}/exchange_authorization_code_for_token",
-    response_model=schemas.OAuth2TokenResponse,
+    "/{source_short_name}/code_to_token_credentials",
+    response_model=schemas.IntegrationCredentialInDB,
 )
-async def exchange_authorization_code_for_token(
+async def create_credentials_from_authorization_code(
     *,
+    db: AsyncSession = Depends(deps.get_db),
     source_short_name: str,
     code: str,
+    credential_name: Optional[str] = None,
+    credential_description: Optional[str] = None,
     client_id: Optional[str] = None,
     client_secret: Optional[str] = None,
-) -> schemas.OAuth2TokenResponse:
-    """Exchange an OAuth2 authorization code for a token.
+    user: schemas.User = Depends(deps.get_user),
+) -> schemas.IntegrationCredentialInDB:
+    """Exchange OAuth2 code for a token and create integration credentials.
+
+    This endpoint:
+    1. Exchanges the authorization code for a token
+    2. Creates and stores integration credentials with the token
+    3. Returns the created credential
 
     Args:
+        db: The database session
         source_short_name: The short name of the source
         code: The authorization code to exchange
+        credential_name: Optional custom name for the credential
+        credential_description: Optional description for the credential
         client_id: Optional client ID to override the default
         client_secret: Optional client secret to override the default
+        user: The current user
 
     Returns:
-        The OAuth2 token response
+        The created integration credential
     """
-    return await source_connection_service.exchange_authorization_code_for_token(
+    return await source_connection_service.create_credential_from_oauth2_code(
+        db=db,
         source_short_name=source_short_name,
         code=code,
+        credential_name=credential_name,
+        credential_description=credential_description,
         client_id=client_id,
         client_secret=client_secret,
+        current_user=user,
     )
