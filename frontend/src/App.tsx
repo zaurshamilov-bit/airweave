@@ -9,6 +9,8 @@ import CollectionDetailView from "@/pages/CollectionDetailView";
 import CollectionsView from "@/pages/CollectionsView";
 import Chat from '@/pages/Chat';
 import WhiteLabel from '@/pages/WhiteLabel';
+import CreateWhiteLabel from '@/pages/CreateWhiteLabel';
+import WhiteLabelDetail from '@/pages/WhiteLabelDetail';
 import { useCollectionsStore } from '@/lib/stores';
 import { NotFound } from '@/pages/NotFound';
 import { AuthGuard } from '@/components/AuthGuard';
@@ -38,7 +40,9 @@ function App() {
           <Route path="/chat" element={<Chat />} />
           <Route path="/chat/:id" element={<Chat />} />
           <Route path="/white-label" element={<WhiteLabel />} />
-          <Route path="/white-label/:tab" element={<WhiteLabel />} />
+          <Route path="/white-label/create" element={<CreateWhiteLabel />} />
+          <Route path="/white-label/:id" element={<WhiteLabelDetail />} />
+          <Route path="/white-label/:id/edit" element={<CreateWhiteLabel />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
