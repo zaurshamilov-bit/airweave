@@ -412,6 +412,7 @@ const DashboardLayout = () => {
         isOpen={showCreateCollectionFlow}
         onOpenChange={setShowCreateCollectionFlow}
         mode="create-collection"
+        dialogId="dashboard-layout-create-collection"
         onComplete={handleCreateCollectionComplete}
       />
     </GradientBackground>

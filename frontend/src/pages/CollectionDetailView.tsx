@@ -719,6 +719,7 @@ const Collections = () => {
                             mode="add-source"
                             collectionId={collection.readable_id}
                             collectionName={collection.name}
+                            dialogId="collection-detail-add-source"
                             onComplete={() => {
                                 setShowAddSourceDialog(false);
                                 reloadData();

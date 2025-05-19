@@ -274,16 +274,28 @@ const Dashboard = () => {
     },
   ];
 
+  // Log when dialog open state changes
+  useEffect(() => {
+    console.log("🚪 Dashboard dialog open state:", dialogOpen);
+  }, [dialogOpen]);
+
+  // Modify the dialog open handler
+  const handleDialogOpen = (open: boolean) => {
+    console.log("🚪 Dashboard handleDialogOpen called with:", open);
+    setDialogOpen(open);
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
       {/* TODO: take care of error */}
       <DialogFlow
         isOpen={dialogOpen}
-        onOpenChange={handleDialogClose}
+        onOpenChange={handleDialogOpen}
         mode="source-button"
         sourceId={selectedSource?.id}
         sourceName={selectedSource?.name}
         sourceShortName={selectedSource?.short_name}
+        dialogId="dashboard-source-dialog"
         onComplete={() => {
           // Handle completion
           fetchCollections(false);
