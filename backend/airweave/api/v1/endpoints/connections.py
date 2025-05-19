@@ -461,3 +461,38 @@ async def connect_slack_with_token(
     return await connection_service.connect_with_direct_token(
         db, "slack", token, name, user, validate_token=True
     )
+
+
+@router.post(
+    "/credentials/{integration_type}/{short_name}", response_model=schemas.IntegrationCredentialInDB
+)
+async def create_integration_credential(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    integration_type: IntegrationType,
+    short_name: str,
+    credential_in: schemas.IntegrationCredentialRawCreate = Body(...),
+    user: schemas.User = Depends(deps.get_user),
+) -> schemas.IntegrationCredentialInDB:
+    """Create integration credentials with validation.
+
+    1. Takes auth_fields and validates them against the auth_config_class
+    2. Encrypts and stores them in integration_credentials
+    3. Returns the integration credential with ID
+
+    Args:
+        db: The database session
+        integration_type: Type of integration (SOURCE, DESTINATION, etc.)
+        short_name: Short name of the integration
+        credential_in: The credential data with auth_fields
+        user: The current user
+
+    Returns:
+        The created integration credential
+
+    Raises:
+        HTTPException: If validation fails
+    """
+    return await connection_service.create_integration_credential(
+        db, integration_type, short_name, credential_in, user
+    )
