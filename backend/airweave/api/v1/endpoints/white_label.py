@@ -277,7 +277,9 @@ async def list_white_label_source_connections(
 
 
 @router.api_route(
-    "/{white_label_id}/oauth2/code", response_model=schemas.Connection, methods=["POST", "OPTIONS"]
+    "/{white_label_id}/oauth2/code",
+    response_model=schemas.SourceConnection,
+    methods=["POST", "OPTIONS"],
 )
 async def exchange_white_label_oauth2_code(
     *,
@@ -344,17 +346,16 @@ async def exchange_white_label_oauth2_code(
             if not source_connection_in.short_name:
                 source_connection_in.short_name = white_label.source_short_name
 
-        async with get_db_context() as sync_db:
-            # Create the source connection with the connection ID
-            (
-                source_connection,
-                sync_job,
-            ) = await source_connection_service.create_source_connection_from_oauth(
-                db=db,
-                source_connection_in=source_connection_in,
-                connection_id=connection.id,
-                current_user=user,
-            )
+        # Create the source connection with the connection ID
+        (
+            source_connection,
+            sync_job,
+        ) = await source_connection_service.create_source_connection_from_oauth(
+            db=db,
+            source_connection_in=source_connection_in,
+            connection_id=connection.id,
+            current_user=user,
+        )
 
         # If job was created and sync_immediately is True, start it in background
         if sync_job:
@@ -379,7 +380,10 @@ async def exchange_white_label_oauth2_code(
                 sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user
             )
 
-        return collection
+        # Make sure we are returning the source_connection, not anything else
+        logger.debug(f"Returning source_connection: {source_connection}")
+        return source_connection
+
     except Exception as e:
         logger.error(f"Failed to exchange OAuth2 code for WhiteLabel {white_label.id}: {e}")
         raise HTTPException(status_code=400, detail="Failed to exchange OAuth2 code.") from e

@@ -107,15 +107,15 @@ class SyncContextFactory:
         sync_job: schemas.SyncJob,
         dag: schemas.SyncDag,
         collection: schemas.Collection,
-        source_connection: schemas.Connection,
+        source_connection: schemas.SourceConnection,
         current_user: schemas.User,
     ) -> SyncContext:
         """Create a sync context."""
         # Fetch white label if set in sync
         white_label = None
-        if sync.white_label_id:
+        if source_connection.white_label_id:
             white_label = await crud.white_label.get(
-                db, id=sync.white_label_id, current_user=current_user
+                db, id=source_connection.white_label_id, current_user=current_user
             )
 
         source = await cls._create_source_instance(
