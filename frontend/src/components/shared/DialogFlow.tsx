@@ -165,8 +165,8 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
                             setTimeout(() => {
                                 isRestoringRef.current = false;
                                 console.log(`✅ Restoration complete for dialog: ${dialogId}`);
-                            }, 200);
-                        }, 100);
+                            }, 50);
+                        }, 50);
                     } else {
                         console.log(`⏭️ Dialog ID mismatch: saved=${savedState.dialogId}, current=${dialogId}, skipping restore`);
                         isRestoringRef.current = false;

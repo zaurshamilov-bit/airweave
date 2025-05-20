@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { redirectWithError } from "@/lib/error-utils";
 import { apiClient } from "@/lib/api";
 import { authenticateSource } from "@/lib/authenticate";
+import { getAppIconUrl } from "@/lib/utils/icons";
 
 export interface ConfigureSourceViewProps {
     onNext?: (data?: any) => void;
@@ -490,68 +491,64 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
     }, [viewData.connectionName]);
 
     // Render the auth fields step
-    const renderAuthStep = () => (
-        <div className="space-y-6">
-            {/* Add a flex container for the title and button */}
-            <div className="flex justify-between items-center">
-                <DialogTitle className="text-2xl font-semibold text-left">
-                    Authenticate Source Connection
-                </DialogTitle>
+    const renderAuthStep = () => {
+        // Check if there are any visible auth fields
+        const hasVisibleAuthFields = sourceDetails?.auth_fields?.fields &&
+            sourceDetails.auth_fields.fields.some((field: any) =>
+                field.name && !isTokenField(field.name)
+            );
 
-                <Button
-                    onClick={handleAuthenticate}
-                    disabled={loading || hasEmptyRequiredAuthFields() || isAuthenticated}
-                    className={cn(
-                        "px-4",
-                        isAuthenticated
-                            ? "bg-green-600 text-white opacity-100 pointer-events-none"
-                            : "bg-blue-600 hover:bg-blue-700 text-white",
-                        isAuthenticated ? "disabled:opacity-100 disabled:bg-green-600" : ""
-                    )}
-                >
-                    {isAuthenticated ? "Authenticated" : "Authenticate"}
-                </Button>
-            </div>
+        return (
+            <div className="space-y-6">
+                <div className="flex justify-between items-start mb-6">
+                    <div>
+                        <DialogTitle className="text-2xl font-semibold text-left">
+                            Authenticate Source Connection
+                        </DialogTitle>
 
-            <DialogDescription className="text-muted-foreground mb-6">
-                {sourceName ? `Set up authentication for ${sourceName}` : "Set up your source authentication"}
-            </DialogDescription>
+                        {/* Authentication class and OAuth2 indicators */}
+                        <div className="flex items-center gap-2 mt-2">
+                            {sourceDetails?.auth_config_class && (
+                                <span className="text-xs text-muted-foreground bg-muted-foreground/20 px-2 py-1 rounded">
+                                    {sourceDetails.auth_config_class}
+                                </span>
+                            )}
+                            {sourceDetails?.auth_type && sourceDetails.auth_type.startsWith('oauth2') && (
+                                <span className="text-xs text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-950 px-2 py-1 rounded">
+                                    OAuth2
+                                </span>
+                            )}
+                        </div>
+                    </div>
 
-            {/* Add this right after the DialogDescription and before the auth fields section */}
-            <div className="bg-muted p-6 rounded-lg mb-4">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-medium">Connection Name</h3>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-sm font-medium">Name</label>
-                    <input
-                        type="text"
-                        className={cn(
-                            "w-full p-2 rounded border",
-                            isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
-                        )}
-                        placeholder="Enter a name for this connection"
-                        value={connectionName}
-                        onChange={(e) => setConnectionName(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                        A descriptive name for this connection. Defaults to "{sourceName} Connection".
-                    </p>
-                </div>
-            </div>
-
-            {/* Auth fields section */}
-            <div className="bg-muted p-6 rounded-lg mb-4">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-medium">Authentication</h3>
-                    {sourceDetails?.auth_config_class && (
-                        <span className="text-xs text-muted-foreground bg-muted-foreground/20 px-2 py-1 rounded">
-                            {sourceDetails.auth_config_class}
-                        </span>
+                    {/* Source image on the right with margin */}
+                    {sourceShortName && (
+                        <div className="mr-4">
+                            <div className={cn(
+                                "w-16 h-16 flex items-center justify-center border border-black rounded-lg",
+                                isDark ? "border-gray-700" : "border-gray-800"
+                            )}>
+                                <img
+                                    src={getAppIconUrl(sourceShortName, resolvedTheme)}
+                                    alt={`${sourceName} icon`}
+                                    className="w-full h-full object-contain p-2"
+                                    onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                        e.currentTarget.parentElement!.innerHTML = `
+                        <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
+                            <span class="text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
+                            ${sourceShortName?.substring(0, 2).toUpperCase()}
+                            </span>
+                        </div>
+                        `;
+                                    }}
+                                />
+                            </div>
+                        </div>
                     )}
                 </div>
 
-                {/* Only show validation error message if validation has been attempted */}
+                {/* Validation error message if validation has been attempted */}
                 {validationAttempted && hasEmptyRequiredAuthFields() && (
                     <div className="mb-4 p-3 bg-red-500/10 rounded border border-red-500/20">
                         <p className="text-sm text-red-600">
@@ -560,79 +557,126 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
                     </div>
                 )}
 
-                {/* Token notice if token fields are present */}
-                {sourceDetails.auth_fields.fields.some((field: any) =>
-                    field.name && isTokenField(field.name)
-                ) && (
-                        <div className="bg-blue-500/10 border border-blue-500/20 rounded p-3 mb-4">
-                            <p className="text-sm">
-                                <span className="font-medium">Note:</span> Access tokens and refresh tokens will be
-                                automatically generated during OAuth authorization and don't need to be entered manually.
-                            </p>
-                        </div>
-                    )}
+                {/* All form fields in one container */}
+                <div className="bg-muted p-6 rounded-lg mb-4">
+                    {/* Connection Name field */}
+                    <div className="space-y-2 mb-4">
+                        <label className="text-base font-medium">
+                            Connection Name
+                        </label>
 
-                {/* Render auth fields (excluding token fields) - without asterisks */}
-                {sourceDetails.auth_fields.fields
-                    .filter((field: any) => field.name && !isTokenField(field.name))
-                    .map((field: any) => (
-                        <div key={field.name} className="space-y-2">
-                            <label className="text-sm font-medium">
-                                {field.title || field.name}
-                            </label>
-                            <input
-                                type={field.type === 'password' ? 'password' : 'text'}
-                                className={cn(
-                                    "w-full p-2 rounded border",
-                                    isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300",
-                                    validationAttempted && errors[field.name] ? "border-red-500" : ""
+                        <p className="text-xs text-muted-foreground mb-2">
+                            Enter a descriptive name to identify the source connection in your collection.
+                        </p>
+
+                        <input
+                            type="text"
+                            className={cn(
+                                "w-full p-2 rounded border",
+                                isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
+                            )}
+                            placeholder="Enter a name for this connection"
+                            value={connectionName}
+                            onChange={(e) => setConnectionName(e.target.value)}
+                        />
+                    </div>
+
+                    {/* Render auth fields (excluding token fields) */}
+                    {hasVisibleAuthFields && sourceDetails.auth_fields.fields
+                        .filter((field: any) => field.name && !isTokenField(field.name))
+                        .map((field: any) => (
+                            <div key={field.name} className="space-y-2 mb-4">
+                                <label className="text-base font-medium">
+                                    {field.title || field.name}
+                                </label>
+
+                                {field.description && (
+                                    <p className="text-xs text-muted-foreground mb-2">{field.description}</p>
                                 )}
-                                placeholder={field.description || ''}
-                                value={authValues[field.name] || ''}
-                                onChange={(e) => handleAuthFieldChange(field.name, e.target.value)}
-                            />
-                            {validationAttempted && errors[field.name] ? (
-                                <p className="text-xs text-red-500">{errors[field.name]}</p>
-                            ) : field.description ? (
-                                <p className="text-xs text-muted-foreground">{field.description}</p>
-                            ) : null}
-                        </div>
-                    ))}
-            </div>
 
-        </div>
-    );
+                                <input
+                                    type={field.type === 'password' ? 'password' : 'text'}
+                                    className={cn(
+                                        "w-full p-2 rounded border",
+                                        isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300",
+                                        validationAttempted && errors[field.name] ? "border-red-500" : ""
+                                    )}
+                                    placeholder={''}
+                                    value={authValues[field.name] || ''}
+                                    onChange={(e) => handleAuthFieldChange(field.name, e.target.value)}
+                                />
+
+                                {validationAttempted && errors[field.name] && (
+                                    <p className="text-xs text-red-500">{errors[field.name]}</p>
+                                )}
+                            </div>
+                        ))}
+                </div>
+            </div>
+        );
+    };
 
     // Render the config fields step
     const renderConfigStep = () => (
         <div className="space-y-6">
-            <DialogTitle className="text-2xl font-semibold text-left mb-4">
-                Configure Source Connection
-            </DialogTitle>
+            <div className="flex justify-between items-start mb-6">
+                <div>
+                    <DialogTitle className="text-2xl font-semibold text-left">
+                        Configure Source Connection
+                    </DialogTitle>
 
-            <DialogDescription className="text-muted-foreground mb-6">
-                {sourceName ? `Configure ${sourceName} connection settings` : "Configure your source connection settings"}
-            </DialogDescription>
+                    {/* Configuration class indicators */}
+                    <div className="flex items-center gap-2 mt-2">
+                        {sourceDetails?.config_class && (
+                            <span className="text-xs text-muted-foreground bg-muted-foreground/20 px-2 py-1 rounded">
+                                {sourceDetails.config_class}
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                {/* Source image on the right with margin */}
+                {sourceShortName && (
+                    <div className="mr-4">
+                        <div className={cn(
+                            "w-16 h-16 flex items-center justify-center border border-black rounded-lg",
+                            isDark ? "border-gray-700" : "border-gray-800"
+                        )}>
+                            <img
+                                src={getAppIconUrl(sourceShortName, resolvedTheme)}
+                                alt={`${sourceName} icon`}
+                                className="w-full h-full object-contain p-2"
+                                onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    e.currentTarget.parentElement!.innerHTML = `
+                    <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
+                        <span class="text-2xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
+                        ${sourceShortName?.substring(0, 2).toUpperCase()}
+                        </span>
+                    </div>
+                    `;
+                                }}
+                            />
+                        </div>
+                    </div>
+                )}
+            </div>
 
             {/* Config fields section */}
             <div className="bg-muted p-6 rounded-lg mb-4">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-medium">Configuration</h3>
-                    {sourceDetails?.config_class && (
-                        <span className="text-xs text-muted-foreground bg-muted-foreground/20 px-2 py-1 rounded">
-                            {sourceDetails.config_class}
-                        </span>
-                    )}
-                </div>
-
                 {sourceDetails?.config_fields?.fields && sourceDetails.config_fields.fields.length > 0 ? (
                     <div className="space-y-4">
                         {sourceDetails.config_fields.fields.map((field: any) => (
-                            <div key={field.name} className="space-y-2">
-                                <label className="text-sm font-medium">
+                            <div key={field.name} className="space-y-2 mb-4">
+                                <label className="text-base font-medium">
                                     {field.title || field.name}
                                     {field.required && <span className="text-red-500 ml-1">*</span>}
                                 </label>
+
+                                {field.description && (
+                                    <p className="text-xs text-muted-foreground mb-2">{field.description}</p>
+                                )}
+
                                 <input
                                     type="text"
                                     className={cn(
@@ -640,15 +684,14 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
                                         isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300",
                                         errors[field.name] ? "border-red-500" : ""
                                     )}
-                                    placeholder={field.description || ''}
+                                    placeholder={''}
                                     value={configValues[field.name] || ''}
                                     onChange={(e) => handleConfigFieldChange(field.name, e.target.value)}
                                 />
-                                {errors[field.name] ? (
+
+                                {errors[field.name] && (
                                     <p className="text-xs text-red-500">{errors[field.name]}</p>
-                                ) : field.description ? (
-                                    <p className="text-xs text-muted-foreground">{field.description}</p>
-                                ) : null}
+                                )}
                             </div>
                         ))}
                     </div>
@@ -680,62 +723,83 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
                 </div>
             </div>
 
+            {/* Authentication button section - fixed above footer */}
+            {step === 'auth' && sourceDetails && (
+                <div className="flex-shrink-0 px-6 py-4 border-t">
+                    {!isAuthenticated && (
+                        <p className="text-sm text-center text-muted-foreground mb-3">
+                            You must authenticate before you can connect to the source.
+                        </p>
+                    )}
+                    <Button
+                        onClick={handleAuthenticate}
+                        disabled={loading || hasEmptyRequiredAuthFields() || isAuthenticated}
+                        className={cn(
+                            "w-full py-3 text-white",
+                            isAuthenticated
+                                ? "bg-green-600 opacity-100 pointer-events-none"
+                                : "bg-blue-600 hover:bg-blue-700",
+                            isAuthenticated ? "disabled:opacity-100 disabled:bg-green-600" : ""
+                        )}
+                    >
+                        {isAuthenticated ? "✓ Authenticated" : "Authenticate"}
+                    </Button>
+                </div>
+            )}
+
             {/* Footer - fixed at bottom */}
             <div className="flex-shrink-0 border-t">
-                <DialogFooter className="flex justify-between gap-3 p-6">
-                    <div>
-                        {step === 'auth' ? (
-                            onBack && (
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    onClick={onBack}
-                                    className={cn("px-6", isDark ? "border-gray-700" : "border-gray-300")}
-                                >
-                                    Back
-                                </Button>
-                            )
-                        ) : (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setStep('auth')}
-                                className={cn("px-6", isDark ? "border-gray-700" : "border-gray-300")}
-                            >
-                                Back
-                            </Button>
-                        )}
-                    </div>
-                    <div className="flex gap-3">
+                <DialogFooter className="flex justify-end gap-3 p-6">
+                    {step === 'auth' && onBack && (
                         <Button
                             type="button"
                             variant="outline"
-                            onClick={onCancel}
+                            onClick={onBack}
                             className={cn("px-6", isDark ? "border-gray-700" : "border-gray-300")}
                         >
-                            Cancel
+                            Back
                         </Button>
+                    )}
 
-                        {step === 'auth' ? (
-                            <Button
-                                type="button"
-                                onClick={handleNextStep}
-                                className="px-6 bg-blue-600 hover:bg-blue-700 text-white"
-                                disabled={loading || !isAuthenticated}
-                            >
-                                {hasConfigFields() ? 'Next' : 'Connect'}
-                            </Button>
-                        ) : (
-                            <Button
-                                type="button"
-                                onClick={handleComplete}
-                                className="px-6 bg-blue-600 hover:bg-blue-700 text-white"
-                                disabled={loading || submitting}
-                            >
-                                {submitting ? 'Connecting...' : 'Connect'}
-                            </Button>
-                        )}
-                    </div>
+                    {step === 'config' && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setStep('auth')}
+                            className={cn("px-6", isDark ? "border-gray-700" : "border-gray-300")}
+                        >
+                            Back
+                        </Button>
+                    )}
+
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={onCancel}
+                        className={cn("px-6", isDark ? "border-gray-700" : "border-gray-300")}
+                    >
+                        Cancel
+                    </Button>
+
+                    {step === 'auth' ? (
+                        <Button
+                            type="button"
+                            onClick={handleNextStep}
+                            className="px-6 bg-blue-600 hover:bg-blue-700 text-white"
+                            disabled={loading || !isAuthenticated}
+                        >
+                            {hasConfigFields() ? 'Next' : 'Connect'}
+                        </Button>
+                    ) : (
+                        <Button
+                            type="button"
+                            onClick={handleComplete}
+                            className="px-6 bg-blue-600 hover:bg-blue-700 text-white"
+                            disabled={loading || submitting}
+                        >
+                            {submitting ? 'Connecting...' : 'Connect'}
+                        </Button>
+                    )}
                 </DialogFooter>
             </div>
         </div>

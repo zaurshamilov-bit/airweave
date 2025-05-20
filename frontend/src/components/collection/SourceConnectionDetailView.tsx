@@ -795,8 +795,27 @@ const SourceConnectionDetailView = ({
                 ...prev,
                 status: latestUpdate.is_complete ? 'completed' : 'failed'
             } : prev);
+
+            // Fetch the latest job data including timestamps
+            if (selectedConnection?.id && lastSyncJob?.id) {
+                apiClient.get(`/source-connections/${selectedConnection.id}/jobs/${lastSyncJob.id}`)
+                    .then(async response => {
+                        if (response.ok) {
+                            const updatedJob = await response.json();
+                            setLastSyncJob(updatedJob);
+
+                            // Recalculate runtime with fresh timestamps
+                            if (updatedJob.started_at && (updatedJob.completed_at || updatedJob.failed_at)) {
+                                const endTime = updatedJob.completed_at || updatedJob.failed_at;
+                                const runtime = new Date(endTime).getTime() - new Date(updatedJob.started_at).getTime();
+                                setTotalRuntime(runtime);
+                            }
+                        }
+                    })
+                    .catch(err => console.error("Error fetching updated job data:", err));
+            }
         }
-    }, [latestUpdate?.is_complete, latestUpdate?.is_failed]);
+    }, [latestUpdate?.is_complete, latestUpdate?.is_failed, selectedConnection?.id, lastSyncJob?.id]);
 
     // 4. Entity data processing
     useEffect(() => {

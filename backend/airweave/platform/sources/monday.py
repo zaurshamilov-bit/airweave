@@ -9,7 +9,8 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
-from airweave.platform.auth.schemas import AuthType, MondayAuthConfig
+from airweave.platform.auth.schemas import AuthType
+from airweave.platform.configs.auth import MondayAuthConfig
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
 from airweave.platform.entities.monday import (
