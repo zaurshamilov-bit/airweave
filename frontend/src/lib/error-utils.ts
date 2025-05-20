@@ -6,6 +6,7 @@
  */
 
 import { NavigateFunction } from "react-router-dom";
+import { protectedPaths } from "@/constants/paths";
 
 // Storage key for error data
 export const CONNECTION_ERROR_STORAGE_KEY = "airweave_connection_error";
@@ -69,7 +70,7 @@ export const redirectWithError = (
     console.log(`🔔 [ErrorUtils] Stored error details in localStorage:`, errorData);
 
     // Create URL with just the error flag (no sensitive data)
-    const targetUrl = `/dashboard?connected=error`;
+    const targetUrl = `${protectedPaths.dashboard}?connected=error`;
     console.log(`🧭 [ErrorUtils] Redirecting to error page: ${targetUrl}`);
 
     // Use appropriate navigation method based on type

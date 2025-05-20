@@ -25,6 +25,7 @@ import SourceConnectionDetailView from "@/components/collection/SourceConnection
 import { emitCollectionEvent, COLLECTION_DELETED } from "@/lib/events";
 import { QueryToolAndLiveDoc } from '@/components/collection/QueryToolAndLiveDoc';
 import { DialogFlow } from '@/components/shared';
+import { protectedPaths } from "@/constants/paths";
 
 // DeleteCollectionDialog component
 interface DeleteCollectionDialogProps {
@@ -360,7 +361,7 @@ const Collections = () => {
                     description: "Collection deleted successfully"
                 });
                 // Navigate back to dashboard after successful deletion
-                navigate("/dashboard");
+                navigate(protectedPaths.dashboard);
             } else {
                 const errorText = await response.text();
                 throw new Error(`Failed to delete collection: ${errorText}`);
@@ -462,7 +463,7 @@ const Collections = () => {
                     <div>{error}</div>
                 </Alert>
                 <div className="mt-4">
-                    <Button onClick={() => navigate("/dashboard")}>
+                    <Button onClick={() => navigate(protectedPaths.dashboard)}>
                         Return to Dashboard
                     </Button>
                 </div>

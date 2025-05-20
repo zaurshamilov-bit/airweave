@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
 import { DialogFlow } from "@/components/shared/DialogFlow";
+import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 
 // Collection type definition
 interface Collection {
@@ -54,17 +55,25 @@ const Dashboard = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { resolvedTheme } = useTheme();
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [sources, setSources] = useState<Source[]>([]);
+
+  // Use collections store
+  const {
+    collections,
+    isLoading: isLoadingCollections,
+    fetchCollections,
+    sourceConnections,
+    fetchSourceConnections
+  } = useCollectionsStore();
+
+  // Use sources store
+  const { sources, isLoading: isLoadingSources, fetchSources } = useSourcesStore();
+
   const [apiKey, setApiKey] = useState<APIKey | null>(null);
-  const [isLoadingCollections, setIsLoadingCollections] = useState(true);
-  const [isLoadingSources, setIsLoadingSources] = useState(true);
   const [isLoadingApiKey, setIsLoadingApiKey] = useState(true);
-  const [collectionsWithSources, setCollectionsWithSources] = useState<Record<string, SourceConnection[]>>({});
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedSource, setSelectedSource] = useState<Source | null>(null);
+  const [selectedSource, setSelectedSource] = useState<{ id: string; name: string; short_name: string } | null>(null);
 
   // Error state for connection errors
   const [connectionError, setConnectionError] = useState<any>(null);
@@ -139,63 +148,28 @@ const Dashboard = () => {
     }
   };
 
-  // Define fetchCollections function at component level
-  const fetchCollections = async (showLoading: boolean = true) => {
-    if (showLoading) {
-      setIsLoadingCollections(true);
-    }
-
-    try {
-      const response = await apiClient.get("/collections");
-      if (response.ok) {
-        const data = await response.json();
-        setCollections(data);
-
-        // Only fetch source connections for the top 3 collections
-        const topCollections = data.slice(0, 3);
-        const sourcesMap: Record<string, SourceConnection[]> = {};
-        for (const collection of topCollections) {
-          await fetchSourceConnectionsForCollection(collection.readable_id, sourcesMap);
-        }
-        setCollectionsWithSources(sourcesMap);
-      } else {
-        console.error("Failed to load collections:", await response.text());
-      }
-    } catch (err) {
-      console.error("Error fetching collections:", err);
-    } finally {
-      if (showLoading) {
-        setIsLoadingCollections(false);
-      }
-    }
-  };
-
-  // Fetch collections on component mount
+  // Initialize Zustand store subscribers
   useEffect(() => {
-    fetchCollections();
-  }, []);
+    // Subscribe to collections events
+    const unsubscribeCollections = useCollectionsStore.getState().subscribeToEvents();
 
-  // Fetch sources
-  useEffect(() => {
-    const fetchSources = async () => {
-      setIsLoadingSources(true);
-      try {
-        const response = await apiClient.get("/sources/list");
-        if (response.ok) {
-          const data = await response.json();
-          setSources(data);
-        } else {
-          console.error("Failed to load sources:", await response.text());
-        }
-      } catch (err) {
-        console.error("Error fetching sources:", err);
-      } finally {
-        setIsLoadingSources(false);
-      }
+    // Initial fetch - use console logging to track API calls
+    console.log("🔄 [Dashboard] Initializing collections and sources");
+
+    // Load collections (will use cache if available)
+    fetchCollections().then(collections => {
+      console.log(`🔄 [Dashboard] Collections loaded: ${collections.length} collections available`);
+    });
+
+    // Load sources - will use cached data if available
+    fetchSources().then(sources => {
+      console.log(`🔄 [Dashboard] Sources loaded: ${sources.length} sources available`);
+    });
+
+    return () => {
+      unsubscribeCollections();
     };
-
-    fetchSources();
-  }, []);
+  }, [fetchCollections, fetchSources]);
 
   // Fetch API key
   useEffect(() => {
@@ -238,8 +212,8 @@ const Dashboard = () => {
     setSelectedSource(null);
     setConnectionError(null);
     clearStoredErrorDetails(); // Ensure error data is cleared
-    // Refresh collections without showing loading state
-    fetchCollections(false);
+    // Refresh collections
+    fetchCollections();
   };
 
   // Top 3 collections
@@ -287,7 +261,6 @@ const Dashboard = () => {
 
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
-      {/* TODO: take care of error */}
       <DialogFlow
         isOpen={dialogOpen}
         onOpenChange={handleDialogOpen}
@@ -302,21 +275,9 @@ const Dashboard = () => {
         }}
       />
 
-      {/* Connect Flow Dialog */}
-      {/* <ConnectFlow
-        isOpen={dialogOpen}
-        onOpenChange={handleDialogClose}
-        mode={connectionError ? "error-view" : "create-collection"}
-        sourceId={selectedSource?.id}
-        sourceName={selectedSource?.name}
-        sourceShortName={selectedSource?.short_name}
-        onComplete={() => fetchCollections(false)}
-        errorData={connectionError}
-      /> */}
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Main content (left column) */}
-        <div className="sm:col-span-2 space-y-8 sm:space-y-10">
+        <div className="md:col-span-2 space-y-6 md:space-y-8">
           {/* Collections Section - only show when loading or has collections */}
           {(isLoadingCollections || collections.length > 0) && (
             <section>
@@ -331,12 +292,12 @@ const Dashboard = () => {
                 </Link>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 auto-rows-fr">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 auto-rows-fr">
                 {isLoadingCollections ? (
                   Array.from({ length: 3 }).map((_, index) => (
                     <div
                       key={index}
-                      className="h-[220px] rounded-xl animate-pulse bg-slate-100 dark:bg-slate-800/50"
+                      className="h-[160px] rounded-xl animate-pulse bg-slate-100 dark:bg-slate-800/50"
                     />
                   ))
                 ) : (
@@ -346,7 +307,6 @@ const Dashboard = () => {
                       id={collection.id}
                       name={collection.name}
                       readableId={collection.readable_id}
-                      sourceConnections={collectionsWithSources[collection.readable_id] || []}
                       status={collection.status}
                       onClick={() => navigate(`/collections/${collection.readable_id}`)}
                     />
@@ -363,7 +323,7 @@ const Dashboard = () => {
               Choose a first source to add to your new collection
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 auto-rows-fr">
+            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-3 auto-rows-fr">
               {isLoadingSources ? (
                 <div className="col-span-full h-40 flex items-center justify-center">
                   <div className="animate-pulse flex flex-col items-center">
@@ -392,7 +352,7 @@ const Dashboard = () => {
         </div>
 
         {/* Right Column */}
-        <div className="sm:col-span-1 space-y-6 sm:space-y-8">
+        <div className="md:col-span-1 space-y-6">
           {/* API Key Card */}
           <ApiKeyCard
             apiKey={apiKey}

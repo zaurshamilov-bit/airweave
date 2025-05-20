@@ -16,7 +16,6 @@ from airweave.core.shared_models import ConnectionStatus, SyncStatus
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.integration_credential import IntegrationType
 from airweave.platform.auth.schemas import AuthType
-from airweave.platform.auth.services import oauth2_service
 from airweave.schemas.connection import ConnectionCreate
 
 connection_logger = logger.with_prefix("Connection Service: ").with_context(
@@ -256,67 +255,6 @@ class ConnectionService:
     #     except Exception as e:
     #         connection_logger.error(f"Failed to exchange OAuth2 code: {e}")
     #         raise HTTPException(status_code=400, detail="Failed to exchange OAuth2 code") from e
-
-    async def connect_with_white_label_oauth2_code(
-        self, db: AsyncSession, white_label_id: UUID, code: str, user: schemas.User
-    ) -> schemas.Connection:
-        """Connect using an OAuth2 code from a white label.
-
-        Args:
-            db: The database session
-            white_label_id: The ID of the white label
-            code: The OAuth2 code
-            user: The current user
-
-        Returns:
-            The created connection
-
-        Raises:
-            HTTPException: If white label is not found or code exchange fails
-        """
-        try:
-            white_label = await crud.white_label.get(db, id=white_label_id, current_user=user)
-            if not white_label:
-                raise HTTPException(status_code=404, detail="White label integration not found")
-
-            return await oauth2_service.create_oauth2_connection_for_whitelabel(
-                db=db, white_label=white_label, code=code, user=user
-            )
-        except HTTPException as e:
-            # Re-raise HTTPExceptions directly to preserve the status code
-            connection_logger.error(f"Failed to exchange OAuth2 code for white label: {e}")
-            raise
-        except Exception as e:
-            connection_logger.error(f"Failed to exchange OAuth2 code for white label: {e}")
-            raise HTTPException(
-                status_code=400, detail="Failed to exchange OAuth2 code for white label"
-            ) from e
-
-    async def get_white_label_oauth2_auth_url(
-        self, db: AsyncSession, white_label_id: UUID, user: schemas.User
-    ) -> str:
-        """Get the OAuth2 authorization URL for a white label integration.
-
-        Args:
-            db: The database session
-            white_label_id: The ID of the white label
-            user: The current user
-
-        Returns:
-            The OAuth2 authorization URL
-
-        Raises:
-            HTTPException: If white label is not found
-        """
-        try:
-            white_label = await crud.white_label.get(db, id=white_label_id, current_user=user)
-            if not white_label:
-                raise HTTPException(status_code=404, detail="White label integration not found")
-
-            return await oauth2_service.generate_auth_url_for_whitelabel(db, white_label)
-        except Exception as e:
-            connection_logger.error(f"Failed to generate auth URL for white label: {e}")
-            raise HTTPException(status_code=400, detail="Failed to generate auth URL") from e
 
     async def connect_with_direct_token(
         self,

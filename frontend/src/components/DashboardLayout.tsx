@@ -29,15 +29,22 @@ import { apiClient } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_UPDATED } from "@/lib/events";
 import { APIKeysSettings } from "@/components/settings/APIKeysSettings";
-import { useCollections, Collection } from "@/lib/collectionsContext";
 import { DialogFlow } from '@/components/shared';
+import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(true);
-  const { collections, isLoading: isLoadingCollections, error: collectionError } = useCollections();
+  const { collections, isLoading: isLoadingCollections, error: collectionError, fetchCollections } = useCollectionsStore();
+
+  // Initialize collections and event listeners
+  useEffect(() => {
+    fetchCollections();
+    const unsubscribe = useCollectionsStore.getState().subscribeToEvents();
+    return unsubscribe;
+  }, [fetchCollections]);
 
   // Log the actual collections count for debugging
   useEffect(() => {
@@ -172,6 +179,7 @@ const DashboardLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { resolvedTheme, setTheme } = useTheme();
+  const { fetchSources } = useSourcesStore();
   const [searchParams] = useSearchParams();
   const [errorData, setErrorData] = useState<any>(null);
 
