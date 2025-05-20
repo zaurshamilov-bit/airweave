@@ -141,6 +141,10 @@ class SourceConnection(SourceConnectionInDBBase):
     latest_sync_job_started_at: Optional[datetime] = None
     latest_sync_job_completed_at: Optional[datetime] = None
 
+    # Sync schedule information
+    cron_schedule: Optional[str] = None
+    next_scheduled_run: Optional[datetime] = None
+
     @classmethod
     def from_orm_with_collection_mapping(cls, obj):
         """Create a SourceConnection from a source_connection ORM model."""

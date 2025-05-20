@@ -9,6 +9,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
+from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import MondayAuthConfig
 from airweave.platform.decorators import source
@@ -61,35 +62,62 @@ class MondaySource(BaseSource):
     async def _graphql_query(
         self, client: httpx.AsyncClient, query: str, variables: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Execute a single GraphQL query against the Monday.com API.
-
-        Args:
-            client: The HTTPX client instance.
-            query: The GraphQL query string.
-            variables: Optional variables for the GraphQL query.
-
-        Returns:
-            The parsed JSON response data.
-
-        Raises:
-            HTTPError: If the request fails.
-        """
+        """Execute a single GraphQL query against the Monday.com API."""
         headers = {
-            "Authorization": f"Bearer {self.access_token}",
+            "Authorization": self.access_token,
             "Content-Type": "application/json",
         }
         payload = {"query": query}
         if variables:
             payload["variables"] = variables
 
-        response = await client.post(self.GRAPHQL_ENDPOINT, json=payload, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        # The top-level JSON typically looks like: { "data": {...}, "errors": [...] }
-        if "errors" in data:
-            # You may raise an exception or log warnings here if desired
-            pass
-        return data.get("data", {})
+        try:
+            response = await client.post(self.GRAPHQL_ENDPOINT, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+            # Handle GraphQL-level errors which come with 200 status
+            if "errors" in data:
+                error_messages = []
+                for error in data.get("errors", []):
+                    message = error.get("message", "Unknown error")
+                    locations = error.get("locations", [])
+                    if locations:
+                        location_info = ", ".join(
+                            [
+                                f"line {loc.get('line')}, column {loc.get('column')}"
+                                for loc in locations
+                            ]
+                        )
+                        message = f"{message} at {location_info}"
+
+                    extensions = error.get("extensions", {})
+                    if extensions:
+                        code = extensions.get("code", "")
+                        if code:
+                            message = f"{message} (code: {code})"
+
+                    error_messages.append(message)
+
+                error_string = "; ".join(error_messages)
+                logger.error(f"GraphQL error in Monday.com API: {error_string}")
+                logger.error(f"Query that caused the error: {query}")
+                if variables:
+                    logger.error(f"Variables: {variables}")
+
+            return data.get("data", {})
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error in Monday.com API: {e.response.status_code}")
+            logger.error(f"Response text: {e.response.text}")
+            logger.error(
+                f"Request details: URL={self.GRAPHQL_ENDPOINT}, "
+                f"Headers={headers} (sensitive info redacted)"
+            )
+            logger.error(f"Query that caused the error: {query}")
+            if variables:
+                logger.error(f"Variables: {variables}")
+            raise
 
     async def _generate_board_entities(
         self, client: httpx.AsyncClient
@@ -103,7 +131,6 @@ class MondaySource(BaseSource):
             type
             state
             workspace_id
-            created_at
             updated_at
             owners {
               id
@@ -133,7 +160,7 @@ class MondaySource(BaseSource):
                 state=board.get("state"),
                 workspace_id=str(board.get("workspace_id")) if board.get("workspace_id") else None,
                 owners=board.get("owners", []),
-                created_at=board.get("created_at"),
+                created_at=None,  # Board API doesn't provide created_at field
                 updated_at=board.get("updated_at"),
                 groups=board.get("groups", []),
                 columns=board.get("columns", []),
@@ -147,7 +174,7 @@ class MondaySource(BaseSource):
     ) -> AsyncGenerator[MondayGroupEntity, None]:
         """Generate MondayGroupEntity objects by querying groups for a specific board."""
         query = """
-        query ($boardIds: [Int]) {
+        query ($boardIds: [ID!]) {
           boards (ids: $boardIds) {
             groups {
               id
@@ -158,7 +185,7 @@ class MondaySource(BaseSource):
           }
         }
         """
-        variables = {"boardIds": [int(board_id)]}
+        variables = {"boardIds": [board_id]}
         result = await self._graphql_query(client, query, variables)
         boards_data = result.get("boards", [])
         if not boards_data:
@@ -188,7 +215,7 @@ class MondaySource(BaseSource):
         (You could also retrieve columns from the board query, but here's a separate example.)
         """
         query = """
-        query ($boardIds: [Int]) {
+        query ($boardIds: [ID!]) {
           boards (ids: $boardIds) {
             columns {
               id
@@ -198,7 +225,7 @@ class MondaySource(BaseSource):
           }
         }
         """
-        variables = {"boardIds": [int(board_id)]}
+        variables = {"boardIds": [board_id]}
         result = await self._graphql_query(client, query, variables)
         boards_data = result.get("boards", [])
         if not boards_data:
@@ -226,37 +253,42 @@ class MondaySource(BaseSource):
         We'll retrieve items via a GraphQL query that includes item fields.
         """
         query = """
-        query ($boardIds: [Int]) {
+        query ($boardIds: [ID!]) {
           boards (ids: $boardIds) {
-            items {
-              id
-              name
-              group {
-                id
-              }
-              state
-              creator {
+            items_page(limit: 500) {
+              items {
                 id
                 name
-              }
-              created_at
-              updated_at
-              column_values {
-                id
-                text
-                value
+                group {
+                  id
+                }
+                state
+                creator {
+                  id
+                  name
+                }
+                created_at
+                updated_at
+                column_values {
+                  id
+                  text
+                  value
+                }
               }
             }
           }
         }
         """
-        variables = {"boardIds": [int(board_id)]}
+        variables = {"boardIds": [board_id]}
         result = await self._graphql_query(client, query, variables)
         boards_data = result.get("boards", [])
         if not boards_data:
             return
 
-        items = boards_data[0].get("items", [])
+        # The structure is now different, we need to extract items from items_page
+        items_page = boards_data[0].get("items_page", {})
+        items = items_page.get("items", [])
+
         for item in items:
             yield MondayItemEntity(
                 entity_id=str(item["id"]),
@@ -283,7 +315,7 @@ class MondaySource(BaseSource):
         Typically, subitems are retrieved separately since they're on a dedicated 'subitems' board.
         """
         query = """
-        query ($itemIds: [Int]) {
+        query ($itemIds: [ID!]) {
           items (ids: $itemIds) {
             subitems {
               id
@@ -310,7 +342,7 @@ class MondaySource(BaseSource):
           }
         }
         """
-        variables = {"itemIds": [int(parent_item_id)]}
+        variables = {"itemIds": [parent_item_id]}
         result = await self._graphql_query(client, query, variables)
         items_data = result.get("items", [])
         if not items_data or "subitems" not in items_data[0]:
@@ -348,7 +380,7 @@ class MondaySource(BaseSource):
         if item_id is not None:
             # Query updates nested under a single item
             query = """
-            query ($itemIds: [Int]) {
+            query ($itemIds: [ID!]) {
               items (ids: $itemIds) {
                 updates {
                   id
@@ -365,7 +397,7 @@ class MondaySource(BaseSource):
               }
             }
             """
-            variables = {"itemIds": [int(item_id)]}
+            variables = {"itemIds": [item_id]}
             result = await self._graphql_query(client, query, variables)
             items_data = result.get("items", [])
             if not items_data:
@@ -374,7 +406,7 @@ class MondaySource(BaseSource):
         else:
             # Query all updates in a board
             query = """
-            query ($boardIds: [Int]) {
+            query ($boardIds: [ID!]) {
               boards (ids: $boardIds) {
                 updates {
                   id
@@ -391,7 +423,7 @@ class MondaySource(BaseSource):
               }
             }
             """
-            variables = {"boardIds": [int(board_id)]}
+            variables = {"boardIds": [board_id]}
             result = await self._graphql_query(client, query, variables)
             boards_data = result.get("boards", [])
             if not boards_data:
