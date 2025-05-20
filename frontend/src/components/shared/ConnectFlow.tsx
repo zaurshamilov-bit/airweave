@@ -27,6 +27,7 @@ import FlowDialog from './FlowDialog';
 import { cn } from "@/lib/utils";
 import { redirectWithError } from "@/lib/error-utils";
 import { useConnectToSourceFlow } from "@/lib/ConnectToSourceFlow";
+import { useSourcesStore } from "@/lib/stores";
 
 /**
  * Defines the entry point modes for the connect flow
@@ -94,11 +95,11 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
     const [viewData, setViewData] = useState({});
     /** Hook that provides API methods for initiating connections */
     const { handleConnection } = useConnectToSourceFlow();
+    /** Hook that provides source details access */
+    const { getSourceDetails, sourceDetails, sourceDetailsLoading, sourceDetailsError } = useSourcesStore();
 
     /** Flag to track if we're bypassing the source config view */
     const [isBypassingSourceConfig, setIsBypassingSourceConfig] = useState(false);
-    /** Cache for source details to prevent duplicate API calls */
-    const [cachedSourceDetails, setCachedSourceDetails] = useState<any>(null);
 
     /** Error state for connection errors */
     const [connectionError, setConnectionError] = useState<{
@@ -130,7 +131,6 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
             isNewCollection: mode === 'source-first-collection'
         });
         setIsBypassingSourceConfig(false);
-        setCachedSourceDetails(null);
 
         if (mode === 'error-view' && errorData) {
             setConnectionError(errorData);
@@ -181,7 +181,7 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
         sourceId: sourceData.sourceId,
         sourceName: sourceData.sourceName,
         sourceShortName: sourceData.sourceShortName,
-        sourceDetails: cachedSourceDetails
+        sourceDetails: sourceDetails[sourceData.sourceShortName] || null
     });
 
     /**
@@ -271,21 +271,19 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
 
             console.log("🔍 [ConnectFlow] Checking source config for:", targetSourceShortName);
 
-            // Get source details
-            let details = cachedSourceDetails;
+            // Get source details from store - this will use cached details if available
+            console.log(`🔍 [ConnectFlow] Fetching source details for ${targetSourceShortName}`);
+            const details = await getSourceDetails(targetSourceShortName);
+
             if (!details) {
-                const response = await apiClient.get(`/sources/detail/${targetSourceShortName}`);
-                if (response.ok) {
-                    details = await response.json();
-                    setCachedSourceDetails(details);
-                } else {
-                    handleConnectionError(
-                        new Error(`Failed to fetch source details: ${await response.text()}`),
-                        targetSourceShortName,
-                        retryAction
-                    );
-                    return false;
-                }
+                const errorMessage = sourceDetailsError[targetSourceShortName] ||
+                    "Failed to fetch source details";
+                handleConnectionError(
+                    new Error(errorMessage),
+                    targetSourceShortName,
+                    retryAction
+                );
+                return false;
             }
 
             // If this is an OAuth source and doesn't need configuration, skip the config view
@@ -469,12 +467,15 @@ export const ConnectFlow: React.FC<ConnectFlowProps> = ({
 
             console.log("🔄 [ConnectFlow] Creating connection for source:", targetSourceShortName);
 
+            // Get source details from store
+            const details = sourceDetails[targetSourceShortName];
+
             // Use the unified connection method
             handleConnection(
                 targetSourceShortName,
                 sourceName || "My Connection",
                 { name: collectionName || "My Collection", readable_id: collectionId },
-                cachedSourceDetails,
+                details,
                 sourceConfig,
                 mode !== 'add-source',
                 (result) => {

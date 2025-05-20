@@ -243,6 +243,9 @@ class SourceConnectionService:
                 "connection_id": connection_id,
                 "readable_collection_id": collection.readable_id,
                 "sync_id": sync.id,
+                "white_label_id": core_attrs.get(
+                    "white_label_id"
+                ),  # Include white_label_id if provided
             }
 
             source_connection = await crud.source_connection.create(
@@ -379,6 +382,7 @@ class SourceConnectionService:
                 modified_at=sc.modified_at,
                 sync_id=sc.sync_id,
                 collection=sc.readable_collection_id,  # map to collection
+                white_label_id=sc.white_label_id,  # Include white_label_id
             )
             for sc in source_connections
         ]
@@ -428,6 +432,7 @@ class SourceConnectionService:
                 modified_at=sc.modified_at,
                 sync_id=sc.sync_id,
                 collection=sc.readable_collection_id,  # map to collection
+                white_label_id=sc.white_label_id,  # Include white_label_id
             )
             for sc in source_connections
         ]
@@ -888,6 +893,9 @@ class SourceConnectionService:
                 "connection_id": connection_id,  # Use the provided connection ID
                 "readable_collection_id": collection.readable_id,
                 "sync_id": sync.id,
+                "white_label_id": core_attrs.get(
+                    "white_label_id"
+                ),  # Include white_label_id if provided
             }
 
             source_connection = await crud.source_connection.create(

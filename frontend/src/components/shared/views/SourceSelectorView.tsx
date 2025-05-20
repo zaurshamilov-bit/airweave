@@ -22,29 +22,14 @@ import { DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/di
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Loader2 } from "lucide-react";
-import { apiClient } from "@/lib/api";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { DialogViewProps } from "../FlowDialog";
 import { useNavigate } from "react-router-dom";
 import { redirectWithError } from "@/lib/error-utils";
 import { SourceButton } from "@/components/dashboard/SourceButton";
-
-/**
- * Interface for source data from API
- */
-interface Source {
-    /** Unique identifier */
-    id: string;
-    /** Display name */
-    name: string;
-    /** Optional description */
-    description?: string | null;
-    /** Short name identifier (e.g., "github", "notion") */
-    short_name: string;
-    /** Optional categorization labels */
-    labels?: string[];
-}
+import { useSourcesStore, Source } from "@/lib/stores";
+import { protectedPaths } from "@/constants/paths";
 
 /**
  * Props for the SourceSelectorView component
@@ -75,12 +60,6 @@ export const SourceSelectorView: React.FC<SourceSelectorViewProps> = ({
     onComplete,
     viewData = {},
 }) => {
-    /** List of available sources from API */
-    const [sources, setSources] = useState<Source[]>([]);
-    /** Loading state during API fetch */
-    const [isLoading, setIsLoading] = useState(true);
-    /** Error message if source fetch fails */
-    const [error, setError] = useState<string | null>(null);
     /** Search query for filtering sources */
     const [searchQuery, setSearchQuery] = useState("");
     /** For navigation */
@@ -89,6 +68,9 @@ export const SourceSelectorView: React.FC<SourceSelectorViewProps> = ({
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
     const { collectionId, collectionName, preselectedSourceId, isNewCollection } = viewData;
+
+    // Use the sources store instead of local state
+    const { sources, isLoading, error, fetchSources } = useSourcesStore();
 
     /**
      * Handle errors by redirecting to dashboard with error parameters
@@ -108,41 +90,27 @@ export const SourceSelectorView: React.FC<SourceSelectorViewProps> = ({
     };
 
     /**
-     * Fetch available sources from API
+     * Fetch available sources from the store
      * Handles auto-selection of preselected source if provided
      */
     useEffect(() => {
-        const fetchSources = async () => {
-            setIsLoading(true);
-            setError(null);
-
-            try {
-                const response = await apiClient.get("/sources/list");
-                if (response.ok) {
-                    const data = await response.json();
-                    setSources(data);
-
-                    // If a source is preselected and it exists in the data, auto-select it
-                    if (preselectedSourceId) {
-                        const selectedSource = data.find((source: Source) => source.id === preselectedSourceId);
-                        if (selectedSource) {
-                            handleSourceSelect(selectedSource);
-                        }
+        // Fetch sources from store - will use cached data if available
+        console.log("🔄 [SourceSelectorView] Initializing sources");
+        fetchSources()
+            .then(sourcesData => {
+                // If sources are available and a source is preselected, select it
+                if (preselectedSourceId && sourcesData.length > 0) {
+                    const selectedSource = sourcesData.find((source) => source.id === preselectedSourceId);
+                    if (selectedSource) {
+                        console.log(`🔄 [SourceSelectorView] Auto-selecting preselected source: ${selectedSource.name}`);
+                        handleSourceSelect(selectedSource);
                     }
-                } else {
-                    const errorText = await response.text();
-                    throw new Error(`Failed to load sources: ${errorText}`);
                 }
-            } catch (err) {
-                console.error("Error fetching sources:", err);
+            })
+            .catch(err => {
                 handleError(err instanceof Error ? err : new Error(String(err)), "Failed to fetch sources");
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchSources();
-    }, [preselectedSourceId]);
+            });
+    }, [fetchSources]);
 
     /**
      * Handle source selection
@@ -240,6 +208,13 @@ export const SourceSelectorView: React.FC<SourceSelectorViewProps> = ({
                     <div className="flex flex-col items-center justify-center py-12">
                         <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
                         <p className="text-muted-foreground">Loading available sources...</p>
+                    </div>
+                ) : error ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-destructive">
+                        <p>{error}</p>
+                        <Button variant="outline" onClick={() => fetchSources()} className="mt-4">
+                            Retry
+                        </Button>
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 gap-3">
