@@ -1,4 +1,4 @@
-import { Link, useLocation, Outlet, useNavigate } from "react-router-dom";
+import { Link, useLocation, Outlet, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Settings,
   Menu,
@@ -29,8 +29,9 @@ import { apiClient } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_UPDATED } from "@/lib/events";
 import { APIKeysSettings } from "@/components/settings/APIKeysSettings";
-import { ConnectFlow } from '@/components/shared';
+import { DialogFlow } from '@/components/shared';
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
+import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
@@ -179,6 +180,8 @@ const DashboardLayout = () => {
   const navigate = useNavigate();
   const { resolvedTheme, setTheme } = useTheme();
   const { fetchSources } = useSourcesStore();
+  const [searchParams] = useSearchParams();
+  const [errorData, setErrorData] = useState<any>(null);
 
   // State for the create collection dialog
   const [showCreateCollectionFlow, setShowCreateCollectionFlow] = useState(false);
@@ -191,29 +194,12 @@ const DashboardLayout = () => {
     location.pathname === route || location.pathname.startsWith('/chat/'));
 
   const handleCreateCollection = useCallback(() => {
-    // Prefetch sources before opening the dialog
-    console.log("🔍 [DashboardLayout] Pre-fetching sources before showing ConnectFlow");
-    fetchSources()
-      .then(() => {
-        // Open the ConnectFlow with source-first-collection mode
-        setShowCreateCollectionFlow(true);
-      })
-      .catch(err => {
-        console.error("❌ [DashboardLayout] Error prefetching sources:", err);
-        // Still open the dialog even if prefetch fails - the sources component will handle the error
-        setShowCreateCollectionFlow(true);
-      });
-  }, [fetchSources]);
+    setShowCreateCollectionFlow(true);
+  }, []);
 
-  // Handle completion of collection creation
-  const handleCreateCollectionComplete = useCallback((result) => {
+  const handleCreateCollectionComplete = useCallback(() => {
     setShowCreateCollectionFlow(false);
-
-    // Navigate to the new collection if we have a collectionId
-    if (result?.collectionId) {
-      navigate(`/collections/${result.collectionId}?connected=success`);
-    }
-  }, [navigate]);
+  }, []);
 
   // Memoize active status checks
   const isDashboardActive = useMemo(() =>
@@ -227,6 +213,38 @@ const DashboardLayout = () => {
   const isApiKeysActive = useMemo(() =>
     location.pathname === '/api-keys',
     [location.pathname]);
+
+  // Move this useEffect to be with the other hooks at the top
+  useEffect(() => {
+    const connected = searchParams.get('connected');
+    if (connected === 'error') {
+      console.log("🔔 [DashboardLayout] Detected 'connected=error' parameter in URL");
+
+      // Retrieve error details from localStorage
+      const errorDetails = getStoredErrorDetails();
+
+      if (errorDetails) {
+        console.log("🔔 [DashboardLayout] Found error details in localStorage:", errorDetails);
+
+        // Set error state and open dialog
+        setErrorData({
+          serviceName: errorDetails.serviceName || "the service",
+          errorMessage: errorDetails.errorMessage || "Connection failed",
+          errorDetails: errorDetails.errorDetails
+        });
+
+        // Open the dialog in error view mode
+        setShowCreateCollectionFlow(true);
+      }
+
+      // Clean localStorage and URL parameters
+      clearStoredErrorDetails();
+
+      // Clean URL parameters
+      const newUrl = location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [searchParams, location]);
 
   // Fully memoized SidebarContent component
   const SidebarContent = useMemo(() => (
@@ -424,12 +442,14 @@ const DashboardLayout = () => {
         </div>
       </GradientCard>
 
-      {/* ConnectFlow for creating a new collection starting with source selection */}
-      <ConnectFlow
+      {/* DialogFlow for creating a new collection starting with source selection */}
+      <DialogFlow
         isOpen={showCreateCollectionFlow}
         onOpenChange={setShowCreateCollectionFlow}
-        mode="source-first-collection"
+        mode="create-collection"
+        dialogId="dashboard-layout-create-collection"
         onComplete={handleCreateCollectionComplete}
+        errorData={errorData}
       />
     </GradientBackground>
   );

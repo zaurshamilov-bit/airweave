@@ -17,7 +17,7 @@ References:
     https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-spaces/
 """
 
-from typing import Any, AsyncGenerator, List
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
@@ -38,9 +38,11 @@ from airweave.platform.sources._base import BaseSource
 
 
 @source(
-    "Confluence",
-    "confluence",
-    AuthType.oauth2_with_refresh,
+    name="Confluence",
+    short_name="confluence",
+    auth_type=AuthType.oauth2_with_refresh,
+    auth_config_class="ConfluenceAuthConfig",
+    config_class="ConfluenceConfig",
     labels=["Knowledge Base", "Documentation"],
 )
 class ConfluenceSource(BaseSource):
@@ -111,7 +113,9 @@ class ConfluenceSource(BaseSource):
             return ""
 
     @classmethod
-    async def create(cls, access_token: str) -> "ConfluenceSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "ConfluenceSource":
         """Create a new Confluence source instance."""
         instance = cls()
         instance.access_token = access_token

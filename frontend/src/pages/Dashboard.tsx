@@ -13,10 +13,10 @@ import {
   SourceButton,
   ApiKeyCard,
   ExampleProjectCard,
-  ConnectFlow
 } from "@/components/dashboard";
 import { cn } from "@/lib/utils";
 import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
+import { DialogFlow } from "@/components/shared/DialogFlow";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 
 // Collection type definition
@@ -201,10 +201,8 @@ const Dashboard = () => {
     toast.info("New API key feature coming soon");
   };
 
-  const handleSourceClick = (source: { id: string; name: string; short_name: string }) => {
-    // Set the selected source
+  const handleSourceClick = (source: Source) => {
     setSelectedSource(source);
-    // Open the dialog
     setDialogOpen(true);
   };
 
@@ -250,18 +248,31 @@ const Dashboard = () => {
     },
   ];
 
+  // Log when dialog open state changes
+  useEffect(() => {
+    console.log("🚪 Dashboard dialog open state:", dialogOpen);
+  }, [dialogOpen]);
+
+  // Modify the dialog open handler
+  const handleDialogOpen = (open: boolean) => {
+    console.log("🚪 Dashboard handleDialogOpen called with:", open);
+    setDialogOpen(open);
+  };
+
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-4 py-6 pb-8">
-      {/* Connect Flow Dialog */}
-      <ConnectFlow
+    <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
+      <DialogFlow
         isOpen={dialogOpen}
-        onOpenChange={handleDialogClose}
-        mode={connectionError ? "error-view" : "create-collection"}
+        onOpenChange={handleDialogOpen}
+        mode="source-button"
         sourceId={selectedSource?.id}
         sourceName={selectedSource?.name}
         sourceShortName={selectedSource?.short_name}
-        onComplete={() => fetchCollections()}
-        errorData={connectionError}
+        dialogId="dashboard-source-dialog"
+        onComplete={() => {
+          // Handle completion
+          fetchCollections(false);
+        }}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

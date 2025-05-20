@@ -45,10 +45,11 @@ from airweave.platform.utils.file_extensions import (
 
 
 @source(
-    "GitHub",
-    "github",
-    AuthType.config_class,
-    "GitHubAuthConfig",
+    name="GitHub",
+    short_name="github",
+    auth_type=AuthType.config_class,
+    auth_config_class="GitHubAuthConfig",
+    config_class="GitHubConfig",
     labels=["Code"],
 )
 class GitHubSource(BaseSource):
@@ -57,19 +58,22 @@ class GitHubSource(BaseSource):
     BASE_URL = "https://api.github.com"
 
     @classmethod
-    async def create(cls, config: GitHubAuthConfig) -> "GitHubSource":
+    async def create(
+        cls, credentials: GitHubAuthConfig, config: Optional[Dict[str, Any]] = None
+    ) -> "GitHubSource":
         """Create a new source instance with authentication.
 
         Args:
-            config: GitHubAuthConfig instance
+            credentials: GitHubAuthConfig instance containing authentication details
+            config: Optional source configuration parameters
 
         Returns:
             Configured GitHub source instance
         """
         instance = cls()
 
-        instance.personal_access_token = config.personal_access_token
-        instance.repo_name = config.repo_name
+        instance.personal_access_token = credentials.personal_access_token
+        instance.repo_name = credentials.repo_name
         return instance
 
     @tenacity.retry(

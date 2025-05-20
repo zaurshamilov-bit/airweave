@@ -1,7 +1,7 @@
 """Base source class."""
 
 from abc import abstractmethod
-from typing import Any, AsyncGenerator, ClassVar, List, Optional
+from typing import Any, AsyncGenerator, ClassVar, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -18,12 +18,18 @@ class BaseSource:
 
     @classmethod
     @abstractmethod
-    async def create(cls, credentials: Optional[Any] = None) -> "BaseSource":
+    async def create(
+        cls, credentials: Optional[Any] = None, config: Optional[Dict[str, Any]] = None
+    ) -> "BaseSource":
         """Create a new source instance.
 
         Args:
             credentials: Optional credentials for authenticated sources.
                        For AuthType.none sources, this can be None.
+            config: Optional configuration parameters
+
+        Returns:
+            A configured source instance
         """
         pass
 

@@ -5,7 +5,7 @@ import { Search, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { CollectionCard } from "@/components/dashboard";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
-import { ConnectFlow } from "@/components/shared";
+import { DialogFlow } from "@/components/shared";
 
 const CollectionsView = () => {
   const navigate = useNavigate();
@@ -62,10 +62,10 @@ const CollectionsView = () => {
   // Open create collection dialog
   const handleCreateCollection = () => {
     // Prefetch sources before opening the dialog
-    console.log("🔍 [CollectionsView] Pre-fetching sources before showing ConnectFlow");
+    console.log("🔍 [CollectionsView] Pre-fetching sources before showing DialogFlow");
     fetchSources()
       .then(() => {
-        // Open the ConnectFlow with source-first-collection mode
+        // Open the DialogFlow with create-collection mode
         setDialogOpen(true);
       })
       .catch(err => {
@@ -77,11 +77,12 @@ const CollectionsView = () => {
 
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
-      {/* ConnectFlow Dialog */}
-      <ConnectFlow
+      {/* DialogFlow Dialog */}
+      <DialogFlow
         isOpen={dialogOpen}
-        onOpenChange={handleDialogClose}
-        mode="source-first-collection"
+        onOpenChange={setDialogOpen}
+        mode="create-collection"
+        dialogId="collections-view-create-collection"
         onComplete={handleDialogClose}
       />
 

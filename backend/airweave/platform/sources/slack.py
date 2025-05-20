@@ -1,6 +1,6 @@
 """Slack source implementation."""
 
-from typing import AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -16,7 +16,14 @@ from airweave.platform.entities.slack import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Slack", "slack", AuthType.oauth2, labels=["Communication", "Team Collaboration"])
+@source(
+    name="Slack",
+    short_name="slack",
+    auth_type=AuthType.oauth2,
+    auth_config_class="SlackAuthConfig",
+    config_class="SlackConfig",
+    labels=["Communication", "Team Collaboration"],
+)
 class SlackSource(BaseSource):
     """Slack source implementation.
 
@@ -25,7 +32,9 @@ class SlackSource(BaseSource):
     """
 
     @classmethod
-    async def create(cls, access_token: str) -> "SlackSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "SlackSource":
         """Create a new Slack source instance."""
         instance = cls()
         instance.access_token = access_token

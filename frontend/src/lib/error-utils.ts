@@ -20,6 +20,9 @@ export interface ErrorDetails {
     errorMessage: string;
     errorDetails?: string;
     timestamp: number;
+    canRetry?: boolean;     // Whether this error can be retried
+    dialogState?: any;      // Store dialog state for potential retry
+    dialogId?: string;      // Identify which dialog should handle the error
 }
 
 /**
@@ -31,24 +34,36 @@ export interface ErrorDetails {
  */
 export const redirectWithError = (
     navigateOrLocation: NavigateFunction | typeof window.location | Location,
-    error: Error | string,
+    error: Error | string | ErrorDetails,
     serviceName?: string
 ) => {
     // Extract error information
-    const errorObj = typeof error === 'string' ? new Error(error) : error;
-    const errorMessage = errorObj.message || "Connection failed";
-    const errorDetails = errorObj.stack || errorObj.message;
+    let errorData: ErrorDetails;
 
-    console.error(`❌ [ErrorUtils] Error:`, errorObj);
-    console.log(`🔔 [ErrorUtils] Service name:`, serviceName);
+    if (typeof error === 'string') {
+        errorData = {
+            serviceName,
+            errorMessage: error,
+            errorDetails: error,
+            timestamp: Date.now()
+        };
+    } else if (error instanceof Error) {
+        errorData = {
+            serviceName,
+            errorMessage: error.message || "Connection failed",
+            errorDetails: error.stack || error.message,
+            timestamp: Date.now()
+        };
+    } else {
+        // It's already an ErrorDetails object
+        errorData = {
+            ...error,
+            serviceName: error.serviceName || serviceName,
+            timestamp: Date.now()
+        };
+    }
 
-    // Create error details object
-    const errorData: ErrorDetails = {
-        serviceName,
-        errorMessage,
-        errorDetails,
-        timestamp: Date.now()
-    };
+    console.error(`❌ [ErrorUtils] Error:`, errorData);
 
     // Store in localStorage (no size limitation)
     localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));

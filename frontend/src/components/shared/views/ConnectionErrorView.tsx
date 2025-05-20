@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme-provider";
-import { DialogViewProps } from "../FlowDialog";
+import { DialogViewProps } from "../DialogFlow";
 import { getAppIconUrl } from "@/lib/utils/icons";
 
 /**
@@ -35,6 +35,8 @@ export interface ConnectionErrorViewProps extends DialogViewProps {
         errorDetails?: string;
         /** Optional function to retry the failed operation */
         retryAction?: () => void;
+        /** Indicates if retry is possible */
+        canRetry?: boolean;
     };
 }
 
@@ -57,7 +59,8 @@ export const ConnectionErrorView: React.FC<ConnectionErrorViewProps> = ({
         sourceShortName = serviceName?.toLowerCase() || "the-service",
         errorMessage = "Connection failed",
         errorDetails,
-        retryAction
+        retryAction,
+        canRetry
     } = viewData || {};
 
     // Log when this component is rendered with data
@@ -190,10 +193,11 @@ export const ConnectionErrorView: React.FC<ConnectionErrorViewProps> = ({
                         Go back
                     </Button>
 
-                    {retryAction && (
+                    {(retryAction || canRetry === true) && (
                         <Button
-                            onClick={retryAction}
+                            onClick={retryAction || (() => console.log("No retry action defined"))}
                             className="bg-blue-600 hover:bg-blue-700 text-white"
+                            disabled={!retryAction && canRetry}
                         >
                             <RefreshCw className="mr-2 h-4 w-4" />
                             Try again

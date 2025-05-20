@@ -66,6 +66,7 @@ class SyncService:
         collection: schemas.Collection,
         source_connection: schemas.Connection,
         current_user: schemas.User,
+        access_token: Optional[str] = None,
     ) -> schemas.Sync:
         """Run a sync.
 
@@ -74,9 +75,11 @@ class SyncService:
             sync (schemas.Sync): The sync to run.
             sync_job (schemas.SyncJob): The sync job to run.
             dag (schemas.SyncDag): The DAG to run.
-            current_user (schemas.User): The current user.
             collection (schemas.Collection): The collection to sync.
             source_connection (schemas.Connection): The source connection to sync.
+            current_user (schemas.User): The current user.
+            access_token (Optional[str]): Optional access token to use
+                instead of stored credentials.
 
         Returns:
         -------
@@ -85,11 +88,18 @@ class SyncService:
         try:
             async with get_db_context() as db:
                 sync_context = await SyncContextFactory.create(
-                    db, sync, sync_job, dag, collection, source_connection, current_user
+                    db,
+                    sync,
+                    sync_job,
+                    dag,
+                    collection,
+                    source_connection,
+                    current_user,
+                    access_token=access_token,
                 )
         except Exception as e:
             logger.error(f"Error during sync context creation: {e}")
-            # Fail the sync job if concext creation failed
+            # Fail the sync job if context creation failed
             await sync_job_service.update_status(
                 sync_job_id=sync_job.id,
                 status=SyncJobStatus.FAILED,

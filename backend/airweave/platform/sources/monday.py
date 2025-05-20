@@ -10,6 +10,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 
 from airweave.platform.auth.schemas import AuthType
+from airweave.platform.configs.auth import MondayAuthConfig
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
 from airweave.platform.entities.monday import (
@@ -23,7 +24,14 @@ from airweave.platform.entities.monday import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Monday", "monday", AuthType.oauth2, labels=["Project Management"])
+@source(
+    name="Monday",
+    short_name="monday",
+    auth_type=AuthType.oauth2,
+    auth_config_class="MondayAuthConfig",
+    config_class="MondayConfig",
+    labels=["Project Management"],
+)
 class MondaySource(BaseSource):
     """Monday source implementation.
 
@@ -34,17 +42,20 @@ class MondaySource(BaseSource):
     GRAPHQL_ENDPOINT = "https://api.monday.com/v2"
 
     @classmethod
-    async def create(cls, access_token: str) -> "MondaySource":
+    async def create(
+        cls, auth_config: MondayAuthConfig, config: Optional[Dict[str, Any]] = None
+    ) -> "MondaySource":
         """Create a new Monday source.
 
         Args:
-            access_token: The OAuth2 access token for Monday.com API access.
+            auth_config: Authentication configuration containing the access token.
+            config: Optional configuration parameters for the Monday source.
 
         Returns:
             A configured MondaySource instance.
         """
         instance = cls()
-        instance.access_token = access_token
+        instance.access_token = auth_config.access_token
         return instance
 
     async def _graphql_query(

@@ -1,6 +1,6 @@
 """Todoist source implementation."""
 
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
@@ -16,7 +16,14 @@ from airweave.platform.entities.todoist import (
 from airweave.platform.sources._base import BaseSource
 
 
-@source("Todoist", "todoist", AuthType.oauth2, labels=["Productivity", "Task Management"])
+@source(
+    name="Todoist",
+    short_name="todoist",
+    auth_type=AuthType.oauth2,
+    auth_config_class="TodoistAuthConfig",
+    config_class="TodoistConfig",
+    labels=["Productivity", "Task Management"],
+)
 class TodoistSource(BaseSource):
     """Todoist source implementation.
 
@@ -30,7 +37,9 @@ class TodoistSource(BaseSource):
     """
 
     @classmethod
-    async def create(cls, access_token: str) -> "TodoistSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "TodoistSource":
         """Create a new Todoist source instance."""
         instance = cls()
         instance.access_token = access_token

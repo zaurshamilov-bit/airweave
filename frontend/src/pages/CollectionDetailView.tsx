@@ -24,7 +24,7 @@ import {
 import SourceConnectionDetailView from "@/components/collection/SourceConnectionDetailView";
 import { emitCollectionEvent, COLLECTION_DELETED } from "@/lib/events";
 import { QueryToolAndLiveDoc } from '@/components/collection/QueryToolAndLiveDoc';
-import { ConnectFlow } from '@/components/shared';
+import { DialogFlow } from '@/components/shared';
 import { protectedPaths } from "@/constants/paths";
 
 // DeleteCollectionDialog component
@@ -712,19 +712,15 @@ const Collections = () => {
                         setConfirmText={setConfirmText}
                     />
 
-                    {/* ConnectFlow for adding a source to an existing collection
-                        Setting mode="add-source" with collectionId/Name ensures it will:
-                        1. Start with SourceSelectorView (skipping CreateCollectionView)
-                        2. Use the existing collection instead of creating a new one
-                        3. Only create a source connection, not a new collection
-                    */}
+                    {/* Replace this ConnectFlow with DialogFlow */}
                     {collection && (
-                        <ConnectFlow
+                        <DialogFlow
                             isOpen={showAddSourceDialog}
                             onOpenChange={setShowAddSourceDialog}
                             mode="add-source"
                             collectionId={collection.readable_id}
                             collectionName={collection.name}
+                            dialogId="collection-detail-add-source"
                             onComplete={() => {
                                 setShowAddSourceDialog(false);
                                 reloadData();

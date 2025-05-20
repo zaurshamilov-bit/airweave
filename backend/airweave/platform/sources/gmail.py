@@ -12,7 +12,7 @@ Reference:
   https://developers.google.com/gmail/api/reference/rest
 """
 
-from typing import AsyncGenerator, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
@@ -29,10 +29,11 @@ from airweave.platform.sources._base import BaseSource
 
 
 @source(
-    "Gmail",
-    "gmail",
-    AuthType.oauth2_with_refresh,
-    auth_config_class="GoogleAuthConfig",
+    name="Gmail",
+    short_name="gmail",
+    auth_type=AuthType.oauth2_with_refresh,
+    auth_config_class="GmailAuthConfig",
+    config_class="GmailConfig",
     labels=["Communication", "Email"],
 )
 class GmailSource(BaseSource):
@@ -43,7 +44,9 @@ class GmailSource(BaseSource):
     """
 
     @classmethod
-    async def create(cls, access_token: str) -> "GmailSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "GmailSource":
         """Create a new Gmail source instance with the provided OAuth access token."""
         instance = cls()
         instance.access_token = access_token

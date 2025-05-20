@@ -14,7 +14,7 @@ References:
     https://developers.google.com/drive/api/v3/reference/files  (Files)
 """
 
-from typing import AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional
 
 import httpx
 
@@ -27,10 +27,11 @@ from airweave.platform.sources._base import BaseSource
 
 
 @source(
-    "Google Drive",
-    "google_drive",
-    AuthType.oauth2_with_refresh,
-    auth_config_class="GoogleAuthConfig",
+    name="Google Drive",
+    short_name="google_drive",
+    auth_type=AuthType.oauth2_with_refresh,
+    auth_config_class="GoogleDriveAuthConfig",
+    config_class="GoogleDriveConfig",
     labels=["File Storage"],
 )
 class GoogleDriveSource(BaseSource):
@@ -43,7 +44,9 @@ class GoogleDriveSource(BaseSource):
     """
 
     @classmethod
-    async def create(cls, access_token: str) -> "GoogleDriveSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "GoogleDriveSource":
         """Create a new Google Drive source instance with the provided OAuth access token."""
         instance = cls()
         instance.access_token = access_token
