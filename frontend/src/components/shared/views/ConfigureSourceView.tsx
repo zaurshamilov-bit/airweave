@@ -38,6 +38,9 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
     const [validationAttempted, setValidationAttempted] = useState(false);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [dialogState, setDialogState] = useState<any>(null);
+    const [connectionName, setConnectionName] = useState<string>(
+        viewData.connectionName || `${viewData.sourceName || ""} Connection`
+    );
 
     // Extract data passed from previous views
     const {
@@ -225,7 +228,13 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
         }
     };
 
-    // Add to handleNextStep
+    // Add this function to check if there are config fields
+    const hasConfigFields = (): boolean => {
+        return !!(sourceDetails?.config_fields?.fields &&
+            sourceDetails.config_fields.fields.length > 0);
+    };
+
+    // Modify handleNextStep
     const handleNextStep = () => {
         console.log('🔄 Attempting to proceed to next step...');
         setValidationAttempted(true);
@@ -233,8 +242,13 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
         console.log(`Validation result: ${isValid ? '✅ VALID' : '❌ INVALID'}`);
 
         if (isValid) {
-            console.log('✅ Proceeding to config step');
-            setStep('config');
+            if (hasConfigFields()) {
+                console.log('✅ Proceeding to config step');
+                setStep('config');
+            } else {
+                console.log('✅ No config fields, proceeding directly to connection');
+                handleComplete();
+            }
         } else {
             console.log('❌ Cannot proceed - validation failed');
         }
@@ -247,33 +261,107 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
 
         setSubmitting(true);
         try {
-            // Here you would make an API call to connect the source
-            // with authValues and configValues
+            // Determine which collection we're using
+            let collectionId = viewData.collectionId;
 
-            // Example API call (replace with your actual endpoint)
-            // const response = await apiClient.post('/sources/connect', {
-            //     source_short_name: sourceShortName,
-            //     collection_id: created_collection_id || collectionId,
-            //     auth_config: authValues,
-            //     source_config: configValues
-            // });
+            // If we need to create a collection (it doesn't exist yet)
+            if (viewData.created_collection_id && viewData.created_collection_name) {
+                console.log(`🆕 Creating new collection: ${viewData.created_collection_name} (${viewData.created_collection_id})`);
 
-            // For now, just simulate success
+                // Create collection via API
+                const collectionResponse = await apiClient.post('/collections', {
+                    name: viewData.created_collection_name,
+                    readable_id: viewData.created_collection_id
+                });
+
+                if (!collectionResponse.ok) {
+                    const errorText = await collectionResponse.text();
+                    throw new Error(`Failed to create collection: ${errorText}`);
+                }
+
+                const collection = await collectionResponse.json();
+                console.log(`✅ Collection created successfully: ${collection.readable_id}`);
+                collectionId = collection.readable_id;
+            }
+
+            // Ensure we have a valid credential ID from the OAuth process
+            if (!viewData.credentialId) {
+                throw new Error("Missing credential ID. Authentication may not have completed properly.");
+            }
+
+            // Now create the source connection with the credential
+            console.log(`🔌 Creating source connection in collection: ${collectionId}`);
+
+            const sourceConnectionData = {
+                name: viewData.connectionName || connectionName || `${sourceName} Connection`,
+                short_name: sourceShortName,
+                collection: collectionId,
+                credential_id: viewData.credentialId,
+                config_fields: configValues,
+                sync_immediately: true
+            };
+
+            console.log(`📝 Source connection data:`, sourceConnectionData);
+
+            const sourceConnectionResponse = await apiClient.post('/source-connections/', sourceConnectionData);
+
+            if (!sourceConnectionResponse.ok) {
+                const errorText = await sourceConnectionResponse.text();
+                throw new Error(`Failed to create source connection: ${errorText}`);
+            }
+
+            const sourceConnection = await sourceConnectionResponse.json();
+            console.log(`✅ Source connection created successfully: ${sourceConnection.id}`);
+
+            // Clear credential from sessionStorage to prevent auto-reopening
+            sessionStorage.removeItem('oauth_dialog_state');
+
+            // Complete the process
             if (onComplete) {
                 onComplete({
                     success: true,
                     message: "Source connected successfully",
                     source_short_name: sourceShortName,
-                    collection_id: created_collection_id || collectionId,
-                    auth_config: authValues,
-                    source_config: configValues
+                    collection_id: collectionId,
+                    source_connection_id: sourceConnection.id,
+                    isCompleted: true // Signal this is a final completion
                 });
             }
+
+            // Redirect to collection detail view
+            navigate(`/collections/${collectionId}`);
         } catch (error) {
             handleError(error instanceof Error ? error : new Error(String(error)), "Source connection error");
         } finally {
             setSubmitting(false);
         }
+    };
+
+    // Add or update this function
+    const validateConfigFields = (): boolean => {
+        const newErrors: Record<string, string> = {};
+        let isValid = true;
+
+        // Check that we have either created_collection_id or collectionId
+        if (!viewData.created_collection_id && !viewData.collectionId) {
+            newErrors['collection'] = 'Missing collection information';
+            isValid = false;
+        }
+
+        // Validate config fields if they're present
+        if (sourceDetails?.config_fields?.fields) {
+            sourceDetails.config_fields.fields
+                .filter((field: any) => field.required)
+                .forEach((field: any) => {
+                    if (!configValues[field.name] || configValues[field.name].trim() === '') {
+                        newErrors[field.name] = `${field.title || field.name} is required`;
+                        isValid = false;
+                    }
+                });
+        }
+
+        setErrors(newErrors);
+        return isValid;
     };
 
     // Log when the component loads auth fields
@@ -304,41 +392,52 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
                 // Collection information from viewData
                 ...viewData,
 
+                // Connection name
+                connectionName,
+
                 // Current auth values
                 authValues,
 
-                // UI state - IMPORTANT: Save both the dialog flow step and the internal step
-                configureStep: step,          // 'auth' or 'config' internal step
-                dialogFlowStep: viewData.dialogFlowStep || 1, // Numeric index in flow sequence
+                // UI state
+                configureStep: step,
+                dialogFlowStep: viewData.dialogFlowStep || 1,
                 validationAttempted,
 
                 // Location information
                 originPath: window.location.pathname,
 
                 // Additional context needed to restore dialog
-                dialogMode: viewData.dialogMode || 'source-button'
+                dialogMode: viewData.dialogMode || 'source-button',
+
+                // Add timestamp for freshness checking
+                timestamp: Date.now()
             };
 
             console.log("📊 FULL DIALOG STATE BEFORE OAUTH:", JSON.stringify(dialogState, null, 2));
 
-            // For OAuth flows, don't set authenticated state yet since we'll be redirected
+            // Check if this is an OAuth flow
             const isOAuthFlow = sourceDetails.auth_type &&
                 sourceDetails.auth_type.startsWith('oauth2');
 
             // Pass navigate to authenticateSource
-            const success = await authenticateSource(dialogState, navigate);
+            const result = await authenticateSource(dialogState, navigate);
 
-            // Only set authenticated immediately for non-OAuth flows
-            if (success && !isOAuthFlow) {
-                setIsAuthenticated(success);
-                // If authentication is successful, we can validate fields too
-                setValidationAttempted(true);
-                validateAuthFields();
-            }
+            // Only set authenticated state for non-OAuth flows or if we got a credentialId
+            if (result.success) {
+                if (result.credentialId) {
+                    // For non-OAuth flows, we update the auth state through onNext
+                    onNext?.({
+                        credentialId: result.credentialId,
+                        isAuthenticated: true
+                    });
 
-            // Set isAuthenticated based on credentialId in dialogState
-            if (dialogState.credentialId) {
-                setIsAuthenticated(true);
+                    // Only set authenticated for non-OAuth flows or when we have a credentialId
+                    if (!isOAuthFlow || result.credentialId) {
+                        setIsAuthenticated(true);
+                        setValidationAttempted(true);
+                        validateAuthFields();
+                    }
+                }
             }
         } catch (error) {
             console.error("Authentication error:", error);
@@ -381,6 +480,15 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
         }
     }, [viewData]);
 
+    // Update when sourceName changes to set default - modify around line 330
+    useEffect(() => {
+        // Only update if viewData.connectionName changes
+        if (viewData.connectionName) {
+            console.log("📝 Restoring saved connection name:", viewData.connectionName);
+            setConnectionName(viewData.connectionName);
+        }
+    }, [viewData.connectionName]);
+
     // Render the auth fields step
     const renderAuthStep = () => (
         <div className="space-y-6">
@@ -408,6 +516,29 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
             <DialogDescription className="text-muted-foreground mb-6">
                 {sourceName ? `Set up authentication for ${sourceName}` : "Set up your source authentication"}
             </DialogDescription>
+
+            {/* Add this right after the DialogDescription and before the auth fields section */}
+            <div className="bg-muted p-6 rounded-lg mb-4">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-medium">Connection Name</h3>
+                </div>
+                <div className="space-y-2">
+                    <label className="text-sm font-medium">Name</label>
+                    <input
+                        type="text"
+                        className={cn(
+                            "w-full p-2 rounded border",
+                            isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-300"
+                        )}
+                        placeholder="Enter a name for this connection"
+                        value={connectionName}
+                        onChange={(e) => setConnectionName(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        A descriptive name for this connection. Defaults to "{sourceName} Connection".
+                    </p>
+                </div>
+            </div>
 
             {/* Auth fields section */}
             <div className="bg-muted p-6 rounded-lg mb-4">
@@ -592,7 +723,7 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
                                 className="px-6 bg-blue-600 hover:bg-blue-700 text-white"
                                 disabled={loading || !isAuthenticated}
                             >
-                                Next
+                                {hasConfigFields() ? 'Next' : 'Connect'}
                             </Button>
                         ) : (
                             <Button

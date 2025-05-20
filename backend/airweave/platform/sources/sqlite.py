@@ -71,16 +71,19 @@ class SQLiteSource(BaseSource):
         self.entity_classes: Dict[str, Type[PolymorphicEntity]] = {}
 
     @classmethod
-    async def create(cls, config: Dict[str, Any]) -> "SQLiteSource":
+    async def create(
+        cls, credentials: Dict[str, Any], config: Optional[Dict[str, Any]] = None
+    ) -> "SQLiteSource":
         """Create a new SQLite source instance.
 
         Args:
-            config: Dictionary containing connection details:
+            credentials: Dictionary containing connection details:
                 - database: Path to SQLite database file
                 - tables: Table to sync (defaults to '*')
+            config: Optional configuration parameters for the SQLite source.
         """
         instance = cls()
-        instance.config = config.model_dump()
+        instance.config = credentials.model_dump()
         return instance
 
     async def _connect(self) -> None:

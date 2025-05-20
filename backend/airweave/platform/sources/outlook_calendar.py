@@ -38,7 +38,9 @@ class OutlookCalendarSource(BaseSource):
     """Outlook Calendar source implementation (read-only)."""
 
     @classmethod
-    async def create(cls, access_token: str) -> "OutlookCalendarSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "OutlookCalendarSource":
         """Create a new Outlook Calendar source instance."""
         instance = cls()
         instance.access_token = access_token

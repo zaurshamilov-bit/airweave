@@ -12,7 +12,7 @@ Reference:
   https://developers.google.com/gmail/api/reference/rest
 """
 
-from typing import AsyncGenerator, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
@@ -44,7 +44,9 @@ class GmailSource(BaseSource):
     """
 
     @classmethod
-    async def create(cls, access_token: str) -> "GmailSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "GmailSource":
         """Create a new Gmail source instance with the provided OAuth access token."""
         instance = cls()
         instance.access_token = access_token

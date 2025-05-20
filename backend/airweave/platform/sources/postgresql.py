@@ -62,11 +62,13 @@ class PostgreSQLSource(BaseSource):
         self.entity_classes: Dict[str, Type[PolymorphicEntity]] = {}
 
     @classmethod
-    async def create(cls, config: Dict[str, Any]) -> "PostgreSQLSource":
+    async def create(
+        cls, credentials: Dict[str, Any], config: Optional[Dict[str, Any]] = None
+    ) -> "PostgreSQLSource":
         """Create a new PostgreSQL source instance.
 
         Args:
-            config: Dictionary containing connection details:
+            credentials: Dictionary containing connection details:
                 - host: Database host
                 - port: Database port
                 - database: Database name
@@ -74,9 +76,10 @@ class PostgreSQLSource(BaseSource):
                 - password: Password
                 - schema: Schema to sync (defaults to 'public')
                 - tables: Table to sync (defaults to '*')
+            config: Optional configuration parameters for the PostgreSQL source.
         """
         instance = cls()
-        instance.config = config.model_dump()
+        instance.config = credentials.model_dump()
         return instance
 
     async def _connect(self) -> None:

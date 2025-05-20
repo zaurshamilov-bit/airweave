@@ -1,4 +1,4 @@
-import { Link, useLocation, Outlet, useNavigate } from "react-router-dom";
+import { Link, useLocation, Outlet, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Settings,
   Menu,
@@ -31,6 +31,7 @@ import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_U
 import { APIKeysSettings } from "@/components/settings/APIKeysSettings";
 import { useCollections, Collection } from "@/lib/collectionsContext";
 import { DialogFlow } from '@/components/shared';
+import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
@@ -171,6 +172,8 @@ const DashboardLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { resolvedTheme, setTheme } = useTheme();
+  const [searchParams] = useSearchParams();
+  const [errorData, setErrorData] = useState<any>(null);
 
   // State for the create collection dialog
   const [showCreateCollectionFlow, setShowCreateCollectionFlow] = useState(false);
@@ -202,6 +205,38 @@ const DashboardLayout = () => {
   const isApiKeysActive = useMemo(() =>
     location.pathname === '/api-keys',
     [location.pathname]);
+
+  // Move this useEffect to be with the other hooks at the top
+  useEffect(() => {
+    const connected = searchParams.get('connected');
+    if (connected === 'error') {
+      console.log("🔔 [DashboardLayout] Detected 'connected=error' parameter in URL");
+
+      // Retrieve error details from localStorage
+      const errorDetails = getStoredErrorDetails();
+
+      if (errorDetails) {
+        console.log("🔔 [DashboardLayout] Found error details in localStorage:", errorDetails);
+
+        // Set error state and open dialog
+        setErrorData({
+          serviceName: errorDetails.serviceName || "the service",
+          errorMessage: errorDetails.errorMessage || "Connection failed",
+          errorDetails: errorDetails.errorDetails
+        });
+
+        // Open the dialog in error view mode
+        setShowCreateCollectionFlow(true);
+      }
+
+      // Clean localStorage and URL parameters
+      clearStoredErrorDetails();
+
+      // Clean URL parameters
+      const newUrl = location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [searchParams, location]);
 
   // Fully memoized SidebarContent component
   const SidebarContent = useMemo(() => (
@@ -399,14 +434,6 @@ const DashboardLayout = () => {
         </div>
       </GradientCard>
 
-      {/* ConnectFlow for creating a new collection starting with source selection */}
-      {/* <ConnectFlow
-        isOpen={showCreateCollectionFlow}
-        onOpenChange={setShowCreateCollectionFlow}
-        mode="source-first-collection"
-        onComplete={handleCreateCollectionComplete}
-      /> */}
-
       {/* DialogFlow for creating a new collection starting with source selection */}
       <DialogFlow
         isOpen={showCreateCollectionFlow}
@@ -414,6 +441,7 @@ const DashboardLayout = () => {
         mode="create-collection"
         dialogId="dashboard-layout-create-collection"
         onComplete={handleCreateCollectionComplete}
+        errorData={errorData}
       />
     </GradientBackground>
   );

@@ -298,7 +298,9 @@ class MySQLAuthConfig(BaseDatabaseAuthConfig):
 class NotionAuthConfig(AuthConfig):
     """Notion authentication credentials schema."""
 
-    auth_token: str = Field(title="Auth Token", description="The auth token for your Notion app.")
+    access_token: str = Field(
+        title="Access Token", description="The access token for your Notion app."
+    )
 
 
 class OneDriveAuthConfig(AuthConfig):

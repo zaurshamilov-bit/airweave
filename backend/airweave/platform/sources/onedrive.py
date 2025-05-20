@@ -18,7 +18,7 @@ Reference (Graph API):
 """
 
 from collections import deque
-from typing import AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional
 
 import httpx
 
@@ -41,7 +41,9 @@ class OneDriveSource(BaseSource):
     """OneDrive source implementation (read-only)."""
 
     @classmethod
-    async def create(cls, access_token: str) -> "OneDriveSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "OneDriveSource":
         """Instantiate a new OneDrive source object with the provided OAuth access token."""
         instance = cls()
         instance.access_token = access_token

@@ -16,7 +16,7 @@ We retrieve data from the Stripe API for the following core resources:
 Then, we yield them as entities using the respective entity schemas defined in entities/stripe.py.
 """
 
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, Dict, Optional
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -72,7 +72,9 @@ class StripeSource(BaseSource):
     """
 
     @classmethod
-    async def create(cls, stripe_auth_config: StripeAuthConfig) -> "StripeSource":
+    async def create(
+        cls, stripe_auth_config: StripeAuthConfig, config: Optional[Dict[str, Any]] = None
+    ) -> "StripeSource":
         """Create a new Stripe source instance."""
         instance = cls()
         instance.api_key = stripe_auth_config.api_key

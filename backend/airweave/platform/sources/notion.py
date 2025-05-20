@@ -5,7 +5,7 @@ handling API rate limits, and converting API responses to entity objects.
 """
 
 import asyncio
-from typing import AsyncGenerator, Dict, List
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 from httpx import ReadTimeout, TimeoutException
@@ -40,11 +40,11 @@ class NotionSource(BaseSource):
     MAX_RETRIES = 3
 
     @classmethod
-    async def create(cls, access_token: str) -> "NotionSource":
+    async def create(cls, credentials, config: Optional[Dict[str, Any]] = None) -> "NotionSource":
         """Create a new Notion source."""
         logger.info("Creating new Notion source")
         instance = cls()
-        instance.access_token = access_token
+        instance.access_token = credentials.access_token
         return instance
 
     def __init__(self):

@@ -18,7 +18,7 @@ References:
   https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_comments/
 """
 
-from typing import AsyncGenerator, Dict
+from typing import Any, AsyncGenerator, Dict, Optional
 
 import httpx
 
@@ -56,7 +56,9 @@ class ZendeskSource(BaseSource):
     """
 
     @classmethod
-    async def create(cls, access_token: str) -> "ZendeskSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "ZendeskSource":
         """Create a new Zendesk source instance."""
         instance = cls()
         instance.access_token = access_token

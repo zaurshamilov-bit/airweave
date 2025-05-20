@@ -41,7 +41,9 @@ class OutlookMailSource(BaseSource):
     GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 
     @classmethod
-    async def create(cls, access_token: str) -> "OutlookMailSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "OutlookMailSource":
         """Create an OutlookMailSource instance with the given access token."""
         instance = cls()
         instance.access_token = access_token

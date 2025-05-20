@@ -82,7 +82,7 @@ const create_credential_non_oauth = async (
     sourceDetails: any,
     sourceShortName: string,
     navigate?: any
-): Promise<boolean> => {
+): Promise<{ success: boolean, credentialId?: string }> => {
     try {
         // Prepare the credential data according to IntegrationCredentialRawCreate schema
         const credentialData = {
@@ -112,10 +112,8 @@ const create_credential_non_oauth = async (
         // Get the created credential with its ID
         const credential = await response.json();
 
-        // Show success message with the UUID
-        alert(`Credential created successfully!\nID: ${credential.id}`);
-
-        return true;
+        // Return success with credential ID instead of showing alert
+        return { success: true, credentialId: credential.id };
     } catch (error) {
         // Replace the alert with redirectWithError
         if (navigate) {
@@ -123,14 +121,15 @@ const create_credential_non_oauth = async (
         } else {
             redirectWithError(window.location, error, sourceDetails?.name || sourceShortName);
         }
-        return false;
+        return { success: false };
     }
 };
 
+// Update authenticateSource to handle the credential ID
 export const authenticateSource = async (
     dialogState: Record<string, any>,
     navigate?: any
-): Promise<boolean> => {
+): Promise<{ success: boolean, credentialId?: string }> => {
     const { authValues, sourceDetails, sourceShortName } = dialogState;
 
     // Format the data for display
@@ -154,7 +153,7 @@ ${authFieldsInfo}
     try {
         // Check auth_type and call appropriate function
         if (sourceDetails.auth_type && sourceDetails.auth_type.startsWith('oauth2')) {
-            return await create_credentials_oauth(dialogState, navigate);
+            return { success: await create_credentials_oauth(dialogState, navigate) };
         } else {
             return await create_credential_non_oauth(authValues, sourceDetails, sourceShortName, navigate);
         }
@@ -167,7 +166,7 @@ ${authFieldsInfo}
         } else {
             redirectWithError(window.location, error, sourceDetails?.name || sourceShortName);
         }
-        return false;
+        return { success: false };
     }
 };
 

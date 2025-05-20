@@ -19,6 +19,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useSearchParams, useParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
+import { CONNECTION_ERROR_STORAGE_KEY } from "@/lib/error-utils";
 
 /**
  * AuthCallback Component
@@ -53,8 +54,27 @@ export function AuthCallback() {
 
         // Check for OAuth provider errors
         if (errorParam) {
+          console.error(`OAuth provider returned error: ${errorParam}`);
           const errorDesc = searchParams.get("error_description") || "Authorization denied";
-          throw new Error(`OAuth error: ${errorParam} - ${errorDesc}`);
+
+          // Set error state for UI
+          setError(`OAuth error: ${errorParam} - ${errorDesc}`);
+          setIsProcessing(false);
+
+          // Create error data and store it
+          const errorData = {
+            serviceName: short_name,
+            errorMessage: `OAuth error: ${errorParam} - ${errorDesc}`,
+            errorDetails: `The OAuth provider rejected the authorization request with error: ${errorParam}`,
+            timestamp: Date.now()
+          };
+
+          // Store in localStorage without risk of exception
+          localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
+
+          // Immediate redirect to dashboard with error flag
+          window.location.href = "/dashboard?connected=error";
+          return;
         }
 
         if (!code || !short_name) {
@@ -73,12 +93,31 @@ export function AuthCallback() {
 
         // Exchange code for credentials using the new endpoint
         console.log(`🔄 Exchanging code for credentials for ${short_name}`);
+
+        // Define interface for type safety
+        interface CredentialRequestData {
+          credential_name: string;
+          credential_description: string;
+          client_id?: string;
+          client_secret?: string;
+        }
+
+        const requestData: CredentialRequestData = {
+          credential_name: `${savedState.sourceDetails?.name || short_name} OAuth Credential`,
+          credential_description: `OAuth credential for ${savedState.sourceDetails?.name || short_name}`
+        };
+
+        // Add client_id and client_secret from authValues if they exist
+        if (savedState.authValues?.client_id) {
+          requestData.client_id = savedState.authValues.client_id;
+        }
+        if (savedState.authValues?.client_secret) {
+          requestData.client_secret = savedState.authValues.client_secret;
+        }
+
         const response = await apiClient.post(
           `/source-connections/${short_name}/code_to_token_credentials?code=${encodeURIComponent(code)}`,
-          {
-            credential_name: `${savedState.sourceDetails?.name || short_name} OAuth Credential`,
-            credential_description: `OAuth credential for ${savedState.sourceDetails?.name || short_name}`
-          }
+          requestData
         );
 
         if (!response.ok) {
@@ -91,10 +130,13 @@ export function AuthCallback() {
         console.log("✅ Credentials created:", credential.id);
 
         // Update saved state with credential info
-        savedState.credentialId = credential.id;
-        savedState.isAuthenticated = true;
-        console.log("📊 UPDATED STATE WITH CREDENTIALS:", JSON.stringify(savedState, null, 2));
-        sessionStorage.setItem('oauth_dialog_state', JSON.stringify(savedState));
+        const updatedState = {
+          ...savedState,
+          credentialId: credential.id,
+          isAuthenticated: true
+        };
+        console.log("📊 UPDATED STATE WITH CREDENTIALS:", JSON.stringify(updatedState, null, 2));
+        sessionStorage.setItem('oauth_dialog_state', JSON.stringify(updatedState));
 
         // Redirect back to original page with flag to restore dialog
         const returnPath = savedState.originPath || "/dashboard";
@@ -121,12 +163,17 @@ export function AuthCallback() {
         localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
 
         // Redirect with error flag - this will trigger the error UI
-        setTimeout(() => {
-          const savedState = sessionStorage.getItem('oauth_dialog_state');
-          const parsedState = savedState ? JSON.parse(savedState) : {};
-          const returnPath = parsedState.originPath || "/dashboard";
-          window.location.href = `${returnPath}?connected=error`;
-        }, 3000);
+        const savedState = sessionStorage.getItem('oauth_dialog_state');
+        const parsedState = savedState ? JSON.parse(savedState) : {};
+        const returnPath = parsedState.originPath || "/dashboard";
+        window.location.href = `${returnPath}?connected=error`;
+
+        console.error("OAuth error detected:", {
+          error: errorParam,
+          description: searchParams.get("error_description") || "Not provided",
+          state: searchParams.get("state"),
+          savedState: !!savedStateJson
+        });
       }
     };
 
@@ -140,7 +187,12 @@ export function AuthCallback() {
         <div className="rounded-lg border bg-card p-8 max-w-md text-center">
           <h2 className="text-xl font-semibold mb-4">Authentication Error</h2>
           <p className="text-muted-foreground mb-6">{error}</p>
-          <p className="text-sm text-muted-foreground">Redirecting back...</p>
+          <a
+            href="/dashboard?connected=error"
+            className="inline-block px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+          >
+            Return to Dashboard
+          </a>
         </div>
       </div>
     );

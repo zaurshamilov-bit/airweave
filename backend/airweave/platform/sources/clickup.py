@@ -56,7 +56,9 @@ class ClickUpSource(BaseSource):
     BASE_URL = "https://api.clickup.com/api/v2/"
 
     @classmethod
-    async def create(cls, access_token: str) -> "ClickUpSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "ClickUpSource":
         """Create a new Slack source instance."""
         instance = cls()
         instance.access_token = access_token

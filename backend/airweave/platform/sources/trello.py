@@ -1,6 +1,6 @@
 """Trello source implementation."""
 
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
@@ -39,7 +39,9 @@ class TrelloSource(BaseSource):
     TRELLO_API_BASE = "https://api.trello.com/1"
 
     @classmethod
-    async def create(cls, access_token: str) -> "TrelloSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "TrelloSource":
         """Create a new Trello source instance."""
         instance = cls()
         instance.access_token = access_token

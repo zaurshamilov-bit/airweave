@@ -1,6 +1,6 @@
 """HubSpot source implementation."""
 
-from typing import AsyncGenerator, Dict
+from typing import Any, AsyncGenerator, Dict, Optional
 
 import httpx
 
@@ -33,7 +33,9 @@ class HubspotSource(BaseSource):
     """
 
     @classmethod
-    async def create(cls, access_token: str) -> "HubspotSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "HubspotSource":
         """Create a new HubSpot source instance."""
         instance = cls()
         instance.access_token = access_token

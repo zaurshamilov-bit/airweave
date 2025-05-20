@@ -15,7 +15,7 @@ Reference:
 """
 
 from datetime import datetime, timedelta
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
@@ -48,7 +48,9 @@ class GoogleCalendarSource(BaseSource):
     """
 
     @classmethod
-    async def create(cls, access_token: str) -> "GoogleCalendarSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "GoogleCalendarSource":
         """Create a new Google Calendar source instance with the provided OAuth access token."""
         instance = cls()
         instance.access_token = access_token

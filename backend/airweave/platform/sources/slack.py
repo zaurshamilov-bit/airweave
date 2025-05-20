@@ -1,6 +1,6 @@
 """Slack source implementation."""
 
-from typing import AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, Optional
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -32,7 +32,9 @@ class SlackSource(BaseSource):
     """
 
     @classmethod
-    async def create(cls, access_token: str) -> "SlackSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "SlackSource":
         """Create a new Slack source instance."""
         instance = cls()
         instance.access_token = access_token

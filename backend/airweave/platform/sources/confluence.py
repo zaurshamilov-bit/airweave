@@ -17,7 +17,7 @@ References:
     https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-spaces/
 """
 
-from typing import Any, AsyncGenerator, List
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
@@ -113,7 +113,9 @@ class ConfluenceSource(BaseSource):
             return ""
 
     @classmethod
-    async def create(cls, access_token: str) -> "ConfluenceSource":
+    async def create(
+        cls, access_token: str, config: Optional[Dict[str, Any]] = None
+    ) -> "ConfluenceSource":
         """Create a new Confluence source instance."""
         instance = cls()
         instance.access_token = access_token
