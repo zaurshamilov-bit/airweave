@@ -450,10 +450,29 @@ class SourceConnectionService:
                     else:
                         source_connection_schema.auth_fields = "********"
 
+        # 2. Get the sync schedule information if sync_id exists
+        if source_connection.sync_id:
+            sync = await crud.sync.get(
+                db=db, id=source_connection.sync_id, current_user=current_user
+            )
+            if sync:
+                # Add cron_schedule and next_scheduled_run to the response
+                source_connection_schema.cron_schedule = sync.cron_schedule
+                source_connection_schema.next_scheduled_run = sync.next_scheduled_run
+
+                # Log the sync schedule information for debugging
+                source_connection_logger.info(
+                    f"Adding sync schedule to source connection: "
+                    f"cron_schedule={sync.cron_schedule}, "
+                    f"next_scheduled_run={sync.next_scheduled_run}"
+                )
+
         # Before returning, add a log to see what's actually being sent
         logger.info(
             "\nRETURNING SOURCE CONNECTION: "
             f"latest_sync_job_id={source_connection_schema.latest_sync_job_id},\n"
+            f"cron_schedule={source_connection_schema.cron_schedule},\n"
+            f"next_scheduled_run={source_connection_schema.next_scheduled_run},\n"
             "all job info="
             f"{source_connection_schema if 'source_connection_schema' in locals() else 'None'}\n"
         )

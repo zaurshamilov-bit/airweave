@@ -50,6 +50,9 @@ class GoogleDriveSource(BaseSource):
         """Create a new Google Drive source instance with the provided OAuth access token."""
         instance = cls()
         instance.access_token = access_token
+
+        instance.include_path = config.get("include_path", None)
+
         return instance
 
     async def _get_with_auth(

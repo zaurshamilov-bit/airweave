@@ -232,7 +232,8 @@ const SourceConnectionDetailView = ({
 
             if (response.ok) {
                 const detailedData = await response.json();
-                console.log("source connection details", detailedData);
+                console.log("Source connection details received:", detailedData);
+                console.log("Cron schedule from API:", detailedData.cron_schedule);
                 setSelectedConnection(detailedData);
                 await fetchSourceConnectionJob(detailedData);
             } else {
@@ -327,6 +328,7 @@ const SourceConnectionDetailView = ({
 
             const sourceData = await response.json();
             console.log("Got source connection data:", sourceData);
+            console.log("Cron schedule after update:", sourceData.cron_schedule);
 
             // Update the source connection state with the new schedule information
             setSelectedConnection(prev => {
@@ -345,6 +347,7 @@ const SourceConnectionDetailView = ({
             // Update the next run time
             const nextRun = calculateNextRunTime(sourceData.cron_schedule);
             setNextRunTime(nextRun);
+            console.log("Next run time calculated:", nextRun);
 
             toast({
                 title: "Success",
@@ -441,6 +444,8 @@ const SourceConnectionDetailView = ({
             const cronExpression = scheduleConfig.type === "scheduled"
                 ? buildCronExpression(scheduleConfig)
                 : null;
+
+            console.log("Generated cron expression:", cronExpression);
 
             // Validate if needed
             if (scheduleConfig.type === "scheduled" &&
@@ -556,14 +561,30 @@ const SourceConnectionDetailView = ({
 
             const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
 
-            // Get current date
+            // Get current date in UTC
             const now = new Date();
-            let nextRun = new Date(now);
+            const nowUtc = new Date(Date.UTC(
+                now.getUTCFullYear(),
+                now.getUTCMonth(),
+                now.getUTCDate(),
+                now.getUTCHours(),
+                now.getUTCMinutes(),
+                now.getUTCSeconds()
+            ));
+
+            let nextRun = new Date(Date.UTC(
+                nowUtc.getUTCFullYear(),
+                nowUtc.getUTCMonth(),
+                nowUtc.getUTCDate(),
+                nowUtc.getUTCHours(),
+                nowUtc.getUTCMinutes(),
+                nowUtc.getUTCSeconds()
+            ));
 
             // For weekly schedules (specific day of week)
             if (dayOfWeek !== '*' && dayOfMonth === '*') {
                 const targetDay = parseInt(dayOfWeek) % 7; // 0-6, where 0 is Sunday
-                const currentDay = now.getDay(); // 0-6, where 0 is Sunday
+                const currentDay = nowUtc.getUTCDay(); // 0-6, where 0 is Sunday
 
                 // Calculate days to add to get to the target day
                 let daysToAdd = (targetDay - currentDay + 7) % 7;
@@ -573,8 +594,8 @@ const SourceConnectionDetailView = ({
                     const targetMinute = parseInt(minute);
 
                     if (hour !== '*' && minute !== '*') {
-                        const currentHour = now.getHours();
-                        const currentMinute = now.getMinutes();
+                        const currentHour = nowUtc.getUTCHours();
+                        const currentMinute = nowUtc.getUTCMinutes();
 
                         if (currentHour > targetHour || (currentHour === targetHour && currentMinute >= targetMinute)) {
                             // Time already passed today, go to next week
@@ -584,66 +605,63 @@ const SourceConnectionDetailView = ({
                 }
 
                 // Set the date to the next occurrence
-                nextRun.setDate(now.getDate() + daysToAdd);
+                nextRun.setUTCDate(nowUtc.getUTCDate() + daysToAdd);
 
                 // Set the time
                 if (hour !== '*') {
-                    nextRun.setHours(parseInt(hour), parseInt(minute) || 0, 0, 0);
+                    nextRun.setUTCHours(parseInt(hour), parseInt(minute) || 0, 0, 0);
                 } else {
-                    nextRun.setHours(now.getHours(), parseInt(minute) || 0, 0, 0);
+                    nextRun.setUTCHours(nowUtc.getUTCHours(), parseInt(minute) || 0, 0, 0);
                 }
             }
             // For monthly schedules (specific day of month)
             else if (dayOfMonth !== '*') {
                 const targetDay = parseInt(dayOfMonth);
-                const currentDay = now.getDate();
-                const currentMonth = now.getMonth();
-                const currentYear = now.getFullYear();
 
-                // Create a date for the target day in current month
-                const targetDate = new Date(currentYear, currentMonth, targetDay);
+                // Create a date for the target day in current month (in UTC)
+                const targetDate = new Date(Date.UTC(
+                    nowUtc.getUTCFullYear(),
+                    nowUtc.getUTCMonth(),
+                    targetDay,
+                    hour !== '*' ? parseInt(hour) : nowUtc.getUTCHours(),
+                    minute !== '*' ? parseInt(minute) : 0,
+                    0, 0
+                ));
 
                 // If the target day already passed this month, go to next month
-                if (targetDate <= now) {
-                    targetDate.setMonth(currentMonth + 1);
+                if (targetDate <= nowUtc) {
+                    targetDate.setUTCMonth(targetDate.getUTCMonth() + 1);
                 }
 
                 nextRun = targetDate;
-
-                // Set the time
-                if (hour !== '*') {
-                    nextRun.setHours(parseInt(hour), parseInt(minute) || 0, 0, 0);
-                } else {
-                    nextRun.setHours(now.getHours(), parseInt(minute) || 0, 0, 0);
-                }
             }
             // For daily schedules
             else if (hour !== '*' && dayOfMonth === '*' && dayOfWeek === '*') {
                 const targetHour = parseInt(hour);
                 const targetMinute = parseInt(minute) || 0;
 
-                nextRun.setHours(targetHour, targetMinute, 0, 0);
+                nextRun.setUTCHours(targetHour, targetMinute, 0, 0);
 
                 // If the time already passed today, go to tomorrow
-                if (nextRun <= now) {
-                    nextRun.setDate(now.getDate() + 1);
+                if (nextRun <= nowUtc) {
+                    nextRun.setUTCDate(nowUtc.getUTCDate() + 1);
                 }
             }
             // For hourly schedules
             else if (hour === '*' && minute !== '*') {
                 const targetMinute = parseInt(minute);
-                const currentMinute = now.getMinutes();
+                const currentMinute = nowUtc.getUTCMinutes();
 
-                nextRun.setMinutes(targetMinute, 0, 0);
+                nextRun.setUTCMinutes(targetMinute, 0, 0);
 
                 // If the minute already passed this hour, go to next hour
                 if (currentMinute >= targetMinute) {
-                    nextRun.setHours(now.getHours() + 1);
+                    nextRun.setUTCHours(nowUtc.getUTCHours() + 1);
                 }
             }
 
-            // Calculate time difference
-            const diffMs = nextRun.getTime() - now.getTime();
+            // Calculate time difference in UTC
+            const diffMs = nextRun.getTime() - nowUtc.getTime();
             const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
             const diffHrs = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
             const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -708,61 +726,36 @@ const SourceConnectionDetailView = ({
         return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
     };
 
-    // Add this conversion function
-    const formatCronTimeToLocal = (cronExpression: string): string => {
+    // Replace formatCronTimeToLocal with a UTC-only version
+    const formatCronTimeUTC = (cronExpression: string): string => {
         const parts = cronExpression.split(' ');
-        const utcMinute = parseInt(parts[0]);
-        const utcHour = parseInt(parts[1]);
+        const minute = parts[0];
+        const hour = parts[1];
         const dayOfMonth = parts[2];
         const month = parts[3];
         const dayOfWeek = parts[4];
 
-        // Skip conversion for non-specific times
-        if (isNaN(utcHour) || parts[1] === '*') return formatCronTime(cronExpression);
-
-        // Get timezone offset in hours
-        const tzOffset = new Date().getTimezoneOffset() / -60;
-
-        // Format the timezone string
-        const tzString = tzOffset >= 0 ? `UTC+${tzOffset}` : `UTC${tzOffset}`;
-
-        // Add timezone offset to UTC hour
-        const localHour = (utcHour + tzOffset + 24) % 24;
-
         // Base time format
-        let timeInfo = `${Math.floor(localHour).toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')} (${tzString})`;
+        let timeInfo = `${hour !== '*' ? hour.padStart(2, '0') : '*'}:${minute.padStart(2, '0')} UTC`;
 
-        // Calculate next run date for display
-        const now = new Date();
-        const nextRun = new Date(now);
+        // Format the date part if specific day
+        if (dayOfWeek !== '*' || dayOfMonth !== '*') {
+            const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-        // Handle different schedule types
-        if (dayOfWeek !== '*' && dayOfMonth === '*') {
-            // Weekly schedule
-            const targetDay = parseInt(dayOfWeek) % 7;
-            const currentDay = now.getDay();
-            const daysToAdd = (targetDay - currentDay + 7) % 7;
-            nextRun.setDate(now.getDate() + daysToAdd);
-        } else if (dayOfMonth !== '*') {
-            // Monthly schedule
-            const targetDay = parseInt(dayOfMonth);
-            nextRun.setDate(targetDay);
-            // If the day has passed this month, move to next month
-            if (nextRun < now) {
-                nextRun.setMonth(nextRun.getMonth() + 1);
+            // Build date context based on schedule type
+            if (dayOfMonth !== '*') {
+                // Monthly schedule
+                timeInfo += ` on day ${dayOfMonth}`;
+            } else if (dayOfWeek !== '*') {
+                // Weekly schedule (0 = Sunday, 6 = Saturday)
+                const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                const dayIndex = parseInt(dayOfWeek) % 7;
+                timeInfo += ` on ${days[dayIndex]}`;
             }
         }
 
-        // Format the date part
-        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-        if (dayOfWeek !== '*' || dayOfMonth !== '*') {
-            // Format as "6 Jun" for specific day schedules (without day name)
-            timeInfo += ` on ${nextRun.getDate()} ${monthNames[nextRun.getMonth()]}`;
-        }
-
         return timeInfo;
-    };
+    }
 
     /********************************************
      * SIDE EFFECTS - ORDERED BY PRIORITY
@@ -886,33 +879,19 @@ const SourceConnectionDetailView = ({
     // 9. Schedule configuration
     useEffect(() => {
         if (selectedConnection?.sync_id && selectedConnection.cron_schedule) {
-            // Parse cron expression to get UTC time
+            // Parse cron expression in UTC (no conversion)
             const cronParts = selectedConnection.cron_schedule.split(' ');
             const utcMinute = parseInt(cronParts[0]);
             const utcHour = cronParts[1] !== '*' ? parseInt(cronParts[1]) : undefined;
 
-            // Convert to local time if hour is specified
-            let localHour = utcHour;
-            let localMinute = utcMinute;
-
-            if (utcHour !== undefined && !isNaN(utcHour)) {
-                // Create date in UTC and get local values
-                const date = new Date();
-                date.setUTCHours(utcHour, utcMinute, 0, 0);
-                localHour = date.getHours();
-                localMinute = date.getMinutes();
-            }
-
-            // Set config with local time values
+            // Set config with UTC time values
             setScheduleConfig({
                 type: "scheduled",
                 frequency: "custom",
-                hour: localHour,
-                minute: localMinute,
+                hour: utcHour,
+                minute: utcMinute,
                 cronExpression: selectedConnection.cron_schedule
             });
-
-            // Rest of the code...
         }
     }, [selectedConnection]);
 
@@ -1005,6 +984,12 @@ const SourceConnectionDetailView = ({
             </div>
         );
     }
+
+    console.log("Render state:", {
+        hasSchedule: !!selectedConnection?.cron_schedule,
+        cronSchedule: selectedConnection?.cron_schedule,
+        nextRunTime
+    });
 
     return (
         <div className={cn(isDark ? "text-foreground" : "")}>
@@ -1112,7 +1097,7 @@ const SourceConnectionDetailView = ({
                                     </div>
                                     <div className="text-xs opacity-70 mt-0.5">
                                         {selectedConnection.cron_schedule && (
-                                            <span>Runs at {formatCronTimeToLocal(selectedConnection.cron_schedule)}</span>
+                                            <span>Runs at {formatCronTimeUTC(selectedConnection.cron_schedule)}</span>
                                         )}
                                     </div>
                                 </div>
