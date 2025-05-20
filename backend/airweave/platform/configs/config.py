@@ -14,10 +14,7 @@ class SourceConfig(BaseConfig):
 class AsanaConfig(SourceConfig):
     """Asana configuration schema."""
 
-    exclude_path: str = Field(
-        title="Exclude Path",
-        description="Path's in the Asana Repository, you want to exclude from Airweave's scope",
-    )
+    pass
 
 
 class ClickUpConfig(SourceConfig):
@@ -35,11 +32,6 @@ class ConfluenceConfig(SourceConfig):
 class DropboxConfig(SourceConfig):
     """Dropbox configuration schema."""
 
-    exclude_path: str = Field(
-        title="Exclude Path",
-        description="Path's in the Dropbox Repository, you want to exclude from Airweave's scope",
-    )
-
 
 class ElasticsearchConfig(SourceConfig):
     """Elasticsearch configuration schema."""
@@ -47,12 +39,15 @@ class ElasticsearchConfig(SourceConfig):
     pass
 
 
-class GithubConfig(SourceConfig):
+class GitHubConfig(SourceConfig):
     """Github configuration schema."""
 
-    exclude_path: str = Field(
-        title="Exclude Path",
-        description="Path's in the Github Repository, you want to exclude from Airweave's scope",
+    branch: str = Field(
+        title="Branch name",
+        description=(
+            "Specific branch to sync (e.g., 'main', 'development'). "
+            "If empty, uses the default branch."
+        ),
     )
 
 
@@ -71,7 +66,12 @@ class GoogleCalendarConfig(SourceConfig):
 class GoogleDriveConfig(SourceConfig):
     """Google Drive configuration schema."""
 
-    pass
+    include_path: str = Field(
+        title="Include Path",
+        description=(
+            "Path's in the Google Drive Repository, you want to include in Airweave's scope."
+        ),
+    )
 
 
 class HubspotConfig(SourceConfig):
@@ -95,10 +95,7 @@ class JiraConfig(SourceConfig):
 class LinearConfig(SourceConfig):
     """Linear configuration schema."""
 
-    exclude_path: str = Field(
-        title="Exclude Path",
-        description="Path's in the Linear Repository, you want to exclude from Airweave's scope",
-    )
+    pass
 
 
 class MondayConfig(SourceConfig):
@@ -143,7 +140,7 @@ class OutlookMailConfig(SourceConfig):
     pass
 
 
-class PostgresConfig(SourceConfig):
+class PostgreSQLConfig(SourceConfig):
     """Postgres configuration schema."""
 
     pass
@@ -155,14 +152,14 @@ class SlackConfig(SourceConfig):
     pass
 
 
-class SqlServerConfig(SourceConfig):
+class SQLServerConfig(SourceConfig):
     """SQL Server configuration schema."""
 
     pass
 
 
-class SqliteConfig(SourceConfig):
-    """Sqlite configuration schema."""
+class SQliteConfig(SourceConfig):
+    """SQlite configuration schema."""
 
     pass
 

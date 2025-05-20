@@ -1157,6 +1157,12 @@ class SourceConnectionService:
             # Convert token response to auth fields
             auth_fields = token_response.model_dump()
 
+            # Add client_id and client_secret to auth_fields if they were provided
+            if client_id:
+                auth_fields["client_id"] = client_id
+            if client_secret:
+                auth_fields["client_secret"] = client_secret
+
             # Validate the auth fields against the auth config class (critical step!)
             validated_auth_fields = await self._validate_auth_fields(
                 db=db, source_short_name=source_short_name, auth_fields=auth_fields
