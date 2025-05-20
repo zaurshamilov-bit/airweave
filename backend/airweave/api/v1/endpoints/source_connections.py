@@ -1,6 +1,6 @@
 """API endpoints for managing source connections."""
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import BackgroundTasks, Body, Depends, Query
@@ -187,7 +187,7 @@ async def run_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID,
-    auth_fields: Optional[Dict[str, Any]] = Body(None, embed=True),
+    access_token: Optional[str] = Body(None, embed=True),
     user: schemas.User = Depends(deps.get_user),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnectionJob:
@@ -196,7 +196,7 @@ async def run_source_connection(
     Args:
         db: The database session
         source_connection_id: The ID of the source connection to run
-        auth_fields: Optional auth fields to use instead of stored credentials
+        access_token: Optional access token to use instead of stored credentials
         user: The current user
         background_tasks: Background tasks for async operations
 
@@ -204,7 +204,10 @@ async def run_source_connection(
         The created sync job
     """
     sync_job = await source_connection_service.run_source_connection(
-        db=db, source_connection_id=source_connection_id, current_user=user, auth_fields=auth_fields
+        db=db,
+        source_connection_id=source_connection_id,
+        current_user=user,
+        access_token=access_token,
     )
 
     # Start the sync job in the background
@@ -222,7 +225,6 @@ async def run_source_connection(
     collection = schemas.Collection.model_validate(collection, from_attributes=True)
     source_connection = schemas.SourceConnection.from_orm_with_collection_mapping(source_connection)
 
-    # Pass validated auth fields to the sync service
     background_tasks.add_task(
         sync_service.run,
         sync,
@@ -231,9 +233,7 @@ async def run_source_connection(
         collection,
         source_connection,
         user,
-        auth_fields=sync_job.validated_auth_fields
-        if hasattr(sync_job, "validated_auth_fields")
-        else None,
+        access_token=sync_job.access_token if hasattr(sync_job, "access_token") else None,
     )
 
     return sync_job.to_source_connection_job(source_connection_id)

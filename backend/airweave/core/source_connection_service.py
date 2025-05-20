@@ -714,7 +714,7 @@ class SourceConnectionService:
         db: AsyncSession,
         source_connection_id: UUID,
         current_user: schemas.User,
-        auth_fields: Optional[Dict[str, Any]] = None,
+        access_token: Optional[str] = None,
     ) -> schemas.SyncJob:
         """Trigger a sync run for a source connection.
 
@@ -722,10 +722,10 @@ class SourceConnectionService:
             db: The database session
             source_connection_id: The ID of the source connection to run
             current_user: The current user
-            auth_fields: Optional auth fields to use instead of stored credentials
+            access_token: Optional access token to use instead of stored credentials
 
         Returns:
-            The created sync job with optional validated auth fields attached
+            The created sync job
 
         Raises:
             HTTPException: If the source connection is not found or has no associated sync
@@ -739,29 +739,14 @@ class SourceConnectionService:
         if not source_connection.sync_id:
             raise HTTPException(status_code=400, detail="Source connection has no associated sync")
 
-        # Validate auth_fields if provided
-        validated_auth_fields = None
-        if auth_fields:
-            source = await crud.source.get_by_short_name(
-                db, short_name=source_connection.short_name
-            )
-            if not source:
-                raise HTTPException(
-                    status_code=404, detail=f"Source not found: {source_connection.short_name}"
-                )
-
-            validated_auth_fields = await self._validate_auth_fields(
-                db, source_connection.short_name, auth_fields
-            )
-
         # Trigger the sync run using the sync service
         sync, sync_job, sync_dag = await sync_service.trigger_sync_run(
             db=db, sync_id=source_connection.sync_id, current_user=current_user
         )
 
-        # Attach validated auth fields to the sync job for later use
-        if validated_auth_fields:
-            sync_job.validated_auth_fields = validated_auth_fields
+        # Store access token directly without validation if provided
+        if access_token:
+            sync_job.access_token = access_token
 
         return sync_job
 

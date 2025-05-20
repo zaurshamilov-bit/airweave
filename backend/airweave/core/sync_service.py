@@ -1,7 +1,7 @@
 """Service for data synchronization."""
 
 from datetime import datetime
-from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+from typing import AsyncGenerator, List, Optional, Union
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -66,7 +66,7 @@ class SyncService:
         collection: schemas.Collection,
         source_connection: schemas.Connection,
         current_user: schemas.User,
-        auth_fields: Optional[Dict[str, Any]] = None,
+        access_token: Optional[str] = None,
     ) -> schemas.Sync:
         """Run a sync.
 
@@ -78,7 +78,7 @@ class SyncService:
             collection (schemas.Collection): The collection to sync.
             source_connection (schemas.Connection): The source connection to sync.
             current_user (schemas.User): The current user.
-            auth_fields (Optional[Dict[str, Any]]): Optional auth fields to use
+            access_token (Optional[str]): Optional access token to use
                 instead of stored credentials.
 
         Returns:
@@ -95,7 +95,7 @@ class SyncService:
                     collection,
                     source_connection,
                     current_user,
-                    auth_fields=auth_fields,
+                    access_token=access_token,
                 )
         except Exception as e:
             logger.error(f"Error during sync context creation: {e}")

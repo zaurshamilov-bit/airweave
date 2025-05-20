@@ -1,7 +1,7 @@
 """Module for sync context."""
 
 import importlib
-from typing import Any, Dict, Optional
+from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,7 +108,7 @@ class SyncContextFactory:
         collection: schemas.Collection,
         source_connection: schemas.Connection,
         current_user: schemas.User,
-        auth_fields: Optional[Dict[str, Any]] = None,
+        access_token: Optional[str] = None,
     ) -> SyncContext:
         """Create a sync context."""
         # Fetch white label if set in sync
@@ -123,7 +123,7 @@ class SyncContextFactory:
             sync=sync,
             current_user=current_user,
             white_label=white_label,
-            auth_fields=auth_fields,
+            access_token=access_token,
         )
         embedding_model = cls._get_embedding_model(sync=sync)
         destinations = await cls._create_destination_instances(
@@ -174,7 +174,7 @@ class SyncContextFactory:
         sync: schemas.Sync,
         current_user: schemas.User,
         white_label: Optional[schemas.WhiteLabel] = None,
-        auth_fields: Optional[Dict[str, Any]] = None,
+        access_token: Optional[str] = None,
     ) -> BaseSource:
         """Create and configure the source instance based on authentication type."""
         # Retrieve source connection and model
@@ -198,29 +198,23 @@ class SyncContextFactory:
 
         source_class = resource_locator.get_source(source_model)
 
-        # Get auth config class
-        if not source_model.auth_config_class:
-            raise ValueError("Auth config class required.")
+        # If access token is provided, use it directly
+        if access_token:
+            return await source_class.create(access_token, config=config_fields)
 
-        auth_config = resource_locator.get_auth_config(source_model.auth_config_class)
+        # Otherwise get credentials from database as before
+        if not source_connection.integration_credential_id:
+            raise NotFoundException("Source connection has no integration credential")
 
-        # Use provided auth fields if available, otherwise fetch from db
-        if auth_fields:
-            # Auth fields already validated before being passed here
-            source_credentials = auth_config.model_validate(auth_fields)
-            # TODO: dont refresh access token
-            # for now assume that if access token is provided, it is valid
-            # LATER: only refresh access token if it is expired
-        else:
-            # Handle credentials from database
-            if not source_connection.integration_credential_id:
-                raise NotFoundException("Source connection has no integration credential")
+        credential = await cls._get_integration_credential(db, source_connection, current_user)
+        decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
 
-            credential = await cls._get_integration_credential(db, source_connection, current_user)
-            decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
+        # If the source model requires auth configuration, validate it
+        if source_model.auth_config_class:
+            auth_config = resource_locator.get_auth_config(source_model.auth_config_class)
             source_credentials = auth_config.model_validate(decrypted_credential)
 
-            # if the source_credential is a refresh token, exchange it for an access token
+            # if the source_credential has a refresh token, exchange it for an access token
             if hasattr(source_credentials, "refresh_token") and source_credentials.refresh_token:
                 oauth2_response = await oauth2_service.refresh_access_token(
                     db,
@@ -230,7 +224,10 @@ class SyncContextFactory:
                     decrypted_credential,
                     white_label,
                 )
+                # Just use the access token
                 source_credentials = oauth2_response.access_token
+        else:
+            source_credentials = decrypted_credential
 
         # Pass both credentials and config to source creation
         return await source_class.create(source_credentials, config=config_fields)
