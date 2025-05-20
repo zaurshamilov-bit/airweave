@@ -27,6 +27,8 @@ import { QueryTool } from '@/components/collection/QueryTool';
 import { LiveApiDoc } from '@/components/collection/LiveApiDoc';
 import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 import { cn } from "@/lib/utils";
+import { SyncErrorCard } from './SyncErrorCard';
+import { SyncDagCard, SourceConnection } from './SyncDagCard';
 
 const nodeTypes = {
     sourceNode: SourceNode,
@@ -34,30 +36,6 @@ const nodeTypes = {
     destinationNode: DestinationNode,
     entityNode: EntityNode
 };
-
-interface SourceConnection {
-    id: string;
-    name: string;
-    description?: string;
-    short_name: string;
-    config_fields?: Record<string, any>;
-    sync_id?: string;
-    organization_id: string;
-    created_at: string;
-    modified_at: string;
-    connection_id?: string;
-    collection: string;
-    created_by_email: string;
-    modified_by_email: string;
-    auth_fields?: Record<string, any> | string;
-    status?: string;
-    latest_sync_job_status?: string;
-    latest_sync_job_id?: string;
-    latest_sync_job_started_at?: string;
-    latest_sync_job_completed_at?: string;
-    cron_schedule?: string;
-    next_scheduled_run?: string;
-}
 
 interface SourceConnectionJob {
     source_connection_id: string;
@@ -112,6 +90,24 @@ const SourceConnectionDetailView = ({
         skipped: number;
         encountered: Record<string, number>;
     } | null>(null);
+    const [isLoading, setIsLoading] = useState(true); // Add loading state
+
+    // Cache previous connection data to prevent flashing during transitions
+    const prevConnectionRef = useRef<{
+        connection: SourceConnection | null;
+        syncJob: SourceConnectionJob | null;
+        entities: number;
+        runtime: number | null;
+        entityDict: Record<string, number>;
+        status: string;
+    }>({
+        connection: null,
+        syncJob: null,
+        entities: 0,
+        runtime: null,
+        entityDict: {},
+        status: ""
+    });
 
     // 2. Real-time updates state
     const [internalShouldForceSubscribe, setInternalShouldForceSubscribe] = useState(false);
@@ -227,6 +223,7 @@ const SourceConnectionDetailView = ({
 
     // 1. Main connection data fetching
     const fetchSourceConnectionDetails = async () => {
+        setIsLoading(true);
         try {
             const response = await apiClient.get(`/source-connections/${sourceConnectionId}`);
 
@@ -241,6 +238,8 @@ const SourceConnectionDetailView = ({
             }
         } catch (err) {
             console.error("Error fetching source connection details:", err);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -938,27 +937,49 @@ const SourceConnectionDetailView = ({
         };
     }, [reactFlowInstance]);
 
-    // Modify the Reset ReactFlow instance when connection changes
+    // Store previous connection data before changes
     useEffect(() => {
-        // Clear the graph when connection changes
-        setNodes([]);
-        setEdges([]);
-        setSelectedEntity('');
-        setEntityDict({});
-        setSelectedDag(null);
-        setEntityDags([]); // Reset entity DAGs too
-
-        // If we have a ReactFlow instance, force a complete reset
-        if (reactFlowInstance) {
-            reactFlowInstance.setNodes([]);
-            reactFlowInstance.setEdges([]);
-
-            // Force a reset of the instance after a delay
-            setTimeout(() => {
-                reactFlowInstance.fitView({ padding: 0.2 });
-            }, 100);
+        if (!isLoading && selectedConnection) {
+            prevConnectionRef.current = {
+                connection: selectedConnection,
+                syncJob: lastSyncJob,
+                entities: totalEntities,
+                runtime: totalRuntime,
+                entityDict: {...entityDict},
+                status: status
+            };
         }
-    }, [sourceConnectionId, reactFlowInstance]);
+    }, [isLoading, selectedConnection, lastSyncJob, totalEntities, totalRuntime, entityDict, status]);
+
+    // Replace the existing cleanup effect with this improved version
+    useEffect(() => {
+        // First set loading state when connection changes
+        if (sourceConnectionId) {
+            setIsLoading(true);
+        }
+
+        return () => {
+            // Only clean up when component unmounts, not on every sourceConnectionId change
+            if (!sourceConnectionId) {
+                setNodes([]);
+                setEdges([]);
+                setSelectedEntity('');
+                setEntityDict({});
+                setSelectedDag(null);
+                setEntityDags([]);
+                prevEntityDictRef.current = {};
+                setFinalPubSubData(null);
+                setLastSyncJob(null);
+                setTotalEntities(0);
+                setTotalRuntime(null);
+
+                if (reactFlowInstance) {
+                    reactFlowInstance.setNodes([]);
+                    reactFlowInstance.setEdges([]);
+                }
+            }
+        };
+    }, [sourceConnectionId, setNodes, setEdges, reactFlowInstance]);
 
     // Add this effect to initialize nextRunTime on component mount or when cron_schedule changes
     useEffect(() => {
@@ -970,11 +991,22 @@ const SourceConnectionDetailView = ({
 
     console.log(`[PubSub] Data source for job ${lastSyncJob?.id}: ${isShowingRealtimeUpdates ? 'LIVE UPDATES' : 'DATABASE'}`);
 
+    // Render based on loading state
+    const connectionToDisplay = isLoading ? prevConnectionRef.current.connection : selectedConnection;
+    const jobToDisplay = isLoading ? prevConnectionRef.current.syncJob : lastSyncJob;
+    const entitiesToDisplay = isLoading ? prevConnectionRef.current.entities : totalEntities;
+    const runtimeToDisplay = isLoading ? prevConnectionRef.current.runtime : totalRuntime;
+    const statusToDisplay = isLoading ? prevConnectionRef.current.status : status;
+    const entityDictToDisplay = Object.keys(stableEntityDict).length > 0 ? stableEntityDict :
+                                isLoading ? prevConnectionRef.current.entityDict : {};
+
+    console.log(`[Loading] State for ${sourceConnectionId}: ${isLoading ? 'LOADING' : 'LOADED'}`);
+
     /********************************************
      * RENDER
      ********************************************/
 
-    if (!selectedConnection) {
+    if (!connectionToDisplay) {
         return (
             <div className="w-full py-6">
                 <div className="flex items-center justify-center">
@@ -994,95 +1026,65 @@ const SourceConnectionDetailView = ({
     return (
         <div className={cn(isDark ? "text-foreground" : "")}>
             {/* Visualization Section */}
-            {lastSyncJob && (
-                <div className="py-2 space-y-3 mt-4">
-                    {/* Status Dashboard */}
-                    <div className="grid grid-cols-12 gap-3">
-                        {/* Status Stats Cards - Add stable min-height to prevent layout shifts */}
-                        <div className="col-span-12 md:col-span-8 grid grid-cols-3 gap-3">
-                            {/* Entities Card */}
-                            <div className={cn(
-                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
-                                isDark
-                                    ? "bg-gray-800/60 border border-gray-700/50"
-                                    : "bg-white border border-gray-100"
-                            )}>
-                                <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
-                                    Entities
-                                </div>
-                                <div className="text-2xl font-semibold">
-                                    {totalEntities.toLocaleString()}
-                                </div>
-                            </div>
-
-                            {/* Status Card */}
-                            <div className={cn(
-                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
-                                isDark
-                                    ? "bg-gray-800/60 border border-gray-700/50"
-                                    : "bg-white border border-gray-100"
-                            )}>
-                                <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
-                                    Status
-                                </div>
-                                <div className="text-lg font-medium flex items-center">
-                                    <span className={`inline-flex h-3 w-3 rounded-full mr-2
-                                        ${status === 'completed' ? 'bg-green-500' :
-                                            status === 'failed' ? 'bg-red-500' :
-                                                status === 'in_progress' ? 'bg-blue-500 animate-pulse' :
-                                                    'bg-amber-500'}`}
-                                    />
-                                    <span className="capitalize">
-                                        {status === 'in_progress' ? 'Running' : status}
-                                        {(status === 'in_progress' || status === 'pending') &&
-                                            <span className="animate-pulse ml-1">•••</span>
-                                        }
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Runtime Card */}
-                            <div className={cn(
-                                "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
-                                isDark
-                                    ? "bg-gray-800/60 border border-gray-700/50"
-                                    : "bg-white border border-gray-100"
-                            )}>
-                                <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
-                                    Runtime
-                                </div>
-                                <div className="text-lg font-medium">
-                                    {totalRuntime ? formatTotalRuntime(totalRuntime) : 'N/A'}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Schedule Card */}
+            <div className="py-2 space-y-3 mt-4">
+                {/* Status Dashboard */}
+                <div className="grid grid-cols-12 gap-3">
+                    {/* Status Stats Cards - Add stable min-height to prevent layout shifts */}
+                    <div className="col-span-12 md:col-span-8 grid grid-cols-3 gap-3">
+                        {/* Entities Card */}
                         <div className={cn(
-                            "col-span-12 md:col-span-4 rounded-lg p-3 flex flex-col justify-between shadow-sm transition-all duration-200 min-h-[5.5rem]",
+                            "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
                             isDark
                                 ? "bg-gray-800/60 border border-gray-700/50"
                                 : "bg-white border border-gray-100"
                         )}>
-                            <div className="flex items-center justify-between mb-1">
-                                <div className="text-xs uppercase tracking-wider font-medium opacity-60">
-                                    Schedule
-                                </div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-1 px-1 rounded-md"
-                                    onClick={() => {
-                                        setScheduleConfig({
-                                            type: selectedConnection.cron_schedule ? "scheduled" : "one-time",
-                                            frequency: "custom",
-                                            cronExpression: selectedConnection.cron_schedule || undefined
-                                        });
-                                        setShowScheduleDialog(true);
-                                    }}
-                                >
-                                    <Pencil className="h-3 w-3" />
-                                </Button>
+                            <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
+                                Entities
+                            </div>
+                            <div className="text-2xl font-semibold">
+                                {isLoading ? (
+                                    <span>{entitiesToDisplay.toLocaleString()}</span>
+                                ) : (
+                                    <span>{totalEntities.toLocaleString()}</span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Status Card */}
+                        <div className={cn(
+                            "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
+                            isDark
+                                ? "bg-gray-800/60 border border-gray-700/50"
+                                : "bg-white border border-gray-100"
+                        )}>
+                            <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
+                                Status
+                            </div>
+                            <div className="text-lg font-medium flex items-center">
+                                <span className={`inline-flex h-3 w-3 rounded-full mr-2
+                                    ${statusToDisplay === 'completed' ? 'bg-green-500' :
+                                        statusToDisplay === 'failed' ? 'bg-red-500' :
+                                            statusToDisplay === 'in_progress' ? 'bg-blue-500 animate-pulse' :
+                                                'bg-amber-500'}`}
+                                />
+                                <span className="capitalize">
+                                    {statusToDisplay === 'in_progress' ? 'Running' : statusToDisplay || 'Not run'}
+                                    {(statusToDisplay === 'in_progress' || statusToDisplay === 'pending') &&
+                                        <span className="animate-pulse ml-1">•••</span>
+                                    }
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Runtime Card */}
+                        <div className={cn(
+                            "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
+                            isDark
+                                ? "bg-gray-800/60 border border-gray-700/50"
+                                : "bg-white border border-gray-100"
+                        )}>
+                            <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
+                                Runtime
                             </div>
                             <div className="flex items-center">
                                 <Clock className={cn(
@@ -1105,247 +1107,85 @@ const SourceConnectionDetailView = ({
                         </div>
                     </div>
 
-                    {/* Entity Visualization */}
-                    <Card className={cn(
-                        "overflow-hidden border rounded-lg",
-                        isDark ? "border-gray-700/50 bg-gray-800/30" : "border-gray-200 bg-white"
+                    {/* Schedule Card */}
+                    <div className={cn(
+                        "col-span-12 md:col-span-4 rounded-lg p-3 flex flex-col justify-between shadow-sm transition-all duration-200 min-h-[5.5rem]",
+                        isDark
+                            ? "bg-gray-800/60 border border-gray-700/50"
+                            : "bg-white border border-gray-100"
                     )}>
-                        <CardHeader className="p-3">
-                            <div className="flex justify-between items-center">
-                                <h3 className={cn(
-                                    "text-base font-medium",
-                                    isDark ? "text-gray-200" : "text-gray-700"
-                                )}>
-                                    Entity Graph
-                                </h3>
-
-                                {/* Action Buttons */}
-                                <div className="flex gap-2">
-
-
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className={cn(
-                                            "h-8 gap-1.5 font-normal",
-                                            isDark
-                                                ? "bg-gray-700 border-gray-600 text-white"
-                                                : "bg-gray-100 border-gray-200 text-gray-800"
-                                        )}
-                                        onClick={handleRunSync}
-                                        disabled={isInitiatingSyncJob || isSyncJobRunning}
-                                    >
-                                        <Play className="h-3.5 w-3.5" />
-                                        {isInitiatingSyncJob ? 'Starting...' : isSyncJobRunning ? 'Running...' : 'Run Sync'}
-                                    </Button>
-                                </div>
+                        <div className="flex items-center justify-between mb-1">
+                            <div className="text-xs uppercase tracking-wider font-medium opacity-60">
+                                Schedule
                             </div>
-
-                            {/* Entity Selection Buttons - Add min-height container to prevent layout shifts */}
-                            <div className="flex flex-wrap gap-1.5 mt-3 mb-1 min-h-[2.25rem] transition-all">
-                                {Object.keys(stableEntityDict).length > 0 ?
-                                    Object.keys(stableEntityDict)
-                                        .sort() // Sort keys alphabetically
-                                        .map((key) => {
-                                            // Determine if this button is selected
-                                            const isSelected = key === selectedEntity;
-
-                                            return (
-                                                <Button
-                                                    key={key}
-                                                    variant="outline"
-                                                    className={cn(
-                                                        "flex items-center gap-1.5 h-7 py-0 px-2 text-[13px] min-w-[90px]",
-                                                        isSelected
-                                                            ? isDark
-                                                                ? "bg-gray-700 border-gray-600 border-[1.5px] text-white"
-                                                                : "bg-gray-100 border-gray-300 border-[1.5px] text-gray-800"
-                                                            : isDark
-                                                                ? "bg-gray-800/80 border-gray-700/60 text-gray-300"
-                                                                : "bg-white border-gray-200/80 text-gray-700"
-                                                    )}
-                                                    onClick={() => setSelectedEntity(key)}
-                                                >
-                                                    {key}
-                                                    <Badge
-                                                        variant="outline"
-                                                        className={cn(
-                                                            "ml-1 pointer-events-none text-[11px] px-1.5 font-normal h-5",
-                                                            isSelected
-                                                                ? isDark
-                                                                    ? "bg-gray-600 text-gray-200 border-gray-500"
-                                                                    : "bg-gray-200 text-gray-700 border-gray-300"
-                                                                : isDark
-                                                                    ? "bg-gray-700 text-gray-300 border-gray-600"
-                                                                    : "bg-gray-100 text-gray-600 border-gray-200"
-                                                        )}
-                                                    >
-                                                        {stableEntityDict[key]}
-                                                    </Badge>
-                                                </Button>
-                                            );
-                                        })
-                                    : null
-                                }
-                            </div>
-                        </CardHeader>
-                        <CardContent className="p-0 pb-0">
-                            {/* Flow Diagram - Add fixed height to prevent resizing during transitions */}
-                            <div
-                                ref={flowContainerRef}
-                                className="h-[320px] w-full overflow-hidden"
-                                style={{ minHeight: '320px' }}
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-1 px-1 rounded-md"
+                                onClick={() => {
+                                    setScheduleConfig({
+                                        type: connectionToDisplay.cron_schedule ? "scheduled" : "one-time",
+                                        frequency: "custom",
+                                        cronExpression: connectionToDisplay.cron_schedule || undefined
+                                    });
+                                    setShowScheduleDialog(true);
+                                }}
                             >
-                                <ReactFlow
-                                    key={selectedConnection.id || 'no-connection'}
-                                    nodes={nodes}
-                                    edges={edges}
-                                    onNodesChange={onNodesChange}
-                                    onEdgesChange={onEdgesChange}
-                                    nodeTypes={nodeTypes}
-                                    fitView
-                                    fitViewOptions={{
-                                        padding: 0.3,
-                                        minZoom: 0.1,
-                                        maxZoom: 1.5,
-                                        duration: 0
-                                    }}
-                                    onInit={setReactFlowInstance}
-                                    defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
-                                    style={{
-                                        touchAction: 'none',
-                                        cursor: 'default',
-                                        background: isDark ? 'transparent' : '#fafafa'
-                                    }}
-                                    nodesDraggable={false}
-                                    nodesConnectable={false}
-                                    elementsSelectable={false}
-                                    zoomOnScroll={false}
-                                    panOnScroll={false}
-                                    panOnDrag={false}
-                                    zoomOnPinch={false}
-                                    zoomOnDoubleClick={false}
-                                    preventScrolling={true}
-                                    proOptions={{ hideAttribution: true }}
-                                />
-                            </div>
-
-                            {/* Divider between Entity Graph and Sync Progress */}
-                            <div className={cn(
-                                "border-t w-full mx-auto my-2",
-                                isDark ? "border-gray-700/50" : "border-gray-200"
+                                <Pencil className="h-3 w-3" />
+                            </Button>
+                        </div>
+                        <div className="flex items-center">
+                            <Clock className={cn(
+                                "w-5 h-5 mr-2",
+                                isDark ? "text-gray-400" : "text-gray-500"
                             )} />
-
-                            {/* Sync Progress Section */}
-                            <div className="px-3 pb-3 pt-1">
-                                <h3 className={cn(
-                                    "text-base font-medium mb-4",
-                                    isDark ? "text-gray-200" : "text-gray-700"
-                                )}>
-                                    Sync Progress
-                                </h3>
-
-                                {/* Normalized multi-segment progress bar - Add min-height to prevent layout shifts */}
-                                <div className={cn(
-                                    "relative w-full h-3 rounded-md overflow-hidden mb-6",
-                                    isDark ? "bg-gray-700/50" : "bg-gray-100"
-                                )}>
-                                    <div
-                                        className="absolute left-0 top-0 h-3 bg-green-500"
-                                        style={{ width: `${total > 0 ? (entityData.inserted / total) * 100 : 0}%` }}
-                                    />
-                                    <div
-                                        className="absolute top-0 h-3 bg-cyan-500"
-                                        style={{
-                                            left: `${total > 0 ? (entityData.inserted / total) * 100 : 0}%`,
-                                            width: `${total > 0 ? (entityData.updated / total) * 100 : 0}%`
-                                        }}
-                                    />
-                                    <div
-                                        className="absolute top-0 h-3 bg-primary"
-                                        style={{
-                                            left: `${total > 0 ? ((entityData.inserted + entityData.updated) / total) * 100 : 0}%`,
-                                            width: `${total > 0 ? (entityData.kept / total) * 100 : 0}%`
-                                        }}
-                                    />
-                                    <div
-                                        className="absolute top-0 h-3 bg-red-500"
-                                        style={{
-                                            left: `${total > 0 ? ((entityData.inserted + entityData.updated + entityData.kept) / total) * 100 : 0}%`,
-                                            width: `${total > 0 ? (entityData.deleted / total) * 100 : 0}%`
-                                        }}
-                                    />
-                                    <div
-                                        className="absolute top-0 h-3 bg-yellow-500"
-                                        style={{
-                                            left: `${total > 0 ? ((entityData.inserted + entityData.updated + entityData.kept + entityData.deleted) / total) * 100 : 0}%`,
-                                            width: `${total > 0 ? (entityData.skipped / total) * 100 : 0}%`
-                                        }}
-                                    />
+                            <div>
+                                <div className="text-lg font-medium">
+                                    {connectionToDisplay.cron_schedule
+                                        ? (nextRunTime ? `Due in ${nextRunTime}` : 'Scheduled')
+                                        : 'Manual only'}
                                 </div>
-
-                                {/* Stats grid - Add min-height for containers */}
-                                <div className="grid grid-cols-5 gap-3 mt-5 min-h-[5rem]">
-                                    <div className={cn(
-                                        "rounded-md p-3 flex flex-col items-center",
-                                        isDark ? "bg-gray-700/30" : "bg-gray-50"
-                                    )}>
-                                        <div className="flex items-center space-x-1 mb-1">
-                                            <span className="w-3 h-3 block bg-green-500 rounded-full" />
-                                            <span className="text-xs font-medium">Inserted</span>
-                                        </div>
-                                        <span className="text-lg font-semibold">{entityData.inserted.toLocaleString()}</span>
-                                    </div>
-
-                                    <div className={cn(
-                                        "rounded-md p-3 flex flex-col items-center",
-                                        isDark ? "bg-gray-700/30" : "bg-gray-50"
-                                    )}>
-                                        <div className="flex items-center space-x-1 mb-1">
-                                            <span className="w-3 h-3 block bg-cyan-500 rounded-full" />
-                                            <span className="text-xs font-medium">Updated</span>
-                                        </div>
-                                        <span className="text-lg font-semibold">{entityData.updated.toLocaleString()}</span>
-                                    </div>
-
-                                    <div className={cn(
-                                        "rounded-md p-3 flex flex-col items-center",
-                                        isDark ? "bg-gray-700/30" : "bg-gray-50"
-                                    )}>
-                                        <div className="flex items-center space-x-1 mb-1">
-                                            <span className="w-3 h-3 block bg-primary rounded-full" />
-                                            <span className="text-xs font-medium">Kept</span>
-                                        </div>
-                                        <span className="text-lg font-semibold">{entityData.kept.toLocaleString()}</span>
-                                    </div>
-
-                                    <div className={cn(
-                                        "rounded-md p-3 flex flex-col items-center",
-                                        isDark ? "bg-gray-700/30" : "bg-gray-50"
-                                    )}>
-                                        <div className="flex items-center space-x-1 mb-1">
-                                            <span className="w-3 h-3 block bg-red-500 rounded-full" />
-                                            <span className="text-xs font-medium">Deleted</span>
-                                        </div>
-                                        <span className="text-lg font-semibold">{entityData.deleted.toLocaleString()}</span>
-                                    </div>
-
-                                    <div className={cn(
-                                        "rounded-md p-3 flex flex-col items-center",
-                                        isDark ? "bg-gray-700/30" : "bg-gray-50"
-                                    )}>
-                                        <div className="flex items-center space-x-1 mb-1">
-                                            <span className="w-3 h-3 block bg-yellow-500 rounded-full" />
-                                            <span className="text-xs font-medium">Skipped</span>
-                                        </div>
-                                        <span className="text-lg font-semibold">{entityData.skipped.toLocaleString()}</span>
-                                    </div>
+                                <div className="text-xs opacity-70 mt-0.5">
+                                    {connectionToDisplay.cron_schedule && (
+                                        <span>Runs at {formatCronTimeUTC(connectionToDisplay.cron_schedule)}</span>
+                                    )}
                                 </div>
                             </div>
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </div>
                 </div>
-            )}
+
+                {/* Display appropriate card based on error status */}
+                {jobToDisplay?.error ? (
+                    <SyncErrorCard
+                        error={jobToDisplay.error}
+                        onRunSync={handleRunSync}
+                        isInitiatingSyncJob={isInitiatingSyncJob}
+                        isSyncJobRunning={isSyncJobRunning}
+                        isDark={isDark}
+                    />
+                ) : (
+                    <SyncDagCard
+                        selectedConnection={connectionToDisplay}
+                        stableEntityDict={entityDictToDisplay}
+                        selectedEntity={selectedEntity}
+                        setSelectedEntity={setSelectedEntity}
+                        nodes={nodes}
+                        edges={edges}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        reactFlowInstance={reactFlowInstance}
+                        setReactFlowInstance={setReactFlowInstance}
+                        flowContainerRef={flowContainerRef}
+                        entityData={entityData}
+                        total={total}
+                        onRunSync={handleRunSync}
+                        isInitiatingSyncJob={isInitiatingSyncJob}
+                        isSyncJobRunning={isSyncJobRunning}
+                        isDark={isDark}
+                    />
+                )}
+            </div>
 
             {/* Schedule Edit Dialog */}
             {showScheduleDialog && (
@@ -1359,7 +1199,7 @@ const SourceConnectionDetailView = ({
                         </DialogHeader>
 
                         <div className="py-4">
-                            {selectedConnection?.id && (
+                            {connectionToDisplay?.id && (
                                 <SyncSchedule
                                     value={scheduleConfig}
                                     onChange={(newConfig) => {

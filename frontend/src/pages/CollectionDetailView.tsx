@@ -10,7 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { StatusBadge, statusConfig } from "@/components/ui/StatusBadge";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -453,6 +453,45 @@ const Collections = () => {
         });
     }, [selectedConnection?.id]);
 
+    // Replace the existing getConnectionStatusIndicator function with this updated version
+    const getConnectionStatusIndicator = (connection: SourceConnection) => {
+        // Use the status that comes directly from the API
+        // Prioritize latest_sync_job_status, then fall back to status field
+        const statusValue = connection.latest_sync_job_status || connection.status || "";
+
+        // Get the color directly from the statusConfig - same logic as StatusBadge
+        const getStatusConfig = (statusKey: string = "") => {
+            // Try exact match first
+            if (statusKey in statusConfig) {
+              return statusConfig[statusKey as keyof typeof statusConfig];
+            }
+
+            // Try case-insensitive match
+            const lowerKey = statusKey.toLowerCase();
+            for (const key in statusConfig) {
+              if (key.toLowerCase() === lowerKey) {
+                return statusConfig[key as keyof typeof statusConfig];
+              }
+            }
+
+            // Return default if no match
+            return statusConfig["default"];
+        };
+
+        const config = getStatusConfig(statusValue);
+        const colorClass = config.color;
+
+        // Add animate-pulse class for in-progress statuses
+        const isInProgress = statusValue.toLowerCase() === "in_progress";
+
+        return (
+            <span
+                className={`inline-flex h-2.5 w-2.5 rounded-full ${colorClass} opacity-80 ${isInProgress ? 'animate-pulse' : ''}`}
+                title={config.label}
+            />
+        );
+    };
+
     if (error) {
         return (
             <div className="container mx-auto py-6">
@@ -656,6 +695,8 @@ const Collections = () => {
                                     )}
                                     onClick={() => handleSelectConnection(connection)}
                                 >
+                                    {getConnectionStatusIndicator(connection)}
+
                                     <div className={cn(
                                         "rounded-md flex items-center justify-center overflow-hidden flex-shrink-0",
                                     )}>

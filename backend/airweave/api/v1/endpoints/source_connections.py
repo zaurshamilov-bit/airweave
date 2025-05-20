@@ -280,9 +280,10 @@ async def get_source_connection_job(
     Returns:
         The sync job
     """
-    return await source_connection_service.get_source_connection_job(
+    tmp = await source_connection_service.get_source_connection_job(
         db=db, source_connection_id=source_connection_id, job_id=job_id, current_user=user
     )
+    return tmp
 
 
 @router.get("/{source_short_name}/oauth2_url", response_model=schemas.OAuth2AuthUrl)

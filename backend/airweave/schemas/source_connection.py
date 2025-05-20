@@ -140,6 +140,7 @@ class SourceConnection(SourceConnectionInDBBase):
     latest_sync_job_id: Optional[UUID] = None
     latest_sync_job_started_at: Optional[datetime] = None
     latest_sync_job_completed_at: Optional[datetime] = None
+    latest_sync_job_error: Optional[str] = None
 
     # Sync schedule information
     cron_schedule: Optional[str] = None
