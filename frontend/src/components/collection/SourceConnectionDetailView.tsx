@@ -299,6 +299,15 @@ const SourceConnectionDetailView = ({
             const data = await response.json();
             setEntityDags(data);
             console.log('DAG data loaded:', data);
+
+            // After getting the DAGs, process them with the actual short_name
+            if (selectedConnection && data.length > 0) {
+                // This will be used when rendering the DAG
+                data.forEach(dag => {
+                    dag.sourceShortName = selectedConnection.short_name;
+                    dag.nodes.find(node => node.type === 'source').connection_id = selectedConnection.connection_id;
+                });
+            }
         } catch (error) {
             console.error('Error fetching entity DAGs:', error);
         }

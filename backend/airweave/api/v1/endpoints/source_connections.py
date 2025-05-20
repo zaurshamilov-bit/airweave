@@ -313,11 +313,11 @@ async def create_credentials_from_authorization_code(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_short_name: str,
-    code: str,
-    credential_name: Optional[str] = None,
-    credential_description: Optional[str] = None,
-    client_id: Optional[str] = None,
-    client_secret: Optional[str] = None,
+    code: str = Query(..., description="The authorization code to exchange"),
+    credential_name: Optional[str] = Body(None),
+    credential_description: Optional[str] = Body(None),
+    client_id: Optional[str] = Body(None),
+    client_secret: Optional[str] = Body(None),
     user: schemas.User = Depends(deps.get_user),
 ) -> schemas.IntegrationCredentialInDB:
     """Exchange OAuth2 code for a token and create integration credentials.

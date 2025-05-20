@@ -54,20 +54,19 @@ class LinearSource(BaseSource):
         }
 
     @classmethod
-    async def create(
-        cls, access_token: str, config: Optional[Dict[str, Any]] = None
-    ) -> "LinearSource":
+    async def create(cls, credentials, config: Optional[Dict[str, Any]] = None) -> "LinearSource":
         """Create instance of the Linear source with authentication token and config.
 
         Args:
             access_token: OAuth access token for Linear API
+            credentials: Credentials object containing access token
             config: Optional configuration parameters, like exclude_path
 
         Returns:
             Configured LinearSource instance
         """
         instance = cls()
-        instance.access_token = access_token
+        instance.access_token = credentials.access_token
 
         # Store config values as instance attributes
         if config:

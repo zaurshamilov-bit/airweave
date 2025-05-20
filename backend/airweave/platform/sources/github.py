@@ -74,6 +74,9 @@ class GitHubSource(BaseSource):
 
         instance.personal_access_token = credentials.personal_access_token
         instance.repo_name = credentials.repo_name
+
+        instance.branch = config.get("branch", None)
+
         return instance
 
     @tenacity.retry(
@@ -378,7 +381,29 @@ class GitHubSource(BaseSource):
         async with httpx.AsyncClient() as client:
             repo_url = f"{self.BASE_URL}/repos/{self.repo_name}"
             repo_data = await self._get_with_auth(client, repo_url)
-            default_branch = repo_data["default_branch"]
 
-            async for entity in self._traverse_repository(client, self.repo_name, default_branch):
+            # Use specified branch if available, otherwise use default branch
+            branch = (
+                self.branch
+                if hasattr(self, "branch") and self.branch
+                else repo_data["default_branch"]
+            )
+
+            # Verify that the branch exists
+            if hasattr(self, "branch") and self.branch:
+                # Get list of branches for the repository
+                branches_url = f"{self.BASE_URL}/repos/{self.repo_name}/branches"
+                branches_data = await self._get_with_auth(client, branches_url)
+                branch_names = [b["name"] for b in branches_data]
+
+                if branch not in branch_names:
+                    available_branches = ", ".join(branch_names)
+                    raise ValueError(
+                        f"Branch '{branch}' not found in repository '{self.repo_name}'. "
+                        f"Available branches: {available_branches}"
+                    )
+
+            logger.info(f"Using branch: {branch} for repo {self.repo_name}")
+
+            async for entity in self._traverse_repository(client, self.repo_name, branch):
                 yield entity

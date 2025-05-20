@@ -75,7 +75,7 @@ class MondaySource(BaseSource):
             HTTPError: If the request fails.
         """
         headers = {
-            "Authorization": self.access_token,
+            "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
         }
         payload = {"query": query}

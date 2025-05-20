@@ -32,12 +32,10 @@ class SlackSource(BaseSource):
     """
 
     @classmethod
-    async def create(
-        cls, access_token: str, config: Optional[Dict[str, Any]] = None
-    ) -> "SlackSource":
+    async def create(cls, credentials, config: Optional[Dict[str, Any]] = None) -> "SlackSource":
         """Create a new Slack source instance."""
         instance = cls()
-        instance.access_token = access_token
+        instance.access_token = credentials.access_token
         return instance
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))

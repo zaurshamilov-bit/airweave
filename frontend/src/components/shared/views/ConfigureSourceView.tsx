@@ -78,8 +78,11 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
                         // Handle auth_fields.fields as array of objects with name property
                         data.auth_fields.fields.forEach((field: any) => {
                             if (field.name) {
-                                // Auto-initialize token fields as null
-                                initialAuthValues[field.name] = isTokenField(field.name) ? null : '';
+                                // First check if we have a saved value in viewData
+                                const savedValue = viewData.authValues && viewData.authValues[field.name];
+                                // If saved value exists, use it, otherwise initialize with empty or null
+                                initialAuthValues[field.name] = savedValue !== undefined ? savedValue :
+                                    (isTokenField(field.name) ? null : '');
                             }
                         });
                         setAuthValues(initialAuthValues);
@@ -109,7 +112,7 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
         };
 
         fetchSourceDetails();
-    }, [sourceShortName]);
+    }, [sourceShortName, viewData.authValues]);
 
     // Create a consistent error handler
     const handleError = (error: Error | string, errorSource?: string) => {
@@ -454,7 +457,7 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
         }
     }, [authValues, viewData.credentialId]);
 
-    // Replace the useEffect for handling credentials with this improved version
+    // Replace the useEffect for handling credentials
     useEffect(() => {
         // Check if we have credential information from restored dialog state
         if (viewData && viewData.credentialId) {
@@ -462,11 +465,20 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
             console.log("🔑 Setting authenticated state with credential:", viewData.credentialId);
             setIsAuthenticated(true);
 
-            // Also add the credential_id to authValues if needed
-            setAuthValues(prev => ({
-                ...prev,
-                credential_id: viewData.credentialId
-            }));
+            // If we have saved auth values, restore them completely
+            if (viewData.authValues) {
+                setAuthValues(prevValues => ({
+                    ...prevValues,
+                    ...viewData.authValues,
+                    credential_id: viewData.credentialId
+                }));
+            } else {
+                // Just add the credential_id
+                setAuthValues(prev => ({
+                    ...prev,
+                    credential_id: viewData.credentialId
+                }));
+            }
 
             // Ensure validation is complete
             setValidationAttempted(true);
