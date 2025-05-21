@@ -61,6 +61,15 @@ class BaseEntity(BaseModel):
     )
 
     vector: Optional[List[float]] = Field(None, description="Vector representation of the entity.")
+    chunk_index: Optional[int] = Field(
+        None,
+        description=(
+            "Index of the chunk in the file, if applicable. "
+            "Example: If a file is split into 2 chunks, "
+            "the first chunk will have a chunk_index of 0, "
+            "the second chunk will have a chunk_index of 1."
+        ),
+    )
 
     class Config:
         """Pydantic config."""
