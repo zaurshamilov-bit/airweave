@@ -478,6 +478,11 @@ class OAuth2Service:
 
         """
         app_url = settings.app_url
+
+        # if the oauth app cannot redirect to localhost because of http
+        # paste: https://redirectmeto.com/ before the redirect uri
+        # and set change the redirect uri in the oauth app as well
+
         return f"{app_url}/auth/callback/{integration_short_name}"
 
     @staticmethod

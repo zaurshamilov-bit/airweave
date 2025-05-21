@@ -56,8 +56,18 @@ class SlackSource(BaseSource):
         response = await client.get(url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
+
         # Slack responses include "ok" to indicate success
         if not data.get("ok", False):
+            # Special handling for not_in_channel errors
+            if data.get("error") == "not_in_channel":
+                print(
+                    f"Warning: Cannot access resource - "
+                    f"not in channel. URL: {url}, params: {params}"
+                )
+                # Return an empty response with ok=True to prevent retry/error propagation
+                return {"ok": True, "channels": [], "messages": [], "members": []}
+            # For other errors, raise as usual
             raise httpx.HTTPError(f"Slack API error: {data}")
         return data
 

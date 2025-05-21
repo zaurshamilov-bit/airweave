@@ -945,7 +945,7 @@ const SourceConnectionDetailView = ({
                 syncJob: lastSyncJob,
                 entities: totalEntities,
                 runtime: totalRuntime,
-                entityDict: {...entityDict},
+                entityDict: { ...entityDict },
                 status: status
             };
         }
@@ -998,7 +998,7 @@ const SourceConnectionDetailView = ({
     const runtimeToDisplay = isLoading ? prevConnectionRef.current.runtime : totalRuntime;
     const statusToDisplay = isLoading ? prevConnectionRef.current.status : status;
     const entityDictToDisplay = Object.keys(stableEntityDict).length > 0 ? stableEntityDict :
-                                isLoading ? prevConnectionRef.current.entityDict : {};
+        isLoading ? prevConnectionRef.current.entityDict : {};
 
     console.log(`[Loading] State for ${sourceConnectionId}: ${isLoading ? 'LOADING' : 'LOADED'}`);
 
@@ -1086,24 +1086,12 @@ const SourceConnectionDetailView = ({
                             <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
                                 Runtime
                             </div>
-                            <div className="flex items-center">
-                                <Clock className={cn(
-                                    "w-5 h-5 mr-2",
-                                    isDark ? "text-gray-400" : "text-gray-500"
-                                )} />
-                                <div>
-                                    <div className="text-lg font-medium">
-                                        {selectedConnection.cron_schedule
-                                            ? (nextRunTime ? `Due in ${nextRunTime}` : 'Scheduled')
-                                            : 'Manual only'}
-                                    </div>
-                                    <div className="text-xs opacity-70 mt-0.5">
-                                        {selectedConnection.cron_schedule && (
-                                            <span>Runs at {formatCronTimeUTC(selectedConnection.cron_schedule)}</span>
-                                        )}
-                                    </div>
-                                </div>
+                            <div className="text-lg font-medium">
+                                {runtimeToDisplay ? formatTotalRuntime(runtimeToDisplay) : 'Not available'}
                             </div>
+                            {lastSyncJob?.completed_at && <div className="text-xs opacity-70 mt-1">
+                                Completed {formatTimeSince(lastSyncJob.completed_at)}
+                            </div>}
                         </div>
                     </div>
 
