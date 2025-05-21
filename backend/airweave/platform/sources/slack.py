@@ -191,15 +191,17 @@ class SlackSource(BaseSource):
                         # Re-raise any other HTTP errors
                         raise
         except httpx.HTTPError as e:
-            # This is needed to catch the same error at a higher level if it propagates
+            # This is the critical part - we need to catch and
+            # handle the not_in_channel error completely
             if "not_in_channel" in str(e):
                 print(
                     f"Warning: Cannot access messages in channel {channel_id}. "
                     f"Bot is not a member of this channel."
                 )
-                return
-            # Re-raise all other HTTP errors
-            raise
+                return  # Don't re-raise, just return with no entities
+            else:
+                # For other errors, we can still re-raise
+                raise
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Slack.
