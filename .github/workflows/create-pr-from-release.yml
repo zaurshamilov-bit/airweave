@@ -1,0 +1,59 @@
+name: Create PR from OSS Release
+description: For forks - create a PR to sync upstream OSS release to fork
+
+on:
+  repository_dispatch:
+    types: [oss-release]
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+      - name: Create branch from oss upstream tag
+        run: |
+          VERSION="${{ github.event.client_payload.version }}"
+          BRANCH_NAME="sync/oss-${VERSION}"
+
+          # Add upstream remote if it doesn't exist
+          git remote add upstream https://github.com/${{ github.event.client_payload.repo }}.git || true
+          git fetch upstream --tags
+
+          # Create branch from the tagged commit
+          git checkout -b $BRANCH_NAME
+          git fetch upstream ${VERSION}
+          git merge upstream/${VERSION} --no-commit
+
+          # If there are conflicts, just note them in the PR
+          if [ $? -ne 0 ]; then
+            git merge --abort
+            echo "Conflicts detected - will mention in PR" >> $GITHUB_ENV
+            git checkout -b $BRANCH_NAME
+            git reset --hard upstream/${VERSION}
+          fi
+
+          git push -u origin $BRANCH_NAME
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "Sync: OSS release ${{ github.event.client_payload.version }}"
+          body: |
+            This PR syncs changes from OSS release ${{ github.event.client_payload.version }}.
+
+            **Source:** ${{ github.event.client_payload.repo }}
+            **Version:** ${{ github.event.client_payload.version }}
+
+            ${{ env.CONFLICTS_DETECTED && '⚠️ **Warning:** Potential conflicts detected. Please review carefully.' || '' }}
+          branch: sync/oss-${{ github.event.client_payload.version }}
+          base: main
+          labels: automated,oss-sync
