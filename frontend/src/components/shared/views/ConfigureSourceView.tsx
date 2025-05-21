@@ -311,7 +311,24 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
 
             if (!sourceConnectionResponse.ok) {
                 const errorText = await sourceConnectionResponse.text();
-                throw new Error(`Failed to create source connection: ${errorText}`);
+                console.error("Source connection error response:", errorText);
+
+                const errorMessage = `Failed to create source connection: ${errorText}`;
+                let errorDetails = errorText;
+
+                try {
+                    // Try to parse as JSON for more details
+                    const errorObj = JSON.parse(errorText);
+                    if (errorObj.detail) {
+                        // Keep the original error message but extract detail for UI
+                        errorDetails = errorObj.detail;
+                    }
+                } catch (e) {
+                    // Not JSON, use as is
+                    console.log("Error response is not JSON:", errorText);
+                }
+
+                throw new Error(errorMessage);
             }
 
             const sourceConnection = await sourceConnectionResponse.json();
@@ -335,9 +352,18 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
             // Redirect to collection detail view
             navigate(`/collections/${collectionId}`);
         } catch (error) {
-            handleError(error instanceof Error ? error : new Error(String(error)), "Source connection error");
-        } finally {
+            // Show an immediate error message in the UI
+            setErrors({
+                _general: `Connection error: ${error instanceof Error ? error.message : String(error)}`
+            });
+
+            // Mark the form as not submitting
             setSubmitting(false);
+
+            // Don't close the dialog right away
+            if (onError) {
+                onError(error instanceof Error ? error : new Error(String(error)), sourceName || sourceShortName);
+            }
         }
     };
 

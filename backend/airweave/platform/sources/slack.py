@@ -179,13 +179,20 @@ class SlackSource(BaseSource):
                     if "429" in str(e):
                         # Let tenacity retry with backoff
                         raise
+                    # Handle 'not_in_channel' error before re-raising other errors
+                    elif "not_in_channel" in str(e):
+                        print(
+                            f"Warning: Cannot access messages in channel {channel_id}. "
+                            f"User is not a member of this channel."
+                        )
+                        # Break out of the loop and yield nothing for this channel
+                        return
                     else:
                         # Re-raise any other HTTP errors
                         raise
         except httpx.HTTPError as e:
-            # Handle 'not_in_channel' error gracefully
+            # This is needed to catch the same error at a higher level if it propagates
             if "not_in_channel" in str(e):
-                # Log a warning without yielding any messages
                 print(
                     f"Warning: Cannot access messages in channel {channel_id}. "
                     f"Bot is not a member of this channel."

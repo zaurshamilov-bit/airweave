@@ -63,11 +63,20 @@ export const redirectWithError = (
         };
     }
 
-    console.error(`❌ [ErrorUtils] Error:`, errorData);
+    // Log more detailed information for debugging
+    console.error(`❌ [ErrorUtils] Error details:`, {
+        message: errorData.errorMessage,
+        details: errorData.errorDetails,
+        service: errorData.serviceName
+    });
 
-    // Store in localStorage (no size limitation)
-    localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
-    console.log(`🔔 [ErrorUtils] Stored error details in localStorage:`, errorData);
+    // Store in localStorage with more reliable stringify
+    try {
+        localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
+        console.log(`🔔 [ErrorUtils] Stored error details in localStorage`);
+    } catch (e) {
+        console.error("Failed to store error details:", e);
+    }
 
     // Create URL with just the error flag (no sensitive data)
     const targetUrl = `${protectedPaths.dashboard}?connected=error`;
@@ -97,35 +106,43 @@ export const redirectWithError = (
 };
 
 /**
+ * Stores error details in localStorage and redirects to dashboard
+ *
+ * @param error - Error object or message
+ * @param serviceName - Name of the service that failed (optional)
+ */
+export const storeErrorDetails = (error: ErrorDetails) => {
+    try {
+        console.log('🔔 [ErrorUtils] Storing error details in localStorage');
+        localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify({
+            ...error,
+            timestamp: Date.now()
+        }));
+    } catch (e) {
+        console.error('❌ [ErrorUtils] Could not store error details:', e);
+    }
+};
+
+/**
  * Retrieves error details from localStorage
  *
  * @returns Error details or null if none found
  */
 export const getStoredErrorDetails = (): ErrorDetails | null => {
-    const storedError = localStorage.getItem(CONNECTION_ERROR_STORAGE_KEY);
-    if (!storedError) return null;
-
     try {
-        const errorData = JSON.parse(storedError) as ErrorDetails;
+        const rawData = localStorage.getItem(CONNECTION_ERROR_STORAGE_KEY);
+        console.log('📋 Raw error data from localStorage:', rawData);
 
-        // Validate basic structure
-        if (!errorData.errorMessage || !errorData.timestamp) {
-            console.error('[ErrorUtils] Invalid error data structure in localStorage');
+        if (!rawData) {
+            console.log('❌ [ErrorUtils] No error data found in localStorage');
             return null;
         }
 
-        // Check if error is recent (less than 5 minutes old)
-        const isFresh = Date.now() - errorData.timestamp < 5 * 60 * 1000;
-        if (!isFresh) {
-            console.log('[ErrorUtils] Discarding stale error data');
-            localStorage.removeItem(CONNECTION_ERROR_STORAGE_KEY);
-            return null;
-        }
-
-        return errorData;
+        const data = JSON.parse(rawData);
+        console.log('✅ [ErrorUtils] Retrieved error data:', data);
+        return data;
     } catch (e) {
-        console.error('[ErrorUtils] Failed to parse error data from localStorage', e);
-        localStorage.removeItem(CONNECTION_ERROR_STORAGE_KEY);
+        console.error('❌ [ErrorUtils] Error retrieving stored error details:', e);
         return null;
     }
 };
@@ -134,5 +151,10 @@ export const getStoredErrorDetails = (): ErrorDetails | null => {
  * Clears error details from localStorage
  */
 export const clearStoredErrorDetails = () => {
-    localStorage.removeItem(CONNECTION_ERROR_STORAGE_KEY);
+    try {
+        localStorage.removeItem(CONNECTION_ERROR_STORAGE_KEY);
+        console.log('🧹 [ErrorUtils] Cleared error details from localStorage');
+    } catch (e) {
+        console.error('❌ [ErrorUtils] Error clearing stored error details:', e);
+    }
 };

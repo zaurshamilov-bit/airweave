@@ -1,6 +1,6 @@
 """Configuration classes for platform components."""
 
-from pydantic import Field
+from pydantic import Field, validator
 
 from airweave.platform.configs._base import BaseConfig
 
@@ -66,12 +66,25 @@ class GoogleCalendarConfig(SourceConfig):
 class GoogleDriveConfig(SourceConfig):
     """Google Drive configuration schema."""
 
-    include_path: str = Field(
-        title="Include Path",
+    exclude_patterns: list[str] = Field(
+        default=[],
+        title="Exclude Patterns",
         description=(
-            "Path's in the Google Drive Repository, you want to include in Airweave's scope."
+            "List of file/folder paths or patterns to exclude from synchronization. "
+            "Examples: '*.tmp', 'Private/*', 'Confidential Reports/'. "
+            "Separate multiple patterns with commas."
         ),
     )
+
+    @validator("exclude_patterns", pre=True)
+    def parse_exclude_patterns(cls, value):
+        """Convert string input to list if needed."""
+        if isinstance(value, str):
+            if not value.strip():
+                return []
+            # Split by commas and strip whitespace
+            return [pattern.strip() for pattern in value.split(",") if pattern.strip()]
+        return value
 
 
 class HubspotConfig(SourceConfig):

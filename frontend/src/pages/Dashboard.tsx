@@ -88,45 +88,31 @@ const Dashboard = () => {
       const errorDetails = getStoredErrorDetails();
 
       if (errorDetails) {
-        console.log("🔔 [Dashboard] Found error details in localStorage:", errorDetails);
+        console.log("🔔 [Dashboard] Found error details:", errorDetails);
 
-        // Set error state and open dialog
-        setConnectionError({
-          serviceName: errorDetails.serviceName || "the service",
-          errorMessage: errorDetails.errorMessage || "Connection failed",
-          errorDetails: errorDetails.errorDetails
-        });
+        // Set the selected source if available
+        if (errorDetails.serviceName) {
+          const matchingSource = sources.find(s =>
+            s.name.toLowerCase() === errorDetails.serviceName?.toLowerCase() ||
+            s.short_name.toLowerCase() === errorDetails.serviceName?.toLowerCase()
+          );
 
-        // Open the dialog in error view mode
+          if (matchingSource) {
+            setSelectedSource(matchingSource);
+          }
+        }
+
+        // Open dialog with the error
         setDialogOpen(true);
       } else {
-        console.warn("⚠️ [Dashboard] 'connected=error' detected but no error details found in localStorage");
+        console.warn("⚠️ [Dashboard] 'connected=error' detected but no error details found");
 
-        // Fallback to URL parameters for backwards compatibility
-        const errorMessage = searchParams.get('errorMessage');
-        const errorDetails = searchParams.get('errorDetails');
-        const sourceName = searchParams.get('source');
-
-        if (errorMessage) {
-          console.log("🔔 [Dashboard] Using URL parameters for error details");
-          setConnectionError({
-            serviceName: sourceName ? decodeURIComponent(sourceName) : "the service",
-            errorMessage: decodeURIComponent(errorMessage),
-            errorDetails: errorDetails ? decodeURIComponent(errorDetails) : undefined
-          });
-
-          setDialogOpen(true);
-        }
+        // Clean URL parameters
+        const newUrl = location.pathname;
+        window.history.replaceState({}, '', newUrl);
       }
-
-      // Clean localStorage and URL parameters
-      clearStoredErrorDetails();
-
-      // Clean URL parameters
-      const newUrl = location.pathname;
-      window.history.replaceState({}, '', newUrl);
     }
-  }, [searchParams, location]);
+  }, [searchParams, location.pathname, sources]);
 
   // Fetch source connections for a specific collection
   const fetchSourceConnectionsForCollection = async (

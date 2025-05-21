@@ -192,23 +192,50 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
                 isRestoringRef.current = false;
             }
         } else if (connectionError) {
+            console.log("🔍 Checking for stored error details");
             // Check for errors stored via error-utils
             const errorDetails = getStoredErrorDetails();
+
             if (errorDetails) {
-                console.log("🔔 Connection error detected:", errorDetails);
+                console.log("🔔 Found error details in localStorage:",
+                    { type: typeof errorDetails, hasMessage: !!errorDetails.errorMessage });
+
+                // Extract JSON error details if available
+                const errorMessage = errorDetails.errorMessage || "Connection failed";
+                let errorDetailsText = errorDetails.errorDetails || "";
+
+                // Try to parse JSON from error message if it exists
+                if (errorMessage && typeof errorMessage === 'string' && errorMessage.includes('{')) {
+                    try {
+                        const jsonStart = errorMessage.indexOf('{');
+                        const jsonEnd = errorMessage.lastIndexOf('}') + 1;
+                        if (jsonStart > -1 && jsonEnd > jsonStart) {
+                            const jsonStr = errorMessage.substring(jsonStart, jsonEnd);
+                            const parsed = JSON.parse(jsonStr);
+                            // Use the detail from the JSON if available
+                            if (parsed.detail) {
+                                errorDetailsText = parsed.detail;
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Error parsing JSON from error message:", e);
+                    }
+                }
 
                 // Set error view data with retry action
                 setErrorViewData({
-                    serviceName: errorDetails.serviceName,
-                    sourceShortName: errorDetails.serviceName?.toLowerCase(),
-                    errorMessage: errorDetails.errorMessage,
-                    errorDetails: errorDetails.errorDetails,
+                    serviceName: errorDetails.serviceName || sourceName || "the service",
+                    sourceShortName: errorDetails.sourceShortName ||
+                        sourceShortName ||
+                        errorDetails.serviceName?.toLowerCase(),
+                    errorMessage: errorMessage,
+                    errorDetails: errorDetailsText,
                     // Add a retry action if available
                     retryAction: errorDetails.canRetry ? () => {
                         setShowErrorView(false);
                         // Return to the last step
-                        if (viewData.dialogFlowStep) {
-                            setCurrentStep(viewData.dialogFlowStep);
+                        if (errorDetails.dialogState?.dialogFlowStep) {
+                            setCurrentStep(errorDetails.dialogState.dialogFlowStep);
                         }
                     } : undefined
                 });
@@ -217,13 +244,38 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
                 setShowErrorView(true);
                 onOpenChange(true);
 
-                // Clean up URL
+                // Don't clean up URL right away - wait until dialog is visible
+                setTimeout(() => {
+                    // Only clean up if dialog is still showing
+                    if (isOpen && showErrorView) {
+                        const newUrl = window.location.pathname;
+                        window.history.replaceState({}, '', newUrl);
+                    }
+                }, 500);
+            } else if (searchParams.get("connected") === "error") {
+                console.warn("🚫 Connection error parameter present but no error details found",
+                    localStorage.getItem(CONNECTION_ERROR_STORAGE_KEY));
+
+                // Get error details from URL search params if possible
+                const errorParam = searchParams.get('error');
+                const errorMsg = searchParams.get('error_message');
+
+                // Fallback error when details are missing
+                setErrorViewData({
+                    serviceName: sourceName || "Unknown service",
+                    sourceShortName: sourceShortName || "unknown service",
+                    errorMessage: errorMsg || "Connection failed - details unavailable",
+                    errorDetails: "The error details were not properly captured. This may be a browser storage issue."
+                });
+                setShowErrorView(true);
+                onOpenChange(true);
+            }
+
+            // Clean up URL regardless
+            setTimeout(() => {
                 const newUrl = window.location.pathname;
                 window.history.replaceState({}, '', newUrl);
-
-                // Clear stored error
-                clearStoredErrorDetails();
-            }
+            }, 100);
         }
     }, [searchParams, onOpenChange, isOpen, dialogId, mode, sourceName, sourceShortName]);
 
@@ -299,20 +351,26 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
             return (
                 <ConnectionErrorView
                     onCancel={() => {
+                        // Mark that we're handling this error - prevent cycles
                         setShowErrorView(false);
+
+                        // Close the dialog first
                         onOpenChange(false);
+
+                        // Only after dialog is closed, clean up storage and URL
+                        setTimeout(() => {
+                            // Clear error from localStorage
+                            clearStoredErrorDetails();
+
+                            // Clean up URL parameters
+                            const url = new URL(window.location.href);
+                            if (url.searchParams.has('connected')) {
+                                url.searchParams.delete('connected');
+                                window.history.replaceState({}, '', url.toString());
+                            }
+                        }, 100);
                     }}
-                    viewData={errorViewData || {
-                        serviceName: viewData.sourceName,
-                        sourceShortName: viewData.sourceShortName,
-                        errorMessage: "Connection failed",
-                        // Add retry capability
-                        retryAction: () => {
-                            setShowErrorView(false);
-                            // Return to the first step or saved step
-                            setCurrentStep(viewData.dialogFlowStep || 0);
-                        }
-                    }}
+                    viewData={errorViewData}
                 />
             );
         }
@@ -405,62 +463,40 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
     const handleCancel = () => {
         console.log('🚪 Cancelling dialog with ID:', dialogId);
 
-        // We need to detect if the OAuth state is stale or relevant
-        const oauthStateStr = sessionStorage.getItem('oauth_dialog_state');
-        let inOAuthProcess = false;
+        // Check if we're in error view mode
+        const isInErrorMode = showErrorView;
 
-        if (oauthStateStr) {
-            try {
-                // Only consider it a valid OAuth process if:
-                // 1. It's valid JSON
-                // 2. It's recent (less than 5 minutes old)
-                // 3. It matches the current dialogId
-                const oauthState = JSON.parse(oauthStateStr);
-                const isRecent = oauthState.timestamp &&
-                    (Date.now() - oauthState.timestamp < 5 * 60 * 1000);
-                const matchesDialog = oauthState.dialogId === dialogId;
+        // Always close the dialog immediately
+        onOpenChange(false);
 
-                inOAuthProcess = isRecent && matchesDialog;
+        // Reset the dialog state
+        setCurrentStep(0);
+        setShowErrorView(false);
+        setErrorViewData(null);
 
-                // Clean up stale data
-                if (!isRecent || !matchesDialog) {
-                    console.log('🧹 Clearing stale OAuth state data');
-                    sessionStorage.removeItem('oauth_dialog_state');
-                }
-            } catch (e) {
-                // Invalid JSON, not a valid OAuth state
-                console.error('❌ Invalid OAuth state data, clearing:', e);
-                sessionStorage.removeItem('oauth_dialog_state');
-                inOAuthProcess = false;
+        // Clear credential data to prevent auto-reopening
+        setViewData(prevData => ({
+            sourceId,
+            sourceName,
+            sourceShortName,
+            collectionId,
+            collectionName,
+            dialogId,
+            // Remove credential data to prevent reopening
+            credentialId: undefined,
+            isAuthenticated: false
+        }));
+
+        // Clear error state from localStorage (if we were showing an error)
+        if (isInErrorMode) {
+            clearStoredErrorDetails();
+
+            // Clean up URL parameters
+            const currentUrl = new URL(window.location.href);
+            if (currentUrl.searchParams.has('connected')) {
+                currentUrl.searchParams.delete('connected');
+                window.history.replaceState({}, '', currentUrl.toString());
             }
-        }
-
-        // Always close the dialog if ESC key or Cancel button was pressed
-        const userInitiatedClose = true;  // Assume user initiated for now
-
-        if (userInitiatedClose || !inOAuthProcess) {
-            // Force the dialog closed regardless of internal state
-            onOpenChange(false);
-
-            // Clear credential data to prevent auto-reopening
-            setViewData(prevData => ({
-                sourceId,
-                sourceName,
-                sourceShortName,
-                collectionId,
-                collectionName,
-                dialogId,
-                // Remove credential data to prevent reopening
-                credentialId: undefined,
-                isAuthenticated: false
-            }));
-
-            // Reset step and error view
-            setCurrentStep(0);
-            setShowErrorView(false);
-            setErrorViewData(null);
-        } else {
-            console.log('🔄 Skipping credential reset during OAuth flow');
         }
     };
 
@@ -481,7 +517,7 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
     };
 
     // Add enhanced error handling function that can be passed to views
-    const handleError = (error: Error | string, sourceName?: string) => {
+    const handleError = (error: Error | string, errorSource?: string) => {
         console.error(`❌ [DialogFlow] Error with dialogId=${dialogId}:`, error);
 
         // Create the ability to retry by default
@@ -496,7 +532,7 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
 
         // Create complete error details
         const completeError = {
-            serviceName: sourceName || viewData.sourceName || "the service",
+            serviceName: errorSource || viewData.sourceName || "the service",
             errorMessage: errorMsg,
             errorDetails: errorStack,
             canRetry,
@@ -510,8 +546,85 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
         };
 
         // Use the common error utility to redirect with full details
-        redirectWithError(navigate, completeError, sourceName || viewData.sourceName);
+        redirectWithError(navigate, completeError, errorSource || viewData.sourceName);
     };
+
+    // Fix DialogFlow error handling
+    const handleDialogError = (error: Error | string, errorSource?: string) => {
+        console.log('❌ [DialogFlow] Error with dialogId=' + dialogId + ':', error);
+
+        // Prepare error data
+        const errorData = {
+            serviceName: errorSource || 'Unknown service',
+            errorMessage: error instanceof Error ? error.message : error,
+            errorDetails: error instanceof Error ? error.stack || error.message : String(error),
+            canRetry: dialogState?.canRetry || false,
+            dialogState,
+            dialogId,
+            timestamp: Date.now()
+        };
+
+        // Store error details without clearing
+        redirectWithError(navigate, errorData.errorMessage, errorData.serviceName, errorData);
+
+        // Update current step to Error view
+        setCurrentStep(6); // Assuming 6 is your error view step
+
+        if (onError) {
+            onError(error, errorSource);
+        }
+    };
+
+    // Fix dialog restoration and error handling useEffect (~line 570)
+    useEffect(() => {
+        // Check for URL param indicating an error
+        if (searchParams.get('connected') === 'error') {
+            const errorDetails = getStoredErrorDetails();
+            console.log('🔔 Found error details in localStorage:', {
+                type: typeof errorDetails,
+                hasMessage: errorDetails?.errorMessage ? true : false
+            });
+
+            if (errorDetails) {
+                // Don't clear localStorage here, wait for explicit dismissal
+                setErrorViewData({
+                    serviceName: errorDetails.serviceName || sourceName || "the service",
+                    sourceShortName: errorDetails.sourceShortName ||
+                        sourceShortName ||
+                        errorDetails.serviceName?.toLowerCase(),
+                    errorMessage: errorDetails.errorMessage || "Connection failed",
+                    errorDetails: errorDetails.errorDetails || "",
+                    // Add a retry action if available
+                    retryAction: errorDetails.canRetry ? () => {
+                        setShowErrorView(false);
+                        // Return to the last step
+                        if (errorDetails.dialogState?.dialogFlowStep) {
+                            setCurrentStep(errorDetails.dialogState.dialogFlowStep);
+                        }
+                    } : undefined
+                });
+
+                // Force open the error dialog
+                if (dialogId && errorDetails.dialogId === dialogId) {
+                    setShowErrorView(true);
+                    // Use onOpenChange directly instead of undefined forceOpenDialog
+                    onOpenChange(true);
+                }
+            } else {
+                console.log('🚫 Connection error parameter present but no error details found', errorDetails);
+
+                // Fallback error when details are missing
+                setErrorViewData({
+                    serviceName: sourceName || "Unknown service",
+                    sourceShortName: sourceShortName || "unknown service",
+                    errorMessage: "Connection failed - details unavailable",
+                    errorDetails: "The error details were not properly captured. This may be a browser storage issue."
+                });
+                setShowErrorView(true);
+                onOpenChange(true);
+            }
+        }
+    }, [searchParams, dialogId, sourceName, sourceShortName, onOpenChange]);
 
     return (
         <Dialog
