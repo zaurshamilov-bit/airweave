@@ -8,7 +8,7 @@ from airweave.core.sync_job_service import sync_job_service
 from airweave.db.session import get_db_context
 from airweave.platform.entities._base import BaseEntity
 from airweave.platform.sync.context import SyncContext
-from airweave.platform.sync.processor import EntityProcessor
+from airweave.platform.sync.entity_processor import EntityProcessor
 from airweave.platform.sync.stream import AsyncSourceStream
 from airweave.platform.sync.worker_pool import AsyncWorkerPool
 

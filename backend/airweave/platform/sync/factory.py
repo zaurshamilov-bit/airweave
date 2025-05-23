@@ -20,8 +20,8 @@ from airweave.platform.entities._base import BaseEntity
 from airweave.platform.locator import resource_locator
 from airweave.platform.sources._base import BaseSource
 from airweave.platform.sync.context import SyncContext
+from airweave.platform.sync.entity_processor import EntityProcessor
 from airweave.platform.sync.orchestrator import SyncOrchestrator
-from airweave.platform.sync.processor import EntityProcessor
 from airweave.platform.sync.pubsub import SyncProgress
 from airweave.platform.sync.router import SyncDAGRouter
 from airweave.platform.sync.worker_pool import AsyncWorkerPool

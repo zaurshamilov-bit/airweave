@@ -15,7 +15,7 @@ class EntityProcessor:
 
     def __init__(self):
         """Initialize the entity processor with empty tracking dictionary."""
-        self._entities_encountered: Dict[str, Set[str]] = {}
+        self._entities_encountered_count: Dict[str, Set[str]] = {}
 
     def initialize_tracking(self, sync_context: SyncContext) -> None:
         """Initialize entity tracking with entity types from the DAG.
@@ -23,7 +23,7 @@ class EntityProcessor:
         Args:
             sync_context: The sync context containing the DAG
         """
-        self._entities_encountered.clear()
+        self._entities_encountered_count.clear()
 
         # Get all entity nodes from the DAG
         entity_nodes = [
@@ -33,7 +33,7 @@ class EntityProcessor:
         # Create a dictionary with entity names as keys and empty sets as values
         for node in entity_nodes:
             if node.name.endswith("Entity"):
-                self._entities_encountered[node.name] = set()
+                self._entities_encountered_count[node.name] = set()
 
     async def process(
         self,
@@ -50,20 +50,22 @@ class EntityProcessor:
             entity_type = entity.__class__.__name__
 
             # Validate entity type is known
-            if entity_type not in self._entities_encountered:
-                self._entities_encountered[entity_type] = set()
+            if entity_type not in self._entities_encountered_count:
+                self._entities_encountered_count[entity_type] = set()
 
             # If we encounter the same entity from a different path, silently skip it
-            if entity.entity_id in self._entities_encountered[entity_type]:
+            if entity.entity_id in self._entities_encountered_count[entity_type]:
                 sync_context.logger.info("\nalready encountered this entity, so silently skip\n")
                 return []
 
             # Add the entity id to the entity_type set - we're processing it now
-            self._entities_encountered[entity_type].add(entity.entity_id)
+            self._entities_encountered_count[entity_type].add(entity.entity_id)
 
             # Update progress tracker with latest entities encountered
             # NOTE: this will only be published when the other stats are being published
-            await sync_context.progress.update_entities_encountered(self._entities_encountered)
+            await sync_context.progress.update_entities_encountered_count(
+                self._entities_encountered_count
+            )
 
             # Stage 1: Enrich entity with metadata
             enriched_entity = await self._enrich(entity, sync_context)

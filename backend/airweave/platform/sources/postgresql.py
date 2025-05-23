@@ -7,7 +7,7 @@ using the PolymorphicEntity system.
 
 import json
 from datetime import datetime
-from typing import Any, AsyncGenerator, Dict, List, Optional, Type
+from typing import Any, AsyncGenerator, Dict, List, Optional, Type, Union
 
 import asyncpg
 
@@ -251,27 +251,22 @@ class PostgreSQLSource(BaseSource):
 
             # Get expected type from model field
             field_info = model_fields[model_field_name]
-            # Extract the actual type from the annotation (handling Optional types)
             field_type = field_info.annotation
-            if hasattr(field_type, "__origin__") and field_type.__origin__ is Optional:
-                # For Optional types, get the actual type
-                field_type = field_type.__args__[0]
 
-            # Convert value to expected type
-            if field_type is str:
+            # Handle Union types (including Optional which is Union[T, None])
+            if hasattr(field_type, "__origin__") and field_type.__origin__ is Union:
+                # For Union types, get the non-None type (if it's Optional pattern)
+                union_args = field_type.__args__
+                # Filter out NoneType to get the actual type
+                non_none_types = [arg for arg in union_args if arg is not type(None)]
+                if non_none_types:
+                    field_type = non_none_types[0]  # Take the first non-None type
+
+            # Simple conversion: if target is string, convert to string
+            if field_type is str and field_value is not None:
                 processed_data[model_field_name] = str(field_value)
-            elif field_type is int and isinstance(field_value, (float, str)):
-                try:
-                    processed_data[model_field_name] = int(field_value)
-                except (ValueError, TypeError):
-                    processed_data[model_field_name] = field_value
-            elif field_type is float and isinstance(field_value, str):
-                try:
-                    processed_data[model_field_name] = float(field_value)
-                except (ValueError, TypeError):
-                    processed_data[model_field_name] = field_value
             else:
-                # Keep original value for other types
+                # Let Pydantic handle everything else
                 processed_data[model_field_name] = field_value
 
         return processed_data
