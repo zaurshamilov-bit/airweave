@@ -223,6 +223,59 @@ class PostgreSQLSource(BaseSource):
             raise ValueError(f"Tables not found in schema '{schema}': {', '.join(invalid_tables)}")
         return tables
 
+    async def _convert_field_values(
+        self, data: Dict[str, Any], model_fields: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Convert field values to the expected types based on the entity model.
+
+        Args:
+            data: The raw data dictionary from the database record
+            model_fields: The model fields from the entity class
+
+        Returns:
+            Dict with processed field values matching the expected types
+        """
+        processed_data = {}
+        for field_name, field_value in data.items():
+            # Handle the case where the field name is 'id' in the database
+            model_field_name = field_name + "_" if field_name == "id" else field_name
+
+            # Skip if the field doesn't exist in the model
+            if model_field_name not in model_fields:
+                continue
+
+            # If value is None, keep it as None
+            if field_value is None:
+                processed_data[model_field_name] = None
+                continue
+
+            # Get expected type from model field
+            field_info = model_fields[model_field_name]
+            # Extract the actual type from the annotation (handling Optional types)
+            field_type = field_info.annotation
+            if hasattr(field_type, "__origin__") and field_type.__origin__ is Optional:
+                # For Optional types, get the actual type
+                field_type = field_type.__args__[0]
+
+            # Convert value to expected type
+            if field_type is str:
+                processed_data[model_field_name] = str(field_value)
+            elif field_type is int and isinstance(field_value, (float, str)):
+                try:
+                    processed_data[model_field_name] = int(field_value)
+                except (ValueError, TypeError):
+                    processed_data[model_field_name] = field_value
+            elif field_type is float and isinstance(field_value, str):
+                try:
+                    processed_data[model_field_name] = float(field_value)
+                except (ValueError, TypeError):
+                    processed_data[model_field_name] = field_value
+            else:
+                # Keep original value for other types
+                processed_data[model_field_name] = field_value
+
+        return processed_data
+
     async def _process_table_batch(
         self, schema: str, table: str, entity_class: Type[PolymorphicEntity], batch: List
     ) -> AsyncGenerator[ChunkEntity, None]:
@@ -245,7 +298,10 @@ class PostgreSQLSource(BaseSource):
             pk_values = [str(data[pk]) for pk in primary_keys]
             entity_id = f"{schema}.{table}:" + ":".join(pk_values)
 
-            yield entity_class(entity_id=entity_id, **data)
+            # Convert field values to match expected types in the entity model
+            processed_data = await self._convert_field_values(data, model_fields)
+
+            yield entity_class(entity_id=entity_id, **processed_data)
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate entities for all tables in specified schemas."""
