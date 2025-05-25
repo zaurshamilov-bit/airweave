@@ -10,7 +10,7 @@
 [![Discord](https://img.shields.io/discord/1323415085011701870?label=Discord&logo=discord&logoColor=white&style=flat-square)](https://discord.com/invite/484HY9Ehxt)
 <br>
 <div style="padding-top: 16px;">
-<a href="https://trendshift.io/repositories/13748" target="_blank"><img src="https://trendshift.io/api/badge/repositories/13748" alt="airweave-ai%2Fairweave | Trendshift" style="width: 250px; height: 55px; margin-right: 12px;" width="250" height="55"/></a><a href="https://www.ycombinator.com/launches/NX7-airweave-let-agents-search-any-app" target="_blank"><img src="https://www.ycombinator.com/launches/NX7-airweave-let-agents-search-any-app/upvote_embed.svg" alt="Launch YC: Airweave - Let Agents Search Any App"/></a>
+<a href="https://trendshift.io/repositories/13748" target="_blank"><img src="https://trendshift.io/api/badge/repositories/13748" alt="airweave-ai%2Fairweave | Trendshift" style="width: 250px; height: 55px; margin-right: 24px;" width="250" height="55"/></a><a href="https://www.ycombinator.com/launches/NX7-airweave-let-agents-search-any-app" target="_blank"><img src="https://www.ycombinator.com/launches/NX7-airweave-let-agents-search-any-app/upvote_embed.svg" alt="Launch YC: Airweave - Let Agents Search Any App"/></a>
 </div>
 </div>
 
