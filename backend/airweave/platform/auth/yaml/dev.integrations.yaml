@@ -218,16 +218,6 @@ integrations:
     client_credential_location: "body"
     scope: "data:read"
 
-  trello:
-    auth_type: "trello_auth"
-    url: "https://trello.com/1/authorize"
-    key: "e49e51c7f9127b9b55aeb839de421305"
-    secret: "dd89259aad6124cbb329931c60ce78b2fc74e2d55b7dd08799f745bf843a355c"
-    scope: "read"
-    callback_method: "fragment"
-    expiration: "never"
-    name: "Airweave Integration"
-
   clickup:
     auth_type: "oauth2"
     url: "https://app.clickup.com/api"

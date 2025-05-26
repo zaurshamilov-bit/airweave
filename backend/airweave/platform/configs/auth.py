@@ -377,9 +377,3 @@ class TodoistAuthConfig(AuthConfig):
     access_token: str = Field(
         title="Access Token", description="The access token for your Todoist app."
     )
-
-
-class TrelloAuthConfig(AuthConfig):
-    """Trello authentication credentials schema."""
-
-    pass
