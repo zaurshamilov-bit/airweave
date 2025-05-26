@@ -26,6 +26,7 @@ class AuthType(str, Enum):
     api_key = "api_key"
     native_functionality = "native_functionality"
     config_class = "config_class"
+    trello_auth = "trello_auth"
     none = "none"
 
 
