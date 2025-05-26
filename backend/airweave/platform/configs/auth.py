@@ -383,14 +383,3 @@ class TrelloAuthConfig(AuthConfig):
     """Trello authentication credentials schema."""
 
     pass
-
-
-class ZenDeskAuthConfig(AuthConfig):
-    """ZenDesk authentication credentials schema."""
-
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your ZenDesk app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your ZenDesk app."
-    )
