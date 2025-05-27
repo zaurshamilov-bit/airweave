@@ -14,11 +14,9 @@
 </div>
 </div>
 
-# Airweave
+## Overview
 
 **Airweave is a tool that lets agents semantically search any app.** It's MCP compatible and seamlessly connects any app, database, or API, to transform their contents into agent-ready knowledge.
-
-## Overview
 
 Airweave simplifies the process of making information retrievable for your agent. Whether you have structured or unstructured data, Airweave helps you break it into processable entities, store the data and make it retrievable through REST and MCP endpoints.
 
