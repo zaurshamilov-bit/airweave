@@ -340,6 +340,17 @@ class OutlookMailAuthConfig(AuthConfig):
     )
 
 
+class PicnicAuthConfig(AuthConfig):
+    """Picnic Clinical Trials authentication credentials schema."""
+
+    username: str = Field(
+        title="Username", description="Username for the AACT Clinical Trials database"
+    )
+    password: str = Field(
+        title="Password", description="Password for the AACT Clinical Trials database"
+    )
+
+
 class PostgreSQLAuthConfig(BaseDatabaseAuthConfig):
     """PostgreSQL authentication configuration."""
 

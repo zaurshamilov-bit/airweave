@@ -524,8 +524,13 @@ const SourceConnectionDetailView = ({
             .filter(node => node.type === 'source')
             .map(node => node.name)[0] || '';
 
-        // Process the entities_encountered data with source name
+        // Process the entities_encountered data with source name and filter out WebFileEntity
         const cleanedDict = Object.entries(entitiesEncountered).reduce((acc, [key, value]) => {
+            // Skip WebFileEntity as it's not a user-defined entity
+            if (key.includes('WebFile')) {
+                return acc;
+            }
+
             const cleanedName = cleanEntityName(key, sourceName);
             acc[cleanedName] = value as number;
             return acc;

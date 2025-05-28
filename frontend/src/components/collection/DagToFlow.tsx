@@ -167,20 +167,25 @@ export function enrichFlowGraphVisualization(flowNodes, flowEdges) {
         type: 'straight'
     };
 
-    // if the dag contains a transformernode
-    const transformerNode = flowNodes.find(node => node.type === 'transformerNode');
-    if (transformerNode) {
-        // replace the transformer node by ocr, chunker
-        // how can I know the entity file type
-        console.log(transformerNode)
-        transformerNode.data = {
-            label: 'Chunker',
-            name: 'Chunker',
-            shortName: 'chunker',
-            model: 'chonkie'
-        };
-        console.log(transformerNode)
-    }
+    // Update transformer node labels for better display names
+    const transformerNodes = flowNodes.filter(node => node.type === 'transformerNode');
+    transformerNodes.forEach(transformerNode => {
+        const originalName = transformerNode.data.originalName || transformerNode.data.name;
+
+        // Map transformer names to better display names
+        if (originalName === 'Web Fetcher') {
+            transformerNode.data.label = 'Crawler';
+            transformerNode.data.name = 'Crawler';
+            transformerNode.data.shortName = 'crawler';
+            transformerNode.data.model = 'firecrawl';
+        } else if (originalName === 'File Chunker') {
+            transformerNode.data.label = 'Chunker';
+            transformerNode.data.name = 'Chunker';
+            transformerNode.data.shortName = 'chunker';
+            transformerNode.data.model = 'chonkie';
+        }
+        // Keep other transformers as they are
+    });
 
     // Return the enriched graph
     return {

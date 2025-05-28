@@ -13,7 +13,7 @@ class AsyncWorkerPool:
     preventing system overload when processing many items in parallel.
     """
 
-    def __init__(self, max_workers: int = 20):
+    def __init__(self, max_workers: int = 100):
         """Initialize worker pool with concurrency control.
 
         Args:
