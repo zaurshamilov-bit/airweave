@@ -33,6 +33,10 @@ class Settings(BaseSettings):
         RUN_ALEMBIC_MIGRATIONS (bool): Whether to run the alembic migrations.
         RUN_DB_SYNC (bool): Whether to run the system sync to process sources,
             destinations, and entity types.
+        REDIS_HOST (str): The Redis server hostname.
+        REDIS_PORT (int): The Redis server port.
+        REDIS_PASSWORD (Optional[str]): The Redis password (if authentication is enabled).
+        REDIS_DB (int): The Redis database number.
         QDRANT_HOST (str): The Qdrant host.
         QDRANT_PORT (int): The Qdrant port.
         TEXT2VEC_INFERENCE_URL (str): The URL for text2vec-transformers inference service.
@@ -81,6 +85,12 @@ class Settings(BaseSettings):
 
     RUN_ALEMBIC_MIGRATIONS: bool = False
     RUN_DB_SYNC: bool = True
+
+    # Redis configuration
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_PASSWORD: Optional[str] = None
+    REDIS_DB: int = 0
 
     QDRANT_HOST: Optional[str] = None
     QDRANT_PORT: Optional[int] = None
