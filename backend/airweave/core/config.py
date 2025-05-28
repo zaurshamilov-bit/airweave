@@ -38,6 +38,7 @@ class Settings(BaseSettings):
         TEXT2VEC_INFERENCE_URL (str): The URL for text2vec-transformers inference service.
         OPENAI_API_KEY (Optional[str]): The OpenAI API key.
         MISTRAL_API_KEY (Optional[str]): The Mistral AI API key.
+        FIRECRAWL_API_KEY (Optional[str]): The FireCrawl API key.
 
         # Custom deployment URLs
         API_FULL_URL (Optional[str]): The full URL for the API.
@@ -84,6 +85,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     MISTRAL_API_KEY: Optional[str] = None
+    FIRECRAWL_API_KEY: Optional[str] = None
 
     AZURE_KEYVAULT_NAME: Optional[str] = None
 
