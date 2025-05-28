@@ -151,6 +151,19 @@ services:
       retries: 5
     restart: on-failure
 
+  temporal-ui:
+    container_name: airweave-temporal-ui
+    image: temporalio/ui:2.26.2
+    ports:
+      - "8088:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      temporal:
+        condition: service_healthy
+    restart: on-failure
+
   temporal-worker:
     container_name: airweave-temporal-worker
     build:
