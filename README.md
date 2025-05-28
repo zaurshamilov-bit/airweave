@@ -108,7 +108,6 @@ client.collections.create_collection(
 npm install @airweave/sdk
 # or
 yarn add @airweave/sdk
-```
 
 ```typescript
 import { AirweaveSDKClient, AirweaveSDKEnvironment } from "@airweave/sdk";
