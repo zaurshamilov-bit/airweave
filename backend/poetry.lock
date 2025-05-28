@@ -4527,6 +4527,31 @@ mpmath = ">=1.1.0,<1.4"
 dev = ["hypothesis (>=6.70.0)", "pytest (>=7.1.0)"]
 
 [[package]]
+name = "temporalio"
+version = "1.11.1"
+description = "Temporal.io Python SDK"
+optional = false
+python-versions = "~=3.9"
+files = [
+    {file = "temporalio-1.11.1-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:747e6562a5de53b9b72cbbf4c731c128e9db7448211df0a53f0ae74cd492e292"},
+    {file = "temporalio-1.11.1-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:1c98d50520cb145c6219847876db8f8928d2b8f371341184686ebd30371868bf"},
+    {file = "temporalio-1.11.1-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:96711fc26387e6308ff68c12653a887230bb86cf26e6bc00c7f9208d3e6641df"},
+    {file = "temporalio-1.11.1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:78f6d4d1032ede5051a10e41670d6168e2821a5c2e533e2a2eafa0eb8d2d1911"},
+    {file = "temporalio-1.11.1-cp39-abi3-win_amd64.whl", hash = "sha256:504f6ddb219bd7b39c67b7648c599edf3626043eef90d11da952af5db8c7f1a5"},
+    {file = "temporalio-1.11.1.tar.gz", hash = "sha256:d7b5e4fdcdb523fa56979fa7330903b3188980f9aec9a4564c2ad910aec0cb85"},
+]
+
+[package.dependencies]
+protobuf = ">=3.20"
+types-protobuf = ">=3.20"
+typing-extensions = ">=4.2.0,<5"
+
+[package.extras]
+grpc = ["grpcio (>=1.48.2,<2)"]
+opentelemetry = ["opentelemetry-api (>=1.11.1,<2)", "opentelemetry-sdk (>=1.11.1,<2)"]
+pydantic = ["pydantic (>=2.0.0,<3)"]
+
+[[package]]
 name = "tenacity"
 version = "8.5.0"
 description = "Retry code until it succeeds"
@@ -4777,6 +4802,17 @@ python-versions = ">=3.9"
 files = [
     {file = "types_passlib-1.7.7.20250516-py3-none-any.whl", hash = "sha256:0846c3d55e62a4a7e1a72094fb3e46d320cb42c4c8a817768d656955920edf73"},
     {file = "types_passlib-1.7.7.20250516.tar.gz", hash = "sha256:f0175da758ab18b4e4c0859b735e7921992b8af95883694402a6bdb7a1c7cce7"},
+]
+
+[[package]]
+name = "types-protobuf"
+version = "6.30.2.20250516"
+description = "Typing stubs for protobuf"
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "types_protobuf-6.30.2.20250516-py3-none-any.whl", hash = "sha256:8c226d05b5e8b2623111765fa32d6e648bbc24832b4c2fddf0fa340ba5d5b722"},
+    {file = "types_protobuf-6.30.2.20250516.tar.gz", hash = "sha256:aecd1881770a9bb225ede66872ef7f0da4505edd0b193108edd9892e48d49a41"},
 ]
 
 [[package]]
@@ -5336,4 +5372,4 @@ requests = "*"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "e45f4c76590c554ad73ca9ca8e257025f503ee6b535d5c30e9eed7a2dba8e2c4"
+content-hash = "d3c662c7e67901de6627f43e679b386eaaf6b982c4e9bb568e93b0787c0e0bb0"

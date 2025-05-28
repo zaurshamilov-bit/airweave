@@ -38,6 +38,11 @@ class Settings(BaseSettings):
         TEXT2VEC_INFERENCE_URL (str): The URL for text2vec-transformers inference service.
         OPENAI_API_KEY (Optional[str]): The OpenAI API key.
         MISTRAL_API_KEY (Optional[str]): The Mistral AI API key.
+        TEMPORAL_HOST (str): The Temporal server hostname.
+        TEMPORAL_PORT (int): The Temporal server port.
+        TEMPORAL_NAMESPACE (str): The Temporal namespace.
+        TEMPORAL_TASK_QUEUE (str): The Temporal task queue name.
+        TEMPORAL_ENABLED (bool): Whether Temporal is enabled.
 
         # Custom deployment URLs
         API_FULL_URL (Optional[str]): The full URL for the API.
@@ -86,6 +91,13 @@ class Settings(BaseSettings):
     MISTRAL_API_KEY: Optional[str] = None
 
     AZURE_KEYVAULT_NAME: Optional[str] = None
+
+    # Temporal configuration
+    TEMPORAL_HOST: str = "localhost"
+    TEMPORAL_PORT: int = 7233
+    TEMPORAL_NAMESPACE: str = "default"
+    TEMPORAL_TASK_QUEUE: str = "airweave-sync-queue"
+    TEMPORAL_ENABLED: bool = False
 
     # Custom deployment URLs - these are used to override the default URLs to allow
     # for custom domains in custom deployments
@@ -240,6 +252,15 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT == "prd":
             return "https://docs.airweave.ai"
         return f"https://docs.{self.ENVIRONMENT}-airweave.com"
+
+    @property
+    def temporal_address(self) -> str:
+        """The Temporal server address.
+
+        Returns:
+            str: The Temporal server address in host:port format.
+        """
+        return f"{self.TEMPORAL_HOST}:{self.TEMPORAL_PORT}"
 
 
 settings = Settings()
