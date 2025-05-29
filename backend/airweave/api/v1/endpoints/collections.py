@@ -12,6 +12,7 @@ from airweave.core.collection_service import collection_service
 from airweave.core.search_service import ResponseType, search_service
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
+from airweave.core.temporal_service import temporal_service
 from airweave.models.user import User
 
 router = TrailingSlashRouter()
@@ -211,15 +212,27 @@ async def refresh_all_source_connections(
         # Add to jobs list
         sync_jobs.append(sync_job.to_source_connection_job(sc.id))
 
-        # Start the sync job in the background
-        background_tasks.add_task(
-            sync_service.run,
-            sync,
-            sync_job,
-            sync_dag,
-            collection_obj,  # Use the already converted object
-            source_connection,
-            current_user,
-        )
+        # Start the sync job in the background or via Temporal
+        if await temporal_service.is_temporal_enabled():
+            # Use Temporal workflow
+            await temporal_service.run_source_connection_workflow(
+                sync=sync,
+                sync_job=sync_job,
+                sync_dag=sync_dag,
+                collection=collection_obj,  # Use the already converted object
+                source_connection=source_connection,
+                user=current_user,
+            )
+        else:
+            # Fall back to background tasks
+            background_tasks.add_task(
+                sync_service.run,
+                sync,
+                sync_job,
+                sync_dag,
+                collection_obj,  # Use the already converted object
+                source_connection,
+                current_user,
+            )
 
     return sync_jobs

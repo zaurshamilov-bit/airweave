@@ -11,6 +11,7 @@ from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
+from airweave.core.temporal_service import temporal_service
 from airweave.db.session import get_db_context
 
 router = TrailingSlashRouter()
@@ -124,9 +125,22 @@ async def create_source_connection(
             )
             collection = schemas.Collection.model_validate(collection, from_attributes=True)
 
-            background_tasks.add_task(
-                sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user
-            )
+            # Check if Temporal is enabled, otherwise fall back to background tasks
+            if await temporal_service.is_temporal_enabled():
+                # Use Temporal workflow
+                await temporal_service.run_source_connection_workflow(
+                    sync=sync,
+                    sync_job=sync_job,
+                    sync_dag=sync_dag,
+                    collection=collection,
+                    source_connection=source_connection,
+                    user=user,
+                )
+            else:
+                # Fall back to background tasks
+                background_tasks.add_task(
+                    sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user
+                )
 
     return source_connection
 
@@ -225,16 +239,30 @@ async def run_source_connection(
     collection = schemas.Collection.model_validate(collection, from_attributes=True)
     source_connection = schemas.SourceConnection.from_orm_with_collection_mapping(source_connection)
 
-    background_tasks.add_task(
-        sync_service.run,
-        sync,
-        sync_job,
-        sync_dag,
-        collection,
-        source_connection,
-        user,
-        access_token=sync_job.access_token if hasattr(sync_job, "access_token") else None,
-    )
+    # Check if Temporal is enabled, otherwise fall back to background tasks
+    if await temporal_service.is_temporal_enabled():
+        # Use Temporal workflow
+        await temporal_service.run_source_connection_workflow(
+            sync=sync,
+            sync_job=sync_job,
+            sync_dag=sync_dag,
+            collection=collection,
+            source_connection=source_connection,
+            user=user,
+            access_token=sync_job.access_token if hasattr(sync_job, "access_token") else None,
+        )
+    else:
+        # Fall back to background tasks
+        background_tasks.add_task(
+            sync_service.run,
+            sync,
+            sync_job,
+            sync_dag,
+            collection,
+            source_connection,
+            user,
+            access_token=sync_job.access_token if hasattr(sync_job, "access_token") else None,
+        )
 
     return sync_job.to_source_connection_job(source_connection_id)
 

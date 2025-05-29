@@ -13,9 +13,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.core import sync_service
 from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus, SyncStatus
-from airweave.core.sync_service import sync_service
+from airweave.core.temporal_service import temporal_service
 from airweave.db.session import get_db_context
 from airweave.models.sync import Sync
 
@@ -402,22 +403,37 @@ class PlatformScheduler:
                 source_connection
             )
 
-            # Run the sync using the original user
-            logger.info(f"Starting sync task for job {sync_job.id} (sync {sync.id})")
-            asyncio.create_task(
-                sync_service.run(
-                    sync,
-                    sync_job_schema,
-                    sync_dag_schema,
-                    collection,
-                    source_connection,
-                    current_user,
+            if await temporal_service.is_temporal_enabled():
+                # Use Temporal workflow for sync execution
+                logger.info(
+                    f"Starting sync job {sync_job.id} (sync {sync.id}) via Temporal workflow"
                 )
-            )
-
-            logger.info(
-                f"Successfully triggered sync job {sync_job.id} for sync {sync.id} ({sync.name})"
-            )
+                await temporal_service.run_source_connection_workflow(
+                    sync=sync,
+                    sync_job=sync_job_schema,
+                    sync_dag=sync_dag_schema,
+                    collection=collection,
+                    source_connection=source_connection,
+                    user=current_user,
+                    access_token=None,  # No access token for scheduled syncs
+                )
+                logger.info(
+                    f"Successfully triggered sync job {sync_job.id} for sync {sync.id} "
+                    f"  ({sync.name}) via Temporal"
+                )
+            else:
+                # Run the sync using the original user
+                logger.info(f"Starting sync task for job {sync_job.id} (sync {sync.id})")
+                asyncio.create_task(
+                    sync_service.run(
+                        sync,
+                        sync_job_schema,
+                        sync_dag_schema,
+                        collection,
+                        source_connection,
+                        current_user,
+                    )
+                )
         except Exception as e:
             logger.error(f"Error triggering sync {sync.id}: {e}", exc_info=True)
 
