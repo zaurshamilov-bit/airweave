@@ -54,7 +54,9 @@ class TemporalWorker:
             logger.info("Stopping Temporal worker...")
             self.running = False
             await self.worker.shutdown()
-            await temporal_client.close()
+
+        # Always close temporal client to prevent resource leaks
+        await temporal_client.close()
 
 
 async def main() -> None:
