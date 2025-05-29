@@ -109,9 +109,9 @@ async def create_source_connection(
         db=db, source_connection_in=source_connection_in, current_user=user
     )
 
-    async with get_db_context() as db:
-        # If job was created and sync_immediately is True, start it in background
-        if sync_job and source_connection_in.sync_immediately:
+    # If job was created and sync_immediately is True, start it in background
+    if sync_job and source_connection_in.sync_immediately:
+        async with get_db_context() as db:
             sync_dag = await sync_service.get_sync_dag(
                 db=db, sync_id=source_connection.sync_id, current_user=user
             )
@@ -119,7 +119,6 @@ async def create_source_connection(
             # Get the sync object
             sync = await crud.sync.get(db=db, id=source_connection.sync_id, current_user=user)
             sync = schemas.Sync.model_validate(sync, from_attributes=True)
-            sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
             sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
             collection = await crud.collection.get_by_readable_id(
                 db=db, readable_id=source_connection.collection, current_user=user
