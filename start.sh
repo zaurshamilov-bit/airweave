@@ -112,7 +112,7 @@ if [ -n "$EXISTING_CONTAINERS" ]; then
   fi
 fi
 
-# Now run the appropriate Docker Compose command
-$COMPOSE_CMD up -d
+# Now run the appropriate Docker Compose command with the new path
+$COMPOSE_CMD -f docker/docker-compose.yml up -d
 
 echo "Services started! Frontend is available at http://localhost:8080"
