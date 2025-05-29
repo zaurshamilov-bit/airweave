@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y \
 # Add Poetry to PATH
 ENV PATH="/root/.local/bin:$PATH"
 
-# Copy poetry files from backend directory
-COPY backend/pyproject.toml backend/poetry.lock ./
+# Copy poetry files from current directory (backend)
+COPY pyproject.toml poetry.lock ./
 
 # Configure poetry
 RUN poetry config virtualenvs.create false
@@ -28,7 +28,7 @@ RUN poetry config virtualenvs.create false
 RUN poetry install --no-interaction --no-ansi --no-root
 
 # Copy the entire backend code (worker needs access to all modules)
-COPY backend/ .
+COPY . .
 
 # Create non-root user for security
 RUN useradd -m -u 1000 worker && chown -R worker:worker /app
