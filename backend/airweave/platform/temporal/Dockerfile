@@ -4,19 +4,31 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies and poetry
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    unixodbc \
+    unixodbc-dev \
+    exiftool \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir poetry==1.8.4
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Add Poetry to PATH
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy poetry files from backend directory
+COPY backend/pyproject.toml backend/poetry.lock ./
+
+# Configure poetry
+RUN poetry config virtualenvs.create false
+
+# Install dependencies only (no root project)
+RUN poetry install --no-interaction --no-ansi --no-root
 
 # Copy the entire backend code (worker needs access to all modules)
-COPY . .
+COPY backend/ .
 
 # Create non-root user for security
 RUN useradd -m -u 1000 worker && chown -R worker:worker /app
