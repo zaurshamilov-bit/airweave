@@ -19,15 +19,21 @@ class RedisClient:
         Returns:
             redis.Redis: Configured Redis client instance.
         """
-        return redis.Redis(
-            host=settings.REDIS_HOST,
-            port=settings.REDIS_PORT,
-            decode_responses=True,
-            socket_keepalive=True,
-            socket_keepalive_options={},
-            health_check_interval=30,
-            max_connections=50,
-        )
+        client_kwargs = {
+            "host": settings.REDIS_HOST,
+            "port": settings.REDIS_PORT,
+            "decode_responses": True,
+            "socket_keepalive": True,
+            "socket_keepalive_options": {},
+            "health_check_interval": 30,
+            "max_connections": 50,
+        }
+
+        # Add password if configured
+        if settings.REDIS_PASSWORD:
+            client_kwargs["password"] = settings.REDIS_PASSWORD
+
+        return redis.Redis(**client_kwargs)
 
     async def publish(self, channel: str, message: str) -> int:
         """Publish a message to a channel.
