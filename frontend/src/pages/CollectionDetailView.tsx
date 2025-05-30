@@ -463,15 +463,15 @@ const Collections = () => {
         const getStatusConfig = (statusKey: string = "") => {
             // Try exact match first
             if (statusKey in statusConfig) {
-              return statusConfig[statusKey as keyof typeof statusConfig];
+                return statusConfig[statusKey as keyof typeof statusConfig];
             }
 
             // Try case-insensitive match
             const lowerKey = statusKey.toLowerCase();
             for (const key in statusConfig) {
-              if (key.toLowerCase() === lowerKey) {
-                return statusConfig[key as keyof typeof statusConfig];
-              }
+                if (key.toLowerCase() === lowerKey) {
+                    return statusConfig[key as keyof typeof statusConfig];
+                }
             }
 
             // Return default if no match
@@ -533,7 +533,7 @@ const Collections = () => {
                                         key={connection.id}
                                         className={cn(
                                             "w-14 h-14 rounded-md border p-1 flex items-center justify-center overflow-hidden",
-                                            isDark ? "bg-gray-800 border-gray-700" : "bg-background border-gray-300"
+                                            isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
                                         )}
                                         style={{
                                             marginLeft: index > 0 ? `-${Math.min(index * 8, 24)}px` : "0px",
@@ -611,7 +611,7 @@ const Collections = () => {
                                 disabled={isReloading}
                                 className={cn(
                                     "h-8 w-8 rounded-full transition-all duration-200",
-                                    isDark ? "hover:bg-gray-800" : "hover:bg-gray-100",
+                                    isDark ? "hover:bg-gray-800" : "hover:bg-gray-50",
                                 )}
                                 title="Reload page"
                             >
@@ -627,7 +627,7 @@ const Collections = () => {
                                 onClick={() => setShowDeleteDialog(true)}
                                 className={cn(
                                     "h-8 w-8 rounded-full transition-all duration-200",
-                                    isDark ? "hover:bg-gray-800" : "hover:bg-gray-100"
+                                    isDark ? "hover:bg-gray-800" : "hover:bg-gray-50"
                                 )}
                                 title="Delete collection"
                             >
@@ -642,7 +642,7 @@ const Collections = () => {
                             onClick={() => setShowAddSourceDialog(true)}
                             className={cn(
                                 "gap-1 text-xs font-medium h-8 px-3",
-                                isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
+                                isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50"
                             )}
                         >
                             <Plus className="h-3.5 w-3.5" />
@@ -653,7 +653,7 @@ const Collections = () => {
                             onClick={handleRefreshAllSources}
                             className={cn(
                                 "gap-1 text-xs font-medium h-8 px-3",
-                                isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
+                                isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50"
                             )}
                         >
                             <Plug className="h-3.5 w-3.5 mr-1" />
@@ -691,7 +691,7 @@ const Collections = () => {
                                             ? "border-2 border-primary"
                                             : isDark
                                                 ? "border border-gray-700 bg-gray-800/50 hover:bg-gray-700/70"
-                                                : "border border-gray-300 hover:bg-gray-100"
+                                                : "border border-gray-200 bg-white hover:bg-gray-50"
                                     )}
                                     onClick={() => handleSelectConnection(connection)}
                                 >
@@ -716,14 +716,14 @@ const Collections = () => {
                         {sourceConnections.length === 0 && (
                             <div className={cn(
                                 "text-center py-6 rounded-md border",
-                                isDark ? "border-gray-700 bg-gray-800/20 text-gray-400" : "border-gray-200 bg-gray-50 text-muted-foreground"
+                                isDark ? "border-gray-700 bg-gray-800/20 text-gray-400" : "border-gray-200 bg-white text-muted-foreground"
                             )}>
                                 <p className="mb-2">No source connections found.</p>
                                 <Button
                                     variant="outline"
                                     className={cn(
                                         "mt-2",
-                                        isDark ? "border-gray-700 hover:bg-gray-800" : ""
+                                        isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50"
                                     )}
                                     onClick={() => setShowAddSourceDialog(true)}
                                 >

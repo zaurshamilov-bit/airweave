@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from airweave.core.shared_models import SourceConnectionStatus, SyncJobStatus
 from airweave.platform.configs._base import ConfigValues
@@ -38,6 +38,22 @@ class SourceConnectionCreate(SourceConnectionBase):
     auth_fields: Optional[ConfigValues] = None
     credential_id: Optional[UUID] = None
     sync_immediately: bool = True
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "My Stripe Connection",
+                    "description": "Production Stripe account for payment data",
+                    "short_name": "stripe",
+                    "collection": "finance-data",
+                    "auth_fields": {"api_key": "sk_live_51H..."},
+                    "cron_schedule": "0 */6 * * *",
+                    "sync_immediately": True,
+                }
+            ]
+        }
+    )
 
     @field_validator("cron_schedule")
     def validate_cron_schedule(cls, v: str) -> str:
@@ -146,6 +162,39 @@ class SourceConnection(SourceConnectionInDBBase):
     cron_schedule: Optional[str] = None
     next_scheduled_run: Optional[datetime] = None
 
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "name": "My Stripe Connection",
+                    "description": "Production Stripe account for payment data",
+                    "short_name": "stripe",
+                    "collection": "finance-data",
+                    "status": "active",
+                    "sync_id": "123e4567-e89b-12d3-a456-426614174000",
+                    "organization_id": "org12345-6789-abcd-ef01-234567890abc",
+                    "connection_id": "conn9876-5432-10fe-dcba-098765432100",
+                    "white_label_id": None,
+                    "created_at": "2024-01-15T09:30:00Z",
+                    "modified_at": "2024-01-15T14:22:15Z",
+                    "created_by_email": "finance@company.com",
+                    "modified_by_email": "finance@company.com",
+                    "auth_fields": {"api_key": "sk_live_51H..."},
+                    "config_fields": {},
+                    "latest_sync_job_status": "completed",
+                    "latest_sync_job_id": "987fcdeb-51a2-43d7-8f3e-1234567890ab",
+                    "latest_sync_job_started_at": "2024-01-15T14:00:00Z",
+                    "latest_sync_job_completed_at": "2024-01-15T14:05:22Z",
+                    "latest_sync_job_error": None,
+                    "cron_schedule": "0 */6 * * *",
+                    "next_scheduled_run": "2024-01-16T02:00:00Z",
+                }
+            ]
+        },
+    )
+
     @classmethod
     def from_orm_with_collection_mapping(cls, obj):
         """Create a SourceConnection from a source_connection ORM model."""
@@ -177,7 +226,22 @@ class SourceConnectionListItem(BaseModel):
     collection: str
     white_label_id: Optional[UUID] = None
 
-    class Config:
-        """Pydantic config for SourceConnectionListItem."""
-
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "name": "My Stripe Connection",
+                    "description": "Production Stripe account for payment data",
+                    "short_name": "stripe",
+                    "status": "active",
+                    "created_at": "2024-01-15T09:30:00Z",
+                    "modified_at": "2024-01-15T14:22:15Z",
+                    "sync_id": "123e4567-e89b-12d3-a456-426614174000",
+                    "collection": "finance-data",
+                    "white_label_id": None,
+                }
+            ]
+        },
+    )

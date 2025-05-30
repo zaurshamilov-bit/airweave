@@ -39,7 +39,28 @@ Asana source implementation.
 
 This connector uses **OAuth 2.0 with refresh token**.
 
-You can connect through the Airweave UI, which will guide you through the OAuth flow.
+<Card
+  title="Authentication Configuration"
+  className="auth-config-card"
+  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
+>
+
+Asana authentication credentials schema.
+<ParamField
+  path="refresh_token"
+  type="str"
+  required={true}
+>
+  The refresh token for your Asana app.
+</ParamField>
+<ParamField
+  path="access_token"
+  type="str"
+  required={true}
+>
+  The access token for your Asana app.
+</ParamField>
+</Card>
 
 
 ## Entities
@@ -163,6 +184,24 @@ Schema for Asana comment/story entities.
 | liked | bool | Whether the comment is liked by the authorized user |
 | type | str | The type of the comment (comment or system) |
 | previews | List[Dict] | Previews of attachments referenced in the comment |
+
+</Accordion>
+<Accordion title="AsanaFileEntity">
+
+Schema for Asana file attachments.
+
+Reference:
+    https://developers.asana.com/reference/getattachment
+
+| Field | Type | Description |
+|-------|------|-------------|
+| task_gid | str | GID of the task this file is attached to |
+| task_name | str | Name of the task this file is attached to |
+| resource_type | str | Type of the attachment resource |
+| host | Optional[str] | Service hosting the attachment |
+| parent | Optional[Dict[str, Any]] | Parent resource the attachment is on |
+| view_url | Optional[str] | URL to view the attachment |
+| permanent | bool | Whether this is a permanent attachment |
 
 </Accordion>
 

@@ -50,7 +50,7 @@ This connector uses **OAuth 2.0 with refresh token**.
   style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
 >
 
-Google authentication credentials schema.
+Google Drive authentication credentials schema.
 <ParamField
   path="client_id"
   type="str"
@@ -65,8 +65,42 @@ Google authentication credentials schema.
 >
   The OAuth client secret for your Google app
 </ParamField>
+<ParamField
+  path="refresh_token"
+  type="str"
+  required={true}
+>
+  The refresh token for your Google Drive app.
+</ParamField>
+<ParamField
+  path="access_token"
+  type="str"
+  required={true}
+>
+  The access token for your Google Drive app.
+</ParamField>
 </Card>
 
+### Configuration
+
+This connector uses a custom configuration class: `GoogleDriveConfig`.
+
+<Card
+  title="Configuration Options"
+  className="config-card"
+  style={{ backgroundColor: 'rgba(0, 100, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
+>
+
+Google Drive configuration schema.
+<ParamField
+  path="exclude_patterns"
+  type="list[str]"
+  required={false}
+  default="[]"
+>
+  List of file/folder paths or patterns to exclude from synchronization. Examples: '*.tmp', 'Private/*', 'Confidential Reports/'. Separate multiple patterns with commas.
+</ParamField>
+</Card>
 
 ## Entities
 
@@ -88,6 +122,33 @@ Reference:
 | created_time | Optional[datetime] | When the shared drive was created (RFC 3339 date-time). |
 | hidden | bool | Whether the shared drive is hidden from default view. |
 | org_unit_id | Optional[str] | The organizational unit of this shared drive, if applicable. |
+
+</Accordion>
+
+<Accordion title="GoogleDriveFileEntity">
+
+Schema for a File resource (in a user's or shared drive).
+
+Reference:
+  https://developers.google.com/drive/api/v3/reference/files
+
+| Field | Type | Description |
+|-------|------|-------------|
+| file_id | str | Unique ID of the file. |
+| name | Optional[str] | Name of the file. |
+| mime_type | Optional[str] | MIME type of the file. |
+| description | Optional[str] | Optional description of the file. |
+| starred | bool | Indicates whether the user has starred the file. |
+| trashed | bool | Whether the file is in the trash. |
+| explicitly_trashed | bool | Whether the file was explicitly trashed by the user. |
+| parents | List[str] | IDs of the parent folders containing this file. |
+| shared | bool | Whether the file is shared. |
+| web_view_link | Optional[str] | Link for opening the file in a relevant Google editor or viewer. |
+| icon_link | Optional[str] | A static, far-reaching URL to the file's icon. |
+| created_time | Optional[datetime] | When the file was created (RFC 3339 date-time). |
+| modified_time | Optional[datetime] | When the file was last modified (RFC 3339 date-time). |
+| size | Optional[int] | The size of the file's content in bytes. |
+| md5_checksum | Optional[str] | MD5 checksum for the content of the file. |
 
 </Accordion>
 
