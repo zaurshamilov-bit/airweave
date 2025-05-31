@@ -17,8 +17,6 @@
 
 ### Make any app searchable for your AI agents
 
-[**Start Now**](https://app.airweave.ai) &nbsp;&nbsp;&nbsp; [**Docs**](https://docs.airweave.ai) &nbsp;&nbsp;&nbsp; [**Discord**](https://discord.com/invite/484HY9Ehxt)
-
 </div>
 
 ## What is Airweave?
