@@ -5,7 +5,7 @@ import os
 from typing import List
 from uuid import uuid4
 
-from firecrawl import FirecrawlApp, ScrapeOptions
+from firecrawl import FirecrawlApp
 
 from airweave.core.config import settings
 from airweave.core.logging import logger
@@ -44,19 +44,17 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
         # Initialize Firecrawl app
         app = FirecrawlApp(api_key=firecrawl_api_key)
 
-        # Crawl the URL and get markdown using correct parameter structure
-        logger.info(f"Crawling URL with Firecrawl: {web_entity.url}")
-        crawl_result = app.crawl_url(
-            web_entity.url, scrape_options=ScrapeOptions(formats=["markdown"])
-        )
+        # Scrape the URL and get markdown using scrape_url instead of crawl_url
+        logger.info(f"Scraping URL with Firecrawl: {web_entity.url}")
+        scrape_result = app.scrape_url(web_entity.url, formats=["markdown"])
 
-        # Access the response data correctly - crawl_result should have data array
-        if not crawl_result or not hasattr(crawl_result, "data") or not crawl_result.data:
+        # Access the response data correctly - scrape_result has data object directly
+        if not scrape_result or not hasattr(scrape_result, "data") or not scrape_result.data:
             logger.warning(f"No data returned from Firecrawl for URL: {web_entity.url}")
             raise ValueError(f"No content could be extracted from URL: {web_entity.url}")
 
-        # Get the first (and only) page data since we limited to 1
-        page_data = crawl_result.data[0]
+        # Get the page data directly since scrape returns single page
+        page_data = scrape_result.data
 
         if not hasattr(page_data, "markdown") or not page_data.markdown:
             logger.warning(f"No markdown content in page data for URL: {web_entity.url}")

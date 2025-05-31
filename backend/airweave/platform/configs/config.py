@@ -153,8 +153,8 @@ class OutlookMailConfig(SourceConfig):
     pass
 
 
-class PicnicConfig(SourceConfig):
-    """Picnic Clinical Trials configuration schema."""
+class CTTIConfig(SourceConfig):
+    """CTTI AACT configuration schema."""
 
     limit: int = Field(
         default=10000,

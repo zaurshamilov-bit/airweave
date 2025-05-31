@@ -1,4 +1,4 @@
-"""Picnic source implementation.
+"""CTTI source implementation.
 
 This source connects to the AACT Clinical Trials PostgreSQL database, queries the nct_id column
 from the studies table, and creates WebEntity instances with ClinicalTrials.gov URLs.
@@ -9,23 +9,23 @@ from typing import Any, AsyncGenerator, Dict, Optional, Union
 import asyncpg
 
 from airweave.platform.auth.schemas import AuthType
-from airweave.platform.configs.auth import PicnicAuthConfig
+from airweave.platform.configs.auth import CTTIAuthConfig
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb
-from airweave.platform.entities.picnic import PicnicWebEntity
+from airweave.platform.entities.ctti import CTTIWebEntity
 from airweave.platform.sources._base import BaseSource
 
 
 @source(
-    name="PicnicHealth",
-    short_name="picnic",
+    name="CTTI AACT",
+    short_name="ctti",
     auth_type=AuthType.config_class,
-    auth_config_class="PicnicAuthConfig",
-    config_class="PicnicConfig",
+    auth_config_class="CTTIAuthConfig",
+    config_class="CTTIConfig",
     labels=["Clinical Trials", "Database"],
 )
-class PicnicSource(BaseSource):
-    """Picnic source implementation.
+class CTTISource(BaseSource):
+    """CTTI source implementation.
 
     This source connects to the AACT Clinical Trials PostgreSQL database and queries
     the nct_id column from the studies table to create WebEntity instances with
@@ -47,19 +47,19 @@ class PicnicSource(BaseSource):
     AACT_TABLE = "studies"
 
     def __init__(self):
-        """Initialize the Picnic source."""
+        """Initialize the CTTI source."""
         self.conn: Optional[asyncpg.Connection] = None
 
     @classmethod
     async def create(
         cls,
-        credentials: Union[Dict[str, Any], PicnicAuthConfig],
+        credentials: Union[Dict[str, Any], CTTIAuthConfig],
         config: Optional[Dict[str, Any]] = None,
-    ) -> "PicnicSource":
-        """Create a new Picnic source instance.
+    ) -> "CTTISource":
+        """Create a new CTTI source instance.
 
         Args:
-            credentials: PicnicAuthConfig object or dictionary containing AACT database credentials:
+            credentials: CTTIAuthConfig object or dictionary containing AACT database credentials:
                 - username: Username for AACT database
                 - password: Password for AACT database
             config: Optional configuration parameters:
@@ -82,7 +82,7 @@ class PicnicSource(BaseSource):
         Raises:
             ValueError: If the credential is missing or empty
         """
-        # Try to get from object attribute first (PicnicAuthConfig)
+        # Try to get from object attribute first (CTTIAuthConfig)
         value = getattr(self.credentials, key, None)
 
         # If not found and credentials is a dict, try dict access
@@ -130,7 +130,7 @@ class PicnicSource(BaseSource):
             except Exception as e:
                 raise ValueError(f"AACT database connection failed: {str(e)}") from e
 
-    async def generate_entities(self) -> AsyncGenerator[Union[PicnicWebEntity], None]:
+    async def generate_entities(self) -> AsyncGenerator[Union[CTTIWebEntity], None]:
         """Generate WebEntity instances for each nct_id in the AACT studies table."""
         try:
             await self._connect()
@@ -164,10 +164,10 @@ class PicnicSource(BaseSource):
                 url = f"https://clinicaltrials.gov/study/{clean_nct_id}"
 
                 # Create entity_id using the nct_id
-                entity_id = f"picnic:study:{clean_nct_id}"
+                entity_id = f"CTTI:study:{clean_nct_id}"
 
                 # Create WebEntity
-                yield PicnicWebEntity(
+                yield CTTIWebEntity(
                     entity_id=entity_id,
                     url=url,
                     title=f"Clinical Trial {clean_nct_id}",
@@ -179,7 +179,7 @@ class PicnicSource(BaseSource):
                     data_source="ClinicalTrials.gov",
                     breadcrumbs=[
                         Breadcrumb(
-                            entity_id="picnic:source", name="Picnic Clinical Trials", type="source"
+                            entity_id="CTTI:source", name="CTTI Clinical Trials", type="source"
                         ),
                         Breadcrumb(
                             entity_id=entity_id,
@@ -188,7 +188,7 @@ class PicnicSource(BaseSource):
                         ),
                     ],
                     metadata={
-                        "source": "picnic",
+                        "source": "CTTI",
                         "database_host": self.AACT_HOST,
                         "database_name": self.AACT_DATABASE,
                         "database_schema": self.AACT_SCHEMA,

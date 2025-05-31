@@ -1,4 +1,4 @@
-"""Picnic entity definitions."""
+"""CTTI entity definitions."""
 
 from typing import Any, Dict, List
 
@@ -7,8 +7,8 @@ from pydantic import Field
 from airweave.platform.entities._base import Breadcrumb, WebEntity
 
 
-class PicnicWebEntity(WebEntity):
-    """Web entity for Picnic clinical trials.
+class CTTIWebEntity(WebEntity):
+    """Web entity for CTTI clinical trials.
 
     Represents a clinical trial study from ClinicalTrials.gov with an NCT ID.
         "WebFileEntity",
@@ -17,7 +17,7 @@ class PicnicWebEntity(WebEntity):
     the actual clinical trial content from ClinicalTrials.gov.
     """
 
-    # Picnic-specific fields
+    # CTTI-specific fields
     nct_id: str = Field(..., description="The NCT ID of the clinical trial study")
     study_url: str = Field(
         ..., description="The full URL to the clinical trial study on ClinicalTrials.gov"

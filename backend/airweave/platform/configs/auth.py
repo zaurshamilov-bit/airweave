@@ -340,8 +340,8 @@ class OutlookMailAuthConfig(AuthConfig):
     )
 
 
-class PicnicAuthConfig(AuthConfig):
-    """Picnic Clinical Trials authentication credentials schema."""
+class CTTIAuthConfig(AuthConfig):
+    """CTTI Clinical Trials authentication credentials schema."""
 
     username: str = Field(
         title="Username", description="Username for the AACT Clinical Trials database"
