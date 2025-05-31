@@ -436,6 +436,14 @@ class CodeFileEntity(ChunkEntity):
     )
 
 
+class WebEntity(BaseEntity):
+    """Entity representing a web page to be crawled."""
+
+    url: str = Field(..., description="URL to crawl")
+    title: Optional[str] = Field(None, description="Page title if known")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
+
 def ensure_file_entity_models():
     """Ensure that all FileEntity subclasses have their parent and chunk models created.
 

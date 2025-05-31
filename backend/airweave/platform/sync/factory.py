@@ -41,7 +41,7 @@ class SyncFactory:
         source_connection: schemas.SourceConnection,
         current_user: schemas.User,
         access_token: Optional[str] = None,
-        max_workers: int = 20,
+        max_workers: int = 100,
     ) -> SyncOrchestrator:
         """Create a dedicated orchestrator instance for a sync run.
 

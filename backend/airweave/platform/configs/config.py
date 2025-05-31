@@ -153,6 +153,28 @@ class OutlookMailConfig(SourceConfig):
     pass
 
 
+class CTTIConfig(SourceConfig):
+    """CTTI AACT configuration schema."""
+
+    limit: int = Field(
+        default=10000,
+        title="Study Limit",
+        description="Maximum number of clinical trial studies to fetch from AACT database",
+    )
+
+    @validator("limit", pre=True)
+    def parse_limit(cls, value):
+        """Convert string input to integer if needed."""
+        if isinstance(value, str):
+            if not value.strip():
+                return 10000
+            try:
+                return int(value.strip())
+            except ValueError as e:
+                raise ValueError("Limit must be a valid integer") from e
+        return value
+
+
 class PostgreSQLConfig(SourceConfig):
     """Postgres configuration schema."""
 
