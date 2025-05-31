@@ -7,6 +7,7 @@ echo "POSTGRES_HOST: $POSTGRES_HOST"
 echo "POSTGRES_USER: $POSTGRES_USER"
 echo "POSTGRES_DB: $POSTGRES_DB"
 echo "POSTGRES_PORT: ${POSTGRES_PORT:-5432}"
+echo "POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-prefer}"
 
 poetry run python -c "
 from tenacity import retry, stop_after_attempt, wait_fixed
@@ -22,11 +23,12 @@ def check_db():
         host = os.getenv('POSTGRES_HOST', 'db')
         db = os.getenv('POSTGRES_DB', 'airweave')
         port = os.getenv('POSTGRES_PORT', '5432')
+        sslmode = os.getenv('POSTGRES_SSLMODE', 'prefer')
 
-        print(f'Attempting to connect to: postgresql://{user}:***@{host}:{port}/{db}')
+        print(f'Attempting to connect to: postgresql://{user}:***@{host}:{port}/{db}?sslmode={sslmode}')
 
-        # Add SSL mode for Azure PostgreSQL
-        connection_string = f'postgresql://{user}:{password}@{host}:{port}/{db}?sslmode=require'
+        # Use SSL mode from environment variable
+        connection_string = f'postgresql://{user}:{password}@{host}:{port}/{db}?sslmode={sslmode}'
         engine = create_engine(connection_string, connect_args={'connect_timeout': 10})
         connection = engine.connect()
         connection.close()
