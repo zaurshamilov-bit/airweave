@@ -22,6 +22,216 @@ import { apiClient } from "@/lib/api";
 import { CONNECTION_ERROR_STORAGE_KEY } from "@/lib/error-utils";
 
 /**
+ * Shared function to exchange OAuth code for credentials
+ */
+async function exchangeCodeForCredentials(
+  code: string,
+  shortName: string,
+  savedState: any
+): Promise<{ id: string }> {
+  console.log(`🔄 Exchanging code for credentials for ${shortName}`);
+
+  // Define interface for type safety
+  interface CredentialRequestData {
+    credential_name: string;
+    credential_description: string;
+    client_id?: string;
+    client_secret?: string;
+  }
+
+  const requestData: CredentialRequestData = {
+    credential_name: `${savedState.sourceDetails?.name || savedState.detailedSource?.name || shortName} OAuth Credential`,
+    credential_description: `OAuth credential for ${savedState.sourceDetails?.name || savedState.detailedSource?.name || shortName}`
+  };
+
+  // Add client_id and client_secret from authValues if they exist
+  if (savedState.authValues?.client_id) {
+    requestData.client_id = savedState.authValues.client_id;
+  }
+  if (savedState.authValues?.client_secret) {
+    requestData.client_secret = savedState.authValues.client_secret;
+  }
+
+  console.log('📋 Credential request data:', requestData);
+
+  const response = await apiClient.post(
+    `/source-connections/${shortName}/code_to_token_credentials?code=${encodeURIComponent(code)}`,
+    requestData
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to exchange code: ${errorText}`);
+  }
+
+  // Get credential data
+  const credential = await response.json();
+  console.log("✅ Credentials created:", credential.id);
+
+  return credential;
+}
+
+/**
+ * Handles OAuth callback specifically for SemanticMcp flow
+ */
+async function handleSemanticMcpOAuthCallback(
+  code: string,
+  shortName: string,
+  savedState: any,
+  setIsProcessing: (value: boolean) => void
+): Promise<void> {
+  try {
+    console.log('🎯 [AuthCallback] Handling SemanticMcp OAuth callback');
+    console.log('📋 Code:', code);
+    console.log('📋 Short name:', shortName);
+    console.log('📋 Saved state:', savedState);
+
+    // Keep processing state true to maintain loading screen
+    setIsProcessing(true);
+
+    // Exchange code for credentials using shared function
+    const credential = await exchangeCodeForCredentials(code, shortName, savedState);
+
+    // Update saved state with credential info
+    const updatedState = {
+      ...savedState,
+      credentialId: credential.id,
+      isAuthenticated: true
+    };
+
+    console.log("📊 UPDATED STATE WITH CREDENTIALS:", JSON.stringify(updatedState, null, 2));
+    sessionStorage.setItem('oauth_dialog_state', JSON.stringify(updatedState));
+
+
+    // Redirect back to SemanticMcp with restore flag
+    const returnPath = savedState.originPath || '/semantic-mcp';
+    window.location.href = `${returnPath}?restore_dialog=true`;
+
+  } catch (error) {
+    console.error('❌ Error in SemanticMcp OAuth callback:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Store error details in sessionStorage
+    const errorDetails = {
+      type: 'oauth_error',
+      source: 'semantic-mcp',
+      sourceName: savedState.detailedSource?.name || shortName,
+      shortName,
+      message: errorMessage,
+      details: error instanceof Error ? error.stack : undefined,
+      timestamp: Date.now()
+    };
+
+    sessionStorage.setItem('semantic_mcp_error', JSON.stringify(errorDetails));
+
+    // Clear the oauth dialog state since we're erroring out
+    sessionStorage.removeItem('oauth_dialog_state');
+
+    // Redirect back to SemanticMcp with error flag
+    const returnPath = savedState.originPath || '/semantic-mcp';
+    window.location.href = `${returnPath}?error=oauth`;
+  }
+}
+
+/**
+ * Handles OAuth callback for the original flow (ConnectFlow, etc.)
+ */
+async function handleOriginalOAuthCallback(
+  searchParams: URLSearchParams,
+  shortName: string | undefined,
+  hasProcessedRef: React.MutableRefObject<boolean>,
+  setIsProcessing: (value: boolean) => void
+): Promise<void> {
+  try {
+    // Set the ref immediately to prevent duplicate processing
+    hasProcessedRef.current = true;
+
+    // Get code from URL
+    const code = searchParams.get("code");
+    const errorParam = searchParams.get("error");
+
+    // Check for OAuth provider errors
+    if (errorParam) {
+      console.error(`OAuth provider returned error: ${errorParam}`);
+      const errorDesc = searchParams.get("error_description") || "Authorization denied";
+
+      // Set processing to false
+      setIsProcessing(false);
+
+      // Create error data and store it
+      const errorData = {
+        serviceName: shortName,
+        errorMessage: `OAuth error: ${errorParam} - ${errorDesc}`,
+        errorDetails: `The OAuth provider rejected the authorization request with error: ${errorParam}`,
+        timestamp: Date.now()
+      };
+
+      // Store in localStorage without risk of exception
+      localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
+
+      // Immediate redirect to dashboard with error flag
+      window.location.href = "/dashboard?connected=error";
+      return;
+    }
+
+    if (!code || !shortName) {
+      throw new Error("Missing required parameters (code or source)");
+    }
+
+    // Retrieve saved dialog state
+    const savedStateJson = sessionStorage.getItem('oauth_dialog_state');
+    if (!savedStateJson) {
+      throw new Error("Missing dialog state - cannot restore context");
+    }
+
+    const savedState = JSON.parse(savedStateJson);
+    console.log("📋 Retrieved saved state:", savedState);
+    console.log("📊 FULL SAVED STATE IN AUTH CALLBACK:", JSON.stringify(savedState, null, 2));
+
+    // Exchange code for credentials using the shared function
+    const credential = await exchangeCodeForCredentials(code, shortName, savedState);
+
+    // Update saved state with credential info
+    const updatedState = {
+      ...savedState,
+      credentialId: credential.id,
+      isAuthenticated: true
+    };
+    console.log("📊 UPDATED STATE WITH CREDENTIALS:", JSON.stringify(updatedState, null, 2));
+    sessionStorage.setItem('oauth_dialog_state', JSON.stringify(updatedState));
+
+    // Redirect back to original page with flag to restore dialog
+    const returnPath = savedState.originPath || "/dashboard";
+    window.location.href = `${returnPath}?restore_dialog=true`;
+
+  } catch (error) {
+    console.error("❌ Error processing OAuth callback:", error);
+    setIsProcessing(false);
+
+    // Store error details using error-utils before redirecting
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorDetails = error instanceof Error ? error.stack : undefined;
+
+    // Create error details object
+    const errorData = {
+      serviceName: shortName,
+      errorMessage,
+      errorDetails,
+      timestamp: Date.now()
+    };
+
+    // Store in localStorage
+    localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
+
+    // Redirect with error flag - this will trigger the error UI
+    const savedState = sessionStorage.getItem('oauth_dialog_state');
+    const parsedState = savedState ? JSON.parse(savedState) : {};
+    const returnPath = parsedState.originPath || "/dashboard";
+    window.location.href = `${returnPath}?connected=error`;
+  }
+}
+
+/**
  * AuthCallback Component
  *
  * This component handles the final leg of the OAuth2 flow:
@@ -34,175 +244,100 @@ export function AuthCallback() {
   const [searchParams] = useSearchParams();
   const { short_name } = useParams();
   const [isProcessing, setIsProcessing] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Add this ref to track if we've already processed the code
+  const [isSemanticMcpFlow, setIsSemanticMcpFlow] = useState(false);
   const hasProcessedRef = useRef(false);
 
   useEffect(() => {
-    const processOAuthCallback = async () => {
+    const processCallback = async () => {
       // Skip if we've already processed this code
       if (hasProcessedRef.current) return;
 
-      try {
-        // Set the ref immediately to prevent duplicate processing
-        hasProcessedRef.current = true;
+      // FIRST: Check where we came from
+      const savedStateJson = sessionStorage.getItem('oauth_dialog_state');
 
-        // Get code from URL
-        const code = searchParams.get("code");
-        const errorParam = searchParams.get("error");
+      if (savedStateJson) {
+        try {
+          const savedState = JSON.parse(savedStateJson);
 
-        // Check for OAuth provider errors
-        if (errorParam) {
-          console.error(`OAuth provider returned error: ${errorParam}`);
-          const errorDesc = searchParams.get("error_description") || "Authorization denied";
+          // Check if this is from SemanticMcp
+          if (savedState.source === 'semantic-mcp') {
+            console.log('🔍 [AuthCallback] Detected SemanticMcp OAuth flow');
+            hasProcessedRef.current = true; // Prevent duplicate processing
+            setIsSemanticMcpFlow(true); // Set the flag
 
-          // Set error state for UI
-          setError(`OAuth error: ${errorParam} - ${errorDesc}`);
-          setIsProcessing(false);
+            const code = searchParams.get("code");
+            const errorParam = searchParams.get("error");
 
-          // Create error data and store it
-          const errorData = {
-            serviceName: short_name,
-            errorMessage: `OAuth error: ${errorParam} - ${errorDesc}`,
-            errorDetails: `The OAuth provider rejected the authorization request with error: ${errorParam}`,
-            timestamp: Date.now()
-          };
+            if (errorParam) {
+              // Handle OAuth provider error for SemanticMcp
+              const errorDesc = searchParams.get("error_description") || "Authorization denied";
 
-          // Store in localStorage without risk of exception
-          localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
+              // Store error details in sessionStorage
+              const errorDetails = {
+                type: 'oauth_provider_error',
+                source: 'semantic-mcp',
+                sourceName: savedState.detailedSource?.name || savedState.selectedSource?.name || 'Unknown',
+                shortName: short_name || 'unknown',
+                message: `OAuth provider error: ${errorParam} - ${errorDesc}`,
+                details: `The OAuth provider rejected the authorization request with error: ${errorParam}`,
+                timestamp: Date.now()
+              };
 
-          // Immediate redirect to dashboard with error flag
-          window.location.href = "/dashboard?connected=error";
-          return;
+              sessionStorage.setItem('semantic_mcp_error', JSON.stringify(errorDetails));
+              sessionStorage.removeItem('oauth_dialog_state');
+
+              // Redirect back with error flag
+              const returnPath = savedState.originPath || '/semantic-mcp';
+              window.location.href = `${returnPath}?error=oauth`;
+              return;
+            }
+
+            if (!code || !short_name) {
+              // Store error for missing parameters
+              const errorDetails = {
+                type: 'missing_parameters',
+                source: 'semantic-mcp',
+                sourceName: savedState.detailedSource?.name || 'Unknown',
+                shortName: short_name || 'unknown',
+                message: 'Missing authorization code or source name',
+                details: 'The OAuth callback did not receive the required parameters',
+                timestamp: Date.now()
+              };
+
+              sessionStorage.setItem('semantic_mcp_error', JSON.stringify(errorDetails));
+              sessionStorage.removeItem('oauth_dialog_state');
+
+              const returnPath = savedState.originPath || '/semantic-mcp';
+              window.location.href = `${returnPath}?error=oauth`;
+              return;
+            }
+
+            // Call the SemanticMcp-specific handler with state setters
+            await handleSemanticMcpOAuthCallback(code, short_name, savedState, setIsProcessing);
+            return;
+          }
+        } catch (e) {
+          console.error('Failed to parse saved state:', e);
         }
-
-        if (!code || !short_name) {
-          throw new Error("Missing required parameters (code or source)");
-        }
-
-        // Retrieve saved dialog state
-        const savedStateJson = sessionStorage.getItem('oauth_dialog_state');
-        if (!savedStateJson) {
-          throw new Error("Missing dialog state - cannot restore context");
-        }
-
-        const savedState = JSON.parse(savedStateJson);
-        console.log("📋 Retrieved saved state:", savedState);
-        console.log("📊 FULL SAVED STATE IN AUTH CALLBACK:", JSON.stringify(savedState, null, 2));
-
-        // Exchange code for credentials using the new endpoint
-        console.log(`🔄 Exchanging code for credentials for ${short_name}`);
-
-        // Define interface for type safety
-        interface CredentialRequestData {
-          credential_name: string;
-          credential_description: string;
-          client_id?: string;
-          client_secret?: string;
-        }
-
-        const requestData: CredentialRequestData = {
-          credential_name: `${savedState.sourceDetails?.name || short_name} OAuth Credential`,
-          credential_description: `OAuth credential for ${savedState.sourceDetails?.name || short_name}`
-        };
-
-        // Add client_id and client_secret from authValues if they exist
-        if (savedState.authValues?.client_id) {
-          requestData.client_id = savedState.authValues.client_id;
-        }
-        if (savedState.authValues?.client_secret) {
-          requestData.client_secret = savedState.authValues.client_secret;
-        }
-
-        const response = await apiClient.post(
-          `/source-connections/${short_name}/code_to_token_credentials?code=${encodeURIComponent(code)}`,
-          requestData
-        );
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Failed to exchange code: ${errorText}`);
-        }
-
-        // Get credential data
-        const credential = await response.json();
-        console.log("✅ Credentials created:", credential.id);
-
-        // Update saved state with credential info
-        const updatedState = {
-          ...savedState,
-          credentialId: credential.id,
-          isAuthenticated: true
-        };
-        console.log("📊 UPDATED STATE WITH CREDENTIALS:", JSON.stringify(updatedState, null, 2));
-        sessionStorage.setItem('oauth_dialog_state', JSON.stringify(updatedState));
-
-        // Redirect back to original page with flag to restore dialog
-        const returnPath = savedState.originPath || "/dashboard";
-        window.location.href = `${returnPath}?restore_dialog=true`;
-
-      } catch (error) {
-        console.error("❌ Error processing OAuth callback:", error);
-        setError(error instanceof Error ? error.message : String(error));
-        setIsProcessing(false);
-
-        // Store error details using error-utils before redirecting
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const errorDetails = error instanceof Error ? error.stack : undefined;
-
-        // Create error details object
-        const errorData = {
-          serviceName: short_name,
-          errorMessage,
-          errorDetails,
-          timestamp: Date.now()
-        };
-
-        // Store in localStorage
-        localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
-
-        // Redirect with error flag - this will trigger the error UI
-        const savedState = sessionStorage.getItem('oauth_dialog_state');
-        const parsedState = savedState ? JSON.parse(savedState) : {};
-        const returnPath = parsedState.originPath || "/dashboard";
-        window.location.href = `${returnPath}?connected=error`;
-
-        console.error("OAuth error detected:", {
-          error: errorParam,
-          description: searchParams.get("error_description") || "Not provided",
-          state: searchParams.get("state"),
-          savedState: !!savedStateJson
-        });
       }
+
+      // If we get here, it's not from SemanticMcp, so use the original flow
+      console.log('🔍 [AuthCallback] Using original OAuth flow');
+      await handleOriginalOAuthCallback(
+        searchParams,
+        short_name,
+        hasProcessedRef,
+        setIsProcessing
+      );
     };
 
-    processOAuthCallback();
+    processCallback();
   }, [searchParams, short_name]);
 
-  // Simple loading/error UI
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-screen flex-col">
-        <div className="rounded-lg border bg-card p-8 max-w-md text-center">
-          <h2 className="text-xl font-semibold mb-4">Authentication Error</h2>
-          <p className="text-muted-foreground mb-6">{error}</p>
-          <a
-            href="/dashboard?connected=error"
-            className="inline-block px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-          >
-            Return to Dashboard
-          </a>
-        </div>
-      </div>
-    );
-  }
-
+  // Simple loading UI - errors are handled by redirecting back to source page
   return (
     <div className="flex items-center justify-center h-screen">
       <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-        <p className="text-muted-foreground text-lg font-medium mb-2">Completing authentication...</p>
         <p className="text-sm text-muted-foreground">
           Processing OAuth response from {short_name}...
         </p>
