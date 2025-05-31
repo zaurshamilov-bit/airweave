@@ -13,10 +13,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
-from airweave.core import sync_service
 from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus, SyncStatus
 from airweave.core.source_connection_service import source_connection_service
+from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
 from airweave.db.session import get_db_context
 from airweave.models.sync import Sync

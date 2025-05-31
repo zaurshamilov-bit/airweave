@@ -571,6 +571,11 @@ class TestTriggerSync:
                 new_callable=AsyncMock,
                 return_value=mock_collection,
             ),
+            patch(
+                "airweave.platform.scheduler.temporal_service.is_temporal_enabled",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
             patch("asyncio.create_task"),
             patch("airweave.platform.scheduler.sync_service.run"),
         ):
