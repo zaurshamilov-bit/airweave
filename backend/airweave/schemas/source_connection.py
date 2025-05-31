@@ -2,7 +2,7 @@
 
 import re
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -98,7 +98,7 @@ class SourceConnectionUpdate(BaseModel):
         None, description="Name of the source connection", min_length=4, max_length=42
     )
     description: Optional[str] = None
-    auth_fields: Optional[ConfigValues] = None
+    auth_fields: Optional[Union[ConfigValues, str]] = None
     config_fields: Optional[ConfigValues] = None
     cron_schedule: Optional[str] = None
     connection_id: Optional[UUID] = None
@@ -128,9 +128,9 @@ class SourceConnectionInDBBase(SourceConnectionBase):
 class SourceConnection(SourceConnectionInDBBase):
     """Schema for source connection."""
 
-    # str if encrypted, ConfigValues if not
+    # str if encrypted/masked, ConfigValues if not
     # comes from integration_credential
-    auth_fields: Optional[ConfigValues] = None
+    auth_fields: Optional[Union[ConfigValues, str]] = None
 
     # Ephemeral status derived from the latest sync job
     status: Optional[SourceConnectionStatus] = None

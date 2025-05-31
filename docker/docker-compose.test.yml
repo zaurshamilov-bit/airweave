@@ -59,7 +59,7 @@ services:
 
   backend:
     build:
-      context: ../../../backend
+      context: ../backend
       dockerfile: Dockerfile.dev
     depends_on:
       postgres:
@@ -90,7 +90,7 @@ services:
     ports:
       - "9001:8001"
     volumes:
-      - ../../../backend:/app
+      - ../backend:/app
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
       interval: 5s
