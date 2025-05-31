@@ -1,5 +1,4 @@
-<img width="1673" alt="airweave-lettermark" style="padding-bottom: 12px;" src="https://github.com/user-attachments/assets/e79a9af7-2e93-4888-9cf4-0f700f19fe05"/>
-
+<img width="1673" alt="airweave-lettermark" style="padding-bottom: 12px;" src="frontend/public/logo-and-lettermark.svg"/>
 
 <div align="center">
 
