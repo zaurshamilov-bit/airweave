@@ -88,24 +88,6 @@ metadata and content from the Linear API.
 | assignee | Optional[str] | Name of the user assigned to this issue, if any |
 
 </Accordion>
-<Accordion title="LinearAttachmentEntity">
-
-Schema for Linear attachment entities.
-
-Attachments in Linear allow linking external resources to issues.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| issue_id | str | ID of the issue this attachment belongs to |
-| issue_identifier | str | Identifier of the issue (e.g., 'ENG-123') |
-| title | Optional[str] | Title of the attachment |
-| subtitle | Optional[str] | Subtitle of the attachment |
-| source | Optional[Dict[str, Any]] | Source information about the attachment |
-| created_at | Optional[datetime] | When the attachment was created |
-| updated_at | Optional[datetime] | When the attachment was last updated |
-| metadata | Optional[Dict[str, Any]] | Key-value metadata for the attachment |
-
-</Accordion>
 <Accordion title="LinearProjectEntity">
 
 Schema for Linear project entities.

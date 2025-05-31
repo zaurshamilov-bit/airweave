@@ -25,7 +25,6 @@ The Onedrive connector allows you to sync data from Onedrive into Airweave, maki
 ### OneDriveSource
 
 OneDrive source implementation using Microsoft Graph API.
-OneDrive source implementation using Microsoft Graph API.
 
 
 <Card
@@ -62,28 +61,6 @@ OneDrive authentication credentials schema.
   The access token for your OneDrive app.
 </ParamField>
 </Card>
-<Card
-  title="Authentication Configuration"
-  className="auth-config-card"
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
->
-
-OneDrive authentication credentials schema.
-<ParamField
-  path="refresh_token"
-  type="str"
-  required={true}
->
-  The refresh token for your OneDrive app.
-</ParamField>
-<ParamField
-  path="access_token"
-  type="str"
-  required={true}
->
-  The access token for your OneDrive app.
-</ParamField>
-</Card>
 
 
 ## Entities
@@ -96,38 +73,14 @@ Schema for a OneDrive Drive object.
 
 The inherited entity_id stores the drive's unique ID. Additional key fields come
 from the Microsoft Graph drive resource.
-from the Microsoft Graph drive resource.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| drive_type | Optional[str] | Describes the type of drive represented by this resource (e.g., personal, business, documentLibrary). |
 | drive_type | Optional[str] | Describes the type of drive represented by this resource (e.g., personal, business, documentLibrary). |
 | owner | Optional[Dict[str, Any]] | Information about the user or application that owns this drive. |
-| quota | Optional[Dict[str, Any]] | Quota information for the drive |
+| quota | Optional[Dict[str, Any]] | Information about the drive's storage quota (total, used, remaining, etc.). |
 | created_at | Optional[datetime] | Datetime when the drive was created (from createdDateTime). |
 | updated_at | Optional[datetime] | Datetime when the drive was last modified (from lastModifiedDateTime). |
-
-</Accordion>
-
-<Accordion title="OneDriveDriveItemEntity">
-
-Schema for a OneDrive DriveItem object (file or folder).
-
-Inherits from FileEntity to support file processing capabilities.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| name | Optional[str] | The name of the item (folder or file). |
-| description | Optional[str] | Description of the item (if available). |
-| etag | Optional[str] | An eTag for the content of the item. Used for change tracking. |
-| ctag | Optional[str] | A cTag for the content of the item. Used for internal sync. |
-| created_at | Optional[datetime] | Datetime when the item was created (from createdDateTime). |
-| updated_at | Optional[datetime] | Datetime when the item was last modified (from lastModifiedDateTime). |
-| size | Optional[int] | Size of the item in bytes. |
-| web_url | Optional[str] | URL that displays the resource in the browser. |
-| file | Optional[Dict[str, Any]] | File metadata if the item is a file (e.g., mimeType, hashes). |
-| folder | Optional[Dict[str, Any]] | Folder metadata if the item is a folder (e.g., childCount). |
-| parent_reference | Optional[Dict[str, Any]] | Information about the parent of this item, such as driveId or parent folder path. |
 
 </Accordion>
 

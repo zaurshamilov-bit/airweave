@@ -62,26 +62,6 @@ GitHub authentication credentials schema.
 </ParamField>
 </Card>
 
-### Configuration
-
-This connector uses a custom configuration class: `GitHubConfig`.
-
-<Card
-  title="Configuration Options"
-  className="config-card"
-  style={{ backgroundColor: 'rgba(0, 100, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
->
-
-GitHub configuration schema.
-<ParamField
-  path="branch"
-  type="str"
-  required={false}
->
-  Specific branch to sync (e.g., 'main', 'development'). If empty, uses the default branch.
-</ParamField>
-</Card>
-
 
 ## Entities
 
@@ -147,38 +127,6 @@ References:
 | download_url | Optional[str] | Direct download URL if applicable. |
 | content | Optional[str] | File content (base64-encoded) if retrieved via 'mediaType=raw' or similar. |
 | encoding | Optional[str] | Indicates the encoding of the content (e.g., 'base64'). |
-
-</Accordion>
-<Accordion title="GitHubRepositoryEntity">
-
-Schema for GitHub repository entity (ParentEntity).
-
-| Field | Type | Description |
-|-------|------|-------------|
-| name | str | Repository name |
-| full_name | str | Full repository name including owner |
-| description | Optional[str] | Repository description |
-| default_branch | str | Default branch of the repository |
-| created_at | datetime | Creation timestamp |
-| updated_at | datetime | Last update timestamp |
-| language | Optional[str] | Primary language of the repository |
-| fork | bool | Whether the repository is a fork |
-| size | int | Size of the repository in KB |
-| stars_count | Optional[int] | Number of stars |
-| watchers_count | Optional[int] | Number of watchers |
-| forks_count | Optional[int] | Number of forks |
-| open_issues_count | Optional[int] | Number of open issues |
-
-</Accordion>
-<Accordion title="GitHubCodeFileEntity">
-
-Schema for GitHub code file entity (CodeFileEntity).
-
-| Field | Type | Description |
-|-------|------|-------------|
-| sha | str | SHA hash of the file content |
-| path | str | Path of the file within the repository |
-| is_binary | bool | Flag indicating if file is binary |
 
 </Accordion>
 

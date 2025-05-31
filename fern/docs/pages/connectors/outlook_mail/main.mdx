@@ -27,7 +27,6 @@ The Outlook Mail connector allows you to sync data from Outlook Mail into Airwea
 Outlook Mail source implementation (read-only).
 
 Retrieves and yields Outlook mail folders, messages and attachments.
-Retrieves and yields Outlook mail folders, messages and attachments.
 
 
 <Card
@@ -40,30 +39,6 @@ Retrieves and yields Outlook mail folders, messages and attachments.
 
 ### Authentication
 
-This connector uses **OAuth 2.0 with rotating refresh token**.
-
-<Card
-  title="Authentication Configuration"
-  className="auth-config-card"
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
->
-
-Outlook Mail authentication credentials schema.
-<ParamField
-  path="refresh_token"
-  type="str"
-  required={true}
->
-  The refresh token for your Outlook Mail app.
-</ParamField>
-<ParamField
-  path="access_token"
-  type="str"
-  required={true}
->
-  The access token for your Outlook Mail app.
-</ParamField>
-</Card>
 This connector uses **OAuth 2.0 with rotating refresh token**.
 
 <Card
@@ -114,7 +89,6 @@ See:
 <Accordion title="OutlookMessageEntity">
 
 Schema for Outlook message entities.
-Schema for Outlook message entities.
 
 Reference: https://learn.microsoft.com/en-us/graph/api/resources/message?view=graph-rest-1.0
 
@@ -127,29 +101,13 @@ Reference: https://learn.microsoft.com/en-us/graph/api/resources/message?view=gr
 | cc_recipients | List[str] | CC recipients |
 | sent_date | Optional[datetime] | Date the message was sent |
 | received_date | Optional[datetime] | Date the message was received |
-| body_preview | Optional[str] | Preview of the message body content |
+| body_preview | Optional[str] | Brief snippet of the message content |
 | body_content | Optional[str] | Full message body content |
 | is_read | bool | Whether the message has been read |
 | is_draft | bool | Whether the message is a draft |
 | importance | Optional[str] | Importance level (Low, Normal, High) |
 | has_attachments | bool | Whether the message has attachments |
 | internet_message_id | Optional[str] | Internet message ID |
-
-</Accordion>
-<Accordion title="OutlookAttachmentEntity">
-
-Schema for Outlook attachment entities.
-
-Reference: https://learn.microsoft.com/en-us/graph/api/resources/fileattachment?view=graph-rest-1.0
-
-| Field | Type | Description |
-|-------|------|-------------|
-| message_id | str | ID of the message this attachment belongs to |
-| attachment_id | str | Outlook's attachment ID |
-| content_type | Optional[str] | Content type of the attachment |
-| is_inline | bool | Whether this is an inline attachment |
-| content_id | Optional[str] | Content ID for inline attachments |
-| metadata | Dict[str, Any] | Additional metadata about the attachment |
 
 </Accordion>
 
