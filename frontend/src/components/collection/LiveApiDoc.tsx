@@ -153,7 +153,7 @@ mcp-cli query search --collection-id ${collectionReadableId} --query "${lastUser
                         className={cn(
                             "w-full justify-start p-4 rounded-md text-sm flex items-center gap-3 transition-all",
                             "border-input bg-background text-muted-foreground hover:text-foreground hover:bg-accent/10 dark:border-border dark:bg-card dark:hover:bg-muted",
-                            viewMode === "restapi" && "border-primary bg-primary/5 dark:bg-primary/10 text-primary dark:text-primary-foreground font-medium"
+                            viewMode === "restapi" && "border-primary bg-primary/5 dark:bg-primary/10 text-primary dark:text-primary-foreground font-medium shadow-sm"
                         )}
                     >
                         <Code className={cn(
@@ -177,7 +177,7 @@ mcp-cli query search --collection-id ${collectionReadableId} --query "${lastUser
                         <span>MCP Server</span>
                         <span className={cn(
                             "absolute top-2 right-2 px-1.5 py-0- text-[9px] font-medium rounded-sm tracking-tight",
-                            isDark ? "bg-gray-800 text-gray-400" : "bg-gray-100 text-gray-500"
+                            isDark ? "bg-gray-800 text-gray-400" : "bg-gray-50 text-gray-500"
                         )}>
                             Coming soon
                         </span>
@@ -188,7 +188,7 @@ mcp-cli query search --collection-id ${collectionReadableId} --query "${lastUser
                 <div className="w-full md:w-3/4">
                     <div className={cn(
                         "rounded-lg overflow-hidden border",
-                        isDark ? "bg-gray-900 border-gray-800" : "bg-gray-100 border-gray-200"
+                        isDark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200 shadow-sm"
                     )}>
                         {/* Tabs - Different tabs based on view mode */}
                         <div className="flex space-x-1 p-2 w-fit overflow-x-auto border-b border-b-gray-200 dark:border-b-gray-800">
@@ -202,9 +202,9 @@ mcp-cli query search --collection-id ${collectionReadableId} --query "${lastUser
                                             "rounded-md text-sm flex items-center gap-2",
                                             isDark
                                                 ? "text-gray-200 hover:bg-gray-800/80"
-                                                : "text-gray-700 hover:bg-gray-200/80",
+                                                : "text-gray-700 hover:bg-gray-50",
                                             apiTab === "rest"
-                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                ? isDark ? "bg-gray-800" : "bg-blue-50/50 text-blue-700"
                                                 : ""
                                         )}
                                     >
@@ -219,9 +219,9 @@ mcp-cli query search --collection-id ${collectionReadableId} --query "${lastUser
                                             "rounded-md text-sm flex items-center gap-2",
                                             isDark
                                                 ? "text-gray-200 hover:bg-gray-800/80"
-                                                : "text-gray-700 hover:bg-gray-200/80",
+                                                : "text-gray-700 hover:bg-gray-50",
                                             apiTab === "python"
-                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                ? isDark ? "bg-gray-800" : "bg-blue-50/50 text-blue-700"
                                                 : ""
                                         )}
                                     >
@@ -236,9 +236,9 @@ mcp-cli query search --collection-id ${collectionReadableId} --query "${lastUser
                                             "rounded-md text-sm flex items-center gap-2",
                                             isDark
                                                 ? "text-gray-200 hover:bg-gray-800/80"
-                                                : "text-gray-700 hover:bg-gray-200/80",
+                                                : "text-gray-700 hover:bg-gray-50",
                                             apiTab === "node"
-                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                ? isDark ? "bg-gray-800" : "bg-blue-50/50 text-blue-700"
                                                 : ""
                                         )}
                                     >
@@ -256,9 +256,9 @@ mcp-cli query search --collection-id ${collectionReadableId} --query "${lastUser
                                             "rounded-md text-sm flex items-center gap-2",
                                             isDark
                                                 ? "text-gray-200 hover:bg-gray-800/80"
-                                                : "text-gray-700 hover:bg-gray-200/80",
+                                                : "text-gray-700 hover:bg-gray-50",
                                             apiTab === "claude"
-                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                ? isDark ? "bg-gray-800" : "bg-blue-50/50 text-blue-700"
                                                 : ""
                                         )}
                                     >
@@ -273,9 +273,9 @@ mcp-cli query search --collection-id ${collectionReadableId} --query "${lastUser
                                             "rounded-md text-sm flex items-center gap-2",
                                             isDark
                                                 ? "text-gray-200 hover:bg-gray-800/80"
-                                                : "text-gray-700 hover:bg-gray-200/80",
+                                                : "text-gray-700 hover:bg-gray-50",
                                             apiTab === "cursor"
-                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                ? isDark ? "bg-gray-800" : "bg-blue-50/50 text-blue-700"
                                                 : ""
                                         )}
                                     >
@@ -290,9 +290,9 @@ mcp-cli query search --collection-id ${collectionReadableId} --query "${lastUser
                                             "rounded-md text-sm flex items-center gap-2",
                                             isDark
                                                 ? "text-gray-200 hover:bg-gray-800/80"
-                                                : "text-gray-700 hover:bg-gray-200/80",
+                                                : "text-gray-700 hover:bg-gray-50",
                                             apiTab === "windsurf"
-                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                ? isDark ? "bg-gray-800" : "bg-blue-50/50 text-blue-700"
                                                 : ""
                                         )}
                                     >
@@ -307,9 +307,9 @@ mcp-cli query search --collection-id ${collectionReadableId} --query "${lastUser
                                             "rounded-md text-sm flex items-center gap-2",
                                             isDark
                                                 ? "text-gray-200 hover:bg-gray-800/80"
-                                                : "text-gray-700 hover:bg-gray-200/80",
+                                                : "text-gray-700 hover:bg-gray-50",
                                             apiTab === "server"
-                                                ? isDark ? "bg-gray-800" : "bg-gray-200"
+                                                ? isDark ? "bg-gray-800" : "bg-blue-50/50 text-blue-700"
                                                 : ""
                                         )}
                                     >

@@ -94,6 +94,26 @@ See:
 | status | Optional[str] | Status of the space if applicable. |
 | created_at | Optional[datetime] | Timestamp when the space was created. |
 | updated_at | Optional[datetime] | Timestamp when the space was last updated. |
+| permissions | Optional[List[str]] | List of permissions for the space |
+
+</Accordion>
+<Accordion title="ConfluencePageEntity">
+
+Schema for a Confluence Page.
+
+See: https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-pages/
+
+| Field | Type | Description |
+|-------|------|-------------|
+| content_id | Optional[str] | Actual Confluence page ID. |
+| title | Optional[str] | Title of the page. |
+| space_id | Optional[str] | ID of the space this page belongs to. |
+| body | Optional[str] | HTML body or excerpt of the page. |
+| version | Optional[int] | Page version number. |
+| status | Optional[str] | Status of the page (e.g., 'current'). |
+| created_at | Optional[datetime] | Timestamp when the page was created. |
+| updated_at | Optional[datetime] | Timestamp when the page was last updated. |
+| metadata | Optional[Dict[str, Any]] | Additional metadata about the page |
 
 </Accordion>
 <Accordion title="ConfluenceBlogPostEntity">

@@ -12,6 +12,7 @@ import WhiteLabel from '@/pages/WhiteLabel';
 import CreateWhiteLabel from '@/pages/CreateWhiteLabel';
 import WhiteLabelDetail from '@/pages/WhiteLabelDetail';
 import WhiteLabelEdit from '@/pages/WhiteLabelEdit';
+import SemanticMcp from '@/pages/SemanticMcp';
 import { useCollectionsStore } from '@/lib/stores';
 import { NotFound } from '@/pages/NotFound';
 import { AuthGuard } from '@/components/AuthGuard';
@@ -33,7 +34,10 @@ function App() {
         {/* Public routes */}
         <Route path={publicPaths.login} element={<Login />} />
         <Route path={publicPaths.callback} element={<Callback />} />
+        <Route path={publicPaths.semanticMcp} element={<SemanticMcp />} />
 
+        {/* Auth callback routes - OUTSIDE of DashboardLayout */}
+        <Route path="/auth/callback/:short_name" element={<AuthCallback />} />
 
         {/* Protected routes */}
         <Route element={<AuthGuard><DashboardLayout /></AuthGuard>}>
@@ -41,7 +45,6 @@ function App() {
           <Route path={protectedPaths.collections} element={<CollectionsView />} />
           <Route path={protectedPaths.collectionDetail} element={<CollectionDetailView />} />
           <Route path={protectedPaths.apiKeys} />
-          <Route path={protectedPaths.authCallback} element={<AuthCallback />} />
           <Route path={protectedPaths.whiteLabel} element={<WhiteLabel />} />
           <Route path={protectedPaths.whiteLabelTab} element={<WhiteLabelDetail />} />
           <Route path={protectedPaths.whiteLabelCreate} element={<CreateWhiteLabel />} />

@@ -14,4 +14,5 @@ export const protectedPaths = {
 export const publicPaths = {
     login: "/login",
     callback: "/callback",
+    semanticMcp: "/semantic-mcp",
 }

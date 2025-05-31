@@ -90,7 +90,7 @@ export const SyncDagCard = ({
     return (
         <Card className={cn(
             "overflow-hidden border rounded-lg",
-            isDark ? "border-gray-700/50 bg-gray-800/30" : "border-gray-200 bg-white"
+            isDark ? "border-gray-700/50 bg-gray-800/30" : "border-gray-200 bg-white shadow-sm"
         )}>
             <CardHeader className="p-3">
                 <div className="flex justify-between items-center">
@@ -109,7 +109,7 @@ export const SyncDagCard = ({
                                 "h-8 gap-1.5 font-normal",
                                 isDark
                                     ? "bg-gray-700 border-gray-600 text-white"
-                                    : "bg-gray-100 border-gray-200 text-gray-800"
+                                    : "bg-white border-gray-200 text-gray-800 hover:bg-gray-50"
                             )}
                             onClick={onRunSync}
                             disabled={isInitiatingSyncJob || isSyncJobRunning}
@@ -136,10 +136,10 @@ export const SyncDagCard = ({
                                             isSelected
                                                 ? isDark
                                                     ? "bg-gray-700 border-gray-600 border-[1.5px] text-white"
-                                                    : "bg-gray-100 border-gray-300 border-[1.5px] text-gray-800"
+                                                    : "bg-blue-50 border-blue-200 border-[1.5px] text-blue-700"
                                                 : isDark
                                                     ? "bg-gray-800/80 border-gray-700/60 text-gray-300"
-                                                    : "bg-white border-gray-200/80 text-gray-700"
+                                                    : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
                                         )}
                                         onClick={() => setSelectedEntity(key)}
                                     >
@@ -151,10 +151,10 @@ export const SyncDagCard = ({
                                                 isSelected
                                                     ? isDark
                                                         ? "bg-gray-600 text-gray-200 border-gray-500"
-                                                        : "bg-gray-200 text-gray-700 border-gray-300"
+                                                        : "bg-blue-100 text-blue-700 border-blue-200"
                                                     : isDark
                                                         ? "bg-gray-700 text-gray-300 border-gray-600"
-                                                        : "bg-gray-100 text-gray-600 border-gray-200"
+                                                        : "bg-gray-50 text-gray-600 border-gray-200"
                                             )}
                                         >
                                             {stableEntityDict[key]}
@@ -191,7 +191,7 @@ export const SyncDagCard = ({
                         style={{
                             touchAction: 'none',
                             cursor: 'default',
-                            background: isDark ? 'transparent' : '#fafafa'
+                            background: isDark ? 'transparent' : '#ffffff'
                         }}
                         nodesDraggable={false}
                         nodesConnectable={false}
@@ -260,7 +260,7 @@ export const SyncDagCard = ({
                     <div className="grid grid-cols-5 gap-3 mt-5 min-h-[5rem]">
                         <div className={cn(
                             "rounded-md p-3 flex flex-col items-center",
-                            isDark ? "bg-gray-700/30" : "bg-gray-50"
+                            isDark ? "bg-gray-700/30" : "bg-white border border-gray-100"
                         )}>
                             <div className="flex items-center space-x-1 mb-1">
                                 <span className="w-3 h-3 block bg-green-500 rounded-full" />
@@ -271,7 +271,7 @@ export const SyncDagCard = ({
 
                         <div className={cn(
                             "rounded-md p-3 flex flex-col items-center",
-                            isDark ? "bg-gray-700/30" : "bg-gray-50"
+                            isDark ? "bg-gray-700/30" : "bg-white border border-gray-100"
                         )}>
                             <div className="flex items-center space-x-1 mb-1">
                                 <span className="w-3 h-3 block bg-cyan-500 rounded-full" />
@@ -282,7 +282,7 @@ export const SyncDagCard = ({
 
                         <div className={cn(
                             "rounded-md p-3 flex flex-col items-center",
-                            isDark ? "bg-gray-700/30" : "bg-gray-50"
+                            isDark ? "bg-gray-700/30" : "bg-white border border-gray-100"
                         )}>
                             <div className="flex items-center space-x-1 mb-1">
                                 <span className="w-3 h-3 block bg-primary rounded-full" />
@@ -293,7 +293,7 @@ export const SyncDagCard = ({
 
                         <div className={cn(
                             "rounded-md p-3 flex flex-col items-center",
-                            isDark ? "bg-gray-700/30" : "bg-gray-50"
+                            isDark ? "bg-gray-700/30" : "bg-white border border-gray-100"
                         )}>
                             <div className="flex items-center space-x-1 mb-1">
                                 <span className="w-3 h-3 block bg-red-500 rounded-full" />
@@ -304,7 +304,7 @@ export const SyncDagCard = ({
 
                         <div className={cn(
                             "rounded-md p-3 flex flex-col items-center",
-                            isDark ? "bg-gray-700/30" : "bg-gray-50"
+                            isDark ? "bg-gray-700/30" : "bg-white border border-gray-100"
                         )}>
                             <div className="flex items-center space-x-1 mb-1">
                                 <span className="w-3 h-3 block bg-yellow-500 rounded-full" />

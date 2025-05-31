@@ -186,6 +186,24 @@ Schema for Asana comment/story entities.
 | previews | List[Dict] | Previews of attachments referenced in the comment |
 
 </Accordion>
+<Accordion title="AsanaFileEntity">
+
+Schema for Asana file attachments.
+
+Reference:
+    https://developers.asana.com/reference/getattachment
+
+| Field | Type | Description |
+|-------|------|-------------|
+| task_gid | str | GID of the task this file is attached to |
+| task_name | str | Name of the task this file is attached to |
+| resource_type | str | Type of the attachment resource |
+| host | Optional[str] | Service hosting the attachment |
+| parent | Optional[Dict[str, Any]] | Parent resource the attachment is on |
+| view_url | Optional[str] | URL to view the attachment |
+| permanent | bool | Whether this is a permanent attachment |
+
+</Accordion>
 
 
 
