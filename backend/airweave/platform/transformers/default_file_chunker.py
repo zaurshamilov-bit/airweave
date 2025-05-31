@@ -1,5 +1,7 @@
 """Default file transformer using Chonkie for improved semantic chunking."""
 
+import os
+
 from chonkie import RecursiveChunker, RecursiveLevel, RecursiveRules, SemanticChunker
 
 from airweave.core.logging import logger
@@ -51,13 +53,62 @@ def get_semantic_chunker(max_chunk_size: int = MAX_CHUNK_SIZE):
     )
 
 
+async def _process_file_content(file: FileEntity) -> str:
+    """Process file content and convert to text if needed."""
+    if not file.local_path:
+        logger.error(f"File {file.name} has no local path")
+        return ""
+
+    # Check if the file is already markdown
+    _, extension = os.path.splitext(file.local_path)
+    extension = extension.lower()
+
+    if extension == ".md":
+        # File is already markdown, read it directly
+        logger.info(f"File {file.name} is already markdown, reading directly")
+        with open(file.local_path, "r", encoding="utf-8") as f:
+            return f.read()
+    else:
+        # Convert file to markdown using the document converter
+        result = await document_converter.convert(file.local_path)
+        if not result or not result.text_content:
+            logger.warning(f"No content extracted from file {file.name}")
+            return ""
+        return result.text_content
+
+
+def _chunk_text_content(text_content: str) -> list[str]:
+    """Chunk text content using recursive and semantic chunkers."""
+    # Step 1: Initial chunking with RecursiveChunker
+    recursive_chunker = get_recursive_chunker()
+    initial_chunks = recursive_chunker.chunk(text_content)
+
+    # Step 2: Apply semantic chunking if any chunks are still too large
+    final_chunk_texts = []
+    semantic_chunker = None
+
+    for chunk in initial_chunks:
+        if chunk.token_count <= MAX_CHUNK_SIZE:
+            final_chunk_texts.append(chunk.text)
+        else:
+            # Only initialize the semantic chunker if needed
+            if not semantic_chunker:
+                semantic_chunker = get_semantic_chunker(MAX_CHUNK_SIZE)
+
+            # Apply semantic chunking to the large chunk
+            semantic_chunks = semantic_chunker.chunk(chunk.text)
+            final_chunk_texts.extend([sc.text for sc in semantic_chunks])
+
+    return final_chunk_texts
+
+
 @transformer(name="File Chunker")
 async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
     """Default file chunker that converts files to markdown chunks using Chonkie.
 
     This transformer:
     1. Takes a FileEntity as input
-    2. Converts the file to markdown using AsyncMarkItDown
+    2. Converts the file to markdown using AsyncMarkItDown (or reads directly if already markdown)
     3. Uses Chonkie for intelligent chunking with a two-step approach:
        - First uses RecursiveChunker with markdown rules
        - Then applies semantic chunking if chunks are too large
@@ -75,37 +126,14 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
     # Get the specific parent/child models for this file entity type
     FileParentClass, FileChunkClass = file_class.create_parent_chunk_models()
 
-    if not file.local_path:
-        logger.error(f"File {file.name} has no local path")
-        return []
-
     try:
-        # Convert file to markdown
-        result = await document_converter.convert(file.local_path)
+        text_content = await _process_file_content(file)
 
-        if not result or not result.text_content:
-            logger.warning(f"No content extracted from file {file.name}")
+        if not text_content or not text_content.strip():
+            logger.warning(f"No text content found in file {file.name}")
             return []
 
-        # Step 1: Initial chunking with RecursiveChunker
-        recursive_chunker = get_recursive_chunker()
-        initial_chunks = recursive_chunker.chunk(result.text_content)
-
-        # Step 2: Apply semantic chunking if any chunks are still too large
-        final_chunk_texts = []
-        semantic_chunker = None
-
-        for chunk in initial_chunks:
-            if chunk.token_count <= MAX_CHUNK_SIZE:
-                final_chunk_texts.append(chunk.text)
-            else:
-                # Only initialize the semantic chunker if needed
-                if not semantic_chunker:
-                    semantic_chunker = get_semantic_chunker(MAX_CHUNK_SIZE)
-
-                # Apply semantic chunking to the large chunk
-                semantic_chunks = semantic_chunker.chunk(chunk.text)
-                final_chunk_texts.extend([sc.text for sc in semantic_chunks])
+        final_chunk_texts = _chunk_text_content(text_content)
 
         # Create parent entity for the file using all fields from original entity
         file_data = file.model_dump()

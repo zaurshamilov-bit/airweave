@@ -198,8 +198,13 @@ async def refresh_all_source_connections(
         sync_dag = await sync_service.get_sync_dag(
             db=db, sync_id=sync_job.sync_id, current_user=current_user
         )
-        source_connection = await crud.source_connection.get(
-            db=db, id=sc.id, current_user=current_user
+
+        # Get source connection with auth_fields for temporal processing
+        source_connection = await source_connection_service.get_source_connection(
+            db=db,
+            source_connection_id=sc.id,
+            show_auth_fields=True,  # Important: Need actual auth_fields for temporal
+            current_user=current_user,
         )
 
         # Prepare objects for background task

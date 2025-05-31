@@ -25,23 +25,6 @@
             }
         },
         {
-            "label": "restart-temporal-worker",
-            "command": "docker compose -f docker/docker-compose.dev.yml restart temporal-worker",
-            "type": "shell",
-            "presentation": {
-                "reveal": "always",
-                "panel": "new"
-            }
-        },
-        {
-            "label": "start-docker-and-restart-temporal",
-            "dependsOrder": "sequence",
-            "dependsOn": [
-                "start-docker-services",
-                "restart-temporal-worker"
-            ]
-        },
-        {
             "label": "stop-docker-services",
             "command": "docker compose -f docker/docker-compose.dev.yml down",
             "type": "shell",

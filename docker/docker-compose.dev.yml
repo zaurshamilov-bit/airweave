@@ -101,42 +101,6 @@ services:
         condition: service_healthy
     restart: on-failure
 
-  temporal-worker:
-    container_name: airweave-temporal-worker
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
-    # Import all variables from .env file (same pattern as production backend)
-    env_file:
-      - ../.env
-    # These variables override any from .env file
-    # Required for container networking (services refer to container names, not localhost)
-    environment:
-      # Override any localhost references for container networking
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - REDIS_HOST=redis
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - TEXT2VEC_INFERENCE_URL=http://text2vec-transformers:8080
-      # These ensure services run properly inside containers
-      - LOCAL_DEVELOPMENT=false
-      # Temporal configuration
-      - TEMPORAL_HOST=temporal
-      - TEMPORAL_PORT=7233
-      - TEMPORAL_NAMESPACE=default
-      - TEMPORAL_TASK_QUEUE=airweave-sync-queue
-      - TEMPORAL_ENABLED=true
-    volumes:
-      - ../backend:/app
-    entrypoint: [ "python", "-m", "airweave.platform.temporal.worker" ]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      temporal:
-        condition: service_healthy
-    restart: on-failure
-
 volumes:
   postgres_data:
   redis_data:

@@ -27,7 +27,7 @@ class DockerComposeManager:
 
     def __init__(
         self,
-        compose_file: str = "docker/docker-compose.test.yml",
+        compose_file: str = "../../docker/docker-compose.test.yml",
         env_vars: Optional[Dict[str, str]] = None,
         minimal_services: Optional[bool] = False,
     ):
@@ -176,22 +176,14 @@ class DockerComposeManager:
                 os.chdir(self.tests_dir)
 
                 # Run build command with output capture
-                result = subprocess.run(
-                    build_cmd,
-                    env=env,
-                    capture_output=True,
-                    text=True
-                )
+                result = subprocess.run(build_cmd, env=env, capture_output=True, text=True)
 
                 if result.returncode != 0:
                     logger.error(f"Docker build failed with exit code {result.returncode}")
                     logger.error(f"STDOUT:\n{result.stdout}")
                     logger.error(f"STDERR:\n{result.stderr}")
                     raise subprocess.CalledProcessError(
-                        result.returncode,
-                        build_cmd,
-                        output=result.stdout,
-                        stderr=result.stderr
+                        result.returncode, build_cmd, output=result.stdout, stderr=result.stderr
                     )
 
                 # Change back to original directory

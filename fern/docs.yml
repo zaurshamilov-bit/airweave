@@ -29,6 +29,8 @@ navigation:
       path: docs/pages/connectors/clickup/main.mdx
     - page: Confluence
       path: docs/pages/connectors/confluence/main.mdx
+    - page: Ctti
+      path: docs/pages/connectors/ctti/main.mdx
     - page: Dropbox
       path: docs/pages/connectors/dropbox/main.mdx
     - page: Elasticsearch

@@ -27,6 +27,7 @@ The Gmail connector allows you to sync data from Gmail into Airweave, making it 
 Gmail source implementation (read-only).
 
 Retrieves and yields Gmail objects (threads, messages, attachments).
+Retrieves and yields Gmail objects (threads, messages, attachments).
 
 
 <Card
@@ -48,6 +49,7 @@ This connector uses **OAuth 2.0 with refresh token**.
 >
 
 Gmail authentication credentials schema.
+Gmail authentication credentials schema.
 <ParamField
   path="client_id"
   type="str"
@@ -61,6 +63,20 @@ Gmail authentication credentials schema.
   required={true}
 >
   The OAuth client secret for your Google app
+</ParamField>
+<ParamField
+  path="refresh_token"
+  type="str"
+  required={true}
+>
+  The refresh token for your Gmail app.
+</ParamField>
+<ParamField
+  path="access_token"
+  type="str"
+  required={true}
+>
+  The access token for your Gmail app.
 </ParamField>
 <ParamField
   path="refresh_token"

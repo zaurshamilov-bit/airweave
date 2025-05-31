@@ -13,7 +13,7 @@ class AsyncWorkerPool:
     preventing system overload when processing many items in parallel.
     """
 
-    def __init__(self, max_workers: int = 20):
+    def __init__(self, max_workers: int = 100):
         """Initialize worker pool with concurrency control.
 
         Args:
@@ -31,6 +31,7 @@ class AsyncWorkerPool:
         """
         task = asyncio.create_task(self._run_with_semaphore(coro, *args, **kwargs))
         self.pending_tasks.add(task)
+        logger.info(f"\nPENDING: {self.pending_tasks}; MAX WORKERS: {self.max_workers}\n")
         task.add_done_callback(self._handle_task_completion)
         return task
 

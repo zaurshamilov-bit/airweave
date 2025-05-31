@@ -27,6 +27,7 @@ The Outlook Mail connector allows you to sync data from Outlook Mail into Airwea
 Outlook Mail source implementation (read-only).
 
 Retrieves and yields Outlook mail folders, messages and attachments.
+Retrieves and yields Outlook mail folders, messages and attachments.
 
 
 <Card
@@ -39,6 +40,30 @@ Retrieves and yields Outlook mail folders, messages and attachments.
 
 ### Authentication
 
+This connector uses **OAuth 2.0 with rotating refresh token**.
+
+<Card
+  title="Authentication Configuration"
+  className="auth-config-card"
+  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
+>
+
+Outlook Mail authentication credentials schema.
+<ParamField
+  path="refresh_token"
+  type="str"
+  required={true}
+>
+  The refresh token for your Outlook Mail app.
+</ParamField>
+<ParamField
+  path="access_token"
+  type="str"
+  required={true}
+>
+  The access token for your Outlook Mail app.
+</ParamField>
+</Card>
 This connector uses **OAuth 2.0 with rotating refresh token**.
 
 <Card
@@ -88,6 +113,7 @@ See:
 </Accordion>
 <Accordion title="OutlookMessageEntity">
 
+Schema for Outlook message entities.
 Schema for Outlook message entities.
 
 Reference: https://learn.microsoft.com/en-us/graph/api/resources/message?view=graph-rest-1.0

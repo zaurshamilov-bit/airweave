@@ -125,6 +125,14 @@ async def create_source_connection(
             )
             collection = schemas.Collection.model_validate(collection, from_attributes=True)
 
+            # Get source connection with auth_fields for temporal processing
+            source_connection_with_auth = await source_connection_service.get_source_connection(
+                db=db,
+                source_connection_id=source_connection.id,
+                show_auth_fields=True,  # Important: Need actual auth_fields for temporal
+                current_user=user,
+            )
+
             # Check if Temporal is enabled, otherwise fall back to background tasks
             if await temporal_service.is_temporal_enabled():
                 # Use Temporal workflow
@@ -133,13 +141,19 @@ async def create_source_connection(
                     sync_job=sync_job,
                     sync_dag=sync_dag,
                     collection=collection,
-                    source_connection=source_connection,
+                    source_connection=source_connection_with_auth,
                     user=user,
                 )
             else:
                 # Fall back to background tasks
                 background_tasks.add_task(
-                    sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user
+                    sync_service.run,
+                    sync,
+                    sync_job,
+                    sync_dag,
+                    collection,
+                    source_connection_with_auth,
+                    user,
                 )
 
     return source_connection
@@ -227,17 +241,22 @@ async def run_source_connection(
     # Start the sync job in the background
     sync = await crud.sync.get(db=db, id=sync_job.sync_id, current_user=user, with_connections=True)
     sync_dag = await sync_service.get_sync_dag(db=db, sync_id=sync_job.sync_id, current_user=user)
-    source_connection = await crud.source_connection.get(
-        db=db, id=source_connection_id, current_user=user
+
+    # Get source connection with auth_fields for temporal processing
+    source_connection_with_auth = await source_connection_service.get_source_connection(
+        db=db,
+        source_connection_id=source_connection_id,
+        show_auth_fields=True,  # Important: Need actual auth_fields for temporal
+        current_user=user,
     )
+
     collection = await crud.collection.get_by_readable_id(
-        db=db, readable_id=source_connection.readable_collection_id, current_user=user
+        db=db, readable_id=source_connection_with_auth.collection, current_user=user
     )
 
     sync = schemas.Sync.model_validate(sync, from_attributes=True)
     sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
     collection = schemas.Collection.model_validate(collection, from_attributes=True)
-    source_connection = schemas.SourceConnection.from_orm_with_collection_mapping(source_connection)
 
     # Check if Temporal is enabled, otherwise fall back to background tasks
     if await temporal_service.is_temporal_enabled():
@@ -247,7 +266,7 @@ async def run_source_connection(
             sync_job=sync_job,
             sync_dag=sync_dag,
             collection=collection,
-            source_connection=source_connection,
+            source_connection=source_connection_with_auth,
             user=user,
             access_token=sync_job.access_token if hasattr(sync_job, "access_token") else None,
         )
@@ -259,7 +278,7 @@ async def run_source_connection(
             sync_job,
             sync_dag,
             collection,
-            source_connection,
+            source_connection_with_auth,
             user,
             access_token=sync_job.access_token if hasattr(sync_job, "access_token") else None,
         )
