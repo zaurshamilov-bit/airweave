@@ -115,7 +115,7 @@ curl -X POST 'https://api.airweave.ai/collections' \
 ```
 </details>
 
-## 🔌 26 Supported Integrations
+## 🔌 25 Supported Integrations
 
 <div align="center">
   <img src="frontend/src/components/icons/apps/notion.svg" width="50" height="50" style="margin: 8px;" />
