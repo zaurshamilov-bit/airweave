@@ -113,6 +113,7 @@ class SyncOrchestrator:
                         continue  # Do not process further
 
                     # Submit each entity for processing in the worker pool
+                    print("\nSUBMITTING TASK TO WORKER POOL\n")
                     task = await self.worker_pool.submit(
                         self._process_single_entity,
                         entity=entity,

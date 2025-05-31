@@ -5,7 +5,7 @@ import os
 from typing import List
 from uuid import uuid4
 
-from firecrawl import FirecrawlApp
+from firecrawl import AsyncFirecrawlApp
 
 from airweave.core.config import settings
 from airweave.core.logging import logger
@@ -42,26 +42,24 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
 
     try:
         # Initialize Firecrawl app
-        app = FirecrawlApp(api_key=firecrawl_api_key)
+        app = AsyncFirecrawlApp(api_key=firecrawl_api_key)
 
         # Scrape the URL and get markdown using scrape_url instead of crawl_url
         logger.info(f"Scraping URL with Firecrawl: {web_entity.url}")
-        scrape_result = app.scrape_url(web_entity.url, formats=["markdown"])
+        scrape_result = await app.scrape_url(web_entity.url, formats=["markdown"])
 
-        # Access the response data correctly - scrape_result has data object directly
-        if not scrape_result or not hasattr(scrape_result, "data") or not scrape_result.data:
-            logger.warning(f"No data returned from Firecrawl for URL: {web_entity.url}")
+        # Check if scraping was successful and has markdown content
+        if (
+            not scrape_result
+            or not hasattr(scrape_result, "markdown")
+            or not scrape_result.markdown
+        ):
+            logger.warning(f"No markdown content returned from Firecrawl for URL: {web_entity.url}")
             raise ValueError(f"No content could be extracted from URL: {web_entity.url}")
 
-        # Get the page data directly since scrape returns single page
-        page_data = scrape_result.data
-
-        if not hasattr(page_data, "markdown") or not page_data.markdown:
-            logger.warning(f"No markdown content in page data for URL: {web_entity.url}")
-            raise ValueError(f"No markdown content could be extracted from URL: {web_entity.url}")
-
-        markdown_content = page_data.markdown
-        metadata = getattr(page_data, "metadata", {}) or {}
+        # Get markdown content directly from the response
+        markdown_content = scrape_result.markdown
+        metadata = scrape_result.metadata  # Direct access
 
         # Extract useful metadata - handle both object attributes and dict access
         def safe_get_metadata(key, default=""):
