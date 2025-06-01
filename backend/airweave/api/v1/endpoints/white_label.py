@@ -347,13 +347,9 @@ async def exchange_white_label_oauth2_code(
                 source_connection_in.short_name = white_label.source_short_name
 
         # Create the source connection with the connection ID
-        (
-            source_connection,
-            sync_job,
-        ) = await source_connection_service.create_source_connection_from_oauth(
+        source_connection, sync_job = await source_connection_service.create_source_connection(
             db=db,
             source_connection_in=source_connection_in,
-            connection_id=connection.id,
             current_user=user,
         )
 
