@@ -267,7 +267,7 @@ const WhiteLabelDetail = () => {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => window.open(`/source-connections/${connection.id}`, "_blank")}
+                        onClick={() => window.open(`/collections/${connection.collection}`, "_blank")}
                       >
                         <ExternalLink className="h-4 w-4" />
                       </Button>

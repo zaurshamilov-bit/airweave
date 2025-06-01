@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Tuple, Union
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from airweave.core.shared_models import SourceConnectionStatus, SyncJobStatus
 from airweave.platform.configs._base import ConfigValues
@@ -226,6 +226,33 @@ class SourceConnectionListItem(BaseModel):
     collection: str
     white_label_id: Optional[UUID] = None
 
+    @model_validator(mode="after")
+    def map_collection_readable_id(self) -> "SourceConnectionListItem":
+        """Map collection_readable_id to collection if present."""
+        # This is handled in the before mode validator below
+        return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def map_collection_field(cls, data: Any) -> Any:
+        """Map collection_readable_id to collection before validation."""
+        if isinstance(data, dict):
+            # If collection_readable_id exists and collection doesn't, map it
+            if "collection_readable_id" in data and "collection" not in data:
+                data["collection"] = data["collection_readable_id"]
+        elif hasattr(data, "readable_collection_id"):
+            # If it's an ORM object, we need to convert to dict first
+            # Extract all attributes we need
+            data_dict = {}
+            for field in cls.model_fields:
+                if hasattr(data, field):
+                    data_dict[field] = getattr(data, field)
+
+            data_dict["collection"] = data.readable_collection_id
+
+            return data_dict
+        return data
+
     model_config = ConfigDict(
         from_attributes=True,
         json_schema_extra={
@@ -239,7 +266,7 @@ class SourceConnectionListItem(BaseModel):
                     "created_at": "2024-01-15T09:30:00Z",
                     "modified_at": "2024-01-15T14:22:15Z",
                     "sync_id": "123e4567-e89b-12d3-a456-426614174000",
-                    "collection": "finance-data",
+                    "collection": "finance-data-x236",
                     "white_label_id": None,
                 }
             ]

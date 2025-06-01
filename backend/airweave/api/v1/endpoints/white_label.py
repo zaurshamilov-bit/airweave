@@ -273,7 +273,10 @@ async def list_white_label_source_connections(
         db, white_label_id=white_label_id, current_user=current_user
     )
 
-    return [schemas.SourceConnectionListItem.model_validate(sc) for sc in source_connections]
+    return [
+        schemas.SourceConnectionListItem.model_validate(sc, from_attributes=True)
+        for sc in source_connections
+    ]
 
 
 @router.api_route(
