@@ -339,6 +339,7 @@ async def exchange_white_label_oauth2_code(
                 short_name=white_label.source_short_name,
                 sync_immediately=True,
                 white_label_id=white_label_id,
+                credential_id=connection.integration_credential_id,
             )
         else:
             # Ensure white_label_id and short_name are set correctly
