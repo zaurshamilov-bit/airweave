@@ -148,10 +148,12 @@ class DropboxAuthConfig(AuthConfig):
     """Dropbox authentication credentials schema."""
 
     client_id: Optional[str] = Field(
-        title="Client ID", description="The OAuth client ID for your Dropbox app"
+        default=None, title="Client ID", description="The OAuth client ID for your Dropbox app"
     )
     client_secret: Optional[str] = Field(
-        title="Client Secret", description="The OAuth client secret for your Dropbox app"
+        default=None,
+        title="Client Secret",
+        description="The OAuth client secret for your Dropbox app",
     )
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Dropbox app."
@@ -206,10 +208,12 @@ class GmailAuthConfig(AuthConfig):
     """Gmail authentication credentials schema."""
 
     client_id: Optional[str] = Field(
-        title="Client ID", description="The OAuth client ID for your Google app"
+        default=None, title="Client ID", description="The OAuth client ID for your Google app"
     )
     client_secret: Optional[str] = Field(
-        title="Client Secret", description="The OAuth client secret for your Google app"
+        default=None,
+        title="Client Secret",
+        description="The OAuth client secret for your Google app",
     )
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Gmail app."
@@ -223,10 +227,12 @@ class GoogleCalendarAuthConfig(AuthConfig):
     """Google Calendar authentication credentials schema."""
 
     client_id: Optional[str] = Field(
-        title="Client ID", description="The OAuth client ID for your Google app"
+        default=None, title="Client ID", description="The OAuth client ID for your Google app"
     )
     client_secret: Optional[str] = Field(
-        title="Client Secret", description="The OAuth client secret for your Google app"
+        default=None,
+        title="Client Secret",
+        description="The OAuth client secret for your Google app",
     )
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Google Calendar app."
@@ -240,10 +246,12 @@ class GoogleDriveAuthConfig(AuthConfig):
     """Google Drive authentication credentials schema."""
 
     client_id: Optional[str] = Field(
-        title="Client ID", description="The OAuth client ID for your Google app"
+        default=None, title="Client ID", description="The OAuth client ID for your Google app"
     )
     client_secret: Optional[str] = Field(
-        title="Client Secret", description="The OAuth client secret for your Google app"
+        default=None,
+        title="Client Secret",
+        description="The OAuth client secret for your Google app",
     )
     refresh_token: str = Field(
         title="Refresh Token", description="The refresh token for your Google Drive app."
