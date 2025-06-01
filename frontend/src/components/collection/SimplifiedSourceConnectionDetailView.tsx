@@ -21,14 +21,8 @@ import {
     cleanEntityName,
     convertDagToFlowGraph
 } from '@/components/collection/DagToFlow';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { SyncSchedule, SyncScheduleConfig, buildCronExpression, isValidCronExpression } from '@/components/sync/SyncSchedule';
-import { QueryTool } from '@/components/collection/QueryTool';
-import { LiveApiDoc } from '@/components/collection/LiveApiDoc';
-import { useSyncSubscription } from "@/hooks/useSyncSubscription";
 import { cn } from "@/lib/utils";
 import { SyncErrorCard } from './SyncErrorCard';
-import { SyncDagCard, SourceConnection } from './SyncDagCard';
 
 const nodeTypes = {
     sourceNode: SourceNode,
@@ -37,259 +31,434 @@ const nodeTypes = {
     entityNode: EntityNode
 };
 
+// Source Connection interface - matches backend SourceConnection schema exactly
+interface SourceConnection {
+    id: string;
+    name: string;
+    description?: string;
+    short_name: string;
+    config_fields?: Record<string, any>;
+    sync_id?: string;
+    organization_id: string;
+    created_at: string;
+    modified_at: string;
+    connection_id?: string;
+    collection: string;
+    white_label_id?: string;
+    created_by_email: string;
+    modified_by_email: string;
+    auth_fields?: Record<string, any> | string;
+    status?: string;
+    latest_sync_job_status?: string;
+    latest_sync_job_id?: string;
+    latest_sync_job_started_at?: string;
+    latest_sync_job_completed_at?: string;
+    latest_sync_job_error?: string;
+    cron_schedule?: string;
+    next_scheduled_run?: string;
+}
+
+// Source Connection Job interface - matches backend SourceConnectionJob schema exactly
 interface SourceConnectionJob {
     source_connection_id: string;
     id: string;
-    sync_id?: string; // This may be needed for DAG fetching
     organization_id: string;
     created_by_email: string;
     modified_by_email: string;
     created_at: string;
     modified_at: string;
     status: 'pending' | 'in_progress' | 'completed' | 'failed';
-    entities_inserted: number;
-    entities_updated: number;
-    entities_deleted: number;
-    entities_kept: number;
-    entities_skipped: number;
-    entities_encountered: Record<string, number>;
-    started_at: string | null;
-    completed_at: string | null;
-    failed_at: string | null;
-    error: string | null;
+    entities_inserted?: number;
+    entities_updated?: number;
+    entities_deleted?: number;
+    entities_kept?: number;
+    entities_skipped?: number;
+    entities_encountered?: Record<string, number>;
+    started_at?: string;
+    completed_at?: string;
+    failed_at?: string;
+    error?: string;
 }
 
 interface SimplifiedSourceConnectionDetailViewProps {
     sourceConnectionId: string;
-    shouldForceSubscribe?: boolean;
-    onSubscriptionComplete?: () => void;
 }
 
-const SimplifiedSourceConnectionDetailView = ({
-    sourceConnectionId,
-    shouldForceSubscribe = false,
-    onSubscriptionComplete
-}: SimplifiedSourceConnectionDetailViewProps) => {
-    const { resolvedTheme } = useTheme();
-    const isDark = resolvedTheme === 'dark';
-
-    /********************************************
-     * STATE DECLARATIONS - GROUPED BY PURPOSE
-     ********************************************/
-
-    // 1. Core connection and job state
-    const [selectedConnection, setSelectedConnection] = useState<SourceConnection | null>(null);
-    const [lastSyncJob, setLastSyncJob] = useState<SourceConnectionJob | null>(null);
-    const [isReloading, setIsReloading] = useState(false);
-    const [isInitiatingSyncJob, setIsInitiatingSyncJob] = useState(false);
-    const [finalPubSubData, setFinalPubSubData] = useState<{
+const SimplifiedSyncDagCard = ({
+    sourceConnection,
+    entityDict,
+    selectedEntity,
+    setSelectedEntity,
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    reactFlowInstance,
+    setReactFlowInstance,
+    flowContainerRef,
+    syncJobData,
+    onRunSync,
+    isInitiatingSyncJob,
+    isDark
+}: {
+    sourceConnection: SourceConnection;
+    entityDict: Record<string, number>;
+    selectedEntity: string;
+    setSelectedEntity: (entity: string) => void;
+    nodes: any[];
+    edges: any[];
+    onNodesChange: any;
+    onEdgesChange: any;
+    reactFlowInstance: any;
+    setReactFlowInstance: any;
+    flowContainerRef: React.RefObject<HTMLDivElement>;
+    syncJobData: {
         inserted: number;
         updated: number;
         deleted: number;
         kept: number;
         skipped: number;
-        encountered: Record<string, number>;
-    } | null>(null);
-    const [isLoading, setIsLoading] = useState(true); // Add loading state
+        total: number;
+    };
+    onRunSync: () => void;
+    isInitiatingSyncJob: boolean;
+    isDark: boolean;
+}) => {
+    return (
+        <div className="space-y-3">
+            {/* Entity Graph Card with Entities Panel on the right */}
+            <div className="flex gap-3">
+                {/* Entity Graph Card */}
+                <Card className={cn(
+                    "overflow-hidden border rounded-lg flex-1",
+                    isDark ? "border-gray-700/50 bg-gray-800/30" : "border-gray-200 bg-white shadow-sm"
+                )}>
+                    <CardHeader className="p-3">
+                        <div className="flex justify-between items-center">
+                            <h3 className={cn(
+                                "text-base font-medium",
+                                isDark ? "text-gray-200" : "text-gray-700"
+                            )}>
+                                Entity Graph
+                            </h3>
 
-    // Cache previous connection data to prevent flashing during transitions
-    const prevConnectionRef = useRef<{
-        connection: SourceConnection | null;
-        syncJob: SourceConnectionJob | null;
-        entities: number;
-        runtime: number | null;
-        entityDict: Record<string, number>;
-        status: string;
-    }>({
-        connection: null,
-        syncJob: null,
-        entities: 0,
-        runtime: null,
-        entityDict: {},
-        status: ""
-    });
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className={cn(
+                                        "h-8 gap-1.5 font-normal",
+                                        isDark
+                                            ? "bg-gray-700 border-gray-600 text-white"
+                                            : "bg-white border-gray-200 text-gray-800 hover:bg-gray-50"
+                                    )}
+                                    onClick={onRunSync}
+                                    disabled={isInitiatingSyncJob}
+                                >
+                                    <Play className="h-3.5 w-3.5" />
+                                    {isInitiatingSyncJob ? 'Starting...' : 'Run Sync'}
+                                </Button>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-3 pt-0">
+                        <div
+                            ref={flowContainerRef}
+                            className="h-[200px] w-full overflow-hidden rounded-md"
+                            style={{ minHeight: '200px' }}
+                        >
+                            <ReactFlow
+                                key={sourceConnection.id || 'no-connection'}
+                                nodes={nodes}
+                                edges={edges}
+                                onNodesChange={onNodesChange}
+                                onEdgesChange={onEdgesChange}
+                                nodeTypes={nodeTypes}
+                                fitView
+                                fitViewOptions={{
+                                    padding: 0.3,
+                                    minZoom: 0.1,
+                                    maxZoom: 1.5,
+                                    duration: 0
+                                }}
+                                onInit={setReactFlowInstance}
+                                defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+                                style={{
+                                    touchAction: 'none',
+                                    cursor: 'default',
+                                    background: isDark ? 'transparent' : '#ffffff'
+                                }}
+                                nodesDraggable={false}
+                                nodesConnectable={false}
+                                elementsSelectable={false}
+                                zoomOnScroll={false}
+                                panOnScroll={false}
+                                panOnDrag={false}
+                                zoomOnPinch={false}
+                                zoomOnDoubleClick={false}
+                                preventScrolling={true}
+                                proOptions={{ hideAttribution: true }}
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
 
-    // 2. Real-time updates state
-    const [internalShouldForceSubscribe, setInternalShouldForceSubscribe] = useState(false);
+                {/* Entity list - right side panel with same height as Entity Graph */}
+                <div className={cn(
+                    "w-[200px] flex-shrink-0 rounded-lg border flex flex-col h-[270px]",
+                    isDark ? "border-gray-700/50 bg-gray-800/30" : "border-gray-200 bg-white shadow-sm"
+                )}>
+                    <div className={cn(
+                        "p-3 border-b flex-shrink-0",
+                        isDark ? "border-gray-700/50" : "border-gray-200"
+                    )}>
+                        <h3 className={cn(
+                            "text-base font-medium",
+                            isDark ? "text-gray-200" : "text-gray-700"
+                        )}>
+                            Entities
+                        </h3>
+                    </div>
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-1.5 min-h-0">
+                        {Object.keys(entityDict).length > 0 ?
+                            Object.keys(entityDict)
+                                .sort()
+                                .map((key) => {
+                                    const isSelected = key === selectedEntity;
 
-    // 3. Entity processing and visualization state
+                                    return (
+                                        <Button
+                                            key={key}
+                                            variant="outline"
+                                            className={cn(
+                                                "w-full justify-between items-center gap-1.5 h-8 py-0 px-2 text-[13px] flex-shrink-0",
+                                                isSelected
+                                                    ? isDark
+                                                        ? "bg-gray-700 border-gray-600 border-[1.5px] text-white"
+                                                        : "bg-blue-50 border-blue-200 border-[1.5px] text-blue-700"
+                                                    : isDark
+                                                        ? "bg-gray-800/80 border-gray-700/60 text-gray-300"
+                                                        : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                                            )}
+                                            onClick={() => setSelectedEntity(key)}
+                                        >
+                                            <span className="truncate">{key}</span>
+                                            <Badge
+                                                variant="outline"
+                                                className={cn(
+                                                    "ml-1 pointer-events-none text-[11px] px-1.5 font-normal h-5 flex-shrink-0",
+                                                    isSelected
+                                                        ? isDark
+                                                            ? "bg-gray-600 text-gray-200 border-gray-500"
+                                                            : "bg-blue-100 text-blue-700 border-blue-200"
+                                                        : isDark
+                                                            ? "bg-gray-700 text-gray-300 border-gray-600"
+                                                            : "bg-gray-50 text-gray-600 border-gray-200"
+                                                )}
+                                            >
+                                                {entityDict[key]}
+                                            </Badge>
+                                        </Button>
+                                    );
+                                })
+                            : <div className={cn(
+                                "text-sm text-center py-4 flex-shrink-0",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                            )}>
+                                No entities found
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            {/* Sync Progress - Compact Cards */}
+            <div className="space-y-2">
+                <div className="flex gap-2 flex-wrap">
+                    <div className={cn(
+                        "rounded-lg p-2 flex items-center gap-2 shadow-sm transition-all duration-200 h-8 min-w-[80px]",
+                        isDark ? "bg-gray-700/30 border border-gray-600/50" : "bg-white border border-gray-100"
+                    )}>
+                        <div className="flex items-center gap-1">
+                            <span className="w-2 h-2 block bg-green-500 rounded-full" />
+                            <span className="text-[10px] uppercase tracking-wider font-medium opacity-60">Inserted</span>
+                        </div>
+                        <span className="text-sm font-semibold">{syncJobData.inserted.toLocaleString()}</span>
+                    </div>
+
+                    <div className={cn(
+                        "rounded-lg p-2 flex items-center gap-2 shadow-sm transition-all duration-200 h-8 min-w-[80px]",
+                        isDark ? "bg-gray-700/30 border border-gray-600/50" : "bg-white border border-gray-100"
+                    )}>
+                        <div className="flex items-center gap-1">
+                            <span className="w-2 h-2 block bg-cyan-500 rounded-full" />
+                            <span className="text-[10px] uppercase tracking-wider font-medium opacity-60">Updated</span>
+                        </div>
+                        <span className="text-sm font-semibold">{syncJobData.updated.toLocaleString()}</span>
+                    </div>
+
+                    <div className={cn(
+                        "rounded-lg p-2 flex items-center gap-2 shadow-sm transition-all duration-200 h-8 min-w-[80px]",
+                        isDark ? "bg-gray-700/30 border border-gray-600/50" : "bg-white border border-gray-100"
+                    )}>
+                        <div className="flex items-center gap-1">
+                            <span className="w-2 h-2 block bg-primary rounded-full" />
+                            <span className="text-[10px] uppercase tracking-wider font-medium opacity-60">Kept</span>
+                        </div>
+                        <span className="text-sm font-semibold">{syncJobData.kept.toLocaleString()}</span>
+                    </div>
+
+                    <div className={cn(
+                        "rounded-lg p-2 flex items-center gap-2 shadow-sm transition-all duration-200 h-8 min-w-[80px]",
+                        isDark ? "bg-gray-700/30 border border-gray-600/50" : "bg-white border border-gray-100"
+                    )}>
+                        <div className="flex items-center gap-1">
+                            <span className="w-2 h-2 block bg-red-500 rounded-full" />
+                            <span className="text-[10px] uppercase tracking-wider font-medium opacity-60">Deleted</span>
+                        </div>
+                        <span className="text-sm font-semibold">{syncJobData.deleted.toLocaleString()}</span>
+                    </div>
+
+                    <div className={cn(
+                        "rounded-lg p-2 flex items-center gap-2 shadow-sm transition-all duration-200 h-8 min-w-[80px]",
+                        isDark ? "bg-gray-700/30 border border-gray-600/50" : "bg-white border border-gray-100"
+                    )}>
+                        <div className="flex items-center gap-1">
+                            <span className="w-2 h-2 block bg-yellow-500 rounded-full" />
+                            <span className="text-[10px] uppercase tracking-wider font-medium opacity-60">Skipped</span>
+                        </div>
+                        <span className="text-sm font-semibold">{syncJobData.skipped.toLocaleString()}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const SimplifiedSourceConnectionDetailView = ({
+    sourceConnectionId
+}: SimplifiedSourceConnectionDetailViewProps) => {
+    const { resolvedTheme } = useTheme();
+    const isDark = resolvedTheme === 'dark';
+
+    const [sourceConnection, setSourceConnection] = useState<SourceConnection | null>(null);
+
+    // CLEAR SEPARATION: Sync Job data (from /source-connections/{id}/jobs/{job_id})
+    const [syncJob, setSyncJob] = useState<SourceConnectionJob | null>(null);
+
+    // Loading and UI state
+    const [isLoading, setIsLoading] = useState(true);
+    const [isInitiatingSyncJob, setIsInitiatingSyncJob] = useState(false);
+
+    // Entity processing and visualization state
     const [totalEntities, setTotalEntities] = useState<number>(0);
     const [totalRuntime, setTotalRuntime] = useState<number | null>(null);
     const [entityDict, setEntityDict] = useState<Record<string, number>>({});
     const [selectedEntity, setSelectedEntity] = useState<string>('');
-    const prevEntityDictRef = useRef<Record<string, number>>({});
 
-    // 4. Graph visualization state
+    // Graph visualization state
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
     const [entityDags, setEntityDags] = useState<Dag[]>([]);
     const [selectedDag, setSelectedDag] = useState<Dag | null>(null);
 
-    // 5. Scheduling state
-    const [showScheduleDialog, setShowScheduleDialog] = useState(false);
-    const [scheduleConfig, setScheduleConfig] = useState<SyncScheduleConfig>({
-        type: "one-time",
-        frequency: "custom"
-    });
-    const [nextRunTime, setNextRunTime] = useState<string | null>(null);
-
-    // Add this near other useRef declarations:
     const flowContainerRef = useRef<HTMLDivElement>(null);
 
-    /********************************************
-     * COMPUTED VALUES & DERIVED STATE
-     ********************************************/
+    // Sync job data processed for UI display
+    const syncJobData = useMemo(() => {
+        const inserted = syncJob?.entities_inserted || 0;
+        const updated = syncJob?.entities_updated || 0;
+        const deleted = syncJob?.entities_deleted || 0;
+        const kept = syncJob?.entities_kept || 0;
+        const skipped = syncJob?.entities_skipped || 0;
+        const total = inserted + updated + kept + deleted + skipped;
 
-    // 1. Subscription control logic
-    const shouldSubscribe = useMemo(() => {
-        return shouldForceSubscribe || internalShouldForceSubscribe ||
-            (lastSyncJob?.status === 'pending' || lastSyncJob?.status === 'in_progress');
-    }, [lastSyncJob?.status, internalShouldForceSubscribe, shouldForceSubscribe]);
+        return { inserted, updated, deleted, kept, skipped, total };
+    }, [syncJob]);
 
-    // Subscribe to real-time updates when necessary
-    const { updates, latestUpdate, isConnected: isPubSubConnected } = useSyncSubscription(
-        shouldSubscribe ? lastSyncJob?.id || null : null
-    );
-
-    // 2. Status derived from most up-to-date source
-    const status = useMemo(() => {
-        // If we have real-time updates and are connected, use those first
-        if (isPubSubConnected && latestUpdate) {
-            if (latestUpdate.is_complete) return "completed";
-            if (latestUpdate.is_failed) return "failed";
-            return "in_progress";
-        }
-        // Otherwise fall back to the DB state
-        return lastSyncJob?.status || "";
-    }, [isPubSubConnected, latestUpdate, lastSyncJob?.status]);
-
-    // 3. Active job status for conditional rendering
-    const isSyncJobRunning = status === "in_progress" || status === "pending";
-
-    // 4. Unified entity data from multiple sources
-    const entityData = useMemo(() => {
-        // If we have real-time updates and are connected, use those
-        if (isPubSubConnected && latestUpdate && isSyncJobRunning) {
-            return {
-                inserted: latestUpdate.inserted || 0,
-                updated: latestUpdate.updated || 0,
-                deleted: latestUpdate.deleted || 0,
-                kept: latestUpdate.kept || 0,
-                skipped: latestUpdate.skipped || 0,
-                encountered: latestUpdate.entities_encountered || {},
-                isRealtimeData: true
-            };
-        }
-
-        // If we have saved final PubSub data and the job just finished, use that
-        if (finalPubSubData && (status === "completed" || status === "failed") && !isSyncJobRunning) {
-            return {
-                ...finalPubSubData,
-                isRealtimeData: false
-            };
-        }
-
-        // Otherwise use database state
-        return {
-            inserted: lastSyncJob?.entities_inserted || 0,
-            updated: lastSyncJob?.entities_updated || 0,
-            deleted: lastSyncJob?.entities_deleted || 0,
-            kept: lastSyncJob?.entities_kept || 0,
-            skipped: lastSyncJob?.entities_skipped || 0,
-            encountered: lastSyncJob?.entities_encountered || {},
-            isRealtimeData: false
-        };
-    }, [isPubSubConnected, latestUpdate, lastSyncJob, isSyncJobRunning, finalPubSubData, status]);
-
-    // 5. Diagnostics for data source
-    const isShowingRealtimeUpdates = shouldSubscribe && updates.length > 0 && isPubSubConnected;
-
-    // 6. Display metrics for UI
-    const total = entityData.inserted + entityData.updated + entityData.kept + entityData.deleted + entityData.skipped;
-
-    // Add this to prevent entity dictionary from completely emptying during transitions
-    // This preserves the previous entity dictionary if new data doesn't have entities yet
-    const stableEntityDict = useMemo(() => {
-        if (Object.keys(entityDict).length > 0) {
-            return entityDict;
-        }
-        return prevEntityDictRef.current;
-    }, [entityDict]);
-
-    /********************************************
-     * API AND DATA FETCHING FUNCTIONS
-     ********************************************/
-
-    // 1. Main connection data fetching
-    const fetchSourceConnectionDetails = async () => {
-        setIsLoading(true);
+    // API CALL 1: Fetch Source Connection details (from /source-connections/{id})
+    const fetchSourceConnection = async () => {
         try {
+            console.log("Fetching source connection details...");
             const response = await apiClient.get(`/source-connections/${sourceConnectionId}`);
 
             if (response.ok) {
-                const detailedData = await response.json();
-                console.log("Source connection details received:", detailedData);
-                console.log("Cron schedule from API:", detailedData.cron_schedule);
-                setSelectedConnection(detailedData);
-                await fetchSourceConnectionJob(detailedData);
+                const data = await response.json();
+                console.log("Source connection data received:", data);
+                setSourceConnection(data);
+                return data;
             } else {
                 console.error("Failed to load source connection details:", await response.text());
+                return null;
             }
         } catch (err) {
             console.error("Error fetching source connection details:", err);
-        } finally {
-            setIsLoading(false);
+            return null;
         }
     };
 
-    // 2. Sync job data fetching
-    const fetchSourceConnectionJob = async (connection: SourceConnection) => {
-        if (!connection.sync_id || !connection.latest_sync_job_id) {
-            // Reset states if no sync ID or job ID available
-            setLastSyncJob(null);
+    // API CALL 2: Fetch Sync Job details (from /source-connections/{id}/jobs/{job_id})
+    const fetchSyncJob = async (connection: SourceConnection) => {
+        if (!connection.latest_sync_job_id) {
+            console.log("No latest sync job ID found");
+            setSyncJob(null);
             setTotalEntities(0);
             setTotalRuntime(null);
+            // Still fetch entity DAGs even without job data if sync_id exists
+            if (connection.sync_id) {
+                await fetchEntityDags(connection.sync_id, connection);
+            }
             return;
         }
 
         try {
+            console.log("Fetching sync job details...");
             const response = await apiClient.get(`/source-connections/${connection.id}/jobs/${connection.latest_sync_job_id}`);
 
             if (!response.ok) {
                 console.error(`Failed to fetch job with ID ${connection.latest_sync_job_id}, status: ${response.status}`);
-                setLastSyncJob(null);
+                setSyncJob(null);
                 setTotalEntities(0);
                 setTotalRuntime(null);
+                // Still fetch entity DAGs even when job fetch fails if sync_id exists
+                if (connection.sync_id) {
+                    await fetchEntityDags(connection.sync_id, connection);
+                }
                 return;
             }
 
-            const sourceConnectionJob = await response.json();
-            console.log("Source connection job:", sourceConnectionJob);
-            setLastSyncJob(sourceConnectionJob);
+            const jobData = await response.json();
+            console.log("Sync job data received:", jobData);
+            setSyncJob(jobData);
 
-            // Calculate runtime for this job
-            if (sourceConnectionJob.started_at && (sourceConnectionJob.completed_at || sourceConnectionJob.failed_at)) {
-                const endTime = sourceConnectionJob.completed_at || sourceConnectionJob.failed_at;
-                const runtime = new Date(endTime!).getTime() - new Date(sourceConnectionJob.started_at).getTime();
+            // Calculate runtime for this job (using sync job timestamps)
+            if (jobData.started_at && (jobData.completed_at || jobData.failed_at)) {
+                const endTime = jobData.completed_at || jobData.failed_at;
+                const runtime = new Date(endTime).getTime() - new Date(jobData.started_at).getTime();
                 setTotalRuntime(runtime);
             }
 
-            // After we have the job data with entities_encountered, fetch entity DAGs
-            if (connection.sync_id && sourceConnectionJob.entities_encountered) {
-                await fetchEntityDags(connection.sync_id);
+            // Always fetch entity DAGs if we have sync_id (regardless of job data)
+            if (connection.sync_id) {
+                await fetchEntityDags(connection.sync_id, connection);
             }
         } catch (err) {
-            console.error("Error fetching source connection job:", err);
-            setLastSyncJob(null);
+            console.error("Error fetching sync job:", err);
+            setSyncJob(null);
             setTotalEntities(0);
             setTotalRuntime(null);
+            // Still fetch entity DAGs even on error if sync_id exists
+            if (connection.sync_id) {
+                await fetchEntityDags(connection.sync_id, connection);
+            }
         }
     };
 
-    // 3. Entity DAG fetching
-    const fetchEntityDags = async (syncId: string) => {
+    // API CALL 3: Fetch Entity DAGs (from /dag/sync/{sync_id}/entity_dags)
+    const fetchEntityDags = async (syncId: string, connection: SourceConnection) => {
         try {
+            console.log("Fetching entity DAGs for:", connection.short_name);
             const response = await apiClient.get(`/dag/sync/${syncId}/entity_dags`);
 
             if (!response.ok) {
@@ -298,14 +467,16 @@ const SimplifiedSourceConnectionDetailView = ({
 
             const data = await response.json();
             setEntityDags(data);
-            console.log('DAG data loaded:', data);
+            console.log('Entity DAGs loaded for', connection.short_name, ':', data);
 
-            // After getting the DAGs, process them with the actual short_name
-            if (selectedConnection && data.length > 0) {
-                // This will be used when rendering the DAG
+            // Process DAGs with the passed connection data (not from state!)
+            if (data.length > 0) {
                 data.forEach(dag => {
-                    dag.sourceShortName = selectedConnection.short_name;
-                    dag.nodes.find(node => node.type === 'source').connection_id = selectedConnection.connection_id;
+                    dag.sourceShortName = connection.short_name;
+                    const sourceNode = dag.nodes.find(node => node.type === 'source');
+                    if (sourceNode) {
+                        sourceNode.connection_id = connection.connection_id;
+                    }
                 });
             }
         } catch (error) {
@@ -313,75 +484,32 @@ const SimplifiedSourceConnectionDetailView = ({
         }
     };
 
-    // 4. Schedule data refreshing
-    const refreshScheduleData = async () => {
-        if (!selectedConnection?.id) return;
-
+    // Main data loading function
+    const loadAllData = async () => {
+        setIsLoading(true);
         try {
-            console.log("Starting schedule refresh for source connection:", selectedConnection.id);
-            setIsReloading(true);
+            // Clear previous data to ensure clean state
+            setEntityDags([]);
+            setSelectedEntity('');
+            setEntityDict({});
+            setNodes([]);
+            setEdges([]);
 
-            // Get source connection details
-            const response = await apiClient.get(`/source-connections/${selectedConnection.id}`);
-            if (!response.ok) throw new Error("Failed to refresh source connection data");
+            // Step 1: Fetch source connection
+            const connection = await fetchSourceConnection();
 
-            const sourceData = await response.json();
-            console.log("Got source connection data:", sourceData);
-            console.log("Cron schedule after update:", sourceData.cron_schedule);
-
-            // Update the source connection state with the new schedule information
-            setSelectedConnection(prev => {
-                if (!prev) return null;
-                console.log("Updating connection details with cron_schedule:", sourceData.cron_schedule);
-                return sourceData;
-            });
-
-            // Update the config state as well
-            setScheduleConfig({
-                type: sourceData.cron_schedule ? "scheduled" : "one-time",
-                frequency: "custom",
-                cronExpression: sourceData.cron_schedule || undefined
-            });
-
-            // Update the next run time
-            const nextRun = calculateNextRunTime(sourceData.cron_schedule);
-            setNextRunTime(nextRun);
-            console.log("Next run time calculated:", nextRun);
-
-            toast({
-                title: "Success",
-                description: "Schedule updated successfully"
-            });
-        } catch (error) {
-            console.error("Error refreshing schedule data:", error);
-            toast({
-                title: "Error",
-                description: "Failed to refresh schedule data",
-                variant: "destructive"
-            });
+            // Step 2: If successful, fetch sync job
+            if (connection) {
+                await fetchSyncJob(connection);
+            }
         } finally {
-            setIsReloading(false);
-            console.log("Schedule refresh complete");
+            setIsLoading(false);
         }
     };
 
-    // 5. General data reload
-    const reloadData = async () => {
-        setIsReloading(true);
-        try {
-            await fetchSourceConnectionDetails();
-        } finally {
-            setIsReloading(false);
-        }
-    };
-
-    /********************************************
-     * UI EVENT HANDLERS
-     ********************************************/
-
-    // 1. Run sync job
+    // API CALL 4: Run sync job (POST /source-connections/{id}/run)
     const handleRunSync = async () => {
-        if (!selectedConnection?.id) {
+        if (!sourceConnection?.id) {
             toast({
                 title: "Error",
                 description: "No source connection selected",
@@ -392,20 +520,26 @@ const SimplifiedSourceConnectionDetailView = ({
 
         try {
             setIsInitiatingSyncJob(true);
-            const response = await apiClient.post(`/source-connections/${selectedConnection.id}/run`);
+            console.log("Starting sync job...");
+            const response = await apiClient.post(`/source-connections/${sourceConnection.id}/run`);
 
             if (!response.ok) {
                 throw new Error("Failed to start sync job");
             }
 
             const newJob = await response.json();
+            console.log("New sync job started:", newJob);
+            setSyncJob(newJob);
 
-            // Set the new job as current
-            setLastSyncJob(newJob);
+            toast({
+                title: "Success",
+                description: "Sync job started successfully",
+            });
 
-            // Force subscription for this new job
-            setInternalShouldForceSubscribe(true);
-            // PubSub will handle updates - no need for manual reloading
+            // Reload all data after a short delay to get updated status
+            setTimeout(() => {
+                loadAllData();
+            }, 2000);
 
         } catch (error) {
             console.error("Error running sync:", error);
@@ -419,272 +553,76 @@ const SimplifiedSourceConnectionDetailView = ({
         }
     };
 
-    // 2. Schedule dialog handling
-    const handleScheduleDialogClose = () => {
-        console.log("Closing schedule dialog without submitting");
-        setShowScheduleDialog(false);
-    };
+    // Helper function to extract entity names from DAGs
+    const extractEntityNamesFromDags = useCallback((dags: Dag[], sourceName: string): Record<string, number> => {
+        const entityDict: Record<string, number> = {};
 
-    // Simple function to handle the Done button click
-    const handleScheduleDone = async () => {
-        if (!selectedConnection?.id) {
-            toast({
-                title: "Error",
-                description: "No source connection selected",
-                variant: "destructive"
-            });
-            return;
-        }
+        dags.forEach(dag => {
+            // Extract the entity name from the DAG name
+            if (dag.name) {
+                // First remove " DAG" suffix if present
+                const nameWithoutDagSuffix = dag.name.replace(/ DAG$/, '');
+                // Then clean the entity name (removes source prefix and "Entity" suffix)
+                const cleanedName = cleanEntityName(nameWithoutDagSuffix, sourceName);
 
-        try {
-            console.log("Saving schedule config:", scheduleConfig);
-
-            // Build cron expression
-            const cronExpression = scheduleConfig.type === "scheduled"
-                ? buildCronExpression(scheduleConfig)
-                : null;
-
-            console.log("Generated cron expression:", cronExpression);
-
-            // Validate if needed
-            if (scheduleConfig.type === "scheduled" &&
-                scheduleConfig.frequency === "custom" &&
-                scheduleConfig.cronExpression &&
-                !isValidCronExpression(scheduleConfig.cronExpression)) {
-
-                toast({
-                    title: "Validation Error",
-                    description: "Invalid cron expression. Please check the format.",
-                    variant: "destructive"
-                });
-                return;
-            }
-
-            // Update data to send
-            const updateData = {
-                cron_schedule: cronExpression
-            };
-
-            console.log("Updating source connection schedule:", updateData);
-
-            // Make direct API call
-            const response = await apiClient.put(
-                `/source-connections/${selectedConnection.id}`,
-                null, // No query params
-                updateData // Data as third parameter
-            );
-
-            if (!response.ok) {
-                throw new Error("Failed to update schedule");
-            }
-
-            // Refresh data and close dialog
-            await refreshScheduleData();
-            setShowScheduleDialog(false);
-
-        } catch (error) {
-            console.error("Error updating schedule:", error);
-            toast({
-                title: "Error",
-                description: "Failed to update schedule",
-                variant: "destructive"
-            });
-        }
-    };
-
-    /********************************************
-     * UTILITY FUNCTIONS
-     ********************************************/
-
-    // 1. Entity dictionary processing
-    const updateEntityDictionary = useCallback(() => {
-        // Use the unified entityData.encountered
-        const entitiesEncountered = entityData.encountered;
-
-        // Store current dictionary in ref
-        if (Object.keys(entityDict).length > 0) {
-            prevEntityDictRef.current = { ...entityDict };
-        }
-
-        // If we have no encountered entities but had them before,
-        // don't empty the dictionary during state transitions
-        if ((!entitiesEncountered || Object.keys(entitiesEncountered).length === 0) &&
-            Object.keys(prevEntityDictRef.current).length > 0) {
-            console.log('Preserving previous entity dictionary during transition');
-            setEntityDict(prevEntityDictRef.current);
-            return;
-        }
-
-        if (!entitiesEncountered || !entityDags.length) {
-            return; // Need both entities and DAGs
-        }
-
-        // Get source name from entityDags
-        const sourceName = entityDags[0].nodes
-            .filter(node => node.type === 'source')
-            .map(node => node.name)[0] || '';
-
-        // Process the entities_encountered data with source name
-        const cleanedDict = Object.entries(entitiesEncountered).reduce((acc, [key, value]) => {
-            const cleanedName = cleanEntityName(key, sourceName);
-            acc[cleanedName] = value as number;
-            return acc;
-        }, {} as Record<string, number>);
-
-        console.log('Created cleaned entity dictionary:', cleanedDict, 'with source name:', sourceName);
-
-        // Only update if we have actual entities
-        if (Object.keys(cleanedDict).length > 0) {
-            setEntityDict(cleanedDict);
-        }
-
-        // Select first entity if none selected
-        if (Object.keys(cleanedDict).length > 0 && !selectedEntity) {
-            setSelectedEntity(Object.keys(cleanedDict)[0]);
-        }
-    }, [entityData.encountered, entityDags, selectedEntity]);
-
-    // 2. Schedule time calculation
-    const calculateNextRunTime = useCallback((cronExpression: string | null) => {
-        if (!cronExpression) {
-            return null;
-        }
-
-        try {
-            // Parse the cron expression
-            const parts = cronExpression.split(' ');
-            if (parts.length !== 5) {
-                console.error("Invalid cron expression format");
-                return null;
-            }
-
-            const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-
-            // Get current date in UTC
-            const now = new Date();
-            const nowUtc = new Date(Date.UTC(
-                now.getUTCFullYear(),
-                now.getUTCMonth(),
-                now.getUTCDate(),
-                now.getUTCHours(),
-                now.getUTCMinutes(),
-                now.getUTCSeconds()
-            ));
-
-            let nextRun = new Date(Date.UTC(
-                nowUtc.getUTCFullYear(),
-                nowUtc.getUTCMonth(),
-                nowUtc.getUTCDate(),
-                nowUtc.getUTCHours(),
-                nowUtc.getUTCMinutes(),
-                nowUtc.getUTCSeconds()
-            ));
-
-            // For weekly schedules (specific day of week)
-            if (dayOfWeek !== '*' && dayOfMonth === '*') {
-                const targetDay = parseInt(dayOfWeek) % 7; // 0-6, where 0 is Sunday
-                const currentDay = nowUtc.getUTCDay(); // 0-6, where 0 is Sunday
-
-                // Calculate days to add to get to the target day
-                let daysToAdd = (targetDay - currentDay + 7) % 7;
-                if (daysToAdd === 0) {
-                    // If today is the target day, check if the time has already passed
-                    const targetHour = parseInt(hour);
-                    const targetMinute = parseInt(minute);
-
-                    if (hour !== '*' && minute !== '*') {
-                        const currentHour = nowUtc.getUTCHours();
-                        const currentMinute = nowUtc.getUTCMinutes();
-
-                        if (currentHour > targetHour || (currentHour === targetHour && currentMinute >= targetMinute)) {
-                            // Time already passed today, go to next week
-                            daysToAdd = 7;
-                        }
-                    }
-                }
-
-                // Set the date to the next occurrence
-                nextRun.setUTCDate(nowUtc.getUTCDate() + daysToAdd);
-
-                // Set the time
-                if (hour !== '*') {
-                    nextRun.setUTCHours(parseInt(hour), parseInt(minute) || 0, 0, 0);
-                } else {
-                    nextRun.setUTCHours(nowUtc.getUTCHours(), parseInt(minute) || 0, 0, 0);
+                // Add to dictionary if we got a valid cleaned name
+                if (cleanedName) {
+                    entityDict[cleanedName] = 0; // Initialize with zero
                 }
             }
-            // For monthly schedules (specific day of month)
-            else if (dayOfMonth !== '*') {
-                const targetDay = parseInt(dayOfMonth);
+        });
 
-                // Create a date for the target day in current month (in UTC)
-                const targetDate = new Date(Date.UTC(
-                    nowUtc.getUTCFullYear(),
-                    nowUtc.getUTCMonth(),
-                    targetDay,
-                    hour !== '*' ? parseInt(hour) : nowUtc.getUTCHours(),
-                    minute !== '*' ? parseInt(minute) : 0,
-                    0, 0
-                ));
-
-                // If the target day already passed this month, go to next month
-                if (targetDate <= nowUtc) {
-                    targetDate.setUTCMonth(targetDate.getUTCMonth() + 1);
-                }
-
-                nextRun = targetDate;
-            }
-            // For daily schedules
-            else if (hour !== '*' && dayOfMonth === '*' && dayOfWeek === '*') {
-                const targetHour = parseInt(hour);
-                const targetMinute = parseInt(minute) || 0;
-
-                nextRun.setUTCHours(targetHour, targetMinute, 0, 0);
-
-                // If the time already passed today, go to tomorrow
-                if (nextRun <= nowUtc) {
-                    nextRun.setUTCDate(nowUtc.getUTCDate() + 1);
-                }
-            }
-            // For hourly schedules
-            else if (hour === '*' && minute !== '*') {
-                const targetMinute = parseInt(minute);
-                const currentMinute = nowUtc.getUTCMinutes();
-
-                nextRun.setUTCMinutes(targetMinute, 0, 0);
-
-                // If the minute already passed this hour, go to next hour
-                if (currentMinute >= targetMinute) {
-                    nextRun.setUTCHours(nowUtc.getUTCHours() + 1);
-                }
-            }
-
-            // Calculate time difference in UTC
-            const diffMs = nextRun.getTime() - nowUtc.getTime();
-            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-            const diffHrs = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-            // Format the time difference
-            let result = '';
-            if (diffDays > 0) {
-                result += `${diffDays}d `;
-            }
-            if (diffHrs > 0) {
-                result += `${diffHrs}h `;
-            }
-            if (diffMins > 0 || (diffDays === 0 && diffHrs === 0)) {
-                result += `${diffMins}m`;
-            }
-
-            return result.trim();
-        } catch (error) {
-            console.error("Error calculating next run time:", error);
-            return null;
-        }
+        console.log('Extracted entities from DAGs:', entityDict, 'source:', sourceName);
+        return entityDict;
     }, []);
 
-    // 3. Time formatting utilities
+    // Entity dictionary processing (uses sync job data or DAG structure as fallback)
+    const updateEntityDictionary = useCallback(() => {
+        const entitiesEncountered = syncJob?.entities_encountered;
+
+        // Get source name from entityDags
+        const sourceName = entityDags[0]?.nodes
+            ?.filter(node => node.type === 'source')
+            ?.map(node => node.name)[0] || '';
+
+        // If we have job data with actual entities_encountered data, use that
+        if (entitiesEncountered && Object.keys(entitiesEncountered).length > 0 && entityDags.length > 0) {
+            // Process the entities_encountered data with source name
+            const cleanedDict = Object.entries(entitiesEncountered).reduce((acc, [key, value]) => {
+                const cleanedName = cleanEntityName(key, sourceName);
+                acc[cleanedName] = value as number;
+                return acc;
+            }, {} as Record<string, number>);
+
+            console.log('Created cleaned entity dictionary from job data:', cleanedDict, 'with source name:', sourceName);
+
+            if (Object.keys(cleanedDict).length > 0) {
+                setEntityDict(cleanedDict);
+
+                // Select first entity if none selected
+                if (!selectedEntity) {
+                    setSelectedEntity(Object.keys(cleanedDict)[0]);
+                }
+            }
+        }
+        // Fallback: If no job data (or empty entities_encountered) but we have DAGs, create entity dict with zero values
+        else if (entityDags.length > 0) {
+            const fallbackDict = extractEntityNamesFromDags(entityDags, sourceName);
+
+            console.log('Created fallback entity dictionary from DAG structure:', fallbackDict, 'with source name:', sourceName);
+
+            if (Object.keys(fallbackDict).length > 0) {
+                setEntityDict(fallbackDict);
+
+                // Select first entity if none selected
+                if (!selectedEntity) {
+                    setSelectedEntity(Object.keys(fallbackDict)[0]);
+                }
+            }
+        }
+    }, [syncJob?.entities_encountered, entityDags, selectedEntity, extractEntityNamesFromDags]);
+
+    // Time formatting utilities
     const formatTotalRuntime = (ms: number) => {
         const seconds = Math.floor(ms / 1000);
         const minutes = Math.floor(seconds / 60);
@@ -716,127 +654,33 @@ const SimplifiedSourceConnectionDetailView = ({
         }
     };
 
-    // Replace formatCronTimeToLocal with a UTC-only version
-    const formatCronTimeUTC = (cronExpression: string): string => {
-        const parts = cronExpression.split(' ');
-        const minute = parts[0];
-        const hour = parts[1];
-        const dayOfMonth = parts[2];
-        const month = parts[3];
-        const dayOfWeek = parts[4];
-
-        // Base time format
-        let timeInfo = `${hour !== '*' ? hour.padStart(2, '0') : '*'}:${minute.padStart(2, '0')} UTC`;
-
-        // Format the date part if specific day
-        if (dayOfWeek !== '*' || dayOfMonth !== '*') {
-            const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-            // Build date context based on schedule type
-            if (dayOfMonth !== '*') {
-                // Monthly schedule
-                timeInfo += ` on day ${dayOfMonth}`;
-            } else if (dayOfWeek !== '*') {
-                // Weekly schedule (0 = Sunday, 6 = Saturday)
-                const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-                const dayIndex = parseInt(dayOfWeek) % 7;
-                timeInfo += ` on ${days[dayIndex]}`;
-            }
-        }
-
-        return timeInfo;
-    }
-
-    /********************************************
-     * SIDE EFFECTS - ORDERED BY PRIORITY
-     ********************************************/
-
-    // 1. Initial data loading
+    // Initial data loading
     useEffect(() => {
-        fetchSourceConnectionDetails();
+        loadAllData();
     }, [sourceConnectionId]);
 
-    // 2. PubSub subscription control
+    // Entity data processing (uses sync job data)
     useEffect(() => {
-        if (latestUpdate?.is_complete || latestUpdate?.is_failed ||
-            lastSyncJob?.status === 'completed' || lastSyncJob?.status === 'failed') {
-            setInternalShouldForceSubscribe(false);
-
-            // Call the completion callback if provided
-            if (onSubscriptionComplete) {
-                onSubscriptionComplete();
-            }
-        }
-    }, [latestUpdate, lastSyncJob?.status, onSubscriptionComplete]);
-
-    // 3. PubSub completion handling
-    useEffect(() => {
-        if ((latestUpdate?.is_complete || latestUpdate?.is_failed) && lastSyncJob?.id) {
-            // Save the final state from PubSub
-            setFinalPubSubData({
-                inserted: latestUpdate.inserted || 0,
-                updated: latestUpdate.updated || 0,
-                deleted: latestUpdate.deleted || 0,
-                kept: latestUpdate.kept || 0,
-                skipped: latestUpdate.skipped || 0,
-                encountered: latestUpdate.entities_encountered || {},
-            });
-
-            // Mark the job as done in state
-            setLastSyncJob(prev => prev ? {
-                ...prev,
-                status: latestUpdate.is_complete ? 'completed' : 'failed'
-            } : prev);
-
-            // Fetch the latest job data including timestamps
-            if (selectedConnection?.id && lastSyncJob?.id) {
-                apiClient.get(`/source-connections/${selectedConnection.id}/jobs/${lastSyncJob.id}`)
-                    .then(async response => {
-                        if (response.ok) {
-                            const updatedJob = await response.json();
-                            setLastSyncJob(updatedJob);
-
-                            // Recalculate runtime with fresh timestamps
-                            if (updatedJob.started_at && (updatedJob.completed_at || updatedJob.failed_at)) {
-                                const endTime = updatedJob.completed_at || updatedJob.failed_at;
-                                const runtime = new Date(endTime).getTime() - new Date(updatedJob.started_at).getTime();
-                                setTotalRuntime(runtime);
-                            }
-                        }
-                    })
-                    .catch(err => console.error("Error fetching updated job data:", err));
-            }
-        }
-    }, [latestUpdate?.is_complete, latestUpdate?.is_failed, selectedConnection?.id, lastSyncJob?.id]);
-
-    // 4. Entity data processing
-    useEffect(() => {
-        const totalEntitiesCount =
-            entityData.inserted +
-            entityData.updated +
-            entityData.kept +
-            entityData.skipped -
-            entityData.deleted;
+        const totalEntitiesCount = syncJobData.inserted + syncJobData.updated + syncJobData.kept + syncJobData.skipped - syncJobData.deleted;
         setTotalEntities(totalEntitiesCount);
-    }, [entityData]);
+    }, [syncJobData]);
 
-    // 5. Entity dictionary maintenance
+    // Entity dictionary maintenance
     useEffect(() => {
         updateEntityDictionary();
     }, [updateEntityDictionary]);
 
-    // 6. Entity selection
+    // Entity selection and DAG processing
     useEffect(() => {
         if (!selectedEntity || entityDags.length === 0) {
             setSelectedDag(null);
             return;
         }
 
-        // Find DAG that has name exactly matching the selected entity
+        // Find DAG that matches the selected entity
         const exactMatch = entityDags.find(dag =>
             dag.name && dag.name.includes(selectedEntity + "Entity")
         );
-        // Fall back to partial match if exact match not found
         const matchingDag = exactMatch || entityDags.find(dag =>
             dag.name && dag.name.includes(selectedEntity)
         );
@@ -850,13 +694,12 @@ const SimplifiedSourceConnectionDetailView = ({
         }
     }, [selectedEntity, entityDags]);
 
-    // 7. DAG visualization
+    // DAG visualization
     useEffect(() => {
-        // Convert the DAG to basic flow graph
         convertDagToFlowGraph(selectedDag, setNodes, setEdges);
     }, [selectedDag, setNodes, setEdges]);
 
-    // 8. ReactFlow visualization adjustments
+    // ReactFlow visualization adjustments
     useEffect(() => {
         if (reactFlowInstance) {
             reactFlowInstance.fitView({
@@ -866,47 +709,7 @@ const SimplifiedSourceConnectionDetailView = ({
         }
     }, [nodes, edges, reactFlowInstance]);
 
-    // 9. Schedule configuration
-    useEffect(() => {
-        if (selectedConnection?.sync_id && selectedConnection.cron_schedule) {
-            // Parse cron expression in UTC (no conversion)
-            const cronParts = selectedConnection.cron_schedule.split(' ');
-            const utcMinute = parseInt(cronParts[0]);
-            const utcHour = cronParts[1] !== '*' ? parseInt(cronParts[1]) : undefined;
-
-            // Set config with UTC time values
-            setScheduleConfig({
-                type: "scheduled",
-                frequency: "custom",
-                hour: utcHour,
-                minute: utcMinute,
-                cronExpression: selectedConnection.cron_schedule
-            });
-        }
-    }, [selectedConnection]);
-
-    // 10. Clean up on source change
-    useEffect(() => {
-        setFinalPubSubData(null);
-    }, [sourceConnectionId]);
-
-    // 11. Logging for diagnostic purposes
-    useEffect(() => {
-        if (updates.length > 0 && latestUpdate) {
-            console.log(`[PubSub] Received update for job ${lastSyncJob?.id}:`, {
-                isComplete: latestUpdate.is_complete,
-                isFailed: latestUpdate.is_failed,
-                counts: {
-                    inserted: latestUpdate.inserted,
-                    updated: latestUpdate.updated,
-                    deleted: latestUpdate.deleted,
-                    kept: latestUpdate.kept
-                }
-            });
-        }
-    }, [updates, latestUpdate, lastSyncJob?.id]);
-
-    // Add this effect to handle resizing
+    // Handle resizing
     useEffect(() => {
         if (!reactFlowInstance || !flowContainerRef.current) return;
 
@@ -928,76 +731,7 @@ const SimplifiedSourceConnectionDetailView = ({
         };
     }, [reactFlowInstance]);
 
-    // Store previous connection data before changes
-    useEffect(() => {
-        if (!isLoading && selectedConnection) {
-            prevConnectionRef.current = {
-                connection: selectedConnection,
-                syncJob: lastSyncJob,
-                entities: totalEntities,
-                runtime: totalRuntime,
-                entityDict: { ...entityDict },
-                status: status
-            };
-        }
-    }, [isLoading, selectedConnection, lastSyncJob, totalEntities, totalRuntime, entityDict, status]);
-
-    // Replace the existing cleanup effect with this improved version
-    useEffect(() => {
-        // First set loading state when connection changes
-        if (sourceConnectionId) {
-            setIsLoading(true);
-        }
-
-        return () => {
-            // Only clean up when component unmounts, not on every sourceConnectionId change
-            if (!sourceConnectionId) {
-                setNodes([]);
-                setEdges([]);
-                setSelectedEntity('');
-                setEntityDict({});
-                setSelectedDag(null);
-                setEntityDags([]);
-                prevEntityDictRef.current = {};
-                setFinalPubSubData(null);
-                setLastSyncJob(null);
-                setTotalEntities(0);
-                setTotalRuntime(null);
-
-                if (reactFlowInstance) {
-                    reactFlowInstance.setNodes([]);
-                    reactFlowInstance.setEdges([]);
-                }
-            }
-        };
-    }, [sourceConnectionId, setNodes, setEdges, reactFlowInstance]);
-
-    // Add this effect to initialize nextRunTime on component mount or when cron_schedule changes
-    useEffect(() => {
-        if (selectedConnection?.cron_schedule) {
-            const nextRun = calculateNextRunTime(selectedConnection.cron_schedule);
-            setNextRunTime(nextRun);
-        }
-    }, [selectedConnection?.cron_schedule, calculateNextRunTime]);
-
-    console.log(`[PubSub] Data source for job ${lastSyncJob?.id}: ${isShowingRealtimeUpdates ? 'LIVE UPDATES' : 'DATABASE'}`);
-
-    // Render based on loading state
-    const connectionToDisplay = isLoading ? prevConnectionRef.current.connection : selectedConnection;
-    const jobToDisplay = isLoading ? prevConnectionRef.current.syncJob : lastSyncJob;
-    const entitiesToDisplay = isLoading ? prevConnectionRef.current.entities : totalEntities;
-    const runtimeToDisplay = isLoading ? prevConnectionRef.current.runtime : totalRuntime;
-    const statusToDisplay = isLoading ? prevConnectionRef.current.status : status;
-    const entityDictToDisplay = Object.keys(stableEntityDict).length > 0 ? stableEntityDict :
-        isLoading ? prevConnectionRef.current.entityDict : {};
-
-    console.log(`[Loading] State for ${sourceConnectionId}: ${isLoading ? 'LOADING' : 'LOADED'}`);
-
-    /********************************************
-     * RENDER
-     ********************************************/
-
-    if (!connectionToDisplay) {
+    if (!sourceConnection) {
         return (
             <div className="w-full py-6">
                 <div className="flex items-center justify-center">
@@ -1008,161 +742,116 @@ const SimplifiedSourceConnectionDetailView = ({
         );
     }
 
-    console.log("Render state:", {
-        hasSchedule: !!selectedConnection?.cron_schedule,
-        cronSchedule: selectedConnection?.cron_schedule,
-        nextRunTime
-    });
-
     return (
         <div className={cn(isDark ? "text-foreground" : "")}>
-            {/* Visualization Section */}
             <div className="py-2 space-y-3 mt-4">
-                {/* Status Dashboard */}
-                <div className="grid grid-cols-12 gap-3">
-                    {/* Status Stats Cards - Add stable min-height to prevent layout shifts */}
-                    <div className="col-span-12 md:col-span-8 grid grid-cols-3 gap-3">
-                        {/* Entities Card */}
-                        <div className={cn(
-                            "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
-                            isDark
-                                ? "bg-gray-800/60 border border-gray-700/50"
-                                : "bg-white border border-gray-100"
-                        )}>
-                            <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
-                                Entities
-                            </div>
-                            <div className="text-2xl font-semibold">
-                                {isLoading ? (
-                                    <span>{entitiesToDisplay.toLocaleString()}</span>
-                                ) : (
-                                    <span>{totalEntities.toLocaleString()}</span>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Status Card */}
-                        <div className={cn(
-                            "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
-                            isDark
-                                ? "bg-gray-800/60 border border-gray-700/50"
-                                : "bg-white border border-gray-100"
-                        )}>
-                            <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
-                                Status
-                            </div>
-                            <div className="text-lg font-medium flex items-center">
-                                <span className={`inline-flex h-3 w-3 rounded-full mr-2
-                                    ${statusToDisplay === 'completed' ? 'bg-green-500' :
-                                        statusToDisplay === 'failed' ? 'bg-red-500' :
-                                            statusToDisplay === 'in_progress' ? 'bg-blue-500 animate-pulse' :
-                                                'bg-amber-500'}`}
-                                />
-                                <span className="capitalize">
-                                    {statusToDisplay === 'in_progress' ? 'Running' : statusToDisplay || 'Not run'}
-                                    {(statusToDisplay === 'in_progress' || statusToDisplay === 'pending') &&
-                                        <span className="animate-pulse ml-1">•••</span>
-                                    }
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Runtime Card */}
-                        <div className={cn(
-                            "col-span-1 rounded-lg p-3 flex flex-col shadow-sm transition-all duration-200 min-h-[5.5rem]",
-                            isDark
-                                ? "bg-gray-800/60 border border-gray-700/50"
-                                : "bg-white border border-gray-100"
-                        )}>
-                            <div className="text-xs uppercase tracking-wider mb-1 font-medium opacity-60">
-                                Runtime
-                            </div>
-                            <div className="text-lg font-medium">
-                                {runtimeToDisplay ? formatTotalRuntime(runtimeToDisplay) : 'Not available'}
-                            </div>
-                            {lastSyncJob?.completed_at && <div className="text-xs opacity-70 mt-1">
-                                Completed {formatTimeSince(lastSyncJob.completed_at)}
-                            </div>}
-                        </div>
-                    </div>
-
-                    {/* Schedule Card */}
-                    <div className={cn(
-                        "col-span-12 md:col-span-4 rounded-lg p-3 flex flex-col justify-between shadow-sm transition-all duration-200 min-h-[5.5rem]",
-                        isDark
-                            ? "bg-gray-800/60 border border-gray-700/50"
-                            : "bg-white border border-gray-100"
-                    )}>
-                        <div className="flex items-center justify-between mb-1">
-                            <div className="text-xs uppercase tracking-wider font-medium opacity-60">
-                                Schedule
-                            </div>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-1 px-1 rounded-md"
-                                onClick={() => {
-                                    setScheduleConfig({
-                                        type: connectionToDisplay.cron_schedule ? "scheduled" : "one-time",
-                                        frequency: "custom",
-                                        cronExpression: connectionToDisplay.cron_schedule || undefined
-                                    });
-                                    setShowScheduleDialog(true);
-                                }}
-                            >
-                                <Pencil className="h-3 w-3" />
-                            </Button>
-                        </div>
-                        <div className="flex items-center">
-                            <Clock className={cn(
-                                "w-5 h-5 mr-2",
-                                isDark ? "text-gray-400" : "text-gray-500"
-                            )} />
-                            <div>
-                                <div className="text-lg font-medium">
-                                    {connectionToDisplay.cron_schedule
-                                        ? (nextRunTime ? `Due in ${nextRunTime}` : 'Scheduled')
-                                        : 'Manual only'}
-                                </div>
-                                <div className="text-xs opacity-70 mt-0.5">
-                                    {connectionToDisplay.cron_schedule && (
-                                        <span>Runs at {formatCronTimeUTC(connectionToDisplay.cron_schedule)}</span>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Display appropriate card based on error status */}
-                {jobToDisplay?.error ? (
+                {/* Display appropriate card based on error status - FROM SYNC JOB */}
+                {syncJob?.error ? (
                     <SyncErrorCard
-                        error={jobToDisplay.error}
+                        error={syncJob.error}
                         onRunSync={handleRunSync}
                         isInitiatingSyncJob={isInitiatingSyncJob}
-                        isSyncJobRunning={isSyncJobRunning}
+                        isSyncJobRunning={false}
                         isDark={isDark}
                     />
                 ) : (
-                    <SyncDagCard
-                        selectedConnection={connectionToDisplay}
-                        stableEntityDict={entityDictToDisplay}
-                        selectedEntity={selectedEntity}
-                        setSelectedEntity={setSelectedEntity}
-                        nodes={nodes}
-                        edges={edges}
-                        onNodesChange={onNodesChange}
-                        onEdgesChange={onEdgesChange}
-                        reactFlowInstance={reactFlowInstance}
-                        setReactFlowInstance={setReactFlowInstance}
-                        flowContainerRef={flowContainerRef}
-                        entityData={entityData}
-                        total={total}
-                        onRunSync={handleRunSync}
-                        isInitiatingSyncJob={isInitiatingSyncJob}
-                        isSyncJobRunning={isSyncJobRunning}
-                        isDark={isDark}
-                    />
+                    <div className="space-y-3">
+                        {/* Status Dashboard - positioned above the cards */}
+                        <div className="flex gap-2 flex-wrap">
+                            {/* Entities Card - FROM SYNC JOB */}
+                            <div className={cn(
+                                "rounded-lg p-2 flex items-center gap-2 shadow-sm transition-all duration-200 h-8 min-w-[80px]",
+                                isDark
+                                    ? "bg-gray-800/60 border border-gray-700/50"
+                                    : "bg-white border border-gray-100"
+                            )}>
+                                <div className="text-[10px] uppercase tracking-wider font-medium opacity-60">
+                                    Entities
+                                </div>
+                                <div className="text-sm font-semibold">
+                                    {totalEntities.toLocaleString()}
+                                </div>
+                            </div>
+
+                            {/* Status Card - FROM SYNC JOB */}
+                            <div className={cn(
+                                "rounded-lg p-2 flex items-center gap-2 shadow-sm transition-all duration-200 h-8 min-w-[90px]",
+                                isDark
+                                    ? "bg-gray-800/60 border border-gray-700/50"
+                                    : "bg-white border border-gray-100"
+                            )}>
+                                <div className="text-[10px] uppercase tracking-wider font-medium opacity-60">
+                                    Status
+                                </div>
+                                <div className="text-sm font-medium flex items-center gap-1">
+                                    <span className={`inline-flex h-2 w-2 rounded-full
+                                        ${syncJob?.status === 'completed' ? 'bg-green-500' :
+                                            syncJob?.status === 'failed' ? 'bg-red-500' :
+                                                syncJob?.status === 'in_progress' ? 'bg-blue-500 animate-pulse' :
+                                                    'bg-amber-500'}`}
+                                    />
+                                    <span className="capitalize text-xs">
+                                        {syncJob?.status === 'in_progress' ? 'Running' : syncJob?.status || 'Not run'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Runtime Card - FROM SYNC JOB */}
+                            <div className={cn(
+                                "rounded-lg p-2 flex items-center gap-2 shadow-sm transition-all duration-200 h-8 min-w-[80px]",
+                                isDark
+                                    ? "bg-gray-800/60 border border-gray-700/50"
+                                    : "bg-white border border-gray-100"
+                            )}>
+                                <div className="text-[10px] uppercase tracking-wider font-medium opacity-60">
+                                    Runtime
+                                </div>
+                                <div className="text-sm font-medium">
+                                    {totalRuntime ? formatTotalRuntime(totalRuntime) : 'N/A'}
+                                </div>
+                            </div>
+
+                            {/* Schedule Card - FROM SOURCE CONNECTION */}
+                            <div className={cn(
+                                "rounded-lg p-2 flex items-center gap-2 shadow-sm transition-all duration-200 h-8 min-w-[100px]",
+                                isDark
+                                    ? "bg-gray-800/60 border border-gray-700/50"
+                                    : "bg-white border border-gray-100"
+                            )}>
+                                <div className="text-[10px] uppercase tracking-wider font-medium opacity-60">
+                                    Schedule
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Clock className={cn(
+                                        "w-3 h-3",
+                                        isDark ? "text-gray-400" : "text-gray-500"
+                                    )} />
+                                    <div className="text-sm font-medium">
+                                        {sourceConnection.cron_schedule ? 'Scheduled' : 'Manual'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Entity Graph and Sync Progress Cards */}
+                        <SimplifiedSyncDagCard
+                            sourceConnection={sourceConnection}
+                            entityDict={entityDict}
+                            selectedEntity={selectedEntity}
+                            setSelectedEntity={setSelectedEntity}
+                            nodes={nodes}
+                            edges={edges}
+                            onNodesChange={onNodesChange}
+                            onEdgesChange={onEdgesChange}
+                            reactFlowInstance={reactFlowInstance}
+                            setReactFlowInstance={setReactFlowInstance}
+                            flowContainerRef={flowContainerRef}
+                            syncJobData={syncJobData}
+                            onRunSync={handleRunSync}
+                            isInitiatingSyncJob={isInitiatingSyncJob}
+                            isDark={isDark}
+                        />
+                    </div>
                 )}
             </div>
         </div>

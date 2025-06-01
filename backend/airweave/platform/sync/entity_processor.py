@@ -38,13 +38,16 @@ class EntityProcessor:
     async def process(
         self,
         entity: BaseEntity,
-        source_node: schemas.DagNode,  # not sure about hard-coupling to dag node
+        source_node: schemas.DagNode,
         sync_context: SyncContext,
         db: AsyncSession,
     ) -> List[BaseEntity]:
         """Process an entity through the complete pipeline."""
+        # Flag to track if we've already accounted for this entity in stats
+        entity_accounted_for = False
+
         try:
-            sync_context.logger.debug(f"Processing entity {entity.entity_id} through pipeline")
+            sync_context.logger.info(f"Processing entity {entity.entity_id} through pipeline")
 
             # Track the current entity
             entity_type = entity.__class__.__name__
@@ -62,7 +65,6 @@ class EntityProcessor:
             self._entities_encountered_count[entity_type].add(entity.entity_id)
 
             # Update progress tracker with latest entities encountered
-            # NOTE: this will only be published when the other stats are being published
             await sync_context.progress.update_entities_encountered_count(
                 self._entities_encountered_count
             )
@@ -72,20 +74,31 @@ class EntityProcessor:
 
             # Stage 2: Determine action for entity
             db_entity, action = await self._determine_action(enriched_entity, sync_context, db)
-            sync_context.logger.debug(f"Determined action {action} for entity {entity.entity_id}")
+            sync_context.logger.info(f"Determined action {action} for entity {entity.entity_id}")
 
             # Stage 2.5: Skip further processing if KEEP
             if action == DestinationAction.KEEP:
                 await sync_context.progress.increment("kept", 1)
+                entity_accounted_for = True
                 return []
 
             # Stage 3: Process entity through DAG
             processed_entities = await self._transform(
                 enriched_entity, source_node, sync_context, db
             )
-            sync_context.logger.debug(
+            sync_context.logger.info(
                 f"Transformed entity {entity.entity_id} into {len(processed_entities)} entities"
             )
+
+            # Check if transformation resulted in no entities
+            if len(processed_entities) == 0:
+                sync_context.logger.warning(
+                    f"Transformation resulted in 0 entities for {entity.entity_id}, "
+                    "marking as skipped"
+                )
+                await sync_context.progress.increment("skipped", 1)
+                entity_accounted_for = True
+                return []
 
             # Stage 4: Compute vector
             processed_entities_with_vector = await self._compute_vector(
@@ -97,10 +110,24 @@ class EntityProcessor:
                 enriched_entity, processed_entities_with_vector, db_entity, action, sync_context, db
             )
 
+            entity_accounted_for = True
             return processed_entities
+
         except Exception as e:
-            sync_context.logger.error(f"Error processing entity {entity.entity_id}: {str(e)}")
-            raise
+            sync_context.logger.error(
+                f"Error processing entity {entity.entity_id}: {type(e).__name__}: {str(e)}"
+            )
+
+            # If we haven't already accounted for this entity in stats, mark it as skipped
+            if not entity_accounted_for:
+                await sync_context.progress.increment("skipped", 1)
+                sync_context.logger.warning(
+                    f"Entity {entity.entity_id} marked as skipped due to processing error"
+                )
+
+            # DON'T RE-RAISE! Just return empty list to indicate no entities were produced
+            # This allows the sync to continue with other entities
+            return []
 
     async def _enrich(self, entity: BaseEntity, sync_context: SyncContext) -> BaseEntity:
         """Enrich entity with sync metadata."""
@@ -158,7 +185,7 @@ class EntityProcessor:
         db: AsyncSession,
     ) -> List[BaseEntity]:
         """Transform entity through DAG routing."""
-        sync_context.logger.debug(
+        sync_context.logger.info(
             f"Starting transformation for entity {entity.entity_id} "
             f"(type: {type(entity).__name__}) from source node {source_node.id}"
         )
@@ -179,7 +206,7 @@ class EntityProcessor:
                 entity_types[entity_type] = 1
 
         type_summary = ", ".join([f"{count} {t}" for t, count in entity_types.items()])
-        sync_context.logger.debug(
+        sync_context.logger.info(
             f"Transformation complete: entity {entity.entity_id} transformed into "
             f"{len(transformed_entities)} entities ({type_summary})"
         )
@@ -231,7 +258,7 @@ class EntityProcessor:
             The entities with vector computed
         """
         if not processed_entities:
-            sync_context.logger.debug("No entities to vectorize, returning empty list")
+            sync_context.logger.info("No entities to vectorize, returning empty list")
             return []
 
         try:
@@ -248,7 +275,7 @@ class EntityProcessor:
             avg_length = total_length / entity_count if entity_count else 0
             max_length = max(content_lengths) if content_lengths else 0
 
-            sync_context.logger.debug(
+            sync_context.logger.info(
                 f"Entity content stats: total={total_length}, "
                 f"avg={avg_length:.2f}, max={max_length}, count={entity_count}"
             )
@@ -291,7 +318,7 @@ class EntityProcessor:
                         continue
 
                     vector_dim = len(vector) if vector else 0
-                    sync_context.logger.debug(
+                    sync_context.logger.info(
                         f"Assigning vector of dimension {vector_dim} to "
                         f"entity {processed_entity.entity_id}"
                     )
@@ -321,7 +348,10 @@ class EntityProcessor:
     ) -> None:
         """Handle INSERT action."""
         if len(processed_entities) == 0:
-            sync_context.logger.info("No processed entities to insert")
+            sync_context.logger.warning(
+                f"No processed entities to insert for {parent_entity.entity_id}, marking as skipped"
+            )
+            await sync_context.progress.increment("skipped", 1)
             return
 
         # Prepare entities with parent reference
@@ -361,8 +391,10 @@ class EntityProcessor:
     ) -> None:
         """Handle UPDATE action."""
         if len(processed_entities) == 0:
-            # TODO: keep track of skipped entities that could not be processed
-            sync_context.logger.info("No processed entities to update")
+            sync_context.logger.warning(
+                f"No processed entities to update for {parent_entity.entity_id}, marking as skipped"
+            )
+            await sync_context.progress.increment("skipped", 1)
             return
 
         # Prepare entities with parent reference

@@ -15,6 +15,36 @@ from airweave.platform.transformers.utils import (
     count_tokens,
 )
 
+# Module-level shared chunkers
+_shared_semantic_chunker = None
+_shared_code_chunker = None
+
+
+def get_shared_semantic_chunker(chunk_size_limit: int):
+    """Get or create a shared semantic chunker for text files."""
+    global _shared_semantic_chunker
+    if _shared_semantic_chunker is None or _shared_semantic_chunker.chunk_size != chunk_size_limit:
+        _shared_semantic_chunker = SemanticChunker(
+            tokenizer_or_token_counter=count_tokens,
+            chunk_size=chunk_size_limit,
+            min_sentences=1,
+            threshold=0.5,
+            mode="window",
+            similarity_window=2,
+        )
+    return _shared_semantic_chunker
+
+
+def get_shared_code_chunker(chunk_size_limit: int):
+    """Get or create a shared code chunker."""
+    global _shared_code_chunker
+    if _shared_code_chunker is None or _shared_code_chunker.chunk_size != chunk_size_limit:
+        _shared_code_chunker = CodeChunker(
+            tokenizer_or_token_counter=count_tokens,
+            chunk_size=chunk_size_limit,
+        )
+    return _shared_code_chunker
+
 
 @transformer(name="Code File Chunker")
 async def code_file_chunker(file: CodeFileEntity) -> List[CodeFileEntity]:
@@ -60,25 +90,13 @@ async def code_file_chunker(file: CodeFileEntity) -> List[CodeFileEntity]:
     logger.info(f"File {file.name} has extension {file_extension}, is_text_file={is_text_file}")
 
     if is_text_file:
-        # Use semantic chunking for text files instead of code chunking
         logger.info(f"Using semantic chunker for text file {file.name}")
-        semantic_chunker = SemanticChunker(
-            tokenizer_or_token_counter=count_tokens,
-            chunk_size=chunk_size_limit,
-            min_sentences=1,  # Start with minimum 1 sentence
-            threshold=0.5,  # Similarity threshold
-            mode="window",  # Use window mode for comparison
-            similarity_window=2,  # Consider 2 sentences for similarity
-        )
+        semantic_chunker = get_shared_semantic_chunker(chunk_size_limit)  # Use shared
         chunks = semantic_chunker.chunk(file.content)
         logger.debug(f"Semantic chunker produced {len(chunks)} chunks")
     else:
-        # Use CodeChunker for actual code files
         logger.info(f"Using code chunker for code file {file.name}")
-        code_chunker = CodeChunker(
-            tokenizer_or_token_counter=count_tokens,
-            chunk_size=chunk_size_limit,
-        )
+        code_chunker = get_shared_code_chunker(chunk_size_limit)  # Use shared
         chunks = code_chunker.chunk(file.content)
         logger.debug(f"Code chunker produced {len(chunks)} chunks")
 

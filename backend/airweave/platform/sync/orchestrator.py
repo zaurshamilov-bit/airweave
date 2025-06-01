@@ -113,7 +113,6 @@ class SyncOrchestrator:
                         continue  # Do not process further
 
                     # Submit each entity for processing in the worker pool
-                    print("\nSUBMITTING TASK TO WORKER POOL\n")
                     task = await self.worker_pool.submit(
                         self._process_single_entity,
                         entity=entity,
@@ -144,6 +143,8 @@ class SyncOrchestrator:
         # Create a new database session scope for this task
         async with get_db_context() as db:
             # Process the entity through the pipeline
+
+            # No try-catch needed here anymore - entity_processor handles all errors gracefully
             await self.entity_processor.process(
                 entity=entity, source_node=source_node, sync_context=self.sync_context, db=db
             )

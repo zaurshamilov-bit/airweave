@@ -4,16 +4,79 @@ This source connects to the AACT Clinical Trials PostgreSQL database, queries th
 from the studies table, and creates WebEntity instances with ClinicalTrials.gov URLs.
 """
 
+import asyncio
+import random
 from typing import Any, AsyncGenerator, Dict, Optional, Union
 
 import asyncpg
 
+from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import CTTIAuthConfig
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb
 from airweave.platform.entities.ctti import CTTIWebEntity
 from airweave.platform.sources._base import BaseSource
+
+
+async def _retry_with_backoff(func, *args, max_retries=3, **kwargs):
+    """Retry a function with exponential backoff.
+
+    Args:
+        func: The async function to retry
+        *args: Arguments to pass to the function
+        max_retries: Maximum number of retry attempts
+        **kwargs: Keyword arguments to pass to the function
+
+    Returns:
+        The result of the function call
+
+    Raises:
+        The last exception if all retries fail
+    """
+    last_exception = None
+
+    for attempt in range(max_retries + 1):  # +1 for initial attempt
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            last_exception = e
+
+            # Log the full error details
+            error_type = type(e).__name__
+            error_msg = str(e)
+
+            # Don't retry on certain permanent errors
+            if isinstance(
+                e,
+                (
+                    asyncpg.InvalidPasswordError,
+                    asyncpg.InvalidCatalogNameError,
+                    ValueError,  # Our credential validation errors
+                ),
+            ):
+                logger.error(f"Non-retryable database error: {error_type}: {error_msg}")
+                raise e
+
+            if attempt < max_retries:
+                # Calculate delay with exponential backoff and jitter
+                base_delay = 2**attempt  # 1s, 2s, 4s
+                jitter = random.uniform(0.1, 0.5)  # Add randomness
+                delay = base_delay + jitter
+
+                logger.warning(
+                    f"Database operation attempt {attempt + 1}/{max_retries + 1} failed with "
+                    f"{error_type}: {error_msg}. Retrying in {delay:.2f}s..."
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(
+                    f"All {max_retries + 1} database operation attempts failed. "
+                    f"Final error {error_type}: {error_msg}"
+                )
+
+    # Re-raise the last exception if all retries failed
+    raise last_exception
 
 
 @source(
@@ -96,39 +159,49 @@ class CTTISource(BaseSource):
         return value
 
     async def _connect(self) -> None:
-        """Establish connection to the AACT Clinical Trials database."""
+        """Establish connection to the AACT Clinical Trials database with retry logic."""
         if not self.conn:
-            try:
-                username = self._get_credential("username")
-                password = self._get_credential("password")
 
-                self.conn = await asyncpg.connect(
-                    host=self.AACT_HOST,
-                    port=self.AACT_PORT,
-                    user=username,
-                    password=password,
-                    database=self.AACT_DATABASE,
-                    timeout=30.0,
-                    command_timeout=60.0,
-                )
-            except ValueError as e:
-                # Re-raise credential validation errors with more context
-                raise ValueError(f"Invalid AACT database credentials: {str(e)}") from e
-            except asyncpg.InvalidPasswordError as e:
-                raise ValueError("Invalid AACT database credentials: Authentication failed") from e
-            except asyncpg.InvalidCatalogNameError as e:
-                raise ValueError(f"AACT database '{self.AACT_DATABASE}' does not exist") from e
-            except (
-                OSError,
-                asyncpg.CannotConnectNowError,
-                asyncpg.ConnectionDoesNotExistError,
-            ) as e:
-                raise ValueError(
-                    f"Could not connect to AACT database at {self.AACT_HOST}:{self.AACT_PORT}. "
-                    f"Please check your internet connection and credentials. Error: {str(e)}"
-                ) from e
-            except Exception as e:
-                raise ValueError(f"AACT database connection failed: {str(e)}") from e
+            async def _establish_connection():
+                try:
+                    username = self._get_credential("username")
+                    password = self._get_credential("password")
+
+                    logger.info(f"Connecting to AACT database at {self.AACT_HOST}:{self.AACT_PORT}")
+                    conn = await asyncpg.connect(
+                        host=self.AACT_HOST,
+                        port=self.AACT_PORT,
+                        user=username,
+                        password=password,
+                        database=self.AACT_DATABASE,
+                        timeout=30.0,
+                        command_timeout=60.0,
+                    )
+                    logger.info("Successfully connected to AACT database")
+                    return conn
+                except ValueError as e:
+                    # Re-raise credential validation errors with more context
+                    raise ValueError(f"Invalid AACT database credentials: {str(e)}") from e
+                except asyncpg.InvalidPasswordError as e:
+                    raise ValueError(
+                        "Invalid AACT database credentials: Authentication failed"
+                    ) from e
+                except asyncpg.InvalidCatalogNameError as e:
+                    raise ValueError(f"AACT database '{self.AACT_DATABASE}' does not exist") from e
+                except (
+                    OSError,
+                    asyncpg.CannotConnectNowError,
+                    asyncpg.ConnectionDoesNotExistError,
+                ) as e:
+                    raise RuntimeError(
+                        f"Could not connect to AACT database at {self.AACT_HOST}:{self.AACT_PORT}. "
+                        f"Please check your internet connection. Error: {str(e)}"
+                    ) from e
+                except Exception as e:
+                    raise RuntimeError(f"AACT database connection failed: {str(e)}") from e
+
+            # Use retry logic for connection establishment
+            self.conn = await _retry_with_backoff(_establish_connection)
 
     async def generate_entities(self) -> AsyncGenerator[Union[CTTIWebEntity], None]:
         """Generate WebEntity instances for each nct_id in the AACT studies table."""
@@ -147,7 +220,14 @@ class CTTISource(BaseSource):
                 LIMIT {limit}
             '''
 
-            records = await self.conn.fetch(query)
+            async def _execute_query():
+                logger.info(f"Executing query to fetch {limit} clinical trials from AACT database")
+                records = await self.conn.fetch(query)
+                logger.info(f"Successfully fetched {len(records)} clinical trial records")
+                return records
+
+            # Use retry logic for query execution
+            records = await _retry_with_backoff(_execute_query)
 
             # Process each nct_id
             for record in records:
@@ -199,7 +279,11 @@ class CTTISource(BaseSource):
                     },
                 )
 
+        except Exception as e:
+            logger.error(f"Error in CTTI source generate_entities: {str(e)}")
+            raise
         finally:
             if self.conn:
                 await self.conn.close()
                 self.conn = None
+                logger.info("Closed AACT database connection")

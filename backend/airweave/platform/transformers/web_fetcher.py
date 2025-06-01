@@ -1,7 +1,9 @@
 """Web fetcher transformer using Firecrawl."""
 
+import asyncio
 import hashlib
 import os
+import random
 from typing import List
 from uuid import uuid4
 
@@ -12,6 +14,83 @@ from airweave.core.logging import logger
 from airweave.platform.decorators import transformer
 from airweave.platform.entities._base import WebEntity
 from airweave.platform.entities.web import WebFileEntity
+
+# Add to the module level or as a class
+_shared_firecrawl_client = None
+
+
+async def get_firecrawl_client():
+    """Get or create the shared Firecrawl client instance."""
+    global _shared_firecrawl_client
+    if _shared_firecrawl_client is None:
+        firecrawl_api_key = getattr(settings, "FIRECRAWL_API_KEY", None)
+        if not firecrawl_api_key:
+            raise ValueError("FIRECRAWL_API_KEY must be configured to use web fetcher")
+        _shared_firecrawl_client = AsyncFirecrawlApp(api_key=firecrawl_api_key)
+    return _shared_firecrawl_client
+
+
+async def _retry_with_backoff(func, *args, max_retries=3, **kwargs):
+    """Retry a function with exponential backoff.
+
+    Args:
+        func: The async function to retry
+        *args: Arguments to pass to the function
+        max_retries: Maximum number of retry attempts
+        **kwargs: Keyword arguments to pass to the function
+
+    Returns:
+        The result of the function call
+
+    Raises:
+        The last exception if all retries fail
+    """
+    last_exception = None
+
+    for attempt in range(max_retries + 1):  # +1 for initial attempt
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            last_exception = e
+
+            # Log the full error details
+            error_type = type(e).__name__
+            error_msg = str(e)
+
+            # Don't retry on certain permanent errors
+            if any(
+                permanent_error in error_msg.lower()
+                for permanent_error in [
+                    "invalid api key",
+                    "unauthorized",
+                    "forbidden",
+                    "not found",
+                    "bad request",
+                    "invalid url",
+                ]
+            ):
+                logger.error(f"Non-retryable error for web scraping: {error_type}: {error_msg}")
+                raise e
+
+            if attempt < max_retries:
+                # Calculate delay with exponential backoff and jitter
+                base_delay = 2**attempt  # 1s, 2s, 4s
+                jitter = random.uniform(0.1, 0.5)  # Add randomness
+                delay = base_delay + jitter
+
+                logger.warning(
+                    f"Web scraping attempt {attempt + 1}/{max_retries + 1} failed with "
+                    f"{error_type}: {error_msg}. Retrying in {delay:.2f}s..."
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error(
+                    f"All {max_retries + 1} web scraping attempts failed. "
+                    f"Final error {error_type}: {error_msg}"
+                )
+
+    # Re-raise the last exception if all retries failed
+    raise last_exception
 
 
 @transformer(name="Web Fetcher")
@@ -34,17 +113,10 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
     """
     logger.info(f"Starting web fetch for URL: {web_entity.url}")
 
-    # Get Firecrawl API key from settings
-    firecrawl_api_key = getattr(settings, "FIRECRAWL_API_KEY", None)
-    if not firecrawl_api_key:
-        logger.error("FIRECRAWL_API_KEY not found in settings")
-        raise ValueError("FIRECRAWL_API_KEY must be configured to use web fetcher")
+    async def _scrape_with_firecrawl():
+        """Internal function to handle the actual scraping with retry logic."""
+        app = await get_firecrawl_client()
 
-    try:
-        # Initialize Firecrawl app
-        app = AsyncFirecrawlApp(api_key=firecrawl_api_key)
-
-        # Scrape the URL and get markdown using scrape_url instead of crawl_url
         logger.info(f"Scraping URL with Firecrawl: {web_entity.url}")
         scrape_result = await app.scrape_url(web_entity.url, formats=["markdown"])
 
@@ -56,6 +128,12 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
         ):
             logger.warning(f"No markdown content returned from Firecrawl for URL: {web_entity.url}")
             raise ValueError(f"No content could be extracted from URL: {web_entity.url}")
+
+        return scrape_result
+
+    try:
+        # Use retry logic for the scraping operation
+        scrape_result = await _retry_with_backoff(_scrape_with_firecrawl)
 
         # Get markdown content directly from the response
         markdown_content = scrape_result.markdown
@@ -137,5 +215,7 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
         return [file_entity]
 
     except Exception as e:
-        logger.error(f"Error fetching web content for URL {web_entity.url}: {str(e)}")
+        logger.error(
+            f"Error fetching web content for URL {web_entity.url} after all retries: {str(e)}"
+        )
         raise e

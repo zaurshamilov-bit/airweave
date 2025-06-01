@@ -1,5 +1,7 @@
 """OpenAI text2vec model for embedding."""
 
+import asyncio
+import random
 import time
 from typing import List, Optional
 
@@ -31,6 +33,82 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         default="text-embedding-3-small", description="OpenAI embedding model name"
     )
 
+    def __init__(self, **kwargs):
+        """Initialize the OpenAI Text2Vec model."""
+        super().__init__(**kwargs)
+        self._client = None
+
+    async def get_client(self):
+        """Get or create the shared HTTP client for OpenAI API calls."""
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                limits=httpx.Limits(
+                    max_keepalive_connections=5,  # Keep 5 connections alive
+                    max_connections=10,  # Max 10 total connections
+                    keepalive_expiry=30.0,  # Each connection lives 30s after last use
+                ),
+                timeout=httpx.Timeout(60.0),
+            )
+        return self._client
+
+    async def _retry_with_backoff(self, func, *args, max_retries=3, **kwargs):
+        """Retry a function with exponential backoff.
+
+        Args:
+            func: The async function to retry
+            *args: Arguments to pass to the function
+            max_retries: Maximum number of retry attempts
+            **kwargs: Keyword arguments to pass to the function
+
+        Returns:
+            The result of the function call
+
+        Raises:
+            The last exception if all retries fail
+        """
+        last_exception = None
+
+        for attempt in range(max_retries + 1):  # +1 for initial attempt
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+
+                # Don't retry on authentication errors or client errors (4xx except 429)
+                if isinstance(e, httpx.HTTPStatusError):
+                    status_code = e.response.status_code
+                    if (
+                        400 <= status_code < 500 and status_code != 429
+                    ):  # 429 is rate limit, should retry
+                        logger.error(f"Non-retryable HTTP error {status_code}: {e.response.text}")
+                        raise e
+
+                # Log the full error details
+                error_type = type(e).__name__
+                error_msg = str(e)
+                if hasattr(e, "response") and hasattr(e.response, "text"):
+                    error_msg += f" - Response: {e.response.text}"
+
+                if attempt < max_retries:
+                    # Calculate delay with exponential backoff and jitter
+                    base_delay = 2**attempt  # 1s, 2s, 4s
+                    jitter = random.uniform(0.1, 0.5)  # Add randomness
+                    delay = base_delay + jitter
+
+                    logger.warning(
+                        f"Attempt {attempt + 1}/{max_retries + 1} failed with {error_type}: "
+                        f"{error_msg}. Retrying in {delay:.2f}s..."
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error(
+                        f"All {max_retries + 1} attempts failed. "
+                        f"Final error {error_type}: {error_msg}"
+                    )
+
+        # Re-raise the last exception if all retries failed
+        raise last_exception
+
     async def embed(
         self,
         text: str,
@@ -54,39 +132,37 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             raise ValueError("Dimensions override not supported for OpenAI embedding")
 
         if not text.strip():
-            logger.debug("Empty text provided for embedding, returning zero vector")
+            logger.info("Empty text provided for embedding, returning zero vector")
             # Return zero vector for empty text
             return [0.0] * self.vector_dimensions
 
         used_model = model or self.embedding_model
-        logger.debug(f"Embedding single text with model {used_model} (text length: {len(text)})")
+        logger.info(f"Embedding single text with model {used_model} (text length: {len(text)})")
+
+        async def _make_request():
+            client = await self.get_client()
+            logger.info("Sending embedding request to OpenAI API")
+            response = await client.post(
+                "https://api.openai.com/v1/embeddings",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"input": text, "model": used_model, "encoding_format": encoding_format},
+            )
+            response.raise_for_status()
+            return response.json()["data"][0]["embedding"]
 
         start_time = time.time()
         try:
-            async with httpx.AsyncClient() as client:
-                logger.debug("Sending embedding request to OpenAI API")
-                response = await client.post(
-                    "https://api.openai.com/v1/embeddings",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={"input": text, "model": used_model, "encoding_format": encoding_format},
-                    timeout=60.0,  # Add longer timeout
-                )
-                response.raise_for_status()
-                result = response.json()["data"][0]["embedding"]
-                elapsed = time.time() - start_time
-                logger.debug(f"Embedding completed in {elapsed:.2f}s, vector size: {len(result)}")
-                return result
-        except httpx.HTTPStatusError as e:
-            logger.error(f"OpenAI API HTTP error: {e.response.status_code} - {e.response.text}")
-            raise
-        except httpx.RequestError as e:
-            logger.error(f"OpenAI API request error: {str(e)}")
-            raise
+            result = await self._retry_with_backoff(_make_request)
+            elapsed = time.time() - start_time
+            logger.info(f"Embedding completed in {elapsed:.2f}s, vector size: {len(result)}")
+            return result
         except Exception as e:
-            logger.error(f"Unexpected error during embedding: {str(e)}")
+            elapsed = time.time() - start_time
+            error_type = type(e).__name__
+            logger.error(f"Embedding failed after {elapsed:.2f}s with {error_type}: {str(e)}")
             raise
 
     async def _process_empty_texts(self, texts: List[str]) -> tuple:
@@ -109,16 +185,19 @@ class OpenAIText2Vec(BaseEmbeddingModel):
     async def _make_openai_request(
         self, filtered_texts: List[str], used_model: str, encoding_format: str
     ) -> List:
-        """Make the actual request to OpenAI API.
+        """Make the actual request to OpenAI API with retry logic.
 
         Returns:
             List of embeddings
         """
         max_text_length = max(len(text) for text in filtered_texts) if filtered_texts else 0
-        logger.debug(f"Maximum text length in batch: {max_text_length} chars")
+        logger.info(f"Maximum text length in batch: {max_text_length} chars")
 
-        async with httpx.AsyncClient() as client:
-            logger.debug(f"Sending batch embedding request to OpenAI API using model {used_model}")
+        async def _make_request():
+            client = await self.get_client()
+
+            # This will reuse an existing connection if available,
+            # or create a new one if needed (up to max_connections=10)
             response = await client.post(
                 "https://api.openai.com/v1/embeddings",
                 headers={
@@ -130,10 +209,11 @@ class OpenAIText2Vec(BaseEmbeddingModel):
                     "model": used_model,
                     "encoding_format": encoding_format,
                 },
-                timeout=120.0,  # Longer timeout for batches
             )
             response.raise_for_status()
             return [e["embedding"] for e in response.json()["data"]]
+
+        return await self._retry_with_backoff(_make_request)
 
     async def embed_many(
         self,
@@ -158,7 +238,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             raise ValueError("Dimensions override not supported for OpenAI embedding")
 
         if not texts:
-            logger.debug("Empty texts list provided for embedding")
+            logger.info("Empty texts list provided for embedding")
             return []
 
         # Log batch size
@@ -168,11 +248,11 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         filtered_texts, empty_indices = await self._process_empty_texts(texts)
 
         if not filtered_texts:
-            logger.debug("All texts in batch were empty, returning zero vectors")
+            logger.info("All texts in batch were empty, returning zero vectors")
             return [[0.0] * self.vector_dimensions] * len(texts)
 
         # Log actual texts to embed
-        logger.debug(
+        logger.info(
             f"Embedding {len(filtered_texts)} non-empty texts "
             f"(skipped {len(empty_indices)} empty texts)"
         )
@@ -198,14 +278,16 @@ class OpenAIText2Vec(BaseEmbeddingModel):
                     result.append(embeddings[embedding_idx])
                     embedding_idx += 1
 
-            logger.debug(f"Final result contains {len(result)} vectors")
+            logger.info(f"Final result contains {len(result)} vectors")
             return result
-        except httpx.HTTPStatusError as e:
-            logger.error(f"OpenAI API HTTP error: {e.response.status_code} - {e.response.text}")
-            raise
-        except httpx.RequestError as e:
-            logger.error(f"OpenAI API request error: {str(e)}")
-            raise
         except Exception as e:
-            logger.error(f"Unexpected error during batch embedding: {str(e)}")
+            elapsed = time.time() - start_time
+            error_type = type(e).__name__
+            logger.error(f"Batch embedding failed after {elapsed:.2f}s with {error_type}: {str(e)}")
             raise
+
+    async def close(self):
+        """Clean up the client when done."""
+        if self._client:
+            await self._client.aclose()
+            self._client = None

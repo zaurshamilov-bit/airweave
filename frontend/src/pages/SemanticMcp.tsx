@@ -14,6 +14,7 @@ import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { statusConfig } from '@/components/ui/StatusBadge';
 import SimplifiedSourceConnectionDetailView from '@/components/collection/SimplifiedSourceConnectionDetailView';
+import { QueryToolAndLiveDoc } from '@/components/collection/SimplifiedQueryToolAndLiveDoc';
 
 interface DetailedSource {
     id: string;
@@ -75,6 +76,35 @@ const SemanticMcp = () => {
     const hasProcessedOAuthRef = useRef(false);
 
     const logoSrc = resolvedTheme === "dark" ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg";
+
+    // Create or get API key from session
+    const ensureApiKey = async () => {
+        try {
+            // Check if we already have an API key in session
+            const existingApiKey = sessionStorage.getItem('semantic_mcp_api_key');
+            if (existingApiKey) {
+                console.log('🔑 [SemanticMcp] Using existing API key from session');
+                return;
+            }
+
+            console.log('🔑 [SemanticMcp] Creating new API key...');
+
+            // Create a new API key
+            const response = await apiClient.post('/api-keys/', {});
+            if (response.ok) {
+                const apiKeyData = await response.json();
+                const decryptedKey = apiKeyData.decrypted_key;
+
+                // Store in session storage
+                sessionStorage.setItem('semantic_mcp_api_key', decryptedKey);
+                console.log('✅ [SemanticMcp] API key created and stored in session');
+            } else {
+                console.error('❌ [SemanticMcp] Failed to create API key:', await response.text());
+            }
+        } catch (error) {
+            console.error('❌ [SemanticMcp] Error creating API key:', error);
+        }
+    };
 
     // Get connection status indicator
     const getConnectionStatusIndicator = (connection: SourceConnection) => {
@@ -148,6 +178,9 @@ const SemanticMcp = () => {
 
     useEffect(() => {
         fetchSources();
+
+        // Ensure we have an API key
+        ensureApiKey();
 
         // Check if there's a saved collection in sessionStorage (in case of page refresh)
         const savedCollectionJson = sessionStorage.getItem('semantic_mcp_collection');
@@ -587,7 +620,7 @@ const SemanticMcp = () => {
                 console.log('📦 [SemanticMcp] Creating new collection...');
                 const timestamp = new Date().toISOString();
                 const collectionData = {
-                    name: `Hidden Collection Semantic MCP (${timestamp})`  // Must be at least 4 characters
+                    name: `My Collection`  // Must be at least 4 characters
                 };
 
                 const collectionResponse = await apiClient.post('/collections/', collectionData);
@@ -630,11 +663,6 @@ const SemanticMcp = () => {
 
             // Alert the sync job ID
             const collectionAction = isNewCollection ? 'Created new' : 'Added to existing';
-            if (sourceConnection.latest_sync_job_id) {
-                alert(`Successfully connected to ${selectedSource.name}!\n\n${collectionAction} collection: ${collection.readable_id}\nSync Job ID: ${sourceConnection.latest_sync_job_id}`);
-            } else {
-                alert(`Successfully connected to ${selectedSource.name}!\n\n${collectionAction} collection: ${collection.readable_id}\nNote: No sync job was started automatically.`);
-            }
 
             // Add source to connected sources
             setConnectedSources(prev => new Set([...prev, selectedSource.id]));
@@ -754,29 +782,32 @@ const SemanticMcp = () => {
 
             {/* Sources Section with Border */}
             <div className="flex justify-center px-10 mt-6">
-                <div className="border border-gray-200 dark:border-gray-700 rounded-xl px-6 py-3 bg-white/50 dark:bg-gray-900/30 backdrop-blur-sm max-w-[600px] w-full mx-auto">
+                <div className="border border-gray-200 dark:border-gray-700 rounded-xl px-6 py-3 bg-white/50 dark:bg-gray-900/30 backdrop-blur-sm max-w-[900px] w-full mx-auto">
                     <h2 className="text-2xl mb-4 text-center">🔗 Connect to your data sources</h2>
 
-                    <div className="grid grid-cols-5 gap-1 justify-items-center mx-auto">
+                    <div className="grid grid-cols-8 gap-1 justify-items-center mx-auto">
                         {isLoading ? (
-                            <div className="col-span-5 h-40 flex items-center justify-center">
+                            <div className="col-span-8 h-40 flex items-center justify-center">
                                 <div className="animate-pulse">Loading sources...</div>
                             </div>
                         ) : sources.length === 0 ? (
-                            <div className="col-span-5 text-center py-10 text-muted-foreground">
+                            <div className="col-span-8 text-center py-10 text-muted-foreground">
                                 No sources available
                             </div>
                         ) : (
-                            [...sources].sort((a, b) => a.name.localeCompare(b.name)).map((source) => (
-                                <SmallSourceButton
-                                    key={source.id}
-                                    id={source.id}
-                                    name={source.name}
-                                    shortName={source.short_name}
-                                    connected={connectedSources.has(source.id)}
-                                    onClick={() => handleSourceClick(source)}
-                                />
-                            ))
+                            [...sources]
+                                .filter((source) => source.short_name.toLowerCase() !== 'ctti' && source.short_name.toLowerCase() !== 'oracle')
+                                .sort((a, b) => a.name.localeCompare(b.name))
+                                .map((source) => (
+                                    <SmallSourceButton
+                                        key={source.id}
+                                        id={source.id}
+                                        name={source.name}
+                                        shortName={source.short_name}
+                                        connected={connectedSources.has(source.id)}
+                                        onClick={() => handleSourceClick(source)}
+                                    />
+                                ))
                         )}
                     </div>
                 </div>
@@ -786,7 +817,7 @@ const SemanticMcp = () => {
             {sourceConnections.length === 0 ? (
                 /* Empty state - grayed out box */
                 <div className="flex justify-center px-10 mt-6">
-                    <div className="border border-gray-300/50 dark:border-gray-600/50 rounded-xl px-6 py-3 bg-gray-100/30 dark:bg-gray-800/20 backdrop-blur-sm max-w-[600px] w-full mx-auto">
+                    <div className="border border-gray-300/50 dark:border-gray-600/50 rounded-xl px-6 py-3 bg-gray-100/30 dark:bg-gray-800/20 backdrop-blur-sm max-w-[900px] w-full mx-auto">
                         <h2 className="text-2xl mb-4 text-center text-muted-foreground/60">
                             🚀 Data will start syncing once you connect your data
                         </h2>
@@ -795,9 +826,9 @@ const SemanticMcp = () => {
             ) : (
                 /* Connected sources with data sync status */
                 <div className="flex justify-center px-10 mt-6">
-                    <div className="border border-gray-200 dark:border-gray-700 rounded-xl px-6 py-3 bg-white/50 dark:bg-gray-900/30 backdrop-blur-sm max-w-[600px] w-full mx-auto">
+                    <div className="border border-gray-200 dark:border-gray-700 rounded-xl px-6 py-3 bg-white/50 dark:bg-gray-900/30 backdrop-blur-sm max-w-[900px] w-full mx-auto">
                         <h2 className="text-2xl mb-4 text-center">🚀 Data sync</h2>
-                        <div className="grid grid-cols-5 gap-1 justify-items-center mx-auto">
+                        <div className="grid grid-cols-8 gap-1 justify-items-center mx-auto">
                             {sourceConnections.map((connection) => (
                                 <div
                                     key={connection.id}
@@ -846,7 +877,7 @@ const SemanticMcp = () => {
                         {/* Source Connection Detail View - Show when a connection is selected */}
                         {selectedConnection && (
                             <div className="flex justify-center mt-2">
-                                <div className="max-w-[600px] w-full mx-auto">
+                                <div className="w-full mx-auto">
                                     <SimplifiedSourceConnectionDetailView
                                         sourceConnectionId={selectedConnection.id}
                                     />
@@ -857,7 +888,38 @@ const SemanticMcp = () => {
                 </div>
             )}
 
+            {/* Query your data section */}
+            <div className="flex justify-center px-10 mt-6">
+                <div className={cn(
+                    "border rounded-xl px-6 py-3 backdrop-blur-sm max-w-[900px] w-full mx-auto relative",
+                    sourceConnections.length === 0
+                        ? "border-gray-300/50 dark:border-gray-600/50 bg-gray-100/30 dark:bg-gray-800/20"
+                        : "border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-900/30"
+                )}>
+                    <h2 className={cn(
+                        "text-2xl mb-4 text-center",
+                        sourceConnections.length === 0
+                            ? "text-muted-foreground/60"
+                            : ""
+                    )}>
+                        🔎 Query your data
+                    </h2>
 
+                    {/* Always show QueryToolAndLiveDoc, but overlay when disabled */}
+                    <div className="relative pt-5">
+                        {/* Show the component with a dummy collection ID when no connections */}
+                        <QueryToolAndLiveDoc
+                            collectionReadableId={currentCollection?.readable_id || "my-collection-1234"}
+                        />
+
+                        {/* Overlay when no source connections */}
+                        {sourceConnections.length === 0 && (
+                            <div className="absolute inset-0 bg-gray-50/2 dark:bg-gray-900/2 backdrop-blur-[1px] rounded-lg flex items-center justify-center">
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
 
             {/* Source Details Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={(open) => !open && handleDialogClose()}>

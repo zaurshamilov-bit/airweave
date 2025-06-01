@@ -31,7 +31,6 @@ class AsyncWorkerPool:
         """
         task = asyncio.create_task(self._run_with_semaphore(coro, *args, **kwargs))
         self.pending_tasks.add(task)
-        logger.info(f"\nPENDING: {self.pending_tasks}; MAX WORKERS: {self.max_workers}\n")
         task.add_done_callback(self._handle_task_completion)
         return task
 
