@@ -14,6 +14,58 @@ class JSONFormatter(logging.Formatter):
     making logs compatible with Azure Log Analytics, Prometheus, and Grafana.
     """
 
+    def __init__(self):
+        """Initialize the formatter with a module path cache."""
+        super().__init__()
+        self._module_cache = {}
+
+    def _get_module_path(self, record: logging.LogRecord) -> str:
+        """Extract the full module path from the log record.
+
+        Args:
+        ----
+            record (logging.LogRecord): The log record
+
+        Returns:
+        -------
+            str: Full module path (e.g., 'airweave.integrations.qdrant')
+
+        """
+        # Check cache first
+        pathname = record.pathname
+        if pathname in self._module_cache:
+            return self._module_cache[pathname]
+
+        try:
+            # Simple string manipulation - find "airweave" in the path
+            if "airweave" in pathname:
+                # Split by path separator and find where airweave starts
+                parts = pathname.replace("\\", "/").split("/")
+
+                # Find the last occurrence of 'airweave' (in case it appears multiple times)
+                airweave_indices = [i for i, part in enumerate(parts) if part == "airweave"]
+                if airweave_indices:
+                    # Take the last occurrence
+                    start_idx = airweave_indices[-1]
+                    module_parts = parts[start_idx:]
+
+                    # Remove .py extension from last part
+                    if module_parts and module_parts[-1].endswith(".py"):
+                        module_parts[-1] = module_parts[-1][:-3]
+
+                    module_path = ".".join(module_parts)
+                    self._module_cache[pathname] = module_path
+                    return module_path
+
+            # Fallback to simple module name
+            module_path = record.module
+            self._module_cache[pathname] = module_path
+            return module_path
+
+        except Exception:
+            # If anything goes wrong, use the simple module name
+            return record.module
+
     def format(self, record: logging.LogRecord) -> str:
         """Format the log record as JSON.
 
@@ -32,7 +84,7 @@ class JSONFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
-            "module": record.module,
+            "module": self._get_module_path(record),
             "function": record.funcName,
             "line": record.lineno,
         }
@@ -252,6 +304,7 @@ class LoggerConfigurator:
                 formatter = logging.Formatter(
                     "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
                 )
+                formatter = JSONFormatter()
             else:
                 # Use JSON formatter for all non-local environments
                 # (Azure Log Analytics, Prometheus/Grafana)

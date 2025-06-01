@@ -74,8 +74,17 @@ class SearchService:
 
             return results
 
+        except NotFoundException:
+            # Re-raise NotFoundExceptions as-is
+            raise
+        except ConnectionError as e:
+            logger.error(f"Vector database connection error: {str(e)}")
+            raise ConnectionError(f"Unable to connect to vector database: {str(e)}") from e
         except Exception as e:
             logger.error(f"Search error: {str(e)}")
+            # Add more context to the error
+            if "connection" in str(e).lower():
+                raise ConnectionError(f"Vector database connection failed: {str(e)}") from e
             raise
 
     async def search_with_completion(

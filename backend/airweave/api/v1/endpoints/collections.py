@@ -136,13 +136,42 @@ async def search_collection(
     Returns:
         dict: Search results or AI completion response
     """
-    return await search_service.search_with_completion(
-        db,
-        readable_id=readable_id,
-        query=query,
-        current_user=current_user,
-        response_type=response_type,
-    )
+    try:
+        return await search_service.search_with_completion(
+            db,
+            readable_id=readable_id,
+            query=query,
+            current_user=current_user,
+            response_type=response_type,
+        )
+    except Exception as e:
+        # Log the error for debugging
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.error(f"Search error for collection {readable_id}: {str(e)}")
+
+        # Check if it's a connection error
+        error_message = str(e).lower()
+        if (
+            "connection" in error_message
+            or "refused" in error_message
+            or "timeout" in error_message
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail="Vector database service is currently unavailable. Please try again later.",
+            ) from e
+        elif "not found" in error_message:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Collection '{readable_id}' not found or you don't have access to it.",
+            ) from e
+        else:
+            # For other errors, return a generic message but with 500 status
+            raise HTTPException(
+                status_code=500, detail=f"An error occurred while searching: {str(e)}"
+            ) from e
 
 
 @router.post("/{readable_id}/refresh_all", response_model=list[schemas.SourceConnectionJob])
