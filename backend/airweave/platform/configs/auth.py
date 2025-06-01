@@ -1,5 +1,7 @@
 """Auth config."""
 
+from typing import Optional
+
 from pydantic import Field, field_validator
 
 from airweave.platform.configs._base import BaseConfig
@@ -145,10 +147,10 @@ class ConfluenceAuthConfig(AuthConfig):
 class DropboxAuthConfig(AuthConfig):
     """Dropbox authentication credentials schema."""
 
-    client_id: str = Field(
+    client_id: Optional[str] = Field(
         title="Client ID", description="The OAuth client ID for your Dropbox app"
     )
-    client_secret: str = Field(
+    client_secret: Optional[str] = Field(
         title="Client Secret", description="The OAuth client secret for your Dropbox app"
     )
     refresh_token: str = Field(
@@ -203,8 +205,10 @@ class GitHubAuthConfig(AuthConfig):
 class GmailAuthConfig(AuthConfig):
     """Gmail authentication credentials schema."""
 
-    client_id: str = Field(title="Client ID", description="The OAuth client ID for your Google app")
-    client_secret: str = Field(
+    client_id: Optional[str] = Field(
+        title="Client ID", description="The OAuth client ID for your Google app"
+    )
+    client_secret: Optional[str] = Field(
         title="Client Secret", description="The OAuth client secret for your Google app"
     )
     refresh_token: str = Field(
@@ -218,8 +222,10 @@ class GmailAuthConfig(AuthConfig):
 class GoogleCalendarAuthConfig(AuthConfig):
     """Google Calendar authentication credentials schema."""
 
-    client_id: str = Field(title="Client ID", description="The OAuth client ID for your Google app")
-    client_secret: str = Field(
+    client_id: Optional[str] = Field(
+        title="Client ID", description="The OAuth client ID for your Google app"
+    )
+    client_secret: Optional[str] = Field(
         title="Client Secret", description="The OAuth client secret for your Google app"
     )
     refresh_token: str = Field(
@@ -233,8 +239,10 @@ class GoogleCalendarAuthConfig(AuthConfig):
 class GoogleDriveAuthConfig(AuthConfig):
     """Google Drive authentication credentials schema."""
 
-    client_id: str = Field(title="Client ID", description="The OAuth client ID for your Google app")
-    client_secret: str = Field(
+    client_id: Optional[str] = Field(
+        title="Client ID", description="The OAuth client ID for your Google app"
+    )
+    client_secret: Optional[str] = Field(
         title="Client Secret", description="The OAuth client secret for your Google app"
     )
     refresh_token: str = Field(
