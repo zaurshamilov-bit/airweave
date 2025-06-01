@@ -382,4 +382,7 @@ async def exchange_white_label_oauth2_code(
 
     except Exception as e:
         logger.error(f"Failed to exchange OAuth2 code for WhiteLabel {white_label.id}: {e}")
-        raise HTTPException(status_code=400, detail="Failed to exchange OAuth2 code.") from e
+        # Pass through the detailed error message if it's an HTTPException
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=400, detail=str(e)) from e
