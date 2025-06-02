@@ -16,6 +16,7 @@
   "dependencies": {
     "@auth0/auth0-react": "^2.2.4",
     "@hookform/resolvers": "^3.9.0",
+    "@microsoft/fetch-event-source": "^2.0.1",
     "@radix-ui/react-alert-dialog": "^1.1.1",
     "@radix-ui/react-avatar": "^1.1.0",
     "@radix-ui/react-checkbox": "^1.1.1",

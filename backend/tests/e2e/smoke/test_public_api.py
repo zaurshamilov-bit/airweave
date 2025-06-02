@@ -14,6 +14,7 @@ Usage:
 """
 
 import pytest
+
 pytestmark = pytest.mark.skip(reason="This is a standalone script, not a pytest test")
 
 import argparse
@@ -37,26 +38,22 @@ def parse_arguments():
         "--env",
         choices=["local", "dev", "prod"],
         required=True,
-        help="Environment to test against (local, dev, or prod)"
+        help="Environment to test against (local, dev, or prod)",
     )
 
     parser.add_argument(
-        "--api-key",
-        type=str,
-        help="API key for authentication (required for dev/prod)"
+        "--api-key", type=str, help="API key for authentication (required for dev/prod)"
     )
 
     parser.add_argument(
-        "--openai-api-key",
-        type=str,
-        help="OpenAI API key for local environment setup"
+        "--openai-api-key", type=str, help="OpenAI API key for local environment setup"
     )
 
     parser.add_argument(
         "--stripe-api-key",
         type=str,
         required=True,
-        help="Stripe API key for testing source connections (required)"
+        help="Stripe API key for testing source connections (required)",
     )
 
     args = parser.parse_args()
@@ -103,7 +100,9 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
 
     # Find the repository root (where start.sh is located)
     current_dir = Path(__file__).resolve()
-    repo_root = current_dir.parent.parent.parent.parent.parent  # Go up from backend/tests/e2e/smoke/test_public_api.py
+    repo_root = (
+        current_dir.parent.parent.parent.parent.parent
+    )  # Go up from backend/tests/e2e/smoke/test_public_api.py
     start_script = repo_root / "start.sh"
 
     if not start_script.exists():
@@ -127,7 +126,7 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            bufsize=1
+            bufsize=1,
         )
 
         # Send automated responses
@@ -173,7 +172,7 @@ def get_api_url(env: str) -> str:
     urls = {
         "local": "http://localhost:8001",
         "dev": "https://api.dev-airweave.com",
-        "prod": "https://api.airweave.ai"
+        "prod": "https://api.airweave.ai",
     }
     return urls[env]
 
@@ -214,9 +213,7 @@ def test_collections(api_url: str, headers: dict) -> str:
 
     # CREATE: Create collection with auto-generated readable_id
     print("  Creating collection...")
-    collection_data = {
-        "name": f"Test Collection {int(time.time())}"
-    }
+    collection_data = {"name": f"Test Collection {int(time.time())}"}
 
     # Debug the request
     print(f"  Request URL: {api_url}/collections/")
@@ -248,7 +245,9 @@ def test_collections(api_url: str, headers: dict) -> str:
     assert "status" in collection, "Collection missing 'status' field"
     assert "created_at" in collection, "Collection missing 'created_at' field"
     assert collection["name"] == collection_data["name"], "Collection name mismatch"
-    assert collection["status"] == "NEEDS SOURCE", "New collection should have 'NEEDS SOURCE' status"
+    assert (
+        collection["status"] == "NEEDS SOURCE"
+    ), "New collection should have 'NEEDS SOURCE' status"
 
     # Verify readable_id format (lowercase, hyphens, ends with 6-char suffix)
     assert readable_id.islower(), "readable_id should be lowercase"
@@ -265,7 +264,9 @@ def test_collections(api_url: str, headers: dict) -> str:
     retrieved_collection = response.json()
     assert retrieved_collection["id"] == collection["id"], "Retrieved collection ID mismatch"
     assert retrieved_collection["name"] == collection["name"], "Retrieved collection name mismatch"
-    assert retrieved_collection["readable_id"] == readable_id, "Retrieved collection readable_id mismatch"
+    assert (
+        retrieved_collection["readable_id"] == readable_id
+    ), "Retrieved collection readable_id mismatch"
 
     print(f"  ✓ Collection retrieved successfully")
 
@@ -274,12 +275,16 @@ def test_collections(api_url: str, headers: dict) -> str:
     updated_name = f"Updated Test Collection {int(time.time())}"
     update_data = {"name": updated_name}
 
-    response = requests.patch(f"{api_url}/collections/{readable_id}", json=update_data, headers=headers)
+    response = requests.patch(
+        f"{api_url}/collections/{readable_id}", json=update_data, headers=headers
+    )
     assert response.status_code == 200, f"Failed to update collection: {response.text}"
 
     updated_collection = response.json()
     assert updated_collection["name"] == updated_name, "Collection name not updated"
-    assert updated_collection["readable_id"] == readable_id, "readable_id should not change on update"
+    assert (
+        updated_collection["readable_id"] == readable_id
+    ), "readable_id should not change on update"
 
     print(f"  ✓ Collection updated: {updated_name}")
 
@@ -326,7 +331,9 @@ def test_collections(api_url: str, headers: dict) -> str:
 
     # Verify our collection is in the full list
     collection_found = any(c["readable_id"] == readable_id for c in all_collections)
-    assert collection_found, f"Created collection '{readable_id}' not found in list of {len(all_collections)} collections"
+    assert (
+        collection_found
+    ), f"Created collection '{readable_id}' not found in list of {len(all_collections)} collections"
 
     # Test skip parameter
     if len(all_collections) > 1:
@@ -344,32 +351,44 @@ def test_collections(api_url: str, headers: dict) -> str:
 
     # Test 404: Get non-existent collection
     response = requests.get(f"{api_url}/collections/nonexistent-collection", headers=headers)
-    assert response.status_code == 404, f"Expected 404 for non-existent collection, got {response.status_code}"
+    assert (
+        response.status_code == 404
+    ), f"Expected 404 for non-existent collection, got {response.status_code}"
 
     # Test 404: Update non-existent collection
-    response = requests.patch(f"{api_url}/collections/nonexistent-collection",
-                             json={"name": "Test"}, headers=headers)
-    assert response.status_code == 404, f"Expected 404 for updating non-existent collection, got {response.status_code}"
+    response = requests.patch(
+        f"{api_url}/collections/nonexistent-collection", json={"name": "Test"}, headers=headers
+    )
+    assert (
+        response.status_code == 404
+    ), f"Expected 404 for updating non-existent collection, got {response.status_code}"
 
     # Test 404: Delete non-existent collection
     response = requests.delete(f"{api_url}/collections/nonexistent-collection", headers=headers)
-    assert response.status_code == 404, f"Expected 404 for deleting non-existent collection, got {response.status_code}"
+    assert (
+        response.status_code == 404
+    ), f"Expected 404 for deleting non-existent collection, got {response.status_code}"
 
     # Test 422: Create collection with invalid name (too short)
-    response = requests.post(f"{api_url}/collections/",
-                           json={"name": "abc"}, headers=headers)
-    assert response.status_code == 422, f"Expected 422 for invalid collection name, got {response.status_code}"
+    response = requests.post(f"{api_url}/collections/", json={"name": "abc"}, headers=headers)
+    assert (
+        response.status_code == 422
+    ), f"Expected 422 for invalid collection name, got {response.status_code}"
 
     # Test 422: Create collection with invalid name (too long)
     long_name = "x" * 100  # Exceeds 64 character limit
-    response = requests.post(f"{api_url}/collections/",
-                           json={"name": long_name}, headers=headers)
-    assert response.status_code == 422, f"Expected 422 for too long collection name, got {response.status_code}"
+    response = requests.post(f"{api_url}/collections/", json={"name": long_name}, headers=headers)
+    assert (
+        response.status_code == 422
+    ), f"Expected 422 for too long collection name, got {response.status_code}"
 
     # Test 422: Update collection with invalid name
-    response = requests.patch(f"{api_url}/collections/{readable_id}",
-                             json={"name": "ab"}, headers=headers)
-    assert response.status_code == 422, f"Expected 422 for invalid update name, got {response.status_code}"
+    response = requests.patch(
+        f"{api_url}/collections/{readable_id}", json={"name": "ab"}, headers=headers
+    )
+    assert (
+        response.status_code == 422
+    ), f"Expected 422 for invalid update name, got {response.status_code}"
 
     print("  ✓ Error handling works correctly")
 
@@ -392,8 +411,17 @@ def test_sources(api_url: str, headers: dict) -> None:
 
     # Verify first source has required structure
     first_source = sources[0]
-    required_fields = ["id", "name", "short_name", "auth_config_class", "config_class",
-                      "class_name", "auth_fields", "created_at", "modified_at"]
+    required_fields = [
+        "id",
+        "name",
+        "short_name",
+        "auth_config_class",
+        "config_class",
+        "class_name",
+        "auth_fields",
+        "created_at",
+        "modified_at",
+    ]
     for field in required_fields:
         assert field in first_source, f"Source missing required field: {field}"
 
@@ -425,7 +453,9 @@ def test_sources(api_url: str, headers: dict) -> None:
 
     # Validate config_fields (can be None or empty for Stripe)
     if stripe_source.get("config_fields"):
-        assert "fields" in stripe_source["config_fields"], "config_fields must have 'fields' if present"
+        assert (
+            "fields" in stripe_source["config_fields"]
+        ), "config_fields must have 'fields' if present"
 
     print("  ✓ Stripe source structure validated")
 
@@ -444,11 +474,15 @@ def test_sources(api_url: str, headers: dict) -> None:
     assert stripe_detail["id"] == stripe_source["id"], "ID mismatch between list and detail"
     assert stripe_detail["name"] == stripe_source["name"], "Name mismatch"
     assert stripe_detail["short_name"] == "stripe", "Short name mismatch"
-    assert stripe_detail["auth_config_class"] == stripe_source["auth_config_class"], "Auth config class mismatch"
+    assert (
+        stripe_detail["auth_config_class"] == stripe_source["auth_config_class"]
+    ), "Auth config class mismatch"
     assert stripe_detail["config_class"] == stripe_source["config_class"], "Config class mismatch"
 
     # Verify auth_fields match
-    detail_api_key = next((f for f in stripe_detail["auth_fields"]["fields"] if f["name"] == "api_key"), None)
+    detail_api_key = next(
+        (f for f in stripe_detail["auth_fields"]["fields"] if f["name"] == "api_key"), None
+    )
     assert detail_api_key is not None, "Detail response missing api_key field"
     assert detail_api_key == api_key_field, "api_key field mismatch between list and detail"
 
@@ -457,19 +491,25 @@ def test_sources(api_url: str, headers: dict) -> None:
     # ERROR HANDLING: Test non-existent source
     print("  Testing error handling...")
     response = requests.get(f"{api_url}/sources/detail/nonexistent", headers=headers)
-    assert response.status_code == 404, f"Expected 404 for non-existent source, got {response.status_code}"
+    assert (
+        response.status_code == 404
+    ), f"Expected 404 for non-existent source, got {response.status_code}"
 
     # Verify error response structure
     error_response = response.json()
     assert "detail" in error_response, "Error response should have 'detail' field"
-    assert "nonexistent" in error_response["detail"].lower(), "Error message should mention the source name"
+    assert (
+        "nonexistent" in error_response["detail"].lower()
+    ), "Error message should mention the source name"
 
     print("  ✓ Error handling works correctly")
 
     print("✅ Sources endpoints test completed successfully")
 
 
-def test_source_connections(api_url: str, headers: dict, collection_id: str, stripe_api_key: str = None) -> tuple[str, str]:
+def test_source_connections(
+    api_url: str, headers: dict, collection_id: str, stripe_api_key: str = None
+) -> tuple[str, str]:
     """Test complete source connections functionality."""
     print("\n🔄 Testing Source Connections - Full CRUD & Sync Operations")
 
@@ -481,10 +521,14 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
     response = requests.get(f"{api_url}/collections/{collection_id}", headers=headers)
     if response.status_code != 200:
         print(f"  ✗ Collection verification failed: {response.status_code} - {response.text}")
-        raise AssertionError(f"Collection '{collection_id}' not found before creating source connection")
+        raise AssertionError(
+            f"Collection '{collection_id}' not found before creating source connection"
+        )
 
     collection_detail = response.json()
-    print(f"  ✓ Collection verified: {collection_detail['name']} ({collection_detail['readable_id']})")
+    print(
+        f"  ✓ Collection verified: {collection_detail['name']} ({collection_detail['readable_id']})"
+    )
 
     # Use provided Stripe API key or fail
     if not stripe_api_key:
@@ -498,10 +542,8 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
         "short_name": "stripe",
         "collection": collection_id,
         "sync_immediately": False,
-        "auth_fields": {
-            "api_key": stripe_api_key
-        },
-        "cron_schedule": "0 */6 * * *"  # Every 6 hours
+        "auth_fields": {"api_key": stripe_api_key},
+        "cron_schedule": "0 */6 * * *",  # Every 6 hours
     }
 
     # Use correct endpoint with hyphen
@@ -540,7 +582,9 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
     assert source_conn["status"] == "active", "Expected active status for non-immediate sync"
 
     # Verify no sync job was created (since sync_immediately=false)
-    assert source_conn.get("latest_sync_job_id") is None, "Should not have sync job when sync_immediately=false"
+    assert (
+        source_conn.get("latest_sync_job_id") is None
+    ), "Should not have sync job when sync_immediately=false"
 
     print(f"  ✓ Source connection created: {source_conn['name']} (ID: {source_conn_id})")
     print("  ✓ Verified no sync job was started (sync_immediately=false)")
@@ -555,19 +599,19 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
     assert conn_detail["cron_schedule"] == "0 */6 * * *", "Cron schedule mismatch"
     assert "next_scheduled_run" in conn_detail, "Missing next_scheduled_run field"
 
-
     print("  ✓ Source connection retrieved with hidden auth fields")
 
     # GET: Source connection with visible auth fields
     print("  Getting source connection (auth fields visible)...")
     response = requests.get(
-        f"{api_url}/source-connections/{source_conn_id}?show_auth_fields=true",
-        headers=headers
+        f"{api_url}/source-connections/{source_conn_id}?show_auth_fields=true", headers=headers
     )
     assert response.status_code == 200, f"Failed to get source connection: {response.text}"
 
     conn_detail_auth = response.json()
-    assert isinstance(conn_detail_auth["auth_fields"], dict), "Auth fields should be a dict when shown"
+    assert isinstance(
+        conn_detail_auth["auth_fields"], dict
+    ), "Auth fields should be a dict when shown"
     assert "api_key" in conn_detail_auth["auth_fields"], "Missing api_key in auth fields"
     assert conn_detail_auth["auth_fields"]["api_key"] == stripe_api_key, "API key mismatch"
 
@@ -578,20 +622,20 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
     update_data = {
         "name": "Updated Stripe Connection",
         "description": "Updated description for testing",
-        "cron_schedule": "0 0 * * *"  # Daily at midnight
+        "cron_schedule": "0 0 * * *",  # Daily at midnight
     }
 
     response = requests.put(
-        f"{api_url}/source-connections/{source_conn_id}",
-        json=update_data,
-        headers=headers
+        f"{api_url}/source-connections/{source_conn_id}", json=update_data, headers=headers
     )
     assert response.status_code == 200, f"Failed to update source connection: {response.text}"
 
     updated_conn = response.json()
     assert updated_conn["name"] == update_data["name"], "Name not updated"
     assert updated_conn["description"] == update_data["description"], "Description not updated"
-    assert updated_conn["cron_schedule"] == update_data["cron_schedule"], "Cron schedule not updated"
+    assert (
+        updated_conn["cron_schedule"] == update_data["cron_schedule"]
+    ), "Cron schedule not updated"
 
     print("  ✓ Source connection updated successfully")
 
@@ -615,13 +659,19 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
     assert any(c["id"] == source_conn_id for c in all_connections), "Created connection not in list"
 
     # LIST: Filter by collection
-    response = requests.get(f"{api_url}/source-connections/?collection={collection_id}", headers=headers)
+    response = requests.get(
+        f"{api_url}/source-connections/?collection={collection_id}", headers=headers
+    )
     assert response.status_code == 200, f"Failed to list by collection: {response.text}"
 
     collection_connections = response.json()
-    assert all(c["collection"] == collection_id for c in collection_connections), "Collection filter not working"
+    assert all(
+        c["collection"] == collection_id for c in collection_connections
+    ), "Collection filter not working"
 
-    print(f"  ✓ Source connections listed ({len(all_connections)} total, {len(collection_connections)} in collection)")
+    print(
+        f"  ✓ Source connections listed ({len(all_connections)} total, {len(collection_connections)} in collection)"
+    )
 
     # RUN: Trigger manual sync
     print("  Running source connection...")
@@ -637,13 +687,16 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
     assert sync_job["source_connection_id"] == source_conn_id, "source_connection_id mismatch"
     assert "status" in sync_job, "Missing job status"
     assert "started_at" in sync_job, "Missing started_at"
-    assert sync_job["status"].upper() in ["PENDING", "IN_PROGRESS"], f"Unexpected initial status: {sync_job['status']}"
+    assert sync_job["status"].upper() in [
+        "PENDING",
+        "IN_PROGRESS",
+    ], f"Unexpected initial status: {sync_job['status']}"
 
     print(f"  ✓ Sync job started (ID: {job_id}, Status: {sync_job['status']})")
 
     # TEST PUBSUB: Subscribe to sync job progress via SSE
     print("  Testing PubSub subscription to sync job progress...")
-    pubsub_success = test_sync_job_pubsub(api_url, job_id, headers.get("x-api-key"))
+    pubsub_success = test_sync_job_pubsub(api_url, job_id, headers, timeout=30)
     assert pubsub_success, "PubSub subscription test failed"
 
     # GET SOURCE CONNECTION: Verify it now has sync job info
@@ -652,7 +705,9 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
     assert response.status_code == 200, f"Failed to get source connection: {response.text}"
 
     conn_with_job = response.json()
-    assert conn_with_job["latest_sync_job_id"] == job_id, "Source connection should have latest_sync_job_id"
+    assert (
+        conn_with_job["latest_sync_job_id"] == job_id
+    ), "Source connection should have latest_sync_job_id"
     assert "latest_sync_job_status" in conn_with_job, "Missing latest_sync_job_status"
     assert "latest_sync_job_started_at" in conn_with_job, "Missing latest_sync_job_started_at"
 
@@ -671,12 +726,16 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
 
     # GET JOB: Get specific job details
     print("  Getting specific job details...")
-    response = requests.get(f"{api_url}/source-connections/{source_conn_id}/jobs/{job_id}", headers=headers)
+    response = requests.get(
+        f"{api_url}/source-connections/{source_conn_id}/jobs/{job_id}", headers=headers
+    )
     assert response.status_code == 200, f"Failed to get job: {response.text}"
 
     job_detail = response.json()
     assert job_detail["id"] == job_id, "Job ID mismatch"
-    assert job_detail["source_connection_id"] == source_conn_id, "source_connection_id mismatch in job"
+    assert (
+        job_detail["source_connection_id"] == source_conn_id
+    ), "source_connection_id mismatch in job"
     assert "status" in job_detail, "Missing job status"
     assert "started_at" in job_detail, "Missing started_at"
 
@@ -689,7 +748,9 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
     elapsed = 0
 
     while elapsed < max_wait:
-        response = requests.get(f"{api_url}/source-connections/{source_conn_id}/jobs/{job_id}", headers=headers)
+        response = requests.get(
+            f"{api_url}/source-connections/{source_conn_id}/jobs/{job_id}", headers=headers
+        )
         assert response.status_code == 200, f"Failed to poll job: {response.text}"
 
         job_status = response.json()
@@ -721,19 +782,23 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
         "short_name": "stripe",
         # No collection specified - should create new one
         "sync_immediately": True,
-        "auth_fields": {
-            "api_key": stripe_api_key
-        }
+        "auth_fields": {"api_key": stripe_api_key},
     }
 
-    response = requests.post(f"{api_url}/source-connections/", json=source_conn_data2, headers=headers)
-    assert response.status_code == 200, f"Failed to create second source connection: {response.text}"
+    response = requests.post(
+        f"{api_url}/source-connections/", json=source_conn_data2, headers=headers
+    )
+    assert (
+        response.status_code == 200
+    ), f"Failed to create second source connection: {response.text}"
 
     source_conn2 = response.json()
     source_conn2_id = source_conn2["id"]
     auto_collection = source_conn2["collection"]
 
-    assert source_conn2["status"].upper() == "IN_PROGRESS", "Expected IN_PROGRESS for immediate sync"
+    assert (
+        source_conn2["status"].upper() == "IN_PROGRESS"
+    ), "Expected IN_PROGRESS for immediate sync"
     assert "latest_sync_job_id" in source_conn2, "Missing latest_sync_job_id"
     assert source_conn2["latest_sync_job_id"] is not None, "Should have active sync job"
 
@@ -745,8 +810,12 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
     assert response.status_code == 200, f"Auto-created collection not found: {response.text}"
 
     auto_collection_detail = response.json()
-    assert auto_collection_detail["readable_id"] == auto_collection, "Collection readable_id mismatch"
-    assert "Collection for" in auto_collection_detail["name"], "Expected auto-generated collection name"
+    assert (
+        auto_collection_detail["readable_id"] == auto_collection
+    ), "Collection readable_id mismatch"
+    assert (
+        "Collection for" in auto_collection_detail["name"]
+    ), "Expected auto-generated collection name"
 
     print("  ✓ Auto-created collection verified")
 
@@ -755,21 +824,29 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
 
     # Test 404: Get non-existent source connection
     response = requests.get(f"{api_url}/source-connections/{uuid.uuid4()}", headers=headers)
-    assert response.status_code == 404, f"Expected 404 for non-existent connection, got {response.status_code}"
+    assert (
+        response.status_code == 404
+    ), f"Expected 404 for non-existent connection, got {response.status_code}"
 
     # Test 404: Get non-existent job
-    response = requests.get(f"{api_url}/source-connections/{source_conn_id}/jobs/{uuid.uuid4()}", headers=headers)
-    assert response.status_code == 404, f"Expected 404 for non-existent job, got {response.status_code}"
+    response = requests.get(
+        f"{api_url}/source-connections/{source_conn_id}/jobs/{uuid.uuid4()}", headers=headers
+    )
+    assert (
+        response.status_code == 404
+    ), f"Expected 404 for non-existent job, got {response.status_code}"
 
     # Test 404: Create with non-existent collection
     bad_data = {
         "name": "Bad Connection",
         "short_name": "stripe",
         "collection": "non-existent-collection",
-        "auth_fields": {"api_key": stripe_api_key}
+        "auth_fields": {"api_key": stripe_api_key},
     }
     response = requests.post(f"{api_url}/source-connections/", json=bad_data, headers=headers)
-    assert response.status_code == 404, f"Expected 404 for non-existent collection, got {response.status_code}"
+    assert (
+        response.status_code == 404
+    ), f"Expected 404 for non-existent collection, got {response.status_code}"
 
     # Test 422: Invalid cron schedule
     bad_cron_data = {**source_conn_data, "cron_schedule": "invalid cron"}
@@ -784,13 +861,13 @@ def test_source_connections(api_url: str, headers: dict, collection_id: str, str
     return source_conn_id, source_conn2_id
 
 
-def test_sync_job_pubsub(api_url: str, job_id: str, api_key: Optional[str] = None, timeout: int = 30) -> bool:
-    """Test sync job pubsub functionality via SSE.
+def test_sync_job_pubsub(api_url: str, job_id: str, headers: dict, timeout: int = 30) -> bool:
+    """Test sync job pubsub functionality via SSE with header authentication.
 
     Args:
         api_url: The API URL
         job_id: The sync job ID to subscribe to
-        api_key: Optional API key for authentication
+        headers: Request headers including authentication
         timeout: Maximum time to wait for messages
 
     Returns:
@@ -800,9 +877,6 @@ def test_sync_job_pubsub(api_url: str, job_id: str, api_key: Optional[str] = Non
     import threading
 
     sse_url = f"{api_url}/sync/job/{job_id}/subscribe"
-    if api_key:
-        sse_url += f"?token={api_key}"
-
     print(f"    Subscribing to SSE endpoint: {sse_url}")
 
     messages_received = []
@@ -812,8 +886,8 @@ def test_sync_job_pubsub(api_url: str, job_id: str, api_key: Optional[str] = Non
         """Read SSE stream in a thread."""
         nonlocal error_occurred
         try:
-            # Use stream=True for SSE
-            response = requests.get(sse_url, stream=True, timeout=timeout)
+            # Use stream=True for SSE with header authentication
+            response = requests.get(sse_url, stream=True, timeout=timeout, headers=headers)
 
             if response.status_code != 200:
                 print(f"    ✗ SSE connection failed: {response.status_code}")
@@ -823,20 +897,22 @@ def test_sync_job_pubsub(api_url: str, job_id: str, api_key: Optional[str] = Non
             # Read SSE stream line by line
             for line in response.iter_lines():
                 if line:
-                    line_str = line.decode('utf-8')
-                    if line_str.startswith('data: '):
+                    line_str = line.decode("utf-8")
+                    if line_str.startswith("data: "):
                         # Extract JSON data after "data: " prefix
                         data_str = line_str[6:]
                         try:
                             data = json.loads(data_str)
                             messages_received.append(data)
-                            print(f"    📨 Received update: inserted={data.get('inserted', 0)}, "
-                                  f"updated={data.get('updated', 0)}, "
-                                  f"deleted={data.get('deleted', 0)}, "
-                                  f"is_complete={data.get('is_complete', False)}")
+                            print(
+                                f"    📨 Received update: inserted={data.get('inserted', 0)}, "
+                                f"updated={data.get('updated', 0)}, "
+                                f"deleted={data.get('deleted', 0)}, "
+                                f"is_complete={data.get('is_complete', False)}"
+                            )
 
                             # Stop if job is complete
-                            if data.get('is_complete') or data.get('is_failed'):
+                            if data.get("is_complete") or data.get("is_failed"):
                                 break
                         except json.JSONDecodeError as e:
                             print(f"    ⚠️  Failed to parse SSE data: {e}")
@@ -869,8 +945,16 @@ def test_sync_job_pubsub(api_url: str, job_id: str, api_key: Optional[str] = Non
 
     # Verify message structure
     for msg in messages_received:
-        required_fields = ["inserted", "updated", "deleted", "kept", "skipped",
-                          "entities_encountered", "is_complete", "is_failed"]
+        required_fields = [
+            "inserted",
+            "updated",
+            "deleted",
+            "kept",
+            "skipped",
+            "entities_encountered",
+            "is_complete",
+            "is_failed",
+        ]
         for field in required_fields:
             if field not in msg:
                 print(f"    ✗ Missing required field '{field}' in pubsub message")
@@ -880,7 +964,9 @@ def test_sync_job_pubsub(api_url: str, job_id: str, api_key: Optional[str] = Non
     return True
 
 
-def test_search_functionality(api_url: str, headers: dict, collection_id: str, wait_after_sync: int = 10) -> None:
+def test_search_functionality(
+    api_url: str, headers: dict, collection_id: str, wait_after_sync: int = 10
+) -> None:
     """Test collection search functionality with both RAW and COMPLETION response types.
 
     Args:
@@ -904,7 +990,7 @@ def test_search_functionality(api_url: str, headers: dict, collection_id: str, w
     response = requests.get(
         f"{api_url}/collections/{collection_id}/search",
         params={"query": search_query, "response_type": "raw"},
-        headers=headers
+        headers=headers,
     )
 
     assert response.status_code == 200, f"Search failed: {response.text}"
@@ -933,7 +1019,7 @@ def test_search_functionality(api_url: str, headers: dict, collection_id: str, w
         print(f"\n  Top results (showing up to 3):")
         for i, result in enumerate(results_list[:3]):
             print(f"    Result {i+1} (score: {result.get('score', 0):.4f}):")
-            payload = result.get('payload', {})
+            payload = result.get("payload", {})
 
             # More detailed debugging of payload content
             if isinstance(payload, dict):
@@ -945,7 +1031,7 @@ def test_search_functionality(api_url: str, headers: dict, collection_id: str, w
                     print(f"        {key}: {value_str}")
 
                 # Look for any content that might contain invoice/product info
-                text_content = payload.get('text', payload.get('content', ''))
+                text_content = payload.get("text", payload.get("content", ""))
                 if text_content:
                     print(f"      Full text content: {text_content[:500]}...")
             else:
@@ -958,6 +1044,7 @@ def test_search_functionality(api_url: str, headers: dict, collection_id: str, w
             # Add the tests directory to Python path to enable imports
             import sys
             import os
+
             current_dir = os.path.dirname(os.path.abspath(__file__))
             tests_dir = os.path.dirname(os.path.dirname(current_dir))  # Go up to tests/
             if tests_dir not in sys.path:
@@ -971,7 +1058,7 @@ def test_search_functionality(api_url: str, headers: dict, collection_id: str, w
                 results=results_list,
                 expected_content_keywords=expected_keywords,
                 minimum_score=0.5,  # Lower threshold since it's test data
-                minimum_relevant_results=1
+                minimum_relevant_results=1,
             )
 
             print(f"    Relevance: {evaluation.get('relevance', 0):.2f}")
@@ -981,12 +1068,14 @@ def test_search_functionality(api_url: str, headers: dict, collection_id: str, w
 
             # FAIL THE TEST if score is too low
             min_acceptable_score = 0.3
-            if evaluation.get('score', 0) < min_acceptable_score:
+            if evaluation.get("score", 0) < min_acceptable_score:
                 # First, let's see if we can find the keywords anywhere in ALL results
-                print(f"\n  🔍 Debugging: Searching for keywords in all {len(results_list)} results...")
+                print(
+                    f"\n  🔍 Debugging: Searching for keywords in all {len(results_list)} results..."
+                )
                 keywords_found_in_any = False
                 for idx, result in enumerate(results_list):
-                    payload = result.get('payload', {})
+                    payload = result.get("payload", {})
                     payload_str = json.dumps(payload).lower()
                     for keyword in expected_keywords:
                         if keyword.lower() in payload_str:
@@ -994,7 +1083,9 @@ def test_search_functionality(api_url: str, headers: dict, collection_id: str, w
                             keywords_found_in_any = True
 
                 if not keywords_found_in_any:
-                    print(f"    ❌ Keywords {expected_keywords} not found in ANY of the {len(results_list)} results")
+                    print(
+                        f"    ❌ Keywords {expected_keywords} not found in ANY of the {len(results_list)} results"
+                    )
 
                 # Now fail the test
                 raise AssertionError(
@@ -1023,7 +1114,7 @@ def test_search_functionality(api_url: str, headers: dict, collection_id: str, w
     response = requests.get(
         f"{api_url}/collections/{collection_id}/search",
         params={"query": search_query, "response_type": "completion"},
-        headers=headers
+        headers=headers,
     )
 
     # Completion might fail if no AI model is configured
@@ -1033,7 +1124,9 @@ def test_search_functionality(api_url: str, headers: dict, collection_id: str, w
         # Validate COMPLETION response structure
         assert "response_type" in completion_results, "Missing 'response_type' field"
         assert "status" in completion_results, "Missing 'status' field"
-        assert completion_results["response_type"] == "completion", "Response type should be 'completion'"
+        assert (
+            completion_results["response_type"] == "completion"
+        ), "Response type should be 'completion'"
 
         completion_text = completion_results.get("completion", "")
         status = completion_results.get("status", "")
@@ -1043,7 +1136,9 @@ def test_search_functionality(api_url: str, headers: dict, collection_id: str, w
             print(f"    AI Response preview: {completion_text[:200]}...")
 
             # Check if completion mentions expected keywords
-            keywords_found = [kw for kw in expected_keywords if kw.lower() in completion_text.lower()]
+            keywords_found = [
+                kw for kw in expected_keywords if kw.lower() in completion_text.lower()
+            ]
             if keywords_found:
                 print(f"    ✓ Found keywords in completion: {keywords_found}")
             else:
@@ -1065,7 +1160,7 @@ def test_cleanup(
     collection_id: str,
     source_conn_id1: str,
     source_conn_id2: str,
-    auto_collection_id: str = None
+    auto_collection_id: str = None,
 ) -> None:
     """Test cleanup - delete all created resources and verify deletion.
 
@@ -1095,8 +1190,7 @@ def test_cleanup(
     # DELETE SOURCE CONNECTION 1: Without deleting data
     print(f"\n  Deleting first source connection (delete_data=false)...")
     response = requests.delete(
-        f"{api_url}/source-connections/{source_conn_id1}?delete_data=false",
-        headers=headers
+        f"{api_url}/source-connections/{source_conn_id1}?delete_data=false", headers=headers
     )
     assert response.status_code == 200, f"Failed to delete source connection 1: {response.text}"
 
@@ -1112,8 +1206,7 @@ def test_cleanup(
     # DELETE SOURCE CONNECTION 2: With deleting data
     print(f"\n  Deleting second source connection (delete_data=true)...")
     response = requests.delete(
-        f"{api_url}/source-connections/{source_conn_id2}?delete_data=true",
-        headers=headers
+        f"{api_url}/source-connections/{source_conn_id2}?delete_data=true", headers=headers
     )
     assert response.status_code == 200, f"Failed to delete source connection 2: {response.text}"
 
@@ -1135,13 +1228,14 @@ def test_cleanup(
     remaining_ids = [sc["id"] for sc in remaining_connections]
     assert source_conn_id1 not in remaining_ids, "Source connection 1 still in list after deletion"
     assert source_conn_id2 not in remaining_ids, "Source connection 2 still in list after deletion"
-    print(f"  ✓ Verified both source connections removed from list ({len(remaining_connections)} remaining)")
+    print(
+        f"  ✓ Verified both source connections removed from list ({len(remaining_connections)} remaining)"
+    )
 
     # DELETE COLLECTION 1: The manually created one (without data)
     print(f"\n  Deleting manually created collection (delete_data=false)...")
     response = requests.delete(
-        f"{api_url}/collections/{collection_id}?delete_data=false",
-        headers=headers
+        f"{api_url}/collections/{collection_id}?delete_data=false", headers=headers
     )
 
     # Collection might already be deleted if it had no more source connections
@@ -1152,7 +1246,9 @@ def test_cleanup(
     elif response.status_code == 404:
         print("  ℹ️  Collection already deleted (cascade from source connections)")
     else:
-        raise AssertionError(f"Unexpected response deleting collection: {response.status_code} - {response.text}")
+        raise AssertionError(
+            f"Unexpected response deleting collection: {response.status_code} - {response.text}"
+        )
 
     # Verify it's actually deleted
     response = requests.get(f"{api_url}/collections/{collection_id}", headers=headers)
@@ -1163,18 +1259,21 @@ def test_cleanup(
     if auto_collection_id:
         print(f"\n  Deleting auto-created collection (delete_data=true)...")
         response = requests.delete(
-            f"{api_url}/collections/{auto_collection_id}?delete_data=true",
-            headers=headers
+            f"{api_url}/collections/{auto_collection_id}?delete_data=true", headers=headers
         )
 
         if response.status_code == 200:
             deleted_coll2 = response.json()
-            assert deleted_coll2["readable_id"] == auto_collection_id, "Deleted collection ID mismatch"
+            assert (
+                deleted_coll2["readable_id"] == auto_collection_id
+            ), "Deleted collection ID mismatch"
             print(f"  ✓ Auto-collection deleted with data: {deleted_coll2['name']}")
         elif response.status_code == 404:
             print("  ℹ️  Auto-collection already deleted")
         else:
-            raise AssertionError(f"Unexpected response deleting auto-collection: {response.status_code}")
+            raise AssertionError(
+                f"Unexpected response deleting auto-collection: {response.status_code}"
+            )
 
         # Verify it's deleted
         response = requests.get(f"{api_url}/collections/{auto_collection_id}", headers=headers)
@@ -1190,9 +1289,13 @@ def test_cleanup(
     remaining_ids = [c["readable_id"] for c in remaining_collections]
     assert collection_id not in remaining_ids, "Manual collection still in list after deletion"
     if auto_collection_id:
-        assert auto_collection_id not in remaining_ids, "Auto-collection still in list after deletion"
+        assert (
+            auto_collection_id not in remaining_ids
+        ), "Auto-collection still in list after deletion"
 
-    print(f"  ✓ All test collections successfully deleted ({len(remaining_collections)} collections remaining)")
+    print(
+        f"  ✓ All test collections successfully deleted ({len(remaining_collections)} collections remaining)"
+    )
 
     # Test DELETE error handling
     print("\n  Testing DELETE error handling...")
@@ -1200,12 +1303,16 @@ def test_cleanup(
     # Try to delete non-existent source connection
     fake_id = str(uuid.uuid4())
     response = requests.delete(f"{api_url}/source-connections/{fake_id}", headers=headers)
-    assert response.status_code == 404, f"Expected 404 for non-existent source connection, got {response.status_code}"
+    assert (
+        response.status_code == 404
+    ), f"Expected 404 for non-existent source connection, got {response.status_code}"
     print("  ✓ DELETE non-existent source connection returns 404")
 
     # Try to delete non-existent collection
     response = requests.delete(f"{api_url}/collections/non-existent-collection", headers=headers)
-    assert response.status_code == 404, f"Expected 404 for non-existent collection, got {response.status_code}"
+    assert (
+        response.status_code == 404
+    ), f"Expected 404 for non-existent collection, got {response.status_code}"
     print("  ✓ DELETE non-existent collection returns 404")
 
     print("\n✅ Cleanup test completed - all resources deleted successfully!")
@@ -1221,10 +1328,7 @@ def main():
         sys.exit(1)
 
     # Configure headers with correct x-api-key format
-    headers = {
-        "Content-Type": "application/json",
-        "accept": "application/json"
-    }
+    headers = {"Content-Type": "application/json", "accept": "application/json"}
     if args.api_key:
         headers["x-api-key"] = args.api_key
 
@@ -1235,7 +1339,9 @@ def main():
     readable_id = test_collections(api_url, headers)
 
     # Pass stripe API key to source connections test
-    source_conn_id1, source_conn_id2 = test_source_connections(api_url, headers, readable_id, args.stripe_api_key)
+    source_conn_id1, source_conn_id2 = test_source_connections(
+        api_url, headers, readable_id, args.stripe_api_key
+    )
 
     # Test search functionality on the collection that has synced data
     test_search_functionality(api_url, headers, readable_id)

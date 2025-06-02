@@ -4,14 +4,13 @@ import asyncio
 from typing import AsyncGenerator, List, Optional, Union
 from uuid import UUID
 
-from fastapi import BackgroundTasks, Body, Depends, HTTPException, Query, Request
+from fastapi import BackgroundTasks, Body, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
-from airweave.core.config import settings
 from airweave.core.logging import logger
 from airweave.core.sync_service import sync_service
 from airweave.platform.sync.pubsub import sync_pubsub
@@ -255,7 +254,7 @@ async def get_sync_job(
 @router.get("/job/{job_id}/subscribe")
 async def subscribe_sync_job(
     job_id: UUID,
-    request: Request,
+    user: schemas.User = Depends(deps.get_user),  # Standard dependency injection
     db: AsyncSession = Depends(deps.get_db),
 ) -> StreamingResponse:
     """Server-Sent Events (SSE) endpoint to subscribe to a sync job's progress.
@@ -263,29 +262,14 @@ async def subscribe_sync_job(
     Args:
     -----
         job_id: The ID of the job to subscribe to
-        request: The request object
+        user: The authenticated user (from standard dependency injection)
         db: The database session
 
     Returns:
     --------
         StreamingResponse: The streaming response
     """
-    # Authenticate user if auth is enabled
-    if settings.AUTH_ENABLED:
-        token = request.query_params.get("token")
-        if not token:
-            logger.warning("SSE connection attempt without token")
-            raise HTTPException(status_code=401, detail="Missing authentication token")
-
-        # Authenticate the user from token parameter
-        from airweave.api.deps import get_user_from_token
-
-        user = await get_user_from_token(token, db)
-        if not user:
-            logger.warning(f"SSE connection with invalid token: {token[:10]}...")
-            raise HTTPException(status_code=401, detail="Invalid authentication token")
-
-        logger.info(f"SSE sync subscription authenticated for user: {user.id}, job: {job_id}")
+    logger.info(f"SSE sync subscription authenticated for user: {user.id}, job: {job_id}")
 
     # Get a new pubsub instance subscribed to this job
     pubsub = await sync_pubsub.subscribe(job_id)
