@@ -16,7 +16,7 @@ from airweave.core.shared_models import (
     IntegrationType,
     SyncJobStatus,
     CollectionStatus,
-    SourceConnectionStatus
+    SourceConnectionStatus,
 )
 from airweave.core.sync_service import sync_service
 
@@ -92,7 +92,9 @@ class TestGetSync:
             result = await sync.get_sync(db=mock_db, sync_id=sync_id, user=mock_user)
 
             # Assert
-            mock_get_sync.assert_called_once_with(db=mock_db, sync_id=sync_id, current_user=mock_user)
+            mock_get_sync.assert_called_once_with(
+                db=mock_db, sync_id=sync_id, current_user=mock_user
+            )
             assert result == mock_sync
 
     @pytest.mark.asyncio
@@ -168,9 +170,15 @@ class TestCreateSync:
         )
 
         with (
-            patch.object(sync_service, "create_and_run_sync", new_callable=AsyncMock) as mock_create_and_run,
-            patch.object(crud.source_connection, "get", new_callable=AsyncMock) as mock_get_source_conn,
-            patch.object(crud.collection, "get_by_readable_id", new_callable=AsyncMock) as mock_get_collection,
+            patch.object(
+                sync_service, "create_and_run_sync", new_callable=AsyncMock
+            ) as mock_create_and_run,
+            patch.object(
+                crud.source_connection, "get", new_callable=AsyncMock
+            ) as mock_get_source_conn,
+            patch.object(
+                crud.collection, "get_by_readable_id", new_callable=AsyncMock
+            ) as mock_get_collection,
         ):
             mock_create_and_run.return_value = (mock_sync, None)  # No sync job created
             mock_get_source_conn.return_value = mock_source_connection
@@ -247,10 +255,16 @@ class TestCreateSync:
         )
 
         with (
-            patch.object(sync_service, "create_and_run_sync", new_callable=AsyncMock) as mock_create_and_run,
+            patch.object(
+                sync_service, "create_and_run_sync", new_callable=AsyncMock
+            ) as mock_create_and_run,
             patch.object(sync_service, "get_sync_dag", new_callable=AsyncMock) as mock_get_dag,
-            patch.object(crud.source_connection, "get", new_callable=AsyncMock) as mock_get_source_conn,
-            patch.object(crud.collection, "get_by_readable_id", new_callable=AsyncMock) as mock_get_collection,
+            patch.object(
+                crud.source_connection, "get", new_callable=AsyncMock
+            ) as mock_get_source_conn,
+            patch.object(
+                crud.collection, "get_by_readable_id", new_callable=AsyncMock
+            ) as mock_get_collection,
         ):
             mock_create_and_run.return_value = (mock_sync, mock_sync_job)
             mock_get_dag.return_value = mock_sync_dag
@@ -327,7 +341,9 @@ class TestDeleteSync:
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
-                await sync.delete_sync(db=mock_db, sync_id=sync_id, delete_data=False, user=mock_user)
+                await sync.delete_sync(
+                    db=mock_db, sync_id=sync_id, delete_data=False, user=mock_user
+                )
 
             assert exc_info.value.status_code == 404
             assert exc_info.value.detail == "Sync not found"
@@ -343,7 +359,9 @@ class TestRunSync:
         """Test running a sync that exists."""
         # Arrange
         sync_id = mock_sync.id
-        with patch.object(sync_service, "trigger_sync_run", new_callable=AsyncMock) as mock_trigger_run:
+        with patch.object(
+            sync_service, "trigger_sync_run", new_callable=AsyncMock
+        ) as mock_trigger_run:
             mock_trigger_run.return_value = (mock_sync, mock_sync_job, mock_sync_dag)
 
             # Act
@@ -366,7 +384,9 @@ class TestRunSync:
         """Test running a sync that doesn't exist."""
         # Arrange
         sync_id = uuid.uuid4()
-        with patch.object(sync_service, "trigger_sync_run", new_callable=AsyncMock) as mock_trigger_run:
+        with patch.object(
+            sync_service, "trigger_sync_run", new_callable=AsyncMock
+        ) as mock_trigger_run:
             mock_trigger_run.side_effect = HTTPException(status_code=404, detail="Sync not found")
 
             # Act & Assert
@@ -433,7 +453,9 @@ class TestGetSyncJob:
             mock_get_job.return_value = mock_sync_job
 
             # Act
-            result = await sync.get_sync_job(db=mock_db, sync_id=sync_id, job_id=job_id, user=mock_user)
+            result = await sync.get_sync_job(
+                db=mock_db, sync_id=sync_id, job_id=job_id, user=mock_user
+            )
 
             # Assert
             mock_get_job.assert_called_once_with(
@@ -480,7 +502,7 @@ class TestSubscribeSyncJob:
     """Tests for the subscribe_sync_job endpoint."""
 
     @pytest.mark.asyncio
-    async def test_subscribe_sync_job_found(self, mock_user):
+    async def test_subscribe_sync_job_found(self, mock_db, mock_user):
         """Test subscribing to a sync job that exists."""
         # Arrange
         job_id = uuid.uuid4()
@@ -505,18 +527,13 @@ class TestSubscribeSyncJob:
         mock_pubsub.listen = mock_listen
         mock_pubsub.close = AsyncMock()
 
-        # Create a properly authenticated mock request with token
-        mock_request = MagicMock()
-        mock_request.query_params.get.return_value = "test-token"
-
-        with (
-            patch("airweave.platform.sync.pubsub.sync_pubsub.subscribe", new_callable=AsyncMock) as mock_subscribe,
-            patch("airweave.api.v1.endpoints.sync.settings.AUTH_ENABLED", False),
-        ):
+        with patch(
+            "airweave.platform.sync.pubsub.sync_pubsub.subscribe", new_callable=AsyncMock
+        ) as mock_subscribe:
             mock_subscribe.return_value = mock_pubsub
 
-            # Act
-            response = await sync.subscribe_sync_job(job_id=job_id, request=mock_request)
+            # Act - Use new signature with user dependency injection
+            response = await sync.subscribe_sync_job(job_id=job_id, user=mock_user, db=mock_db)
 
             # Assert
             mock_subscribe.assert_called_once_with(job_id)
@@ -548,19 +565,14 @@ class TestSubscribeSyncJob:
         mock_pubsub.listen = mock_listen
         mock_pubsub.close = AsyncMock()
 
-        # Create a properly authenticated mock request with token
-        mock_request = MagicMock()
-        mock_request.query_params.get.return_value = "test-token"
-
-        with (
-            patch("airweave.platform.sync.pubsub.sync_pubsub.subscribe", new_callable=AsyncMock) as mock_subscribe,
-            patch("airweave.api.v1.endpoints.sync.settings.AUTH_ENABLED", False),
-        ):
+        with patch(
+            "airweave.platform.sync.pubsub.sync_pubsub.subscribe", new_callable=AsyncMock
+        ) as mock_subscribe:
             # Subscribe will always return a pubsub instance
             mock_subscribe.return_value = mock_pubsub
 
-            # Act
-            response = await sync.subscribe_sync_job(job_id=job_id, request=mock_request, db=mock_db)
+            # Act - Use new signature with user dependency injection
+            response = await sync.subscribe_sync_job(job_id=job_id, user=mock_user, db=mock_db)
 
             # Assert - it creates a streaming response even for non-existent jobs
             mock_subscribe.assert_called_once_with(job_id)
