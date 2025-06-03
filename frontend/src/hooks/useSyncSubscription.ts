@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { env } from "../config/env";
-import { apiClient } from "@/lib/api";
+import { SSEClient, createSSEConnection } from "../lib/sseClient";
 
 interface SyncUpdate {
   updated?: number;
@@ -11,63 +11,63 @@ interface SyncUpdate {
 
 export function useSyncSubscription(jobId?: string | null) {
   const [updates, setUpdates] = useState<SyncUpdate[]>([]);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const sseClientRef = useRef<SSEClient | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
     if (!jobId) return;
 
-    // Create a cleanup function for when the component unmounts or jobId changes
+    // Create cleanup function
     let isMounted = true;
     const cleanup = () => {
-      if (eventSourceRef.current) {
-        console.log("Closing sync subscription event source");
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+      if (sseClientRef.current) {
+        console.log("Closing sync subscription SSE client");
+        sseClientRef.current.disconnect();
+        sseClientRef.current = null;
+        setIsConnected(false);
       }
     };
 
-    // Async function to get the auth token and create the EventSource
-    const setupEventSource = async () => {
+    // Setup SSE connection using the new secure client
+    const setupSSEConnection = async () => {
       try {
-        // Get the auth token from the API client
-        const token = await apiClient.getToken();
-
-        // Create the URL with the auth token as a query parameter
-        const baseUrl = `${env.VITE_API_URL}/sync/job/${jobId}/subscribe`;
-        const url = token
-          ? `${baseUrl}?token=${encodeURIComponent(token)}`
-          : baseUrl;
+        const url = `${env.VITE_API_URL}/sync/job/${jobId}/subscribe`;
 
         console.log(`Creating sync subscription to: ${jobId}`);
 
-        // Create and setup the EventSource
-        const es = new EventSource(url);
-        eventSourceRef.current = es;
+        const sseClient = createSSEConnection({
+          url,
+          onMessage: (data: SyncUpdate) => {
+            console.log('[PubSub] Raw event received:', data);
+            if (!isMounted) return;
 
-        es.onmessage = (event) => {
-          console.log('[PubSub] Raw event received:', event.data);
-          if (!isMounted) return;
-
-          try {
-            const data: SyncUpdate = JSON.parse(event.data);
             setUpdates((prev) => [...prev, data]);
-          } catch (err) {
-            console.error("Failed to parse SSE data:", err);
+          },
+          onOpen: () => {
+            setIsConnected(true);
+            console.log('SSE connection established');
+          },
+          onClose: () => {
+            setIsConnected(false);
+            console.log('SSE connection closed');
+          },
+          onError: (error) => {
+            console.error("Sync subscription failed:", error);
+            setIsConnected(false);
           }
-        };
+        });
 
-        es.onerror = (error) => {
-          console.error("Sync subscription failed:", error);
-          es.close();
-          eventSourceRef.current = null;
-        };
+        sseClientRef.current = sseClient;
+        await sseClient.connect();
+
       } catch (error) {
         console.error("Error setting up sync subscription:", error);
+        setIsConnected(false);
       }
     };
 
-    // Set up the event source
-    void setupEventSource();
+    // Start the connection
+    void setupSSEConnection();
 
     // Return cleanup function
     return () => {
@@ -79,6 +79,6 @@ export function useSyncSubscription(jobId?: string | null) {
   return {
     updates,
     latestUpdate: updates.length > 0 ? updates[updates.length - 1] : null,
-    isConnected: eventSourceRef.current?.readyState === EventSource.OPEN
+    isConnected
   };
 }
