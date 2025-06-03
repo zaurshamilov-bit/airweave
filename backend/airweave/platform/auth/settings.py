@@ -6,6 +6,7 @@ from typing import Any
 import yaml
 
 from airweave.core.config import settings as core_settings
+from airweave.core.logging import logger
 from airweave.core.secrets import secret_client
 from airweave.platform.auth.schemas import (
     APIKeyAuthSettings,
@@ -91,7 +92,8 @@ class IntegrationSettings:
             settings (BaseAuthSettings): The settings for the integration.
         """
         if core_settings.ENVIRONMENT == "prd":
-            return await secret_client.get_secret(settings.client_secret)
+            secret = await secret_client.get_secret(settings.client_secret)
+            return secret.value
         else:
             return settings.client_secret
 
@@ -124,9 +126,13 @@ class IntegrationSettings:
             # Create a copy of the settings object
             settings_dict = settings.model_dump()
             settings_dict["client_secret"] = await self._get_client_secret(settings)
-
-            # Return a new instance with the enriched client secret
-            return type(settings)(**settings_dict)
+            try:
+                # Return a new instance with the enriched client secret
+                return type(settings)(**settings_dict)
+            except Exception as e:
+                # If there's an error, log it and return the original settings
+                logger.error(f"Error creating settings object: {e}")
+                raise e
 
         return settings
 
