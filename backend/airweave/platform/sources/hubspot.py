@@ -12,6 +12,7 @@ from airweave.platform.entities.hubspot import (
     HubspotContactEntity,
     HubspotDealEntity,
     HubspotTicketEntity,
+    parse_hubspot_datetime,
 )
 from airweave.platform.sources._base import BaseSource
 
@@ -54,6 +55,15 @@ class HubspotSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
+    def _safe_float_conversion(self, value: Any) -> Optional[float]:
+        """Safely convert a value to float, handling empty strings and None."""
+        if not value or value == "":
+            return None
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+
     async def _generate_contact_entities(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[ChunkEntity, None]:
@@ -66,15 +76,18 @@ class HubspotSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for contact in data.get("results", []):
+                properties = contact.get("properties", {})
+
                 yield HubspotContactEntity(
                     entity_id=contact["id"],
-                    first_name=contact["properties"].get("firstname"),
-                    last_name=contact["properties"].get("lastname"),
-                    email=contact["properties"].get("email"),
-                    phone=contact["properties"].get("phone"),
-                    lifecycle_stage=contact["properties"].get("lifecyclestage"),
-                    created_at=contact["createdAt"],
-                    updated_at=contact["updatedAt"],
+                    # Core fields for easy access
+                    first_name=properties.get("firstname"),
+                    last_name=properties.get("lastname"),
+                    email=properties.get("email"),
+                    # All properties from HubSpot
+                    properties=properties,
+                    created_at=parse_hubspot_datetime(contact.get("createdAt")),
+                    updated_at=parse_hubspot_datetime(contact.get("updatedAt")),
                     archived=contact.get("archived", False),
                 )
 
@@ -95,18 +108,17 @@ class HubspotSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for company in data.get("results", []):
+                properties = company.get("properties", {})
+
                 yield HubspotCompanyEntity(
                     entity_id=company["id"],
-                    name=company["properties"].get("name"),
-                    domain=company["properties"].get("domain"),
-                    industry=company["properties"].get("industry"),
-                    phone=company["properties"].get("phone"),
-                    website=company["properties"].get("website"),
-                    city=company["properties"].get("city"),
-                    state=company["properties"].get("state"),
-                    zip=company["properties"].get("zip"),
-                    created_at=company["createdAt"],
-                    updated_at=company["updatedAt"],
+                    # Core fields for easy access
+                    name=properties.get("name"),
+                    domain=properties.get("domain"),
+                    # All properties from HubSpot
+                    properties=properties,
+                    created_at=parse_hubspot_datetime(company.get("createdAt")),
+                    updated_at=parse_hubspot_datetime(company.get("updatedAt")),
                     archived=company.get("archived", False),
                 )
 
@@ -126,19 +138,17 @@ class HubspotSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for deal in data.get("results", []):
+                properties = deal.get("properties", {})
+
                 yield HubspotDealEntity(
                     entity_id=deal["id"],
-                    deal_name=deal["properties"].get("dealname"),
-                    amount=(
-                        float(deal["properties"].get("amount", 0.0))
-                        if deal["properties"].get("amount")
-                        else None
-                    ),
-                    pipeline=deal["properties"].get("pipeline"),
-                    deal_stage=deal["properties"].get("dealstage"),
-                    close_date=deal["properties"].get("closedate"),
-                    created_at=deal["createdAt"],
-                    updated_at=deal["updatedAt"],
+                    # Core fields for easy access
+                    deal_name=properties.get("dealname"),
+                    amount=self._safe_float_conversion(properties.get("amount")),
+                    # All properties from HubSpot
+                    properties=properties,
+                    created_at=parse_hubspot_datetime(deal.get("createdAt")),
+                    updated_at=parse_hubspot_datetime(deal.get("updatedAt")),
                     archived=deal.get("archived", False),
                 )
 
@@ -158,13 +168,17 @@ class HubspotSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url)
             for ticket in data.get("results", []):
+                properties = ticket.get("properties", {})
+
                 yield HubspotTicketEntity(
                     entity_id=ticket["id"],
-                    subject=ticket["properties"].get("subject"),
-                    content=ticket["properties"].get("content"),
-                    status=ticket["properties"].get("hs_pipeline_stage"),
-                    created_at=ticket["createdAt"],
-                    updated_at=ticket["updatedAt"],
+                    # Core fields for easy access
+                    subject=properties.get("subject"),
+                    content=properties.get("content"),
+                    # All properties from HubSpot
+                    properties=properties,
+                    created_at=parse_hubspot_datetime(ticket.get("createdAt")),
+                    updated_at=parse_hubspot_datetime(ticket.get("updatedAt")),
                     archived=ticket.get("archived", False),
                 )
 
