@@ -85,7 +85,6 @@
                 "Temporal Worker"
             ],
             "stopAll": true,
-            "preLaunchTask": "start-docker-services",
         }
     ]
 }
