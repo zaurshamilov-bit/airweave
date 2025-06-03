@@ -115,13 +115,19 @@ class IntegrationSettings:
         if not settings:
             raise KeyError(f"Integration settings not found for {short_name}")
 
-        # Enrich with client secret for PRD
+        # Enrich with client secret for PRD - create a copy to avoid mutating the original
         if settings.auth_type in [
             AuthType.oauth2,
             AuthType.oauth2_with_refresh,
             AuthType.oauth2_with_refresh_rotating,
         ]:
-            settings.client_secret = await self._get_client_secret(settings)
+            # Create a copy of the settings object
+            settings_dict = settings.model_dump()
+            settings_dict["client_secret"] = await self._get_client_secret(settings)
+
+            # Return a new instance with the enriched client secret
+            return type(settings)(**settings_dict)
+
         return settings
 
 
