@@ -141,16 +141,24 @@ const SourceConnectionDetailView = ({
      * COMPUTED VALUES & DERIVED STATE
      ********************************************/
 
-    // 1. Subscription control logic
+    // 1. Make jobId more stable
+    const stableJobId = useMemo(() => {
+        return lastSyncJob?.id || null;
+    }, [lastSyncJob?.id]);
+
+    // 2. Make shouldSubscribe more stable and explicit
     const shouldSubscribe = useMemo(() => {
-        return shouldForceSubscribe || internalShouldForceSubscribe ||
-            (lastSyncJob?.status === 'pending' || lastSyncJob?.status === 'in_progress');
-    }, [lastSyncJob?.status, internalShouldForceSubscribe, shouldForceSubscribe]);
+        const hasActiveJob = lastSyncJob?.status === 'pending' || lastSyncJob?.status === 'in_progress';
+        const forceSubscribe = shouldForceSubscribe || internalShouldForceSubscribe;
+
+        return Boolean(stableJobId && (hasActiveJob || forceSubscribe));
+    }, [stableJobId, lastSyncJob?.status, internalShouldForceSubscribe, shouldForceSubscribe]);
+
+    // 3. Only pass jobId when we actually want to subscribe
+    const subscriptionJobId = shouldSubscribe ? stableJobId : null;
 
     // Subscribe to real-time updates when necessary
-    const { updates, latestUpdate, isConnected: isPubSubConnected } = useSyncSubscription(
-        shouldSubscribe ? lastSyncJob?.id || null : null
-    );
+    const { updates, latestUpdate, isConnected: isPubSubConnected } = useSyncSubscription(subscriptionJobId);
 
     // 2. Status derived from most up-to-date source
     const status = useMemo(() => {

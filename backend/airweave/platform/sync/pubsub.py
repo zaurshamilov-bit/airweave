@@ -1,5 +1,6 @@
 """Pubsub for sync jobs using Redis backend."""
 
+import asyncio
 from uuid import UUID
 
 import redis.asyncio as redis
@@ -90,23 +91,43 @@ class SyncProgress:
         self.stats = SyncProgressUpdate()
         self._last_published = 0
         self._publish_threshold = PUBLISH_THRESHOLD
+        # CRITICAL FIX: Add async lock to prevent race conditions
+        self._lock = asyncio.Lock()
 
     def __getattr__(self, name: str) -> int:
         """Get counter value for any stat."""
         return getattr(self.stats, name)
 
     async def increment(self, stat_name: str, amount: int = 1) -> None:
-        """Increment a counter and trigger update if threshold reached."""
-        current_value = getattr(self.stats, stat_name, 0)
-        setattr(self.stats, stat_name, current_value + amount)
+        """Increment a counter and trigger update if threshold reached.
 
-        total_ops = sum(
-            [self.stats.inserted, self.stats.updated, self.stats.deleted, self.stats.kept]
-        )
+        Uses async lock to prevent race conditions from concurrent workers.
+        """
+        async with self._lock:  # CRITICAL FIX: Synchronize access
+            current_value = getattr(self.stats, stat_name, 0)
+            setattr(self.stats, stat_name, current_value + amount)
 
-        if total_ops - self._last_published >= self._publish_threshold:
-            await self._publish()
-            self._last_published = total_ops
+            # Include ALL operations in threshold calculation (including skipped)
+            total_ops = sum(
+                [
+                    self.stats.inserted,
+                    self.stats.updated,
+                    self.stats.deleted,
+                    self.stats.kept,
+                    self.stats.skipped,
+                ]
+            )
+
+            # Check if we should publish
+            if total_ops - self._last_published >= self._publish_threshold:
+                logger.info(f"Progress threshold reached: {total_ops} total ops, publishing update")
+                await self._publish()
+                self._last_published = total_ops
+            else:
+                logger.debug(
+                    f"Progress: {stat_name}={current_value + amount}, total={total_ops}, "
+                    f"threshold={self._publish_threshold}"
+                )
 
     async def _publish(self) -> None:
         """Publish current progress."""
@@ -114,9 +135,10 @@ class SyncProgress:
 
     async def finalize(self, is_complete: bool = True) -> None:
         """Publish final progress."""
-        self.stats.is_complete = is_complete
-        self.stats.is_failed = not is_complete
-        await self._publish()
+        async with self._lock:  # Ensure finalize is also synchronized
+            self.stats.is_complete = is_complete
+            self.stats.is_failed = not is_complete
+            await self._publish()
 
     def to_dict(self) -> dict:
         """Convert progress to a dictionary."""
@@ -126,9 +148,11 @@ class SyncProgress:
         self, entities_encountered: dict[str, set[str]]
     ) -> None:
         """Update the entities encountered tracking."""
-        self.stats.entities_encountered = {
-            entity_type: len(entity_ids) for entity_type, entity_ids in entities_encountered.items()
-        }
+        async with self._lock:  # Synchronize this as well
+            self.stats.entities_encountered = {
+                entity_type: len(entity_ids)
+                for entity_type, entity_ids in entities_encountered.items()
+            }
 
 
 # Create a global instance for the entire app

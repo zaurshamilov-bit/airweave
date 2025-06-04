@@ -1,7 +1,9 @@
 """Default file transformer using Chonkie for improved semantic chunking."""
 
+import asyncio
 import os
 
+import aiofiles
 from chonkie import RecursiveChunker, RecursiveLevel, RecursiveRules, SemanticChunker
 
 from airweave.core.logging import logger
@@ -69,10 +71,10 @@ async def _process_file_content(file: FileEntity) -> str:
     extension = extension.lower()
 
     if extension == ".md":
-        # File is already markdown, read it directly
+        # File is already markdown, read it directly ASYNC
         logger.info(f"File {file.name} is already markdown, reading directly")
-        with open(file.local_path, "r", encoding="utf-8") as f:
-            return f.read()
+        async with aiofiles.open(file.local_path, "r", encoding="utf-8") as f:
+            return await f.read()
     else:
         # Convert file to markdown using the document converter
         result = await document_converter.convert(file.local_path)
@@ -82,11 +84,11 @@ async def _process_file_content(file: FileEntity) -> str:
         return result.text_content
 
 
-def _chunk_text_content(text_content: str) -> list[str]:
+async def _chunk_text_content(text_content: str) -> list[str]:
     """Chunk text content using recursive and semantic chunkers."""
-    # Step 1: Initial chunking with RecursiveChunker
+    # Step 1: Initial chunking with RecursiveChunker (run in thread pool)
     recursive_chunker = get_recursive_chunker()
-    initial_chunks = recursive_chunker.chunk(text_content)
+    initial_chunks = await asyncio.to_thread(recursive_chunker.chunk, text_content)
 
     # Step 2: Apply semantic chunking if any chunks are still too large
     final_chunk_texts = []
@@ -100,8 +102,8 @@ def _chunk_text_content(text_content: str) -> list[str]:
             if not semantic_chunker:
                 semantic_chunker = get_shared_semantic_chunker(MAX_CHUNK_SIZE)
 
-            # Apply semantic chunking to the large chunk
-            semantic_chunks = semantic_chunker.chunk(chunk.text)
+            # Apply semantic chunking to the large chunk (run in thread pool)
+            semantic_chunks = await asyncio.to_thread(semantic_chunker.chunk, chunk.text)
             final_chunk_texts.extend([sc.text for sc in semantic_chunks])
 
     return final_chunk_texts
@@ -138,7 +140,7 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
             logger.warning(f"No text content found in file {file.name}")
             return []
 
-        final_chunk_texts = _chunk_text_content(text_content)
+        final_chunk_texts = await _chunk_text_content(text_content)
 
         # Create parent entity for the file using all fields from original entity
         file_data = file.model_dump()

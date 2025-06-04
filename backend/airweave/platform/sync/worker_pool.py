@@ -46,37 +46,29 @@ class AsyncWorkerPool:
     def _handle_task_completion(self, task: asyncio.Task) -> None:
         """Handle task completion and clean up."""
         self.pending_tasks.discard(task)
-        if not task.cancelled() and task._exception:
-            logger.error(f"Task failed: {task._exception}")
+        if not task.cancelled() and task.exception() is not None:
+            logger.error(f"Task failed: {task.exception()}")
 
     async def wait_for_batch(self, timeout: float = 0.5) -> None:
-        """Wait for some tasks to complete."""
+        """Wait for some tasks to complete, processing them as they finish."""
         if not self.pending_tasks:
             return
 
+        # Wait for the first few tasks to complete, not ALL of them
         done, _ = await asyncio.wait(
             self.pending_tasks, return_when=asyncio.FIRST_COMPLETED, timeout=timeout
         )
 
-        for task in done:
-            try:
-                await task
-            except Exception as e:
-                logger.error(f"Error in worker task: {e}")
+        # Tasks are already completed and removed by callback, no need to process them again
+        # The callback handles cleanup automatically
 
     async def wait_for_completion(self) -> None:
-        """Wait for all tasks to complete."""
+        """Wait for all tasks to complete, processing results as they finish."""
         while self.pending_tasks:
-            current_batch = list(self.pending_tasks)[: self.max_workers * 2]
-            if not current_batch:
-                break
-
+            # Process tasks as they complete instead of waiting for ALL to complete
             done, _ = await asyncio.wait(
-                current_batch, return_when=asyncio.ALL_COMPLETED, timeout=10
+                self.pending_tasks, return_when=asyncio.FIRST_COMPLETED, timeout=1.0
             )
 
-            for task in done:
-                try:
-                    await task
-                except Exception as e:
-                    logger.error(f"Task error during completion: {e}")
+            # Tasks are already completed and removed by callback, no need to process them again
+            # The callback handles cleanup and error logging automatically

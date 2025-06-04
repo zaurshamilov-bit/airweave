@@ -1,6 +1,6 @@
 """Module for entity processing within the sync architecture."""
 
-import time
+import asyncio
 from typing import Dict, List, Optional, Set
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,8 +46,13 @@ class EntityProcessor:
         # Flag to track if we've already accounted for this entity in stats
         entity_accounted_for = False
 
+        # Get entity number for logging (default to "?" if not set)
+        entity_number = getattr(entity, "entity_number", "?")
+
         try:
-            sync_context.logger.info(f"Processing entity {entity.entity_id} through pipeline")
+            sync_context.logger.info(
+                f"Processing entity #{entity_number} ({entity.entity_id}) through pipeline"
+            )
 
             # Track the current entity
             entity_type = entity.__class__.__name__
@@ -74,7 +79,9 @@ class EntityProcessor:
 
             # Stage 2: Determine action for entity
             db_entity, action = await self._determine_action(enriched_entity, sync_context, db)
-            sync_context.logger.info(f"Determined action {action} for entity {entity.entity_id}")
+            sync_context.logger.info(
+                f"Determined action {action} for entity #{entity_number} ({entity.entity_id})"
+            )
 
             # Stage 2.5: Skip further processing if KEEP
             if action == DestinationAction.KEEP:
@@ -87,14 +94,15 @@ class EntityProcessor:
                 enriched_entity, source_node, sync_context, db
             )
             sync_context.logger.info(
-                f"Transformed entity {entity.entity_id} into {len(processed_entities)} entities"
+                f"Transformed entity #{entity_number} ({entity.entity_id}) into "
+                f"{len(processed_entities)} entities"
             )
 
             # Check if transformation resulted in no entities
             if len(processed_entities) == 0:
                 sync_context.logger.warning(
-                    f"Transformation resulted in 0 entities for {entity.entity_id}, "
-                    "marking as skipped"
+                    f"Transformation resulted in 0 entities for #{entity_number} "
+                    f"({entity.entity_id}), marking as skipped"
                 )
                 await sync_context.progress.increment("skipped", 1)
                 entity_accounted_for = True
@@ -115,14 +123,16 @@ class EntityProcessor:
 
         except Exception as e:
             sync_context.logger.error(
-                f"Error processing entity {entity.entity_id}: {type(e).__name__}: {str(e)}"
+                f"Error processing entity #{entity_number} ({entity.entity_id}): "
+                f"{type(e).__name__}: {str(e)}"
             )
 
             # If we haven't already accounted for this entity in stats, mark it as skipped
             if not entity_accounted_for:
                 await sync_context.progress.increment("skipped", 1)
                 sync_context.logger.warning(
-                    f"Entity {entity.entity_id} marked as skipped due to processing error"
+                    f"Entity #{entity_number} ({entity.entity_id}) marked as skipped "
+                    f"due to processing error"
                 )
 
             # DON'T RE-RAISE! Just return empty list to indicate no entities were produced
@@ -150,7 +160,8 @@ class EntityProcessor:
             db=db, entity_id=entity.entity_id, sync_id=sync_context.sync.id
         )
 
-        current_hash = entity.hash()
+        # Hash computation can be CPU-bound, run in thread pool
+        current_hash = await asyncio.to_thread(entity.hash)
 
         if db_entity:
             sync_context.logger.info(
@@ -262,29 +273,64 @@ class EntityProcessor:
             return []
 
         try:
-            embedding_model = sync_context.embedding_model
-            entity_count = len(processed_entities)
+            entity_context = self._get_entity_context(processed_entities)
+            self._log_vectorization_start(processed_entities, sync_context, entity_context)
 
-            sync_context.logger.info(
-                f"Computing vectors for {entity_count} entities using {embedding_model.model_name}"
+            # Convert entities to dictionaries for embedding
+            entity_dicts = await self._convert_entities_to_dicts(processed_entities, sync_context)
+
+            # Get embeddings from the model
+            embeddings = await self._get_embeddings(entity_dicts, sync_context, entity_context)
+
+            # Assign vectors to entities
+            processed_entities = await self._assign_vectors_to_entities(
+                processed_entities, embeddings, sync_context
             )
 
-            # Log entity content lengths for debugging
-            content_lengths = [len(str(entity.to_storage_dict())) for entity in processed_entities]
-            total_length = sum(content_lengths)
-            avg_length = total_length / entity_count if entity_count else 0
-            max_length = max(content_lengths) if content_lengths else 0
+            return processed_entities
 
-            sync_context.logger.info(
-                f"Entity content stats: total={total_length}, "
-                f"avg={avg_length:.2f}, max={max_length}, count={entity_count}"
-            )
+        except Exception as e:
+            sync_context.logger.error(f"Error computing vectors: {str(e)}")
+            raise
 
-            start_time = time.time()
+    def _get_entity_context(self, processed_entities: List[BaseEntity]) -> str:
+        """Get entity context string for logging."""
+        if processed_entities:
+            first_entity = processed_entities[0]
+            entity_number = getattr(first_entity, "entity_number", "?")
+            return f"Entity #{entity_number} batch"
+        return "Entity batch"
 
-            # Convert entities to dictionary representations
+    def _log_vectorization_start(
+        self, processed_entities: List[BaseEntity], sync_context: SyncContext, entity_context: str
+    ) -> None:
+        """Log vectorization startup information."""
+        embedding_model = sync_context.embedding_model
+        entity_count = len(processed_entities)
+
+        sync_context.logger.info(
+            f"Computing vectors for {entity_count} entities using {embedding_model.model_name}"
+        )
+
+        # Log entity content lengths for debugging
+        content_lengths = [len(str(entity.to_storage_dict())) for entity in processed_entities]
+        total_length = sum(content_lengths)
+        avg_length = total_length / entity_count if entity_count else 0
+        max_length = max(content_lengths) if content_lengths else 0
+
+        sync_context.logger.info(
+            f"Entity content stats: total={total_length}, "
+            f"avg={avg_length:.2f}, max={max_length}, count={entity_count}"
+        )
+
+    async def _convert_entities_to_dicts(
+        self, processed_entities: List[BaseEntity], sync_context: SyncContext
+    ) -> List[str]:
+        """Convert entities to dictionary representations."""
+
+        def _convert_entities_to_dicts_sync(entities):
             entity_dicts = []
-            for entity in processed_entities:
+            for entity in entities:
                 try:
                     entity_dict = str(entity.to_storage_dict())
                     entity_dicts.append(entity_dict)
@@ -292,26 +338,58 @@ class EntityProcessor:
                     sync_context.logger.error(f"Error converting entity to dict: {str(e)}")
                     # Provide a fallback empty string to maintain array alignment
                     entity_dicts.append("")
+            return entity_dicts
 
-            # Get embeddings from the model
+        return await asyncio.to_thread(_convert_entities_to_dicts_sync, processed_entities)
+
+    async def _get_embeddings(
+        self, entity_dicts: List[str], sync_context: SyncContext, entity_context: str
+    ) -> List[List[float]]:
+        """Get embeddings from the embedding model."""
+        import asyncio
+        import inspect
+
+        embedding_model = sync_context.embedding_model
+        loop = asyncio.get_event_loop()
+        cpu_start = loop.time()
+
+        # Get embeddings from the model with entity context
+        if hasattr(embedding_model, "embed_many"):
+            # Check if the embedding model supports entity_context parameter
+            embed_many_signature = inspect.signature(embedding_model.embed_many)
+            if "entity_context" in embed_many_signature.parameters:
+                embeddings = await embedding_model.embed_many(
+                    entity_dicts, entity_context=entity_context
+                )
+            else:
+                embeddings = await embedding_model.embed_many(entity_dicts)
+        else:
             embeddings = await embedding_model.embed_many(entity_dicts)
 
-            elapsed = time.time() - start_time
-            sync_context.logger.info(
-                f"Vector computation completed in {elapsed:.2f}s for {len(embeddings)} entities"
+        cpu_elapsed = loop.time() - cpu_start
+        sync_context.logger.info(
+            f"Vector computation completed in {cpu_elapsed:.2f}s for {len(embeddings)} entities"
+        )
+
+        return embeddings
+
+    async def _assign_vectors_to_entities(
+        self,
+        processed_entities: List[BaseEntity],
+        embeddings: List[List[float]],
+        sync_context: SyncContext,
+    ) -> List[BaseEntity]:
+        """Assign vectors to entities."""
+        # Validate we got the expected number of embeddings
+        if len(embeddings) != len(processed_entities):
+            sync_context.logger.warning(
+                f"Embedding count mismatch: got {len(embeddings)} embeddings "
+                f"for {len(processed_entities)} entities"
             )
 
-            # Validate we got the expected number of embeddings
-            if len(embeddings) != len(processed_entities):
-                sync_context.logger.warning(
-                    f"Embedding count mismatch: got {len(embeddings)} embeddings "
-                    f"for {len(processed_entities)} entities"
-                )
-
-            # Assign vectors to entities
-            for i, (processed_entity, vector) in enumerate(
-                zip(processed_entities, embeddings, strict=False)
-            ):
+        # Assign vectors to entities in thread pool (CPU-bound operation for many entities)
+        def _assign_vectors_to_entities_sync(entities, vectors):
+            for i, (processed_entity, vector) in enumerate(zip(entities, vectors, strict=False)):
                 try:
                     if vector is None:
                         sync_context.logger.warning(f"Received None vector for entity at index {i}")
@@ -327,12 +405,11 @@ class EntityProcessor:
                     sync_context.logger.error(
                         f"Error assigning vector to entity at index {i}: {str(e)}"
                     )
+            return entities
 
-            return processed_entities
-
-        except Exception as e:
-            sync_context.logger.error(f"Error computing vectors: {str(e)}")
-            raise
+        return await asyncio.to_thread(
+            _assign_vectors_to_entities_sync, processed_entities, embeddings
+        )
 
     async def _handle_keep(self, sync_context: SyncContext) -> None:
         """Handle KEEP action."""
@@ -362,14 +439,15 @@ class EntityProcessor:
             ):
                 processed_entity.parent_entity_id = parent_entity.entity_id
 
-        # Insert into database
+        # Insert into database - hash computation is CPU-bound
+        parent_hash = await asyncio.to_thread(parent_entity.hash)
         new_db_entity = await crud.entity.create(
             db=db,
             obj_in=schemas.EntityCreate(
                 sync_job_id=sync_context.sync_job.id,
                 sync_id=sync_context.sync.id,
                 entity_id=parent_entity.entity_id,
-                hash=parent_entity.hash(),
+                hash=parent_hash,
             ),
             organization_id=sync_context.sync.organization_id,
         )
@@ -405,11 +483,12 @@ class EntityProcessor:
             ):
                 processed_entity.parent_entity_id = parent_entity.entity_id
 
-        # Update hash in database
+        # Update hash in database - hash computation is CPU-bound
+        parent_hash = await asyncio.to_thread(parent_entity.hash)
         await crud.entity.update(
             db=db,
             db_obj=db_entity,
-            obj_in=schemas.EntityUpdate(hash=parent_entity.hash()),
+            obj_in=schemas.EntityUpdate(hash=parent_hash),
         )
         parent_entity.db_entity_id = db_entity.id
 

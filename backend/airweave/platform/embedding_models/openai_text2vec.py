@@ -1,11 +1,9 @@
-"""OpenAI text2vec model for embedding."""
+"""Simplified OpenAI text2vec model for embedding using official OpenAI client."""
 
 import asyncio
-import random
-import time
 from typing import List, Optional
 
-import httpx
+from openai import AsyncOpenAI
 from pydantic import Field
 
 from airweave.core.logging import logger
@@ -16,16 +14,16 @@ from ._base import BaseEmbeddingModel
 
 
 @embedding_model(
-    "OpenAI Text2Vec",
-    "openai_text2vec",
+    "OpenAI Text2Vec Simple",
+    "openai_text2vec_simple",
     "openai",
     AuthType.config_class,
     "OpenAIAuthConfig",
 )
 class OpenAIText2Vec(BaseEmbeddingModel):
-    """OpenAI text2vec model configuration for embedding."""
+    """Simplified OpenAI text2vec model configuration for embedding using official OpenAI client."""
 
-    model_name: str = "openai-text2vec"
+    model_name: str = "openai-text2vec-simple"
     api_key: str = Field(..., description="OpenAI API key")
     vector_dimensions: int = 1536
     enabled: bool = True
@@ -34,80 +32,14 @@ class OpenAIText2Vec(BaseEmbeddingModel):
     )
 
     def __init__(self, **kwargs):
-        """Initialize the OpenAI Text2Vec model."""
+        """Initialize the OpenAI Text2Vec model with a shared client."""
         super().__init__(**kwargs)
-        self._client = None
 
-    async def get_client(self):
-        """Get or create the shared HTTP client for OpenAI API calls."""
-        if self._client is None:
-            self._client = httpx.AsyncClient(
-                limits=httpx.Limits(
-                    max_keepalive_connections=5,  # Keep 5 connections alive
-                    max_connections=10,  # Max 10 total connections
-                    keepalive_expiry=30.0,  # Each connection lives 30s after last use
-                ),
-                timeout=httpx.Timeout(60.0),
-            )
-        return self._client
-
-    async def _retry_with_backoff(self, func, *args, max_retries=3, **kwargs):
-        """Retry a function with exponential backoff.
-
-        Args:
-            func: The async function to retry
-            *args: Arguments to pass to the function
-            max_retries: Maximum number of retry attempts
-            **kwargs: Keyword arguments to pass to the function
-
-        Returns:
-            The result of the function call
-
-        Raises:
-            The last exception if all retries fail
-        """
-        last_exception = None
-
-        for attempt in range(max_retries + 1):  # +1 for initial attempt
-            try:
-                return await func(*args, **kwargs)
-            except Exception as e:
-                last_exception = e
-
-                # Don't retry on authentication errors or client errors (4xx except 429)
-                if isinstance(e, httpx.HTTPStatusError):
-                    status_code = e.response.status_code
-                    if (
-                        400 <= status_code < 500 and status_code != 429
-                    ):  # 429 is rate limit, should retry
-                        logger.error(f"Non-retryable HTTP error {status_code}: {e.response.text}")
-                        raise e
-
-                # Log the full error details
-                error_type = type(e).__name__
-                error_msg = str(e)
-                if hasattr(e, "response") and hasattr(e.response, "text"):
-                    error_msg += f" - Response: {e.response.text}"
-
-                if attempt < max_retries:
-                    # Calculate delay with exponential backoff and jitter
-                    base_delay = 2**attempt  # 1s, 2s, 4s
-                    jitter = random.uniform(0.1, 0.5)  # Add randomness
-                    delay = base_delay + jitter
-
-                    logger.warning(
-                        f"Attempt {attempt + 1}/{max_retries + 1} failed with {error_type}: "
-                        f"{error_msg}. Retrying in {delay:.2f}s..."
-                    )
-                    await asyncio.sleep(delay)
-                else:
-                    logger.error(
-                        f"All {max_retries + 1} attempts failed. "
-                        f"Final error {error_type}: {error_msg}"
-                    )
-
-        # Re-raise the last exception if all retries failed
-        raise last_exception
+        # Create a single shared client
+        self._client = AsyncOpenAI(
+            api_key=self.api_key,
+        )
+        logger.info("Created shared OpenAI client")
 
     async def embed(
         self,
@@ -115,105 +47,61 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         model: Optional[str] = None,
         encoding_format: str = "float",
         dimensions: Optional[int] = None,
+        entity_context: Optional[str] = None,
     ) -> List[float]:
-        """Embed a single text string using OpenAI.
+        """Embed a single text string using OpenAI official client.
 
         Args:
             text: The text to embed
             model: The OpenAI model to use (defaults to self.embedding_model)
             encoding_format: Format of the embedding (default: float)
             dimensions: Vector dimensions (defaults to self.vector_dimensions)
+            entity_context: Optional context string for entity identification in logs
 
         Returns:
             List of embedding values
         """
         if dimensions:
-            # OpenAI doesn't support custom dimensions - would need post-processing
             raise ValueError("Dimensions override not supported for OpenAI embedding")
 
+        context_prefix = f"{entity_context} " if entity_context else ""
+
         if not text.strip():
-            logger.info("Empty text provided for embedding, returning zero vector")
-            # Return zero vector for empty text
+            logger.info(f"{context_prefix}Empty text provided for embedding, returning zero vector")
             return [0.0] * self.vector_dimensions
 
         used_model = model or self.embedding_model
-        logger.info(f"Embedding single text with model {used_model} (text length: {len(text)})")
+        logger.info(
+            f"{context_prefix}Embedding single text with model {used_model} "
+            f"(text length: {len(text)})"
+        )
 
-        async def _make_request():
-            client = await self.get_client()
-            logger.info("Sending embedding request to OpenAI API")
-            response = await client.post(
-                "https://api.openai.com/v1/embeddings",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={"input": text, "model": used_model, "encoding_format": encoding_format},
-            )
-            response.raise_for_status()
-            return response.json()["data"][0]["embedding"]
-
-        start_time = time.time()
+        loop = asyncio.get_event_loop()
+        cpu_start = loop.time()
         try:
-            result = await self._retry_with_backoff(_make_request)
-            elapsed = time.time() - start_time
-            logger.info(f"Embedding completed in {elapsed:.2f}s, vector size: {len(result)}")
-            return result
-        except Exception as e:
-            elapsed = time.time() - start_time
-            error_type = type(e).__name__
-            logger.error(f"Embedding failed after {elapsed:.2f}s with {error_type}: {str(e)}")
-            raise
-
-    async def _process_empty_texts(self, texts: List[str]) -> tuple:
-        """Process texts to separate empty from non-empty.
-
-        Returns:
-            Tuple of (filtered_texts, empty_indices)
-        """
-        filtered_texts = []
-        empty_indices = []
-
-        for i, text in enumerate(texts):
-            if text.strip():
-                filtered_texts.append(text)
-            else:
-                empty_indices.append(i)
-
-        return filtered_texts, empty_indices
-
-    async def _make_openai_request(
-        self, filtered_texts: List[str], used_model: str, encoding_format: str
-    ) -> List:
-        """Make the actual request to OpenAI API with retry logic.
-
-        Returns:
-            List of embeddings
-        """
-        max_text_length = max(len(text) for text in filtered_texts) if filtered_texts else 0
-        logger.info(f"Maximum text length in batch: {max_text_length} chars")
-
-        async def _make_request():
-            client = await self.get_client()
-
-            # This will reuse an existing connection if available,
-            # or create a new one if needed (up to max_connections=10)
-            response = await client.post(
-                "https://api.openai.com/v1/embeddings",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "input": filtered_texts,
-                    "model": used_model,
-                    "encoding_format": encoding_format,
-                },
+            # Wait for the API call to complete with await
+            response = await self._client.embeddings.create(
+                input=text,
+                model=used_model,
+                encoding_format=encoding_format,
             )
-            response.raise_for_status()
-            return [e["embedding"] for e in response.json()["data"]]
 
-        return await self._retry_with_backoff(_make_request)
+            embedding = response.data[0].embedding
+            cpu_elapsed = loop.time() - cpu_start
+            logger.info(
+                f"{context_prefix}Embedding completed in {cpu_elapsed:.2f}s, "
+                f"vector size: {len(embedding)}"
+            )
+            return embedding
+
+        except Exception as e:
+            cpu_elapsed = loop.time() - cpu_start
+            error_type = type(e).__name__
+            logger.error(
+                f"{context_prefix}Embedding failed after {cpu_elapsed:.2f}s "
+                f"with {error_type}: {str(e)}"
+            )
+            raise
 
     async def embed_many(
         self,
@@ -221,51 +109,70 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         model: Optional[str] = None,
         encoding_format: str = "float",
         dimensions: Optional[int] = None,
+        entity_context: Optional[str] = None,
     ) -> List[List[float]]:
-        """Embed multiple text strings using OpenAI.
+        """Embed multiple text strings using OpenAI official client.
 
         Args:
             texts: List of texts to embed
             model: The OpenAI model to use (defaults to self.embedding_model)
             encoding_format: Format of the embedding (default: float)
             dimensions: Vector dimensions (defaults to self.vector_dimensions)
+            entity_context: Optional context string for entity identification in logs
 
         Returns:
             List of embedding vectors
         """
         if dimensions:
-            # OpenAI doesn't support custom dimensions - would need post-processing
             raise ValueError("Dimensions override not supported for OpenAI embedding")
 
+        context_prefix = f"{entity_context} " if entity_context else ""
+
         if not texts:
-            logger.info("Empty texts list provided for embedding")
+            logger.info(f"{context_prefix}Empty texts list provided for embedding")
             return []
 
-        # Log batch size
-        logger.info(f"Embedding batch of {len(texts)} texts")
+        logger.info(f"{context_prefix}Embedding batch of {len(texts)} texts")
 
         # Filter out empty texts and track their positions
-        filtered_texts, empty_indices = await self._process_empty_texts(texts)
+        filtered_texts = []
+        empty_indices = set()
+
+        for i, text in enumerate(texts):
+            if text.strip():
+                filtered_texts.append(text)
+            else:
+                empty_indices.add(i)
 
         if not filtered_texts:
-            logger.info("All texts in batch were empty, returning zero vectors")
+            logger.info(f"{context_prefix}All texts in batch were empty, returning zero vectors")
             return [[0.0] * self.vector_dimensions] * len(texts)
 
-        # Log actual texts to embed
         logger.info(
-            f"Embedding {len(filtered_texts)} non-empty texts "
+            f"{context_prefix}Embedding {len(filtered_texts)} non-empty texts "
             f"(skipped {len(empty_indices)} empty texts)"
         )
 
         used_model = model or self.embedding_model
-        start_time = time.time()
+        loop = asyncio.get_event_loop()
+        cpu_start = loop.time()
 
         try:
-            embeddings = await self._make_openai_request(
-                filtered_texts, used_model, encoding_format
+            # Wait for the API call to complete with await
+            response = await self._client.embeddings.create(
+                input=filtered_texts,
+                model=used_model,
+                encoding_format=encoding_format,
             )
-            elapsed = time.time() - start_time
-            logger.info(f"Batch embedding completed in {elapsed:.2f}s ({len(embeddings)} vectors)")
+
+            # Extract embeddings from response
+            embeddings = [embedding_data.embedding for embedding_data in response.data]
+
+            cpu_elapsed = loop.time() - cpu_start
+            logger.info(
+                f"{context_prefix}Batch embedding completed in {cpu_elapsed:.2f}s "
+                f"({len(embeddings)} vectors)"
+            )
 
             # Reinsert empty vectors at the correct positions
             result = []
@@ -278,16 +185,20 @@ class OpenAIText2Vec(BaseEmbeddingModel):
                     result.append(embeddings[embedding_idx])
                     embedding_idx += 1
 
-            logger.info(f"Final result contains {len(result)} vectors")
+            logger.info(f"{context_prefix}Final result contains {len(result)} vectors")
             return result
+
         except Exception as e:
-            elapsed = time.time() - start_time
+            cpu_elapsed = loop.time() - cpu_start
             error_type = type(e).__name__
-            logger.error(f"Batch embedding failed after {elapsed:.2f}s with {error_type}: {str(e)}")
+            logger.error(
+                f"{context_prefix}Batch embedding failed after {cpu_elapsed:.2f}s "
+                f"with {error_type}: {str(e)}"
+            )
             raise
 
     async def close(self):
-        """Clean up the client when done."""
+        """Clean up the shared client when done."""
         if self._client:
-            await self._client.aclose()
-            self._client = None
+            await self._client.close()
+            logger.info("OpenAI client closed successfully")

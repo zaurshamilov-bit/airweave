@@ -18,6 +18,7 @@ from airweave.platform.entities._base import (
 from airweave.platform.locator import resource_locator
 from airweave.platform.transformers.code_file_chunker import code_file_chunker
 from airweave.platform.transformers.code_file_summarizer import code_file_summarizer
+from airweave.platform.transformers.default_file_chunker import file_chunker
 from airweave.platform.transformers.entity_field_chunker import entity_chunker
 from airweave.schemas.dag import DagNode, NodeType, SyncDag
 
@@ -154,9 +155,24 @@ class SyncDAGRouter:
                     transformed_entity = await code_file_summarizer(transformed_entity)
             return transformed_entities
 
+        # If the entity is a FileEntity (including WebFileEntity), apply file_chunker transformer
+        # This handles WebFileEntity created by web_fetcher and other FileEntity subclasses
+        entity_type = type(entity)
+        if (
+            issubclass(entity_type, FileEntity)
+            and not issubclass(entity_type, CodeFileEntity)
+            and not isinstance(entity, CodeFileEntity)
+        ):
+            # Apply file_chunker transformer
+            logger.info(
+                f"Routing FileEntity {entity.entity_id} of type {entity_type.__name__} "
+                f"to file_chunker"
+            )
+            transformed_entities = await file_chunker(entity)
+            return transformed_entities
+
         # Apply entity_field_chunker ONLY to ChunkEntity subclasses that are NOT FileEntity
         # subclasses
-        entity_type = type(entity)
         if (
             issubclass(entity_type, ChunkEntity)
             and not issubclass(entity_type, FileEntity)
