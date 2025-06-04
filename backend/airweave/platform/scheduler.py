@@ -56,7 +56,7 @@ class PlatformScheduler:
 
         This is useful for maintenance or after changing cron schedules.
         """
-        logger.info("Starting update of all next_scheduled_run values")
+        logger.debug("Starting update of all next_scheduled_run values")
         updated_count = 0
         error_count = 0
 
@@ -70,10 +70,10 @@ class PlatformScheduler:
             syncs = [schemas.SyncWithoutConnections.model_validate(sync) for sync in syncs]
 
             if not syncs:
-                logger.info("No syncs with cron schedules found")
+                logger.debug("No syncs with cron schedules found")
                 return
 
-            logger.info(f"Found {len(syncs)} syncs with cron schedules")
+            logger.debug(f"Found {len(syncs)} syncs with cron schedules")
             now = datetime.now(timezone.utc)
 
             # Process each sync
@@ -121,7 +121,7 @@ class PlatformScheduler:
                     logger.error(f"Error updating sync {sync.id}: {e}", exc_info=True)
                     error_count += 1
 
-            logger.info(
+            logger.debug(
                 f"Completed update of next_scheduled_run values: "
                 f"{updated_count} updated, {error_count} errors"
             )
@@ -133,13 +133,13 @@ class PlatformScheduler:
             return
 
         # Update all next_scheduled_run values before starting
-        logger.info("Initializing scheduler by updating all next_scheduled_run values")
+        logger.debug("Initializing scheduler by updating all next_scheduled_run values")
         await self.update_all_next_scheduled_runs()
 
         self.running = True
         self.task = asyncio.create_task(self._scheduler_loop())
-        logger.info("Sync scheduler started")
-        logger.info(f"Scheduler check interval set to {self.check_interval} seconds")
+        logger.debug("Sync scheduler started")
+        logger.debug(f"Scheduler check interval set to {self.check_interval} seconds")
 
     async def stop(self):
         """Stop the scheduler."""
@@ -149,19 +149,19 @@ class PlatformScheduler:
 
         self.running = False
         if self.task:
-            logger.info("Cancelling scheduler task")
+            logger.debug("Cancelling scheduler task")
             self.task.cancel()
             try:
                 await self.task
             except asyncio.CancelledError:
-                logger.info("Scheduler task cancelled successfully")
+                logger.debug("Scheduler task cancelled successfully")
                 pass
             self.task = None
-        logger.info("Sync scheduler stopped")
+        logger.debug("Sync scheduler stopped")
 
     async def _scheduler_loop(self):
         """Main scheduler loop that checks for due syncs."""
-        logger.info("Scheduler loop started")
+        logger.debug("Scheduler loop started")
         loop_count = 0
 
         while self.running:
@@ -193,7 +193,7 @@ class PlatformScheduler:
             syncs = await self._get_active_syncs_with_schedule(db)
 
             if syncs:
-                logger.info(f"Found {len(syncs)} syncs that may be due for execution")
+                logger.debug(f"Found {len(syncs)} syncs that may be due for execution")
             else:
                 logger.debug("No syncs found that are due for execution")
 
@@ -214,7 +214,7 @@ class PlatformScheduler:
 
             check_duration = (datetime.now(timezone.utc) - check_start_time).total_seconds()
             if processed_count > 0:
-                logger.info(
+                logger.debug(
                     f"Processed {processed_count} syncs, triggered {triggered_count} in "
                     f"{check_duration:.3f}s"
                 )
@@ -269,7 +269,7 @@ class PlatformScheduler:
         # Check if there's an active job running
         if latest_job and latest_job.status == SyncJobStatus.IN_PROGRESS:
             # Skip this sync as it's already running
-            logger.info(
+            logger.debug(
                 f"Sync {sync.id} ({sync.name}) already has job {latest_job.id} in progress."
             )
             # TODO: We must create a sync job that is autocancelled, to indicate to the user
@@ -298,7 +298,7 @@ class PlatformScheduler:
             sync.next_scheduled_run is None
             or abs((ensure_utc(sync.next_scheduled_run) - next_run).total_seconds()) > 1
         ):
-            logger.info(
+            logger.debug(
                 f"Updating next_scheduled_run for sync {sync.id} from "
                 f"{sync.next_scheduled_run.isoformat() if sync.next_scheduled_run else 'None'} "
                 f"to {next_run.isoformat()}"
@@ -327,7 +327,7 @@ class PlatformScheduler:
         # Check if the sync is due
         if next_run <= now:
             time_diff = (now - next_run).total_seconds()
-            logger.info(
+            logger.debug(
                 f"Sync {sync.id} ({sync.name}) is due (overdue by {time_diff:.1f}s), triggering"
             )
             sync_schema = await crud.sync.get(
@@ -347,7 +347,7 @@ class PlatformScheduler:
     async def _trigger_sync(self, db: AsyncSession, sync: schemas.Sync):
         """Trigger a sync job."""
         try:
-            logger.info(f"Triggering sync {sync.id} ({sync.name})")
+            logger.debug(f"Triggering sync {sync.id} ({sync.name})")
 
             # Get the user who created the sync for running the job
             user_email = sync.created_by_email
@@ -371,7 +371,7 @@ class PlatformScheduler:
                 sync_job = await crud.sync_job.create(
                     db=db, obj_in=sync_job_in, current_user=current_user
                 )
-                logger.info(f"Created sync job {sync_job.id} for sync {sync.id}")
+                logger.debug(f"Created sync job {sync_job.id} for sync {sync.id}")
 
             # Get the DAG for this sync
             logger.debug(f"Getting DAG for sync {sync.id}")
@@ -411,7 +411,7 @@ class PlatformScheduler:
                 )
 
                 # Use Temporal workflow for sync execution
-                logger.info(
+                logger.debug(
                     f"Starting sync job {sync_job.id} (sync {sync.id}) via Temporal workflow"
                 )
                 await temporal_service.run_source_connection_workflow(
@@ -423,7 +423,7 @@ class PlatformScheduler:
                     user=current_user,
                     access_token=None,  # No access token for scheduled syncs
                 )
-                logger.info(
+                logger.debug(
                     f"Successfully triggered sync job {sync_job.id} for sync {sync.id} "
                     f"  ({sync.name}) via Temporal"
                 )
@@ -434,7 +434,7 @@ class PlatformScheduler:
                 )
 
                 # Run the sync using the original user
-                logger.info(f"Starting sync task for job {sync_job.id} (sync {sync.id})")
+                logger.debug(f"Starting sync task for job {sync_job.id} (sync {sync.id})")
                 asyncio.create_task(
                     sync_service.run(
                         sync,
