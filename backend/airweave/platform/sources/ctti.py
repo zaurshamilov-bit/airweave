@@ -126,7 +126,8 @@ class CTTISource(BaseSource):
                 - username: Username for AACT database
                 - password: Password for AACT database
             config: Optional configuration parameters:
-                - limit: Maximum number of studies to fetch (default: 1000)
+                - limit: Maximum number of studies to fetch (default: 10000)
+                - skip: Number of studies to skip for pagination (default: 0)
         """
         instance = cls()
         instance.credentials = credentials  # Store credentials separately
@@ -208,8 +209,9 @@ class CTTISource(BaseSource):
         try:
             await self._connect()
 
-            # Get the limit from config
+            # Get the limit and skip from config
             limit = self.config.get("limit", 10000)
+            skip = self.config.get("skip", 0)
 
             # Simple query - URL construction in Python is fine
             query = f'''
@@ -218,10 +220,19 @@ class CTTISource(BaseSource):
                 WHERE nct_id IS NOT NULL
                 ORDER BY nct_id
                 LIMIT {limit}
+                OFFSET {skip}
             '''
 
             async def _execute_query():
-                logger.info(f"Executing query to fetch {limit} clinical trials from AACT database")
+                if skip > 0:
+                    logger.info(
+                        f"Executing query to fetch {limit} clinical trials from AACT database "
+                        f"(skipping first {skip} records)"
+                    )
+                else:
+                    logger.info(
+                        f"Executing query to fetch {limit} clinical trials from AACT database"
+                    )
                 records = await self.conn.fetch(query)
                 logger.info(f"Successfully fetched {len(records)} clinical trial records")
                 return records
@@ -275,6 +286,7 @@ class CTTISource(BaseSource):
                         "database_table": self.AACT_TABLE,
                         "original_nct_id": nct_id,  # Keep original in case it had formatting
                         "limit_used": limit,
+                        "skip_used": skip,
                         "total_fetched": len(records),
                     },
                 )

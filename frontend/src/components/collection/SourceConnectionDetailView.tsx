@@ -141,16 +141,24 @@ const SourceConnectionDetailView = ({
      * COMPUTED VALUES & DERIVED STATE
      ********************************************/
 
-    // 1. Subscription control logic
+    // 1. Make jobId more stable
+    const stableJobId = useMemo(() => {
+        return lastSyncJob?.id || null;
+    }, [lastSyncJob?.id]);
+
+    // 2. Make shouldSubscribe more stable and explicit
     const shouldSubscribe = useMemo(() => {
-        return shouldForceSubscribe || internalShouldForceSubscribe ||
-            (lastSyncJob?.status === 'pending' || lastSyncJob?.status === 'in_progress');
-    }, [lastSyncJob?.status, internalShouldForceSubscribe, shouldForceSubscribe]);
+        const hasActiveJob = lastSyncJob?.status === 'pending' || lastSyncJob?.status === 'in_progress';
+        const forceSubscribe = shouldForceSubscribe || internalShouldForceSubscribe;
+
+        return Boolean(stableJobId && (hasActiveJob || forceSubscribe));
+    }, [stableJobId, lastSyncJob?.status, internalShouldForceSubscribe, shouldForceSubscribe]);
+
+    // 3. Only pass jobId when we actually want to subscribe
+    const subscriptionJobId = shouldSubscribe ? stableJobId : null;
 
     // Subscribe to real-time updates when necessary
-    const { updates, latestUpdate, isConnected: isPubSubConnected } = useSyncSubscription(
-        shouldSubscribe ? lastSyncJob?.id || null : null
-    );
+    const { updates, latestUpdate, isConnected: isPubSubConnected } = useSyncSubscription(subscriptionJobId);
 
     // 2. Status derived from most up-to-date source
     const status = useMemo(() => {
@@ -232,6 +240,13 @@ const SourceConnectionDetailView = ({
                 console.log("Source connection details received:", detailedData);
                 console.log("Cron schedule from API:", detailedData.cron_schedule);
                 setSelectedConnection(detailedData);
+
+                // Fetch entity DAGs immediately if we have a sync_id
+                if (detailedData.sync_id) {
+                    await fetchEntityDags(detailedData.sync_id);
+                }
+
+                // Then fetch job data
                 await fetchSourceConnectionJob(detailedData);
             } else {
                 console.error("Failed to load source connection details:", await response.text());
@@ -275,8 +290,8 @@ const SourceConnectionDetailView = ({
                 setTotalRuntime(runtime);
             }
 
-            // After we have the job data with entities_encountered, fetch entity DAGs
-            if (connection.sync_id && sourceConnectionJob.entities_encountered) {
+            // Always fetch entity DAGs if we have a sync_id
+            if (connection.sync_id) {
                 await fetchEntityDags(connection.sync_id);
             }
         } catch (err) {
@@ -506,17 +521,14 @@ const SourceConnectionDetailView = ({
             prevEntityDictRef.current = { ...entityDict };
         }
 
-        // If we have no encountered entities but had them before,
-        // don't empty the dictionary during state transitions
-        if ((!entitiesEncountered || Object.keys(entitiesEncountered).length === 0) &&
-            Object.keys(prevEntityDictRef.current).length > 0) {
-            console.log('Preserving previous entity dictionary during transition');
-            setEntityDict(prevEntityDictRef.current);
+        // Only update if we have actual encountered entities
+        if (!entitiesEncountered || Object.keys(entitiesEncountered).length === 0) {
+            // Don't clear the dictionary - let initializeEntityDictFromDags handle empty state
             return;
         }
 
-        if (!entitiesEncountered || !entityDags.length) {
-            return; // Need both entities and DAGs
+        if (!entityDags.length) {
+            return; // Need DAGs to process entities
         }
 
         // Get source name from entityDags
@@ -536,7 +548,7 @@ const SourceConnectionDetailView = ({
             return acc;
         }, {} as Record<string, number>);
 
-        console.log('Created cleaned entity dictionary:', cleanedDict, 'with source name:', sourceName);
+        console.log('Updated entity dictionary with real values:', cleanedDict, 'with source name:', sourceName);
 
         // Only update if we have actual entities
         if (Object.keys(cleanedDict).length > 0) {
@@ -760,6 +772,43 @@ const SourceConnectionDetailView = ({
 
         return timeInfo;
     }
+
+    // Add function to initialize entity dictionary from DAGs with 0 values
+    const initializeEntityDictFromDags = useCallback(() => {
+        // Only initialize if we don't have real data yet
+        if (entityData.encountered && Object.keys(entityData.encountered).length > 0) {
+            return;
+        }
+
+        if (!entityDags || entityDags.length === 0) return;
+
+        // Check if we already have an entity dict to avoid re-initializing
+        if (Object.keys(entityDict).length > 0) return;
+
+        // Get source name from entityDags
+        const sourceName = entityDags[0].nodes
+            .filter(node => node.type === 'source')
+            .map(node => node.name)[0] || '';
+
+        // Extract entity names from DAGs and initialize with 0
+        const initialDict: Record<string, number> = {};
+        entityDags.forEach(dag => {
+            if (dag.name && !dag.name.includes('WebFile')) {
+                const cleanedName = cleanEntityName(dag.name, sourceName);
+                initialDict[cleanedName] = 0;
+            }
+        });
+
+        if (Object.keys(initialDict).length > 0) {
+            console.log('Initialized entity dictionary from DAGs with 0 values:', initialDict);
+            setEntityDict(initialDict);
+
+            // Select first entity if none selected
+            if (!selectedEntity) {
+                setSelectedEntity(Object.keys(initialDict)[0]);
+            }
+        }
+    }, [entityDags, entityData.encountered, selectedEntity, entityDict]);
 
     /********************************************
      * SIDE EFFECTS - ORDERED BY PRIORITY
@@ -993,6 +1042,11 @@ const SourceConnectionDetailView = ({
             setNextRunTime(nextRun);
         }
     }, [selectedConnection?.cron_schedule, calculateNextRunTime]);
+
+    // Initialize entity dictionary from DAGs when they're loaded
+    useEffect(() => {
+        initializeEntityDictFromDags();
+    }, [entityDags, initializeEntityDictFromDags]); // Include the callback in dependencies
 
     console.log(`[PubSub] Data source for job ${lastSyncJob?.id}: ${isShowingRealtimeUpdates ? 'LIVE UPDATES' : 'DATABASE'}`);
 
