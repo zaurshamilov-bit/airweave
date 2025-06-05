@@ -147,27 +147,23 @@ Based on the actual model inheritance patterns in the codebase:
 - **Pattern**: User-specific data, checks on user identity
 - **Example**: User profile, preferences, user-organization relationships
 
-**2. CRUDUserInOrganization**: User-owned resources within organization context
-- **Models**: Collection, SourceConnection, WhiteLabel (all extend OrganizationBase + UserMixin)
-- **Pattern**: User owns the resource, but within organization scope
-- **Access**: User must be creator/modifier AND be in the organization
-- **API Pattern**: Public-facing user resources
+**2. CRUDOrganization**: Organization-scoped resources (unified pattern)
+- **Models**: All OrganizationBase models (Collection, SourceConnection, Entity, APIKey, etc.)
+- **Configuration Flags**:
+  - `track_user: bool` - Whether model has UserMixin (created_by_email, modified_by_email)
+- **Access Patterns**:
+  - All organization members can access resources within their organization scope
+  - User tracking for auditing purposes only (no ownership restrictions)
+- **API Pattern**: Unified organization-scoped endpoints
 
-**3. CRUDOrganization**: Organization-wide resources
-- **Two sub-patterns**:
-  - With user tracking: APIKey, IntegrationCredential (OrganizationBase + UserMixin)
-  - Without user tracking: Entity, Sync, SyncJob (OrganizationBase only)
-- **Pattern**: Organization membership required, optional user tracking
-- **Access**: Any organization member can access (with role-based restrictions)
-
-**4. CRUDPublic**: System-wide resources
+**3. CRUDPublic**: System-wide resources
 - **Models**: Source, Destination, EntityDefinition, Transformer (Base with nullable organization_id)
 - **Pattern**: Available to all authenticated users, optionally organization-specific
 - **Access**: No organization filtering (or filtered by nullable organization_id)
 
 ### Implementation Strategy
 
-**New File**: `backend/airweave/crud/_base_user.py`
+**Enhanced File**: `backend/airweave/crud/_base_organization.py`
 ```python
 from typing import Generic, Optional, Type, TypeVar
 from uuid import UUID
@@ -181,83 +177,8 @@ ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
-class CRUDUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
-    """CRUD for pure user-level data."""
-
-    def __init__(self, model: Type[ModelType]):
-        self.model = model
-
-    async def get(self, db: AsyncSession, id: UUID, current_user: User) -> Optional[ModelType]:
-        """Get user data - must be same user."""
-        if id != current_user.id:
-            raise PermissionException("Cannot access other user's data")
-
-        result = await db.execute(select(self.model).where(self.model.id == id))
-        return result.unique().scalar_one_or_none()
-```
-
-**New File**: `backend/airweave/crud/_base_user_in_organization.py`
-```python
-class CRUDUserInOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
-    """CRUD for user-owned resources within organization context."""
-
-    def __init__(self, model: Type[ModelType]):
-        self.model = model
-
-    async def get(self, db: AsyncSession, id: UUID, current_user: User) -> Optional[ModelType]:
-        """Get user-owned resource in current user's organization."""
-        query = select(self.model).where(
-            self.model.id == id,
-            self.model.organization_id == current_user.current_organization_id,
-            # User must be creator or modifier
-            (self.model.created_by_email == current_user.email) |
-            (self.model.modified_by_email == current_user.email)
-        )
-        result = await db.execute(query)
-        return result.unique().scalar_one_or_none()
-
-    async def get_multi_for_user(
-        self,
-        db: AsyncSession,
-        current_user: User,
-        *, skip: int = 0, limit: int = 100
-    ) -> list[ModelType]:
-        """Get all user-owned resources in current organization."""
-        query = select(self.model).where(
-            self.model.organization_id == current_user.current_organization_id,
-            (self.model.created_by_email == current_user.email) |
-            (self.model.modified_by_email == current_user.email)
-        ).offset(skip).limit(limit)
-
-        result = await db.execute(query)
-        return list(result.unique().scalars().all())
-
-    async def create(
-        self,
-        db: AsyncSession,
-        *,
-        obj_in: CreateSchemaType,
-        current_user: User
-    ) -> ModelType:
-        """Create user-owned resource in current organization."""
-        if not isinstance(obj_in, dict):
-            obj_in = obj_in.model_dump(exclude_unset=True)
-
-        obj_in['organization_id'] = current_user.current_organization_id
-        obj_in['created_by_email'] = current_user.email
-        obj_in['modified_by_email'] = current_user.email
-
-        db_obj = self.model(**obj_in)
-        db.add(db_obj)
-        await db.commit()
-        await db.refresh(db_obj)
-        return db_obj
-```
-
-**New File**: `backend/airweave/crud/_base_organization.py` (Enhanced)
-```python
 class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
-    """CRUD for organization-wide resources."""
+    """Unified CRUD for all organization-scoped resources."""
 
     def __init__(self, model: Type[ModelType], track_user: bool = True):
         self.model = model
@@ -270,7 +191,7 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         current_user: User,
         organization_id: Optional[UUID] = None
     ) -> Optional[ModelType]:
-        """Get organization resource - user must be org member."""
+        """Get organization resource."""
         effective_org_id = organization_id or current_user.current_organization_id
 
         # Validate user has org access
@@ -280,6 +201,7 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             self.model.id == id,
             self.model.organization_id == effective_org_id
         )
+
         result = await db.execute(query)
         return result.unique().scalar_one_or_none()
 
@@ -288,7 +210,9 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         current_user: User,
         organization_id: Optional[UUID] = None,
-        *, skip: int = 0, limit: int = 100
+        *,
+        skip: int = 0,
+        limit: int = 100
     ) -> list[ModelType]:
         """Get all resources for organization."""
         effective_org_id = organization_id or current_user.current_organization_id
@@ -332,6 +256,28 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         await db.refresh(db_obj)
         return db_obj
 
+    async def update(
+        self,
+        db: AsyncSession,
+        *,
+        db_obj: ModelType,
+        obj_in: UpdateSchemaType,
+        current_user: User
+    ) -> ModelType:
+        """Update organization resource."""
+        if not isinstance(obj_in, dict):
+            obj_in = obj_in.model_dump(exclude_unset=True)
+
+        if self.track_user:
+            obj_in['modified_by_email'] = current_user.email
+
+        for field, value in obj_in.items():
+            setattr(db_obj, field, value)
+
+        await db.commit()
+        await db.refresh(db_obj)
+        return db_obj
+
     async def _validate_organization_access(
         self,
         db: AsyncSession,
@@ -343,6 +289,35 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         # For now, just check primary organization
         if organization_id != user.organization_id:
             raise PermissionException(f"User does not have access to organization {organization_id}")
+```
+
+**New File**: `backend/airweave/crud/_base_user.py`
+```python
+from typing import Generic, Optional, Type, TypeVar
+from uuid import UUID
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from airweave.core.exceptions import PermissionException
+from airweave.models._base import Base
+from airweave.schemas import User
+
+ModelType = TypeVar("ModelType", bound=Base)
+CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
+UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
+
+class CRUDUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+    """CRUD for pure user-level data."""
+
+    def __init__(self, model: Type[ModelType]):
+        self.model = model
+
+    async def get(self, db: AsyncSession, id: UUID, current_user: User) -> Optional[ModelType]:
+        """Get user data - must be same user."""
+        if id != current_user.id:
+            raise PermissionException("Cannot access other user's data")
+
+        result = await db.execute(select(self.model).where(self.model.id == id))
+        return result.unique().scalar_one_or_none()
 ```
 
 **New File**: `backend/airweave/crud/_base_public.py`
@@ -381,41 +356,59 @@ class CRUDPublic(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
 ### Migration Plan for Existing CRUD Classes
 
-**Step 1: Update Existing Classes**
+**Step 1: Update Existing Classes with Unified Pattern**
 ```python
-# Update Collection (UserInOrganization pattern)
-class CRUDCollection(CRUDUserInOrganization[Collection, CollectionCreate, CollectionUpdate]):
+# Resources with user tracking
+class CRUDCollection(CRUDOrganization[Collection, CollectionCreate, CollectionUpdate]):
     def __init__(self):
-        super().__init__(Collection)
+        super().__init__(Collection, track_user=True)
 
-# Update Entity (Organization pattern, no user tracking)
-class CRUDEntity(CRUDOrganization[Entity, EntityCreate, EntityUpdate]):
+class CRUDSourceConnection(CRUDOrganization[SourceConnection, SourceConnectionCreate, SourceConnectionUpdate]):
     def __init__(self):
-        super().__init__(Entity, track_user=False)
+        super().__init__(SourceConnection, track_user=True)
 
-# Update APIKey (Organization pattern, with user tracking)
+class CRUDWhiteLabel(CRUDOrganization[WhiteLabel, WhiteLabelCreate, WhiteLabelUpdate]):
+    def __init__(self):
+        super().__init__(WhiteLabel, track_user=True)
+
 class CRUDAPIKey(CRUDOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
     def __init__(self):
         super().__init__(APIKey, track_user=True)
 
-# Update Source (Public pattern)
+class CRUDIntegrationCredential(CRUDOrganization[IntegrationCredential, IntegrationCredentialCreate, IntegrationCredentialUpdate]):
+    def __init__(self):
+        super().__init__(IntegrationCredential, track_user=True)
+
+# Resources without user tracking
+class CRUDEntity(CRUDOrganization[Entity, EntityCreate, EntityUpdate]):
+    def __init__(self):
+        super().__init__(Entity, track_user=False)
+
+class CRUDSync(CRUDOrganization[Sync, SyncCreate, SyncUpdate]):
+    def __init__(self):
+        super().__init__(Sync, track_user=False)
+
+class CRUDSyncJob(CRUDOrganization[SyncJob, SyncJobCreate, SyncJobUpdate]):
+    def __init__(self):
+        super().__init__(SyncJob, track_user=False)
+
+# Public resources (unchanged)
 class CRUDSource(CRUDPublic[Source, SourceCreate, SourceUpdate]):
     def __init__(self):
         super().__init__(Source)
 ```
 
-**Step 2: API Layer Updates**
+**Step 2: API Layer Updates with Simplified Endpoints**
 ```python
-# UserInOrganization pattern endpoints
+# All organization-scoped resources use the same pattern
 @router.get("/collections/", response_model=List[schemas.Collection])
 async def list_collections(
     current_user: User = Depends(deps.get_user),
     db: AsyncSession = Depends(deps.get_db),
 ):
-    """List user's collections in current organization."""
-    return await crud.collection.get_multi_for_user(db, current_user)
+    """List all collections in current organization."""
+    return await crud.collection.get_multi_for_organization(db, current_user)
 
-# Organization pattern endpoints
 @router.get("/entities/", response_model=List[schemas.Entity])
 async def list_entities(
     current_user: User = Depends(deps.get_user),
@@ -424,14 +417,13 @@ async def list_entities(
     """List all entities in current organization."""
     return await crud.entity.get_multi_for_organization(db, current_user)
 
-# Public pattern endpoints
-@router.get("/sources/", response_model=List[schemas.Source])
-async def list_sources(
+@router.get("/api-keys/", response_model=List[schemas.APIKey])
+async def list_api_keys(
     current_user: User = Depends(deps.get_user),
     db: AsyncSession = Depends(deps.get_db),
 ):
-    """List all available sources."""
-    return await crud.source.get_multi(db, organization_id=current_user.current_organization_id)
+    """List all API keys in current organization."""
+    return await crud.api_key.get_multi_for_organization(db, current_user)
 ```
 
 ### Model Classification Summary
@@ -440,21 +432,16 @@ async def list_sources(
 - User (self-management only)
 - Future: UserPreferences
 
-**CRUDUserInOrganization** (OrganizationBase + UserMixin):
-- Collection
-- SourceConnection
-- WhiteLabel
-
-**CRUDOrganization**:
-- *With user tracking*: APIKey, IntegrationCredential
-- *Without user tracking*: Entity, Sync, SyncJob, DAG, Connection
+**CRUDOrganization** (unified with track_user flag):
+- **With user tracking** (`track_user=True`): Collection, SourceConnection, WhiteLabel, APIKey, IntegrationCredential
+- **Without user tracking** (`track_user=False`): Entity, Sync, SyncJob, DAG, Connection
 
 **CRUDPublic** (Base, optional nullable organization_id):
 - Source, Destination
 - EntityDefinition
 - Transformer, EmbeddingModel
 
-This approach avoids god classes while providing clear, purpose-built CRUD patterns that match the actual usage in your codebase.
+This approach provides clean organization scoping without complex ownership logic, while maintaining user tracking for auditing purposes where needed.
 
 ---
 
@@ -783,13 +770,11 @@ Found Invitation?
 - CRUD operations automatically filter by organization
 
 **Caching Strategy**:
-- Organization memberships cached for 5 minutes
 - Auth0 API calls minimized through smart caching
 - Frontend stores organization data in Zustand with persistence
 
 **Error Handling**:
-- Auth0 API failures gracefully degrade to cached data
-- Organization access validation at every API boundary
+- Organization access validation at every API boundary using dependency injection
 - Frontend shows appropriate error states
 
 **Security Validation Points**:
