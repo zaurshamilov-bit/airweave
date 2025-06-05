@@ -1,4 +1,5 @@
 import { env } from '../config/env';
+import { useOrganizationStore } from '@/lib/stores/organization-store';
 
 // Define a token provider interface
 interface TokenProvider {
@@ -100,6 +101,24 @@ export const API_CONFIG = {
 type ApiResponse<T = any> = Promise<Response>;
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
+// Get headers with optional organization context
+const getHeaders = async (): Promise<Record<string, string>> => {
+  const token = await tokenProvider.getToken();
+  const { currentOrganization } = useOrganizationStore.getState();
+
+  const headers: Record<string, string> = {
+    ...API_CONFIG.headers,
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+
+  // TODO: Uncomment when backend is ready for organization scoping
+  // if (currentOrganization) {
+  //   headers['X-Organization-ID'] = currentOrganization.id;
+  // }
+
+  return headers;
+};
+
 // Shared HTTP request function to eliminate duplication
 const makeRequest = async <T>(
   method: HttpMethod,
@@ -117,11 +136,7 @@ const makeRequest = async <T>(
       );
     }
 
-    let token = await tokenProvider.getToken();
-    const headers = {
-      ...API_CONFIG.headers,
-      ...(token && { Authorization: `Bearer ${token}` }),
-    };
+    let headers = await getHeaders();
 
     const fetchOptions: RequestInit = {
       method,
@@ -139,17 +154,14 @@ const makeRequest = async <T>(
     if ((response.status === 401 || response.status === 403) && tokenProvider.clearToken) {
       console.log(`Got ${response.status} error, attempting token refresh`);
       tokenProvider.clearToken(); // Clear the cached token
-      token = await tokenProvider.getToken(); // Get a fresh token
 
-      if (token) {
+      // Get fresh headers with new token
+      headers = await getHeaders();
+
+      if (headers.Authorization) {
         console.log('Retrying request with fresh token');
         // Retry with new token
-        const retryHeaders = {
-          ...API_CONFIG.headers,
-          Authorization: `Bearer ${token}`,
-        };
-
-        fetchOptions.headers = retryHeaders;
+        fetchOptions.headers = headers;
         response = await fetch(url.toString(), fetchOptions);
       }
     }

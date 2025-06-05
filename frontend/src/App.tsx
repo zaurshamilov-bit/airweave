@@ -13,6 +13,8 @@ import CreateWhiteLabel from '@/pages/CreateWhiteLabel';
 import WhiteLabelDetail from '@/pages/WhiteLabelDetail';
 import WhiteLabelEdit from '@/pages/WhiteLabelEdit';
 import SemanticMcp from '@/pages/SemanticMcp';
+import { OrganizationSettings } from '@/pages/organization/OrganizationSettings';
+import { OrganizationMembers } from '@/pages/organization/OrganizationMembers';
 import { useCollectionsStore } from '@/lib/stores';
 import { NotFound } from '@/pages/NotFound';
 import { AuthGuard } from '@/components/AuthGuard';
@@ -50,6 +52,10 @@ function App() {
           <Route path={protectedPaths.whiteLabelCreate} element={<CreateWhiteLabel />} />
           <Route path={protectedPaths.whiteLabelDetail} element={<WhiteLabelDetail />} />
           <Route path={protectedPaths.whiteLabelEdit} element={<WhiteLabelEdit />} />
+
+          {/* Organization routes */}
+          <Route path="/organization/settings" element={<OrganizationSettings />} />
+          <Route path="/organization/members" element={<OrganizationMembers />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
