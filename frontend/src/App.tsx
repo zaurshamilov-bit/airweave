@@ -7,7 +7,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import Dashboard from '@/pages/Dashboard';
 import CollectionDetailView from "@/pages/CollectionDetailView";
 import CollectionsView from "@/pages/CollectionsView";
-import Chat from '@/pages/Chat';
+
 import WhiteLabel from '@/pages/WhiteLabel';
 import CreateWhiteLabel from '@/pages/CreateWhiteLabel';
 import WhiteLabelDetail from '@/pages/WhiteLabelDetail';

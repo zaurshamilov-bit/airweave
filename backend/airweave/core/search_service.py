@@ -2,6 +2,7 @@
 
 import logging
 
+from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
@@ -17,6 +18,45 @@ logger = logging.getLogger(__name__)
 
 class SearchService:
     """Service for handling vector database searches."""
+
+    # OpenAI configuration constants
+    DEFAULT_MODEL = "gpt-4o"
+    DEFAULT_MODEL_SETTINGS = {
+        "temperature": 0.7,
+        "max_tokens": 1000,
+        "top_p": 1,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+    }
+
+    CONTEXT_PROMPT = """You are an AI assistant with access to a knowledge base.
+    Use the following relevant context to help answer the user's question.
+    Always format your responses in proper markdown, including:
+    - Using proper headers (# ## ###)
+    - Formatting code blocks with ```language
+    - Using tables with | header | header |
+    - Using bullet points and numbered lists
+    - Using **bold** and *italic* where appropriate
+
+    Here's the context:
+    {context}
+
+    Remember to:
+    1. Be helpful, clear, and accurate
+    2. Maintain a professional tone
+    3. Format ALL responses in proper markdown
+    4. Use tables when presenting structured data
+    5. Use code blocks with proper language tags"""
+
+    def __init__(self):
+        """Initialize the search service with OpenAI client."""
+        if not settings.OPENAI_API_KEY:
+            logger.warning("OPENAI_API_KEY is not set in environment variables")
+            self.openai_client = None
+        else:
+            self.openai_client = AsyncOpenAI(
+                api_key=settings.OPENAI_API_KEY,
+            )
 
     async def search(
         self,
@@ -107,9 +147,6 @@ class SearchService:
         Returns:
             dict: A dictionary containing search results or AI completion
         """
-        # Lazy import to avoid circular dependency
-        from airweave.core.chat_service import chat_service
-
         results = await self.search(
             db=db,
             query=query,
@@ -122,6 +159,28 @@ class SearchService:
                 results=results, response_type=response_type, status=SearchStatus.SUCCESS
             )
 
+        # Check for no results or low-quality results
+        quality_response = self._check_result_quality(results)
+        if quality_response:
+            return quality_response
+
+        # Process results and generate completion
+        processed_results = self._process_search_results(results)
+        completion = await self._generate_ai_completion(query, processed_results)
+
+        return schemas.SearchResponse(
+            results=processed_results,
+            completion=completion,
+            response_type=response_type,
+            status=SearchStatus.SUCCESS,
+        )
+
+    def _check_result_quality(self, results: list[dict]) -> schemas.SearchResponse | None:
+        """Check if results are empty or have low quality scores.
+
+        Returns:
+            SearchResponse if results are poor quality, None if results are good
+        """
         # If no results found, return a more specific message
         if not results:
             return schemas.SearchResponse(
@@ -147,24 +206,41 @@ class SearchService:
                 status=SearchStatus.NO_RELEVANT_RESULTS,
             )
 
-        # Extract vector data from each result's payload
-        vector_data = []
+        return None
+
+    def _process_search_results(self, results: list[dict]) -> list[dict]:
+        """Process search results by removing vector data and download URLs.
+
+        Args:
+            results: Raw search results
+
+        Returns:
+            Processed results with vectors and download URLs removed
+        """
         for result in results:
             if isinstance(result, dict) and "payload" in result:
-                if "vector" in result["payload"]:
-                    vector_data.append(str(result["payload"]["vector"]))
-                    # Remove vector from payload to avoid sending large data back
-                    result["payload"].pop("vector", None)
-
+                # Remove vector from payload to avoid sending large data back
+                result["payload"].pop("vector", None)
                 # Also remove download URLs from payload
-                if "download_url" in result["payload"]:
-                    result["payload"].pop("download_url", None)
+                result["payload"].pop("download_url", None)
 
-        # Modify the context prompt to be more specific about only answering based on context
+        return results
+
+    async def _generate_ai_completion(self, query: str, results: list[dict]) -> str:
+        """Generate AI completion based on search results.
+
+        Args:
+            query: The user's search query
+            results: Processed search results
+
+        Returns:
+            AI-generated completion text
+        """
+        # Prepare messages for OpenAI
         messages = [
             {
                 "role": "system",
-                "content": chat_service.CONTEXT_PROMPT.format(
+                "content": self.CONTEXT_PROMPT.format(
                     context=str(results),
                     additional_instruction=(
                         "If the provided context doesn't contain information to answer "
@@ -177,32 +253,27 @@ class SearchService:
         ]
 
         # Generate completion
-        model = chat_service.DEFAULT_MODEL
-        model_settings = chat_service.DEFAULT_MODEL_SETTINGS.copy()
+        model = self.DEFAULT_MODEL
+        model_settings = self.DEFAULT_MODEL_SETTINGS.copy()
 
         # Remove streaming setting if present
-        if "stream" in model_settings:
-            model_settings.pop("stream")
+        model_settings.pop("stream", None)
 
         try:
-            response = await chat_service.client.chat.completions.create(
+            if not self.openai_client:
+                return "OpenAI API key not configured. Cannot generate completion."
+
+            response = await self.openai_client.chat.completions.create(
                 model=model, messages=messages, **model_settings
             )
 
-            completion = (
+            return (
                 response.choices[0].message.content
                 if response.choices
                 else "Unable to generate completion."
             )
         except Exception as e:
-            completion = f"Error generating completion: {str(e)}"
-
-        return schemas.SearchResponse(
-            results=results,
-            completion=completion,
-            response_type=response_type,
-            status=SearchStatus.SUCCESS,
-        )
+            return f"Error generating completion: {str(e)}"
 
 
 # Create singleton instance

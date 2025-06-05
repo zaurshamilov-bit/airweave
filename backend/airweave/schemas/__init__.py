@@ -9,7 +9,6 @@ from .api_key import (
     APIKeyInDBBase,
     APIKeyUpdate,
 )
-from .chat import Chat, ChatCreate, ChatMessage, ChatMessageCreate, ChatUpdate
 from .collection import (
     Collection,
     CollectionCreate,

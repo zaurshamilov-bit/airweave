@@ -36,21 +36,6 @@ class SyncStatus(str, Enum):
     ERROR = "error"
 
 
-class ChatStatus(str, Enum):
-    """Chat status enumeration."""
-
-    ACTIVE = "active"
-    ARCHIVED = "archived"
-
-
-class ChatRole(str, Enum):
-    """Role of the message sender."""
-
-    USER = "user"
-    ASSISTANT = "assistant"
-    SYSTEM = "system"
-
-
 class SourceConnectionStatus(str, Enum):
     """Source connection status enum."""
 
