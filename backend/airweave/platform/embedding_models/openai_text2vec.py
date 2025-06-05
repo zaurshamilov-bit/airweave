@@ -111,91 +111,205 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         dimensions: Optional[int] = None,
         entity_context: Optional[str] = None,
     ) -> List[List[float]]:
-        """Embed multiple text strings using OpenAI official client.
-
-        Args:
-            texts: List of texts to embed
-            model: The OpenAI model to use (defaults to self.embedding_model)
-            encoding_format: Format of the embedding (default: float)
-            dimensions: Vector dimensions (defaults to self.vector_dimensions)
-            entity_context: Optional context string for entity identification in logs
-
-        Returns:
-            List of embedding vectors
-        """
+        """Embed multiple text strings using OpenAI official client."""
         if dimensions:
             raise ValueError("Dimensions override not supported for OpenAI embedding")
 
         context_prefix = f"{entity_context} " if entity_context else ""
 
         if not texts:
-            logger.info(f"{context_prefix}Empty texts list provided for embedding")
+            logger.info(f"📭 OPENAI_EMPTY [{context_prefix}] Empty texts list provided")
             return []
 
-        logger.info(f"{context_prefix}Embedding batch of {len(texts)} texts")
+        logger.info(
+            f"🤖 OPENAI_START [{context_prefix}] Starting batch embedding for {len(texts)} texts"
+        )
 
-        # Filter out empty texts and track their positions
+        # Filter empty texts and track indices
+        filtered_result = self._filter_empty_texts(texts, context_prefix)
+        filtered_texts, empty_indices = filtered_result
+
+        if not filtered_texts:
+            logger.info(f"📭 OPENAI_ALL_EMPTY [{context_prefix}] All texts were empty")
+            return [[0.0] * self.vector_dimensions] * len(texts)
+
+        self._log_processing_stats(filtered_texts, empty_indices, context_prefix)
+
+        used_model = model or self.embedding_model
+        embeddings = await self._process_embeddings_in_batches(
+            filtered_texts, used_model, encoding_format, context_prefix
+        )
+
+        # Reinsert empty vectors at the correct positions
+        return self._reinsert_empty_vectors(embeddings, empty_indices, len(texts))
+
+    def _filter_empty_texts(self, texts: List[str], context_prefix: str) -> tuple[List[str], set]:
+        """Filter out empty texts and return filtered list and empty indices."""
         filtered_texts = []
         empty_indices = set()
+        total_chars = 0
 
         for i, text in enumerate(texts):
             if text.strip():
                 filtered_texts.append(text)
+                total_chars += len(text)
             else:
                 empty_indices.add(i)
 
-        if not filtered_texts:
-            logger.info(f"{context_prefix}All texts in batch were empty, returning zero vectors")
-            return [[0.0] * self.vector_dimensions] * len(texts)
+        return filtered_texts, empty_indices
+
+    def _log_processing_stats(
+        self, filtered_texts: List[str], empty_indices: set, context_prefix: str
+    ):
+        """Log statistics about texts being processed."""
+        total_chars = sum(len(text) for text in filtered_texts)
+        avg_chars = total_chars / len(filtered_texts) if filtered_texts else 0
 
         logger.info(
-            f"{context_prefix}Embedding {len(filtered_texts)} non-empty texts "
-            f"(skipped {len(empty_indices)} empty texts)"
+            f"📊 OPENAI_STATS [{context_prefix}] Processing {len(filtered_texts)} non-empty texts "
+            f"(skipped {len(empty_indices)} empty, avg chars: {avg_chars:.0f})"
         )
 
-        used_model = model or self.embedding_model
+    async def _process_embeddings_in_batches(
+        self, texts: List[str], model: str, encoding_format: str, context_prefix: str
+    ) -> List[List[float]]:
+        """Process embeddings in optimized batches."""
         loop = asyncio.get_event_loop()
         cpu_start = loop.time()
 
+        # Process in batches to avoid API limits
+        # OpenAI limits: 8191 tokens per text, 2048 texts per batch, 300k total tokens per request
+        MAX_BATCH_SIZE = 100  # Well under the 2048 limit, allows good parallelism
+        MAX_TOKENS_PER_BATCH = 280000  # ~93% of 300k limit for safety margin
+
+        embeddings = []
+        current_batch = []
+        current_batch_tokens = 0
+
+        for text in texts:
+            # Estimate tokens (rough: 1 token ≈ 4 chars for English text)
+            estimated_tokens = len(text) // 4
+
+            # Check if adding this text would exceed limits
+            should_process_batch = current_batch and (
+                len(current_batch) >= MAX_BATCH_SIZE
+                or current_batch_tokens + estimated_tokens > MAX_TOKENS_PER_BATCH
+            )
+
+            if should_process_batch:
+                # Process current batch
+                batch_embeddings = await self._process_single_batch(
+                    current_batch, model, encoding_format, context_prefix
+                )
+                embeddings.extend(batch_embeddings)
+
+                # Start new batch
+                current_batch = [text]
+                current_batch_tokens = estimated_tokens
+            else:
+                # Add to current batch
+                current_batch.append(text)
+                current_batch_tokens += estimated_tokens
+
+        # Process final batch
+        if current_batch:
+            batch_embeddings = await self._process_single_batch(
+                current_batch, model, encoding_format, context_prefix
+            )
+            embeddings.extend(batch_embeddings)
+
+        cpu_elapsed = loop.time() - cpu_start
+        logger.info(
+            f"✅ OPENAI_COMPLETE [{context_prefix}] All batches completed in {cpu_elapsed:.2f}s "
+            f"({len(embeddings)} vectors returned)"
+        )
+
+        return embeddings
+
+    async def _process_single_batch(
+        self, batch: List[str], model: str, encoding_format: str, context_prefix: str
+    ) -> List[List[float]]:
+        """Process a single batch of texts."""
+        loop = asyncio.get_event_loop()
+        batch_start = loop.time()
+
         try:
-            # Wait for the API call to complete with await
+            logger.info(
+                f"🔗 OPENAI_BATCH_API_CALL [{context_prefix}] "
+                f"Processing batch of {len(batch)} texts"
+            )
+
             response = await self._client.embeddings.create(
-                input=filtered_texts,
-                model=used_model,
+                input=batch,
+                model=model,
                 encoding_format=encoding_format,
             )
 
-            # Extract embeddings from response
-            embeddings = [embedding_data.embedding for embedding_data in response.data]
+            batch_embeddings = [embedding_data.embedding for embedding_data in response.data]
+            batch_elapsed = loop.time() - batch_start
 
-            cpu_elapsed = loop.time() - cpu_start
             logger.info(
-                f"{context_prefix}Batch embedding completed in {cpu_elapsed:.2f}s "
-                f"({len(embeddings)} vectors)"
+                f"✅ OPENAI_BATCH_SUCCESS [{context_prefix}] "
+                f"Batch completed in {batch_elapsed:.2f}s"
             )
 
-            # Reinsert empty vectors at the correct positions
-            result = []
-            embedding_idx = 0
-
-            for i in range(len(texts)):
-                if i in empty_indices:
-                    result.append([0.0] * self.vector_dimensions)
-                else:
-                    result.append(embeddings[embedding_idx])
-                    embedding_idx += 1
-
-            logger.info(f"{context_prefix}Final result contains {len(result)} vectors")
-            return result
+            return batch_embeddings
 
         except Exception as e:
-            cpu_elapsed = loop.time() - cpu_start
-            error_type = type(e).__name__
-            logger.error(
-                f"{context_prefix}Batch embedding failed after {cpu_elapsed:.2f}s "
-                f"with {error_type}: {str(e)}"
+            # Check if it's a token limit error
+            if "maximum context length" in str(e) or "max_tokens_per_request" in str(e):
+                logger.warning(
+                    f"🚦 OPENAI_TOKEN_LIMIT [{context_prefix}] Hit token limit with batch of "
+                    f"{len(batch)} texts, splitting batch"
+                )
+                return await self._handle_token_limit_error(
+                    batch, model, encoding_format, context_prefix
+                )
+            else:
+                raise e
+
+    async def _handle_token_limit_error(
+        self, batch: List[str], model: str, encoding_format: str, context_prefix: str
+    ) -> List[List[float]]:
+        """Handle token limit errors by splitting batches."""
+        # Split batch in half and retry
+        if len(batch) > 1:
+            mid = len(batch) // 2
+            first_half = await self._process_single_batch(
+                batch[:mid], model, encoding_format, context_prefix
             )
-            raise
+            second_half = await self._process_single_batch(
+                batch[mid:], model, encoding_format, context_prefix
+            )
+            return first_half + second_half
+        else:
+            # Single text is too long - this shouldn't happen if chunkers work correctly
+            logger.error(
+                f"❌ OPENAI_CHUNK_TOO_LARGE [{context_prefix}] "
+                f"Single chunk exceeds token limit! This indicates a chunker failure."
+            )
+            # As a last resort, truncate
+            truncated_text = batch[0][:30000]  # ~7500 tokens as emergency fallback
+            return await self._process_single_batch(
+                [truncated_text], model, encoding_format, context_prefix
+            )
+
+    def _reinsert_empty_vectors(
+        self, embeddings: List[List[float]], empty_indices: set, total_length: int
+    ) -> List[List[float]]:
+        """Reinsert empty vectors at their original positions."""
+        result = []
+        embedding_idx = 0
+
+        for i in range(total_length):
+            if i in empty_indices:
+                result.append([0.0] * self.vector_dimensions)
+            else:
+                result.append(embeddings[embedding_idx])
+                embedding_idx += 1
+
+        logger.info(f"📦 OPENAI_FINAL Final result: {len(result)} vectors")
+        return result
 
     async def close(self):
         """Clean up the shared client when done."""

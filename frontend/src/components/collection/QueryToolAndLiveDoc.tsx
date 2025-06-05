@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { apiClient, API_CONFIG } from '@/lib/api';
@@ -17,12 +17,13 @@ import { CursorIcon } from '@/components/icons/CursorIcon';
 import { WindsurfIcon } from '@/components/icons/WindsurfIcon';
 import { CodeBlock } from '@/components/ui/code-block';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from "@/components/ui/select";
+import { JsonViewer } from '@textea/json-viewer';
 
 interface QueryToolAndLiveDocProps {
     collectionReadableId: string;
@@ -37,6 +38,7 @@ export const QueryToolAndLiveDoc = ({ collectionReadableId }: QueryToolAndLiveDo
     const [responseType, setResponseType] = useState<ResponseType>('raw');
     const [completion, setCompletion] = useState('');
     const [objects, setObjects] = useState('');
+    const [objectsData, setObjectsData] = useState<any>(null);  // Add state for parsed JSON
     const [isLoading, setIsLoading] = useState(false);
     const [statusCode, setStatusCode] = useState<number | null>(null);
     const [responseTime, setResponseTime] = useState<number | null>(null);
@@ -52,6 +54,23 @@ export const QueryToolAndLiveDoc = ({ collectionReadableId }: QueryToolAndLiveDo
     const { resolvedTheme } = useTheme();
     const responseRef = useRef<HTMLDivElement>(null);
     const isDark = resolvedTheme === 'dark';
+
+    // Memoize expensive style objects
+    const syntaxStyle = useMemo(() => isDark ? materialOceanic : oneLight, [isDark]);
+
+    const customSyntaxStyle = useMemo(() => ({
+        ...syntaxStyle,
+        'pre[class*="language-"]': {
+            ...syntaxStyle['pre[class*="language-"]'],
+            background: 'transparent',
+            margin: 0,
+            padding: 0,
+        },
+        'code[class*="language-"]': {
+            ...syntaxStyle['code[class*="language-"]'],
+            background: 'transparent',
+        }
+    }), [syntaxStyle]);
 
     // Fetch API key
     useEffect(() => {
@@ -76,84 +95,8 @@ export const QueryToolAndLiveDoc = ({ collectionReadableId }: QueryToolAndLiveDo
         fetchApiKey();
     }, []);
 
-    // Reset tab when switching view modes to avoid invalid states
-    const handleViewModeChange = (mode: "restapi" | "mcpserver") => {
-        setViewMode(mode);
-        if (mode === "restapi") {
-            setApiTab("rest");
-        } else {
-            setApiTab("claude");
-        }
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        // Don't proceed if query is empty
-        if (!query.trim()) return;
-
-        setIsLoading(true);
-        setStatusCode(null);
-        setResponseTime(null);
-        setSearchStatus(null);
-        const startTime = performance.now();
-
-        try {
-            // Use the collections search endpoint with response_type parameter
-            const response = await apiClient.get(
-                `/collections/${collectionReadableId}/search?query=${encodeURIComponent(query)}&response_type=${responseType}`
-            );
-            const endTime = performance.now();
-            setResponseTime(Math.round(endTime - startTime));
-            setStatusCode(response.status);
-
-            if (!response.ok) {
-                throw new Error(`Search failed: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-
-            // Update state based on the response format
-            setSearchStatus(data.status || null);
-            setObjects(JSON.stringify(data.results || [], null, 2));
-
-            if (responseType === 'completion') {
-                setCompletion(data.completion || '');
-            } else {
-                setCompletion('');
-            }
-        } catch (error) {
-            console.error('Error searching:', error);
-            setCompletion(`Error: ${error instanceof Error ? error.message : String(error)}`);
-            setObjects('');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleCopyObjects = async () => {
-        try {
-            await navigator.clipboard.writeText(objects);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (error) {
-            console.error('Failed to copy:', error);
-        }
-    };
-
-    const handleCopyCompletion = async () => {
-        try {
-            await navigator.clipboard.writeText(completion);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (error) {
-            console.error('Failed to copy:', error);
-        }
-    };
-
-    // Format API URL for display
-    const getApiUrl = () => {
-        // Extract base URL domain for display, removing protocol
+    // Memoize API URL to prevent unnecessary recalculations
+    const apiUrl = useMemo(() => {
         const baseUrlDomain = API_CONFIG.baseURL.replace(/^https?:\/\//, '');
         const baseUrl = `${baseUrlDomain}/collections/${collectionReadableId || '{collection_id}'}/search`;
         const params = [];
@@ -165,10 +108,10 @@ export const QueryToolAndLiveDoc = ({ collectionReadableId }: QueryToolAndLiveDo
         params.push(`response_type=${responseType}`);
 
         return `${baseUrl}?${params.join('&')}`;
-    };
+    }, [collectionReadableId, query, responseType]);
 
-    // Function to build API examples for documentation
-    const getApiEndpoints = () => {
+    // Memoize API endpoints to prevent expensive recalculation on every render
+    const apiEndpoints = useMemo(() => {
         const apiBaseUrl = API_CONFIG.baseURL;
         const apiUrl = `${apiBaseUrl}/collections/${collectionReadableId}/search`;
         const exampleQuery = query || "Ask a question about your data";
@@ -243,28 +186,87 @@ airweave-mcp-search`;
             installSnippet,
             cliSnippet
         };
-    };
+    }, [collectionReadableId, query, responseType, apiKey]);
 
-    // JSON syntax highlighting styles
-    const syntaxStyle = isDark ? materialOceanic : oneLight;
-
-    // Create a custom style that maintains text coloring but fits our design
-    const customSyntaxStyle = {
-        ...syntaxStyle,
-        'pre[class*="language-"]': {
-            ...syntaxStyle['pre[class*="language-"]'],
-            background: 'transparent',
-            margin: 0,
-            padding: 0,
-        },
-        'code[class*="language-"]': {
-            ...syntaxStyle['code[class*="language-"]'],
-            background: 'transparent',
+    // Reset tab when switching view modes to avoid invalid states
+    const handleViewModeChange = useCallback((mode: "restapi" | "mcpserver") => {
+        setViewMode(mode);
+        if (mode === "restapi") {
+            setApiTab("rest");
+        } else {
+            setApiTab("claude");
         }
-    };
+    }, []);
 
-    // Get status indicator colors
-    const getStatusIndicator = (status: string | null) => {
+    const handleSubmit = useCallback(async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        // Don't proceed if query is empty
+        if (!query.trim()) return;
+
+        setIsLoading(true);
+        setStatusCode(null);
+        setResponseTime(null);
+        setSearchStatus(null);
+        const startTime = performance.now();
+
+        try {
+            // Use the collections search endpoint with response_type parameter
+            const response = await apiClient.get(
+                `/collections/${collectionReadableId}/search?query=${encodeURIComponent(query)}&response_type=${responseType}`
+            );
+            const endTime = performance.now();
+            setResponseTime(Math.round(endTime - startTime));
+            setStatusCode(response.status);
+
+            if (!response.ok) {
+                throw new Error(`Search failed: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // Update state based on the response format
+            setSearchStatus(data.status || null);
+            setObjects(JSON.stringify(data.results || [], null, 2));
+            setObjectsData(data.results || []);  // Store parsed data
+
+            if (responseType === 'completion') {
+                setCompletion(data.completion || '');
+            } else {
+                setCompletion('');
+            }
+        } catch (error) {
+            console.error('Error searching:', error);
+            setCompletion(`Error: ${error instanceof Error ? error.message : String(error)}`);
+            setObjects('');
+            setObjectsData(null);  // Clear parsed data
+        } finally {
+            setIsLoading(false);
+        }
+    }, [query, collectionReadableId, responseType]);
+
+    const handleCopyObjects = useCallback(async () => {
+        try {
+            await navigator.clipboard.writeText(objects);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (error) {
+            console.error('Failed to copy:', error);
+        }
+    }, [objects]);
+
+    const handleCopyCompletion = useCallback(async () => {
+        try {
+            await navigator.clipboard.writeText(completion);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (error) {
+            console.error('Failed to copy:', error);
+        }
+    }, [completion]);
+
+    // Get status indicator colors - memoized
+    const getStatusIndicator = useCallback((status: string | null) => {
         if (!status) return "bg-gray-400";
 
         switch (status) {
@@ -275,9 +277,10 @@ airweave-mcp-search`;
             default:
                 return isDark ? "bg-red-400" : "bg-red-500";
         }
-    };
+    }, [isDark]);
 
-    const docLinkFooter = (
+    // Memoize footer components
+    const docLinkFooter = useMemo(() => (
         <div className="text-xs flex items-center gap-2">
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>→</span>
             <a
@@ -292,9 +295,9 @@ airweave-mcp-search`;
                 Explore the full API documentation
             </a>
         </div>
-    );
+    ), [isDark]);
 
-    const mcpConfigFooter = (
+    const mcpConfigFooter = useMemo(() => (
         <div className="text-xs flex items-center gap-2">
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>→</span>
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>
@@ -304,16 +307,16 @@ airweave-mcp-search`;
                 {apiTab === "windsurf" && "~/.windsurf/mcp.json for Windsurf"}
             </span>
         </div>
-    );
+    ), [isDark, apiTab]);
 
-    const mcpInstallFooter = (
+    const mcpInstallFooter = useMemo(() => (
         <div className="text-xs flex items-center gap-2">
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>→</span>
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>
                 After installation, configure your MCP client with the environment variables shown above
             </span>
         </div>
-    );
+    ), [isDark]);
 
     return (
         <div className="w-full mb-6">
@@ -341,7 +344,7 @@ airweave-mcp-search`;
                                 ? "bg-gray-900 text-gray-300"
                                 : "bg-gray-50/80 text-gray-700"
                         )}>
-                            <span className="opacity-75">{getApiUrl()}</span>
+                            <span className="opacity-75">{apiUrl}</span>
                         </div>
                         <div className="border-l flex items-center">
                             <Button
@@ -351,7 +354,7 @@ airweave-mcp-search`;
                                     "h-8 w-8 rounded-none",
                                     isDark ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-700"
                                 )}
-                                onClick={() => navigator.clipboard.writeText(`https://${getApiUrl()}`)}
+                                onClick={() => navigator.clipboard.writeText(`https://${apiUrl}`)}
                             >
                                 <Copy className="h-3.5 w-3.5" />
                             </Button>
@@ -444,12 +447,12 @@ airweave-mcp-search`;
                                 "absolute inset-0 h-1.5 bg-gradient-to-r from-transparent via-white to-transparent",
                                 "animate-shimmer"
                             )}
-                            style={{
-                                backgroundSize: '200% 100%',
-                                animationDuration: '1.5s',
-                                animationIterationCount: 'infinite',
-                                animationTimingFunction: 'linear'
-                            }}
+                                style={{
+                                    backgroundSize: '200% 100%',
+                                    animationDuration: '1.5s',
+                                    animationIterationCount: 'infinite',
+                                    animationTimingFunction: 'linear'
+                                }}
                             ></div>
                         </div>
                     ) : (
@@ -545,7 +548,7 @@ airweave-mcp-search`;
                                         ? "prose-invert bg-gradient-to-b from-gray-900/70 to-gray-900/50 text-gray-200"
                                         : "bg-gradient-to-b from-white to-gray-50/80 prose-gray text-gray-800"
                                 )}
-                                style={{ fontSize: '0.875rem' }}>
+                                    style={{ fontSize: '0.875rem' }}>
                                     {isLoading ? (
                                         <div className="animate-pulse h-32 w-full">
                                             <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2.5"></div>
@@ -558,18 +561,18 @@ airweave-mcp-search`;
                                         <ReactMarkdown
                                             remarkPlugins={[remarkGfm]}
                                             components={{
-                                                h1: ({node, ...props}) => <h1 style={{fontSize: '2em', fontWeight: 'bold', margin: '0.67em 0'}} {...props}/>,
-                                                h2: ({node, ...props}) => <h2 style={{fontSize: '1.5em', fontWeight: 'bold', margin: '0.83em 0'}} {...props}/>,
-                                                h3: ({node, ...props}) => <h3 style={{fontSize: '1.17em', fontWeight: 'bold', margin: '1em 0'}} {...props}/>,
-                                                ul: ({node, ...props}) => <ul style={{listStyle: 'disc', paddingLeft: '2em', margin: '1em 0'}} {...props}/>,
-                                                li: ({node, ...props}) => <li style={{display: 'list-item', margin: '0.5em 0'}} {...props}/>,
+                                                h1: ({ node, ...props }) => <h1 style={{ fontSize: '2em', fontWeight: 'bold', margin: '0.67em 0' }} {...props} />,
+                                                h2: ({ node, ...props }) => <h2 style={{ fontSize: '1.5em', fontWeight: 'bold', margin: '0.83em 0' }} {...props} />,
+                                                h3: ({ node, ...props }) => <h3 style={{ fontSize: '1.17em', fontWeight: 'bold', margin: '1em 0' }} {...props} />,
+                                                ul: ({ node, ...props }) => <ul style={{ listStyle: 'disc', paddingLeft: '2em', margin: '1em 0' }} {...props} />,
+                                                li: ({ node, ...props }) => <li style={{ display: 'list-item', margin: '0.5em 0' }} {...props} />,
                                                 code(props) {
-                                                    const {children, className, node, ...rest} = props;
+                                                    const { children, className, node, ...rest } = props;
                                                     const match = /language-(\w+)/.exec(className || '');
                                                     return match ? (
                                                         <SyntaxHighlighter
                                                             language={match[1]}
-                                                            style={isDark ? materialOceanic : oneLight}
+                                                            style={syntaxStyle}
                                                             customStyle={{
                                                                 margin: 0,
                                                                 borderRadius: '0.75rem',
@@ -594,7 +597,7 @@ airweave-mcp-search`;
                         ) : null}
 
                         {/* JSON Response Section */}
-                        {objects || isLoading ? (
+                        {(objects || isLoading) ? (
                             <div className={cn(
                                 "border-t",
                                 isDark ? "border-gray-800/50" : "border-gray-200/50"
@@ -646,19 +649,33 @@ airweave-mcp-search`;
                                             <div className="h-4 w-8 bg-gray-200 dark:bg-gray-700 rounded"></div>
                                         </div>
                                     ) : (
-                                        <SyntaxHighlighter
-                                            language="json"
-                                            style={customSyntaxStyle}
-                                            customStyle={{
-                                                fontSize: '0.8rem',
-                                                background: 'transparent',
-                                                padding: '1rem',
-                                                margin: 0
-                                            }}
-                                            showLineNumbers={true}
-                                        >
-                                            {objects}
-                                        </SyntaxHighlighter>
+                                        <div className="p-4">
+                                            <JsonViewer
+                                                value={objectsData}
+                                                theme={isDark ? "dark" : "light"}
+                                                style={{
+                                                    fontSize: '0.8rem',
+                                                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                                                }}
+                                                rootName={false}
+                                                displayDataTypes={false}
+                                                enableClipboard={false}
+                                                quotesOnKeys={false}
+                                                indentWidth={2}
+                                                collapseStringsAfterLength={100}
+                                                groupArraysAfterLength={100}
+                                                defaultInspectDepth={4}
+                                                defaultInspectControl={(path, value) => {
+                                                    if (path[path.length - 1] === 'payload') {
+                                                        return true;
+                                                    }
+                                                    if (path.length <= 2) {
+                                                        return true;
+                                                    }
+                                                    return undefined;
+                                                }}
+                                            />
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -855,7 +872,7 @@ airweave-mcp-search`;
                                     <>
                                         {apiTab === "rest" && (
                                             <CodeBlock
-                                                code={getApiEndpoints().curlSnippet}
+                                                code={apiEndpoints.curlSnippet}
                                                 language="bash"
                                                 badgeText="GET"
                                                 badgeColor="bg-emerald-600 hover:bg-emerald-600"
@@ -868,7 +885,7 @@ airweave-mcp-search`;
 
                                         {apiTab === "python" && (
                                             <CodeBlock
-                                                code={getApiEndpoints().pythonSnippet}
+                                                code={apiEndpoints.pythonSnippet}
                                                 language="python"
                                                 badgeText="SDK"
                                                 badgeColor="bg-blue-600 hover:bg-blue-600"
@@ -881,7 +898,7 @@ airweave-mcp-search`;
 
                                         {apiTab === "node" && (
                                             <CodeBlock
-                                                code={getApiEndpoints().nodeSnippet}
+                                                code={apiEndpoints.nodeSnippet}
                                                 language="javascript"
                                                 badgeText="SDK"
                                                 badgeColor="bg-blue-600 hover:bg-blue-600"
@@ -898,7 +915,7 @@ airweave-mcp-search`;
                                     <>
                                         {apiTab === "claude" && (
                                             <CodeBlock
-                                                code={getApiEndpoints().configSnippet}
+                                                code={apiEndpoints.configSnippet}
                                                 language="json"
                                                 badgeText="CONFIG"
                                                 badgeColor="bg-purple-600 hover:bg-purple-600"
@@ -911,7 +928,7 @@ airweave-mcp-search`;
 
                                         {apiTab === "cursor" && (
                                             <CodeBlock
-                                                code={getApiEndpoints().configSnippet}
+                                                code={apiEndpoints.configSnippet}
                                                 language="json"
                                                 badgeText="CONFIG"
                                                 badgeColor="bg-blue-600 hover:bg-blue-600"
@@ -924,7 +941,7 @@ airweave-mcp-search`;
 
                                         {apiTab === "windsurf" && (
                                             <CodeBlock
-                                                code={getApiEndpoints().configSnippet}
+                                                code={apiEndpoints.configSnippet}
                                                 language="json"
                                                 badgeText="CONFIG"
                                                 badgeColor="bg-teal-600 hover:bg-teal-600"
@@ -937,7 +954,7 @@ airweave-mcp-search`;
 
                                         {apiTab === "server" && (
                                             <CodeBlock
-                                                code={getApiEndpoints().installSnippet}
+                                                code={apiEndpoints.installSnippet}
                                                 language="bash"
                                                 badgeText="INSTALL"
                                                 badgeColor="bg-gray-600 hover:bg-gray-600"

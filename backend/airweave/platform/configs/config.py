@@ -162,6 +162,15 @@ class CTTIConfig(SourceConfig):
         description="Maximum number of clinical trial studies to fetch from AACT database",
     )
 
+    skip: int = Field(
+        default=0,
+        title="Skip Studies",
+        description=(
+            "Number of clinical trial studies to skip (for pagination). "
+            "Use with limit to fetch different batches."
+        ),
+    )
+
     @validator("limit", pre=True)
     def parse_limit(cls, value):
         """Convert string input to integer if needed."""
@@ -172,6 +181,27 @@ class CTTIConfig(SourceConfig):
                 return int(value.strip())
             except ValueError as e:
                 raise ValueError("Limit must be a valid integer") from e
+        return value
+
+    @validator("skip", pre=True)
+    def parse_skip(cls, value):
+        """Convert string input to integer if needed."""
+        if isinstance(value, str):
+            if not value.strip():
+                return 0
+            try:
+                skip_val = int(value.strip())
+                if skip_val < 0:
+                    raise ValueError("Skip must be non-negative")
+                return skip_val
+            except ValueError as e:
+                if "non-negative" in str(e):
+                    raise e
+                raise ValueError("Skip must be a valid integer") from e
+        if isinstance(value, (int, float)):
+            if value < 0:
+                raise ValueError("Skip must be non-negative")
+            return int(value)
         return value
 
 

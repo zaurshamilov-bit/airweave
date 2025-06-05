@@ -74,6 +74,9 @@ class SyncFactory:
             access_token=access_token,
         )
 
+        # CRITICAL FIX: Initialize transformer cache to eliminate 1.5s database lookups
+        await sync_context.router.initialize_transformer_cache(db)
+
         # Create entity processor
         entity_processor = EntityProcessor()
 

@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from airweave import schemas
+from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus
 from airweave.core.sync_job_service import sync_job_service
 from airweave.db.session import get_db_context
@@ -96,7 +97,6 @@ class SyncOrchestrator:
     async def _process_entity_stream(self, source_node) -> None:
         """Process stream of entities from source."""
         error_occurred = False
-        entity_counter = 0  # Add counter to track entity numbers
 
         self.sync_context.logger.info(
             f"Starting entity stream processing from source {self.sync_context.source._name}"
@@ -109,45 +109,40 @@ class SyncOrchestrator:
             try:
                 # Process entities as they come
                 async for entity in stream.get_entities():
-                    entity_counter += 1  # Increment counter for each entity
-
-                    # Add entity number to entity (as a dynamic attribute)
-                    entity.entity_number = entity_counter
-
-                    self.sync_context.logger.info(
-                        f"Received entity #{entity_counter}: {entity.entity_id} "
+                    logger.info(
+                        f"📨 ORCHESTRATOR_ENTITY_RECEIVED Entity: {entity.entity_id} "
                         f"(type: {type(entity).__name__})"
                     )
 
                     if getattr(entity, "should_skip", False):
-                        self.sync_context.logger.info(
-                            f"Skipping entity #{entity_counter}: {entity.entity_id}"
-                        )
+                        logger.info(f"⏭️  ORCHESTRATOR_SKIP Entity: {entity.entity_id}")
                         await self.sync_context.progress.increment("skipped")
-                        continue  # Do not process further
+                        continue
 
                     # Submit each entity for processing in the worker pool
-                    task = await self.worker_pool.submit(
+                    logger.info(
+                        f"📤 ORCHESTRATOR_SUBMIT Submitting entity {entity.entity_id} "
+                        f"to worker pool (pending: {len(self.worker_pool.pending_tasks)})"
+                    )
+
+                    await self.worker_pool.submit(
                         self._process_single_entity,
                         entity=entity,
                         source_node=source_node,
                     )
 
-                    # Pythonic way to save entity for error reporting
-                    task.entity = entity
-
-                    # If we have too many pending tasks, wait for some to complete
-                    # Use a more conservative threshold to avoid race conditions
+                    # Check throttling
                     current_pending = len(self.worker_pool.pending_tasks)
-                    if current_pending >= self.worker_pool.max_workers * 1.5:
-                        await self.worker_pool.wait_for_batch(timeout=1.0)
+                    if current_pending >= self.worker_pool.max_workers * 2:
+                        logger.warning(
+                            f"🚦 ORCHESTRATOR_THROTTLE Too many pending tasks ({current_pending}), "
+                            f"waiting for batch completion"
+                        )
+                        await self.worker_pool.wait_for_batch(timeout=0.5)
 
                 # Wait for all remaining tasks
                 await self.worker_pool.wait_for_completion()
-                self.sync_context.logger.info(
-                    f"All entity processing tasks completed. "
-                    f"Total entities processed: {entity_counter}"
-                )
+                self.sync_context.logger.info("All entity processing tasks completed.")
 
             except Exception as e:
                 self.sync_context.logger.error(f"Error during entity stream processing: {e}")

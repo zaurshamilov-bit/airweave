@@ -235,11 +235,13 @@ class QdrantDestination(VectorDBDestination):
         for entity in entities:
             # Use the entity's to_storage_dict method to get properly serialized data
             entity_data = entity.to_storage_dict()
-
             # Use the entity's vector directly
             if not hasattr(entity, "vector") or entity.vector is None:
                 logger.warning(f"Entity {entity.entity_id} has no vector, skipping")
                 continue
+
+            if hasattr(entity_data, "vector"):
+                entity_data.pop("vector")
 
             # Create point for Qdrant
             point_structs.append(
@@ -258,7 +260,7 @@ class QdrantDestination(VectorDBDestination):
         operation_response = await self.client.upsert(
             collection_name=self.collection_name,
             points=point_structs,
-            wait=True,  # Wait for operation to complete
+            wait=False,  # Wait for operation to complete
         )
 
         if hasattr(operation_response, "errors") and operation_response.errors:
