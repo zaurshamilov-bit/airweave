@@ -1,4 +1,4 @@
-"""Base CRUD class for public tables."""
+"""Base CRUD class for system-wide public resources."""
 
 from typing import Any, Generic, Optional, Type, TypeVar, Union
 from uuid import UUID
@@ -15,24 +15,20 @@ CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
 
-class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
-    """CRUD base class for system tables.
-
-    Implements CRUD methods without user or organization context.
-    """
+class CRUDPublic(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+    """CRUD for system-wide public resources."""
 
     def __init__(self, model: Type[ModelType]):
-        """CRUD object with default methods for public tables.
+        """Initialize the CRUD object.
 
         Args:
         ----
             model (Type[ModelType]): The model to be used in the CRUD operations.
-
         """
         self.model = model
 
     async def get(self, db: AsyncSession, id: UUID) -> Optional[ModelType]:
-        """Get a single object by ID.
+        """Get public resource - no access control.
 
         Args:
         ----
@@ -42,18 +38,17 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         Returns:
         -------
             Optional[ModelType]: The object with the given ID.
-
         """
         result = await db.execute(select(self.model).where(self.model.id == id))
         return result.unique().scalar_one_or_none()
 
     async def get_by_short_name(self, db: AsyncSession, short_name: str) -> Optional[ModelType]:
-        """Get a single object by short name.
+        """Get public resource by short name.
 
         Args:
         ----
             db (AsyncSession): The database session.
-            short_name (str): The short name of the object  to get.
+            short_name (str): The short name of the object to get.
 
         Returns:
         -------
@@ -61,6 +56,141 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """
         result = await db.execute(select(self.model).where(self.model.short_name == short_name))
         return result.unique().scalar_one_or_none()
+
+    async def get_multi(
+        self,
+        db: AsyncSession,
+        organization_id: Optional[UUID] = None,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        disable_limit: bool = True,
+    ) -> list[ModelType]:
+        """Get public resources, optionally filtered by organization.
+
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            organization_id (Optional[UUID]): The organization ID to filter by.
+            skip (int): The number of objects to skip.
+            limit (int): The number of objects to return.
+            disable_limit (bool): Disable the limit parameter by default.
+
+        Returns:
+        -------
+            list[ModelType]: A list of objects.
+        """
+        query = select(self.model)
+
+        # If model has organization_id, filter by it
+        if hasattr(self.model, "organization_id") and organization_id:
+            query = query.where(
+                (self.model.organization_id == organization_id)
+                | (self.model.organization_id.is_(None))  # Include system-wide
+            )
+
+        query = query.offset(skip)
+        if not disable_limit:
+            query = query.limit(limit)
+
+        result = await db.execute(query)
+        return list(result.unique().scalars().all())
+
+    async def create(
+        self,
+        db: AsyncSession,
+        *,
+        obj_in: CreateSchemaType,
+        uow: Optional[UnitOfWork] = None,
+    ) -> ModelType:
+        """Create public resource.
+
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            obj_in (CreateSchemaType): The object to create.
+            uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
+
+        Returns:
+        -------
+            ModelType: The created object.
+        """
+        if not isinstance(obj_in, dict):
+            obj_in = obj_in.model_dump(exclude_unset=True)
+
+        db_obj = self.model(**obj_in)
+        db.add(db_obj)
+
+        if not uow:
+            await db.commit()
+            await db.refresh(db_obj)
+
+        return db_obj
+
+    async def update(
+        self,
+        db: AsyncSession,
+        *,
+        db_obj: ModelType,
+        obj_in: Union[UpdateSchemaType, dict[str, Any]],
+        uow: Optional[UnitOfWork] = None,
+    ) -> ModelType:
+        """Update public resource.
+
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            db_obj (ModelType): The object to update.
+            obj_in (Union[UpdateSchemaType, dict[str, Any]]): The new object data.
+            uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
+
+        Returns:
+        -------
+            ModelType: The updated object.
+        """
+        if not isinstance(obj_in, dict):
+            obj_in = obj_in.model_dump(exclude_unset=True)
+
+        for field, value in obj_in.items():
+            setattr(db_obj, field, value)
+
+        if not uow:
+            await db.commit()
+            await db.refresh(db_obj)
+
+        return db_obj
+
+    async def remove(
+        self,
+        db: AsyncSession,
+        *,
+        id: UUID,
+        uow: Optional[UnitOfWork] = None,
+    ) -> Optional[ModelType]:
+        """Delete public resource.
+
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            id (UUID): The UUID of the object to delete.
+            uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
+
+        Returns:
+        -------
+            Optional[ModelType]: The deleted object.
+        """
+        result = await db.execute(select(self.model).where(self.model.id == id))
+        db_obj = result.unique().scalar_one_or_none()
+
+        if db_obj is None:
+            return None
+
+        await db.delete(db_obj)
+
+        if not uow:
+            await db.commit()
+
+        return db_obj
 
     async def get_all(
         self, db: AsyncSession, *, skip: int = 0, limit: int = 100, disable_limit: bool = True
@@ -86,33 +216,6 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         result = await db.execute(query)
         return list(result.unique().scalars().all())
 
-    async def create(
-        self, db: AsyncSession, *, obj_in: CreateSchemaType, uow: UnitOfWork = None
-    ) -> ModelType:
-        """Create a new object.
-
-        Args:
-        ----
-            db (AsyncSession): The database session.
-            obj_in (CreateSchemaType): The object to create.
-            uow (UnitOfWork, optional): Unit of work for transaction control.
-                If not provided, auto-commits the transaction.
-
-        Returns:
-        -------
-            ModelType: The created object.
-
-        """
-        if not isinstance(obj_in, dict):
-            obj_in = obj_in.model_dump()
-        db_obj = self.model(**obj_in)
-        db.add(db_obj)
-
-        if uow is None:
-            await db.commit()
-
-        return db_obj
-
     async def create_many(
         self, db: AsyncSession, objs_in: list[CreateSchemaType], uow: UnitOfWork = None
     ) -> list[ModelType]:
@@ -137,72 +240,17 @@ class CRUDBaseSystem(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         return db_objs
 
-    async def update(
-        self,
-        db: AsyncSession,
-        *,
-        db_obj: ModelType,
-        obj_in: Union[UpdateSchemaType, dict[str, Any]],
-        uow: UnitOfWork = None,
-    ) -> ModelType:
-        """Update an object.
-
-        Args:
-        ----
-            db (AsyncSession): The database session.
-            db_obj (ModelType): The object to update.
-            obj_in (Union[UpdateSchemaType, Dict[str, Any]]): The new object data.
-            uow (UnitOfWork, optional): Unit of work for transaction control.
-
-        Returns:
-        -------
-            ModelType: The updated object
-
-        """
-        if not isinstance(obj_in, dict):
-            obj_in = obj_in.model_dump(exclude_unset=True)
-
-        for key, value in obj_in.items():
-            setattr(db_obj, key, value) if hasattr(db_obj, key) else None
-        db.add(db_obj)
-
-        if uow is None:
-            await db.commit()
-
-        return db_obj
-
-    async def remove(
-        self, db: AsyncSession, *, id: UUID, uow: UnitOfWork = None
-    ) -> Optional[ModelType]:
-        """Delete an object.
-
-        Args:
-        ----
-            db (AsyncSession): The database session.
-            id (UUID): The UUID of the object to delete.
-            uow (UnitOfWork, optional): Unit of work for transaction control.
-
-        Returns:
-        -------
-            Optional[ModelType]: The deleted object.
-
-        """
-        result = await db.execute(select(self.model).where(self.model.id == id))
-        db_obj = result.unique().scalar_one_or_none()
-        if db_obj is None:
-            return None
-
-        await db.delete(db_obj)
-
-        if uow is None:
-            await db.commit()
-
-        return db_obj
-
     async def sync(
         self, db: AsyncSession, items: list[CreateSchemaType], unique_field: str = "short_name"
     ) -> None:
-        """Sync items with the database."""
+        """Sync items with the database.
+
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            items (list[CreateSchemaType]): The items to sync.
+            unique_field (str): The field to use for uniqueness.
+        """
         # Create a dictionary of new items by their unique field
         new_items_dict = {getattr(item, unique_field): item for item in items}
 

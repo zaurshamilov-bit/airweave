@@ -15,6 +15,15 @@ from airweave.schemas.user import UserCreate, UserUpdate
 class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
     """CRUD operations for the User model."""
 
+    def _get_user_query_with_orgs(self):
+        """Get a base query for users with organizations loaded."""
+        from airweave.models.user_organization import UserOrganization
+
+        return select(User).options(
+            selectinload(User.user_organizations).selectinload(UserOrganization.organization),
+            selectinload(User.organization),  # Keep backward compatibility
+        )
+
     async def get_by_email(self, db: AsyncSession, *, email: str) -> Optional[User]:
         """Get a user by email.
 
@@ -29,8 +38,8 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         Returns:
             Optional[User]: The user with the given email.
         """
-        # Use selectinload to eagerly load the organization
-        stmt = select(User).where(User.email == email).options(selectinload(User.organization))
+        # Use selectinload to eagerly load the organizations
+        stmt = self._get_user_query_with_orgs().where(User.email == email)
         result = await db.execute(stmt)
         return result.unique().scalar_one_or_none()
 
@@ -45,8 +54,8 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         Returns:
             Optional[User]: The user with the given ID.
         """
-        # Use selectinload to eagerly load the organization
-        stmt = select(User).where(User.id == id).options(selectinload(User.organization))
+        # Use selectinload to eagerly load the organizations
+        stmt = self._get_user_query_with_orgs().where(User.id == id)
         result = await db.execute(stmt)
         return result.unique().scalar_one_or_none()
 
@@ -66,8 +75,8 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         Returns:
             list[User]: A list of users.
         """
-        # Use selectinload to eagerly load the organization for all users
-        stmt = select(User).offset(skip).limit(limit).options(selectinload(User.organization))
+        # Use selectinload to eagerly load the organizations for all users
+        stmt = self._get_user_query_with_orgs().offset(skip).limit(limit)
         result = await db.execute(stmt)
         return list(result.unique().scalars().all())
 
@@ -75,7 +84,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         """Create a new user.
 
         Always creates a default organization for the user if one is not provided.
-        Also creates a default API key for the user.
+        Also creates a UserOrganization relationship entry.
 
         Args:
             db (AsyncSession): The database session.
@@ -107,14 +116,27 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
             # Update the user create object with the organization
             user_data = obj_in.model_dump()
             user_data["organization_id"] = org_id
+            user_data["primary_organization_id"] = org_id
             obj_in = UserCreate(**user_data)
 
         # Create the user using the parent class method
         user = await super().create(db, obj_in=obj_in)
         user_id = user.id
 
-        # Explicitly load the organization in a new query
-        stmt = select(User).where(User.id == user_id).options(selectinload(User.organization))
+        # Create UserOrganization relationship entry
+        from airweave.models.user_organization import UserOrganization
+
+        user_org = UserOrganization(
+            user_id=user_id,
+            organization_id=user.organization_id,
+            role="owner",  # First user is owner of their org
+            is_primary=True,
+        )
+        db.add(user_org)
+        await db.commit()
+
+        # Explicitly load the user with organizations in a new query
+        stmt = self._get_user_query_with_orgs().where(User.id == user_id)
         result = await db.execute(stmt)
 
         return result.scalar_one_or_none()
@@ -168,10 +190,8 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
 
         updated_user = await super().update(db, db_obj=db_obj, obj_in=update_data)
 
-        # Explicitly load the organization after update
-        stmt = (
-            select(User).where(User.id == updated_user.id).options(selectinload(User.organization))
-        )
+        # Explicitly load the organizations after update
+        stmt = self._get_user_query_with_orgs().where(User.id == updated_user.id)
         result = await db.execute(stmt)
         return result.scalar_one_or_none() or updated_user
 

@@ -30,12 +30,12 @@ class OrganizationBase(Base):
 
 
 class UserMixin:
-    """Mixin for adding user tracking columns to a model."""
+    """Mixin for adding nullable user tracking to a model."""
 
     @declared_attr
     def created_by_email(cls):
-        return Column(String, ForeignKey("user.email"), nullable=False)
+        return Column(String, nullable=True)  # Made nullable for API key support
 
     @declared_attr
     def modified_by_email(cls):
-        return Column(String, ForeignKey("user.email"), nullable=False)
+        return Column(String, nullable=True)  # Made nullable for API key support

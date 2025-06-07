@@ -9,6 +9,7 @@ from .api_key import (
     APIKeyInDBBase,
     APIKeyUpdate,
 )
+from .auth import AuthContext
 from .collection import (
     Collection,
     CollectionCreate,
@@ -64,8 +65,10 @@ from .organization import (
     Organization,
     OrganizationBase,
     OrganizationCreate,
+    OrganizationCreateRequest,
     OrganizationInDBBase,
     OrganizationUpdate,
+    OrganizationWithRole,
 )
 from .search import SearchResponse
 from .source import (

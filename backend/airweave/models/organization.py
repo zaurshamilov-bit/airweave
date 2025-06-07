@@ -9,6 +9,7 @@ from airweave.models._base import Base
 
 if TYPE_CHECKING:
     from airweave.models.user import User
+    from airweave.models.user_organization import UserOrganization
 
 
 class Organization(Base):
@@ -18,6 +19,18 @@ class Organization(Base):
 
     name: Mapped[str] = mapped_column(String, unique=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    auth0_org_id: Mapped[str] = mapped_column(String, nullable=True)  # Auth0 organization ID
 
-    # Add the users relationship (reciprocal to User.organization)
-    users: Mapped[List["User"]] = relationship("User", back_populates="organization")
+    # Keep existing users relationship for backward compatibility
+    # Specify foreign_keys to resolve ambiguous foreign key error
+    users: Mapped[List["User"]] = relationship(
+        "User", foreign_keys="User.organization_id", back_populates="organization", lazy="noload"
+    )
+
+    # Many-to-many relationship with users
+    user_organizations: Mapped[List["UserOrganization"]] = relationship(
+        "UserOrganization",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+        lazy="noload",
+    )

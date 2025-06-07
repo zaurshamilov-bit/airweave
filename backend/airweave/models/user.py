@@ -1,14 +1,15 @@
 """User model."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import UUID, Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.models._base import OrganizationBase
 
 if TYPE_CHECKING:
     from airweave.models.organization import Organization
+    from airweave.models.user_organization import UserOrganization
 
 
 class User(OrganizationBase):
@@ -22,6 +23,29 @@ class User(OrganizationBase):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Define the relationship to Organization
-    # Note: In async context, we'll handle eager loading in the CRUD class
-    organization: Mapped["Organization"] = relationship("Organization", back_populates="users")
+    # Multi-organization support - new fields
+    primary_organization_id: Mapped[UUID] = mapped_column(
+        UUID, ForeignKey("organization.id"), nullable=True
+    )
+    current_organization_id: Mapped[UUID] = mapped_column(
+        UUID, nullable=True
+    )  # Runtime org context
+
+    # Define the relationships
+    # Keep existing relationship for backward compatibility (maps to organization_id from OrganizationBase)
+    organization: Mapped["Organization"] = relationship(
+        "Organization",
+        foreign_keys="User.organization_id",
+        back_populates="users",
+        lazy="noload",
+    )
+
+    # New primary organization relationship
+    primary_organization: Mapped["Organization"] = relationship(
+        "Organization", foreign_keys=[primary_organization_id], lazy="noload"
+    )
+
+    # Many-to-many relationship with organizations
+    user_organizations: Mapped[List["UserOrganization"]] = relationship(
+        "UserOrganization", back_populates="user", cascade="all, delete-orphan", lazy="noload"
+    )

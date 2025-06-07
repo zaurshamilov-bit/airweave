@@ -9,11 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave.models.entity_definition import EntityDefinition
 from airweave.schemas.entity_definition import EntityDefinitionCreate, EntityDefinitionUpdate
 
-from ._base_system import CRUDBaseSystem
+from ._base_public import CRUDPublic
 
 
 class CRUDEntityDefinition(
-    CRUDBaseSystem[EntityDefinition, EntityDefinitionCreate, EntityDefinitionUpdate]
+    CRUDPublic[EntityDefinition, EntityDefinitionCreate, EntityDefinitionUpdate]
 ):
     """CRUD operations for Entity Definition."""
 

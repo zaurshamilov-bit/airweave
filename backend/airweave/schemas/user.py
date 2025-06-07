@@ -5,19 +5,44 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, validator
 
+from .organization import Organization
+
+
+class UserOrganizationBase(BaseModel):
+    """Base schema for UserOrganization relationship."""
+
+    role: str = "member"  # owner, admin, member
+    is_primary: bool = False
+    auth0_org_id: Optional[str] = None
+
+    class Config:
+        """Pydantic config for UserOrganizationBase."""
+
+        from_attributes = True
+
+
+class UserOrganization(UserOrganizationBase):
+    """Schema for UserOrganization relationship with full organization details."""
+
+    organization_id: UUID
+    organization: Organization
+
+    class Config:
+        """Pydantic config for UserOrganization."""
+
+        from_attributes = True
+
 
 class UserBase(BaseModel):
     """Base schema for User."""
 
     email: EmailStr
     full_name: Optional[str] = "Superuser"
-    organization_id: Optional[UUID] = None
+    organization_id: Optional[UUID] = None  # Keep for backward compatibility
 
     @validator("organization_id", pre=True, always=True)
     def organization_must_exist_for_operations(cls, v, values):
-        """Validate that the organization_id field is present for all operations except create."""
-        # During validation of incoming data, we allow None because create will handle it
-        # For database objects, this should never be None
+        """Validate that the organization_id field is present for operations."""
         return v
 
     class Config:
@@ -30,7 +55,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for creating a User object."""
 
-    # Allow organization_id to be None during creation, as it will be created if not provided
+    pass
 
 
 class UserUpdate(UserBase):
@@ -51,13 +76,27 @@ class UserInDBBase(UserBase):
 
     id: UUID
     permissions: Optional[list[str]] = None
+    primary_organization_id: Optional[UUID] = None
+    current_organization_id: Optional[UUID] = None
+    organizations: list[UserOrganization] = []
 
-    @validator("organization_id")
-    def organization_required_in_db(cls, v):
-        """Validate that the organization_id is never None in the database."""
-        if v is None:
-            raise ValueError("User must have an organization_id in the database")
-        return v
+    @validator("organizations", pre=True, always=True)
+    def load_organizations(cls, v):
+        """Ensure organizations are always loaded."""
+        return v or []
+
+    @property
+    def primary_organization(self) -> Optional[UserOrganization]:
+        """Get the primary organization for this user."""
+        for org in self.organizations:
+            if org.is_primary:
+                return org
+        return None
+
+    @property
+    def organization_roles(self) -> dict[UUID, str]:
+        """Get a mapping of organization IDs to roles."""
+        return {org.organization_id: org.role for org in self.organizations}
 
     class Config:
         """Pydantic config for UserInDBBase."""
@@ -82,8 +121,6 @@ class UserInDB(UserInDBBase):
 
 
 class UserWithOrganizations(UserInDBBase):
-    """Schema for User with Organizations."""
+    """Schema for User with Organizations - now redundant as all users include orgs."""
 
     pass
-
-    # organizations: list[Organization]

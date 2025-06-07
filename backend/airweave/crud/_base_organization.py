@@ -1,73 +1,103 @@
-"""Base CRUD class for tables with organization context."""
+"""Unified CRUD class for organization-scoped resources."""
 
-from typing import Generic, Optional, Type, TypeVar
+from typing import Any, Generic, Optional, Type, TypeVar, Union
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airweave.core.exceptions import NotFoundException
+from airweave.core.exceptions import NotFoundException, PermissionException
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models._base import Base
+from airweave.schemas import AuthContext, User
 
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
 
-class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
-    """Base class for CRUD operations in organization context."""
+class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+    """Unified CRUD for all organization-scoped resources."""
 
-    def __init__(self, model: Type[ModelType]):
+    def __init__(self, model: Type[ModelType], track_user: bool = True):
         """Initialize the CRUD object.
 
         Args:
         ----
             model (Type[ModelType]): The model to be used in the CRUD operations.
-
+            track_user (bool): Whether model has UserMixin (created_by_email, modified_by_email).
         """
         self.model = model
+        self.track_user = track_user
 
-    async def get(self, db: AsyncSession, id: UUID, organization_id: UUID) -> Optional[ModelType]:
-        """Get a single object by ID.
+    async def get(
+        self,
+        db: AsyncSession,
+        id: UUID,
+        auth_context: AuthContext,
+        organization_id: Optional[UUID] = None,
+    ) -> Optional[ModelType]:
+        """Get organization resource.
 
         Args:
         ----
             db (AsyncSession): The database session.
             id (UUID): The UUID of the object to get.
-            organization_id (UUID): The UUID of the organization.
+            auth_context (AuthContext): The authentication context.
+            organization_id (Optional[UUID]): The organization ID to filter by.
 
         Returns:
         -------
             Optional[ModelType]: The object with the given ID.
-
         """
-        result = await db.execute(
-            select(self.model).where(
-                self.model.id == id, self.model.organization_id == organization_id
-            )
+        effective_org_id = organization_id or auth_context.organization_id
+
+        # Validate auth context has org access
+        await self._validate_organization_access(auth_context, effective_org_id)
+
+        query = select(self.model).where(
+            self.model.id == id, self.model.organization_id == effective_org_id
         )
+
+        result = await db.execute(query)
         return result.unique().scalar_one_or_none()
 
-    async def get_all_for_organization(
-        self, db: AsyncSession, organization_id: UUID, *, skip: int = 0, limit: int = 100
+    async def get_multi_for_organization(
+        self,
+        db: AsyncSession,
+        auth_context: AuthContext,
+        organization_id: Optional[UUID] = None,
+        *,
+        skip: int = 0,
+        limit: int = 100,
     ) -> list[ModelType]:
-        """Get all objects for an organization.
+        """Get all resources for organization.
 
         Args:
         ----
             db (AsyncSession): The database session.
-            organization_id (UUID): The UUID of the organization.
+            auth_context (AuthContext): The authentication context.
+            organization_id (Optional[UUID]): The organization ID to filter by.
             skip (int): The number of objects to skip.
             limit (int): The number of objects to return.
+
+        Returns:
+        -------
+            list[ModelType]: A list of objects.
         """
+        effective_org_id = organization_id or auth_context.organization_id
+
+        # Validate auth context has org access
+        await self._validate_organization_access(auth_context, effective_org_id)
+
         query = (
             select(self.model)
-            .where(self.model.organization_id == organization_id)
+            .where(self.model.organization_id == effective_org_id)
             .offset(skip)
             .limit(limit)
         )
+
         result = await db.execute(query)
         return list(result.unique().scalars().all())
 
@@ -76,85 +106,180 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
         db: AsyncSession,
         *,
         obj_in: CreateSchemaType,
-        organization_id: UUID,
+        auth_context: AuthContext,
+        organization_id: Optional[UUID] = None,
         uow: Optional[UnitOfWork] = None,
     ) -> ModelType:
-        """Create a new object for a given schema type and organization context.
+        """Create organization resource with auth context.
 
         Args:
         ----
             db (AsyncSession): The database session.
             obj_in (CreateSchemaType): The object to create.
-            organization_id (UUID): The UUID of the organization.
+            auth_context (AuthContext): The authentication context.
+            organization_id (Optional[UUID]): The organization ID to create in.
             uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
         -------
             ModelType: The created object.
-
         """
-        obj_in_data = obj_in.model_dump()
-        obj_in_data["organization_id"] = organization_id
-        db_obj = self.model(**obj_in_data)
+        effective_org_id = organization_id or auth_context.organization_id
+
+        # Validate auth context has org access
+        await self._validate_organization_access(auth_context, effective_org_id)
+
+        if not isinstance(obj_in, dict):
+            obj_in = obj_in.model_dump(exclude_unset=True)
+
+        obj_in["organization_id"] = effective_org_id
+
+        if self.track_user:
+            if auth_context.has_user_context:
+                # Human user: track directly
+                obj_in["created_by_email"] = auth_context.tracking_email
+                obj_in["modified_by_email"] = auth_context.tracking_email
+            else:
+                # API key/system: nullable tracking
+                obj_in["created_by_email"] = None
+                obj_in["modified_by_email"] = None
+
+        db_obj = self.model(**obj_in)
         db.add(db_obj)
+
         if not uow:
             await db.commit()
             await db.refresh(db_obj)
+
         return db_obj
 
     async def update(
         self,
         db: AsyncSession,
+        *,
         db_obj: ModelType,
-        obj_in: UpdateSchemaType,
+        obj_in: Union[UpdateSchemaType, dict[str, Any]],
+        auth_context: AuthContext,
         uow: Optional[UnitOfWork] = None,
     ) -> ModelType:
-        """Update an existing object in db for a given schema type and organization context.
+        """Update organization resource with auth context.
 
         Args:
         ----
             db (AsyncSession): The database session.
             db_obj (ModelType): The object to update.
-            obj_in (UpdateSchemaType): The object to update with.
-            organization_id (UUID): The UUID of the organization.
+            obj_in (Union[UpdateSchemaType, dict[str, Any]]): The new object data.
+            auth_context (AuthContext): The authentication context.
             uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
         -------
             ModelType: The updated object.
-
         """
-        obj_in = obj_in.model_dump(exclude_unset=True)
+        # Validate auth context has org access
+        await self._validate_organization_access(auth_context, db_obj.organization_id)
 
-        for key, value in obj_in.items():
-            setattr(db_obj, key, value) if hasattr(db_obj, key) else None
+        if not isinstance(obj_in, dict):
+            obj_in = obj_in.model_dump(exclude_unset=True)
 
-        db.add(db_obj)
+        if self.track_user and auth_context.has_user_context:
+            obj_in["modified_by_email"] = auth_context.tracking_email
+
+        for field, value in obj_in.items():
+            setattr(db_obj, field, value)
+
         if not uow:
             await db.commit()
             await db.refresh(db_obj)
+
         return db_obj
 
     async def remove(
-        self, db: AsyncSession, id: UUID, organization_id: UUID, uow: Optional[UnitOfWork] = None
-    ) -> None:
-        """Delete an object from db for a given schema type and organization context.
+        self,
+        db: AsyncSession,
+        *,
+        id: UUID,
+        auth_context: AuthContext,
+        organization_id: Optional[UUID] = None,
+        uow: Optional[UnitOfWork] = None,
+    ) -> Optional[ModelType]:
+        """Delete organization resource with auth context.
 
         Args:
         ----
             db (AsyncSession): The database session.
             id (UUID): The UUID of the object to delete.
-            organization_id (UUID): The UUID of the organization.
+            auth_context (AuthContext): The authentication context.
+            organization_id (Optional[UUID]): The organization ID to delete from.
             uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
+
+        Returns:
+        -------
+            Optional[ModelType]: The deleted object.
         """
-        stmt = (
-            delete(self.model)
-            .where(self.model.id == id, self.model.organization_id == organization_id)
-            .execution_options(synchronize_session=False)
+        effective_org_id = organization_id or auth_context.organization_id
+
+        # Validate auth context has org access
+        await self._validate_organization_access(auth_context, effective_org_id)
+
+        query = select(self.model).where(
+            self.model.id == id, self.model.organization_id == effective_org_id
         )
-        result = await db.execute(stmt)
-        if result.rowcount == 0:
+        result = await db.execute(query)
+        db_obj = result.unique().scalar_one_or_none()
+
+        if db_obj is None:
             raise NotFoundException(f"{self.model.__name__} not found")
+
+        await db.delete(db_obj)
 
         if not uow:
             await db.commit()
+
+        return db_obj
+
+    async def _validate_organization_access(
+        self, auth_context: AuthContext, organization_id: UUID
+    ) -> None:
+        """Validate auth context has access to organization.
+
+        Args:
+        ----
+            auth_context (AuthContext): The authentication context.
+            organization_id (UUID): The organization ID to validate access to.
+
+        Raises:
+        ------
+            PermissionException: If auth context does not have access to organization.
+        """
+        if organization_id != auth_context.organization_id:
+            raise PermissionException(
+                f"Auth context does not have access to organization {organization_id}"
+            )
+
+    # Backward compatibility methods for existing code
+    async def get_multi_for_organization_legacy(
+        self,
+        db: AsyncSession,
+        current_user: User,
+        organization_id: Optional[UUID] = None,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> list[ModelType]:
+        """Legacy method for backward compatibility."""
+        # Convert user to auth context
+        auth_context = AuthContext(
+            organization_id=current_user.organization_id, user=current_user, auth_method="auth0"
+        )
+        return await self.get_multi_for_organization(
+            db=db,
+            auth_context=auth_context,
+            organization_id=organization_id,
+            skip=skip,
+            limit=limit,
+        )
+
+
+# Backward compatibility alias
+CRUDBaseOrganization = CRUDOrganization

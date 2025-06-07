@@ -1,9 +1,10 @@
 """Organization schemas."""
 
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class OrganizationBase(BaseModel):
@@ -17,6 +18,13 @@ class OrganizationCreate(OrganizationBase):
     """Organization creation schema."""
 
     pass
+
+
+class OrganizationCreateRequest(BaseModel):
+    """Organization creation request schema for API endpoints."""
+
+    name: str = Field(..., min_length=1, max_length=100, description="Organization name")
+    description: Optional[str] = Field(None, max_length=500, description="Organization description")
 
 
 class OrganizationUpdate(BaseModel):
@@ -39,3 +47,15 @@ class Organization(OrganizationInDBBase):
 
     name: str
     description: str
+
+
+class OrganizationWithRole(BaseModel):
+    """Organization schema with user's role information."""
+
+    id: UUID
+    name: str
+    description: str
+    created_at: datetime
+    modified_at: datetime
+    role: str  # owner, admin, member
+    is_primary: bool
