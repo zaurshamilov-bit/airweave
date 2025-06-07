@@ -72,6 +72,23 @@ class EntityProcessor:
                 self._entities_encountered_count
             )
 
+            # Check if entity is already fully processed (should be KEPT)
+            if getattr(entity, "is_fully_processed", False):
+                logger.info(
+                    f"✅ PROCESSOR_KEPT [{entity_context}] Entity already fully processed, "
+                    f"marking as KEPT"
+                )
+                await sync_context.progress.increment("kept", 1)
+                entity_accounted_for = True
+                return []
+
+            # Check if entity should be skipped (set by file_manager or source)
+            if getattr(entity, "should_skip", False):
+                logger.info(f"⏭️  PROCESSOR_SKIP [{entity_context}] Entity marked to skip")
+                await sync_context.progress.increment("skipped", 1)
+                entity_accounted_for = True
+                return []
+
             # Stage 1: Enrich entity with metadata
             logger.info(f"🏷️  PROCESSOR_ENRICH_START [{entity_context}] Enriching entity metadata")
             enrich_start = asyncio.get_event_loop().time()
