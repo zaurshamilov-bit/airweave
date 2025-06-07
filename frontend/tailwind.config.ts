@@ -22,7 +22,7 @@ export default {
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
+        ring: "transparent",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
 
@@ -102,7 +102,7 @@ export default {
           "accent-solid": "hsl(var(--sidebar-accent-solid))",
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
-          ring: "hsl(var(--sidebar-ring))",
+          ring: "transparent",
         },
       },
       borderRadius: {

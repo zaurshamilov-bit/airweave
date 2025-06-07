@@ -39,14 +39,14 @@
     --secondary: 0 0% 96%;
     --secondary-foreground: 0 0% 2.4%;
 
-    /* Muted with pure white for light mode */
-    --muted: 0 0% 100%;
-    --muted-solid: 0 0% 100%;
+    /* Muted with light gray for proper contrast in light mode */
+    --muted: 0 0% 96%;
+    --muted-solid: 0 0% 96%;
     --muted-foreground: 0 0% 25%;
 
-    /* Accent with pure white for light mode */
-    --accent: 0 0% 100% / 0.9;
-    --accent-solid: 0 0% 100%;
+    /* Accent with light gray for proper hover contrast in light mode */
+    --accent: 0 0% 96% / 0.9;
+    --accent-solid: 0 0% 96%;
     --accent-foreground: 0 0% 2.4%;
 
     /* Blue accent colors using #1692E5 */
@@ -81,14 +81,14 @@
     --highlight-400: 0 0% 90%;
     --highlight-500: 0 0% 85%;
 
-    /* Sidebar with pure white for light mode */
+    /* Sidebar with light gray for proper contrast in light mode */
     --sidebar-background: 0 0% 100% / 0.95;
     --sidebar-background-solid: 0 0% 100%;
     --sidebar-foreground: 0 0% 2.4%;
     --sidebar-primary: 0 0% 2.4%;
     --sidebar-primary-foreground: 210 67% 98.8%;
-    --sidebar-accent: 0 0% 100% / 0.9;
-    --sidebar-accent-solid: 0 0% 100%;
+    --sidebar-accent: 0 0% 96% / 0.9;
+    --sidebar-accent-solid: 0 0% 96%;
     --sidebar-accent-foreground: 0 0% 2.4%;
     --sidebar-border: 0 0% 88%;
     --sidebar-ring: 0 0% 2.4%;
@@ -192,6 +192,11 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Shared dropdown hover utility */
+.dropdown-item-hover {
+  @apply transition-colors duration-200 hover:bg-slate-100 dark:hover:bg-slate-800;
 }
 
 .sidebar-nav-item {

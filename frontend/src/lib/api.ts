@@ -1,5 +1,5 @@
 import { env } from '../config/env';
-import { useOrganizationStore } from '@/lib/stores/organization-store';
+import { useOrganizationStore } from '@/lib/stores/organizations';
 
 // Define a token provider interface
 interface TokenProvider {
@@ -111,10 +111,10 @@ const getHeaders = async (): Promise<Record<string, string>> => {
     ...(token && { Authorization: `Bearer ${token}` }),
   };
 
-  // TODO: Uncomment when backend is ready for organization scoping
-  // if (currentOrganization) {
-  //   headers['X-Organization-ID'] = currentOrganization.id;
-  // }
+  // Add organization context header if available
+  if (currentOrganization) {
+    headers['X-Organization-ID'] = currentOrganization.id;
+  }
 
   return headers;
 };

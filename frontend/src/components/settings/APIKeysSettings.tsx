@@ -205,19 +205,13 @@ export function APIKeysSettings() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-1">
+    <div className="space-y-4">
 
-        <p className="text-sm text-muted-foreground">
-          Create and manage API keys for authenticating with the Airweave API
-        </p>
-      </div>
-
-      <div className="py-6 space-y-8">
+      <div className="py-2 space-y-8">
         {/* Create new API key section */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h3 className="text-sm font-medium">Create New API Key</h3>
+            <h3 className="text-sm font-medium">Create new API key</h3>
             <p className="text-xs text-muted-foreground">
               API keys will expire 180 days after creation
             </p>
@@ -238,8 +232,8 @@ export function APIKeysSettings() {
               </>
             ) : (
               <>
-                <Key className="mr-2 h-4 w-4" />
-                Create New Key
+                <Key className="mr-1 h-3 w-3" />
+                Create key
               </>
             )}
           </Button>
@@ -307,7 +301,7 @@ export function APIKeysSettings() {
             {/* API Keys list */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">Your API Keys</h3>
+                <h3 className="text-sm font-medium">Your API keys</h3>
                 <div className="text-xs text-muted-foreground">{apiKeys.length} key{apiKeys.length !== 1 ? 's' : ''}</div>
               </div>
 

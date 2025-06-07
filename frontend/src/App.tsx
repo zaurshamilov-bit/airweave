@@ -22,6 +22,7 @@ import Login from '@/pages/Login';
 import Callback from '@/pages/Callback';
 import { protectedPaths, publicPaths } from '@/constants/paths';
 import { AuthCallback } from '@/pages/AuthCallback';
+import { OrganizationSettingsUnified } from '@/pages/organization/OrganizationSettingsUnified';
 
 function App() {
   // Initialize collections event listeners when the app loads
@@ -54,8 +55,7 @@ function App() {
           <Route path={protectedPaths.whiteLabelEdit} element={<WhiteLabelEdit />} />
 
           {/* Organization routes */}
-          <Route path="/organization/settings" element={<OrganizationSettings />} />
-          <Route path="/organization/members" element={<OrganizationMembers />} />
+          <Route path="/organization/settings" element={<OrganizationSettingsUnified />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

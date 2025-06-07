@@ -18,7 +18,7 @@ export const ExampleProjectCard = ({
 }: ExampleProjectCardProps) => {
   return (
     <div
-      className="bg-card border border-border rounded-lg hover:border-border/60 hover:shadow-md transition-all overflow-hidden group cursor-pointer"
+      className="bg-card border border-border rounded-lg hover:border-border/60 transition-all overflow-hidden group cursor-pointer"
       onClick={onClick}
     >
       <div className="p-5">

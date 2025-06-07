@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { useOrganizationStore } from '@/lib/stores/organization-store';
+import { useOrganizationStore } from '@/lib/stores/organizations';
 import { Link } from 'react-router-dom';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -9,40 +9,86 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   ExternalLink, MoreVertical, Building2, Settings,
-  UserPlus, Crown, Shield, Users
+  UserPlus, Crown, Shield, Users, Plus, LogOut
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { CreateOrganizationModal } from '@/components/organization';
+import { cn } from '@/lib/utils';
+import { useTheme } from '@/lib/theme-provider';
 
-// Dummy data for now until backend is ready
-const DUMMY_ORGANIZATIONS = [
-  {
-    id: '1',
-    name: 'Acme Corp',
-    description: 'Main organization',
-    role: 'owner' as const,
-    is_primary: true,
-  },
-  {
-    id: '2',
-    name: 'Beta Inc',
-    description: 'Secondary organization',
-    role: 'admin' as const,
-    is_primary: false,
-  }
-];
+// Consistent styling for all menu items
+const menuItemClass = "flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer";
+const subMenuItemClass = "flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer";
+const externalLinkClass = "flex items-center justify-between px-2 py-1.5 text-sm";
+
+interface MenuItemWithIconProps {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}
+
+const MenuItemWithIcon = ({ icon, children, className, onClick, disabled }: MenuItemWithIconProps) => (
+  <DropdownMenuItem
+    onSelect={onClick}
+    disabled={disabled}
+    className={cn(menuItemClass, className)}
+  >
+    <span className="w-4 h-4 flex items-center justify-center text-muted-foreground">
+      {icon}
+    </span>
+    <span className="flex-1">{children}</span>
+  </DropdownMenuItem>
+);
+
+const ExternalMenuLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
+  <DropdownMenuItem asChild>
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={externalLinkClass}
+    >
+      <span className="flex items-center gap-2">{children}</span>
+      <ExternalLink className="h-3 w-3 opacity-40" />
+    </a>
+  </DropdownMenuItem>
+);
+
+const InternalMenuLink = ({ to, icon, children }: { to: string; icon: React.ReactNode; children: React.ReactNode }) => (
+  <DropdownMenuItem asChild>
+    <Link to={to} className={menuItemClass}>
+      <span className="w-4 h-4 flex items-center justify-center text-muted-foreground">
+        {icon}
+      </span>
+      <span className="flex-1">{children}</span>
+    </Link>
+  </DropdownMenuItem>
+);
+
+// Consistent separator component
+const MenuSeparator = () => <div className="h-px bg-border/10 my-1" />;
 
 export function UserProfileDropdown() {
   const { user, logout } = useAuth();
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
   const {
     organizations,
     currentOrganization,
-    setOrganizations,
-    setCurrentOrganization
+    fetchUserOrganizations,
+    switchOrganization
   } = useOrganizationStore();
 
   const [firstName, setFirstName] = useState<string>('');
+  const [showCreateOrgModal, setShowCreateOrgModal] = useState(false);
+  const [isLoadingOrgs, setIsLoadingOrgs] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
     if (user?.name) {
@@ -51,22 +97,49 @@ export function UserProfileDropdown() {
     }
   }, [user]);
 
-  // Initialize dummy data on mount
+  // Fetch user organizations when component mounts or user changes
   useEffect(() => {
-    if (organizations.length === 0) {
-      setOrganizations(DUMMY_ORGANIZATIONS);
-    }
-  }, [organizations.length, setOrganizations]);
+    const loadOrganizations = async () => {
+      if (user && organizations.length === 0) {
+        try {
+          setIsLoadingOrgs(true);
+          await fetchUserOrganizations();
+        } catch (error) {
+          console.error('Failed to load organizations:', error);
+        } finally {
+          setIsLoadingOrgs(false);
+        }
+      }
+    };
+
+    loadOrganizations();
+  }, [user, organizations.length, fetchUserOrganizations]);
 
   const handleLogout = () => {
+    setDropdownOpen(false);
     apiClient.clearToken();
     logout();
   };
 
-  const switchOrganization = (orgId: string) => {
-    const org = organizations.find(o => o.id === orgId);
-    if (org) {
-      setCurrentOrganization(org);
+  const handleSwitchOrganization = (orgId: string) => {
+    switchOrganization(orgId);
+    setDropdownOpen(false);
+  };
+
+  const handleCreateOrganization = () => {
+    setDropdownOpen(false);
+    setShowCreateOrgModal(true);
+  };
+
+  const handleCreateOrgSuccess = (newOrganization: any) => {
+    console.log('Organization created successfully:', newOrganization);
+    setShowCreateOrgModal(false);
+  };
+
+  const handleCreateOrgModalChange = (open: boolean) => {
+    setShowCreateOrgModal(open);
+    if (!open) {
+      setDropdownOpen(false);
     }
   };
 
@@ -86,160 +159,184 @@ export function UserProfileDropdown() {
     }
   };
 
+  const closeDropdown = () => setDropdownOpen(false);
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className="flex items-center justify-between px-1 py-2 text-sm font-medium rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200 ease-in-out w-full">
-          <div className="flex items-center">
-            <Avatar className="h-8 w-8 mr-3">
-              <AvatarImage src={user?.picture} alt={user?.name || "User"} />
-              <AvatarFallback className="bg-primary/0 border text-primary text-xs">
-                {firstName
-                  ? firstName[0]
-                  : user?.email?.substring(0, 1).toUpperCase() || 'U'}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col items-start">
-              <span>{user?.name || "User"}</span>
-              {currentOrganization && (
-                <span className="text-xs text-muted-foreground truncate max-w-32">
-                  {currentOrganization.name}
+    <>
+      <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+        <DropdownMenuTrigger asChild>
+          <button className="flex items-center justify-between py-2 text-sm rounded-lg w-full hover:bg-muted transition-all duration-200 outline-none focus:outline-none focus:ring-0">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={user?.picture} alt={user?.name || "User"} />
+                <AvatarFallback className="bg-primary/10 text-primary text-bold text-xs">
+                  {firstName
+                    ? firstName[0]
+                    : user?.email?.substring(0, 1).toUpperCase() || 'U'}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col items-start min-w-0">
+                <span className="text-foreground truncate max-w-32">
+                  {user?.name || "User"}
                 </span>
-              )}
+                {currentOrganization && (
+                  <span className="text-xs text-muted-foreground/70 truncate max-w-32">
+                    {currentOrganization.name}
+                  </span>
+                )}
+              </div>
             </div>
+            <MoreVertical className="h-4 w-4 text-muted-foreground/60" />
+          </button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent
+          className="w-[300px] p-1 ml-1 shadow-xs"
+          align="end"
+          side="top"
+          sideOffset={8}
+          onEscapeKeyDown={closeDropdown}
+          onInteractOutside={closeDropdown}
+        >
+          {/* User Info Section */}
+          <div className="px-2 py-1.5 border-b border-border/10 bg-muted/20">
+            <p className="text-sm text-muted-foreground font-medium truncate">
+              {user?.email}
+            </p>
           </div>
-          <MoreVertical className="h-4 w-4 opacity-70" />
-        </button>
-      </DropdownMenuTrigger>
 
-      <DropdownMenuContent className="ml-2 w-[280px] p-0 rounded-md" align="end" side="top" sideOffset={4}>
-        {/* User Info Section */}
-        <div className="py-2 px-3 border-b border-border/10">
-          <p className="text-sm text-muted-foreground truncate">
-            {user?.email}
-          </p>
-          {currentOrganization && (
-            <div className="flex items-center gap-2 mt-1">
-              <Building2 className="h-3 w-3" />
-              <span className="text-xs font-medium">{currentOrganization.name}</span>
-              <Badge
-                variant={getRoleBadgeVariant(currentOrganization.role)}
-                className="text-xs h-4 px-1"
-              >
-                {getRoleIcon(currentOrganization.role)}
-                {currentOrganization.role}
-              </Badge>
-            </div>
-          )}
-        </div>
-
-        {/* Organization Switcher */}
-        {organizations.length > 1 && (
-          <>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className="px-3 py-1.5 text-sm">
-                <Building2 className="h-4 w-4 mr-2" />
-                Switch Organization
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="w-64">
-                {organizations.map((org) => (
-                  <DropdownMenuItem
-                    key={org.id}
-                    onSelect={() => switchOrganization(org.id)}
-                    disabled={org.id === currentOrganization?.id}
-                    className="flex items-center justify-between px-3 py-2"
-                  >
-                    <div className="flex items-center">
-                      <Building2 className="h-4 w-4 mr-2" />
-                      <div>
-                        <div className="font-medium">{org.name}</div>
-                        {org.is_primary && (
-                          <div className="text-xs text-muted-foreground">Primary</div>
-                        )}
+          {/* Organization Switcher */}
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className={cn(subMenuItemClass, "px-2 py-1.5")}>
+              <span className="flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                {currentOrganization?.name || 'Select Organization'}
+              </span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-72 p-1 shadow-xs animate-none">
+              {isLoadingOrgs ? (
+                <DropdownMenuItem disabled className="px-2 py-1.5 text-sm text-muted-foreground">
+                  Loading organizations...
+                </DropdownMenuItem>
+              ) : organizations.length > 0 ? (
+                <>
+                  {organizations.map((org) => (
+                    <DropdownMenuItem
+                      key={org.id}
+                      onSelect={() => handleSwitchOrganization(org.id)}
+                      disabled={org.id === currentOrganization?.id}
+                      className="flex items-center justify-between px-2 py-1.5"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="w-4 h-4 flex items-center justify-center">
+                          <Building2 className="h-4 w-4 text-muted-foreground" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm truncate">{org.name}</div>
+                          {org.is_primary && (
+                            <div className="text-xs text-muted-foreground/70">Primary</div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {org.id === currentOrganization?.id && (
-                        <div className="w-2 h-2 bg-green-500 rounded-full" />
-                      )}
-                      <Badge
-                        variant={getRoleBadgeVariant(org.role)}
-                        className="text-xs h-4 px-1"
-                      >
-                        {getRoleIcon(org.role)}
-                      </Badge>
-                    </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {org.id === currentOrganization?.id && (
+                          <div className="w-2 h-2 bg-green-500 rounded-full" />
+                        )}
+                        <Badge variant={getRoleBadgeVariant(org.role)} className="text-xs scale-90">
+                          <span className="flex items-center gap-1">
+                            {getRoleIcon(org.role)}
+                            {org.role}
+                          </span>
+                        </Badge>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+
+                  <MenuSeparator />
+
+                  <MenuItemWithIcon
+                    icon={<Plus className="h-4 w-4" />}
+                    onClick={handleCreateOrganization}
+                    className="text-primary data-[highlighted]:bg-transparent"
+                  >
+                    Create Organization
+                  </MenuItemWithIcon>
+                </>
+              ) : (
+                <>
+                  <DropdownMenuItem disabled className="px-2 py-1.5 text-sm text-muted-foreground">
+                    No organizations found
                   </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuSeparator className="opacity-10" />
-          </>
-        )}
 
-        {/* Organization Management */}
-        {currentOrganization && ['owner', 'admin'].includes(currentOrganization.role) && (
-          <>
-            <div className="py-1">
-              <DropdownMenuItem asChild>
-                <Link to="/organization/members" className="flex items-center px-3 py-1.5 text-sm">
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Invite Members
-                </Link>
-              </DropdownMenuItem>
+                  <MenuSeparator />
 
-              <DropdownMenuItem asChild>
-                <Link to="/organization/settings" className="flex items-center px-3 py-1.5 text-sm">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Organization Settings
-                </Link>
-              </DropdownMenuItem>
-            </div>
-            <DropdownMenuSeparator className="opacity-10" />
-          </>
-        )}
+                  <MenuItemWithIcon
+                    icon={<Plus className="h-4 w-4" />}
+                    onClick={handleCreateOrganization}
+                    className="text-primary data-[highlighted]:bg-transparent"
+                  >
+                    Create Organization
+                  </MenuItemWithIcon>
+                </>
+              )}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
 
-        {/* External Links */}
-        <div className="py-1">
-          <DropdownMenuItem asChild>
-            <a href="https://airweave.ai" target="_blank" rel="noopener noreferrer" className="flex items-center justify-between px-3 py-1.5 text-sm">
-              Blog <ExternalLink className="h-3.5 w-3.5 opacity-70" />
-            </a>
-          </DropdownMenuItem>
+          {/* Organization Management */}
+          {currentOrganization && ['owner', 'admin'].includes(currentOrganization.role) && (
+            <>
+              <MenuSeparator />
 
-          <DropdownMenuItem asChild>
-            <a href="https://docs.airweave.ai" target="_blank" rel="noopener noreferrer" className="flex items-center justify-between px-3 py-1.5 text-sm">
-              Documentation <ExternalLink className="h-3.5 w-3.5 opacity-70" />
-            </a>
-          </DropdownMenuItem>
+              <InternalMenuLink
+                to="/organization/settings?tab=members"
+                icon={<UserPlus className="h-4 w-4" />}
+              >
+                Invite Members
+              </InternalMenuLink>
 
-          <DropdownMenuItem asChild>
-            <a href="https://discord.gg/484HY9Ehxt" target="_blank" rel="noopener noreferrer" className="flex items-center justify-between px-3 py-1.5 text-sm">
-              Join Discord community <ExternalLink className="h-3.5 w-3.5 opacity-70" />
-            </a>
-          </DropdownMenuItem>
-        </div>
+              <InternalMenuLink
+                to="/organization/settings"
+                icon={<Settings className="h-4 w-4" />}
+              >
+                Organization Settings
+              </InternalMenuLink>
+            </>
+          )}
 
-        <DropdownMenuSeparator className="opacity-10" />
+          <MenuSeparator />
 
-        {/* Account Settings */}
-        <div className="py-1">
-          <DropdownMenuItem asChild>
-            <Link to="/settings/account" className="px-3 py-1.5 text-sm">
-              Account Settings
-            </Link>
-          </DropdownMenuItem>
-        </div>
+          {/* External Links */}
+          <ExternalMenuLink href="https://airweave.ai">
+            Blog
+          </ExternalMenuLink>
 
-        <DropdownMenuSeparator className="opacity-10" />
+          <ExternalMenuLink href="https://docs.airweave.ai">
+            Documentation
+          </ExternalMenuLink>
 
-        {/* Logout */}
-        <div className="py-1">
-          <DropdownMenuItem onSelect={handleLogout} className="px-3 py-1.5 text-sm text-muted-foreground">
+          <ExternalMenuLink href="https://discord.gg/484HY9Ehxt">
+            Join Discord
+          </ExternalMenuLink>
+
+          <MenuSeparator />
+
+          {/* Logout */}
+          <MenuItemWithIcon
+            icon={<LogOut className="h-4 w-4" />}
+            onClick={handleLogout}
+            className="text-muted-foreground/80"
+          >
             Sign out
-          </DropdownMenuItem>
-        </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          </MenuItemWithIcon>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Create Organization Modal */}
+      <CreateOrganizationModal
+        open={showCreateOrgModal}
+        onOpenChange={handleCreateOrgModalChange}
+        onSuccess={handleCreateOrgSuccess}
+      />
+    </>
   );
 }
