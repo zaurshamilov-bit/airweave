@@ -258,7 +258,7 @@ class CTTISource(BaseSource):
                 entity_id = f"CTTI:study:{clean_nct_id}"
 
                 # Create WebEntity
-                yield CTTIWebEntity(
+                entity = CTTIWebEntity(
                     entity_id=entity_id,
                     url=url,
                     title=f"Clinical Trial {clean_nct_id}",
@@ -290,6 +290,17 @@ class CTTISource(BaseSource):
                         "total_fetched": len(records),
                     },
                 )
+
+                # Check if CTTI entity is already processed globally
+                from airweave.platform.storage import storage_manager
+
+                if await storage_manager.is_ctti_entity_processed(entity_id):
+                    logger.info(
+                        f"CTTI entity {entity_id} already processed globally, marking as KEPT"
+                    )
+                    entity.is_fully_processed = True
+
+                yield entity
 
         except Exception as e:
             logger.error(f"Error in CTTI source generate_entities: {str(e)}")

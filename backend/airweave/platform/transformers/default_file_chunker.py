@@ -242,6 +242,7 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
        - First uses RecursiveChunker with markdown rules
        - Then applies semantic chunking if chunks are too large
     4. Yields each chunk as a ChunkEntity
+    5. Cleans up temporary files after processing
 
     Args:
         file: The FileEntity to process
@@ -334,10 +335,39 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
             f"(1 parent + {len(final_chunk_texts)} chunks)"
         )
 
+        # Mark entity as fully processed in storage
+        if file.sync_id:
+            from airweave.platform.storage import storage_manager
+
+            # Check if this is a CTTI entity - they don't need marking as processed
+            # since they use global deduplication in the aactmarkdowns container
+            if not storage_manager._is_ctti_entity(file):
+                await storage_manager.mark_entity_processed(
+                    file.sync_id, file.entity_id, len(final_chunk_texts)
+                )
+                logger.info(
+                    f"📝 CHUNKER_MARKED_PROCESSED [{entity_context}] "
+                    f"Marked entity as fully processed with {len(final_chunk_texts)} chunks"
+                )
+            else:
+                logger.info(
+                    f"🏥 CHUNKER_CTTI_SKIP_MARK [{entity_context}] "
+                    f"Skipping mark_processed for CTTI entity (uses global deduplication)"
+                )
+
     except Exception as e:
         logger.error(
             f"💥 CHUNKER_ERROR [{entity_context}] Chunking failed: {type(e).__name__}: {str(e)}"
         )
         raise e
+    finally:
+        # Clean up temporary file if it exists
+        if hasattr(file, "local_path") and file.local_path:
+            from airweave.platform.storage import storage_manager
+
+            await storage_manager.cleanup_temp_file(file.local_path)
+            logger.info(
+                f"🧹 CHUNKER_CLEANUP [{entity_context}] Cleaned up temp file: {file.local_path}"
+            )
 
     return produced_entities

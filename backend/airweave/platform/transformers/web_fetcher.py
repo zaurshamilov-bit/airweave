@@ -226,6 +226,62 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
 
     logger.info(f"🌐 WEB_START [{entity_context}] Starting web fetch for URL: {web_entity.url}")
 
+    # Import storage manager here to avoid circular imports
+    from airweave.platform.storage import storage_manager
+
+    # Check if this is a CTTI entity for special handling
+    is_ctti = storage_manager._is_ctti_entity(web_entity)
+
+    if is_ctti:
+        logger.info(
+            f"🏥 WEB_CTTI [{entity_context}] Detected CTTI entity, using global deduplication"
+        )
+
+    # Note: is_fully_processed check for CTTI entities is now done in the source
+    # before the entity enters the processor pipeline
+
+    # Check if already processed (for non-CTTI entities)
+    if await _is_entity_already_processed(web_entity, is_ctti, entity_context):
+        return []
+
+    try:
+        # Use retry logic with connection limiting
+        scrape_result = await _scrape_web_content(web_entity, entity_context)
+
+        # Create and store file entity
+        file_entity = await _create_and_store_file_entity(
+            web_entity, scrape_result, is_ctti, entity_context
+        )
+
+        return [file_entity]
+
+    except Exception as e:
+        logger.error(
+            f"💥 WEB_ERROR [{entity_context}] Failed to fetch web content: "
+            f"{type(e).__name__}: {str(e)}"
+        )
+        raise e
+
+
+async def _is_entity_already_processed(
+    web_entity: WebEntity, is_ctti: bool, entity_context: str
+) -> bool:
+    """Check if entity is already processed."""
+    from airweave.platform.storage import storage_manager
+
+    if not is_ctti and hasattr(web_entity, "sync_id") and web_entity.sync_id:
+        cache_key = f"{web_entity.sync_id}/{web_entity.entity_id}"
+        if await storage_manager.is_entity_fully_processed(cache_key):
+            logger.info(f"✅ WEB_CACHED [{entity_context}] Web entity already processed (KEPT)")
+            # Mark the entity as fully processed so entity_processor marks it as KEPT
+            web_entity.is_fully_processed = True
+            return True
+    return False
+
+
+async def _scrape_web_content(web_entity: WebEntity, entity_context: str):
+    """Scrape web content using Firecrawl."""
+
     async def _scrape_with_firecrawl():
         """Internal function to handle the actual scraping with connection limiting."""
         app, semaphore = await get_firecrawl_client()
@@ -273,91 +329,150 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
 
             return scrape_result
 
-    try:
-        # Use retry logic with connection limiting
-        scrape_result = await _retry_with_backoff(
-            _scrape_with_firecrawl, entity_context=entity_context
-        )
+    return await _retry_with_backoff(_scrape_with_firecrawl, entity_context=entity_context)
 
-        # Streamlined file processing
-        logger.info(f"💾 WEB_FILE_START [{entity_context}] Creating temporary file")
 
-        # Get markdown content directly from the response
-        markdown_content = scrape_result.markdown
-        metadata = scrape_result.metadata if hasattr(scrape_result, "metadata") else {}
+async def _create_and_store_file_entity(
+    web_entity: WebEntity, scrape_result, is_ctti: bool, entity_context: str
+) -> WebFileEntity:
+    """Create file entity from scraped content and store it."""
+    # Streamlined file processing
+    logger.info(f"💾 WEB_FILE_START [{entity_context}] Creating temporary file")
 
-        # Optimized metadata extraction
-        if isinstance(metadata, dict):
-            title = web_entity.title or metadata.get("title", "Web Page")
-        else:
-            title = web_entity.title or getattr(metadata, "title", "Web Page")
+    # Get markdown content and metadata
+    markdown_content = scrape_result.markdown
+    metadata = scrape_result.metadata if hasattr(scrape_result, "metadata") else {}
 
-        # Ensure temp directory exists (only created once)
-        base_temp_dir = await ensure_temp_dir()
+    # Extract title
+    if isinstance(metadata, dict):
+        title = web_entity.title or metadata.get("title", "Web Page")
+    else:
+        title = web_entity.title or getattr(metadata, "title", "Web Page")
 
-        # Generate file path
-        file_uuid = uuid4()
-        safe_title = title.replace("/", "_").replace("\\", "_")[:100]  # Limit title length
-        safe_filename = f"{file_uuid}-{safe_title}.md"
-        temp_file_path = os.path.join(base_temp_dir, safe_filename)
+    # Generate file metadata
+    file_uuid = uuid4()
+    safe_title = title.replace("/", "_").replace("\\", "_")[:100]  # Limit title length
+    safe_filename = f"{file_uuid}-{safe_title}.md"
 
-        # Write file asynchronously
-        async with aiofiles.open(temp_file_path, "w", encoding="utf-8") as f:
-            await f.write(markdown_content)
+    # Use storage manager's temp directory
+    base_temp_dir = "/tmp/airweave/processing"
+    os.makedirs(base_temp_dir, exist_ok=True)
+    temp_file_path = os.path.join(base_temp_dir, safe_filename)
 
-        # Calculate file size and checksum in parallel with file write
-        def _calculate_file_metrics(content: str):
-            encoded_content = content.encode("utf-8")
-            file_size = len(encoded_content)
-            checksum = hashlib.sha256(encoded_content).hexdigest()
-            return file_size, checksum
+    # Write file asynchronously
+    async with aiofiles.open(temp_file_path, "w", encoding="utf-8") as f:
+        await f.write(markdown_content)
 
-        file_size, checksum = await run_in_thread_pool(_calculate_file_metrics, markdown_content)
+    # Calculate file size and checksum in parallel with file write
+    def _calculate_file_metrics(content: str):
+        encoded_content = content.encode("utf-8")
+        file_size = len(encoded_content)
+        checksum = hashlib.sha256(encoded_content).hexdigest()
+        return file_size, checksum
 
-        # Create WebFileEntity with optimized field copying
-        file_entity = WebFileEntity(
-            entity_id=web_entity.entity_id,
-            file_id=f"web_{web_entity.entity_id}",
-            name=f"{title}.md",
-            mime_type="text/markdown",
-            size=file_size,
-            download_url=web_entity.url,
-            url=web_entity.url,
-            local_path=temp_file_path,
-            file_uuid=file_uuid,
-            checksum=checksum,
-            total_size=file_size,
-            # Copy BaseEntity fields
-            breadcrumbs=web_entity.breadcrumbs,
-            parent_entity_id=web_entity.parent_entity_id,
-            sync_id=web_entity.sync_id,
-            sync_job_id=web_entity.sync_job_id,
-            source_name=web_entity.source_name,
-            sync_metadata=web_entity.sync_metadata,
-            # WebFileEntity specific
-            original_url=web_entity.url,
-            crawl_metadata=metadata,
-            web_title=title,
-            web_description=metadata.get("description", "") if isinstance(metadata, dict) else "",
-            # Simplified metadata
-            metadata={
-                "url": web_entity.url,
-                "title": title,
-                "content_length": len(markdown_content),
-                **(web_entity.metadata or {}),
-            },
-        )
+    file_size, checksum = await run_in_thread_pool(_calculate_file_metrics, markdown_content)
+
+    # Create enhanced metadata
+    enhanced_metadata = _create_enhanced_metadata(web_entity, title, markdown_content, is_ctti)
+
+    # Create WebFileEntity
+    file_entity = _create_web_file_entity(
+        web_entity,
+        title,
+        file_size,
+        temp_file_path,
+        file_uuid,
+        checksum,
+        metadata,
+        enhanced_metadata,
+    )
+
+    # Store in persistent storage
+    await _store_file_entity(file_entity, temp_file_path, is_ctti, entity_context)
+
+    logger.info(
+        f"✅ WEB_COMPLETE [{entity_context}] Successfully created FileEntity ({file_size} bytes)"
+    )
+
+    return file_entity
+
+
+def _create_enhanced_metadata(
+    web_entity: WebEntity, title: str, markdown_content: str, is_ctti: bool
+) -> dict:
+    """Create enhanced metadata for the file entity."""
+    enhanced_metadata = {
+        "url": web_entity.url,
+        "title": title,
+        "content_length": len(markdown_content),
+        **(web_entity.metadata or {}),
+    }
+
+    # Add CTTI source marker if this is a CTTI entity
+    if is_ctti:
+        enhanced_metadata["source"] = "CTTI"
+
+    return enhanced_metadata
+
+
+def _create_web_file_entity(
+    web_entity: WebEntity,
+    title: str,
+    file_size: int,
+    temp_file_path: str,
+    file_uuid,
+    checksum: str,
+    metadata,
+    enhanced_metadata: dict,
+) -> WebFileEntity:
+    """Create WebFileEntity with optimized field copying."""
+    return WebFileEntity(
+        entity_id=web_entity.entity_id,
+        file_id=f"web_{web_entity.entity_id}",
+        name=f"{title}.md",
+        mime_type="text/markdown",
+        size=file_size,
+        download_url=web_entity.url,
+        url=web_entity.url,
+        local_path=temp_file_path,
+        file_uuid=file_uuid,
+        checksum=checksum,
+        total_size=file_size,
+        # Copy BaseEntity fields
+        breadcrumbs=web_entity.breadcrumbs,
+        parent_entity_id=web_entity.parent_entity_id,
+        sync_id=web_entity.sync_id,
+        sync_job_id=web_entity.sync_job_id,
+        source_name=web_entity.source_name,
+        sync_metadata=web_entity.sync_metadata,
+        # WebFileEntity specific
+        original_url=web_entity.url,
+        crawl_metadata=metadata,
+        web_title=title,
+        web_description=metadata.get("description", "") if isinstance(metadata, dict) else "",
+        # Enhanced metadata
+        metadata=enhanced_metadata,
+    )
+
+
+async def _store_file_entity(
+    file_entity: WebFileEntity, temp_file_path: str, is_ctti: bool, entity_context: str
+) -> None:
+    """Store file entity in persistent storage."""
+    from airweave.platform.storage import storage_manager
+
+    if is_ctti:
+        # Use CTTI-specific storage (global deduplication)
+        with open(temp_file_path, "rb") as f:
+            file_entity = await storage_manager.store_ctti_file(file_entity, f)
 
         logger.info(
-            f"✅ WEB_COMPLETE [{entity_context}] Successfully created FileEntity "
-            f"({file_size} bytes)"
+            f"💾 WEB_CTTI_STORED [{entity_context}] "
+            f"Stored CTTI file globally: {file_entity.storage_blob_name}"
         )
-
-        return [file_entity]
-
-    except Exception as e:
-        logger.error(
-            f"💥 WEB_ERROR [{entity_context}] Failed to fetch web content: "
-            f"{type(e).__name__}: {str(e)}"
+    else:
+        # Non-CTTI: Use standard sync-based storage
+        # (file will be uploaded by file_manager when needed)
+        logger.info(
+            f"💾 WEB_FILE_CREATED [{entity_context}] Created local file at {temp_file_path}"
         )
-        raise e
