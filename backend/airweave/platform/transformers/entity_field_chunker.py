@@ -1,7 +1,8 @@
 """Entity chunker for chunking large text fields in entities."""
 
+import json
 import math
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from chonkie import SemanticChunker
 
@@ -67,29 +68,23 @@ def create_semantic_chunker(content_size: int, target_size: int) -> SemanticChun
     )
 
 
-def calculate_entity_size(entity_dict: Dict) -> Tuple[int, Dict[str, int]]:
-    """Calculate the total size of an entity and sizes of individual fields.
-
-    Args:
-        entity_dict: Entity dictionary from model_dump()
-
-    Returns:
-        Tuple of (total_size, field_sizes_dict)
-    """
+def calculate_entity_size(entity_dict: Dict[str, Any]) -> Tuple[int, Dict[str, int]]:
+    """Calculate the token size of entity and its fields."""
     total_size = 0
     field_sizes = {}
 
     for field_name, field_value in entity_dict.items():
         if isinstance(field_value, str):
             size = count_tokens(field_value)
-            field_sizes[field_name] = size
-            total_size += size
         elif isinstance(field_value, (dict, list)):
-            # Approximate size for complex fields
-            # This is a rough estimate based on JSON serialization
+            # For complex types, serialize to JSON to count tokens
+            size = count_tokens(json.dumps(field_value))
+        else:
+            # For other types, convert to string
             size = count_tokens(str(field_value))
-            field_sizes[field_name] = size
-            total_size += size
+
+        field_sizes[field_name] = size
+        total_size += size
 
     return total_size, field_sizes
 

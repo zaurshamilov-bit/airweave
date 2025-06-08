@@ -59,8 +59,8 @@ class FileManager:
 
         if is_ctti:
             logger.info(
-                "🏥 FILE_CTTI Detected CTTI entity, using global deduplication",
-                entity_id=entity.entity_id,
+                f"🏥 FILE_CTTI Detected CTTI entity, using global deduplication "
+                f"(entity_id: {entity.entity_id})"
             )
 
         # Check if entity is already fully processed
@@ -81,8 +81,8 @@ class FileManager:
             # For CTTI, check global storage
             if await storage_manager.is_ctti_entity_processed(entity.entity_id):
                 logger.info(
-                    "CTTI entity already processed globally, marking as KEPT",
-                    entity_id=entity.entity_id,
+                    f"CTTI entity already processed globally, marking as KEPT "
+                    f"(entity_id: {entity.entity_id})"
                 )
                 entity.is_fully_processed = True
                 entity.is_cached = True
@@ -92,9 +92,8 @@ class FileManager:
             cache_key = f"{entity.sync_id}/{entity.entity_id}"
             if await storage_manager.is_entity_fully_processed(cache_key):
                 logger.info(
-                    "Entity already fully processed, marking as KEPT",
-                    entity_id=entity.entity_id,
-                    sync_id=str(entity.sync_id),
+                    f"Entity already fully processed, marking as KEPT "
+                    f"(entity_id: {entity.entity_id}, sync_id: {entity.sync_id})"
                 )
                 entity.is_fully_processed = True
                 entity.is_cached = True
@@ -113,10 +112,9 @@ class FileManager:
 
             if cached_path:
                 logger.info(
-                    "File found in storage cache, using cached version",
-                    entity_id=entity.entity_id,
-                    sync_id=str(entity.sync_id),
-                    cached_path=cached_path,
+                    f"File found in storage cache, using cached version "
+                    f"(entity_id: {entity.entity_id}, sync_id: {entity.sync_id}, "
+                    f"cached_path: {cached_path})"
                 )
 
                 # Update entity with cached file info
@@ -161,7 +159,9 @@ class FileManager:
             # IMPORTANT: Keep temp file for processing - chunker will clean it up
 
         except Exception as e:
-            logger.error(f"Error processing file {entity.name}: {str(e)}")
+            logger.error(
+                f"[Entity({entity.entity_id})] Error processing file {entity.name}: {str(e)}"
+            )
             # Clean up partial file if it exists
             if os.path.exists(temp_path):
                 os.remove(temp_path)
@@ -178,13 +178,15 @@ class FileManager:
     ) -> int:
         """Download file stream to temporary path."""
         downloaded_size = 0
-        logger.info(
-            "Downloading file from source",
-            entity_id=entity.entity_id,
-            name=entity.name,
-            url=entity.download_url[:100] + "..."
+        # Truncate long URLs for logging
+        url_display = (
+            entity.download_url[:100] + "..."
             if len(entity.download_url) > 100
-            else entity.download_url,
+            else entity.download_url
+        )
+        logger.info(
+            f"Downloading file from source (entity_id: {entity.entity_id}, "
+            f"name: {entity.name}, url: {url_display})"
         )
 
         async with aiofiles.open(temp_path, "wb") as f:
@@ -254,11 +256,9 @@ class FileManager:
             entity.total_size = downloaded_size
 
         logger.info(
-            "File downloaded successfully",
-            entity_id=entity.entity_id,
-            local_path=temp_path,
-            size=downloaded_size,
-            checksum=entity.checksum[:8] + "...",
+            f"File downloaded successfully (entity_id: {entity.entity_id}, "
+            f"local_path: {temp_path}, size: {downloaded_size}, "
+            f"checksum: {entity.checksum[:8]}...)"
         )
 
     async def _store_entity_in_storage(
@@ -271,15 +271,13 @@ class FileManager:
                 entity = await storage_manager.store_file_entity(entity, f)
 
             logger.info(
-                "File stored in persistent storage",
-                entity_id=entity.entity_id,
-                sync_id=str(entity.sync_id),
-                storage_blob_name=entity.storage_blob_name,
+                f"File stored in persistent storage (entity_id: {entity.entity_id}, "
+                f"sync_id: {entity.sync_id}, storage_blob_name: {entity.storage_blob_name})"
             )
         elif is_ctti:
             logger.info(
-                "🏥 FILE_CTTI_SKIP_STORE Skipping storage for CTTI file (handled by web_fetcher)",
-                entity_id=entity.entity_id,
+                f"🏥 FILE_CTTI_SKIP_STORE Skipping storage for CTTI file "
+                f"(handled by web_fetcher) (entity_id: {entity.entity_id})"
             )
 
     @staticmethod

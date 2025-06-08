@@ -203,6 +203,14 @@ class EntityProcessor:
 
     async def _enrich(self, entity: BaseEntity, sync_context: SyncContext) -> BaseEntity:
         """Enrich entity with sync metadata."""
+        # Check if entity needs lazy materialization
+        if hasattr(entity, "needs_materialization") and entity.needs_materialization:
+            logger.info(
+                f"🔄 PROCESSOR_LAZY_DETECT [Entity({entity.entity_id})] "
+                f"Entity requires materialization"
+            )
+            await entity.materialize()
+
         entity.source_name = sync_context.source._name
         entity.sync_id = sync_context.sync.id
         entity.sync_job_id = sync_context.sync_job.id

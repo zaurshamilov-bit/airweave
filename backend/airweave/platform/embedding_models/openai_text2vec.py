@@ -181,8 +181,10 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         # OpenAI limits: 8191 tokens per text, 2048 texts per batch, 300k total tokens per request
         MAX_BATCH_SIZE = 100  # Well under the 2048 limit, allows good parallelism
         MAX_TOKENS_PER_BATCH = 280000  # ~93% of 300k limit for safety margin
+        MAX_CONCURRENT_BATCHES = 5  # Limit concurrent API calls
 
-        embeddings = []
+        # Prepare batches first
+        batches = []
         current_batch = []
         current_batch_tokens = 0
 
@@ -191,18 +193,14 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             estimated_tokens = len(text) // 4
 
             # Check if adding this text would exceed limits
-            should_process_batch = current_batch and (
+            should_create_new_batch = current_batch and (
                 len(current_batch) >= MAX_BATCH_SIZE
                 or current_batch_tokens + estimated_tokens > MAX_TOKENS_PER_BATCH
             )
 
-            if should_process_batch:
-                # Process current batch
-                batch_embeddings = await self._process_single_batch(
-                    current_batch, model, encoding_format, context_prefix
-                )
-                embeddings.extend(batch_embeddings)
-
+            if should_create_new_batch:
+                # Save current batch
+                batches.append(current_batch)
                 # Start new batch
                 current_batch = [text]
                 current_batch_tokens = estimated_tokens
@@ -211,17 +209,43 @@ class OpenAIText2Vec(BaseEmbeddingModel):
                 current_batch.append(text)
                 current_batch_tokens += estimated_tokens
 
-        # Process final batch
+        # Don't forget the last batch
         if current_batch:
-            batch_embeddings = await self._process_single_batch(
-                current_batch, model, encoding_format, context_prefix
-            )
+            batches.append(current_batch)
+
+        logger.info(
+            f"📦 OPENAI_BATCHES [{context_prefix}] Created {len(batches)} batches "
+            f"from {len(texts)} texts"
+        )
+
+        # Process batches in parallel with concurrency limit
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_BATCHES)
+
+        async def process_batch_with_limit(batch, batch_idx):
+            async with semaphore:
+                logger.info(
+                    f"🔄 OPENAI_BATCH_START [{context_prefix}] Processing batch "
+                    f"{batch_idx + 1}/{len(batches)} ({len(batch)} texts)"
+                )
+                return await self._process_single_batch(
+                    batch, model, encoding_format, context_prefix
+                )
+
+        # Create tasks for all batches
+        tasks = [process_batch_with_limit(batch, idx) for idx, batch in enumerate(batches)]
+
+        # Process all batches in parallel
+        batch_results = await asyncio.gather(*tasks)
+
+        # Flatten results
+        embeddings = []
+        for batch_embeddings in batch_results:
             embeddings.extend(batch_embeddings)
 
         cpu_elapsed = loop.time() - cpu_start
         logger.info(
-            f"✅ OPENAI_COMPLETE [{context_prefix}] All batches completed in {cpu_elapsed:.2f}s "
-            f"({len(embeddings)} vectors returned)"
+            f"✅ OPENAI_COMPLETE [{context_prefix}] All {len(batches)} batches completed "
+            f"in {cpu_elapsed:.2f}s ({len(embeddings)} vectors returned)"
         )
 
         return embeddings
