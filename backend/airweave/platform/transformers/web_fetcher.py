@@ -24,6 +24,10 @@ _client_lock = asyncio.Lock()
 _httpx_client = None
 _temp_dir_created = False
 
+# Add a separate semaphore for CTTI to limit their concurrent requests
+_ctti_semaphore = None
+_ctti_semaphore_lock = asyncio.Lock()
+
 
 async def get_httpx_client():
     """Get or create shared httpx client with proper connection pooling."""
@@ -47,9 +51,9 @@ async def get_httpx_client():
             limits=limits,
             timeout=httpx.Timeout(
                 connect=30.0,  # Increased from 10.0 to handle slower connections
-                read=120.0,  # Increased from 60.0 to handle slow CTTI pages
+                read=240.0,  # Increased from 120.0 to handle slow CTTI pages (4 minutes)
                 write=30.0,
-                pool=120.0,  # Increased from 60.0 to match read timeout
+                pool=240.0,  # Increased from 120.0 to match read timeout
             ),
             # Performance optimizations
             verify=True,
@@ -134,6 +138,24 @@ async def get_firecrawl_client():
             )
 
     return _shared_firecrawl_client, _client_semaphore
+
+
+async def get_ctti_semaphore():
+    """Get or create a special semaphore for CTTI entities with lower concurrency."""
+    global _ctti_semaphore
+
+    async with _ctti_semaphore_lock:
+        if _ctti_semaphore is None:
+            # Much lower concurrency for CTTI to avoid overwhelming their servers
+            max_ctti_concurrent = getattr(settings, "CTTI_MAX_CONCURRENT", 3)  # Default to 3
+            _ctti_semaphore = asyncio.Semaphore(max_ctti_concurrent)
+            _ctti_semaphore._initial_value = max_ctti_concurrent
+            logger.info(
+                f"🏥 CTTI_SEMAPHORE_INIT Created CTTI-specific semaphore "
+                f"(max_concurrent={max_ctti_concurrent})"
+            )
+
+    return _ctti_semaphore
 
 
 async def _retry_with_backoff(func, *args, max_retries=3, entity_context="", **kwargs):
@@ -356,16 +378,42 @@ async def _scrape_with_firecrawl_internal(web_entity: WebEntity, entity_context:
     """Internal function to handle the actual scraping with connection limiting."""
     app, semaphore = await get_firecrawl_client()
 
-    # Check if we need to wait for a slot
-    if semaphore._value == 0:
-        logger.info(
-            f"⏳ WEB_QUEUE [{entity_context}] Waiting for connection slot "
-            f"(all {getattr(semaphore, '_initial_value', 10)} slots in use)"
-        )
+    # Check if this is a CTTI entity and use special semaphore
+    from airweave.platform.storage import storage_manager
 
-    # Use semaphore to limit concurrent connections
-    async with semaphore:
-        return await _perform_firecrawl_scrape(web_entity, entity_context)
+    is_ctti = storage_manager._is_ctti_entity(web_entity)
+
+    if is_ctti:
+        # Use CTTI-specific semaphore with lower concurrency
+        ctti_semaphore = await get_ctti_semaphore()
+
+        # Check if we need to wait for a CTTI slot
+        if ctti_semaphore._value == 0:
+            logger.info(
+                f"⏳ WEB_CTTI_QUEUE [{entity_context}] Waiting for CTTI connection slot "
+                f"(all {getattr(ctti_semaphore, '_initial_value', 3)} slots in use)"
+            )
+
+        # Use CTTI semaphore to limit concurrent connections to ClinicalTrials.gov
+        async with ctti_semaphore:
+            logger.info(
+                f"🏥 WEB_CTTI_SLOT [{entity_context}] Acquired CTTI connection slot "
+                f"(active: {ctti_semaphore._initial_value - ctti_semaphore._value}"
+                f"/{ctti_semaphore._initial_value})"
+            )
+            return await _perform_firecrawl_scrape(web_entity, entity_context)
+    else:
+        # Use regular semaphore for non-CTTI entities
+        # Check if we need to wait for a slot
+        if semaphore._value == 0:
+            logger.info(
+                f"⏳ WEB_QUEUE [{entity_context}] Waiting for connection slot "
+                f"(all {getattr(semaphore, '_initial_value', 10)} slots in use)"
+            )
+
+        # Use semaphore to limit concurrent connections
+        async with semaphore:
+            return await _perform_firecrawl_scrape(web_entity, entity_context)
 
 
 async def _perform_firecrawl_scrape(web_entity: WebEntity, entity_context: str):
@@ -411,6 +459,19 @@ async def _try_scrape_with_timeouts(
     app, web_entity: WebEntity, timeouts: list, entity_context: str
 ):
     """Try scraping with progressively longer timeouts."""
+    # Check if this is a CTTI entity for special timeout handling
+    from airweave.platform.storage import storage_manager
+
+    is_ctti = storage_manager._is_ctti_entity(web_entity)
+
+    # Use longer timeouts for CTTI entities
+    if is_ctti:
+        # Much longer timeouts for slow CTTI pages
+        timeouts = [120.0, 180.0, 240.0]  # 2, 3, 4 minutes
+        logger.info(
+            f"🏥 WEB_CTTI_TIMEOUTS [{entity_context}] Using extended timeouts for CTTI: {timeouts}"
+        )
+
     for timeout in timeouts:
         try:
             return await asyncio.wait_for(

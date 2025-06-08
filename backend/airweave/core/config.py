@@ -52,6 +52,7 @@ class Settings(BaseSettings):
         SYNC_THREAD_POOL_SIZE (int): The size of the thread pool for sync tasks.
         WEB_FETCHER_MAX_CONCURRENT (int): Max concurrent web scraping requests
         OPENAI_MAX_CONCURRENT (int): Max concurrent OpenAI API requests
+        CTTI_MAX_CONCURRENT (int): Max concurrent CTTI (ClinicalTrials.gov) requests
 
         # Custom deployment URLs
         API_FULL_URL (Optional[str]): The full URL for the API.
@@ -120,6 +121,7 @@ class Settings(BaseSettings):
     SYNC_THREAD_POOL_SIZE: int = 100
     WEB_FETCHER_MAX_CONCURRENT: int = 10  # Max concurrent web scraping requests
     OPENAI_MAX_CONCURRENT: int = 20  # Max concurrent OpenAI API requests
+    CTTI_MAX_CONCURRENT: int = 3  # Max concurrent CTTI (ClinicalTrials.gov) requests
 
     # Custom deployment URLs - these are used to override the default URLs to allow
     # for custom domains in custom deployments
