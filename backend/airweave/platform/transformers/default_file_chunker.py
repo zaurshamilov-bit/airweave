@@ -27,7 +27,7 @@ _cache_lock = None
 USE_OPTIMIZED_CHUNKING = True  # Set to True to use faster token-based chunking
 
 # Calculate safe chunk size accounting for metadata overhead
-SAFE_CHUNK_SIZE = MAX_CHUNK_SIZE - METADATA_SIZE - MARGIN_OF_ERROR  # 8191 - 1200 - 250 = 6741
+SAFE_CHUNK_SIZE = MAX_CHUNK_SIZE - METADATA_SIZE - MARGIN_OF_ERROR  # 7500 - 1200 - 250 = 6050
 
 
 def get_recursive_chunker():
@@ -135,13 +135,30 @@ async def _chunk_text_content(text_content: str, entity_context: str) -> list[st
         logger.info(
             f"🚀 CHUNKER_OPTIMIZED_MODE [{entity_context}] Using optimized token-based chunking"
         )
-
-        # Import the optimized chunking function
         from airweave.platform.transformers.optimized_file_chunker import _chunk_text_optimized
 
         return await _chunk_text_optimized(text_content, entity_context)
 
-    # Original semantic chunking approach
+    # Perform recursive chunking
+    initial_chunks = await _perform_recursive_chunking(text_content, entity_context)
+
+    # Separate chunks by size
+    small_chunks, large_chunks_data = _separate_chunks_by_size(initial_chunks)
+
+    if not large_chunks_data:
+        return small_chunks
+
+    # Process large chunks with semantic chunking
+    large_chunk_results = await _process_large_chunks_semantically(
+        large_chunks_data, entity_context
+    )
+
+    # Reconstruct final chunk list
+    return _reconstruct_chunk_list(initial_chunks, small_chunks, large_chunk_results)
+
+
+async def _perform_recursive_chunking(text_content: str, entity_context: str) -> list:
+    """Perform initial recursive chunking."""
     logger.info(f"🔧 CHUNKER_RECURSIVE_START [{entity_context}] Starting recursive chunking")
 
     recursive_chunker = get_recursive_chunker()
@@ -150,83 +167,126 @@ async def _chunk_text_content(text_content: str, entity_context: str) -> list[st
     logger.info(
         f"📝 CHUNKER_RECURSIVE_DONE [{entity_context}] Created {len(initial_chunks)} initial chunks"
     )
+    return initial_chunks
 
-    final_chunk_texts = []
-    large_chunks = 0
 
-    # Pre-load semantic chunker if we anticipate needing it
-    semantic_chunker = None
-    large_chunk_count = sum(1 for chunk in initial_chunks if chunk.token_count > SAFE_CHUNK_SIZE)
-
-    if large_chunk_count > 0:
-        logger.info(
-            f"🧠 CHUNKER_SEMANTIC_PRELOAD [{entity_context}] "
-            f"Pre-loading semantic chunker for {large_chunk_count} large chunks"
-        )
-        semantic_chunker = await get_optimized_semantic_chunker(SAFE_CHUNK_SIZE, entity_context)
+def _separate_chunks_by_size(initial_chunks: list) -> tuple[list[str], list[tuple]]:
+    """Separate chunks into small and large based on token count."""
+    small_chunks = []
+    large_chunks_data = []
 
     for i, chunk in enumerate(initial_chunks):
         if chunk.token_count <= SAFE_CHUNK_SIZE:
-            final_chunk_texts.append(chunk.text)
+            small_chunks.append(chunk.text)
         else:
-            large_chunks += 1
-            logger.info(
-                f"✂️  CHUNKER_SEMANTIC_SPLIT [{entity_context}] Chunk {i + 1} too large "
-                f"({chunk.token_count} tokens), applying semantic chunking"
-            )
+            large_chunks_data.append((i, chunk))
 
-            # Apply semantic chunking with optimized processing
-            chunk_start = asyncio.get_event_loop().time()
+    return small_chunks, large_chunks_data
 
-            def _semantic_chunk_optimized(chunker, text, context):
-                """Optimized semantic chunking with progress reporting."""
-                logger.info(
-                    f"🔧 CHUNKER_SEMANTIC_PROCESSING [{context}] Processing {len(text)} characters"
-                )
 
-                try:
-                    result = chunker.chunk(text)
-                    logger.info(
-                        f"🔧 CHUNKER_SEMANTIC_INTERNAL_DONE [{context}] Internal chunking complete"
-                    )
-                    return result
-                except Exception as e:
-                    logger.error(
-                        f"💥 CHUNKER_SEMANTIC_ERROR [{context}] Semantic chunking failed: {str(e)}"
-                    )
-                    # Fallback: split text manually into smaller parts
-                    text_length = len(text)
-                    part_size = text_length // 3  # Split into 3 parts as fallback
-                    parts = [text[i : i + part_size] for i in range(0, text_length, part_size)]
+async def _process_large_chunks_semantically(
+    large_chunks_data: list[tuple], entity_context: str
+) -> dict:
+    """Process large chunks using semantic chunking."""
+    large_chunk_count = len(large_chunks_data)
 
-                    # Create mock chunk objects
-                    class MockChunk:
-                        def __init__(self, text):
-                            self.text = text
+    logger.info(
+        f"🧠 CHUNKER_LARGE_CHUNKS [{entity_context}] "
+        f"Found {large_chunk_count} large chunks that need semantic chunking"
+    )
 
-                    return [MockChunk(part) for part in parts if part.strip()]
+    # Pre-load semantic chunker
+    semantic_chunker = await get_optimized_semantic_chunker(SAFE_CHUNK_SIZE, entity_context)
 
-            semantic_chunks = await run_in_thread_pool(
-                _semantic_chunk_optimized, semantic_chunker, chunk.text, entity_context
-            )
+    # Set up parallel processing
+    max_concurrent = min(5, large_chunk_count)
+    semaphore = asyncio.Semaphore(max_concurrent)
 
-            chunk_elapsed = asyncio.get_event_loop().time() - chunk_start
+    async def process_with_limit(chunk_data):
+        async with semaphore:
+            return await _process_single_large_chunk(chunk_data, semantic_chunker, entity_context)
 
-            final_chunk_texts.extend([sc.text for sc in semantic_chunks])
+    # Process all chunks in parallel
+    logger.info(
+        f"🔄 CHUNKER_PARALLEL_START [{entity_context}] Processing {large_chunk_count} large chunks "
+        f"in parallel (max concurrent: {max_concurrent})"
+    )
 
-            logger.info(
-                f"📦 CHUNKER_SEMANTIC_RESULT [{entity_context}] Large chunk split into "
-                f"{len(semantic_chunks)} semantic chunks in {chunk_elapsed:.3f}s"
-            )
+    tasks = [process_with_limit(chunk_data) for chunk_data in large_chunks_data]
+    results = await asyncio.gather(*tasks)
 
-            # Yield control after processing each large chunk
-            await asyncio.sleep(0)
+    logger.info(
+        f"🔄 CHUNKER_SEMANTIC_SUMMARY [{entity_context}] Applied semantic chunking to "
+        f"{large_chunk_count} large chunks in parallel"
+    )
 
-    if large_chunks > 0:
-        logger.info(
-            f"🔄 CHUNKER_SEMANTIC_SUMMARY [{entity_context}] Applied semantic chunking to "
-            f"{large_chunks} large chunks"
-        )
+    return dict(results)
+
+
+async def _process_single_large_chunk(
+    chunk_data: tuple, semantic_chunker, entity_context: str
+) -> tuple:
+    """Process a single large chunk using semantic chunking."""
+    idx, chunk = chunk_data
+
+    logger.info(
+        f"✂️  CHUNKER_SEMANTIC_SPLIT [{entity_context}] Processing large chunk {idx + 1} "
+        f"({chunk.token_count} tokens)"
+    )
+
+    chunk_start = asyncio.get_event_loop().time()
+
+    # Perform semantic chunking with fallback
+    semantic_chunks = await run_in_thread_pool(
+        _semantic_chunk_with_fallback, semantic_chunker, chunk.text, entity_context
+    )
+
+    chunk_elapsed = asyncio.get_event_loop().time() - chunk_start
+
+    logger.info(
+        f"📦 CHUNKER_SEMANTIC_RESULT [{entity_context}] Large chunk {idx + 1} split into "
+        f"{len(semantic_chunks)} semantic chunks in {chunk_elapsed:.3f}s"
+    )
+
+    return idx, [sc.text for sc in semantic_chunks]
+
+
+def _semantic_chunk_with_fallback(chunker, text, context):
+    """Perform semantic chunking with fallback for errors."""
+    try:
+        return chunker.chunk(text)
+    except Exception as e:
+        logger.error(f"💥 CHUNKER_SEMANTIC_ERROR [{context}] Semantic chunking failed: {str(e)}")
+        # Fallback: split text manually
+        return _fallback_chunk_split(text)
+
+
+def _fallback_chunk_split(text: str):
+    """Fallback method to split text when semantic chunking fails."""
+    text_length = len(text)
+    part_size = text_length // 3
+    parts = [text[i : i + part_size] for i in range(0, text_length, part_size)]
+
+    class MockChunk:
+        def __init__(self, text):
+            self.text = text
+
+    return [MockChunk(part) for part in parts if part.strip()]
+
+
+def _reconstruct_chunk_list(
+    initial_chunks: list, small_chunks: list[str], large_chunk_results: dict
+) -> list[str]:
+    """Reconstruct the final chunk list maintaining original order."""
+    final_chunk_texts = []
+    large_chunk_indices = set(large_chunk_results.keys())
+    small_chunk_iter = iter(small_chunks)
+
+    for i in range(len(initial_chunks)):
+        if i in large_chunk_indices:
+            final_chunk_texts.extend(large_chunk_results[i])
+        else:
+            final_chunk_texts.append(next(small_chunk_iter))
 
     return final_chunk_texts
 
