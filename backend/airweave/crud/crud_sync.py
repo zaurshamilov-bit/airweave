@@ -61,7 +61,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
         )  # NB: raises airweave.core.exceptions.PermissionException if user doesn't have permission
         return sync
 
-    async def get_all_for_user(
+    async def get_multi(
         self,
         db: AsyncSession,
         current_user: schemas.User,
@@ -85,7 +85,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
             list[schemas.Sync]: The syncs
         """
         # Get all syncs for the user using the base class method
-        syncs = await super().get_all_for_user(db, current_user, skip=skip, limit=limit)
+        syncs = await super().get_multi(db, current_user, skip=skip, limit=limit)
 
         # Enrich the syncs with their connections if requested
         if with_connections:
@@ -327,7 +327,7 @@ class CRUDSync(CRUDBase[Sync, SyncCreate, SyncUpdate]):
             list[schemas.SyncWithSourceConnection]: The syncs with their source connections
         """
         # First, get all syncs for the user
-        syncs = await super().get_all_for_user(db, current_user)
+        syncs = await super().get_multi(db, current_user)
 
         # Enrich all syncs efficiently
         enriched_syncs = await self.enricher_for_all(db, syncs)

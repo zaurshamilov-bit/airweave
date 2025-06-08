@@ -81,7 +81,7 @@ async def list_white_labels(
     --------
         list[schemas.WhiteLabel]: A list of white labels
     """
-    white_labels = await crud.white_label.get_all_for_user(db, current_user=current_user)
+    white_labels = await crud.white_label.get_multi(db, current_user=current_user)
     return white_labels
 
 

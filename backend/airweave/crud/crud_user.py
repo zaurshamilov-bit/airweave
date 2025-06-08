@@ -7,12 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from airweave.crud._base import CRUDBase
+from airweave.crud._base_user import CRUDBaseUser
 from airweave.models.user import User
 from airweave.schemas.user import UserCreate, UserUpdate
 
 
-class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
+class CRUDUser(CRUDBaseUser[User, UserCreate, UserUpdate]):
     """CRUD operations for the User model."""
 
     def _get_user_query_with_orgs(self):
@@ -20,8 +20,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         from airweave.models.user_organization import UserOrganization
 
         return select(User).options(
-            selectinload(User.user_organizations).selectinload(UserOrganization.organization),
-            selectinload(User.organization),  # Keep backward compatibility
+            selectinload(User.user_organizations).selectinload(UserOrganization.organization)
         )
 
     async def get_by_email(self, db: AsyncSession, *, email: str) -> Optional[User]:

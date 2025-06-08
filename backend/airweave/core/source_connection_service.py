@@ -513,7 +513,7 @@ class SourceConnectionService:
             A list of simplified source connection list items
         """
         # Get all source connections for the user
-        source_connections = await crud.source_connection.get_all_for_user(
+        source_connections = await crud.source_connection.get_multi(
             db=db, current_user=current_user, skip=skip, limit=limit
         )
 

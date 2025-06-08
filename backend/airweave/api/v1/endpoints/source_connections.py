@@ -42,13 +42,13 @@ async def list_source_connections(
         return await source_connection_service.get_source_connections_by_collection(
             db=db,
             collection=collection,
-            current_user=user,
+            auth_context=user.auth_context,
             skip=skip,
             limit=limit,
         )
 
     return await source_connection_service.get_all_source_connections(
-        db=db, current_user=user, skip=skip, limit=limit
+        db=db, auth_context=user.auth_context, skip=skip, limit=limit
     )
 
 
@@ -75,7 +75,7 @@ async def get_source_connection(
         db=db,
         source_connection_id=source_connection_id,
         show_auth_fields=show_auth_fields,
-        current_user=user,
+        auth_context=user.auth_context,
     )
 
 

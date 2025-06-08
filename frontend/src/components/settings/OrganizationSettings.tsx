@@ -40,7 +40,7 @@ export const OrganizationSettings = ({
     try {
       setIsLoading(true);
 
-      const response = await apiClient.put(`/organizations/${currentOrganization.id}`, {
+      const response = await apiClient.put(`/organizations/${currentOrganization.id}`, undefined, {
         name,
         description
       });
@@ -58,6 +58,10 @@ export const OrganizationSettings = ({
       });
 
       toast.success('Organization updated successfully');
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
 
     } catch (error) {
       console.error('Failed to update organization:', error);

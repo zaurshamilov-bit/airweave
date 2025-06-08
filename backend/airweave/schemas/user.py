@@ -3,7 +3,7 @@
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from .organization import Organization
 
@@ -38,12 +38,6 @@ class UserBase(BaseModel):
 
     email: EmailStr
     full_name: Optional[str] = "Superuser"
-    organization_id: Optional[UUID] = None  # Keep for backward compatibility
-
-    @validator("organization_id", pre=True, always=True)
-    def organization_must_exist_for_operations(cls, v, values):
-        """Validate that the organization_id field is present for operations."""
-        return v
 
     class Config:
         """Pydantic config for UserBase."""
@@ -63,24 +57,16 @@ class UserUpdate(UserBase):
 
     permissions: Optional[list[str]] = None
 
-    @validator("organization_id")
-    def organization_required_for_update(cls, v):
-        """Validate that the organization_id is not None for updates."""
-        if v is None:
-            raise ValueError("organization_id cannot be None when updating a user")
-        return v
-
 
 class UserInDBBase(UserBase):
     """Base schema for User stored in DB."""
 
     id: UUID
-    permissions: Optional[list[str]] = None
     primary_organization_id: Optional[UUID] = None
-    current_organization_id: Optional[UUID] = None
-    organizations: list[UserOrganization] = []
+    user_organizations: list[UserOrganization] = Field(default_factory=list)
 
-    @validator("organizations", pre=True, always=True)
+    @field_validator("user_organizations", mode="before")
+    @classmethod
     def load_organizations(cls, v):
         """Ensure organizations are always loaded."""
         return v or []
@@ -88,7 +74,7 @@ class UserInDBBase(UserBase):
     @property
     def primary_organization(self) -> Optional[UserOrganization]:
         """Get the primary organization for this user."""
-        for org in self.organizations:
+        for org in self.user_organizations:
             if org.is_primary:
                 return org
         return None
@@ -96,7 +82,7 @@ class UserInDBBase(UserBase):
     @property
     def organization_roles(self) -> dict[UUID, str]:
         """Get a mapping of organization IDs to roles."""
-        return {org.organization_id: org.role for org in self.organizations}
+        return {org.organization.id: org.role for org in self.user_organizations}
 
     class Config:
         """Pydantic config for UserInDBBase."""

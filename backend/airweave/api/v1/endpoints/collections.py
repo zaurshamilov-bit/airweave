@@ -23,13 +23,12 @@ async def list_collections(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: schemas.AuthContext = Depends(deps.get_auth_context),
 ) -> List[schemas.Collection]:
     """List all collections for the current user's organization."""
-    return await crud.collection.get_multi_by_organization(
+    return await crud.collection.get_multi(
         db,
-        organization_id=current_user.organization_id,
-        current_user=current_user,
+        auth_context=auth_context,
         skip=skip,
         limit=limit,
     )

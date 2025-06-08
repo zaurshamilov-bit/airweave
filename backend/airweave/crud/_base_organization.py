@@ -10,14 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave.core.exceptions import NotFoundException, PermissionException
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models._base import Base
-from airweave.schemas import AuthContext, User
+from airweave.schemas import AuthContext
 
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
 
-class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     """Unified CRUD for all organization-scoped resources."""
 
     def __init__(self, model: Type[ModelType], track_user: bool = True):
@@ -36,7 +36,6 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         id: UUID,
         auth_context: AuthContext,
-        organization_id: Optional[UUID] = None,
     ) -> Optional[ModelType]:
         """Get organization resource.
 
@@ -45,29 +44,25 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             db (AsyncSession): The database session.
             id (UUID): The UUID of the object to get.
             auth_context (AuthContext): The authentication context.
-            organization_id (Optional[UUID]): The organization ID to filter by.
 
         Returns:
         -------
             Optional[ModelType]: The object with the given ID.
         """
-        effective_org_id = organization_id or auth_context.organization_id
-
         # Validate auth context has org access
-        await self._validate_organization_access(auth_context, effective_org_id)
+        await self._validate_organization_access(auth_context, auth_context.organization_id)
 
         query = select(self.model).where(
-            self.model.id == id, self.model.organization_id == effective_org_id
+            self.model.id == id, self.model.organization_id == auth_context.organization_id
         )
 
         result = await db.execute(query)
         return result.unique().scalar_one_or_none()
 
-    async def get_multi_for_organization(
+    async def get_multi(
         self,
         db: AsyncSession,
         auth_context: AuthContext,
-        organization_id: Optional[UUID] = None,
         *,
         skip: int = 0,
         limit: int = 100,
@@ -78,7 +73,6 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         ----
             db (AsyncSession): The database session.
             auth_context (AuthContext): The authentication context.
-            organization_id (Optional[UUID]): The organization ID to filter by.
             skip (int): The number of objects to skip.
             limit (int): The number of objects to return.
 
@@ -86,14 +80,12 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         -------
             list[ModelType]: A list of objects.
         """
-        effective_org_id = organization_id or auth_context.organization_id
-
         # Validate auth context has org access
-        await self._validate_organization_access(auth_context, effective_org_id)
+        await self._validate_organization_access(auth_context, auth_context.organization_id)
 
         query = (
             select(self.model)
-            .where(self.model.organization_id == effective_org_id)
+            .where(self.model.organization_id == auth_context.organization_id)
             .offset(skip)
             .limit(limit)
         )
@@ -107,7 +99,6 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         *,
         obj_in: CreateSchemaType,
         auth_context: AuthContext,
-        organization_id: Optional[UUID] = None,
         uow: Optional[UnitOfWork] = None,
     ) -> ModelType:
         """Create organization resource with auth context.
@@ -124,15 +115,13 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         -------
             ModelType: The created object.
         """
-        effective_org_id = organization_id or auth_context.organization_id
-
         # Validate auth context has org access
-        await self._validate_organization_access(auth_context, effective_org_id)
+        await self._validate_organization_access(auth_context, auth_context.organization_id)
 
         if not isinstance(obj_in, dict):
             obj_in = obj_in.model_dump(exclude_unset=True)
 
-        obj_in["organization_id"] = effective_org_id
+        obj_in["organization_id"] = auth_context.organization_id
 
         if self.track_user:
             if auth_context.has_user_context:
@@ -252,34 +241,11 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         ------
             PermissionException: If auth context does not have access to organization.
         """
-        if organization_id != auth_context.organization_id:
-            raise PermissionException(
-                f"Auth context does not have access to organization {organization_id}"
-            )
-
-    # Backward compatibility methods for existing code
-    async def get_multi_for_organization_legacy(
-        self,
-        db: AsyncSession,
-        current_user: User,
-        organization_id: Optional[UUID] = None,
-        *,
-        skip: int = 0,
-        limit: int = 100,
-    ) -> list[ModelType]:
-        """Legacy method for backward compatibility."""
-        # Convert user to auth context
-        auth_context = AuthContext(
-            organization_id=current_user.organization_id, user=current_user, auth_method="auth0"
-        )
-        return await self.get_multi_for_organization(
-            db=db,
-            auth_context=auth_context,
-            organization_id=organization_id,
-            skip=skip,
-            limit=limit,
-        )
-
-
-# Backward compatibility alias
-CRUDBaseOrganization = CRUDOrganization
+        if auth_context.has_user_context:
+            if organization_id not in [
+                org.organization.id for org in auth_context.user.user_organizations
+            ]:
+                raise PermissionException("User does not have access to organization")
+        else:
+            if organization_id != auth_context.organization_id:
+                raise PermissionException("API key does not have access to organization")

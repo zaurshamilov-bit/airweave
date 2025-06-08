@@ -37,6 +37,8 @@ class OrganizationUpdate(BaseModel):
 class OrganizationInDBBase(OrganizationBase):
     """Organization base schema in the database."""
 
+    model_config = {"from_attributes": True}
+
     id: UUID
     created_at: datetime
     modified_at: datetime
@@ -51,6 +53,8 @@ class Organization(OrganizationInDBBase):
 
 class OrganizationWithRole(BaseModel):
     """Organization schema with user's role information."""
+
+    model_config = {"from_attributes": True}
 
     id: UUID
     name: str

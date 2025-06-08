@@ -20,9 +20,7 @@ async def list_transformers(
     current_user: User = Depends(deps.get_user),
 ):
     """List all transformers for the current user's organization."""
-    return await transformer.get_multi_by_organization(
-        db, organization_id=current_user.organization_id
-    )
+    return await transformer.get_multi(db, organization_id=current_user.organization_id)
 
 
 @router.post("/", response_model=Transformer)

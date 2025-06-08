@@ -115,6 +115,24 @@ export function UserProfileDropdown() {
     loadOrganizations();
   }, [user, organizations.length, fetchUserOrganizations]);
 
+  // Refetch organizations when dropdown opens to ensure fresh data
+  useEffect(() => {
+    const refreshOrganizations = async () => {
+      if (dropdownOpen && user) {
+        try {
+          setIsLoadingOrgs(true);
+          await fetchUserOrganizations();
+        } catch (error) {
+          console.error('Failed to refresh organizations:', error);
+        } finally {
+          setIsLoadingOrgs(false);
+        }
+      }
+    };
+
+    refreshOrganizations();
+  }, [dropdownOpen, user, fetchUserOrganizations]);
+
   const handleLogout = () => {
     setDropdownOpen(false);
     apiClient.clearToken();

@@ -9,27 +9,26 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave.core import credentials
-from airweave.core.exceptions import NotFoundException
-from airweave.crud._base_organization import CRUDOrganization
+from airweave.core.exceptions import NotFoundException, PermissionException
+from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.api_key import APIKey
-from airweave.schemas import APIKeyCreate, APIKeyUpdate, AuthContext, User
+from airweave.schemas import APIKeyCreate, APIKeyUpdate, AuthContext
 
 
-class CRUDAPIKey(CRUDOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
+class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
     """CRUD operations for the APIKey model."""
 
     def __init__(self):
         """Initialize APIKey CRUD with user tracking enabled."""
         super().__init__(APIKey, track_user=True)
 
-    async def create_with_auth_context(
+    async def create(
         self,
         db: AsyncSession,
         *,
         obj_in: APIKeyCreate,
         auth_context: AuthContext,
-        organization_id: Optional[UUID] = None,
         uow: Optional[UnitOfWork] = None,
     ) -> APIKey:
         """Create a new API key with auth context.
@@ -39,7 +38,6 @@ class CRUDAPIKey(CRUDOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
             db (AsyncSession): The database session.
             obj_in (APIKeyCreate): The API key creation data.
             auth_context (AuthContext): The authentication context.
-            organization_id (Optional[UUID]): The organization ID to create in.
             uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
@@ -61,7 +59,6 @@ class CRUDAPIKey(CRUDOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
             db=db,
             obj_in=api_key_data,
             auth_context=auth_context,
-            organization_id=organization_id,
             uow=uow,
         )
 
@@ -89,7 +86,7 @@ class CRUDAPIKey(CRUDOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
             list[APIKey]: A list of API keys for the organization.
         """
         # Use the parent method which handles organization scoping and access validation
-        return await self.get_multi_for_organization(
+        return await self.get_multi(
             db=db,
             auth_context=auth_context,
             organization_id=organization_id,
@@ -137,83 +134,12 @@ class CRUDAPIKey(CRUDOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
                 if decrypted_data["key"] == key:
                     # Check expiration
                     if api_key.expiration_date < datetime.now(timezone.utc):
-                        raise ValueError("API key has expired")
+                        raise PermissionException("API key has expired")
                     return api_key
             except Exception:
                 continue
 
         raise NotFoundException("API key not found")
-
-    # Backward compatibility methods
-    async def create_with_user(
-        self,
-        db: AsyncSession,
-        *,
-        obj_in: APIKeyCreate,
-        current_user: User,
-        organization_id: Optional[UUID] = None,
-        uow: Optional[UnitOfWork] = None,
-    ) -> APIKey:
-        """Create a new API key for a user (backward compatibility).
-
-        Args:
-        ----
-            db (AsyncSession): The database session.
-            obj_in (APIKeyCreate): The API key creation data.
-            current_user (User): The current user.
-            organization_id (Optional[UUID]): The organization ID to create in.
-            uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
-
-        Returns:
-        -------
-            APIKey: The created API key.
-        """
-        # Convert user to auth context
-        auth_context = AuthContext(
-            organization_id=current_user.organization_id, user=current_user, auth_method="auth0"
-        )
-        return await self.create_with_auth_context(
-            db=db,
-            obj_in=obj_in,
-            auth_context=auth_context,
-            organization_id=organization_id,
-            uow=uow,
-        )
-
-    async def get_all_for_user(
-        self,
-        db: AsyncSession,
-        *,
-        skip: int = 0,
-        limit: int = 100,
-        current_user: User,
-        organization_id: Optional[UUID] = None,
-    ) -> list[APIKey]:
-        """Get all API keys for a user's organization (backward compatibility).
-
-        Args:
-        ----
-            db (AsyncSession): The database session.
-            skip (int): The number of records to skip.
-            limit (int): The maximum number of records to return.
-            current_user (User): The current user.
-            organization_id (Optional[UUID]): The organization ID to filter by.
-
-        Returns:
-        -------
-            list[APIKey]: A list of API keys for the organization.
-        """
-        # Convert user to auth context
-        auth_context = AuthContext(
-            organization_id=current_user.organization_id, user=current_user, auth_method="auth0"
-        )
-        return await self.get_all_for_auth_context(
-            db=db,
-            auth_context=auth_context,
-            organization_id=organization_id,
-            skip=skip,
-            limit=limit,
-        )
 
 
 api_key = CRUDAPIKey()

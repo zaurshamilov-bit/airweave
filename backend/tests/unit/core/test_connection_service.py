@@ -84,13 +84,13 @@
 #     async def test_get_all_connections(self, mock_db, mock_user):
 #         # Arrange
 #         connections = [MagicMock(spec=schemas.Connection) for _ in range(3)]
-#         crud.connection.get_all_for_user = AsyncMock(return_value=connections)
+#         crud.connection.get_multi = AsyncMock(return_value=connections)
 
 #         # Act
 #         result = await connection_service.get_all_connections(mock_db, mock_user)
 
 #         # Assert
-#         crud.connection.get_all_for_user.assert_called_once_with(mock_db, current_user=mock_user)
+#         crud.connection.get_multi.assert_called_once_with(mock_db, current_user=mock_user)
 #         assert result == connections
 
 #     # Tests for get_connections_by_type

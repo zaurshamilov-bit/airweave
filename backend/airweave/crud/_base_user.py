@@ -17,7 +17,7 @@ CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
 
-class CRUDUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+class CRUDBaseUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     """CRUD for pure user-level data."""
 
     def __init__(self, model: Type[ModelType]):

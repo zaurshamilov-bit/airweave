@@ -138,7 +138,7 @@ class SyncService:
                 db=db, current_user=current_user
             )
         else:
-            syncs = await crud.sync.get_all_for_user(
+            syncs = await crud.sync.get_multi(
                 db=db, current_user=current_user, skip=skip, limit=limit
             )
         return syncs

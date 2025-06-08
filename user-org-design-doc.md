@@ -38,7 +38,6 @@ class Organization(Base):  # organization.py
 **CRUD Patterns**:
 - `CRUDBase`: User permissions + org scoping (`current_user.organization_id`)
 - `CRUDBaseOrganization`: Pure organization scoping (`organization_id` parameter)
-- `CRUDBaseSystem`: No scoping (system tables)
 
 ### API Layer (Current)
 **Organization Enforcement Pattern**:
@@ -49,7 +48,7 @@ async def endpoint(
     db: AsyncSession = Depends(deps.get_db)
 ):
     # Auto-scoped by current_user.organization_id
-    return await crud.entity.get_multi_by_organization(
+    return await crud.entity.get_multi(
         db, organization_id=current_user.organization_id
     )
 ```
@@ -157,7 +156,7 @@ Based on the actual model inheritance patterns in the codebase:
 - **API Pattern**: Unified organization-scoped endpoints
 
 **3. CRUDPublic**: System-wide resources
-- **Models**: Source, Destination, EntityDefinition, Transformer (Base with nullable organization_id)
+- **Models**: Source, Destination, EntityDefinition, Transformer (Base with no organization_id)
 - **Pattern**: Available to all authenticated users, optionally organization-specific
 - **Access**: No organization filtering (or filtered by nullable organization_id)
 
@@ -205,7 +204,7 @@ class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         result = await db.execute(query)
         return result.unique().scalar_one_or_none()
 
-    async def get_multi_for_organization(
+    async def get_multi(
         self,
         db: AsyncSession,
         current_user: User,
@@ -407,7 +406,7 @@ async def list_collections(
     db: AsyncSession = Depends(deps.get_db),
 ):
     """List all collections in current organization."""
-    return await crud.collection.get_multi_for_organization(db, current_user)
+    return await crud.collection.get_multi(db, current_user)
 
 @router.get("/entities/", response_model=List[schemas.Entity])
 async def list_entities(
@@ -415,7 +414,7 @@ async def list_entities(
     db: AsyncSession = Depends(deps.get_db),
 ):
     """List all entities in current organization."""
-    return await crud.entity.get_multi_for_organization(db, current_user)
+    return await crud.entity.get_multi(db, current_user)
 
 @router.get("/api-keys/", response_model=List[schemas.APIKey])
 async def list_api_keys(
@@ -423,7 +422,7 @@ async def list_api_keys(
     db: AsyncSession = Depends(deps.get_db),
 ):
     """List all API keys in current organization."""
-    return await crud.api_key.get_multi_for_organization(db, current_user)
+    return await crud.api_key.get_multi(db, current_user)
 ```
 
 ### Model Classification Summary
@@ -442,6 +441,207 @@ async def list_api_keys(
 - Transformer, EmbeddingModel
 
 This approach provides clean organization scoping without complex ownership logic, while maintaining user tracking for auditing purposes where needed.
+
+---
+
+## API Key Context Management via Dependency Injection
+
+### Problem Statement
+API keys need organization-scoped access without user-level ownership conflicts. The challenge is maintaining audit trails while allowing organization members to access API-key-created resources.
+
+### Solution: Unified AuthContext for All Authentication Methods
+
+**AuthContext Schema**:
+```python
+# backend/airweave/schemas/auth.py
+class AuthContext(BaseModel):
+    """Unified authentication context for all auth methods."""
+    organization_id: UUID
+    user: Optional[User] = None
+    auth_method: str  # "auth0", "api_key", "system"
+
+    # Auth method specific metadata
+    auth_metadata: Optional[Dict[str, Any]] = None
+
+    @property
+    def has_user_context(self) -> bool:
+        """Whether this context has user info for tracking."""
+        return self.user is not None
+
+    @property
+    def tracking_email(self) -> Optional[str]:
+        """Email to use for UserMixin tracking."""
+        return self.user.email if self.user else None
+```
+
+**Updated Authentication Dependencies**:
+```python
+# backend/airweave/api/deps.py
+async def get_auth_context(
+    db: AsyncSession = Depends(get_db),
+    x_api_key: Optional[str] = Header(None),
+    auth0_user: Optional[Auth0User] = Depends(auth0.get_user),
+) -> AuthContext:
+
+    if auth0_user:
+        # Human user via Auth0
+        user = await crud.user.get_by_email(db, email=auth0_user.email)
+        return AuthContext(
+            organization_id=user.organization_id,
+            user=user,
+            auth_method="auth0",
+            auth_metadata={"auth0_id": auth0_user.id}
+        )
+
+    elif x_api_key:
+        # API key authentication - organization context only
+        api_key_obj = await crud.api_key.get_by_key(db, key=x_api_key)
+        return AuthContext(
+            organization_id=api_key_obj.organization_id,
+            user=None,  # API key outlives users
+            auth_method="api_key",
+            auth_metadata={
+                "api_key_id": str(api_key_obj.id),
+                "created_by": api_key_obj.created_by_email  # Audit only
+            }
+        )
+
+    raise HTTPException(status_code=401, detail="No valid authentication")
+
+# Backward compatibility wrapper
+async def get_user(
+    auth_context: AuthContext = Depends(get_auth_context)
+) -> User:
+    """Legacy dependency for endpoints that expect User."""
+    if not auth_context.user:
+        raise HTTPException(status_code=401, detail="User context required")
+    return auth_context.user
+```
+
+**CRUD Layer Mapping to AuthContext**:
+
+| CRUD Class | Model Mixins | AuthContext Needs | Behavior |
+|------------|--------------|-------------------|----------|
+| `CRUDOrganization(track_user=True)` | OrganizationBase + UserMixin | `organization_id` + `tracking_email` | Org scoping + user tracking |
+| `CRUDOrganization(track_user=False)` | OrganizationBase only | `organization_id` only | Org scoping only |
+| `CRUDUser` | Base + UserMixin | `user` required | User-level access |
+| `CRUDPublic` | Base only | None (open access) | System-wide resources |
+
+**Updated CRUD Organization**:
+```python
+# backend/airweave/crud/_base_organization.py
+class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+
+    def __init__(self, model: Type[ModelType], track_user: bool = True):
+        self.model = model
+        self.track_user = track_user
+
+    async def create(
+        self,
+        db: AsyncSession,
+        *,
+        obj_in: CreateSchemaType,
+        auth_context: AuthContext,
+        organization_id: Optional[UUID] = None
+    ) -> ModelType:
+        """Create organization resource with auth context."""
+        effective_org_id = organization_id or auth_context.organization_id
+
+        # Validate org access
+        await self._validate_organization_access(auth_context, effective_org_id)
+
+        if not isinstance(obj_in, dict):
+            obj_in = obj_in.model_dump(exclude_unset=True)
+
+        obj_in["organization_id"] = effective_org_id
+
+        if self.track_user:
+            if auth_context.has_user_context:
+                # Human user: track directly
+                obj_in["created_by_email"] = auth_context.tracking_email
+                obj_in["modified_by_email"] = auth_context.tracking_email
+            else:
+                # API key/system: nullable tracking
+                obj_in["created_by_email"] = None
+                obj_in["modified_by_email"] = None
+
+        db_obj = self.model(**obj_in)
+        db.add(db_obj)
+        await db.commit()
+        await db.refresh(db_obj)
+        return db_obj
+
+    async def _validate_organization_access(
+        self,
+        auth_context: AuthContext,
+        organization_id: UUID
+    ) -> None:
+        """Validate auth context has access to organization."""
+        if organization_id != auth_context.organization_id:
+            raise PermissionException(
+                f"Auth context does not have access to organization {organization_id}"
+            )
+```
+
+**Updated Model Mixins**:
+```python
+# backend/airweave/models/_base.py
+class UserMixin:
+    """Mixin for adding nullable user tracking to a model."""
+
+    @declared_attr
+    def created_by_email(cls):
+        return Column(String, nullable=True)  # ← Made nullable
+
+    @declared_attr
+    def modified_by_email(cls):
+        return Column(String, nullable=True)  # ← Made nullable
+```
+
+### API Endpoint Patterns
+
+**Option 1: New AuthContext Pattern (Recommended)**:
+```python
+@router.post("/collections/")
+async def create_collection(
+    collection_data: CollectionCreate,
+    auth_context: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+):
+    return await crud.collection.create(db, obj_in=collection_data, auth_context=auth_context)
+```
+
+**Option 2: Backward Compatible Pattern**:
+```python
+@router.post("/collections/")
+async def create_collection(
+    collection_data: CollectionCreate,
+    current_user: User = Depends(get_user),  # Fails for API keys
+    db: AsyncSession = Depends(get_db),
+):
+    # Convert user to auth context internally
+    auth_context = AuthContext(
+        organization_id=current_user.organization_id,
+        user=current_user,
+        auth_method="auth0"
+    )
+    return await crud.collection.create(db, obj_in=collection_data, auth_context=auth_context)
+```
+
+### Key Benefits
+1. **Unified Context**: Single pattern for all auth methods
+2. **Flexible Tracking**: UserMixin works when context available, nullable when not
+3. **Organization Scoping**: Always enforced regardless of auth method
+4. **API Key Resilience**: Works even when original user is deleted
+5. **Clear Separation**: Auth layer provides context, CRUD layer consumes it
+6. **Future Proof**: Easy to add service accounts, multi-org, etc.
+
+### Implementation Strategy
+1. Make `UserMixin` fields nullable
+2. Update `CRUDOrganization` to accept `AuthContext`
+3. Gradually migrate endpoints from `get_user` to `get_auth_context`
+4. Remove user-level ownership permission checks
+5. Keep backward compatibility during transition
 
 ---
 

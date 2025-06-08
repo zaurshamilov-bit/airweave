@@ -20,9 +20,7 @@ async def list_entity_definitions(
     current_user: User = Depends(deps.get_user),
 ) -> List[schemas.EntityDefinition]:
     """List all entity definitions for the current user's organization."""
-    return await crud.entity_definition.get_multi_by_organization(
-        db, organization_id=current_user.organization_id
-    )
+    return await crud.entity_definition.get_multi(db, organization_id=current_user.organization_id)
 
 
 @router.post("/definitions/", response_model=schemas.EntityDefinition)
@@ -55,9 +53,7 @@ async def list_entity_relations(
     current_user: User = Depends(deps.get_user),
 ) -> List[schemas.EntityRelation]:
     """List all entity relations for the current user's organization."""
-    return await crud.entity_relation.get_multi_by_organization(
-        db, organization_id=current_user.organization_id
-    )
+    return await crud.entity_relation.get_multi(db, organization_id=current_user.organization_id)
 
 
 @router.post("/relations/", response_model=schemas.EntityRelation)

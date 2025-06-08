@@ -6,32 +6,30 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airweave.crud._base import CRUDBase
+from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.models.organization import Organization
 from airweave.models.user import User
 from airweave.models.user_organization import UserOrganization
+from airweave.schemas.auth import AuthContext
 from airweave.schemas.organization import (
     OrganizationCreate,
     OrganizationCreateRequest,
     OrganizationUpdate,
+    OrganizationWithRole,
 )
 
 
-class OrganizationWithUserRole:
-    """Helper class to represent organization with user's role info."""
+class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, OrganizationUpdate]):
+    """CRUD operations for the organization model.
 
-    def __init__(self, organization: Organization, user_role: str, is_primary: bool):
-        self.id = organization.id
-        self.name = organization.name
-        self.description = organization.description
-        self.created_at = organization.created_at
-        self.modified_at = organization.modified_at
-        self.user_role = user_role
-        self.is_primary = is_primary
+    Note: This handles Organization entities themselves, not organization-scoped resources.
+    Organizations don't have organization_id (they ARE organizations), so this needs
+    special handling beyond the standard CRUDOrganization pattern.
+    """
 
-
-class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUpdate]):
-    """CRUD operations for the organization model."""
+    def __init__(self):
+        """Initialize with track_user=True since organizations have creator tracking."""
+        super().__init__(Organization, track_user=True)
 
     async def get_by_name(self, db: AsyncSession, name: str) -> Organization | None:
         """Get an organization by its name."""
@@ -55,8 +53,19 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         # Convert to OrganizationCreate schema
         org_data = OrganizationCreate(name=obj_in.name, description=obj_in.description or "")
 
-        # Create the organization
-        organization = await self.create(db, obj_in=org_data)
+        # Create the organization manually since it doesn't have organization_id
+        if not isinstance(org_data, dict):
+            org_data_dict = org_data.model_dump(exclude_unset=True)
+        else:
+            org_data_dict = org_data
+
+        # Add user tracking
+        org_data_dict["created_by_email"] = owner_user.email
+        org_data_dict["modified_by_email"] = owner_user.email
+
+        organization = Organization(**org_data_dict)
+        db.add(organization)
+        await db.flush()  # Get the ID
 
         # Create UserOrganization relationship with owner role
         user_org = UserOrganization(
@@ -79,7 +88,7 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
 
     async def get_user_organizations_with_roles(
         self, db: AsyncSession, user_id: UUID
-    ) -> List[OrganizationWithUserRole]:
+    ) -> List[OrganizationWithRole]:
         """Get all organizations for a user with their roles.
 
         Args:
@@ -100,43 +109,17 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         rows = result.all()
 
         return [
-            OrganizationWithUserRole(organization=org, user_role=role, is_primary=is_primary)
+            OrganizationWithRole(
+                id=org.id,
+                name=org.name,
+                description=org.description or "",
+                created_at=org.created_at,
+                modified_at=org.modified_at,
+                role=role,
+                is_primary=is_primary,
+            )
             for org, role, is_primary in rows
         ]
-
-    # === UserOrganization Management Methods with Security ===
-
-    async def _validate_organization_access(
-        self, db: AsyncSession, current_user: User, organization_id: UUID
-    ) -> UserOrganization:
-        """Validate user has access to organization and return their membership.
-
-        Args:
-            db: Database session
-            current_user: Current authenticated user
-            organization_id: Organization ID to validate access to
-
-        Returns:
-            UserOrganization record for the user
-
-        Raises:
-            HTTPException: If user doesn't have access
-        """
-        from fastapi import HTTPException
-
-        stmt = select(UserOrganization).where(
-            UserOrganization.user_id == current_user.id,
-            UserOrganization.organization_id == organization_id,
-        )
-        result = await db.execute(stmt)
-        user_org = result.scalar_one_or_none()
-
-        if not user_org:
-            raise HTTPException(
-                status_code=404, detail="Organization not found or you don't have access to it"
-            )
-
-        return user_org
 
     async def _validate_admin_access(
         self, db: AsyncSession, current_user: User, organization_id: UUID
@@ -166,7 +149,7 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         return user_org
 
     async def get_user_membership(
-        self, db: AsyncSession, organization_id: UUID, user_id: UUID, current_user: User
+        self, db: AsyncSession, organization_id: UUID, user_id: UUID, auth_context: AuthContext
     ) -> Optional[UserOrganization]:
         """Get user membership in organization with access validation.
 
@@ -174,13 +157,13 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
             db: Database session
             organization_id: The organization's ID
             user_id: The user's ID to check membership for
-            current_user: Current authenticated user
+            auth_context: Current authenticated user
 
         Returns:
             UserOrganization record if found, None otherwise
         """
         # Validate current user has access to this organization
-        await self._validate_organization_access(db, current_user, organization_id)
+        await self._validate_organization_access(auth_context, organization_id)
 
         # Query the membership
         stmt = select(UserOrganization).where(
@@ -277,7 +260,8 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
                 if not owners:
                     raise HTTPException(
                         status_code=400,
-                        detail="Cannot remove yourself as the only owner. Transfer ownership first.",
+                        detail="Cannot remove yourself as the only owner. "
+                        "Transfer ownership to another member first.",
                     )
         else:
             # If removing someone else, validate current user has admin access
@@ -366,4 +350,5 @@ class CRUDOrganization(CRUDBase[Organization, OrganizationCreate, OrganizationUp
         return user_org
 
 
-organization = CRUDOrganization(Organization)
+# Create the instance with the updated class name
+organization = CRUDOrganization()

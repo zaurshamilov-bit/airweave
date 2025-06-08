@@ -58,7 +58,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
         return db_obj
 
-    async def get_all_for_user(
+    async def get_multi(
         self, db: AsyncSession, current_user: User, *, skip: int = 0, limit: int = 100
     ) -> list[ModelType]:
         """Get multiple objects.

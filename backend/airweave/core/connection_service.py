@@ -66,7 +66,7 @@ class ConnectionService:
         Returns:
             A list of connections
         """
-        return await crud.connection.get_all_for_user(db, current_user=user)
+        return await crud.connection.get_multi(db, current_user=user)
 
     async def get_connections_by_type(
         self, db: AsyncSession, integration_type: IntegrationType, user: schemas.User

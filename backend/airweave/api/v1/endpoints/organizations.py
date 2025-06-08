@@ -57,7 +57,9 @@ async def create_organization(
             is_primary=True,  # New organizations are primary by default
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create organization: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create organization: {str(e)}"
+        ) from e
 
 
 @router.get("/", response_model=List[schemas.OrganizationWithRole])
@@ -85,7 +87,7 @@ async def list_user_organizations(
             description=org.description or "",
             created_at=org.created_at,
             modified_at=org.modified_at,
-            role=org.user_role,
+            role=org.role,
             is_primary=org.is_primary,
         )
         for org in organizations
@@ -121,7 +123,7 @@ async def get_organization(
             status_code=404, detail="Organization not found or you don't have access to it"
         )
 
-    organization = await crud.organization.get(db=db, id=organization_id)
+    organization = await crud.organization.get(db=db, id=organization_id, current_user=current_user)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
 
@@ -141,7 +143,7 @@ async def update_organization(
     organization_id: UUID,
     organization_data: schemas.OrganizationCreateRequest,  # Reuse the same schema
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: schemas.AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.OrganizationWithRole:
     """Update an organization.
 
@@ -151,7 +153,7 @@ async def update_organization(
         organization_id: The ID of the organization to update
         organization_data: The updated organization data
         db: Database session
-        current_user: The current authenticated user
+        auth_context: The current authenticated user
 
     Returns:
         The updated organization with user's role
@@ -162,7 +164,10 @@ async def update_organization(
     """
     # Get user's membership and validate admin access
     user_org = await crud.organization.get_user_membership(
-        db=db, organization_id=organization_id, user_id=current_user.id, current_user=current_user
+        db=db,
+        organization_id=organization_id,
+        user_id=auth_context.user.id,
+        auth_context=auth_context,
     )
 
     if not user_org:
@@ -176,7 +181,7 @@ async def update_organization(
         )
 
     # Check if the new name conflicts with existing organizations (if name is being changed)
-    organization = await crud.organization.get(db=db, id=organization_id)
+    organization = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
 
@@ -188,29 +193,23 @@ async def update_organization(
                 detail=f"Organization with name '{organization_data.name}' already exists",
             )
 
-    # Update the organization
-    try:
-        from airweave.schemas.organization import OrganizationUpdate
+    update_data = schemas.OrganizationUpdate(
+        name=organization_data.name, description=organization_data.description or ""
+    )
 
-        update_data = OrganizationUpdate(
-            name=organization_data.name, description=organization_data.description or ""
-        )
+    updated_organization = await crud.organization.update(
+        db=db, db_obj=organization, obj_in=update_data
+    )
 
-        updated_organization = await crud.organization.update(
-            db=db, db_obj=organization, obj_in=update_data
-        )
-
-        return schemas.OrganizationWithRole(
-            id=updated_organization.id,
-            name=updated_organization.name,
-            description=updated_organization.description or "",
-            created_at=updated_organization.created_at,
-            modified_at=updated_organization.modified_at,
-            role=user_org.role,
-            is_primary=user_org.is_primary,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update organization: {str(e)}")
+    return schemas.OrganizationWithRole(
+        id=updated_organization.id,
+        name=updated_organization.name,
+        description=updated_organization.description or "",
+        created_at=updated_organization.created_at,
+        modified_at=updated_organization.modified_at,
+        role=user_org.role,
+        is_primary=user_org.is_primary,
+    )
 
 
 @router.delete("/{organization_id}", response_model=schemas.OrganizationWithRole)
@@ -251,7 +250,7 @@ async def delete_organization(
         )
 
     # Get the organization
-    organization = await crud.organization.get(db=db, id=organization_id)
+    organization = await crud.organization.get(db=db, id=organization_id, current_user=current_user)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
 
@@ -263,7 +262,7 @@ async def delete_organization(
     if len(user_orgs) <= 1:
         raise HTTPException(
             status_code=400,
-            detail="Cannot delete your only organization. Users must belong to at least one organization.",
+            detail="Cannot delete your only organization. Contact support to delete your account.",
         )
 
     # Delete the organization (CASCADE will handle user_organization relationships)
@@ -317,7 +316,8 @@ async def leave_organization(
     if len(user_orgs) <= 1:
         raise HTTPException(
             status_code=400,
-            detail="Cannot leave your only organization. Users must belong to at least one organization.",
+            detail="Cannot leave your only organization. "
+            "Users must belong to at least one organization. Delete the organization instead.",
         )
 
     # If user is an owner, check if there are other owners
@@ -332,7 +332,8 @@ async def leave_organization(
         if not other_owners:
             raise HTTPException(
                 status_code=400,
-                detail="Cannot leave organization as the only owner. Transfer ownership to another member first.",
+                detail="Cannot leave organization as the only owner. "
+                "Transfer ownership to another member first.",
             )
 
     # Remove the user from the organization (this validates permissions automatically)

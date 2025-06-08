@@ -8,10 +8,11 @@ import {
 } from 'lucide-react';
 import { CreateOrganizationModal } from '@/components/organization';
 import { APIKeysSettings } from '@/components/settings/APIKeysSettings';
-import { OrganizationSettings } from '@/components/settings/OrganizationSettings';
 import { MembersSettings } from '@/components/settings/MembersSettings';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
+import { OrganizationSettings } from '@/components/settings/OrganizationSettings';
 
 type TabType = 'settings' | 'api-keys' | 'members';
 
@@ -21,7 +22,8 @@ export const OrganizationSettingsUnified = () => {
 
   const {
     currentOrganization,
-    updateOrganization
+    updateOrganization,
+    fetchUserOrganizations
   } = useOrganizationStore();
 
   // Tab state - get initial tab from URL params
@@ -42,6 +44,19 @@ export const OrganizationSettingsUnified = () => {
 
   const handleCreateOrgSuccess = (newOrganization: any) => {
     console.log('New organization created from settings:', newOrganization);
+  };
+
+  // Enhanced organization update handler that also refreshes organizations list
+  const handleOrganizationUpdate = async (id: string, updates: Partial<any>) => {
+    // Update the organization in the store
+    updateOrganization(id, updates);
+
+    // Refresh the organizations list to ensure all components are updated
+    try {
+      await fetchUserOrganizations();
+    } catch (error) {
+      console.error('Failed to refresh organizations after update:', error);
+    }
   };
 
   // Handle copy to clipboard
@@ -113,13 +128,10 @@ export const OrganizationSettingsUnified = () => {
     );
   }
 
-  // Dummy member count for the tab badge
-  const memberCount = 2;
-
   const tabs = [
     { id: 'settings' as TabType, label: 'Settings' },
     { id: 'api-keys' as TabType, label: 'API Keys' },
-    { id: 'members' as TabType, label: 'Members', count: memberCount }
+    { id: 'members' as TabType, label: 'Members' }
   ];
 
   return (
@@ -172,11 +184,6 @@ export const OrganizationSettingsUnified = () => {
                 )}
               >
                 {tab.label}
-                {tab.count !== undefined && (
-                  <Badge variant="secondary" className="text-xs px-1.5 py-0 opacity-70">
-                    {tab.count}
-                  </Badge>
-                )}
               </button>
             );
           })}
@@ -188,7 +195,7 @@ export const OrganizationSettingsUnified = () => {
           {activeTab === 'settings' && (
             <OrganizationSettings
               currentOrganization={currentOrganization}
-              onOrganizationUpdate={updateOrganization}
+              onOrganizationUpdate={handleOrganizationUpdate}
             />
           )}
 
