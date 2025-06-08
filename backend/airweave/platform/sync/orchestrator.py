@@ -7,7 +7,6 @@ from airweave import schemas
 from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus
 from airweave.core.sync_job_service import sync_job_service
-from airweave.db.session import get_db_context
 from airweave.platform.entities._base import BaseEntity
 from airweave.platform.sync.context import SyncContext
 from airweave.platform.sync.entity_processor import EntityProcessor
@@ -102,13 +101,14 @@ class SyncOrchestrator:
         )
 
         # Create entity buffer for producer/consumer pattern
-        entity_buffer = asyncio.Queue(maxsize=50)
+        entity_buffer = asyncio.Queue(maxsize=10)
         producer_error_ref = {"error": None}
 
         # Create tasks
         producer_task = asyncio.create_task(self._run_producer(entity_buffer, producer_error_ref))
 
-        num_consumers = min(10, self.worker_pool.max_workers // 10)
+        # Increased consumers to process faster
+        num_consumers = min(20, self.worker_pool.max_workers // 5)  # Was // 10
         consumer_tasks = [
             asyncio.create_task(self._run_consumer(entity_buffer, source_node))
             for _ in range(num_consumers)
@@ -128,7 +128,9 @@ class SyncOrchestrator:
         """Producer task that fills the entity buffer."""
         try:
             async with AsyncSourceStream(
-                self.sync_context.source.generate_entities(), logger=self.sync_context.logger
+                self.sync_context.source.generate_entities(),
+                queue_size=100,  # Reduced from default 1000 to get entities flowing faster
+                logger=self.sync_context.logger,
             ) as stream:
                 async for entity in stream.get_entities():
                     logger.info(
@@ -185,11 +187,22 @@ class SyncOrchestrator:
 
         # Check throttling
         current_pending = len(self.worker_pool.pending_tasks)
-        if current_pending >= self.worker_pool.max_workers * 0.8:
+
+        # More aggressive throttling to prevent connection exhaustion
+        # Start throttling at 50% capacity instead of 80%
+        if current_pending >= self.worker_pool.max_workers * 0.5:
             logger.info(
                 f"🚦 CONSUMER_THROTTLE High pending tasks ({current_pending}), slowing consumption"
             )
-            await self.worker_pool.wait_for_batch(timeout=0.1)
+            # Wait longer to let tasks complete
+            await self.worker_pool.wait_for_batch(timeout=1.0)  # Was 0.1
+
+        # Hard limit - stop accepting new tasks if we're overwhelmed
+        if current_pending >= self.worker_pool.max_workers * 0.9:
+            logger.warning(
+                f"🛑 CONSUMER_PAUSE Too many pending tasks ({current_pending}), pausing consumption"
+            )
+            await self.worker_pool.wait_for_batch(timeout=5.0)
 
     async def _wait_for_tasks(self, producer_task, consumer_tasks, producer_error_ref) -> bool:
         """Wait for tasks and handle errors."""
@@ -218,11 +231,9 @@ class SyncOrchestrator:
 
     async def _process_single_entity(self, entity: BaseEntity, source_node) -> None:
         """Process a single entity through the pipeline."""
-        # Create a new database session scope for this task
-        async with get_db_context() as db:
-            # Process the entity through the pipeline
-
-            # No try-catch needed here anymore - entity_processor handles all errors gracefully
-            await self.entity_processor.process(
-                entity=entity, source_node=source_node, sync_context=self.sync_context, db=db
-            )
+        # Process the entity through the pipeline
+        # Database sessions are created on-demand inside the processor
+        # No try-catch needed here anymore - entity_processor handles all errors gracefully
+        await self.entity_processor.process(
+            entity=entity, source_node=source_node, sync_context=self.sync_context
+        )

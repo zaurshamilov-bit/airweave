@@ -175,9 +175,7 @@ class SyncDAGRouter:
         logger.error(f"❌ ROUTER_NO_DEF_FOUND No entity definition found for {entity_type}")
         raise ValueError(f"No entity definition found for {entity_type}")
 
-    async def process_entity(
-        self, db: AsyncSession, producer_id: UUID, entity: BaseEntity
-    ) -> list[BaseEntity]:
+    async def process_entity(self, producer_id: UUID, entity: BaseEntity) -> list[BaseEntity]:
         """Route an entity to its next consumer based on DAG structure."""
         entity_context = f"Entity({entity.entity_id})"
         entity_type = type(entity)
@@ -200,7 +198,7 @@ class SyncDAGRouter:
 
         # Normal DAG routing for other entities
         return await self._handle_dag_routing(
-            db, producer_id, entity, entity_context, entity_type, router_start
+            producer_id, entity, entity_context, entity_type, router_start
         )
 
     def _is_code_file_entity(self, entity_type: type, entity: BaseEntity) -> bool:
@@ -339,7 +337,6 @@ class SyncDAGRouter:
 
     async def _handle_dag_routing(
         self,
-        db: AsyncSession,
         producer_id: UUID,
         entity: BaseEntity,
         entity_context: str,
@@ -396,7 +393,7 @@ class SyncDAGRouter:
         )
 
         transform_start = asyncio.get_event_loop().time()
-        transformed_entities = await self._apply_transformer(db, consumer, entity)
+        transformed_entities = await self._apply_transformer(consumer, entity)
         transform_elapsed = asyncio.get_event_loop().time() - transform_start
 
         logger.info(
@@ -407,12 +404,11 @@ class SyncDAGRouter:
 
         # Route the transformed entities recursively
         return await self._route_transformed_entities(
-            db, consumer_id, transformed_entities, entity_context, router_start
+            consumer_id, transformed_entities, entity_context, router_start
         )
 
     async def _route_transformed_entities(
         self,
-        db: AsyncSession,
         consumer_id: UUID,
         transformed_entities: list[BaseEntity],
         entity_context: str,
@@ -430,7 +426,7 @@ class SyncDAGRouter:
             logger.info(
                 f"🔁 ROUTER_RECURSIVE_{i} [{entity_context}] Routing transformed entity {i + 1}"
             )
-            sub_entities = await self.process_entity(db, consumer_id, transformed_entity)
+            sub_entities = await self.process_entity(consumer_id, transformed_entity)
             result_entities.extend(sub_entities)
 
         recursive_elapsed = asyncio.get_event_loop().time() - recursive_start
@@ -451,9 +447,7 @@ class SyncDAGRouter:
         """Get if a node is a destination."""
         return node.type == NodeType.destination
 
-    async def _apply_transformer(
-        self, db: AsyncSession, consumer: DagNode, entity: BaseEntity
-    ) -> list[BaseEntity]:
+    async def _apply_transformer(self, consumer: DagNode, entity: BaseEntity) -> list[BaseEntity]:
         """Apply the transformer to the entity."""
         entity_context = f"Entity({entity.entity_id})"
 
@@ -471,10 +465,14 @@ class SyncDAGRouter:
                     f"⚠️  ROUTER_CACHE_MISS [{entity_context}] Transformer not in cache, "
                     f"falling back to database lookup"
                 )
-                transformer = await crud.transformer.get(db, id=consumer.transformer_id)
-                # Cache for future use
-                if transformer:
-                    self._transformer_cache[consumer.transformer_id] = transformer
+                # Create a temporary database session just for this lookup
+                from airweave.db.session import get_db_context
+
+                async with get_db_context() as db:
+                    transformer = await crud.transformer.get(db, id=consumer.transformer_id)
+                    # Cache for future use
+                    if transformer:
+                        self._transformer_cache[consumer.transformer_id] = transformer
 
             lookup_elapsed = asyncio.get_event_loop().time() - lookup_start
             logger.info(

@@ -8,18 +8,27 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from airweave.core.config import settings
 
 # Connection Pool Sizing Strategy:
-# - Workers only need DB connections ~10% of the time (during queries)
-# - With 100 workers and 10% usage = ~10 concurrent connections needed
-# - Add buffer for spikes and other services
-# - Pool size 25 + overflow 25 = 50 total connections available
-# - This leaves headroom for backend API, SSE connections, etc.
-# - Total Azure PostgreSQL connections used: ~50-75 (well under 200 limit)
+# - With proper connection management, workers only hold DB connections for milliseconds
+# - Database operations: entity lookup (~0.1s), insert/update (~0.1s)
+# - Even with 100 concurrent workers, only a few need connections at the same time
+# - Pool size 15 + overflow 15 = 30 total connections available
+# - This efficiently handles bursts while preventing connection exhaustion
+# - Multiple sync jobs can run simultaneously without issues
 
 # Determine pool size based on worker count
 worker_count = getattr(settings, "SYNC_MAX_WORKERS", 100)
-# Rule of thumb: pool_size = workers * 0.15 (15% concurrent usage)
-POOL_SIZE = min(25, max(10, int(worker_count * 0.15)))
+# With on-demand connections: pool_size = workers * 0.15 (only 15% need DB at once)
+POOL_SIZE = min(15, max(10, int(worker_count * 0.15)))
 MAX_OVERFLOW = POOL_SIZE  # Allow doubling during spikes
+
+# Connection Pool Timeout Behavior:
+# - pool_timeout=30: Wait up to 30 seconds for a connection to become available
+# - If all connections are busy for 30+ seconds, raises TimeoutError
+# - This prevents unbounded queueing and alerts to connection leaks
+#
+# Alternative configurations:
+# - pool_timeout=0: Don't wait at all, fail immediately if no connections
+# - pool_timeout=None: Wait forever (NOT RECOMMENDED - can cause deadlocks)
 
 async_engine = create_async_engine(
     str(settings.SQLALCHEMY_ASYNC_DATABASE_URI),
@@ -27,8 +36,9 @@ async_engine = create_async_engine(
     max_overflow=MAX_OVERFLOW,
     pool_pre_ping=True,
     pool_recycle=300,  # Recycle connections after 5 minutes
-    pool_timeout=30,
+    pool_timeout=30,  # Wait up to 30 seconds for a connection
     isolation_level="READ COMMITTED",
+    # Note: async engines automatically use AsyncAdaptedQueuePool
     # Settings to prevent connection buildup:
     connect_args={
         "server_settings": {

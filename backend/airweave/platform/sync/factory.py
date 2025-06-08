@@ -1,6 +1,7 @@
 """Module for sync factory that creates context and orchestrator instances."""
 
 import importlib
+import time
 from typing import Optional
 from uuid import UUID
 
@@ -67,7 +68,12 @@ class SyncFactory:
             max_workers = settings.SYNC_MAX_WORKERS
             logger.info(f"Using configured max_workers: {max_workers}")
 
+        # Track initialization timing
+        init_start = time.time()
+
         # Create sync context
+        logger.info("Creating sync context...")
+        context_start = time.time()
         sync_context = await cls._create_sync_context(
             db=db,
             sync=sync,
@@ -78,15 +84,20 @@ class SyncFactory:
             current_user=current_user,
             access_token=access_token,
         )
+        logger.info(f"Sync context created in {time.time() - context_start:.2f}s")
 
         # CRITICAL FIX: Initialize transformer cache to eliminate 1.5s database lookups
+        cache_start = time.time()
         await sync_context.router.initialize_transformer_cache(db)
+        logger.info(f"Transformer cache initialized in {time.time() - cache_start:.2f}s")
 
         # Create entity processor
         entity_processor = EntityProcessor()
 
         # Create worker pool
+        pool_start = time.time()
         worker_pool = AsyncWorkerPool(max_workers=max_workers)
+        logger.info(f"Worker pool created in {time.time() - pool_start:.2f}s")
 
         # Create dedicated orchestrator instance
         orchestrator = SyncOrchestrator(
@@ -97,6 +108,8 @@ class SyncFactory:
 
         # Initialize entity tracking
         entity_processor.initialize_tracking(sync_context)
+
+        logger.info(f"Total orchestrator initialization took {time.time() - init_start:.2f}s")
 
         return orchestrator
 

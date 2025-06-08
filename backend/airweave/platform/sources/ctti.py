@@ -244,6 +244,9 @@ class CTTISource(BaseSource):
             # Use retry logic for query execution
             records = await _retry_with_backoff(_execute_query)
 
+            logger.info(f"Starting to process {len(records)} records into entities")
+            entities_created = 0
+
             # Process each nct_id
             for record in records:
                 nct_id = record["nct_id"]
@@ -295,16 +298,23 @@ class CTTISource(BaseSource):
                     },
                 )
 
-                # Check if CTTI entity is already processed globally
-                from airweave.platform.storage import storage_manager
+                # TODO: For faster startup, consider batching entity creation
+                # and checking Azure storage existence in parallel batches
+                # This would reduce the sequential processing time significantly
 
-                if await storage_manager.is_ctti_entity_processed(entity_id):
-                    logger.info(
-                        f"CTTI entity {entity_id} already processed globally, marking as KEPT"
-                    )
-                    entity.is_fully_processed = True
+                entities_created += 1
+
+                # Log progress every 100 entities
+                if entities_created % 100 == 0:
+                    logger.info(f"Created {entities_created}/{len(records)} CTTI entities")
+
+                # Yield control periodically to prevent blocking
+                if entities_created % 10 == 0:
+                    await asyncio.sleep(0)  # Allow other tasks to run
 
                 yield entity
+
+            logger.info(f"Completed creating all {entities_created} CTTI entities")
 
         except Exception as e:
             logger.error(f"Error in CTTI source generate_entities: {str(e)}")

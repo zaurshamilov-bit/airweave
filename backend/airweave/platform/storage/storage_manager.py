@@ -410,6 +410,51 @@ class StorageManager:
         # For CTTI, just check if the file exists in the global container
         return await self.check_ctti_file_exists(entity_id)
 
+    async def get_ctti_file_content(self, entity_id: str) -> Optional[str]:
+        """Retrieve CTTI file content from global storage.
+
+        Args:
+            entity_id: Entity ID to retrieve
+
+        Returns:
+            The markdown content as string if found, None otherwise
+        """
+        # Clean entity_id to create safe filename
+        safe_filename = entity_id.replace(":", "_").replace("/", "_") + ".md"
+
+        logger.info(
+            "Retrieving CTTI file from global storage",
+            extra={
+                "entity_id": entity_id,
+                "blob_name": safe_filename,
+                "container": "aactmarkdowns",
+            },
+        )
+
+        # Download the file content
+        content_bytes = await self.client.download_file("aactmarkdowns", safe_filename)
+
+        if content_bytes:
+            # Decode markdown content
+            content = content_bytes.decode("utf-8")
+            logger.info(
+                "CTTI file retrieved successfully",
+                extra={
+                    "entity_id": entity_id,
+                    "content_length": len(content),
+                },
+            )
+            return content
+        else:
+            logger.warning(
+                "CTTI file not found in global storage",
+                extra={
+                    "entity_id": entity_id,
+                    "blob_name": safe_filename,
+                },
+            )
+            return None
+
 
 # Global instance
 storage_manager = StorageManager()

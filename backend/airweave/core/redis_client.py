@@ -1,5 +1,7 @@
 """Redis client configuration."""
 
+import platform
+import socket
 from typing import Optional
 
 import redis.asyncio as redis
@@ -30,29 +32,49 @@ class RedisClient:
             self._pubsub_client = self._create_client(max_connections=100)
         return self._pubsub_client
 
+    def _get_socket_keepalive_options(self) -> dict:
+        """Get socket keepalive options based on the OS.
+
+        Returns empty dict for macOS to avoid socket option errors.
+        Returns proper TCP keepalive settings for Linux.
+        """
+        if platform.system() == "Darwin":  # macOS
+            return {}
+        else:  # Linux and others
+            # Use the correct Linux TCP keepalive constants
+            # TCP_KEEPIDLE = 4
+            # TCP_KEEPINTVL = 5
+            # TCP_KEEPCNT = 6
+
+            if hasattr(socket, "TCP_KEEPIDLE"):
+                return {
+                    socket.TCP_KEEPIDLE: 60,  # Start keepalive after 60s idle
+                    socket.TCP_KEEPINTVL: 10,  # Interval between keepalive probes
+                    socket.TCP_KEEPCNT: 6,  # Number of keepalive probes
+                }
+            else:
+                # Fallback for systems without these constants
+                return {}
+
     def _create_client(self, max_connections: int = 50) -> redis.Redis:
         """Create a Redis client with specified connection pool size."""
-        client_kwargs = {
-            "host": settings.REDIS_HOST,
-            "port": settings.REDIS_PORT,
-            "db": settings.REDIS_DB,
-            "decode_responses": True,
-            "connection_pool_kwargs": {
-                "max_connections": max_connections,
-                "retry_on_timeout": True,
-                "socket_keepalive": True,
-                "socket_keepalive_options": {
-                    1: 1,  # TCP_KEEPIDLE
-                    2: 2,  # TCP_KEEPINTVL
-                    3: 5,  # TCP_KEEPCNT
-                },
-            },
-        }
+        # Create connection pool with proper configuration
+        pool = redis.ConnectionPool(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            db=settings.REDIS_DB,
+            password=settings.REDIS_PASSWORD if settings.REDIS_PASSWORD else None,
+            decode_responses=True,
+            max_connections=max_connections,
+            retry_on_timeout=True,
+            socket_keepalive=True,
+            socket_keepalive_options=self._get_socket_keepalive_options(),
+            socket_connect_timeout=5,  # Add connection timeout
+            socket_timeout=5,  # Add socket timeout
+            retry_on_error=[ConnectionError, TimeoutError],  # Retry on these errors
+        )
 
-        if settings.REDIS_PASSWORD:
-            client_kwargs["password"] = settings.REDIS_PASSWORD
-
-        return redis.Redis(**client_kwargs)
+        return redis.Redis(connection_pool=pool)
 
     async def publish(self, channel: str, message: str) -> int:
         """Publish a message to a channel.

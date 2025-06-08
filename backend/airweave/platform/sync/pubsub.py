@@ -1,11 +1,13 @@
 """Pubsub for sync jobs using Redis backend."""
 
 import asyncio
+import platform
 from uuid import UUID
 
 import redis.asyncio as redis
 from pydantic import BaseModel
 
+from airweave.core.config import settings
 from airweave.core.logging import logger
 from airweave.core.redis_client import redis_client
 
@@ -26,7 +28,7 @@ class SyncProgressUpdate(BaseModel):
     is_failed: bool = False
 
 
-PUBLISH_THRESHOLD = 5
+PUBLISH_THRESHOLD = 3
 
 
 class SyncPubSub:
@@ -72,9 +74,35 @@ class SyncPubSub:
         """
         channel = self._channel_name(job_id)
 
-        # Create a new pubsub instance using the dedicated pubsub client
-        # This prevents SSE connections from exhausting the main Redis pool
-        pubsub = redis_client.pubsub_client.pubsub()
+        # Get socket keepalive options based on OS
+        if platform.system() == "Darwin":
+            socket_keepalive_options = {}
+        else:
+            # Use the correct Linux TCP keepalive constants
+            import socket
+
+            if hasattr(socket, "TCP_KEEPIDLE"):
+                socket_keepalive_options = {
+                    socket.TCP_KEEPIDLE: 60,  # Start keepalive after 60s idle
+                    socket.TCP_KEEPINTVL: 10,  # Interval between keepalive probes
+                    socket.TCP_KEEPCNT: 6,  # Number of keepalive probes
+                }
+            else:
+                socket_keepalive_options = {}
+
+        # Create a new Redis client directly for pubsub to avoid connection pool issues
+        # This is a workaround for async pubsub issues in Docker environments
+        pubsub_redis = await redis.from_url(
+            f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}",
+            decode_responses=True,
+            socket_keepalive=True,
+            socket_connect_timeout=5,
+            # Don't set socket_timeout for pubsub connections - they need to stay open
+            socket_keepalive_options=socket_keepalive_options,
+        )
+
+        # Create pubsub instance
+        pubsub = pubsub_redis.pubsub()
 
         # Subscribe to the specific channel
         await pubsub.subscribe(channel)

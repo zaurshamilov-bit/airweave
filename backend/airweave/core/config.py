@@ -43,12 +43,15 @@ class Settings(BaseSettings):
         OPENAI_API_KEY (Optional[str]): The OpenAI API key.
         MISTRAL_API_KEY (Optional[str]): The Mistral AI API key.
         FIRECRAWL_API_KEY (Optional[str]): The FireCrawl API key.
-        TEMPORAL_HOST (str): The Temporal server hostname.
+        TEMPORAL_HOST (str): The host of the Temporal server.
         TEMPORAL_PORT (int): The Temporal server port.
-        TEMPORAL_NAMESPACE (str): The Temporal namespace.
-        TEMPORAL_TASK_QUEUE (str): The Temporal task queue name.
+        TEMPORAL_NAMESPACE (str): The namespace of the Temporal server.
+        TEMPORAL_TASK_QUEUE (str): The task queue for the Temporal server.
         TEMPORAL_ENABLED (bool): Whether Temporal is enabled.
         SYNC_MAX_WORKERS (int): The maximum number of workers for sync tasks.
+        SYNC_THREAD_POOL_SIZE (int): The size of the thread pool for sync tasks.
+        WEB_FETCHER_MAX_CONCURRENT (int): Max concurrent web scraping requests
+        OPENAI_MAX_CONCURRENT (int): Max concurrent OpenAI API requests
 
         # Custom deployment URLs
         API_FULL_URL (Optional[str]): The full URL for the API.
@@ -113,7 +116,10 @@ class Settings(BaseSettings):
     TEMPORAL_ENABLED: bool = False
 
     # Sync configuration
-    SYNC_MAX_WORKERS: int = 100  # Default to 100 for local, can be overridden by env var
+    SYNC_MAX_WORKERS: int = 100
+    SYNC_THREAD_POOL_SIZE: int = 100
+    WEB_FETCHER_MAX_CONCURRENT: int = 10  # Max concurrent web scraping requests
+    OPENAI_MAX_CONCURRENT: int = 20  # Max concurrent OpenAI API requests
 
     # Custom deployment URLs - these are used to override the default URLs to allow
     # for custom domains in custom deployments

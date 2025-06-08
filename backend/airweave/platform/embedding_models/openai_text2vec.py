@@ -6,11 +6,15 @@ from typing import List, Optional
 from openai import AsyncOpenAI
 from pydantic import Field
 
+from airweave.core.config import settings
 from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import embedding_model
 
 from ._base import BaseEmbeddingModel
+
+# Global semaphore for OpenAI API rate limiting
+_openai_semaphore: Optional[asyncio.Semaphore] = None
 
 
 @embedding_model(
@@ -35,11 +39,22 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         """Initialize the OpenAI Text2Vec model with a shared client."""
         super().__init__(**kwargs)
 
-        # Create a single shared client
+        # Create a single shared client with extended timeout for high concurrency
+        # Default is 10 minutes, but we extend it for reliability with 100 concurrent workers
         self._client = AsyncOpenAI(
             api_key=self.api_key,
+            timeout=1200.0,  # 20 minutes total timeout (was 10 minutes default)
+            max_retries=2,  # Retry on transient errors
         )
-        logger.info("Created shared OpenAI client")
+        logger.info("Created shared OpenAI client with 20 minute timeout")
+
+        # Initialize rate limiting semaphore (limit concurrent OpenAI requests)
+        global _openai_semaphore
+        if _openai_semaphore is None:
+            # Limit concurrent OpenAI requests to prevent API overload
+            max_concurrent = getattr(settings, "OPENAI_MAX_CONCURRENT", 20)
+            _openai_semaphore = asyncio.Semaphore(max_concurrent)
+            logger.info(f"Initialized OpenAI rate limiting to {max_concurrent} concurrent requests")
 
     async def embed(
         self,
@@ -254,20 +269,26 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         self, batch: List[str], model: str, encoding_format: str, context_prefix: str
     ) -> List[List[float]]:
         """Process a single batch of texts."""
+        global _openai_semaphore
+
         loop = asyncio.get_event_loop()
         batch_start = loop.time()
 
         try:
-            logger.info(
-                f"🔗 OPENAI_BATCH_API_CALL [{context_prefix}] "
-                f"Processing batch of {len(batch)} texts"
-            )
+            # Use global rate limiter
+            async with _openai_semaphore:
+                max_concurrent = getattr(settings, "OPENAI_MAX_CONCURRENT", 20)
+                logger.info(
+                    f"🔗 OPENAI_BATCH_API_CALL [{context_prefix}] "
+                    f"Processing batch of {len(batch)} texts "
+                    f"(active: {max_concurrent - _openai_semaphore._value}/{max_concurrent})"
+                )
 
-            response = await self._client.embeddings.create(
-                input=batch,
-                model=model,
-                encoding_format=encoding_format,
-            )
+                response = await self._client.embeddings.create(
+                    input=batch,
+                    model=model,
+                    encoding_format=encoding_format,
+                )
 
             batch_embeddings = [embedding_data.embedding for embedding_data in response.data]
             batch_elapsed = loop.time() - batch_start

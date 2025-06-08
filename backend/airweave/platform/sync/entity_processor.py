@@ -3,10 +3,9 @@
 import asyncio
 from typing import Dict, List, Optional, Set
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from airweave import crud, schemas
 from airweave.core.logging import logger
+from airweave.db.session import get_db_context
 from airweave.platform.entities._base import BaseEntity, DestinationAction
 from airweave.platform.sync.async_helpers import compute_entity_hash_async, run_in_thread_pool
 from airweave.platform.sync.context import SyncContext
@@ -42,11 +41,12 @@ class EntityProcessor:
         entity: BaseEntity,
         source_node: schemas.DagNode,
         sync_context: SyncContext,
-        db: AsyncSession,
     ) -> List[BaseEntity]:
-        """Process an entity through the complete pipeline."""
+        """Process an entity through the complete pipeline.
+
+        Note: Database sessions are created only when needed to minimize connection usage.
+        """
         entity_context = f"Entity({entity.entity_id})"
-        entity_accounted_for = False
         pipeline_start = asyncio.get_event_loop().time()
 
         try:
@@ -79,14 +79,12 @@ class EntityProcessor:
                     f"marking as KEPT"
                 )
                 await sync_context.progress.increment("kept", 1)
-                entity_accounted_for = True
                 return []
 
             # Check if entity should be skipped (set by file_manager or source)
             if getattr(entity, "should_skip", False):
                 logger.info(f"⏭️  PROCESSOR_SKIP [{entity_context}] Entity marked to skip")
                 await sync_context.progress.increment("skipped", 1)
-                entity_accounted_for = True
                 return []
 
             # Stage 1: Enrich entity with metadata
@@ -100,11 +98,11 @@ class EntityProcessor:
                 f"✅ PROCESSOR_ENRICH_DONE [{entity_context}] Enriched in {enrich_elapsed:.3f}s"
             )
 
-            # Stage 2: Determine action for entity
+            # Stage 2: Determine action for entity (REQUIRES DATABASE)
             logger.info(f"🔍 PROCESSOR_ACTION_START [{entity_context}] Determining action")
             action_start = asyncio.get_event_loop().time()
 
-            db_entity, action = await self._determine_action(enriched_entity, sync_context, db)
+            db_entity, action = await self._determine_action(enriched_entity, sync_context)
 
             action_elapsed = asyncio.get_event_loop().time() - action_start
             logger.info(
@@ -115,7 +113,6 @@ class EntityProcessor:
             # Stage 2.5: Skip further processing if KEEP
             if action == DestinationAction.KEEP:
                 await sync_context.progress.increment("kept", 1)
-                entity_accounted_for = True
                 total_elapsed = asyncio.get_event_loop().time() - pipeline_start
                 logger.info(
                     f"⏭️  PROCESSOR_KEEP [{entity_context}] Entity kept, pipeline complete "
@@ -129,9 +126,7 @@ class EntityProcessor:
             )
             transform_start = asyncio.get_event_loop().time()
 
-            processed_entities = await self._transform(
-                enriched_entity, source_node, sync_context, db
-            )
+            processed_entities = await self._transform(enriched_entity, source_node, sync_context)
 
             transform_elapsed = asyncio.get_event_loop().time() - transform_start
             logger.info(
@@ -146,7 +141,6 @@ class EntityProcessor:
                     f"No entities produced, marking skipped"
                 )
                 await sync_context.progress.increment("skipped", 1)
-                entity_accounted_for = True
                 return []
 
             # Stage 4: Compute vector
@@ -163,16 +157,15 @@ class EntityProcessor:
                 f"{len(processed_entities_with_vector)} entities in {vector_elapsed:.3f}s"
             )
 
-            # Stage 5: Persist entities based on action
+            # Stage 5: Persist entities based on action (REQUIRES DATABASE)
             logger.info(f"💾 PROCESSOR_PERSIST_START [{entity_context}] Persisting to destinations")
             persist_start = asyncio.get_event_loop().time()
 
             await self._persist(
-                enriched_entity, processed_entities_with_vector, db_entity, action, sync_context, db
+                enriched_entity, processed_entities_with_vector, db_entity, action, sync_context
             )
 
             persist_elapsed = asyncio.get_event_loop().time() - persist_start
-            entity_accounted_for = True
 
             total_elapsed = asyncio.get_event_loop().time() - pipeline_start
             logger.info(
@@ -186,18 +179,28 @@ class EntityProcessor:
             return processed_entities
 
         except Exception as e:
-            total_elapsed = asyncio.get_event_loop().time() - pipeline_start
+            pipeline_elapsed = asyncio.get_event_loop().time() - pipeline_start
+            error_type = type(e).__name__
+            error_message = str(e) if str(e) else "No error details available"
+
+            # Log detailed error information
             logger.error(
-                f"💥 PROCESSOR_ERROR [{entity_context}] "
-                f"Pipeline failed after {total_elapsed:.3f}s: "
-                f"{type(e).__name__}: {str(e)}"
+                f"💥 PROCESSOR_ERROR [{entity_context}] Pipeline failed after "
+                f"{pipeline_elapsed:.3f}s: {error_type}: {error_message}"
             )
 
-            if not entity_accounted_for:
-                await sync_context.progress.increment("skipped", 1)
-                logger.warning(
-                    f"📊 PROCESSOR_SKIP_COUNT [{entity_context}] Marked as skipped due to error"
+            # For debugging empty errors
+            if not str(e):
+                logger.error(
+                    f"🔍 PROCESSOR_ERROR_DETAILS [{entity_context}] "
+                    f"Empty error of type {error_type}, repr: {repr(e)}"
                 )
+
+            # Mark as skipped and continue
+            await sync_context.progress.increment("skipped", 1)
+            logger.warning(
+                f"📊 PROCESSOR_SKIP_COUNT [{entity_context}] Marked as skipped due to error"
+            )
 
             return []
 
@@ -219,9 +222,12 @@ class EntityProcessor:
         return entity
 
     async def _determine_action(
-        self, entity: BaseEntity, sync_context: SyncContext, db: AsyncSession
+        self, entity: BaseEntity, sync_context: SyncContext
     ) -> tuple[schemas.Entity, DestinationAction]:
-        """Determine what action to take for an entity."""
+        """Determine what action to take for an entity.
+
+        Creates a temporary database session for the lookup.
+        """
         entity_context = f"Entity({entity.entity_id})"
 
         logger.info(
@@ -229,9 +235,11 @@ class EntityProcessor:
         )
         db_start = asyncio.get_event_loop().time()
 
-        db_entity = await crud.entity.get_by_entity_and_sync_id(
-            db=db, entity_id=entity.entity_id, sync_id=sync_context.sync.id
-        )
+        # Create a new database session just for this lookup
+        async with get_db_context() as db:
+            db_entity = await crud.entity.get_by_entity_and_sync_id(
+                db=db, entity_id=entity.entity_id, sync_id=sync_context.sync.id
+            )
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
 
@@ -276,16 +284,18 @@ class EntityProcessor:
         entity: BaseEntity,
         source_node: schemas.DagNode,
         sync_context: SyncContext,
-        db: AsyncSession,
     ) -> List[BaseEntity]:
-        """Transform entity through DAG routing."""
+        """Transform entity through DAG routing.
+
+        The router will create its own database session if needed.
+        """
         sync_context.logger.info(
             f"Starting transformation for entity {entity.entity_id} "
             f"(type: {type(entity).__name__}) from source node {source_node.id}"
         )
 
+        # The router will create its own DB session if needed
         transformed_entities = await sync_context.router.process_entity(
-            db=db,
             producer_id=source_node.id,
             entity=entity,
         )
@@ -314,7 +324,6 @@ class EntityProcessor:
         db_entity: schemas.Entity,
         action: DestinationAction,
         sync_context: SyncContext,
-        db: AsyncSession,
     ) -> None:
         """Persist entities to destinations based on action.
 
@@ -324,18 +333,13 @@ class EntityProcessor:
             db_entity: The database entity to update
             action: The action to take
             sync_context: The sync context
-            db: The database session
         """
         if action == DestinationAction.KEEP:
             await self._handle_keep(sync_context)
         elif action == DestinationAction.INSERT:
-            await self._handle_insert(
-                parent_entity, processed_entities, db_entity, sync_context, db
-            )
+            await self._handle_insert(parent_entity, processed_entities, db_entity, sync_context)
         elif action == DestinationAction.UPDATE:
-            await self._handle_update(
-                parent_entity, processed_entities, db_entity, sync_context, db
-            )
+            await self._handle_update(parent_entity, processed_entities, db_entity, sync_context)
 
     async def _compute_vector(
         self,
@@ -568,7 +572,6 @@ class EntityProcessor:
         processed_entities: List[BaseEntity],
         db_entity: Optional[schemas.Entity],
         sync_context: SyncContext,
-        db: AsyncSession,
     ) -> None:
         """Handle INSERT action."""
         entity_context = f"Entity({parent_entity.entity_id})"
@@ -587,16 +590,19 @@ class EntityProcessor:
         db_start = asyncio.get_event_loop().time()
 
         parent_hash = await compute_entity_hash_async(parent_entity)
-        new_db_entity = await crud.entity.create(
-            db=db,
-            obj_in=schemas.EntityCreate(
-                sync_job_id=sync_context.sync_job.id,
-                sync_id=sync_context.sync.id,
-                entity_id=parent_entity.entity_id,
-                hash=parent_hash,
-            ),
-            organization_id=sync_context.sync.organization_id,
-        )
+
+        # Create a new database session just for this insert
+        async with get_db_context() as db:
+            new_db_entity = await crud.entity.create(
+                db=db,
+                obj_in=schemas.EntityCreate(
+                    sync_job_id=sync_context.sync_job.id,
+                    sync_id=sync_context.sync.id,
+                    entity_id=parent_entity.entity_id,
+                    hash=parent_hash,
+                ),
+                organization_id=sync_context.sync.organization_id,
+            )
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
         parent_entity.db_entity_id = new_db_entity.id
@@ -633,7 +639,6 @@ class EntityProcessor:
         processed_entities: List[BaseEntity],
         db_entity: schemas.Entity,
         sync_context: SyncContext,
-        db: AsyncSession,
     ) -> None:
         """Handle UPDATE action."""
         entity_context = f"Entity({parent_entity.entity_id})"
@@ -652,11 +657,14 @@ class EntityProcessor:
         db_start = asyncio.get_event_loop().time()
 
         parent_hash = await compute_entity_hash_async(parent_entity)
-        await crud.entity.update(
-            db=db,
-            db_obj=db_entity,
-            obj_in=schemas.EntityUpdate(hash=parent_hash),
-        )
+
+        # Create a new database session just for this update
+        async with get_db_context() as db:
+            await crud.entity.update(
+                db=db,
+                db_obj=db_entity,
+                obj_in=schemas.EntityUpdate(hash=parent_hash),
+            )
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
         parent_entity.db_entity_id = db_entity.id

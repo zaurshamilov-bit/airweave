@@ -46,14 +46,14 @@ async def get_httpx_client():
         _httpx_client = httpx.AsyncClient(
             limits=limits,
             timeout=httpx.Timeout(
-                connect=5.0,
-                read=60.0,  # Increased for slow sites
+                connect=30.0,  # Increased from 10.0 to handle slower connections
+                read=120.0,  # Increased from 60.0 to handle slow CTTI pages
                 write=30.0,
-                pool=60.0,
+                pool=120.0,  # Increased from 60.0 to match read timeout
             ),
             # Performance optimizations
             verify=True,
-            http2=True,  # Enable HTTP/2 for better performance
+            http2=False,  # Disabled - can cause SSL shutdown errors with some servers
             follow_redirects=True,  # Handle redirects automatically
         )
 
@@ -69,8 +69,18 @@ async def cleanup_httpx_client():
     """Clean up the httpx client when done."""
     global _httpx_client
     if _httpx_client:
-        await _httpx_client.aclose()
-        _httpx_client = None
+        # Clean client shutdown without SSL errors
+        try:
+            # First cancel any pending requests
+            _httpx_client._transport.close()
+            # Then close the client
+            await _httpx_client.aclose()
+        except Exception as e:
+            # Ignore SSL shutdown errors during cleanup
+            if "ssl" not in str(e).lower():
+                logger.error(f"Error closing httpx client: {e}")
+        finally:
+            _httpx_client = None
         logger.info("🌐 HTTPX_CLIENT_CLEANUP Closed httpx client")
 
 
@@ -96,8 +106,11 @@ async def get_firecrawl_client():
                 raise ValueError("FIRECRAWL_API_KEY must be configured to use web fetcher")
 
             # Configurable semaphore limit - increase for better throughput
-            max_concurrent_requests = getattr(settings, "WEB_FETCHER_MAX_CONCURRENT", 30)
+            # Reduced to prevent overwhelming target websites and connection pool exhaustion
+            max_concurrent_requests = getattr(settings, "WEB_FETCHER_MAX_CONCURRENT", 10)  # Was 30
             _client_semaphore = asyncio.Semaphore(max_concurrent_requests)
+            # Store initial value for logging purposes
+            _client_semaphore._initial_value = max_concurrent_requests
 
             # Get the shared httpx client
             httpx_client = await get_httpx_client()
@@ -123,7 +136,7 @@ async def get_firecrawl_client():
     return _shared_firecrawl_client, _client_semaphore
 
 
-async def _retry_with_backoff(func, *args, max_retries=2, entity_context="", **kwargs):
+async def _retry_with_backoff(func, *args, max_retries=3, entity_context="", **kwargs):
     """Retry a function with exponential backoff and improved error handling."""
     last_exception = None
     context_prefix = f"{entity_context} " if entity_context else ""
@@ -162,8 +175,14 @@ async def _retry_with_backoff(func, *args, max_retries=2, entity_context="", **k
             # Check for rate limiting errors
             rate_limit_errors = ["rate limit", "too many requests", "quota exceeded", "429"]
 
+            # Check for connection errors
+            connection_errors = ["connecttimeout", "connection", "timeout", "ssl"]
+
             is_permanent = any(pe in error_msg.lower() for pe in permanent_errors)
             is_rate_limited = any(rl in error_msg.lower() for rl in rate_limit_errors)
+            is_connection_error = any(
+                ce in error_msg.lower() for ce in connection_errors
+            ) or error_type in ["ConnectTimeout", "ConnectionError", "TimeoutError"]
 
             if is_permanent:
                 logger.error(
@@ -173,9 +192,19 @@ async def _retry_with_backoff(func, *args, max_retries=2, entity_context="", **k
                 raise e
 
             if attempt < max_retries:
-                if is_rate_limited:
-                    # Shorter delay for rate limiting since we have higher concurrency
-                    base_delay = 2 ** (attempt + 1)  # 2, 4 seconds
+                if is_connection_error:
+                    # Longer delays for connection issues
+                    base_delay = 5 * (attempt + 1)  # 5, 10, 15 seconds
+                    jitter = random.uniform(1.0, 2.0)
+                    delay = base_delay + jitter
+
+                    logger.warning(
+                        f"🔌 WEB_CONNECTION_ERROR [{context_prefix}] "
+                        f"Connection error on attempt {attempt + 1}, retrying in {delay:.2f}s..."
+                    )
+                elif is_rate_limited:
+                    # Medium delay for rate limiting
+                    base_delay = 3 ** (attempt + 1)  # 3, 9, 27 seconds
                     jitter = random.uniform(0.5, 1.0)
                     delay = base_delay + jitter
 
@@ -184,9 +213,9 @@ async def _retry_with_backoff(func, *args, max_retries=2, entity_context="", **k
                         f"Rate limited, retrying in {delay:.2f}s..."
                     )
                 else:
-                    # Shorter exponential backoff
-                    base_delay = 1 * (attempt + 1)  # 1, 2 seconds
-                    jitter = random.uniform(0.1, 0.3)
+                    # Standard exponential backoff
+                    base_delay = 2 * (attempt + 1)  # 2, 4, 6 seconds
+                    jitter = random.uniform(0.1, 0.5)
                     delay = base_delay + jitter
 
                     logger.warning(
@@ -279,57 +308,145 @@ async def _is_entity_already_processed(
     return False
 
 
-async def _scrape_web_content(web_entity: WebEntity, entity_context: str):
-    """Scrape web content using Firecrawl."""
+async def _get_ctti_cached_content(web_entity: WebEntity, entity_context: str):
+    """Check for and retrieve CTTI content from global storage."""
+    from airweave.platform.storage import storage_manager
 
-    async def _scrape_with_firecrawl():
-        """Internal function to handle the actual scraping with connection limiting."""
-        app, semaphore = await get_firecrawl_client()
+    existing_content = await storage_manager.get_ctti_file_content(web_entity.entity_id)
 
-        # Use semaphore to limit concurrent connections
-        async with semaphore:
-            logger.info(f"🔗 WEB_CONNECT [{entity_context}] Acquiring connection slot")
+    if existing_content:
+        logger.info(
+            f"📥 WEB_CTTI_CACHED [{entity_context}] Retrieved CTTI content from global storage "
+            f"({len(existing_content)} characters)"
+        )
+        return _create_mock_scrape_result(existing_content, web_entity)
 
-            logger.info(f"📥 WEB_SCRAPE [{entity_context}] Scraping URL: {web_entity.url}")
-            scrape_start = asyncio.get_event_loop().time()
+    logger.info(
+        f"🌐 WEB_CTTI_NOT_CACHED [{entity_context}] CTTI content not found in storage, "
+        f"will scrape from web"
+    )
+    return None
 
-            # Start with shorter timeout, retry with longer if needed
-            timeouts = [10.0, 20.0, 30.0]
-            for timeout in timeouts:
-                try:
-                    scrape_result = await asyncio.wait_for(
-                        app.scrape_url(
-                            web_entity.url,
-                            formats=["markdown"],
-                            include_tags=["ctg-study-details-top-info", "ctg-study-info"],
-                            only_main_content=True,
-                        ),
-                        timeout=timeout,
-                    )
+
+def _create_mock_scrape_result(markdown_content: str, web_entity: WebEntity):
+    """Create a mock scrape result object that mimics Firecrawl's response."""
+
+    class MockScrapeResult:
+        def __init__(self, markdown_content: str):
+            self.markdown = markdown_content
+
+            # Try to extract title from markdown content
+            title = None
+            lines = markdown_content.split("\n")
+            for line in lines[:10]:  # Check first 10 lines
+                if line.strip().startswith("# "):
+                    title = line.strip()[2:].strip()
                     break
-                except asyncio.TimeoutError:
-                    if timeout == timeouts[-1]:
-                        raise
 
-            scrape_elapsed = asyncio.get_event_loop().time() - scrape_start
+            self.metadata = {
+                "source": "azure_storage",
+                "retrieved_from_cache": True,
+                "title": title or f"Clinical Trial {web_entity.entity_id.split(':')[-1]}",
+            }
 
-            if (
-                not scrape_result
-                or not hasattr(scrape_result, "markdown")
-                or not scrape_result.markdown
-            ):
-                logger.warning(f"📭 WEB_EMPTY [{entity_context}] No markdown content returned")
-                raise ValueError(f"No content extracted from URL: {web_entity.url}")
+    return MockScrapeResult(markdown_content)
 
-            content_length = len(scrape_result.markdown)
-            logger.info(
-                f"📄 WEB_CONTENT [{entity_context}] Received {content_length} characters "
-                f"in {scrape_elapsed:.2f}s"
+
+async def _scrape_with_firecrawl_internal(web_entity: WebEntity, entity_context: str):
+    """Internal function to handle the actual scraping with connection limiting."""
+    app, semaphore = await get_firecrawl_client()
+
+    # Check if we need to wait for a slot
+    if semaphore._value == 0:
+        logger.info(
+            f"⏳ WEB_QUEUE [{entity_context}] Waiting for connection slot "
+            f"(all {getattr(semaphore, '_initial_value', 10)} slots in use)"
+        )
+
+    # Use semaphore to limit concurrent connections
+    async with semaphore:
+        return await _perform_firecrawl_scrape(web_entity, entity_context)
+
+
+async def _perform_firecrawl_scrape(web_entity: WebEntity, entity_context: str):
+    """Perform the actual Firecrawl scrape with timeout handling."""
+    app, _ = await get_firecrawl_client()
+
+    # Log the current semaphore state
+    _, semaphore = await get_firecrawl_client()
+    available_slots = semaphore._value
+    total_slots = getattr(semaphore, "_initial_value", 10)
+    queue_size = total_slots - available_slots
+
+    logger.info(
+        f"🔗 WEB_CONNECT [{entity_context}] Acquired connection slot "
+        f"(active: {queue_size}/{total_slots}, available: {available_slots})"
+    )
+
+    logger.info(f"📥 WEB_SCRAPE [{entity_context}] Scraping URL: {web_entity.url}")
+    scrape_start = asyncio.get_event_loop().time()
+
+    # Start with shorter timeout, retry with longer if needed
+    # Increased timeouts for slow CTTI pages that can take 40-80 seconds
+    timeouts = [60.0, 90.0, 120.0]  # Was [10.0, 20.0, 30.0]
+
+    scrape_result = await _try_scrape_with_timeouts(app, web_entity, timeouts, entity_context)
+
+    scrape_elapsed = asyncio.get_event_loop().time() - scrape_start
+
+    if not scrape_result or not hasattr(scrape_result, "markdown") or not scrape_result.markdown:
+        logger.warning(f"📭 WEB_EMPTY [{entity_context}] No markdown content returned")
+        raise ValueError(f"No content extracted from URL: {web_entity.url}")
+
+    content_length = len(scrape_result.markdown)
+    logger.info(
+        f"📄 WEB_CONTENT [{entity_context}] Received {content_length} characters "
+        f"in {scrape_elapsed:.2f}s"
+    )
+
+    return scrape_result
+
+
+async def _try_scrape_with_timeouts(
+    app, web_entity: WebEntity, timeouts: list, entity_context: str
+):
+    """Try scraping with progressively longer timeouts."""
+    for timeout in timeouts:
+        try:
+            return await asyncio.wait_for(
+                app.scrape_url(
+                    web_entity.url,
+                    formats=["markdown"],
+                    include_tags=["ctg-study-details-top-info", "ctg-study-info"],
+                    only_main_content=True,
+                ),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            if timeout == timeouts[-1]:
+                raise
+            logger.warning(
+                f"⏱️  WEB_TIMEOUT [{entity_context}] Timed out after {timeout}s, "
+                f"retrying with {timeouts[timeouts.index(timeout) + 1]}s timeout"
             )
 
-            return scrape_result
 
-    return await _retry_with_backoff(_scrape_with_firecrawl, entity_context=entity_context)
+async def _scrape_web_content(web_entity: WebEntity, entity_context: str):
+    """Scrape web content using Firecrawl or retrieve from storage for CTTI entities."""
+    # Import storage manager here to avoid circular imports
+    from airweave.platform.storage import storage_manager
+
+    # Check if this is a CTTI entity that already exists in global storage
+    is_ctti = storage_manager._is_ctti_entity(web_entity)
+
+    if is_ctti:
+        cached_result = await _get_ctti_cached_content(web_entity, entity_context)
+        if cached_result:
+            return cached_result
+
+    return await _retry_with_backoff(
+        _scrape_with_firecrawl_internal, web_entity, entity_context, entity_context=entity_context
+    )
 
 
 async def _create_and_store_file_entity(
@@ -462,14 +579,29 @@ async def _store_file_entity(
     from airweave.platform.storage import storage_manager
 
     if is_ctti:
-        # Use CTTI-specific storage (global deduplication)
-        with open(temp_file_path, "rb") as f:
-            file_entity = await storage_manager.store_ctti_file(file_entity, f)
+        # Check if CTTI file already exists in global storage
+        if await storage_manager.check_ctti_file_exists(file_entity.entity_id):
+            logger.info(
+                f"💾 WEB_CTTI_EXISTS [{entity_context}] "
+                f"CTTI file already exists in global storage, skipping upload"
+            )
+            # Still set the storage metadata on the entity
+            safe_filename = file_entity.entity_id.replace(":", "_").replace("/", "_") + ".md"
+            file_entity.storage_blob_name = safe_filename
+            if not hasattr(file_entity, "metadata") or file_entity.metadata is None:
+                file_entity.metadata = {}
+            file_entity.metadata["ctti_container"] = "aactmarkdowns"
+            file_entity.metadata["ctti_blob_name"] = safe_filename
+            file_entity.metadata["ctti_global_storage"] = True
+        else:
+            # Use CTTI-specific storage (global deduplication)
+            with open(temp_file_path, "rb") as f:
+                file_entity = await storage_manager.store_ctti_file(file_entity, f)
 
-        logger.info(
-            f"💾 WEB_CTTI_STORED [{entity_context}] "
-            f"Stored CTTI file globally: {file_entity.storage_blob_name}"
-        )
+            logger.info(
+                f"💾 WEB_CTTI_STORED [{entity_context}] "
+                f"Stored CTTI file globally: {file_entity.storage_blob_name}"
+            )
     else:
         # Non-CTTI: Use standard sync-based storage
         # (file will be uploaded by file_manager when needed)
