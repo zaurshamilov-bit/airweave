@@ -48,6 +48,7 @@ class Settings(BaseSettings):
         TEMPORAL_NAMESPACE (str): The Temporal namespace.
         TEMPORAL_TASK_QUEUE (str): The Temporal task queue name.
         TEMPORAL_ENABLED (bool): Whether Temporal is enabled.
+        SYNC_MAX_WORKERS (int): The maximum number of workers for sync tasks.
 
         # Custom deployment URLs
         API_FULL_URL (Optional[str]): The full URL for the API.
@@ -110,6 +111,9 @@ class Settings(BaseSettings):
     TEMPORAL_NAMESPACE: str = "default"
     TEMPORAL_TASK_QUEUE: str = "airweave-sync-queue"
     TEMPORAL_ENABLED: bool = False
+
+    # Sync configuration
+    SYNC_MAX_WORKERS: int = 100  # Default to 100 for local, can be overridden by env var
 
     # Custom deployment URLs - these are used to override the default URLs to allow
     # for custom domains in custom deployments

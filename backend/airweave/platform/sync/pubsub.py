@@ -72,8 +72,9 @@ class SyncPubSub:
         """
         channel = self._channel_name(job_id)
 
-        # Create a new pubsub instance for this subscription
-        pubsub = redis_client.client.pubsub()
+        # Create a new pubsub instance using the dedicated pubsub client
+        # This prevents SSE connections from exhausting the main Redis pool
+        pubsub = redis_client.pubsub_client.pubsub()
 
         # Subscribe to the specific channel
         await pubsub.subscribe(channel)

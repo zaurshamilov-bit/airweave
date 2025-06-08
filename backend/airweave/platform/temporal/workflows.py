@@ -53,6 +53,6 @@ class RunSourceConnectionWorkflow:
             retry_policy=RetryPolicy(
                 initial_interval=timedelta(seconds=1),
                 maximum_interval=timedelta(minutes=5),
-                maximum_attempts=3,
+                maximum_attempts=1,
             ),
         )

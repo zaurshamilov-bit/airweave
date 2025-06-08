@@ -10,7 +10,7 @@ from airweave import crud, schemas
 from airweave.core import credentials
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
-from airweave.core.logging import LoggerConfigurator
+from airweave.core.logging import LoggerConfigurator, logger
 from airweave.platform.auth.services import oauth2_service
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
@@ -41,7 +41,7 @@ class SyncFactory:
         source_connection: schemas.SourceConnection,
         current_user: schemas.User,
         access_token: Optional[str] = None,
-        max_workers: int = 100,
+        max_workers: int = None,
     ) -> SyncOrchestrator:
         """Create a dedicated orchestrator instance for a sync run.
 
@@ -57,11 +57,16 @@ class SyncFactory:
             source_connection: The source connection
             current_user: The current user
             access_token: Optional token to use instead of stored credentials
-            max_workers: Maximum number of concurrent workers (default: 20)
+            max_workers: Maximum number of concurrent workers (default: from settings)
 
         Returns:
             A dedicated SyncOrchestrator instance
         """
+        # Use configured value if max_workers not specified
+        if max_workers is None:
+            max_workers = settings.SYNC_MAX_WORKERS
+            logger.info(f"Using configured max_workers: {max_workers}")
+
         # Create sync context
         sync_context = await cls._create_sync_context(
             db=db,
