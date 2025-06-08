@@ -71,3 +71,6 @@ backend/coverage.xml
 .coverage
 
 coverage.xml
+
+# Local storage folder
+local_storage/
