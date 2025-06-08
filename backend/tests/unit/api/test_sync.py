@@ -533,13 +533,13 @@ class TestSubscribeSyncJob:
             mock_subscribe.return_value = mock_pubsub
 
             # Act - Use new signature with user dependency injection
-            response = await sync.subscribe_sync_job(job_id=job_id, user=mock_user, db=mock_db)
+            response = await sync.subscribe_sync_job(job_id=job_id, user=mock_user)
 
             # Assert
             mock_subscribe.assert_called_once_with(job_id)
             assert isinstance(response, StreamingResponse)
             assert response.media_type == "text/event-stream"
-            assert response.headers["Cache-Control"] == "no-cache"
+            assert response.headers["Cache-Control"] == "no-cache, no-transform"
             assert response.headers["Connection"] == "keep-alive"
             assert response.headers["X-Accel-Buffering"] == "no"
 
@@ -572,7 +572,7 @@ class TestSubscribeSyncJob:
             mock_subscribe.return_value = mock_pubsub
 
             # Act - Use new signature with user dependency injection
-            response = await sync.subscribe_sync_job(job_id=job_id, user=mock_user, db=mock_db)
+            response = await sync.subscribe_sync_job(job_id=job_id, user=mock_user)
 
             # Assert - it creates a streaming response even for non-existent jobs
             mock_subscribe.assert_called_once_with(job_id)
