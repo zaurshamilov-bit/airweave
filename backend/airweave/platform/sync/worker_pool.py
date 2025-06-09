@@ -94,31 +94,3 @@ class AsyncWorkerPool:
             )
         else:
             logger.info(f"🏁 WORKER_CLEANUP [{task_id}] Task cleaned up successfully")
-
-    async def wait_for_batch(self, timeout: float = 0.5) -> None:
-        """Wait for some tasks to complete, processing them as they finish."""
-        if not self.pending_tasks:
-            return
-
-        logger.info(
-            f"⏸️  WORKER_BATCH_WAIT Waiting for batch completion "
-            f"(pending: {len(self.pending_tasks)}, timeout: {timeout}s)"
-        )
-
-        done, _ = await asyncio.wait(
-            self.pending_tasks, return_when=asyncio.FIRST_COMPLETED, timeout=timeout
-        )
-
-        logger.info(
-            f"📦 WORKER_BATCH_DONE {len(done)} tasks completed in batch "
-            f"(remaining: {len(self.pending_tasks)})"
-        )
-
-    async def wait_for_completion(self) -> None:
-        """Wait for all tasks to complete."""
-        if self.pending_tasks:
-            logger.info(
-                f"⏳ WORKER_FINAL_WAIT Waiting for all {len(self.pending_tasks)} tasks to complete"
-            )
-            await asyncio.wait(self.pending_tasks, return_when=asyncio.ALL_COMPLETED)
-            logger.info("🎯 WORKER_ALL_COMPLETE All tasks have completed")

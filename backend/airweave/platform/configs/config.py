@@ -17,6 +17,36 @@ class AsanaConfig(SourceConfig):
     pass
 
 
+class BitbucketConfig(SourceConfig):
+    """Bitbucket configuration schema."""
+
+    branch: str = Field(
+        default="",
+        title="Branch name",
+        description=(
+            "Specific branch to sync (e.g., 'main', 'develop'). If empty, uses the default branch."
+        ),
+    )
+    file_extensions: list[str] = Field(
+        default=[],
+        title="File Extensions",
+        description=(
+            "List of file extensions to include (e.g., '.py', '.js', '.md'). "
+            "If empty, includes all text files. Use '.*' to include all files."
+        ),
+    )
+
+    @validator("file_extensions", pre=True)
+    def parse_file_extensions(cls, value):
+        """Convert string input to list if needed."""
+        if isinstance(value, str):
+            if not value.strip():
+                return []
+            # Split by commas and strip whitespace
+            return [ext.strip() for ext in value.split(",") if ext.strip()]
+        return value
+
+
 class ClickUpConfig(SourceConfig):
     """ClickUp configuration schema."""
 
