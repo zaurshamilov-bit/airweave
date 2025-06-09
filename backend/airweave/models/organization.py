@@ -16,7 +16,7 @@ class Organization(Base):
 
     __tablename__ = "organization"
 
-    name: Mapped[str] = mapped_column(String, unique=True)
+    name: Mapped[str] = mapped_column(String, unique=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     auth0_org_id: Mapped[str] = mapped_column(String, nullable=True)  # Auth0 organization ID
 

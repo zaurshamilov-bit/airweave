@@ -47,15 +47,19 @@ class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
             datetime.now(timezone.utc) + timedelta(days=180)  # Default to 180 days
         )
 
-        # Create a new object with the encrypted key and expiration
-        api_key_data = APIKeyCreate(encrypted_key=encrypted_key, expiration_date=expiration_date)
+        # Create a dictionary with the data instead of using the schema
+        api_key_data = {
+            "encrypted_key": encrypted_key,
+            "expiration_date": expiration_date,
+        }
 
         # Use the parent create method which handles organization scoping and user tracking
-        return await self.create(
+        return await super().create(
             db=db,
             obj_in=api_key_data,
             auth_context=auth_context,
             uow=uow,
+            skip_validation=True,
         )
 
     async def get_all_for_auth_context(

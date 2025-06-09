@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, List
 
-from sqlalchemy import UUID, Boolean, ForeignKey, String
+from sqlalchemy import Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.models._base import Base
@@ -21,11 +21,6 @@ class User(Base):
     auth0_id: Mapped[str] = mapped_column(String, unique=True, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    # Multi-organization support - new fields
-    primary_organization_id: Mapped[UUID] = mapped_column(
-        UUID, ForeignKey("organization.id"), nullable=False
-    )
 
     # Many-to-many relationship with organizations
     user_organizations: Mapped[List["UserOrganization"]] = relationship(

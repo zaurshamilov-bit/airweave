@@ -100,6 +100,7 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
         obj_in: CreateSchemaType,
         auth_context: AuthContext,
         uow: Optional[UnitOfWork] = None,
+        skip_validation: bool = False,
     ) -> ModelType:
         """Create organization resource with auth context.
 
@@ -110,13 +111,15 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
             auth_context (AuthContext): The authentication context.
             organization_id (Optional[UUID]): The organization ID to create in.
             uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
+            skip_validation (bool): Whether to skip validation.
 
         Returns:
         -------
             ModelType: The created object.
         """
-        # Validate auth context has org access
-        await self._validate_organization_access(auth_context, auth_context.organization_id)
+        if not skip_validation:
+            # Validate auth context has org access
+            await self._validate_organization_access(auth_context, auth_context.organization_id)
 
         if not isinstance(obj_in, dict):
             obj_in = obj_in.model_dump(exclude_unset=True)

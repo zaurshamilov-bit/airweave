@@ -16,6 +16,7 @@ from airweave.api import deps
 from airweave.api.auth import auth0
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.logging import logger
+from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.organization import Organization as OrganizationModel
 from airweave.schemas import Organization, User
 from airweave.schemas.auth import AuthContext
@@ -117,7 +118,17 @@ async def create_or_update_user(
     user = await crud.user.get_by_email(db, email=user_data.email)
 
     if user:
-        return user
+        return schemas.User.model_validate(user)
 
-    user = await crud.user.create(db, obj_in=user_data)
+    # If no user, create a new one
+    async with UnitOfWork(db) as uow:
+        user, organization = await crud.user.create_with_organization(db, obj_in=user_data, uow=uow)
+        _ = await crud.api_key.create(
+            db,
+            obj_in=schemas.APIKeyCreate(user_id=user.id, name="API Key"),
+            auth_context=AuthContext(
+                user=user, organization_id=organization.id, auth_method="auth0"
+            ),
+            uow=uow,
+        )
     return user

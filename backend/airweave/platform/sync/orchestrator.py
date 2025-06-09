@@ -100,54 +100,47 @@ class SyncOrchestrator:
         self.sync_context.logger.info(
             f"Starting entity stream processing from source {self.sync_context.source._name}"
         )
+        # Use the stream as a context manager
+        async with AsyncSourceStream(
+            self.sync_context.source.generate_entities(), logger=self.sync_context.logger
+        ) as stream:
+            try:
+                # Process entities as they come
+                async for entity in stream.get_entities():
+                    if getattr(entity, "should_skip", False):
+                        await self.sync_context.progress.increment("skipped")
+                        continue  # Do not process further
 
-        # Create ONE shared database session for the entire sync job
-        async with get_db_context() as shared_db:
-            self.sync_context.logger.info(
-                f"Created shared database session for sync job {self.sync_context.sync_job.id}"
-            )
+                    # Submit each entity for processing with shared DB session
+                    task = await self.worker_pool.submit(
+                        self._process_single_entity, entity=entity, source_node=source_node
+                    )
 
-            # Use the stream as a context manager
-            async with AsyncSourceStream(
-                self.sync_context.source.generate_entities(), logger=self.sync_context.logger
-            ) as stream:
-                try:
-                    # Process entities as they come
-                    async for entity in stream.get_entities():
-                        if getattr(entity, "should_skip", False):
-                            await self.sync_context.progress.increment("skipped")
-                            continue  # Do not process further
+                    # Pythonic way to save entity for error reporting
+                    task.entity = entity
 
-                        # Submit each entity for processing with shared DB session
-                        task = await self.worker_pool.submit(
-                            self._process_single_entity,
-                            entity=entity,
-                            source_node=source_node,
-                            db=shared_db,  # Pass shared session
-                        )
+                    # If we have too many pending tasks, wait for some to complete
+                    if len(self.worker_pool.pending_tasks) >= self.worker_pool.max_workers * 2:
+                        await self.worker_pool.wait_for_batch(timeout=0.5)
 
-                        # Pythonic way to save entity for error reporting
-                        task.entity = entity
+                # Wait for all remaining tasks
+                await self.worker_pool.wait_for_completion()
+                self.sync_context.logger.info("All entity processing tasks completed")
 
-                        # If we have too many pending tasks, wait for some to complete
-                        if len(self.worker_pool.pending_tasks) >= self.worker_pool.max_workers * 2:
-                            await self.worker_pool.wait_for_batch(timeout=0.5)
+            except Exception as e:
+                self.sync_context.logger.error(f"Error during entity stream processing: {e}")
+                error_occurred = True
+                raise
+            finally:
+                # Finalize progress
+                await self.sync_context.progress.finalize(is_complete=not error_occurred)
 
-                    # Wait for all remaining tasks
-                    await self.worker_pool.wait_for_completion()
-                    self.sync_context.logger.info("All entity processing tasks completed")
-
-                except Exception as e:
-                    self.sync_context.logger.error(f"Error during entity stream processing: {e}")
-                    error_occurred = True
-                    raise
-                finally:
-                    # Finalize progress
-                    await self.sync_context.progress.finalize(is_complete=not error_occurred)
-
-    async def _process_single_entity(self, entity: BaseEntity, source_node, db) -> None:
+    async def _process_single_entity(
+        self, entity: BaseEntity, source_node: schemas.DagNode
+    ) -> None:
         """Process a single entity through the pipeline using shared database session."""
-        # Use the shared database session - NO new session creation!
-        await self.entity_processor.process(
-            entity=entity, source_node=source_node, sync_context=self.sync_context, db=db
-        )
+        async with get_db_context() as db:
+            # Process the entity through the pipeline
+            await self.entity_processor.process(
+                entity=entity, source_node=source_node, sync_context=self.sync_context, db=db
+            )

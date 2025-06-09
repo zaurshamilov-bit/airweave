@@ -87,13 +87,26 @@ export const useOrganizationStore = create<OrganizationState>()(
         try {
           set({ isLoading: true });
 
-          const response = await apiClient.get('/organizations');
+          // Get current user data which includes user_organizations
+          const response = await apiClient.get('/users');
 
           if (!response.ok) {
-            throw new Error(`Failed to fetch organizations: ${response.status}`);
+            throw new Error(`Failed to fetch user data: ${response.status}`);
           }
 
-          const organizations = await response.json();
+          const user = await response.json();
+
+          // Extract organizations from user_organizations field
+          const organizations: Organization[] = user.user_organizations?.map((userOrg: any) => ({
+            id: userOrg.organization.id,
+            name: userOrg.organization.name,
+            description: userOrg.organization.description,
+            auth0_org_id: userOrg.auth0_org_id,
+            role: userOrg.role,
+            is_primary: userOrg.is_primary,
+            created_at: userOrg.organization.created_at,
+            modified_at: userOrg.organization.modified_at,
+          })) || [];
 
           // Set organizations and select appropriate current organization
           const currentOrgId = get().currentOrganization?.id;
@@ -143,7 +156,6 @@ export const useOrganizationStore = create<OrganizationState>()(
     {
       name: 'organization-storage',
       partialize: (state) => ({
-        organizations: state.organizations,
         currentOrganization: state.currentOrganization
       }),
     }

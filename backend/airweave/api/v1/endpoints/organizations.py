@@ -16,7 +16,7 @@ router = TrailingSlashRouter()
 
 @router.post("/", response_model=schemas.OrganizationWithRole)
 async def create_organization(
-    organization_data: schemas.OrganizationCreateRequest,
+    organization_data: schemas.OrganizationCreate,
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.OrganizationWithRole:
@@ -126,6 +126,10 @@ async def get_organization(
             status_code=404, detail="Organization not found or you don't have access to it"
         )
 
+    # Capture the role and is_primary values early to avoid greenlet exceptions later
+    user_role = user_org.role
+    user_is_primary = user_org.is_primary
+
     organization = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -136,15 +140,15 @@ async def get_organization(
         description=organization.description or "",
         created_at=organization.created_at,
         modified_at=organization.modified_at,
-        role=user_org.role,
-        is_primary=user_org.is_primary,
+        role=user_role,
+        is_primary=user_is_primary,
     )
 
 
 @router.put("/{organization_id}", response_model=schemas.OrganizationWithRole)
 async def update_organization(
     organization_id: UUID,
-    organization_data: schemas.OrganizationCreateRequest,  # Reuse the same schema
+    organization_data: schemas.OrganizationCreate,  # Reuse the same schema
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.OrganizationWithRole:
@@ -178,7 +182,11 @@ async def update_organization(
             status_code=404, detail="Organization not found or you don't have access to it"
         )
 
-    if user_org.role not in ["owner", "admin"]:
+    # Capture the role and is_primary values early to avoid greenlet exceptions later
+    user_role = user_org.role
+    user_is_primary = user_org.is_primary
+
+    if user_role not in ["owner", "admin"]:
         raise HTTPException(
             status_code=403, detail="Only organization owners and admins can update organizations"
         )
@@ -201,7 +209,7 @@ async def update_organization(
     )
 
     updated_organization = await crud.organization.update(
-        db=db, db_obj=organization, obj_in=update_data
+        db=db, db_obj=organization, obj_in=update_data, auth_context=auth_context
     )
 
     return schemas.OrganizationWithRole(
@@ -210,8 +218,8 @@ async def update_organization(
         description=updated_organization.description or "",
         created_at=updated_organization.created_at,
         modified_at=updated_organization.modified_at,
-        role=user_org.role,
-        is_primary=user_org.is_primary,
+        role=user_role,
+        is_primary=user_is_primary,
     )
 
 
@@ -250,7 +258,11 @@ async def delete_organization(
             status_code=404, detail="Organization not found or you don't have access to it"
         )
 
-    if user_org.role != "owner":
+    # Capture the role and is_primary values early to avoid greenlet exceptions later
+    user_role = user_org.role
+    user_is_primary = user_org.is_primary
+
+    if user_role != "owner":
         raise HTTPException(
             status_code=403, detail="Only organization owners can delete organizations"
         )
@@ -280,8 +292,8 @@ async def delete_organization(
         description=deleted_org.description or "",
         created_at=deleted_org.created_at,
         modified_at=deleted_org.modified_at,
-        role=user_org.role,
-        is_primary=user_org.is_primary,
+        role=user_role,
+        is_primary=user_is_primary,
     )
 
 
@@ -317,6 +329,9 @@ async def leave_organization(
     if not user_org:
         raise HTTPException(status_code=404, detail="You are not a member of this organization")
 
+    # Capture the role early to avoid greenlet exceptions later
+    user_role = user_org.role
+
     # Check if this is the user's only organization
     user_orgs = await crud.organization.get_user_organizations_with_roles(
         db=db, user_id=auth_context.user.id
@@ -330,7 +345,7 @@ async def leave_organization(
         )
 
     # If user is an owner, check if there are other owners
-    if user_org.role == "owner":
+    if user_role == "owner":
         other_owners = await crud.organization.get_organization_owners(
             db=db,
             organization_id=organization_id,

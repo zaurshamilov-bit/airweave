@@ -7,7 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from airweave import schemas
 from airweave.crud._base_user import CRUDBaseUser
+from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.user import User
 from airweave.schemas.user import UserCreate, UserUpdate
 
@@ -79,66 +81,64 @@ class CRUDUser(CRUDBaseUser[User, UserCreate, UserUpdate]):
         result = await db.execute(stmt)
         return list(result.unique().scalars().all())
 
-    async def create(self, db: AsyncSession, *, obj_in: UserCreate) -> User:
+    async def create_with_organization(
+        self, db: AsyncSession, *, obj_in: UserCreate, uow: Optional[UnitOfWork] = None
+    ) -> tuple[schemas.User, schemas.Organization]:
         """Create a new user.
 
-        Always creates a default organization for the user if one is not provided.
-        Also creates a UserOrganization relationship entry.
+        Always creates a default organization for the user and makes them the owner.
 
         Args:
             db (AsyncSession): The database session.
             obj_in (UserCreate): The object to create.
+            uow (UnitOfWork): The unit of work to use for the transaction.
 
         Returns:
-            User: The newly created user.
+            tuple[schemas.User, schemas.Organization]: The newly created schemas.
         """
-        # Always create an organization for the user if one is not provided
-        if not hasattr(obj_in, "organization_id") or obj_in.organization_id is None:
-            from airweave.crud.crud_organization import organization as crud_organization
-            from airweave.schemas.organization import OrganizationCreate
+        from airweave.crud.crud_organization import organization as crud_organization
 
-            org_name = f"Organization for {obj_in.email}"
-
-            # Check if an organization with this name already exists
-            existing_org = await crud_organization.get_by_name(db, name=org_name)
-            if existing_org:
-                # Use the existing organization
-                org_id = existing_org.id
-            else:
-                # Create a new organization
-                org_in = OrganizationCreate(
-                    name=org_name, description=f"Auto-created organization for {obj_in.email}"
-                )
-                org = await crud_organization.create(db, obj_in=org_in)
-                org_id = org.id
-
-            # Update the user create object with the organization
+        async def _create_with_organization(
+            db: AsyncSession, *, obj_in: UserCreate, uow: UnitOfWork
+        ) -> tuple[schemas.User, schemas.Organization]:
+            """Create a new user with an organization."""
+            # First create the user without organization
             user_data = obj_in.model_dump()
-            user_data["organization_id"] = org_id
-            user_data["primary_organization_id"] = org_id
-            obj_in = UserCreate(**user_data)
+            user_data.pop("organization_id", None)
+            user_data.pop("primary_organization_id", None)
 
-        # Create the user using the parent class method
-        user = await super().create(db, obj_in=obj_in)
-        user_id = user.id
+            # Create the user directly
+            user = User(**user_data)
+            db.add(user)
+            await db.flush()  # Get the ID
 
-        # Create UserOrganization relationship entry
-        from airweave.models.user_organization import UserOrganization
+            # Create organization with the user as owner
+            org_name = f"Organization for {obj_in.email}"
+            org_in = schemas.OrganizationCreate(
+                name=org_name, description=f"Auto-created organization for {obj_in.email}"
+            )
 
-        user_org = UserOrganization(
-            user_id=user_id,
-            organization_id=user.organization_id,
-            role="owner",  # First user is owner of their org
-            is_primary=True,
-        )
-        db.add(user_org)
-        await db.commit()
+            # Use create_with_owner which handles organization creation and user relationships
+            organization = await crud_organization.create_with_owner(
+                db, obj_in=org_in, owner_user=user, uow=uow
+            )
 
-        # Explicitly load the user with organizations in a new query
-        stmt = self._get_user_query_with_orgs().where(User.id == user_id)
-        result = await db.execute(stmt)
+            # Load the user with organizations before committing
+            stmt = self._get_user_query_with_orgs().where(User.id == user.id)
+            result = await db.execute(stmt)
+            user_with_orgs = result.scalar_one_or_none()
 
-        return result.scalar_one_or_none()
+            # Convert to schemas to avoid lazy-loading issues
+            user_schema = schemas.User.model_validate(user_with_orgs)
+            org_schema = schemas.Organization.model_validate(organization)
+
+            return user_schema, org_schema
+
+        if not uow:
+            async with UnitOfWork(db) as uow:
+                return await _create_with_organization(db, obj_in=obj_in, uow=uow)
+        else:
+            return await _create_with_organization(db, obj_in=obj_in, uow=uow)
 
     async def remove(self, db: AsyncSession, *, id: UUID, current_user: User) -> Optional[User]:
         """Remove an object by ID.

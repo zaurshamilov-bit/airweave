@@ -10,21 +10,14 @@ from pydantic import BaseModel, Field
 class OrganizationBase(BaseModel):
     """Organization base schema."""
 
-    name: str
-    description: str
+    name: str = Field(..., min_length=4, max_length=100, description="Organization name")
+    description: Optional[str] = Field(None, max_length=500, description="Organization description")
 
 
 class OrganizationCreate(OrganizationBase):
     """Organization creation schema."""
 
     pass
-
-
-class OrganizationCreateRequest(BaseModel):
-    """Organization creation request schema for API endpoints."""
-
-    name: str = Field(..., min_length=1, max_length=100, description="Organization name")
-    description: Optional[str] = Field(None, max_length=500, description="Organization description")
 
 
 class OrganizationUpdate(BaseModel):

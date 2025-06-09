@@ -62,7 +62,6 @@ class UserInDBBase(UserBase):
     """Base schema for User stored in DB."""
 
     id: UUID
-    primary_organization_id: Optional[UUID] = None
     user_organizations: list[UserOrganization] = Field(default_factory=list)
 
     @field_validator("user_organizations", mode="before")
@@ -78,6 +77,12 @@ class UserInDBBase(UserBase):
             if org.is_primary:
                 return org
         return None
+
+    @property
+    def primary_organization_id(self) -> Optional[UUID]:
+        """Get the primary organization ID for this user for backward compatibility."""
+        primary_org = self.primary_organization
+        return primary_org.organization.id if primary_org else None
 
     @property
     def organization_roles(self) -> dict[UUID, str]:

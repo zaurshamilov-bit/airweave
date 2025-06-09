@@ -1,35 +1,35 @@
 """CRUD operations for the organization model."""
 
-from typing import List, Optional
+from typing import Any, List, Optional, Union
 from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airweave.crud._base_organization import CRUDBaseOrganization
+from airweave.core.exceptions import PermissionException
+from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.organization import Organization
 from airweave.models.user import User
 from airweave.models.user_organization import UserOrganization
 from airweave.schemas.auth import AuthContext
 from airweave.schemas.organization import (
     OrganizationCreate,
-    OrganizationCreateRequest,
     OrganizationUpdate,
     OrganizationWithRole,
 )
 
 
-class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, OrganizationUpdate]):
+class CRUDOrganization:
     """CRUD operations for the organization model.
 
     Note: This handles Organization entities themselves, not organization-scoped resources.
-    Organizations don't have organization_id (they ARE organizations), so this needs
-    special handling beyond the standard CRUDOrganization pattern.
+    Organizations don't have organization_id (they ARE organizations), so this class
+    implements its own validation logic rather than inheriting from CRUDBaseOrganization.
     """
 
     def __init__(self):
-        """Initialize with track_user=True since organizations have creator tracking."""
-        super().__init__(Organization, track_user=True)
+        """Initialize the Organization CRUD."""
+        self.model = Organization
 
     async def get_by_name(self, db: AsyncSession, name: str) -> Organization | None:
         """Get an organization by its name."""
@@ -38,7 +38,12 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
         return result.scalar_one_or_none()
 
     async def create_with_owner(
-        self, db: AsyncSession, *, obj_in: OrganizationCreateRequest, owner_user: User
+        self,
+        db: AsyncSession,
+        *,
+        obj_in: OrganizationCreate,
+        owner_user: User,
+        uow: Optional[UnitOfWork] = None,
     ) -> Organization:
         """Create organization and assign the user as owner.
 
@@ -46,6 +51,7 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
             db: Database session
             obj_in: Organization creation data
             owner_user: User who will become the owner
+            uow: Unit of work
 
         Returns:
             The created organization
@@ -58,10 +64,6 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
             org_data_dict = org_data.model_dump(exclude_unset=True)
         else:
             org_data_dict = org_data
-
-        # Add user tracking
-        org_data_dict["created_by_email"] = owner_user.email
-        org_data_dict["modified_by_email"] = owner_user.email
 
         organization = Organization(**org_data_dict)
         db.add(organization)
@@ -76,15 +78,141 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
         )
         db.add(user_org)
 
-        # Update user's current organization to this new one
-        owner_user.current_organization_id = organization.id
         if not owner_user.primary_organization_id:
             owner_user.primary_organization_id = organization.id
 
-        await db.commit()
-        await db.refresh(organization)
+        if not uow:
+            await db.commit()
+            await db.refresh(organization)
 
         return organization
+
+    async def get(
+        self,
+        db: AsyncSession,
+        id: UUID,
+        auth_context: AuthContext,
+    ) -> Optional[Organization]:
+        """Get organization by ID with access validation.
+
+        Organizations don't have organization_id field, so we override the base method.
+        """
+        # Check if the user has access to this organization
+        if auth_context.has_user_context:
+            user_org_ids = [org.organization.id for org in auth_context.user.user_organizations]
+            if id not in user_org_ids:
+                return None
+        else:
+            # For API key access, only allow access to the key's organization
+            if str(id) != auth_context.organization_id:
+                return None
+
+        query = select(self.model).where(self.model.id == id)
+        result = await db.execute(query)
+        return result.unique().scalar_one_or_none()
+
+    async def get_multi(
+        self,
+        db: AsyncSession,
+        auth_context: AuthContext,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+    ) -> list[Organization]:
+        """Get all organizations for the authenticated user/API key.
+
+        Organizations don't have organization_id field, so we override the base method.
+        """
+        if auth_context.has_user_context:
+            # Get organizations the user has access to
+            user_org_ids = [org.organization.id for org in auth_context.user.user_organizations]
+            if not user_org_ids:
+                return []
+
+            query = (
+                select(self.model).where(self.model.id.in_(user_org_ids)).offset(skip).limit(limit)
+            )
+        else:
+            # For API key access, only return the key's organization
+            query = (
+                select(self.model)
+                .where(self.model.id == auth_context.organization_id)
+                .offset(skip)
+                .limit(limit)
+            )
+
+        result = await db.execute(query)
+        return list(result.unique().scalars().all())
+
+    async def update(
+        self,
+        db: AsyncSession,
+        *,
+        db_obj: Organization,
+        obj_in: Union[OrganizationUpdate, dict[str, Any]],
+        auth_context: AuthContext,
+        uow: Optional[UnitOfWork] = None,
+    ) -> Organization:
+        """Update organization with access validation.
+
+        Organizations don't have organization_id field, so we override the base method.
+        """
+        # Check if the user has access to this organization
+        if auth_context.has_user_context:
+            user_org_ids = [org.organization.id for org in auth_context.user.user_organizations]
+            if db_obj.id not in user_org_ids:
+                from airweave.core.exceptions import PermissionException
+
+                raise PermissionException("User does not have access to organization")
+        else:
+            # For API key access, only allow access to the key's organization
+            if str(db_obj.id) != auth_context.organization_id:
+                from airweave.core.exceptions import PermissionException
+
+                raise PermissionException("API key does not have access to organization")
+
+        if not isinstance(obj_in, dict):
+            obj_in = obj_in.model_dump(exclude_unset=True)
+
+        # Organizations track user modifications
+        if auth_context.has_user_context:
+            obj_in["modified_by_email"] = auth_context.tracking_email
+
+        for field, value in obj_in.items():
+            setattr(db_obj, field, value)
+
+        if not uow:
+            await db.commit()
+            await db.refresh(db_obj)
+
+        return db_obj
+
+    async def create(db, obj_in, auth_context) -> NotImplementedError:
+        """Create organization resource with auth context."""
+        raise NotImplementedError("This method is not implemented for organizations.")
+
+    async def _validate_organization_access(
+        self, auth_context: AuthContext, organization_id: UUID
+    ) -> None:
+        """Validate auth context has access to organization.
+
+        Args:
+        ----
+            auth_context (AuthContext): The authentication context.
+            organization_id (UUID): The organization ID to validate access to.
+
+        Raises:
+        ------
+            PermissionException: If auth context does not have access to organization.
+        """
+        if auth_context.has_user_context:
+            if organization_id not in [
+                org.organization.id for org in auth_context.user.user_organizations
+            ]:
+                raise PermissionException("User does not have access to organization")
+        else:
+            if str(organization_id) != auth_context.organization_id:
+                raise PermissionException("API key does not have access to organization")
 
     async def get_user_organizations_with_roles(
         self, db: AsyncSession, user_id: UUID
@@ -138,9 +266,21 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
         """
         from fastapi import HTTPException
 
-        user_org = await self._validate_organization_access(auth_context, organization_id)
+        # First validate basic organization access
+        await self._validate_organization_access(auth_context, organization_id)
 
-        if user_org.role not in ["owner", "admin"]:
+        # Then check if user is admin/owner by finding their UserOrganization record
+        if not auth_context.has_user_context:
+            raise HTTPException(status_code=403, detail="API keys cannot perform admin actions")
+
+        # Find the user's role in this organization
+        user_org = None
+        for org in auth_context.user.user_organizations:
+            if org.organization.id == organization_id:
+                user_org = org
+                break
+
+        if not user_org or user_org.role not in ["owner", "admin"]:
             raise HTTPException(
                 status_code=403, detail="You must be an admin or owner to perform this action"
             )

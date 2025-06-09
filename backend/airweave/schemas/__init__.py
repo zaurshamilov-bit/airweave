@@ -60,7 +60,6 @@ from .organization import (
     Organization,
     OrganizationBase,
     OrganizationCreate,
-    OrganizationCreateRequest,
     OrganizationInDBBase,
     OrganizationUpdate,
     OrganizationWithRole,

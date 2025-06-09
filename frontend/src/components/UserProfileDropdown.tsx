@@ -100,7 +100,7 @@ export function UserProfileDropdown() {
   // Fetch user organizations when component mounts or user changes
   useEffect(() => {
     const loadOrganizations = async () => {
-      if (user && organizations.length === 0) {
+      if (user) {
         try {
           setIsLoadingOrgs(true);
           await fetchUserOrganizations();
@@ -113,7 +113,7 @@ export function UserProfileDropdown() {
     };
 
     loadOrganizations();
-  }, [user, organizations.length, fetchUserOrganizations]);
+  }, [user, fetchUserOrganizations]);
 
   // Refetch organizations when dropdown opens to ensure fresh data
   useEffect(() => {
@@ -121,6 +121,7 @@ export function UserProfileDropdown() {
       if (dropdownOpen && user) {
         try {
           setIsLoadingOrgs(true);
+          // Always fetch fresh data when dropdown opens
           await fetchUserOrganizations();
         } catch (error) {
           console.error('Failed to refresh organizations:', error);
@@ -130,7 +131,10 @@ export function UserProfileDropdown() {
       }
     };
 
-    refreshOrganizations();
+    // Only refresh when dropdown opens (becomes true)
+    if (dropdownOpen) {
+      refreshOrganizations();
+    }
   }, [dropdownOpen, user, fetchUserOrganizations]);
 
   const handleLogout = () => {
@@ -242,7 +246,6 @@ export function UserProfileDropdown() {
                     <DropdownMenuItem
                       key={org.id}
                       onSelect={() => handleSwitchOrganization(org.id)}
-                      disabled={org.id === currentOrganization?.id}
                       className="flex items-center justify-between px-2 py-1.5"
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
