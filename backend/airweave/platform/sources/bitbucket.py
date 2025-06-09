@@ -13,10 +13,11 @@ References:
   https://developer.atlassian.com/cloud/bitbucket/rest/api-group-source/
 
 Notes:
-  - This connector uses Bearer token authentication (app passwords or access tokens)
+  - This connector uses Basic authentication with app passwords
   - For each workspace, we gather repositories and traverse their contents
 """
 
+import base64
 import mimetypes
 from datetime import datetime
 from pathlib import Path
@@ -72,6 +73,7 @@ class BitbucketSource(BaseSource):
         """
         instance = cls()
 
+        instance.username = credentials.username
         instance.app_password = credentials.app_password
         instance.workspace = credentials.workspace
         instance.repo_slug = credentials.repo_slug
@@ -89,7 +91,7 @@ class BitbucketSource(BaseSource):
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Make authenticated API request using Bearer token.
+        """Make authenticated API request using Basic authentication.
 
         Args:
             client: HTTP client
@@ -99,8 +101,12 @@ class BitbucketSource(BaseSource):
         Returns:
             JSON response
         """
+        # Create Basic auth credentials
+        credentials = f"{self.username}:{self.app_password}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
         headers = {
-            "Authorization": f"Bearer {self.app_password}",
+            "Authorization": f"Basic {encoded_credentials}",
             "Accept": "application/json",
         }
         response = await client.get(url, headers=headers, params=params)
@@ -127,8 +133,12 @@ class BitbucketSource(BaseSource):
         next_url = url
 
         while next_url:
+            # Create Basic auth credentials
+            credentials = f"{self.username}:{self.app_password}"
+            encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
             headers = {
-                "Authorization": f"Bearer {self.app_password}",
+                "Authorization": f"Basic {encoded_credentials}",
                 "Accept": "application/json",
             }
 
@@ -405,19 +415,26 @@ class BitbucketSource(BaseSource):
             File entities
         """
         try:
-            # Get file content
-            file_url = f"{self.BASE_URL}/repositories/{workspace_slug}/"
-            f"{repo_slug}/src/{branch}/{item_path}"
+            # Get file content - use raw format to get actual file content
+            file_url = (
+                f"{self.BASE_URL}/repositories/{workspace_slug}/{repo_slug}"
+                f"/src/{branch}/{item_path}"
+            )
+            # Create Basic auth credentials
+            credentials = f"{self.username}:{self.app_password}"
+            encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
             file_response = await client.get(
                 file_url,
                 headers={
-                    "Authorization": f"Bearer {self.app_password}",
-                    "Accept": "application/json",
+                    "Authorization": f"Basic {encoded_credentials}",
+                    "Accept": "text/plain",  # Request raw content, not JSON
                 },
+                params={"format": "raw"},  # BitBucket parameter to get raw file content
             )
             file_response.raise_for_status()
 
-            # For text files, Bitbucket returns the content directly
+            # Get the raw file content
             content_text = file_response.text
             file_size = len(content_text.encode("utf-8"))
 
@@ -457,6 +474,9 @@ class BitbucketSource(BaseSource):
                     line_count=line_count,
                     path_in_repo=item_path,
                     content=content_text,  # Store the content directly in the entity
+                    # Required fields from CodeFileEntity base class
+                    repo_name=repo_slug,  # Repository name
+                    repo_owner=workspace_slug,  # Repository owner (workspace)
                     last_modified=datetime.fromisoformat(
                         item.get("commit", {}).get("date", "").replace("Z", "+00:00")
                     )

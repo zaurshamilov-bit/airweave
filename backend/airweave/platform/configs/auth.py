@@ -128,6 +128,10 @@ class AsanaAuthConfig(AuthConfig):
 class BitbucketAuthConfig(AuthConfig):
     """Bitbucket authentication credentials schema."""
 
+    username: str = Field(
+        title="Username",
+        description="Your Bitbucket username",
+    )
     app_password: str = Field(
         title="App Password",
         description="Bitbucket app password with repository read permissions",
