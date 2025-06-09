@@ -125,6 +125,25 @@ class AsanaAuthConfig(AuthConfig):
     )
 
 
+class BitbucketAuthConfig(AuthConfig):
+    """Bitbucket authentication credentials schema."""
+
+    app_password: str = Field(
+        title="App Password",
+        description="Bitbucket app password with repository read permissions",
+    )
+    workspace: str = Field(
+        title="Workspace",
+        description="Bitbucket workspace slug (e.g., 'my-workspace')",
+    )
+    repo_slug: Optional[str] = Field(
+        default="",
+        title="Repository Slug",
+        description="Specific repository to sync (e.g., 'my-repo'). "
+        "If empty, syncs all repositories in the workspace.",
+    )
+
+
 class ClickUpAuthConfig(AuthConfig):
     """Clickup authentication credentials schema."""
 
