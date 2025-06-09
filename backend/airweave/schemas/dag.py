@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class NodeType(str, Enum):
@@ -90,8 +90,8 @@ class DagEdge(DagEdgeBase):
     id: UUID
     dag_id: UUID
     organization_id: UUID
-    created_by_email: str
-    modified_by_email: str
+    created_by_email: Optional[EmailStr] = None
+    modified_by_email: Optional[EmailStr] = None
 
     class Config:
         """Pydantic config."""
@@ -138,8 +138,8 @@ class SyncDag(SyncDagBase):
 
     id: UUID
     organization_id: UUID
-    created_by_email: str
-    modified_by_email: str
+    created_by_email: Optional[EmailStr] = None
+    modified_by_email: Optional[EmailStr] = None
     nodes: list[DagNode]
     edges: list[DagEdge]
 

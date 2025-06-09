@@ -9,6 +9,7 @@ from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus
 from airweave.db.session import get_db_context
 from airweave.platform.sync.pubsub import SyncProgressUpdate
+from airweave.schemas.auth import AuthContext
 
 
 class SyncJobService:
@@ -18,7 +19,7 @@ class SyncJobService:
         self,
         sync_job_id: UUID,
         status: SyncJobStatus,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         stats: Optional[SyncProgressUpdate] = None,
         error: Optional[str] = None,
         started_at: Optional[datetime] = None,
@@ -28,7 +29,9 @@ class SyncJobService:
         """Update sync job status with provided details."""
         try:
             async with get_db_context() as db:
-                db_sync_job = await crud.sync_job.get(db=db, id=sync_job_id)
+                db_sync_job = await crud.sync_job.get(
+                    db=db, id=sync_job_id, auth_context=auth_context
+                )
 
                 if not db_sync_job:
                     logger.error(f"Sync job {sync_job_id} not found")
@@ -61,7 +64,7 @@ class SyncJobService:
                     db=db,
                     db_obj=db_sync_job,
                     obj_in=schemas.SyncJobUpdate(**update_data),
-                    current_user=current_user,
+                    auth_context=auth_context,
                 )
         except Exception as e:
             logger.error(f"Failed to update sync job status: {e}")

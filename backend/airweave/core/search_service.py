@@ -11,6 +11,7 @@ from airweave.core.exceptions import NotFoundException
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
 from airweave.platform.locator import resource_locator
+from airweave.schemas.auth import AuthContext
 from airweave.schemas.search import ResponseType, SearchStatus
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ class SearchService:
         db: AsyncSession,
         query: str,
         readable_id: str,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> list[dict]:
         """Search across vector database using existing connections.
 
@@ -71,7 +72,7 @@ class SearchService:
             db (AsyncSession): Database session
             query (str): Search query text
             readable_id (str): Readable ID of the collection to search within
-            current_user (schemas.User): Current user performing the search
+            auth_context (AuthContext): Authentication context
 
         Returns:
             list[dict]: List of search results
@@ -80,7 +81,7 @@ class SearchService:
             NotFoundException: If sync or connections not found
         """
         try:
-            collection = await crud.collection.get_by_readable_id(db, readable_id, current_user)
+            collection = await crud.collection.get_by_readable_id(db, readable_id, auth_context)
             if not collection:
                 raise NotFoundException("Collection not found")
 
@@ -132,7 +133,7 @@ class SearchService:
         db: AsyncSession,
         query: str,
         readable_id: str,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         response_type: ResponseType = ResponseType.RAW,
     ) -> schemas.SearchResponse:
         """Search and optionally generate AI completion for results.
@@ -141,7 +142,7 @@ class SearchService:
             db: The database session
             query: The search query text
             readable_id: Readable ID of the collection to search in
-            current_user: The current user
+            auth_context: Authentication context
             response_type: Type of response (raw results or AI completion)
 
         Returns:
@@ -151,7 +152,7 @@ class SearchService:
             db=db,
             query=query,
             readable_id=readable_id,
-            current_user=current_user,
+            auth_context=auth_context,
         )
 
         if response_type == ResponseType.RAW:

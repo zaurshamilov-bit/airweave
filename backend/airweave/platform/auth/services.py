@@ -24,6 +24,7 @@ from airweave.platform.auth.schemas import (
     OAuth2TokenResponse,
 )
 from airweave.platform.auth.settings import integration_settings
+from airweave.schemas.auth import AuthContext
 
 oauth2_service_logger = logger.with_prefix("OAuth2 Service: ").with_context(
     component="oauth2_service"
@@ -119,7 +120,7 @@ class OAuth2Service:
     async def refresh_access_token(
         db: AsyncSession,
         integration_short_name: str,
-        user: schemas.User,
+        auth_context: AuthContext,
         connection_id: UUID,
         decrypted_credential: dict,
         white_label: Optional[schemas.WhiteLabel] = None,
@@ -132,7 +133,7 @@ class OAuth2Service:
         ----
             db (AsyncSession): The database session.
             integration_short_name (str): The short name of the integration.
-            user (schemas.User): The user for whom to refresh the token.
+            auth_context (AuthContext): The authentication context.
             connection_id (UUID): The ID of the connection to refresh the token for.
             decrypted_credential (dict): The token and optional config fields
             white_label (Optional[schemas.WhiteLabel]): White label configuration to use if
@@ -178,14 +179,14 @@ class OAuth2Service:
 
             # Handle rotating refresh tokens if needed
             oauth2_token_response = await OAuth2Service._handle_token_response(
-                db, response, integration_config, user, connection_id
+                db, response, integration_config, auth_context, connection_id
             )
 
             return oauth2_token_response
 
         except Exception as e:
             oauth2_service_logger.error(
-                f"Token refresh failed for user {user.email} and "
+                f"Token refresh failed for organization {auth_context.organization_id} and "
                 f"integration {integration_short_name}: {str(e)}"
             )
             raise
@@ -377,7 +378,7 @@ class OAuth2Service:
         db: AsyncSession,
         response: httpx.Response,
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
-        user: schemas.User,
+        auth_context: AuthContext,
         connection_id: UUID,
     ) -> OAuth2TokenResponse:
         """Handle the token response and update refresh token if needed.
@@ -388,7 +389,7 @@ class OAuth2Service:
             response (httpx.Response): The response from the token refresh request.
             integration_config (schemas.Source | schemas.Destination | schemas.EmbeddingModel):
                 The integration configuration.
-            user (schemas.User): The user to update the refresh token for.
+            auth_context (AuthContext): The authentication context.
             connection_id (UUID): The ID of the connection to update.
 
         Returns:
@@ -399,9 +400,11 @@ class OAuth2Service:
 
         if integration_config.auth_type == "oauth2_with_refresh_rotating":
             # Get connection and its credential
-            connection = await crud.connection.get(db=db, id=connection_id, current_user=user)
+            connection = await crud.connection.get(
+                db=db, id=connection_id, auth_context=auth_context
+            )
             integration_credential = await crud.integration_credential.get(
-                db=db, id=connection.integration_credential_id, current_user=user
+                db=db, id=connection.integration_credential_id, auth_context=auth_context
             )
 
             # Update the credentials with the new refresh token
@@ -414,7 +417,7 @@ class OAuth2Service:
                 db=db,
                 db_obj=integration_credential,
                 obj_in={"encrypted_credentials": encrypted_credentials},
-                current_user=user,
+                auth_context=auth_context,
             )
 
         return oauth2_token_response
@@ -608,7 +611,7 @@ class OAuth2Service:
         db: AsyncSession,
         white_label: schemas.WhiteLabel,
         code: str,
-        user: schemas.User,
+        auth_context: AuthContext,
     ) -> schemas.Connection:
         """Create a new OAuth2 connection using white label credentials.
 
@@ -617,7 +620,7 @@ class OAuth2Service:
             db: Database session
             white_label: The white label configuration to use
             code: The authorization code to exchange
-            user: The user creating the connection
+            auth_context: The authentication context
 
         Returns:
         -------
@@ -644,7 +647,7 @@ class OAuth2Service:
             source=source,
             settings=settings,
             oauth2_response=oauth2_response,
-            user=user,
+            auth_context=auth_context,
         )
 
     @staticmethod
@@ -662,7 +665,7 @@ class OAuth2Service:
         source: schemas.Source,
         settings: BaseAuthSettings,
         oauth2_response: OAuth2TokenResponse,
-        user: schemas.User,
+        auth_context: AuthContext,
     ) -> schemas.Connection:
         """Create a new connection with OAuth2 credentials."""
         # Prepare credentials based on auth type
@@ -680,8 +683,10 @@ class OAuth2Service:
         async with UnitOfWork(db) as uow:
             # Create integration credential
             integration_credential_in = schemas.IntegrationCredentialCreate(
-                name=f"{source.name} - {user.email}",
-                description=f"OAuth2 credentials for {source.name} - {user.email}",
+                name=f"{source.name} - {auth_context.organization_id}",
+                description=(
+                    f"OAuth2 credentials for {source.name} - {auth_context.organization_id}"
+                ),
                 integration_short_name=source.short_name,
                 integration_type=IntegrationType.SOURCE,
                 auth_type=source.auth_type,
@@ -689,7 +694,7 @@ class OAuth2Service:
             )
 
             integration_credential = await crud.integration_credential.create(
-                uow.session, obj_in=integration_credential_in, current_user=user, uow=uow
+                uow.session, obj_in=integration_credential_in, auth_context=auth_context, uow=uow
             )
 
             await uow.session.flush()
@@ -704,7 +709,7 @@ class OAuth2Service:
             )
 
             connection = await crud.connection.create(
-                uow.session, obj_in=connection_in, current_user=user, uow=uow
+                uow.session, obj_in=connection_in, auth_context=auth_context, uow=uow
             )
 
             await uow.commit()

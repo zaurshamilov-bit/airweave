@@ -132,8 +132,8 @@ class SourceConnectionInDBBase(SourceConnectionBase):
     connection_id: Optional[UUID] = None  # ID of the underlying connection object
     collection: str
     white_label_id: Optional[UUID] = None
-    created_by_email: EmailStr
-    modified_by_email: EmailStr
+    created_by_email: Optional[EmailStr] = None
+    modified_by_email: Optional[EmailStr] = None
 
     class Config:
         """Pydantic config for SourceConnectionInDBBase."""

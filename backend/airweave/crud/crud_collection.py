@@ -116,7 +116,7 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
         if collection is None:
             return None
 
-        self._validate_if_user_has_permission(collection, auth_context)
+        await self._validate_organization_access(auth_context, collection.organization_id)
 
         # Compute and set the ephemeral status
         collection = (await self._attach_ephemeral_status(db, [collection], auth_context))[0]

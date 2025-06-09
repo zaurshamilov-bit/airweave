@@ -371,7 +371,7 @@ class EntityProcessor:
                 entity_id=parent_entity.entity_id,
                 hash=parent_entity.hash(),
             ),
-            organization_id=sync_context.sync.organization_id,
+            auth_context=sync_context.auth_context,
         )
         parent_entity.db_entity_id = new_db_entity.id
 

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave.core.exceptions import PermissionException
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models._base import Base
-from airweave.schemas import User
+from airweave.schemas.auth import AuthContext
 
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
@@ -29,14 +29,16 @@ class CRUDBaseUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         """
         self.model = model
 
-    async def get(self, db: AsyncSession, id: UUID, current_user: User) -> Optional[ModelType]:
+    async def get(
+        self, db: AsyncSession, id: UUID, auth_context: AuthContext
+    ) -> Optional[ModelType]:
         """Get user data - must be same user.
 
         Args:
         ----
             db (AsyncSession): The database session.
             id (UUID): The UUID of the object to get.
-            current_user (User): The current user.
+            auth_context (AuthContext): The authentication context.
 
         Returns:
         -------
@@ -46,7 +48,7 @@ class CRUDBaseUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         ------
             PermissionException: If user tries to access another user's data.
         """
-        if id != current_user.id:
+        if id != auth_context.user.id:
             raise PermissionException("Cannot access other user's data")
 
         result = await db.execute(select(self.model).where(self.model.id == id))
@@ -57,7 +59,7 @@ class CRUDBaseUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db: AsyncSession,
         *,
         obj_in: CreateSchemaType,
-        current_user: User,
+        auth_context: AuthContext,
         uow: Optional[UnitOfWork] = None,
     ) -> ModelType:
         """Create user data.
@@ -66,7 +68,7 @@ class CRUDBaseUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         ----
             db (AsyncSession): The database session.
             obj_in (CreateSchemaType): The object to create.
-            current_user (User): The current user.
+            auth_context (AuthContext): The authentication context.
             uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
@@ -77,7 +79,7 @@ class CRUDBaseUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             obj_in = obj_in.model_dump(exclude_unset=True)
 
         # Ensure the object belongs to the current user
-        obj_in["id"] = current_user.id
+        obj_in["id"] = auth_context.user.id
 
         db_obj = self.model(**obj_in)
         db.add(db_obj)
@@ -94,7 +96,7 @@ class CRUDBaseUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         *,
         db_obj: ModelType,
         obj_in: Union[UpdateSchemaType, dict[str, Any]],
-        current_user: User,
+        auth_context: AuthContext,
         uow: Optional[UnitOfWork] = None,
     ) -> ModelType:
         """Update user data.
@@ -104,14 +106,14 @@ class CRUDBaseUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             db (AsyncSession): The database session.
             db_obj (ModelType): The object to update.
             obj_in (Union[UpdateSchemaType, dict[str, Any]]): The new object data.
-            current_user (User): The current user.
+            auth_context (AuthContext): The authentication context.
             uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
         -------
             ModelType: The updated object.
         """
-        if db_obj.id != current_user.id:
+        if db_obj.id != auth_context.user.id:
             raise PermissionException("Cannot update other user's data")
 
         if not isinstance(obj_in, dict):

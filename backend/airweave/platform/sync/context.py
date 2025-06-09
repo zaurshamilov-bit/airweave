@@ -11,6 +11,7 @@ from airweave.platform.entities._base import BaseEntity
 from airweave.platform.sources._base import BaseSource
 from airweave.platform.sync.pubsub import SyncProgress
 from airweave.platform.sync.router import SyncDAGRouter
+from airweave.schemas.auth import AuthContext
 
 
 class SyncContext:
@@ -44,7 +45,7 @@ class SyncContext:
     collection: schemas.Collection
     source_connection: schemas.Connection
     entity_map: dict[type[BaseEntity], UUID]
-    current_user: schemas.User
+    auth_context: AuthContext
     logger: _ContextualLogger
 
     white_label: Optional[schemas.WhiteLabel] = None
@@ -63,7 +64,7 @@ class SyncContext:
         collection: schemas.Collection,
         source_connection: schemas.Connection,
         entity_map: dict[type[BaseEntity], UUID],
-        current_user: schemas.User,
+        auth_context: AuthContext,
         logger: _ContextualLogger,
         white_label: Optional[schemas.WhiteLabel] = None,
     ):
@@ -80,6 +81,6 @@ class SyncContext:
         self.collection = collection
         self.source_connection = source_connection
         self.entity_map = entity_map
-        self.current_user = current_user
+        self.auth_context = auth_context
         self.white_label = white_label
         self.logger = logger

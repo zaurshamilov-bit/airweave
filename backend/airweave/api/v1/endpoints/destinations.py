@@ -8,6 +8,7 @@ from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
 from airweave.platform.configs._base import Fields
 from airweave.platform.locator import resource_locator
+from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
@@ -15,14 +16,14 @@ router = TrailingSlashRouter()
 @router.get("/list", response_model=list[schemas.Destination])
 async def list_destinations(
     db: AsyncSession = Depends(deps.get_db),
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> list[schemas.Destination]:
     """Get all available destinations.
 
     Args:
     -----
         db: The database session
-        user: The current user
+        auth_context: The current authentication context
 
     Returns:
     --------
@@ -37,7 +38,7 @@ async def read_destination(
     *,
     db: AsyncSession = Depends(deps.get_db),
     short_name: str,
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Destination:
     """Get destination by short name.
 
@@ -45,13 +46,15 @@ async def read_destination(
     -----
         db: The database session
         short_name: The short name of the destination
-        user: The current user
+        auth_context: The current authentication context
 
     Returns:
     --------
         destination (schemas.Destination): The destination
     """
-    destination = await crud.destination.get_by_short_name(db, short_name)
+    destination = await crud.destination.get_by_short_name(
+        db, short_name, auth_context=auth_context
+    )
     if not destination:
         raise HTTPException(status_code=404, detail="Destination not found")
     if destination.auth_config_class:

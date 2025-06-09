@@ -62,7 +62,7 @@ class CRUDUser(CRUDBaseUser[User, UserCreate, UserUpdate]):
         """Get multiple objects.
 
         WARNING: This method is not secure and should not be used in production.
-        It is only used for MLOps and testing purposes.
+
 
         TODO: Implement proper security measures through admin roles.
 

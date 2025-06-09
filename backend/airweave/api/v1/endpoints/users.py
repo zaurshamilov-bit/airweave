@@ -18,6 +18,7 @@ from airweave.api.router import TrailingSlashRouter
 from airweave.core.logging import logger
 from airweave.models.organization import Organization as OrganizationModel
 from airweave.schemas import Organization, User
+from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
@@ -25,34 +26,34 @@ router = TrailingSlashRouter()
 @router.get("/", response_model=User)
 async def read_user(
     *,
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.User:
     """Get current user.
 
     Args:
     ----
-        current_user (User): The current user.
+        auth_context (AuthContext): The authentication context.
 
     Returns:
     -------
         schemas.User: The user object.
 
     """
-    return current_user
+    return auth_context.user
 
 
 @router.get("/me/organization", response_model=Organization)
 async def read_user_organization(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Organization:
     """Get the organization of the current user.
 
     Args:
     ----
         db (AsyncSession): The database session.
-        current_user (User): The current user.
+        auth_context (AuthContext): The current authentication context.
 
     Returns:
     -------
@@ -62,11 +63,13 @@ async def read_user_organization(
     ------
         HTTPException: If the organization is not found.
     """
-    if not current_user.organization_id:
+    if not auth_context.user.organization_id:
         raise HTTPException(status_code=404, detail="User has no organization associated")
 
     # Use direct query to bypass permission checks
-    stmt = select(OrganizationModel).where(OrganizationModel.id == current_user.organization_id)
+    stmt = select(OrganizationModel).where(
+        OrganizationModel.id == auth_context.user.organization_id
+    )
     result = await db.execute(stmt)
     org = result.scalar_one_or_none()
 

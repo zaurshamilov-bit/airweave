@@ -46,6 +46,9 @@ class AuthContext(BaseModel):
     def __str__(self) -> str:
         """String representation for logging."""
         if self.user:
-            return f"AuthContext(method={self.auth_method}, user={self.user.email}, org={self.organization_id})"
+            return (
+                f"AuthContext(method={self.auth_method}, "
+                f"user={self.user.email}, org={self.organization_id})"
+            )
         else:
             return f"AuthContext(method={self.auth_method}, org={self.organization_id})"

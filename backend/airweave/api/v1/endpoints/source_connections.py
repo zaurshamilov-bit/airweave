@@ -13,6 +13,7 @@ from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
 from airweave.db.session import get_db_context
+from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
@@ -24,7 +25,7 @@ async def list_source_connections(
     collection: Optional[str] = Query(None, description="Filter by collection"),
     skip: int = 0,
     limit: int = 100,
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> List[schemas.SourceConnectionListItem]:
     """List all source connections for the current user.
 
@@ -33,7 +34,7 @@ async def list_source_connections(
         collection: The collection to filter by
         skip: The number of connections to skip
         limit: The number of connections to return
-        user: The current user
+        auth_context: The current authentication context
 
     Returns:
         A list of source connection list items with essential information
@@ -42,13 +43,13 @@ async def list_source_connections(
         return await source_connection_service.get_source_connections_by_collection(
             db=db,
             collection=collection,
-            auth_context=user.auth_context,
+            auth_context=auth_context,
             skip=skip,
             limit=limit,
         )
 
     return await source_connection_service.get_all_source_connections(
-        db=db, auth_context=user.auth_context, skip=skip, limit=limit
+        db=db, auth_context=auth_context, skip=skip, limit=limit
     )
 
 
@@ -58,7 +59,7 @@ async def get_source_connection(
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID,
     show_auth_fields: bool = False,
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SourceConnection:
     """Get a specific source connection by ID.
 
@@ -66,7 +67,7 @@ async def get_source_connection(
         db: The database session
         source_connection_id: The ID of the source connection
         show_auth_fields: Whether to show the auth fields, default is False
-        user: The current user
+        auth_context: The current authentication context
 
     Returns:
         The source connection
@@ -75,7 +76,7 @@ async def get_source_connection(
         db=db,
         source_connection_id=source_connection_id,
         show_auth_fields=show_auth_fields,
-        auth_context=user.auth_context,
+        auth_context=auth_context,
     )
 
 
@@ -84,7 +85,7 @@ async def create_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_in: schemas.SourceConnectionCreate = Body(...),
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnection:
     """Create a new source connection.
@@ -99,29 +100,31 @@ async def create_source_connection(
     Args:
         db: The database session
         source_connection_in: The source connection to create
-        user: The current user
+        auth_context: The current authentication context
         background_tasks: Background tasks for async operations
 
     Returns:
         The created source connection
     """
     source_connection, sync_job = await source_connection_service.create_source_connection(
-        db=db, source_connection_in=source_connection_in, current_user=user
+        db=db, source_connection_in=source_connection_in, auth_context=auth_context
     )
 
     # If job was created and sync_immediately is True, start it in background
     if sync_job and source_connection_in.sync_immediately:
         async with get_db_context() as db:
             sync_dag = await sync_service.get_sync_dag(
-                db=db, sync_id=source_connection.sync_id, current_user=user
+                db=db, sync_id=source_connection.sync_id, auth_context=auth_context
             )
 
             # Get the sync object
-            sync = await crud.sync.get(db=db, id=source_connection.sync_id, current_user=user)
+            sync = await crud.sync.get(
+                db=db, id=source_connection.sync_id, auth_context=auth_context
+            )
             sync = schemas.Sync.model_validate(sync, from_attributes=True)
             sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
             collection = await crud.collection.get_by_readable_id(
-                db=db, readable_id=source_connection.collection, current_user=user
+                db=db, readable_id=source_connection.collection, auth_context=auth_context
             )
             collection = schemas.Collection.model_validate(collection, from_attributes=True)
 
@@ -130,7 +133,7 @@ async def create_source_connection(
                 db=db,
                 source_connection_id=source_connection.id,
                 show_auth_fields=True,  # Important: Need actual auth_fields for temporal
-                current_user=user,
+                auth_context=auth_context,
             )
 
             # Check if Temporal is enabled, otherwise fall back to background tasks
@@ -142,7 +145,7 @@ async def create_source_connection(
                     sync_dag=sync_dag,
                     collection=collection,
                     source_connection=source_connection_with_auth,
-                    user=user,
+                    auth_context=auth_context,
                 )
             else:
                 # Fall back to background tasks
@@ -153,7 +156,7 @@ async def create_source_connection(
                     sync_dag,
                     collection,
                     source_connection_with_auth,
-                    user,
+                    auth_context,
                 )
 
     return source_connection
@@ -165,7 +168,7 @@ async def update_source_connection(
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID,
     source_connection_in: schemas.SourceConnectionUpdate = Body(...),
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SourceConnection:
     """Update a source connection.
 
@@ -173,7 +176,7 @@ async def update_source_connection(
         db: The database session
         source_connection_id: The ID of the source connection to update
         source_connection_in: The updated source connection data
-        user: The current user
+        auth_context: The current authentication context
 
     Returns:
         The updated source connection
@@ -182,7 +185,7 @@ async def update_source_connection(
         db=db,
         source_connection_id=source_connection_id,
         source_connection_in=source_connection_in,
-        current_user=user,
+        auth_context=auth_context,
     )
 
 
@@ -192,7 +195,7 @@ async def delete_source_connection(
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID,
     delete_data: bool = False,
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SourceConnection:
     """Delete a source connection and all related components.
 
@@ -200,13 +203,16 @@ async def delete_source_connection(
         db: The database session
         source_connection_id: The ID of the source connection to delete
         delete_data: Whether to delete the associated data in destinations
-        user: The current user
+        auth_context: The current authentication context
 
     Returns:
         The deleted source connection
     """
     return await source_connection_service.delete_source_connection(
-        db=db, source_connection_id=source_connection_id, current_user=user, delete_data=delete_data
+        db=db,
+        source_connection_id=source_connection_id,
+        auth_context=auth_context,
+        delete_data=delete_data,
     )
 
 
@@ -216,7 +222,7 @@ async def run_source_connection(
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID,
     access_token: Optional[str] = Body(None, embed=True),
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnectionJob:
     """Trigger a sync run for a source connection.
@@ -225,7 +231,7 @@ async def run_source_connection(
         db: The database session
         source_connection_id: The ID of the source connection to run
         access_token: Optional access token to use instead of stored credentials
-        user: The current user
+        auth_context: The current authentication context
         background_tasks: Background tasks for async operations
 
     Returns:
@@ -234,24 +240,28 @@ async def run_source_connection(
     sync_job = await source_connection_service.run_source_connection(
         db=db,
         source_connection_id=source_connection_id,
-        current_user=user,
+        auth_context=auth_context,
         access_token=access_token,
     )
 
     # Start the sync job in the background
-    sync = await crud.sync.get(db=db, id=sync_job.sync_id, current_user=user, with_connections=True)
-    sync_dag = await sync_service.get_sync_dag(db=db, sync_id=sync_job.sync_id, current_user=user)
+    sync = await crud.sync.get(
+        db=db, id=sync_job.sync_id, auth_context=auth_context, with_connections=True
+    )
+    sync_dag = await sync_service.get_sync_dag(
+        db=db, sync_id=sync_job.sync_id, auth_context=auth_context
+    )
 
     # Get source connection with auth_fields for temporal processing
     source_connection_with_auth = await source_connection_service.get_source_connection(
         db=db,
         source_connection_id=source_connection_id,
         show_auth_fields=True,  # Important: Need actual auth_fields for temporal
-        current_user=user,
+        auth_context=auth_context,
     )
 
     collection = await crud.collection.get_by_readable_id(
-        db=db, readable_id=source_connection_with_auth.collection, current_user=user
+        db=db, readable_id=source_connection_with_auth.collection, auth_context=auth_context
     )
 
     sync = schemas.Sync.model_validate(sync, from_attributes=True)
@@ -267,7 +277,7 @@ async def run_source_connection(
             sync_dag=sync_dag,
             collection=collection,
             source_connection=source_connection_with_auth,
-            user=user,
+            auth_context=auth_context,
             access_token=sync_job.access_token if hasattr(sync_job, "access_token") else None,
         )
     else:
@@ -279,7 +289,7 @@ async def run_source_connection(
             sync_dag,
             collection,
             source_connection_with_auth,
-            user,
+            auth_context,
             access_token=sync_job.access_token if hasattr(sync_job, "access_token") else None,
         )
 
@@ -291,20 +301,20 @@ async def list_source_connection_jobs(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID,
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> List[schemas.SourceConnectionJob]:
     """List all sync jobs for a source connection.
 
     Args:
         db: The database session
         source_connection_id: The ID of the source connection
-        user: The current user
+        auth_context: The current authentication context
 
     Returns:
         A list of sync jobs
     """
     return await source_connection_service.get_source_connection_jobs(
-        db=db, source_connection_id=source_connection_id, current_user=user
+        db=db, source_connection_id=source_connection_id, auth_context=auth_context
     )
 
 
@@ -314,7 +324,7 @@ async def get_source_connection_job(
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID,
     job_id: UUID,
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SourceConnectionJob:
     """Get a specific sync job for a source connection.
 
@@ -322,13 +332,13 @@ async def get_source_connection_job(
         db: The database session
         source_connection_id: The ID of the source connection
         job_id: The ID of the sync job
-        user: The current user
+        auth_context: The current authentication context
 
     Returns:
         The sync job
     """
     tmp = await source_connection_service.get_source_connection_job(
-        db=db, source_connection_id=source_connection_id, job_id=job_id, current_user=user
+        db=db, source_connection_id=source_connection_id, job_id=job_id, auth_context=auth_context
     )
     return tmp
 
@@ -366,7 +376,7 @@ async def create_credentials_from_authorization_code(
     credential_description: Optional[str] = Body(None),
     client_id: Optional[str] = Body(None),
     client_secret: Optional[str] = Body(None),
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.IntegrationCredentialInDB:
     """Exchange OAuth2 code for a token and create integration credentials.
 
@@ -383,7 +393,7 @@ async def create_credentials_from_authorization_code(
         credential_description: Optional description for the credential
         client_id: Optional client ID to override the default
         client_secret: Optional client secret to override the default
-        user: The current user
+        auth_context: The current authentication context
 
     Returns:
         The created integration credential
@@ -396,5 +406,5 @@ async def create_credentials_from_authorization_code(
         credential_description=credential_description,
         client_id=client_id,
         client_secret=client_secret,
-        current_user=user,
+        auth_context=auth_context,
     )

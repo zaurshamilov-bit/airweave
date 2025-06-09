@@ -110,8 +110,8 @@ class SourceConnectionJob(BaseModel):
     source_connection_id: UUID
     id: UUID
     organization_id: UUID
-    created_by_email: EmailStr
-    modified_by_email: EmailStr
+    created_by_email: Optional[EmailStr] = None
+    modified_by_email: Optional[EmailStr] = None
     created_at: datetime
     modified_at: datetime
     status: SyncJobStatus = SyncJobStatus.PENDING

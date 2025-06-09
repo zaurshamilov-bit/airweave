@@ -10,6 +10,7 @@ from airweave.core.config import settings
 from airweave.core.logging import logger
 from airweave.platform.temporal.client import temporal_client
 from airweave.platform.temporal.workflows import RunSourceConnectionWorkflow
+from airweave.schemas.auth import AuthContext
 
 
 class TemporalService:
@@ -22,7 +23,7 @@ class TemporalService:
         sync_dag: schemas.SyncDag,
         collection: schemas.Collection,
         source_connection: schemas.SourceConnection,
-        user: schemas.User,
+        auth_context: AuthContext,
         access_token: Optional[str] = None,
     ) -> WorkflowHandle:
         """Start a source connection sync workflow.
@@ -33,7 +34,7 @@ class TemporalService:
             sync_dag: The sync DAG
             collection: The collection
             source_connection: The source connection
-            user: The current user
+            auth_context: The authentication context
             access_token: Optional access token
 
         Returns:
@@ -57,7 +58,7 @@ class TemporalService:
                 sync_dag.model_dump(mode="json"),
                 collection.model_dump(mode="json"),
                 source_connection.model_dump(mode="json"),
-                user.model_dump(mode="json"),
+                auth_context.model_dump(mode="json"),
                 access_token,
             ],
             id=workflow_id,

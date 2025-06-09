@@ -15,6 +15,13 @@ from airweave.schemas.entity import EntityCreate, EntityUpdate
 class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
     """CRUD operations for entities."""
 
+    def __init__(self):
+        """Initialize the CRUD object.
+
+        Initialize with track_user=False since Entity model doesn't have user tracking fields.
+        """
+        super().__init__(Entity, track_user=False)
+
     async def get_by_entity_and_sync_id(
         self,
         db: AsyncSession,
@@ -83,4 +90,4 @@ class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
         return result.scalar_one_or_none()
 
 
-entity = CRUDEntity(Entity)
+entity = CRUDEntity()

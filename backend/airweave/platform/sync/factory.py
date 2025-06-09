@@ -25,6 +25,7 @@ from airweave.platform.sync.orchestrator import SyncOrchestrator
 from airweave.platform.sync.pubsub import SyncProgress
 from airweave.platform.sync.router import SyncDAGRouter
 from airweave.platform.sync.worker_pool import AsyncWorkerPool
+from airweave.schemas.auth import AuthContext
 
 
 class SyncFactory:
@@ -39,7 +40,7 @@ class SyncFactory:
         dag: schemas.SyncDag,
         collection: schemas.Collection,
         source_connection: schemas.SourceConnection,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         access_token: Optional[str] = None,
         max_workers: int = 100,
     ) -> SyncOrchestrator:
@@ -55,7 +56,7 @@ class SyncFactory:
             dag: The DAG for the sync
             collection: The collection to sync to
             source_connection: The source connection
-            current_user: The current user
+            auth_context: The authentication context
             access_token: Optional token to use instead of stored credentials
             max_workers: Maximum number of concurrent workers (default: 20)
 
@@ -70,7 +71,7 @@ class SyncFactory:
             dag=dag,
             collection=collection,
             source_connection=source_connection,
-            current_user=current_user,
+            auth_context=auth_context,
             access_token=access_token,
         )
 
@@ -101,7 +102,7 @@ class SyncFactory:
         dag: schemas.SyncDag,
         collection: schemas.Collection,
         source_connection: schemas.SourceConnection,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         access_token: Optional[str] = None,
     ) -> SyncContext:
         """Create a sync context.
@@ -113,7 +114,7 @@ class SyncFactory:
             dag: The DAG for the sync
             collection: The collection to sync to
             source_connection: The source connection
-            current_user: The current user
+            auth_context: The authentication context
             access_token: Optional token to use instead of stored credentials
 
         Returns:
@@ -123,13 +124,13 @@ class SyncFactory:
         white_label = None
         if source_connection.white_label_id:
             white_label = await crud.white_label.get(
-                db, id=source_connection.white_label_id, current_user=current_user
+                db, id=source_connection.white_label_id, auth_context=auth_context
             )
 
         source = await cls._create_source_instance(
             db=db,
             sync=sync,
-            current_user=current_user,
+            auth_context=auth_context,
             white_label=white_label,
             access_token=access_token,
         )
@@ -138,7 +139,7 @@ class SyncFactory:
             db=db,
             sync=sync,
             collection=collection,
-            current_user=current_user,
+            auth_context=auth_context,
         )
         transformers = await cls._get_transformer_callables(db=db, sync=sync)
         entity_map = await cls._get_entity_definition_map(db=db)
@@ -152,8 +153,7 @@ class SyncFactory:
             dimensions={
                 "sync_id": str(sync.id),
                 "sync_job_id": str(sync_job.id),
-                "user_id": str(current_user.id),
-                # "org_id": str(sync.organization_id), TODO: add org id when we have orgs
+                "organization_id": str(auth_context.organization_id),
             },
         )
 
@@ -170,7 +170,7 @@ class SyncFactory:
             progress=progress,
             router=router,
             entity_map=entity_map,
-            current_user=current_user,
+            auth_context=auth_context,
             logger=logger,
             white_label=white_label,
         )
@@ -180,19 +180,19 @@ class SyncFactory:
         cls,
         db: AsyncSession,
         sync: schemas.Sync,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         white_label: Optional[schemas.WhiteLabel] = None,
         access_token: Optional[str] = None,
     ) -> BaseSource:
         """Create and configure the source instance based on authentication type."""
         # Retrieve source connection and model
-        source_connection = await crud.connection.get(db, sync.source_connection_id, current_user)
+        source_connection = await crud.connection.get(db, sync.source_connection_id, auth_context)
         if not source_connection:
             raise NotFoundException("Source connection not found")
 
         # Get the source_connection record to access config_fields using sync_id
         source_connection_obj = await crud.source_connection.get_by_sync_id(
-            db, sync_id=sync.id, current_user=current_user
+            db, sync_id=sync.id, auth_context=auth_context
         )
         if not source_connection_obj:
             raise NotFoundException("Source connection record not found")
@@ -214,7 +214,7 @@ class SyncFactory:
         if not source_connection.integration_credential_id:
             raise NotFoundException("Source connection has no integration credential")
 
-        credential = await cls._get_integration_credential(db, source_connection, current_user)
+        credential = await cls._get_integration_credential(db, source_connection, auth_context)
         decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
 
         # If the source model requires auth configuration, validate it
@@ -227,7 +227,7 @@ class SyncFactory:
                 oauth2_response = await oauth2_service.refresh_access_token(
                     db,
                     source_model.short_name,
-                    current_user,
+                    auth_context,
                     source_connection.id,
                     decrypted_credential,
                     white_label,
@@ -245,11 +245,11 @@ class SyncFactory:
         cls,
         db: AsyncSession,
         source_connection: schemas.Connection,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> schemas.IntegrationCredential:
         """Get integration credential."""
         credential = await crud.integration_credential.get(
-            db, source_connection.integration_credential_id, current_user
+            db, source_connection.integration_credential_id, auth_context
         )
         if not credential:
             raise NotFoundException("Source integration credential not found")
@@ -284,7 +284,7 @@ class SyncFactory:
         db: AsyncSession,
         sync: schemas.Sync,
         collection: schemas.Collection,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> list[BaseDestination]:
         """Create destination instances.
 
@@ -293,7 +293,7 @@ class SyncFactory:
             db (AsyncSession): The database session
             sync (schemas.Sync): The sync object
             collection (schemas.Collection): The collection object
-            current_user (schemas.User): The current user
+            auth_context (AuthContext): The authentication context
 
         Returns:
         --------
@@ -302,12 +302,13 @@ class SyncFactory:
         destination_connection_id = sync.destination_connection_ids[0]
 
         destination_connection = await crud.connection.get(
-            db, destination_connection_id, current_user
+            db, destination_connection_id, auth_context
         )
         if not destination_connection:
             raise NotFoundException(
                 (
-                    f"Destination connection not found for user {current_user.email}"
+                    f"Destination connection not found for organization "
+                    f"{auth_context.organization_id}"
                     f" and connection id {destination_connection_id}"
                 )
             )

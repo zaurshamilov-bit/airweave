@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airweave.crud._base import CRUDBase
+from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.models.integration_credential import IntegrationCredential
 from airweave.schemas.integration_credential import (
     IntegrationCredentialCreateEncrypted,
@@ -14,7 +14,7 @@ from airweave.schemas.integration_credential import (
 
 
 class CRUDIntegrationCredential(
-    CRUDBase[
+    CRUDBaseOrganization[
         IntegrationCredential, IntegrationCredentialCreateEncrypted, IntegrationCredentialUpdate
     ]
 ):

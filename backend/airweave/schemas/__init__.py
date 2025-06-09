@@ -48,11 +48,6 @@ from .entity_definition import (
     EntityDefinitionUpdate,
     EntityType,
 )
-from .entity_relation import (
-    EntityRelation,
-    EntityRelationCreate,
-    EntityRelationUpdate,
-)
 from .integration_credential import (
     IntegrationCredential,
     IntegrationCredentialCreate,

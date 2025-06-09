@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
-from airweave.models.user import User
+from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
@@ -18,14 +18,14 @@ router = TrailingSlashRouter()
 async def create_organization(
     organization_data: schemas.OrganizationCreateRequest,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.OrganizationWithRole:
     """Create a new organization with current user as owner.
 
     Args:
         organization_data: The organization data to create
         db: Database session
-        current_user: The current authenticated user
+        auth_context: The current authenticated user
 
     Returns:
         The created organization with user's role
@@ -44,7 +44,7 @@ async def create_organization(
     # Create the organization with the user as owner
     try:
         organization = await crud.organization.create_with_owner(
-            db=db, obj_in=organization_data, owner_user=current_user
+            db=db, obj_in=organization_data, owner_user=auth_context.user
         )
 
         return schemas.OrganizationWithRole(
@@ -65,19 +65,19 @@ async def create_organization(
 @router.get("/", response_model=List[schemas.OrganizationWithRole])
 async def list_user_organizations(
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> List[schemas.OrganizationWithRole]:
     """Get all organizations the current user belongs to.
 
     Args:
         db: Database session
-        current_user: The current authenticated user
+        auth_context: The current authenticated user
 
     Returns:
         List of organizations with user's role in each
     """
     organizations = await crud.organization.get_user_organizations_with_roles(
-        db=db, user_id=current_user.id
+        db=db, user_id=auth_context.user.id
     )
 
     return [
@@ -98,14 +98,14 @@ async def list_user_organizations(
 async def get_organization(
     organization_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.OrganizationWithRole:
     """Get a specific organization by ID.
 
     Args:
         organization_id: The ID of the organization to get
         db: Database session
-        current_user: The current authenticated user
+        auth_context: The current authenticated user
 
     Returns:
         The organization with user's role
@@ -115,7 +115,10 @@ async def get_organization(
     """
     # Validate access and get user's membership (this now has security built-in)
     user_org = await crud.organization.get_user_membership(
-        db=db, organization_id=organization_id, user_id=current_user.id, current_user=current_user
+        db=db,
+        organization_id=organization_id,
+        user_id=auth_context.user.id,
+        auth_context=auth_context,
     )
 
     if not user_org:
@@ -123,7 +126,7 @@ async def get_organization(
             status_code=404, detail="Organization not found or you don't have access to it"
         )
 
-    organization = await crud.organization.get(db=db, id=organization_id, current_user=current_user)
+    organization = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
 
@@ -143,7 +146,7 @@ async def update_organization(
     organization_id: UUID,
     organization_data: schemas.OrganizationCreateRequest,  # Reuse the same schema
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: schemas.AuthContext = Depends(deps.get_auth_context),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.OrganizationWithRole:
     """Update an organization.
 
@@ -216,7 +219,7 @@ async def update_organization(
 async def delete_organization(
     organization_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.OrganizationWithRole:
     """Delete an organization.
 
@@ -225,7 +228,7 @@ async def delete_organization(
     Args:
         organization_id: The ID of the organization to delete
         db: Database session
-        current_user: The current authenticated user
+        auth_context: The current authenticated user
 
     Returns:
         The deleted organization
@@ -236,7 +239,10 @@ async def delete_organization(
     """
     # Get user's membership (this now validates access automatically)
     user_org = await crud.organization.get_user_membership(
-        db=db, organization_id=organization_id, user_id=current_user.id, current_user=current_user
+        db=db,
+        organization_id=organization_id,
+        user_id=auth_context.user.id,
+        auth_context=auth_context,
     )
 
     if not user_org:
@@ -250,13 +256,13 @@ async def delete_organization(
         )
 
     # Get the organization
-    organization = await crud.organization.get(db=db, id=organization_id, current_user=current_user)
+    organization = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
     if not organization:
         raise HTTPException(status_code=404, detail="Organization not found")
 
     # Check if this is the user's only organization
     user_orgs = await crud.organization.get_user_organizations_with_roles(
-        db=db, user_id=current_user.id
+        db=db, user_id=auth_context.user.id
     )
 
     if len(user_orgs) <= 1:
@@ -283,7 +289,7 @@ async def delete_organization(
 async def leave_organization(
     organization_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> dict:
     """Leave an organization.
 
@@ -292,7 +298,7 @@ async def leave_organization(
     Args:
         organization_id: The ID of the organization to leave
         db: Database session
-        current_user: The current authenticated user
+        auth_context: The current authenticated user
 
     Returns:
         Success message
@@ -302,7 +308,10 @@ async def leave_organization(
     """
     # Get user's membership (this validates access automatically)
     user_org = await crud.organization.get_user_membership(
-        db=db, organization_id=organization_id, user_id=current_user.id, current_user=current_user
+        db=db,
+        organization_id=organization_id,
+        user_id=auth_context.user.id,
+        auth_context=auth_context,
     )
 
     if not user_org:
@@ -310,7 +319,7 @@ async def leave_organization(
 
     # Check if this is the user's only organization
     user_orgs = await crud.organization.get_user_organizations_with_roles(
-        db=db, user_id=current_user.id
+        db=db, user_id=auth_context.user.id
     )
 
     if len(user_orgs) <= 1:
@@ -325,8 +334,8 @@ async def leave_organization(
         other_owners = await crud.organization.get_organization_owners(
             db=db,
             organization_id=organization_id,
-            current_user=current_user,
-            exclude_user_id=current_user.id,
+            auth_context=auth_context,
+            exclude_user_id=auth_context.user.id,
         )
 
         if not other_owners:
@@ -338,7 +347,10 @@ async def leave_organization(
 
     # Remove the user from the organization (this validates permissions automatically)
     success = await crud.organization.remove_member(
-        db=db, organization_id=organization_id, user_id=current_user.id, current_user=current_user
+        db=db,
+        organization_id=organization_id,
+        user_id=auth_context.user.id,
+        auth_context=auth_context,
     )
 
     if not success:

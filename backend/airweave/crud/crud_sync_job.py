@@ -6,21 +6,22 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airweave.crud._base import CRUDBase
+from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.models.sync import Sync
 from airweave.models.sync_job import SyncJob
+from airweave.schemas.auth import AuthContext
 from airweave.schemas.sync_job import SyncJobCreate, SyncJobUpdate
 
 
-class CRUDSyncJob(CRUDBase[SyncJob, SyncJobCreate, SyncJobUpdate]):
+class CRUDSyncJob(CRUDBaseOrganization[SyncJob, SyncJobCreate, SyncJobUpdate]):
     """CRUD operations for sync jobs."""
 
-    async def get(self, db: AsyncSession, id: UUID, current_user=None) -> SyncJob | None:
+    async def get(self, db: AsyncSession, id: UUID, auth_context: AuthContext) -> SyncJob | None:
         """Get a sync job by ID."""
         stmt = (
             select(SyncJob, Sync.name.label("sync_name"))
             .join(Sync, SyncJob.sync_id == Sync.id)
-            .where(SyncJob.id == id)
+            .where(SyncJob.id == id, SyncJob.organization_id == auth_context.organization_id)
         )
         result = await db.execute(stmt)
         row = result.first()
@@ -55,7 +56,6 @@ class CRUDSyncJob(CRUDBase[SyncJob, SyncJobCreate, SyncJobUpdate]):
         db: AsyncSession,
         skip: int = 0,
         limit: int = 100,
-        current_user=None,
         status: Optional[list[str]] = None,
     ) -> list[SyncJob]:
         """Get all sync jobs across all syncs, optionally filtered by status."""

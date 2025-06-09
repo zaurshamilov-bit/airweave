@@ -12,6 +12,7 @@ from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import logger
 from airweave.db.session import get_db
+from airweave.schemas.auth import AuthContext
 
 
 async def _authenticate_system_user(db: AsyncSession) -> Tuple[Optional[schemas.User], str, dict]:
@@ -106,7 +107,7 @@ async def get_auth_context(
     x_api_key: Optional[str] = Header(None),
     x_organization_id: Optional[str] = Header(None, alias="X-Organization-ID"),
     auth0_user: Optional[Auth0User] = Depends(auth0.get_user),
-) -> schemas.AuthContext:
+) -> AuthContext:
     """Retrieve authentication context for the request.
 
     Creates a unified AuthContext that works for both Auth0 users and API key authentication.
@@ -121,7 +122,7 @@ async def get_auth_context(
 
     Returns:
     -------
-        schemas.AuthContext: Unified authentication context.
+        AuthContext: Unified authentication context.
 
     Raises:
     ------
@@ -150,7 +151,7 @@ async def get_auth_context(
     # Validate organization access
     await _validate_organization_access(db, organization_id, user_context, auth_method, x_api_key)
 
-    return schemas.AuthContext(
+    return AuthContext(
         organization_id=organization_id,
         user=user_context,
         auth_method=auth_method,

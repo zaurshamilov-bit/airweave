@@ -69,10 +69,10 @@ def creds() -> Dict[str, Optional[str]]:
     }
 
 
-@pytest.mark.parametrize("service_name", ["stripe"])  # Add more: "dropbox", "asana", "google_drive", "github", "postgresql", etc.
-def test_sources(
-    e2e_environment, e2e_api_url: str, creds: Dict[str, str], service_name: str
-):
+@pytest.mark.parametrize(
+    "service_name", ["stripe"]
+)  # Add more: "dropbox", "asana", "google_drive", "github", "postgresql", etc.
+def test_sources(e2e_environment, e2e_api_url: str, creds: Dict[str, str], service_name: str):
     """Test end-to-end sync for any source using the new public API.
 
     This test is source-agnostic - it works with any source as long as the
@@ -87,15 +87,19 @@ def test_sources(
     # Get credentials for this source
     credential_json = creds.get(service_name)
     if not credential_json or credential_json == "None":
-        pytest.skip(f"No credentials available for {service_name}. Please set {service_name.upper()}_CREDS environment variable.")
+        pytest.skip(
+            f"No credentials available for {service_name}. Please set {service_name.upper()}_CREDS environment variable."
+        )
 
     print(f"\n🔄 Testing {service_name} sync via new public API")
-    print(f"  Credential JSON: {credential_json[:100]}..." if len(credential_json) > 100 else f"  Credential JSON: {credential_json}")
+    print(
+        f"  Credential JSON: {credential_json[:100]}..."
+        if len(credential_json) > 100
+        else f"  Credential JSON: {credential_json}"
+    )
 
     # 1. Create integration credential directly in database
-    credential_id = asyncio.run(
-        create_integration_credential(service_name, credential_json)
-    )
+    credential_id = asyncio.run(create_integration_credential(service_name, credential_json))
     print(f"✓ Created integration credential: {credential_id}")
 
     # Debug: Ensure credential_id is not None
@@ -112,10 +116,7 @@ def test_sources(
         # Collection will be auto-created
     }
 
-    response = requests.post(
-        f"{e2e_api_url}/source-connections/",
-        json=source_conn_data
-    )
+    response = requests.post(f"{e2e_api_url}/source-connections/", json=source_conn_data)
 
     if response.status_code != 200:
         # Parse credentials to show what fields were provided (without sensitive values)
@@ -153,9 +154,7 @@ def test_sources(
 
     # 4. Wait for sync completion
     print(f"\n⏳ Waiting for sync to complete...")
-    job_status = wait_for_sync_completion(
-        e2e_api_url, source_conn_id, job_id, timeout=300
-    )
+    job_status = wait_for_sync_completion(e2e_api_url, source_conn_id, job_id, timeout=300)
 
     # 5. Verify sync completed successfully
     assert job_status["status"].upper() == "COMPLETED", (
@@ -172,9 +171,7 @@ def test_sources(
     cleanup_source_connection(e2e_api_url, source_conn_id, collection_id)
 
 
-async def create_integration_credential(
-    service_name: str, credential_json: str
-) -> uuid.UUID:
+async def create_integration_credential(service_name: str, credential_json: str) -> uuid.UUID:
     """Create integration credential directly in database.
 
     This is necessary because we have raw credentials that need to be
@@ -204,9 +201,7 @@ async def create_integration_credential(
         isolation_level="READ COMMITTED",
     )
 
-    AsyncSessionLocal = async_sessionmaker(
-        autocommit=False, autoflush=False, bind=async_engine
-    )
+    AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=async_engine)
 
     async with AsyncSessionLocal() as db:
         try:
@@ -255,7 +250,7 @@ async def create_integration_credential(
                 )
 
                 credential = await crud.integration_credential.create(
-                    uow.session, obj_in=credential_in, current_user=user, uow=uow
+                    uow.session, obj_in=credential_in, auth_context=auth_context, uow=uow
                 )
 
                 await uow.session.flush()
@@ -278,11 +273,7 @@ async def create_integration_credential(
 
 
 def wait_for_sync_completion(
-    api_url: str,
-    source_conn_id: str,
-    job_id: str,
-    timeout: int = 300,
-    poll_interval: int = 5
+    api_url: str, source_conn_id: str, job_id: str, timeout: int = 300, poll_interval: int = 5
 ) -> Dict[str, Any]:
     """Wait for a sync job to complete and return final status.
 
@@ -302,9 +293,7 @@ def wait_for_sync_completion(
     elapsed = 0
 
     while elapsed < timeout:
-        response = requests.get(
-            f"{api_url}/source-connections/{source_conn_id}/jobs/{job_id}"
-        )
+        response = requests.get(f"{api_url}/source-connections/{source_conn_id}/jobs/{job_id}")
         assert response.status_code == 200, f"Failed to get job status: {response.text}"
 
         job_status = response.json()
@@ -325,9 +314,7 @@ def wait_for_sync_completion(
     raise AssertionError(f"Sync job timed out after {timeout} seconds")
 
 
-def cleanup_source_connection(
-    api_url: str, source_conn_id: str, collection_id: str
-) -> None:
+def cleanup_source_connection(api_url: str, source_conn_id: str, collection_id: str) -> None:
     """Clean up test resources.
 
     Args:
@@ -338,18 +325,14 @@ def cleanup_source_connection(
     print("\n🧹 Cleaning up test resources...")
 
     # Delete source connection (will cascade delete sync, etc.)
-    response = requests.delete(
-        f"{api_url}/source-connections/{source_conn_id}?delete_data=true"
-    )
+    response = requests.delete(f"{api_url}/source-connections/{source_conn_id}?delete_data=true")
     if response.status_code == 200:
         print(f"✓ Deleted source connection: {source_conn_id}")
     else:
         print(f"⚠️  Failed to delete source connection: {response.status_code}")
 
     # Delete collection
-    response = requests.delete(
-        f"{api_url}/collections/{collection_id}?delete_data=true"
-    )
+    response = requests.delete(f"{api_url}/collections/{collection_id}?delete_data=true")
     if response.status_code == 200:
         print(f"✓ Deleted collection: {collection_id}")
     else:

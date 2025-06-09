@@ -19,10 +19,6 @@ from airweave.schemas import APIKeyCreate, APIKeyUpdate, AuthContext
 class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
     """CRUD operations for the APIKey model."""
 
-    def __init__(self):
-        """Initialize APIKey CRUD with user tracking enabled."""
-        super().__init__(APIKey, track_user=True)
-
     async def create(
         self,
         db: AsyncSession,
@@ -142,4 +138,4 @@ class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
         raise NotFoundException("API key not found")
 
 
-api_key = CRUDAPIKey()
+api_key = CRUDAPIKey(APIKey)

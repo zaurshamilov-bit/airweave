@@ -44,7 +44,7 @@ class Organization(Base):  # organization.py
 ```python
 # Every endpoint uses this pattern:
 async def endpoint(
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
     db: AsyncSession = Depends(deps.get_db)
 ):
     # Auto-scoped by current_user.organization_id
@@ -146,7 +146,7 @@ Based on the actual model inheritance patterns in the codebase:
 - **Pattern**: User-specific data, checks on user identity
 - **Example**: User profile, preferences, user-organization relationships
 
-**2. CRUDOrganization**: Organization-scoped resources (unified pattern)
+**2. CRUDBaseOrganization**: Organization-scoped resources (unified pattern)
 - **Models**: All OrganizationBase models (Collection, SourceConnection, Entity, APIKey, etc.)
 - **Configuration Flags**:
   - `track_user: bool` - Whether model has UserMixin (created_by_email, modified_by_email)
@@ -176,7 +176,7 @@ ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
-class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     """Unified CRUD for all organization-scoped resources."""
 
     def __init__(self, model: Type[ModelType], track_user: bool = True):
@@ -358,36 +358,36 @@ class CRUDPublic(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 **Step 1: Update Existing Classes with Unified Pattern**
 ```python
 # Resources with user tracking
-class CRUDCollection(CRUDOrganization[Collection, CollectionCreate, CollectionUpdate]):
+class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, CollectionUpdate]):
     def __init__(self):
         super().__init__(Collection, track_user=True)
 
-class CRUDSourceConnection(CRUDOrganization[SourceConnection, SourceConnectionCreate, SourceConnectionUpdate]):
+class CRUDSourceConnection(CRUDBaseOrganization[SourceConnection, SourceConnectionCreate, SourceConnectionUpdate]):
     def __init__(self):
         super().__init__(SourceConnection, track_user=True)
 
-class CRUDWhiteLabel(CRUDOrganization[WhiteLabel, WhiteLabelCreate, WhiteLabelUpdate]):
+class CRUDWhiteLabel(CRUDBaseOrganization[WhiteLabel, WhiteLabelCreate, WhiteLabelUpdate]):
     def __init__(self):
         super().__init__(WhiteLabel, track_user=True)
 
-class CRUDAPIKey(CRUDOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
+class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
     def __init__(self):
         super().__init__(APIKey, track_user=True)
 
-class CRUDIntegrationCredential(CRUDOrganization[IntegrationCredential, IntegrationCredentialCreate, IntegrationCredentialUpdate]):
+class CRUDIntegrationCredential(CRUDBaseOrganization[IntegrationCredential, IntegrationCredentialCreate, IntegrationCredentialUpdate]):
     def __init__(self):
         super().__init__(IntegrationCredential, track_user=True)
 
 # Resources without user tracking
-class CRUDEntity(CRUDOrganization[Entity, EntityCreate, EntityUpdate]):
+class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
     def __init__(self):
         super().__init__(Entity, track_user=False)
 
-class CRUDSync(CRUDOrganization[Sync, SyncCreate, SyncUpdate]):
+class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
     def __init__(self):
         super().__init__(Sync, track_user=False)
 
-class CRUDSyncJob(CRUDOrganization[SyncJob, SyncJobCreate, SyncJobUpdate]):
+class CRUDSyncJob(CRUDBaseOrganization[SyncJob, SyncJobCreate, SyncJobUpdate]):
     def __init__(self):
         super().__init__(SyncJob, track_user=False)
 
@@ -402,7 +402,7 @@ class CRUDSource(CRUDPublic[Source, SourceCreate, SourceUpdate]):
 # All organization-scoped resources use the same pattern
 @router.get("/collections/", response_model=List[schemas.Collection])
 async def list_collections(
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
     db: AsyncSession = Depends(deps.get_db),
 ):
     """List all collections in current organization."""
@@ -410,7 +410,7 @@ async def list_collections(
 
 @router.get("/entities/", response_model=List[schemas.Entity])
 async def list_entities(
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
     db: AsyncSession = Depends(deps.get_db),
 ):
     """List all entities in current organization."""
@@ -418,7 +418,7 @@ async def list_entities(
 
 @router.get("/api-keys/", response_model=List[schemas.APIKey])
 async def list_api_keys(
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
     db: AsyncSession = Depends(deps.get_db),
 ):
     """List all API keys in current organization."""
@@ -431,7 +431,7 @@ async def list_api_keys(
 - User (self-management only)
 - Future: UserPreferences
 
-**CRUDOrganization** (unified with track_user flag):
+**CRUDBaseOrganization** (unified with track_user flag):
 - **With user tracking** (`track_user=True`): Collection, SourceConnection, WhiteLabel, APIKey, IntegrationCredential
 - **Without user tracking** (`track_user=False`): Entity, Sync, SyncJob, DAG, Connection
 
@@ -522,15 +522,15 @@ async def get_user(
 
 | CRUD Class | Model Mixins | AuthContext Needs | Behavior |
 |------------|--------------|-------------------|----------|
-| `CRUDOrganization(track_user=True)` | OrganizationBase + UserMixin | `organization_id` + `tracking_email` | Org scoping + user tracking |
-| `CRUDOrganization(track_user=False)` | OrganizationBase only | `organization_id` only | Org scoping only |
+| `CRUDBaseOrganization(track_user=True)` | OrganizationBase + UserMixin | `organization_id` + `tracking_email` | Org scoping + user tracking |
+| `CRUDBaseOrganization(track_user=False)` | OrganizationBase only | `organization_id` only | Org scoping only |
 | `CRUDUser` | Base + UserMixin | `user` required | User-level access |
 | `CRUDPublic` | Base only | None (open access) | System-wide resources |
 
 **Updated CRUD Organization**:
 ```python
 # backend/airweave/crud/_base_organization.py
-class CRUDOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
+class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
     def __init__(self, model: Type[ModelType], track_user: bool = True):
         self.model = model
@@ -638,7 +638,7 @@ async def create_collection(
 
 ### Implementation Strategy
 1. Make `UserMixin` fields nullable
-2. Update `CRUDOrganization` to accept `AuthContext`
+2. Update `CRUDBaseOrganization` to accept `AuthContext`
 3. Gradually migrate endpoints from `get_user` to `get_auth_context`
 4. Remove user-level ownership permission checks
 5. Keep backward compatibility during transition

@@ -122,13 +122,12 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
         ]
 
     async def _validate_admin_access(
-        self, db: AsyncSession, current_user: User, organization_id: UUID
+        self, auth_context: AuthContext, organization_id: UUID
     ) -> UserOrganization:
         """Validate user has admin/owner access to organization.
 
         Args:
-            db: Database session
-            current_user: Current authenticated user
+            auth_context: The authentication context
             organization_id: Organization ID to validate admin access to
 
         Returns:
@@ -139,7 +138,7 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
         """
         from fastapi import HTTPException
 
-        user_org = await self._validate_organization_access(db, current_user, organization_id)
+        user_org = await self._validate_organization_access(auth_context, organization_id)
 
         if user_org.role not in ["owner", "admin"]:
             raise HTTPException(
@@ -176,7 +175,7 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
         self,
         db: AsyncSession,
         organization_id: UUID,
-        current_user: User,
+        auth_context: AuthContext,
         exclude_user_id: Optional[UUID] = None,
     ) -> List[UserOrganization]:
         """Get all owners of an organization with access validation.
@@ -184,14 +183,14 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
         Args:
             db: Database session
             organization_id: The organization's ID
-            current_user: Current authenticated user
+            auth_context: The auth context
             exclude_user_id: Optional user ID to exclude from results
 
         Returns:
             List of UserOrganization records with owner role
         """
         # Validate current user has access to this organization
-        await self._validate_organization_access(db, current_user, organization_id)
+        await self._validate_organization_access(auth_context, organization_id)
 
         stmt = select(UserOrganization).where(
             UserOrganization.organization_id == organization_id, UserOrganization.role == "owner"
@@ -204,20 +203,20 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
         return list(result.scalars().all())
 
     async def get_organization_members(
-        self, db: AsyncSession, organization_id: UUID, current_user: User
+        self, db: AsyncSession, organization_id: UUID, auth_context: AuthContext
     ) -> List[UserOrganization]:
         """Get all members of an organization with access validation.
 
         Args:
             db: Database session
             organization_id: The organization's ID
-            current_user: Current authenticated user
+            auth_context: The auth context
 
         Returns:
             List of UserOrganization records for the organization
         """
         # Validate current user has access to this organization
-        await self._validate_organization_access(db, current_user, organization_id)
+        await self._validate_organization_access(auth_context, organization_id)
 
         stmt = (
             select(UserOrganization)
@@ -249,8 +248,7 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
 
         # If user is trying to remove themselves, we allow it with different validation
         if user_id == current_user.id:
-            # Validate current user has access to this organization
-            user_org = await self._validate_organization_access(db, current_user, organization_id)
+            user_org = await self.get_user_membership(db, organization_id, user_id, current_user)
 
             # If they're an owner, check if there are other owners
             if user_org.role == "owner":
@@ -282,7 +280,7 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
         organization_id: UUID,
         user_id: UUID,
         role: str,
-        current_user: User,
+        auth_context: AuthContext,
         is_primary: bool = False,
     ) -> UserOrganization:
         """Add a user to an organization with proper permission checks.
@@ -292,7 +290,7 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
             organization_id: The organization's ID
             user_id: The user's ID to add
             role: The user's role in the organization
-            current_user: Current authenticated user
+            auth_context: Current authenticated user
             is_primary: Whether this is the user's primary organization
 
         Returns:
@@ -302,7 +300,7 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
             HTTPException: If current user doesn't have permission
         """
         # Validate current user has admin access
-        await self._validate_admin_access(db, current_user, organization_id)
+        await self._validate_admin_access(auth_context, organization_id)
 
         user_org = UserOrganization(
             user_id=user_id, organization_id=organization_id, role=role, is_primary=is_primary
@@ -320,7 +318,7 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
         organization_id: UUID,
         user_id: UUID,
         new_role: str,
-        current_user: User,
+        auth_context: AuthContext,
     ) -> Optional[UserOrganization]:
         """Update a user's role in an organization with proper permission checks.
 
@@ -329,7 +327,7 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
             organization_id: The organization's ID
             user_id: The user's ID whose role to update
             new_role: The new role for the user
-            current_user: Current authenticated user
+            auth_context: Current authenticated user
 
         Returns:
             The updated UserOrganization record if found, None otherwise
@@ -338,9 +336,9 @@ class CRUDOrganization(CRUDBaseOrganization[Organization, OrganizationCreate, Or
             HTTPException: If current user doesn't have permission
         """
         # Validate current user has admin access
-        await self._validate_admin_access(db, current_user, organization_id)
+        await self._validate_admin_access(auth_context, organization_id)
 
-        user_org = await self.get_user_membership(db, organization_id, user_id, current_user)
+        user_org = await self.get_user_membership(db, organization_id, user_id, auth_context)
 
         if user_org:
             user_org.role = new_role

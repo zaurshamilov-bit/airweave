@@ -13,7 +13,7 @@ async def run_sync_activity(
     sync_dag_dict: Dict[str, Any],
     collection_dict: Dict[str, Any],
     source_connection_dict: Dict[str, Any],
-    user_dict: Dict[str, Any],
+    auth_context_dict: Dict[str, Any],
     access_token: Optional[str] = None,
 ) -> None:
     """Activity to run a sync job.
@@ -26,7 +26,7 @@ async def run_sync_activity(
         sync_dag_dict: The sync DAG as dict
         collection_dict: The collection as dict
         source_connection_dict: The source connection as dict
-        user_dict: The current user as dict
+        auth_context_dict: The authentication context as dict
         access_token: Optional access token
     """
     # Import here to avoid Temporal sandboxing issues
@@ -39,7 +39,7 @@ async def run_sync_activity(
     sync_dag = schemas.SyncDag(**sync_dag_dict)
     collection = schemas.Collection(**collection_dict)
     source_connection = schemas.SourceConnection(**source_connection_dict)
-    user = schemas.User(**user_dict)
+    auth_context = schemas.AuthContext(**auth_context_dict)
 
     activity.logger.info(f"Starting sync activity for job {sync_job.id}")
 
@@ -50,7 +50,7 @@ async def run_sync_activity(
             dag=sync_dag,
             collection=collection,
             source_connection=source_connection,
-            current_user=user,
+            auth_context=auth_context,
             access_token=access_token,
         )
         activity.logger.info(f"Completed sync activity for job {sync_job.id}")
