@@ -376,6 +376,13 @@ class StorageClient:
         Returns:
             Configured storage backend
         """
+        # Check if we should skip Azure and use local storage directly
+        if os.getenv("SKIP_AZURE_STORAGE", "false").lower() == "true":
+            logger.info("SKIP_AZURE_STORAGE is set, using local disk storage")
+            local_path = Path("./local_storage")
+            self._ensure_default_containers(local_path)
+            return LocalStorageBackend(local_path)
+
         # Try Azure connection first
         try:
             credential = DefaultAzureCredential()
