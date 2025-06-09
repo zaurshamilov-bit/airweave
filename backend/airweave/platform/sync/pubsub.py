@@ -90,10 +90,16 @@ class SyncPubSub:
             else:
                 socket_keepalive_options = {}
 
+        # Build Redis URL with authentication
+        if settings.REDIS_PASSWORD:
+            redis_url = f"redis://:{settings.REDIS_PASSWORD}@{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
+        else:
+            redis_url = f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
+
         # Create a new Redis client directly for pubsub to avoid connection pool issues
         # This is a workaround for async pubsub issues in Docker environments
         pubsub_redis = await redis.from_url(
-            f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}",
+            redis_url,
             decode_responses=True,
             socket_keepalive=True,
             socket_connect_timeout=5,

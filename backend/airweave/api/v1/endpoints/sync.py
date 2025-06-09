@@ -1,6 +1,7 @@
 """API endpoints for managing syncs."""
 
 import asyncio
+import json
 from typing import AsyncGenerator, List, Optional, Union
 from uuid import UUID
 
@@ -278,7 +279,7 @@ async def subscribe_sync_job(
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
             # Send initial connection event
-            yield f"data: {{'type': 'connected', 'job_id': '{job_id}'}}\n\n"
+            yield f"data: {json.dumps({'type': 'connected', 'job_id': str(job_id)})}\n\n"
 
             # Send heartbeat every 30 seconds to keep connection alive
             last_heartbeat = asyncio.get_event_loop().time()
@@ -302,7 +303,7 @@ async def subscribe_sync_job(
             logger.info(f"SSE connection cancelled for job {job_id}, connection: {connection_id}")
         except Exception as e:
             logger.error(f"SSE error for job {job_id}: {str(e)}")
-            yield f"data: {{'type': 'error', 'message': '{str(e)}'}}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
         finally:
             # Clean up when SSE connection closes
             try:
