@@ -63,8 +63,9 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - TEXT2VEC_INFERENCE_URL=http://text2vec-transformers:8080
-      # These ensure services run properly inside containers
-      - LOCAL_DEVELOPMENT=false
+      # Environment configuration (can be overridden in .env)
+      - ENVIRONMENT=${ENVIRONMENT:-local}
+      - LOCAL_DEVELOPMENT=${LOCAL_DEVELOPMENT:-true}
       # Temporal configuration
       - TEMPORAL_HOST=temporal
       - TEMPORAL_PORT=7233
@@ -79,9 +80,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
-      interval: 5s
-      timeout: 10s
-      retries: 3
+      interval: 10s
+      timeout: 30s
+      retries: 10
+      start_period: 60s
     restart: on-failure
 
   frontend:
@@ -187,8 +189,9 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - TEXT2VEC_INFERENCE_URL=http://text2vec-transformers:8080
-      # These ensure services run properly inside containers
-      - LOCAL_DEVELOPMENT=false
+      # Environment configuration (can be overridden in .env)
+      - ENVIRONMENT=${ENVIRONMENT:-local}
+      - LOCAL_DEVELOPMENT=${LOCAL_DEVELOPMENT:-true}
       # Temporal configuration
       - TEMPORAL_HOST=temporal
       - TEMPORAL_PORT=7233
