@@ -26,8 +26,6 @@ async def get_sync_dag(
 ):
     """Get the DAG definition for a sync."""
     dag = await sync_dag.get_by_sync_id(db, sync_id=sync_id, auth_context=auth_context)
-    if not dag:
-        raise HTTPException(status_code=404, detail="DAG not found")
     return dag
 
 
@@ -178,8 +176,6 @@ async def update_sync_dag(
 ):
     """Update a DAG definition for a sync."""
     db_dag = await sync_dag.get_by_sync_id(db, sync_id=sync_id, auth_context=auth_context)
-    if not db_dag:
-        raise HTTPException(status_code=404, detail="DAG not found")
 
     return await sync_dag.update_with_nodes_and_edges(
         db, db_obj=db_dag, obj_in=dag, auth_context=auth_context

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airweave.core.exceptions import PermissionException
+from airweave.core.exceptions import NotFoundException, PermissionException
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models._base import Base
 from airweave.models.user import User
@@ -50,7 +50,10 @@ class CRUDBaseUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             raise PermissionException("Cannot access other user's data")
 
         result = await db.execute(select(self.model).where(self.model.id == id))
-        return result.unique().scalar_one_or_none()
+        db_obj = result.unique().scalar_one_or_none()
+        if not db_obj:
+            raise NotFoundException(f"{self.model.__name__} not found")
+        return db_obj
 
     async def create(
         self,
@@ -124,4 +127,23 @@ class CRUDBaseUser(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             await db.commit()
             await db.refresh(db_obj)
 
+        return db_obj
+
+    async def remove(self, db: AsyncSession, id: UUID, current_user: User) -> ModelType:
+        """Remove user data.
+
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            id (UUID): The UUID of the object to remove.
+            current_user (User): The current user.
+        """
+        if id != current_user.id:
+            raise PermissionException("Cannot remove other user's data")
+
+        result = await db.execute(select(self.model).where(self.model.id == id))
+        db_obj = result.unique().scalar_one_or_none()
+        if not db_obj:
+            raise NotFoundException(f"{self.model.__name__} not found")
+        await db.delete(db_obj)
         return db_obj

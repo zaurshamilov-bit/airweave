@@ -41,8 +41,6 @@ async def read_source(
     """
     try:
         source = await crud.source.get_by_short_name(db, short_name)
-        if not source:
-            raise HTTPException(status_code=404, detail=f"Source not found: {short_name}")
 
         # Validate auth_config_class
         if not source.auth_config_class:

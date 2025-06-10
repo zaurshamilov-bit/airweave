@@ -1,6 +1,6 @@
 """The API module that contains the endpoints for destinations."""
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
@@ -55,8 +55,6 @@ async def read_destination(
     destination = await crud.destination.get_by_short_name(
         db, short_name, auth_context=auth_context
     )
-    if not destination:
-        raise HTTPException(status_code=404, detail="Destination not found")
     if destination.auth_config_class:
         auth_config_class = resource_locator.get_auth_config(destination.auth_config_class)
         fields = Fields.from_config_class(auth_config_class)

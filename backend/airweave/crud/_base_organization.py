@@ -50,14 +50,19 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
             Optional[ModelType]: The object with the given ID.
         """
         # Validate auth context has org access
-        await self._validate_organization_access(auth_context, auth_context.organization_id)
 
         query = select(self.model).where(
             self.model.id == id, self.model.organization_id == auth_context.organization_id
         )
 
         result = await db.execute(query)
-        return result.unique().scalar_one_or_none()
+        db_obj = result.unique().scalar_one_or_none()
+        if db_obj is None:
+            raise NotFoundException(f"{self.model.__name__} not found")
+
+        await self._validate_organization_access(auth_context, db_obj.organization_id)
+
+        return db_obj
 
     async def get_multi(
         self,
@@ -81,7 +86,6 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
             list[ModelType]: A list of objects.
         """
         # Validate auth context has org access
-        await self._validate_organization_access(auth_context, auth_context.organization_id)
 
         query = (
             select(self.model)
@@ -91,7 +95,12 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
         )
 
         result = await db.execute(query)
-        return list(result.unique().scalars().all())
+        db_objs = result.unique().scalars().all()
+
+        for db_obj in db_objs:
+            await self._validate_organization_access(auth_context, db_obj.organization_id)
+
+        return db_objs
 
     async def create(
         self,
@@ -211,9 +220,6 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
         """
         effective_org_id = organization_id or auth_context.organization_id
 
-        # Validate auth context has org access
-        await self._validate_organization_access(auth_context, effective_org_id)
-
         query = select(self.model).where(
             self.model.id == id, self.model.organization_id == effective_org_id
         )
@@ -222,6 +228,9 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
 
         if db_obj is None:
             raise NotFoundException(f"{self.model.__name__} not found")
+
+        # Validate auth context has org access
+        await self._validate_organization_access(auth_context, db_obj.organization_id)
 
         await db.delete(db_obj)
 

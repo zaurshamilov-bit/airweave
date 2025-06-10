@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, List
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import UUID, Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.models._base import Base
@@ -26,3 +26,11 @@ class User(Base):
     user_organizations: Mapped[List["UserOrganization"]] = relationship(
         "UserOrganization", back_populates="user", cascade="all, delete-orphan", lazy="noload"
     )
+
+    @property
+    def primary_organization_id(self) -> UUID | None:
+        """Get the primary organization ID from the relationship."""
+        for user_org in self.user_organizations:
+            if user_org.is_primary:
+                return user_org.organization_id
+        return None

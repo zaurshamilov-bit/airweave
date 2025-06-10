@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from .organization import Organization
+from airweave.schemas.organization import Organization
 
 
 class UserOrganizationBase(BaseModel):
@@ -14,6 +14,8 @@ class UserOrganizationBase(BaseModel):
     role: str = "member"  # owner, admin, member
     is_primary: bool = False
     auth0_org_id: Optional[str] = None
+    user_id: UUID
+    organization_id: UUID
 
     class Config:
         """Pydantic config for UserOrganizationBase."""
@@ -24,7 +26,6 @@ class UserOrganizationBase(BaseModel):
 class UserOrganization(UserOrganizationBase):
     """Schema for UserOrganization relationship with full organization details."""
 
-    organization_id: UUID
     organization: Organization
 
     class Config:
@@ -62,6 +63,7 @@ class UserInDBBase(UserBase):
     """Base schema for User stored in DB."""
 
     id: UUID
+    primary_organization_id: Optional[UUID] = None
     user_organizations: list[UserOrganization] = Field(default_factory=list)
 
     @field_validator("user_organizations", mode="before")
@@ -77,12 +79,6 @@ class UserInDBBase(UserBase):
             if org.is_primary:
                 return org
         return None
-
-    @property
-    def primary_organization_id(self) -> Optional[UUID]:
-        """Get the primary organization ID for this user for backward compatibility."""
-        primary_org = self.primary_organization
-        return primary_org.organization.id if primary_org else None
 
     @property
     def organization_roles(self) -> dict[UUID, str]:

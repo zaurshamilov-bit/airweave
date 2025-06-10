@@ -34,7 +34,41 @@ interface OrganizationState {
   createOrganization: (orgData: CreateOrganizationRequest) => Promise<Organization>;
   fetchUserOrganizations: () => Promise<void>;
   switchOrganization: (orgId: string) => void;
+  setPrimaryOrganization: (orgId: string) => Promise<boolean>;
+  initializeOrganizations: () => Promise<void>;
 }
+
+// Helper function to select the best organization
+const selectBestOrganization = (
+  organizations: Organization[],
+  currentOrgId?: string | null
+): Organization | null => {
+  if (organizations.length === 0) return null;
+
+  // Priority:
+  // 1. Current organization (if it still exists and is valid)
+  // 2. Primary organization
+  // 3. First organization
+
+  // Check if current org is still valid
+  if (currentOrgId) {
+    const currentOrg = organizations.find(org => org.id === currentOrgId);
+    if (currentOrg) {
+      return currentOrg;
+    }
+  }
+
+  // Find primary organization
+  const primaryOrg = organizations.find(org => org.is_primary);
+  if (primaryOrg) {
+    return primaryOrg;
+  }
+
+  // Fallback to first organization
+  return organizations[0];
+};
+
+
 
 export const useOrganizationStore = create<OrganizationState>()(
   persist(
@@ -45,9 +79,7 @@ export const useOrganizationStore = create<OrganizationState>()(
 
       setOrganizations: (organizations) => {
         const currentOrgId = get().currentOrganization?.id;
-        const currentOrg = organizations.find(org => org.id === currentOrgId) ||
-                          organizations.find(org => org.is_primary) ||
-                          organizations[0];
+        const currentOrg = selectBestOrganization(organizations, currentOrgId);
 
         set({ organizations, currentOrganization: currentOrg });
       },
@@ -58,12 +90,17 @@ export const useOrganizationStore = create<OrganizationState>()(
         organizations: [...state.organizations, org]
       })),
 
-      removeOrganization: (orgId) => set((state) => ({
-        organizations: state.organizations.filter(org => org.id !== orgId),
-        currentOrganization: state.currentOrganization?.id === orgId ?
-          state.organizations.find(org => org.is_primary) || state.organizations[0] :
-          state.currentOrganization
-      })),
+      removeOrganization: (orgId) => set((state) => {
+        const newOrganizations = state.organizations.filter(org => org.id !== orgId);
+        const newCurrentOrg = state.currentOrganization?.id === orgId
+          ? selectBestOrganization(newOrganizations)
+          : state.currentOrganization;
+
+        return {
+          organizations: newOrganizations,
+          currentOrganization: newCurrentOrg
+        };
+      }),
 
       updateOrganization: (orgId, updates) => set((state) => ({
         organizations: state.organizations.map(org =>
@@ -80,6 +117,85 @@ export const useOrganizationStore = create<OrganizationState>()(
         const org = organizations.find(o => o.id === orgId);
         if (org) {
           set({ currentOrganization: org });
+          console.log(`🔄 [OrganizationStore] Switched to organization: ${org.name} (${org.id})`);
+        }
+      },
+
+      setPrimaryOrganization: async (orgId: string): Promise<boolean> => {
+        try {
+          set({ isLoading: true });
+
+          const response = await apiClient.post(`/organizations/${orgId}/set-primary`);
+
+          if (!response.ok) {
+            throw new Error(`Failed to set primary organization: ${response.status}`);
+          }
+
+          const updatedOrg = await response.json();
+
+          // Update all organizations - clear is_primary from others, set it for the target
+          set((state) => ({
+            organizations: state.organizations.map(org => ({
+              ...org,
+              is_primary: org.id === orgId
+            })),
+            currentOrganization: state.currentOrganization?.id === orgId ?
+              { ...state.currentOrganization, is_primary: true } :
+              state.currentOrganization,
+            isLoading: false
+          }));
+
+          return true;
+        } catch (error) {
+          console.error('Failed to set primary organization:', error);
+          set({ isLoading: false });
+          return false;
+        }
+      },
+
+      initializeOrganizations: async () => {
+        try {
+          set({ isLoading: true });
+
+          // Get current user data which includes user_organizations
+          const response = await apiClient.get('/users');
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch user data: ${response.status}`);
+          }
+
+          const user = await response.json();
+
+          // Extract organizations from user_organizations field
+          const organizations: Organization[] = user.user_organizations?.map((userOrg: any) => ({
+            id: userOrg.organization.id,
+            name: userOrg.organization.name,
+            description: userOrg.organization.description,
+            auth0_org_id: userOrg.auth0_org_id,
+            role: userOrg.role,
+            is_primary: userOrg.is_primary,
+            created_at: userOrg.organization.created_at,
+            modified_at: userOrg.organization.modified_at,
+          })) || [];
+
+          // For initialization (login), always prefer primary organization
+          const currentOrg = selectBestOrganization(organizations, null); // Pass null to force primary selection
+
+          set({
+            organizations,
+            currentOrganization: currentOrg,
+            isLoading: false
+          });
+
+          console.log('Organizations initialized:', {
+            total: organizations.length,
+            primary: currentOrg?.name,
+            isPrimary: currentOrg?.is_primary
+          });
+        } catch (error) {
+          console.error('Failed to initialize organizations:', error);
+          set({ isLoading: false });
+          throw error;
         }
       },
 
@@ -108,11 +224,9 @@ export const useOrganizationStore = create<OrganizationState>()(
             modified_at: userOrg.organization.modified_at,
           })) || [];
 
-          // Set organizations and select appropriate current organization
+          // For regular fetches, preserve current selection if valid
           const currentOrgId = get().currentOrganization?.id;
-          const currentOrg = organizations.find((org: Organization) => org.id === currentOrgId) ||
-                            organizations.find((org: Organization) => org.is_primary) ||
-                            organizations[0];
+          const currentOrg = selectBestOrganization(organizations, currentOrgId);
 
           set({
             organizations,

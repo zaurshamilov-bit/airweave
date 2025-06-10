@@ -74,9 +74,6 @@ async def read_user_organization(
     result = await db.execute(stmt)
     org = result.scalar_one_or_none()
 
-    if not org:
-        raise HTTPException(status_code=404, detail="Organization not found")
-
     # Return a dict with all required fields for Organization schema
     return schemas.Organization(
         id=org.id,

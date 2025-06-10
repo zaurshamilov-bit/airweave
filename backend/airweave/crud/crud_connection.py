@@ -7,7 +7,7 @@ from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from airweave.core.exceptions import PermissionException
+from airweave.core.exceptions import NotFoundException, PermissionException
 from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.connection import Connection, IntegrationType
@@ -62,8 +62,8 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         result = await db.execute(query)
         db_obj = result.unique().scalar_one_or_none()
 
-        if db_obj is None:
-            return None
+        if not db_obj:
+            raise NotFoundException(f"Connection with ID {id} not found")
 
         # If it's not a native connection, validate user permissions
         if not self._is_native_connection(db_obj):
@@ -231,8 +231,8 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         result = await db.execute(query)
         db_obj = result.unique().scalar_one_or_none()
 
-        if db_obj is None:
-            return None
+        if not db_obj:
+            raise NotFoundException(f"Connection with ID {id} not found")
 
         # Prevent deletion of native connections
         if self._is_native_connection(db_obj):

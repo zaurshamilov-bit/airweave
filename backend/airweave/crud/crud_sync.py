@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from typing import Any, Optional, Union
 from uuid import UUID
 
-from fastapi import HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,7 +49,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         sync = await super().get(db, id=id, auth_context=auth_context)
 
         if not sync:
-            raise HTTPException(status_code=404, detail="Sync not found")
+            raise NotFoundException("Sync not found")
 
         if with_connections:
             # Enrich the sync with all its connections

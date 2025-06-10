@@ -59,10 +59,6 @@ export const OrganizationSettings = ({
 
       toast.success('Organization updated successfully');
 
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
-
     } catch (error) {
       console.error('Failed to update organization:', error);
       toast.error('Failed to update organization');

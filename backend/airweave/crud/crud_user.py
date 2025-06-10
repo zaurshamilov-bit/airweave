@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from airweave import schemas
+from airweave.core.exceptions import NotFoundException
 from airweave.crud._base_user import CRUDBaseUser
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.user import User
@@ -42,7 +43,10 @@ class CRUDUser(CRUDBaseUser[User, UserCreate, UserUpdate]):
         # Use selectinload to eagerly load the organizations
         stmt = self._get_user_query_with_orgs().where(User.email == email)
         result = await db.execute(stmt)
-        return result.unique().scalar_one_or_none()
+        db_obj = result.unique().scalar_one_or_none()
+        if not db_obj:
+            raise NotFoundException(f"User with email {email} not found")
+        return db_obj
 
     async def get(self, db: AsyncSession, id: UUID, current_user: User) -> Optional[User]:
         """Get a single object by ID.
@@ -58,7 +62,10 @@ class CRUDUser(CRUDBaseUser[User, UserCreate, UserUpdate]):
         # Use selectinload to eagerly load the organizations
         stmt = self._get_user_query_with_orgs().where(User.id == id)
         result = await db.execute(stmt)
-        return result.unique().scalar_one_or_none()
+        db_obj = result.unique().scalar_one_or_none()
+        if not db_obj:
+            raise NotFoundException(f"User with ID {id} not found")
+        return db_obj
 
     async def get_multi(self, db: AsyncSession, skip: int = 0, limit: int = 100) -> list[User]:
         """Get multiple objects.
@@ -102,10 +109,9 @@ class CRUDUser(CRUDBaseUser[User, UserCreate, UserUpdate]):
             db: AsyncSession, *, obj_in: UserCreate, uow: UnitOfWork
         ) -> tuple[schemas.User, schemas.Organization]:
             """Create a new user with an organization."""
-            # First create the user without organization
+            # First create the user without organization references
             user_data = obj_in.model_dump()
             user_data.pop("organization_id", None)
-            user_data.pop("primary_organization_id", None)
 
             # Create the user directly
             user = User(**user_data)
@@ -123,13 +129,28 @@ class CRUDUser(CRUDBaseUser[User, UserCreate, UserUpdate]):
                 db, obj_in=org_in, owner_user=user, uow=uow
             )
 
-            # Load the user with organizations before committing
-            stmt = self._get_user_query_with_orgs().where(User.id == user.id)
-            result = await db.execute(stmt)
-            user_with_orgs = result.scalar_one_or_none()
+            # Manually construct the user schema with organization data
+            # Since we're in a transaction, we need to manually build the relationships
+            user_org_data = {
+                "user_id": user.id,
+                "organization_id": organization.id,
+                "organization": schemas.Organization.model_validate(organization),
+                "role": "owner",
+                "is_primary": True,
+                "auth0_org_id": None,
+            }
 
-            # Convert to schemas to avoid lazy-loading issues
-            user_schema = schemas.User.model_validate(user_with_orgs)
+            user_org_schema = schemas.UserOrganization(**user_org_data)
+
+            # Create user schema with the organization relationship
+            user_dict = {
+                "id": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "user_organizations": [user_org_schema],
+            }
+
+            user_schema = schemas.User(**user_dict)
             org_schema = schemas.Organization.model_validate(organization)
 
             return user_schema, org_schema
@@ -153,6 +174,8 @@ class CRUDUser(CRUDBaseUser[User, UserCreate, UserUpdate]):
         """
         # Now implemented with organization context
         user = await self.get(db, id=id, current_user=current_user)
+        if not user:
+            raise NotFoundException(f"User with ID {id} not found")
         if user:
             await db.delete(user)
             await db.commit()
@@ -177,15 +200,11 @@ class CRUDUser(CRUDBaseUser[User, UserCreate, UserUpdate]):
         Returns:
             User: The updated user.
         """
-        # Ensure the organization_id is not removed
+        # Validate the update data
         if isinstance(obj_in, dict):
             update_data = obj_in
-            if "organization_id" in update_data and update_data["organization_id"] is None:
-                raise ValueError("User must have an organization")
         else:
             update_data = obj_in.model_dump(exclude_unset=True)
-            if "organization_id" in update_data and update_data["organization_id"] is None:
-                raise ValueError("User must have an organization")
 
         updated_user = await super().update(db, db_obj=db_obj, obj_in=update_data)
 

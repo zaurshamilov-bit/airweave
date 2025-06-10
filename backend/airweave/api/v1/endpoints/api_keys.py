@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import Body, Depends, HTTPException
+from fastapi import Body, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
@@ -82,9 +82,6 @@ async def read_api_key(
         HTTPException: If the API key is not found.
     """
     api_key = await crud.api_key.get(db=db, id=id, auth_context=auth_context)
-    if not api_key:
-        raise HTTPException(status_code=404, detail="API key not found")
-
     # Decrypt the key for the response
     decrypted_data = credentials.decrypt(api_key.encrypted_key)
     decrypted_key = decrypted_data["key"]
@@ -178,8 +175,6 @@ async def delete_api_key(
 
     """
     api_key = await crud.api_key.get(db=db, id=id, auth_context=auth_context)
-    if not api_key:
-        raise HTTPException(status_code=404, detail="API key not found")
 
     # Decrypt the key for the response
     decrypted_data = credentials.decrypt(api_key.encrypted_key)

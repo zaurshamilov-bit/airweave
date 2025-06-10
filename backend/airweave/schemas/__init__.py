@@ -100,6 +100,7 @@ from .user import (
     UserCreate,
     UserInDB,
     UserInDBBase,
+    UserOrganization,
     UserUpdate,
     UserWithOrganizations,
 )

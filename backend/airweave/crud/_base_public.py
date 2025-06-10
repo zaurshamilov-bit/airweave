@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airweave.core.exceptions import NotFoundException
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models._base import Base
 
@@ -40,7 +41,10 @@ class CRUDPublic(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             Optional[ModelType]: The object with the given ID.
         """
         result = await db.execute(select(self.model).where(self.model.id == id))
-        return result.unique().scalar_one_or_none()
+        db_obj = result.unique().scalar_one_or_none()
+        if not db_obj:
+            raise NotFoundException(f"Object with ID {id} not found")
+        return db_obj
 
     async def get_by_short_name(self, db: AsyncSession, short_name: str) -> Optional[ModelType]:
         """Get public resource by short name.
@@ -55,7 +59,10 @@ class CRUDPublic(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             Optional[ModelType]: The object with the given short name.
         """
         result = await db.execute(select(self.model).where(self.model.short_name == short_name))
-        return result.unique().scalar_one_or_none()
+        db_obj = result.unique().scalar_one_or_none()
+        if not db_obj:
+            raise NotFoundException(f"Object with short name {short_name} not found")
+        return db_obj
 
     async def get_multi(
         self,
@@ -183,7 +190,7 @@ class CRUDPublic(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db_obj = result.unique().scalar_one_or_none()
 
         if db_obj is None:
-            return None
+            raise NotFoundException(f"Object with ID {id} not found")
 
         await db.delete(db_obj)
 

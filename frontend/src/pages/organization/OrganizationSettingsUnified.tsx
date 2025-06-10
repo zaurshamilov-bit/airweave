@@ -3,8 +3,9 @@ import { useOrganizationStore } from '@/lib/stores/organizations';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import {
-  Plus, Crown, Shield, Users, Check, Copy
+  Plus, Crown, Shield, Users, Check, Copy, Star
 } from 'lucide-react';
 import { CreateOrganizationModal } from '@/components/organization';
 import { APIKeysSettings } from '@/components/settings/APIKeysSettings';
@@ -23,7 +24,8 @@ export const OrganizationSettingsUnified = () => {
   const {
     currentOrganization,
     updateOrganization,
-    fetchUserOrganizations
+    fetchUserOrganizations,
+    setPrimaryOrganization
   } = useOrganizationStore();
 
   // Tab state - get initial tab from URL params
@@ -35,6 +37,9 @@ export const OrganizationSettingsUnified = () => {
 
   // Add state for copy animation
   const [isCopied, setIsCopied] = useState(false);
+
+  // Add state for primary toggle loading
+  const [isPrimaryToggleLoading, setIsPrimaryToggleLoading] = useState(false);
 
   // Update tab when URL params change
   useEffect(() => {
@@ -56,6 +61,36 @@ export const OrganizationSettingsUnified = () => {
       await fetchUserOrganizations();
     } catch (error) {
       console.error('Failed to refresh organizations after update:', error);
+    }
+  };
+
+  // Handle primary organization toggle
+  const handlePrimaryToggle = async (checked: boolean) => {
+    if (!currentOrganization || isPrimaryToggleLoading) return;
+
+    // If unchecking, we don't allow it since there should always be a primary
+    if (!checked) {
+      toast.error('You must have at least one primary organization');
+      return;
+    }
+
+    setIsPrimaryToggleLoading(true);
+
+    try {
+      const success = await setPrimaryOrganization(currentOrganization.id);
+
+      if (success) {
+        toast.success(`${currentOrganization.name} is now your primary organization`);
+        // Refresh to ensure UI is in sync
+        await fetchUserOrganizations();
+      } else {
+        toast.error('Failed to set primary organization');
+      }
+    } catch (error) {
+      console.error('Error setting primary organization:', error);
+      toast.error('Failed to set primary organization');
+    } finally {
+      setIsPrimaryToggleLoading(false);
     }
   };
 
@@ -138,9 +173,9 @@ export const OrganizationSettingsUnified = () => {
     <>
       <div className="max-w-4xl mx-auto py-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-start justify-between mb-8">
           <div className="flex flex-col">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 mb-2">
               <h1 className="text-xl font-medium">{currentOrganization.name}</h1>
               <Badge variant={getRoleBadgeVariant(currentOrganization.role)} className="text-xs px-2 py-0.5 opacity-70">
                 <span className="flex items-center gap-1">
@@ -148,9 +183,18 @@ export const OrganizationSettingsUnified = () => {
                   {currentOrganization.role}
                 </span>
               </Badge>
+              {currentOrganization.is_primary && (
+                <Badge variant="outline" className="text-xs px-2 py-0.5 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                  <span className="flex items-center gap-1">
+                    <Star className="h-3 w-3" />
+                    Primary
+                  </span>
+                </Badge>
+              )}
             </div>
+
             {/* Organization ID under title like CollectionDetailView */}
-            <p className="text-muted-foreground/80 text-xs group relative flex items-center mt-1">
+            <p className="text-muted-foreground/80 text-xs group relative flex items-center">
               {currentOrganization.id}
               <button
                 className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
@@ -164,6 +208,27 @@ export const OrganizationSettingsUnified = () => {
                 )}
               </button>
             </p>
+          </div>
+
+          {/* Primary Organization Toggle */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center space-x-3">
+              <div className="flex flex-col items-end">
+                <label htmlFor="primary-toggle" className="text-sm font-medium text-foreground cursor-pointer">
+                  Primary Organization
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {currentOrganization.is_primary ? 'Default for new resources' : 'Make this your default'}
+                </p>
+              </div>
+              <Switch
+                id="primary-toggle"
+                checked={currentOrganization.is_primary}
+                onCheckedChange={handlePrimaryToggle}
+                disabled={isPrimaryToggleLoading}
+                className="data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
+              />
+            </div>
           </div>
         </div>
 

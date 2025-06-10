@@ -144,8 +144,12 @@ export function UserProfileDropdown() {
   };
 
   const handleSwitchOrganization = (orgId: string) => {
+    // Update the organization in the store first
     switchOrganization(orgId);
     setDropdownOpen(false);
+
+    // Do a full page reload to ensure clean state
+    window.location.href = '/';
   };
 
   const handleCreateOrganization = () => {

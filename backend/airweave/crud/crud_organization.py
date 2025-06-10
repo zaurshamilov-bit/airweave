@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airweave.core.exceptions import PermissionException
+from airweave.core.exceptions import NotFoundException, PermissionException
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.organization import Organization
 from airweave.models.user import User
@@ -36,6 +36,66 @@ class CRUDOrganization:
         stmt = select(Organization).where(Organization.name == name)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def _set_primary_organization(
+        self, db: AsyncSession, user_id: UUID, organization_id: UUID
+    ) -> None:
+        """Set an organization as primary for a user, ensuring only one is primary.
+
+        Args:
+            db: Database session
+            user_id: The user's ID
+            organization_id: The organization ID to set as primary
+        """
+        # First, clear any existing primary flags for this user
+        stmt_clear = (
+            select(UserOrganization)
+            .where(UserOrganization.user_id == user_id)
+            .where(UserOrganization.is_primary is True)
+        )
+        result = await db.execute(stmt_clear)
+        existing_primary_orgs = result.scalars().all()
+
+        for org in existing_primary_orgs:
+            org.is_primary = False
+
+        # Then set the new primary organization
+        stmt_set = select(UserOrganization).where(
+            UserOrganization.user_id == user_id, UserOrganization.organization_id == organization_id
+        )
+        result = await db.execute(stmt_set)
+        user_org = result.scalar_one_or_none()
+
+        if user_org:
+            user_org.is_primary = True
+
+    async def set_primary_organization(
+        self, db: AsyncSession, user_id: UUID, organization_id: UUID, auth_context: AuthContext
+    ) -> bool:
+        """Set an organization as primary for a user with access validation.
+
+        Args:
+            db: Database session
+            user_id: The user's ID
+            organization_id: The organization ID to set as primary
+            auth_context: The authentication context
+
+        Returns:
+            True if successful, False if the user doesn't have access to the organization
+        """
+        # Validate the user has access to this organization
+        user_org = await self.get_user_membership(
+            db=db, organization_id=organization_id, user_id=user_id, auth_context=auth_context
+        )
+
+        if not user_org:
+            raise NotFoundException(
+                f"User with ID {user_id} not found in organization with ID {organization_id}"
+            )
+
+        await self._set_primary_organization(db, user_id, organization_id)
+        await db.commit()
+        return True
 
     async def create_with_owner(
         self,
@@ -69,17 +129,27 @@ class CRUDOrganization:
         db.add(organization)
         await db.flush()  # Get the ID
 
+        # Check if user has any existing organizations
+        stmt = select(UserOrganization).where(UserOrganization.user_id == owner_user.id)
+        result = await db.execute(stmt)
+        existing_orgs = result.scalars().all()
+
+        # New organization is primary if it's the user's first organization
+        is_primary = len(existing_orgs) == 0
+
         # Create UserOrganization relationship with owner role
         user_org = UserOrganization(
             user_id=owner_user.id,
             organization_id=organization.id,
             role="owner",
-            is_primary=True,  # New organizations are primary by default
+            is_primary=is_primary,
         )
         db.add(user_org)
 
-        if not owner_user.primary_organization_id:
-            owner_user.primary_organization_id = organization.id
+        # If this is the primary organization, ensure no other org is primary
+        if is_primary:
+            await db.flush()  # Ensure user_org is persisted before calling helper
+            await self._set_primary_organization(db, owner_user.id, organization.id)
 
         if not uow:
             await db.commit()
@@ -98,18 +168,14 @@ class CRUDOrganization:
         Organizations don't have organization_id field, so we override the base method.
         """
         # Check if the user has access to this organization
-        if auth_context.has_user_context:
-            user_org_ids = [org.organization.id for org in auth_context.user.user_organizations]
-            if id not in user_org_ids:
-                return None
-        else:
-            # For API key access, only allow access to the key's organization
-            if str(id) != auth_context.organization_id:
-                return None
+        await self._validate_organization_access(auth_context, id)
 
         query = select(self.model).where(self.model.id == id)
         result = await db.execute(query)
-        return result.unique().scalar_one_or_none()
+        db_obj = result.unique().scalar_one_or_none()
+        if not db_obj:
+            raise NotFoundException(f"Organization with ID {id} not found")
+        return db_obj
 
     async def get_multi(
         self,
@@ -309,7 +375,12 @@ class CRUDOrganization:
             UserOrganization.user_id == user_id, UserOrganization.organization_id == organization_id
         )
         result = await db.execute(stmt)
-        return result.scalar_one_or_none()
+        db_obj = result.scalar_one_or_none()
+        if not db_obj:
+            raise NotFoundException(
+                f"User with ID {user_id} not found in organization with ID {organization_id}"
+            )
+        return db_obj
 
     async def get_organization_owners(
         self,
@@ -442,11 +513,26 @@ class CRUDOrganization:
         # Validate current user has admin access
         await self._validate_admin_access(auth_context, organization_id)
 
+        # Check if user already has organizations
+        stmt = select(UserOrganization).where(UserOrganization.user_id == user_id)
+        result = await db.execute(stmt)
+        existing_orgs = result.scalars().all()
+
+        # If this is their first organization, make it primary regardless of the parameter
+        if len(existing_orgs) == 0:
+            is_primary = True
+
         user_org = UserOrganization(
             user_id=user_id, organization_id=organization_id, role=role, is_primary=is_primary
         )
 
         db.add(user_org)
+        await db.flush()
+
+        # If setting as primary, ensure no other org is primary for this user
+        if is_primary:
+            await self._set_primary_organization(db, user_id, organization_id)
+
         await db.commit()
         await db.refresh(user_org)
 
@@ -486,6 +572,13 @@ class CRUDOrganization:
             await db.refresh(user_org)
 
         return user_org
+
+    async def remove(self, db: AsyncSession, id: UUID) -> Organization:
+        """Remove an organization."""
+        stmt = delete(Organization).where(Organization.id == id)
+        result = await db.execute(stmt)
+        await db.commit()
+        return result.scalar_one_or_none()
 
 
 # Create the instance with the updated class name

@@ -54,7 +54,7 @@ async def create_organization(
             created_at=organization.created_at,
             modified_at=organization.modified_at,
             role="owner",
-            is_primary=True,  # New organizations are primary by default
+            is_primary=False,
         )
     except Exception as e:
         raise HTTPException(
@@ -131,8 +131,6 @@ async def get_organization(
     user_is_primary = user_org.is_primary
 
     organization = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
-    if not organization:
-        raise HTTPException(status_code=404, detail="Organization not found")
 
     return schemas.OrganizationWithRole(
         id=organization.id,
@@ -193,9 +191,6 @@ async def update_organization(
 
     # Check if the new name conflicts with existing organizations (if name is being changed)
     organization = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
-    if not organization:
-        raise HTTPException(status_code=404, detail="Organization not found")
-
     if organization_data.name != organization.name:
         existing_org = await crud.organization.get_by_name(db, name=organization_data.name)
         if existing_org and existing_org.id != organization_id:
@@ -266,11 +261,6 @@ async def delete_organization(
         raise HTTPException(
             status_code=403, detail="Only organization owners can delete organizations"
         )
-
-    # Get the organization
-    organization = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
-    if not organization:
-        raise HTTPException(status_code=404, detail="Organization not found")
 
     # Check if this is the user's only organization
     user_orgs = await crud.organization.get_user_organizations_with_roles(
@@ -372,3 +362,59 @@ async def leave_organization(
         raise HTTPException(status_code=500, detail="Failed to leave organization")
 
     return {"message": "Successfully left the organization"}
+
+
+@router.post("/{organization_id}/set-primary", response_model=schemas.OrganizationWithRole)
+async def set_primary_organization(
+    organization_id: UUID,
+    db: AsyncSession = Depends(deps.get_db),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+) -> schemas.OrganizationWithRole:
+    """Set an organization as the user's primary organization.
+
+    Args:
+        organization_id: The ID of the organization to set as primary
+        db: Database session
+        auth_context: The current authenticated user
+
+    Returns:
+        The organization with updated primary status
+
+    Raises:
+        HTTPException: If organization not found or user doesn't have access
+    """
+    # Set as primary organization
+    success = await crud.organization.set_primary_organization(
+        db=db,
+        user_id=auth_context.user.id,
+        organization_id=organization_id,
+        auth_context=auth_context,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=404, detail="Organization not found or you don't have access to it"
+        )
+
+    # Get the updated organization data
+    user_org = await crud.organization.get_user_membership(
+        db=db,
+        organization_id=organization_id,
+        user_id=auth_context.user.id,
+        auth_context=auth_context,
+    )
+
+    organization = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
+
+    if not organization or not user_org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    return schemas.OrganizationWithRole(
+        id=organization.id,
+        name=organization.name,
+        description=organization.description or "",
+        created_at=organization.created_at,
+        modified_at=organization.modified_at,
+        role=user_org.role,
+        is_primary=user_org.is_primary,
+    )

@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airweave.core.exceptions import NotFoundException
 from airweave.models.entity_definition import EntityDefinition
 from airweave.schemas.entity_definition import EntityDefinitionCreate, EntityDefinitionUpdate
 
@@ -37,7 +38,10 @@ class CRUDEntityDefinition(
     ) -> EntityDefinition:
         """Get an entity definition by its entity class name."""
         result = await db.execute(select(self.model).where(self.model.name == entity_class_name))
-        return result.scalar_one_or_none()
+        db_obj = result.scalar_one_or_none()
+        if not db_obj:
+            raise NotFoundException(f"Entity definition with name {entity_class_name} not found")
+        return db_obj
 
     async def get_multi_by_source_short_name(
         self, db: AsyncSession, *, source_short_name: str

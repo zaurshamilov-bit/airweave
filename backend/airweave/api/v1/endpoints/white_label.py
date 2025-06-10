@@ -135,8 +135,6 @@ async def get_white_label(
         white_label (schemas.WhiteLabel): The white label
     """
     white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
     if white_label.organization_id != auth_context.organization_id:  # type: ignore
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return white_label
@@ -165,8 +163,6 @@ async def update_white_label(
     """
     # TODO: Check if update is valid (i.e. scopes, source id etc)
     white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
     if white_label.organization_id != auth_context.organization_id:  # type: ignore
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
@@ -198,8 +194,6 @@ async def delete_white_label(
         white_label (schemas.WhiteLabel): The deleted white label
     """
     white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
     if white_label.organization_id != auth_context.user.organization_id:  # type: ignore
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
@@ -239,8 +233,6 @@ async def get_white_label_oauth2_auth_url(
         return ""
 
     white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
     if white_label.organization_id != auth_context.organization_id:  # type: ignore
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
@@ -268,8 +260,6 @@ async def list_white_label_source_connections(
         list[schemas.SourceConnectionListItem]: A list of source connections
     """
     white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
     if white_label.organization_id != auth_context.organization_id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
@@ -324,8 +314,7 @@ async def exchange_white_label_oauth2_code(
         return ""
 
     white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
+
     if white_label.organization_id != auth_context.organization_id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
 

@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airweave.core.exceptions import NotFoundException
 from airweave.core.shared_models import CollectionStatus, SourceConnectionStatus
 from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.crud.crud_source_connection import source_connection as crud_source_connection
@@ -113,8 +114,8 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
         result = await db.execute(select(Collection).where(Collection.readable_id == readable_id))
         collection = result.scalar_one_or_none()
 
-        if collection is None:
-            return None
+        if not collection:
+            raise NotFoundException(f"Collection with readable ID {readable_id} not found")
 
         await self._validate_organization_access(auth_context, collection.organization_id)
 
