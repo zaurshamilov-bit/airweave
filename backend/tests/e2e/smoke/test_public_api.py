@@ -1022,6 +1022,10 @@ def test_sync_job_pubsub(api_url: str, job_id: str, headers: dict, timeout: int 
 
     # Verify message structure
     for msg in messages_received:
+        # Skip non-progress messages (connected, heartbeat, etc.)
+        if msg.get("type") in ["connected", "heartbeat", "error"]:
+            continue
+
         required_fields = [
             "inserted",
             "updated",
