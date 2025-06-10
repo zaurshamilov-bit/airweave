@@ -54,6 +54,13 @@ export default {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
         },
+
+        // Brand colors
+        brand: {
+          lime: "hsl(var(--brand-lime))", // Tertiary Brand Color
+          yellow: "hsl(var(--brand-yellow))", // Secondary Brand Color
+        },
+
         blue: {
           DEFAULT: "hsl(var(--blue))",
           foreground: "hsl(var(--blue-foreground))",

@@ -73,6 +73,10 @@
 
     --radius: 0.5rem;
 
+    /* Brand colors */
+    --brand-lime: 92 80% 45%; /* #C1F297 - Tertiary Brand Color */
+    --brand-yellow: 54 100% 45%; /* #F1EEEA - Secondary Brand Color */
+
     --highlight: 0 0% 75%;
     --highlight-foreground: 0 0% 2.4%;
     --highlight-100: 0 0% 100%;
@@ -161,6 +165,10 @@
     --border: 0 0% 15%;
     --input: 0 0% 8%;
     --ring: 210 67% 98.8% / 0.6;
+
+    /* Brand colors */
+    --brand-lime: 92 78% 77%; /* #C1F297 - True brand color for dark mode */
+    --brand-yellow: 54 100% 45%; /* #F1EEEA - True brand color for dark mode */
 
     --highlight: 0 0% 20%;
     --highlight-foreground: 210 67% 98.8%;

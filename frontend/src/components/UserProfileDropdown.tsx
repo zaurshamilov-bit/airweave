@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   ExternalLink, MoreVertical, Building2, Settings,
-  UserPlus, Crown, Shield, Users, Plus, LogOut
+  UserPlus, Crown, Shield, Users, Plus, LogOut, Check
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { CreateOrganizationModal } from '@/components/organization';
@@ -144,6 +144,12 @@ export function UserProfileDropdown() {
   };
 
   const handleSwitchOrganization = (orgId: string) => {
+    // If clicking on the already selected organization, just close the dropdown
+    if (orgId === currentOrganization?.id) {
+      setDropdownOpen(false);
+      return;
+    }
+
     // Update the organization in the store first
     switchOrganization(orgId);
     setDropdownOpen(false);
@@ -171,17 +177,9 @@ export function UserProfileDropdown() {
 
   const getRoleIcon = (role: string) => {
     switch (role) {
-      case 'owner': return <Crown className="h-3 w-3" />;
-      case 'admin': return <Shield className="h-3 w-3" />;
-      default: return <Users className="h-3 w-3" />;
-    }
-  };
-
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case 'owner': return 'default';
-      case 'admin': return 'secondary';
-      default: return 'outline';
+      case 'owner': return <Crown className="h-3 w-3 text-brand-lime/90" />;
+      case 'admin': return <Shield className="h-3 w-3 text-brand-lime/90" />;
+      default: return <Users className="h-3 w-3 text-brand-lime/90" />;
     }
   };
 
@@ -233,7 +231,7 @@ export function UserProfileDropdown() {
 
           {/* Organization Switcher */}
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger className={cn(subMenuItemClass, "px-2 py-1.5")}>
+            <DropdownMenuSubTrigger className={cn(subMenuItemClass, "px-2 py-1.5 cursor-pointer")}>
               <span className="flex items-center gap-2">
                 <Building2 className="h-4 w-4" />
                 {currentOrganization?.name || 'Select Organization'}
@@ -246,36 +244,42 @@ export function UserProfileDropdown() {
                 </DropdownMenuItem>
               ) : organizations.length > 0 ? (
                 <>
-                  {organizations.map((org) => (
-                    <DropdownMenuItem
-                      key={org.id}
-                      onSelect={() => handleSwitchOrganization(org.id)}
-                      className="flex items-center justify-between px-2 py-1.5"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="w-4 h-4 flex items-center justify-center">
-                          <Building2 className="h-4 w-4 text-muted-foreground" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm truncate">{org.name}</div>
-                          {org.is_primary && (
-                            <div className="text-xs text-muted-foreground/70">Primary</div>
+                  {organizations.map((org) => {
+                    const isSelected = org.id === currentOrganization?.id;
+
+                    return (
+                      <DropdownMenuItem
+                        key={org.id}
+                        onSelect={() => handleSwitchOrganization(org.id)}
+                        className={cn(
+                          "flex items-center justify-between px-2 py-2.5 rounded-md transition-colors cursor-pointer",
+                          isSelected
+                            ? "bg-muted/50 text-foreground cursor-default"
+                            : "hover:bg-muted/30"
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <span className="w-4 h-4 flex items-center justify-center">
+                            <Building2 className="h-4 w-4 text-muted-foreground/60" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm truncate font-medium">{org.name}</span>
+                              {getRoleIcon(org.role)}
+                            </div>
+                            {org.is_primary && (
+                              <div className="text-xs mt-0.5 text-brand-yellow">Primary organization</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="shrink-0 ml-2">
+                          {isSelected && (
+                            <Check className="h-4 w-4 text-muted-foreground/60" />
                           )}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {org.id === currentOrganization?.id && (
-                          <div className="w-2 h-2 bg-green-500 rounded-full" />
-                        )}
-                        <Badge variant={getRoleBadgeVariant(org.role)} className="text-xs scale-90">
-                          <span className="flex items-center gap-1">
-                            {getRoleIcon(org.role)}
-                            {org.role}
-                          </span>
-                        </Badge>
-                      </div>
-                    </DropdownMenuItem>
-                  ))}
+                      </DropdownMenuItem>
+                    );
+                  })}
 
                   <MenuSeparator />
 

@@ -117,14 +117,6 @@ export const OrganizationSettingsUnified = () => {
     }
   };
 
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case 'owner': return 'default';
-      case 'admin': return 'secondary';
-      default: return 'outline';
-    }
-  };
-
   const handleTabChange = (tabId: TabType) => {
     setActiveTab(tabId);
     const newSearchParams = new URLSearchParams(searchParams);
@@ -172,29 +164,29 @@ export const OrganizationSettingsUnified = () => {
   return (
     <>
       <div className="max-w-4xl mx-auto py-8">
-        {/* Header */}
+        {/* Header - Simplified without primary toggle */}
         <div className="flex items-start justify-between mb-8">
           <div className="flex flex-col">
             <div className="flex items-center gap-3 mb-2">
               <h1 className="text-xl font-medium">{currentOrganization.name}</h1>
-              <Badge variant={getRoleBadgeVariant(currentOrganization.role)} className="text-xs px-2 py-0.5 opacity-70">
-                <span className="flex items-center gap-1">
-                  {getRoleIcon(currentOrganization.role)}
-                  {currentOrganization.role}
-                </span>
-              </Badge>
+
+              {/* Subtle role indicator */}
+              <div className="flex items-center gap-1 text-brand-lime/90">
+                {getRoleIcon(currentOrganization.role)}
+                <span className="text-xs capitalize">{currentOrganization.role}</span>
+              </div>
+
+              {/* Subtle primary indicator */}
               {currentOrganization.is_primary && (
-                <Badge variant="outline" className="text-xs px-2 py-0.5 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                  <span className="flex items-center gap-1">
-                    <Star className="h-3 w-3" />
-                    Primary
-                  </span>
-                </Badge>
+                <div className="flex items-center gap-1 text-brand-yellow">
+                  <Star className="h-3 w-3" />
+                  <span className="text-xs">Primary</span>
+                </div>
               )}
             </div>
 
-            {/* Organization ID under title like CollectionDetailView */}
-            <p className="text-muted-foreground/80 text-xs group relative flex items-center">
+            {/* Organization ID under title */}
+            <p className="text-muted-foreground text-xs group relative flex items-center">
               {currentOrganization.id}
               <button
                 className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
@@ -202,33 +194,12 @@ export const OrganizationSettingsUnified = () => {
                 title="Copy ID"
               >
                 {isCopied ? (
-                  <Check className="h-3.5 w-3.5 text-muted-foreground/80 transition-all" />
+                  <Check className="h-3.5 w-3.5 text-muted-foreground transition-all" />
                 ) : (
-                  <Copy className="h-3.5 w-3.5 text-muted-foreground/80 transition-all" />
+                  <Copy className="h-3.5 w-3.5 text-muted-foreground transition-all" />
                 )}
               </button>
             </p>
-          </div>
-
-          {/* Primary Organization Toggle */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center space-x-3">
-              <div className="flex flex-col items-end">
-                <label htmlFor="primary-toggle" className="text-sm font-medium text-foreground cursor-pointer">
-                  Primary Organization
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  {currentOrganization.is_primary ? 'Default for new resources' : 'Make this your default'}
-                </p>
-              </div>
-              <Switch
-                id="primary-toggle"
-                checked={currentOrganization.is_primary}
-                onCheckedChange={handlePrimaryToggle}
-                disabled={isPrimaryToggleLoading}
-                className="data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500"
-              />
-            </div>
           </div>
         </div>
 
@@ -258,10 +229,30 @@ export const OrganizationSettingsUnified = () => {
         <div>
           {/* Settings Tab */}
           {activeTab === 'settings' && (
-            <OrganizationSettings
-              currentOrganization={currentOrganization}
-              onOrganizationUpdate={handleOrganizationUpdate}
-            />
+            <div className="space-y-8">
+              <OrganizationSettings
+                currentOrganization={currentOrganization}
+                onOrganizationUpdate={handleOrganizationUpdate}
+              />
+
+              {/* Primary Organization Setting */}
+              <div className="border-t border-border pt-8">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <h3 className="text-base font-medium">Primary Organization</h3>
+                    <p className="text-sm text-muted-foreground">
+                      This organization will be used as the default for new resources and projects.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={currentOrganization.is_primary}
+                    onCheckedChange={handlePrimaryToggle}
+                    disabled={isPrimaryToggleLoading}
+                    className="scale-90 data-[state=checked]:bg-brand-yellow/60"
+                  />
+                </div>
+              </div>
+            </div>
           )}
 
           {/* API Keys Tab */}
