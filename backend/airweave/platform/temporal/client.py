@@ -33,9 +33,10 @@ class TemporalClient:
     async def close(cls) -> None:
         """Close the Temporal client."""
         if cls._client is not None:
-            await cls._client.close()
+            # Temporal Python SDK Client doesn't have a close method
+            # Just reset the client reference
             cls._client = None
 
 
-# Global instance
+# Singleton instance
 temporal_client = TemporalClient()

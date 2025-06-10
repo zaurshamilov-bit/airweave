@@ -132,6 +132,12 @@ async def compute_entity_hash_async(entity: Any) -> str:
             "source_name",
             "sync_id",
             "sync_metadata",
+            "created_at",
+            "updated_at",
+            "modified_at",
+            "_sa_instance_state",  # SQLAlchemy internal state
+            "organization_id",
+            "chunk_index",  # Exclude chunk_index from hash to ensure parent/chunk compatibility
         }
 
         # Get content fields

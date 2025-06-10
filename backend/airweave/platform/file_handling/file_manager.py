@@ -34,11 +34,13 @@ class FileManager:
         """Process a file entity by saving its stream and enriching the entity.
 
         This method handles the following:
-        1. Check if file is already fully processed (skip entire download)
-        2. Check if file exists in storage (download from storage to temp)
-        3. Download new file from source to temp
-        4. Store in persistent storage for future use
-        5. Keep temp file for processing (chunker will clean up)
+        1. Check if file exists in storage (download from storage to temp)
+        2. If not, download new file from source to temp
+        3. Store in persistent storage for future use
+        4. Keep temp file for processing (chunker will clean up)
+
+        NOTE: We always process entities even if they exist in storage,
+        because each collection needs its own copy in the vector database.
 
         Args:
             stream: An async iterator yielding file chunks
@@ -63,42 +65,13 @@ class FileManager:
                 f"(entity_id: {entity.entity_id})"
             )
 
-        # Check if entity is already fully processed
-        if await self._is_entity_fully_processed(entity, is_ctti):
-            return entity
-
-        # Check if file exists in storage (but not fully processed)
+        # Check if file exists in storage (but still process it)
         cached_entity = await self._get_cached_entity(entity, is_ctti)
         if cached_entity:
             return cached_entity
 
         # File not in cache, download from source
         return await self._download_and_store_entity(entity, stream, max_size, is_ctti)
-
-    async def _is_entity_fully_processed(self, entity: FileEntity, is_ctti: bool) -> bool:
-        """Check if entity is already fully processed."""
-        if is_ctti:
-            # For CTTI, check global storage
-            if await storage_manager.is_ctti_entity_processed(entity.entity_id):
-                logger.info(
-                    f"CTTI entity already processed globally, marking as KEPT "
-                    f"(entity_id: {entity.entity_id})"
-                )
-                entity.is_fully_processed = True
-                entity.is_cached = True
-                return True
-        elif entity.sync_id:
-            # Standard check for non-CTTI entities
-            cache_key = f"{entity.sync_id}/{entity.entity_id}"
-            if await storage_manager.is_entity_fully_processed(cache_key):
-                logger.info(
-                    f"Entity already fully processed, marking as KEPT "
-                    f"(entity_id: {entity.entity_id}, sync_id: {entity.sync_id})"
-                )
-                entity.is_fully_processed = True
-                entity.is_cached = True
-                return True
-        return False
 
     async def _get_cached_entity(self, entity: FileEntity, is_ctti: bool) -> Optional[FileEntity]:
         """Get cached entity if it exists in storage."""

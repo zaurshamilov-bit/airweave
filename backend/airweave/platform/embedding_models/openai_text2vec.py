@@ -333,6 +333,28 @@ class OpenAIText2Vec(BaseEmbeddingModel):
                 f"❌ OPENAI_CHUNK_TOO_LARGE [{context_prefix}] "
                 f"Single chunk exceeds token limit! This indicates a chunker failure."
             )
+
+            # Log the actual content to debug
+            text = batch[0]
+            text_length = len(text)
+            token_count = len(text) // 4  # Rough estimate
+
+            logger.error(
+                f"🔍 OPENAI_DEBUG [{context_prefix}] Text details: "
+                f"length={text_length} chars, ~{token_count} tokens"
+            )
+
+            # Log first 1000 chars to see what type of content it is
+            logger.error(
+                f"📄 OPENAI_CONTENT_PREVIEW [{context_prefix}] First 1000 chars:\n{text[:1000]}..."
+            )
+
+            # Log last 500 chars to see if there's a pattern
+            if text_length > 1500:
+                logger.error(
+                    f"📄 OPENAI_CONTENT_END [{context_prefix}] Last 500 chars:\n...{text[-500:]}"
+                )
+
             # As a last resort, truncate
             truncated_text = batch[0][:30000]  # ~7500 tokens as emergency fallback
             return await self._process_single_batch(

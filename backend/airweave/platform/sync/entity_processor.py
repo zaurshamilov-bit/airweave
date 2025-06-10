@@ -67,19 +67,11 @@ class EntityProcessor:
                 )
                 return []
 
+            # Update entity tracking
             self._entities_encountered_count[entity_type].add(entity.entity_id)
             await sync_context.progress.update_entities_encountered_count(
                 self._entities_encountered_count
             )
-
-            # Check if entity is already fully processed (should be KEPT)
-            if getattr(entity, "is_fully_processed", False):
-                logger.info(
-                    f"✅ PROCESSOR_KEPT [{entity_context}] Entity already fully processed, "
-                    f"marking as KEPT"
-                )
-                await sync_context.progress.increment("kept", 1)
-                return []
 
             # Check if entity should be skipped (set by file_manager or source)
             if getattr(entity, "should_skip", False):
@@ -466,6 +458,33 @@ class EntityProcessor:
             for _i, entity in enumerate(entities):
                 try:
                     entity_dict = str(entity.to_storage_dict())
+
+                    # Log large entities for debugging
+                    dict_length = len(entity_dict)
+                    if dict_length > 30000:  # ~7500 tokens
+                        entity_type = type(entity).__name__
+                        sync_context.logger.error(
+                            f"🚨 ENTITY_TOO_LARGE Entity {entity.entity_id} ({entity_type}) "
+                            f"stringified to {dict_length} chars (~{dict_length // 4} tokens)"
+                        )
+                        # Log first 1000 chars
+                        sync_context.logger.error(
+                            f"📄 ENTITY_PREVIEW First 1000 chars of {entity.entity_id}:\n"
+                            f"{entity_dict[:1000]}..."
+                        )
+                        # Log field info if available
+                        if hasattr(entity, "model_dump"):
+                            fields = entity.model_dump()
+                            large_fields = []
+                            for field_name, field_value in fields.items():
+                                if isinstance(field_value, str) and len(field_value) > 1000:
+                                    large_fields.append(f"{field_name}: {len(field_value)} chars")
+                            if large_fields:
+                                sync_context.logger.error(
+                                    f"📊 LARGE_FIELDS in {entity.entity_id}: "
+                                    f"{', '.join(large_fields)}"
+                                )
+
                     entity_dicts.append(entity_dict)
 
                 except Exception as e:

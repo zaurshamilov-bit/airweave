@@ -75,6 +75,49 @@ class TemporalService:
 
         return handle
 
+    async def cancel_sync_job_workflow(self, sync_job_id: str) -> bool:
+        """Cancel a running workflow by sync job ID.
+
+        This will search for workflows with IDs matching the pattern sync-{sync_job_id}-*
+        and cancel them. The workflow will catch the CancelledError and update the
+        sync job status to CANCELLED.
+
+        Args:
+            sync_job_id: The sync job ID to cancel
+
+        Returns:
+            True if a workflow was found and cancelled, False otherwise
+        """
+        try:
+            client = await temporal_client.get_client()
+
+            # List workflows to find the one matching our sync job
+            # Note: In production, you might want to store the workflow ID
+            # when starting it for direct lookup
+            workflows = []
+            async for workflow in client.list_workflows(
+                query=f'WorkflowId STARTS_WITH "sync-{sync_job_id}-"'
+            ):
+                workflows.append(workflow)
+
+            if not workflows:
+                logger.warning(f"No running workflow found for sync job {sync_job_id}")
+                return False
+
+            # Cancel the workflow(s)
+            for workflow in workflows:
+                handle = client.get_workflow_handle(workflow.id)
+                await handle.cancel()
+                logger.info(
+                    f"Successfully cancelled workflow {workflow.id} for sync job {sync_job_id}"
+                )
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to cancel workflow for sync job {sync_job_id}: {e}")
+            raise
+
     async def is_temporal_enabled(self) -> bool:
         """Check if Temporal is enabled and available.
 

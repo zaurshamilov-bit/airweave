@@ -262,9 +262,13 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
     This transformer:
     1. Takes a WebEntity with a URL
     2. Uses Firecrawl to crawl the URL and convert to markdown
+       (or retrieves from storage for CTTI entities)
     3. Saves the markdown content to a local temporary file
     4. Returns a list containing a single FileEntity with local_path set,
        ready for file chunker
+
+    NOTE: We always process entities even if content exists in storage,
+    because each collection needs its own copy in the vector database.
 
     Args:
         web_entity: The WebEntity containing the URL to fetch
@@ -288,13 +292,6 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
             f"🏥 WEB_CTTI [{entity_context}] Detected CTTI entity, using global deduplication"
         )
 
-    # Note: is_fully_processed check for CTTI entities is now done in the source
-    # before the entity enters the processor pipeline
-
-    # Check if already processed (for non-CTTI entities)
-    if await _is_entity_already_processed(web_entity, is_ctti, entity_context):
-        return []
-
     try:
         # Use retry logic with connection limiting
         scrape_result = await _scrape_web_content(web_entity, entity_context)
@@ -317,16 +314,12 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
 async def _is_entity_already_processed(
     web_entity: WebEntity, is_ctti: bool, entity_context: str
 ) -> bool:
-    """Check if entity is already processed."""
-    from airweave.platform.storage import storage_manager
+    """DEPRECATED: We no longer skip entities that are already processed.
 
-    if not is_ctti and hasattr(web_entity, "sync_id") and web_entity.sync_id:
-        cache_key = f"{web_entity.sync_id}/{web_entity.entity_id}"
-        if await storage_manager.is_entity_fully_processed(cache_key):
-            logger.info(f"✅ WEB_CACHED [{entity_context}] Web entity already processed (KEPT)")
-            # Mark the entity as fully processed so entity_processor marks it as KEPT
-            web_entity.is_fully_processed = True
-            return True
+    Each collection needs its own copy in the vector database, so we always
+    process entities even if they've been processed before.
+    """
+    # This method is kept for backwards compatibility but always returns False
     return False
 
 
