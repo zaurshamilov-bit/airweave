@@ -31,6 +31,7 @@ import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_U
 import { APIKeysSettings } from "@/components/settings/APIKeysSettings";
 import { DialogFlow } from '@/components/shared';
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
+import { useOrganizationStore } from "@/lib/stores/organizations";
 import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
@@ -38,6 +39,7 @@ const CollectionsSection = memo(() => {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(true);
   const { collections, isLoading: isLoadingCollections, error: collectionError, fetchCollections } = useCollectionsStore();
+  const { currentOrganization } = useOrganizationStore();
 
   // Initialize collections and event listeners
   useEffect(() => {
@@ -45,6 +47,14 @@ const CollectionsSection = memo(() => {
     const unsubscribe = useCollectionsStore.getState().subscribeToEvents();
     return unsubscribe;
   }, [fetchCollections]);
+
+  // Refetch collections when organization changes (for auto-switching)
+  useEffect(() => {
+    if (currentOrganization) {
+      console.log(`🔄 [CollectionsSection] Organization changed to ${currentOrganization.name}, refetching collections`);
+      fetchCollections(true); // Force refresh
+    }
+  }, [currentOrganization?.id, fetchCollections]);
 
   // Log the actual collections count for debugging
   useEffect(() => {
@@ -180,6 +190,7 @@ const DashboardLayout = () => {
   const navigate = useNavigate();
   const { resolvedTheme, setTheme } = useTheme();
   const { fetchSources } = useSourcesStore();
+  const { currentOrganization } = useOrganizationStore();
   const [searchParams] = useSearchParams();
   const [errorData, setErrorData] = useState<any>(null);
 
@@ -279,7 +290,7 @@ const DashboardLayout = () => {
         <UserProfileDropdown />
       </div>
     </div>
-  ), [resolvedTheme, handleCreateCollection, isDashboardActive, isApiKeysActive, isWhiteLabelActive]);
+  ), [resolvedTheme, handleCreateCollection, isDashboardActive, isApiKeysActive, isWhiteLabelActive, currentOrganization?.id]);
 
   // Main component render
   return (
