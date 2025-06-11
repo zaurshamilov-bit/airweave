@@ -8,6 +8,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Loader2, Save } from 'lucide-react';
 import { apiClient } from "@/lib/api";
 import { toast } from 'sonner';
+import { useOrganizationStore } from '@/lib/stores/organizations';
+import { useNavigate } from 'react-router-dom';
 
 interface Organization {
   id: string;
@@ -33,6 +35,9 @@ export const OrganizationSettings = ({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const { removeOrganization, organizations } = useOrganizationStore();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (currentOrganization) {
@@ -91,7 +96,21 @@ export const OrganizationSettings = ({
       }
 
       toast.success('Organization deleted successfully');
-      window.location.href = '/dashboard';
+
+      // Remove the organization from the store, which will automatically switch to the next best org
+      removeOrganization(currentOrganization.id);
+
+      // Check if there are any remaining organizations
+      const remainingOrgs = organizations.filter(org => org.id !== currentOrganization.id);
+
+      if (remainingOrgs.length === 0) {
+        // No organizations left, redirect to a page that handles this state
+        navigate('/');
+      } else {
+        // There are other organizations, navigate to dashboard which will show the new current org
+        // Use window.location.href to ensure a full page reload and proper state initialization
+        window.location.href = '/';
+      }
 
     } catch (error) {
       console.error('Failed to delete organization:', error);

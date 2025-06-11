@@ -214,7 +214,7 @@ const DashboardLayout = () => {
 
   // Memoize active status checks
   const isDashboardActive = useMemo(() =>
-    location.pathname === "/" || location.pathname === "/dashboard",
+    location.pathname === "/",
     [location.pathname]);
 
   const isWhiteLabelActive = useMemo(() =>

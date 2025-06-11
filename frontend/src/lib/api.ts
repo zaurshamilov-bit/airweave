@@ -143,7 +143,7 @@ const handleOrganizationMismatch = async (responseData: any, method: HttpMethod)
   }
 
   // Don't auto-switch on homepage to avoid conflicts with manual org switching
-  if (window.location.pathname === '/' || window.location.pathname === '/dashboard') {
+  if (window.location.pathname === '/') {
     return false;
   }
 

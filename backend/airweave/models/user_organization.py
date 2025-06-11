@@ -21,7 +21,6 @@ class UserOrganization(Base):
     organization_id: Mapped[UUID] = mapped_column(
         UUID, ForeignKey("organization.id"), nullable=False
     )
-    auth0_org_id: Mapped[str] = mapped_column(String, nullable=True)  # Auth0 organization ID
     role: Mapped[str] = mapped_column(
         String, default="member", nullable=False
     )  # owner, admin, member

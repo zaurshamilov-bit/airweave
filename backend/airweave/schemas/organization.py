@@ -12,6 +12,7 @@ class OrganizationBase(BaseModel):
 
     name: str = Field(..., min_length=4, max_length=100, description="Organization name")
     description: Optional[str] = Field(None, max_length=500, description="Organization description")
+    auth0_org_id: Optional[str] = Field(None, description="Auth0 organization ID")
 
 
 class OrganizationCreate(OrganizationBase):
@@ -42,6 +43,7 @@ class Organization(OrganizationInDBBase):
 
     name: str
     description: Optional[str] = None
+    auth0_org_id: Optional[str] = None
 
 
 class OrganizationWithRole(BaseModel):

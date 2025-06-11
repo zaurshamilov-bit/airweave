@@ -137,7 +137,6 @@ class CRUDUser(CRUDBaseUser[User, UserCreate, UserUpdate]):
                 "organization": schemas.Organization.model_validate(organization),
                 "role": "owner",
                 "is_primary": True,
-                "auth0_org_id": None,
             }
 
             user_org_schema = schemas.UserOrganization(**user_org_data)

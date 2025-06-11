@@ -36,6 +36,11 @@ interface OrganizationState {
   switchOrganization: (orgId: string) => void;
   setPrimaryOrganization: (orgId: string) => Promise<boolean>;
   initializeOrganizations: () => Promise<void>;
+
+  // Member management actions
+  inviteUserToOrganization: (orgId: string, email: string, role: string) => Promise<boolean>;
+  removeUserFromOrganization: (orgId: string, userId: string) => Promise<boolean>;
+  leaveOrganization: (orgId: string) => Promise<boolean>;
 }
 
 // Helper function to select the best organization
@@ -67,8 +72,6 @@ const selectBestOrganization = (
   // Fallback to first organization
   return organizations[0];
 };
-
-
 
 export const useOrganizationStore = create<OrganizationState>()(
   persist(
@@ -238,6 +241,82 @@ export const useOrganizationStore = create<OrganizationState>()(
 
           return newOrganization;
         } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      // Member management actions
+      inviteUserToOrganization: async (orgId: string, email: string, role: string): Promise<boolean> => {
+        try {
+          set({ isLoading: true });
+
+          const response = await apiClient.post(`/organizations/${orgId}/invite`, {
+            email,
+            role
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `Failed to invite user: ${response.status}`);
+          }
+
+          set({ isLoading: false });
+          return true;
+        } catch (error) {
+          console.error('Failed to invite user to organization:', error);
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      removeUserFromOrganization: async (orgId: string, userId: string): Promise<boolean> => {
+        try {
+          set({ isLoading: true });
+
+          const response = await apiClient.delete(`/organizations/${orgId}/members/${userId}`);
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `Failed to remove user: ${response.status}`);
+          }
+
+          set({ isLoading: false });
+          return true;
+        } catch (error) {
+          console.error('Failed to remove user from organization:', error);
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      leaveOrganization: async (orgId: string): Promise<boolean> => {
+        try {
+          set({ isLoading: true });
+
+          const response = await apiClient.post(`/organizations/${orgId}/leave`);
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `Failed to leave organization: ${response.status}`);
+          }
+
+          // Remove the organization from the local state
+          const { organizations, currentOrganization } = get();
+          const newOrganizations = organizations.filter(org => org.id !== orgId);
+          const newCurrentOrg = currentOrganization?.id === orgId
+            ? selectBestOrganization(newOrganizations)
+            : currentOrganization;
+
+          set({
+            organizations: newOrganizations,
+            currentOrganization: newCurrentOrg,
+            isLoading: false
+          });
+
+          return true;
+        } catch (error) {
+          console.error('Failed to leave organization:', error);
           set({ isLoading: false });
           throw error;
         }

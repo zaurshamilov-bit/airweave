@@ -1,5 +1,6 @@
 """API endpoints for organizations."""
 
+from datetime import datetime
 from typing import List
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.auth0_service import auth0_service
+from airweave.core.logging import logger
 from airweave.models.user import User
 from airweave.schemas.auth import AuthContext
 
@@ -254,95 +256,34 @@ async def delete_organization(
             detail="Cannot delete your only organization. Contact support to delete your account.",
         )
 
-    # Delete the organization (CASCADE will handle user_organization relationships)
-    deleted_org = await crud.organization.remove(db=db, id=organization_id)
-
-    return schemas.OrganizationWithRole(
-        id=deleted_org.id,
-        name=deleted_org.name,
-        description=deleted_org.description or "",
-        created_at=deleted_org.created_at,
-        modified_at=deleted_org.modified_at,
-        role=user_role,
-        is_primary=user_is_primary,
-    )
-
-
-@router.post("/{organization_id}/leave", response_model=dict)
-async def leave_organization(
-    organization_id: UUID,
-    db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
-) -> dict:
-    """Leave an organization.
-
-    Users cannot leave if they are the only owner or if it's their only organization.
-
-    Args:
-        organization_id: The ID of the organization to leave
-        db: Database session
-        auth_context: The current authenticated user
-
-    Returns:
-        Success message
-
-    Raises:
-        HTTPException: If user cannot leave the organization
-    """
-    # Get user's membership (this validates access automatically)
-    user_org = await crud.organization.get_user_membership(
-        db=db,
-        organization_id=organization_id,
-        user_id=auth_context.user.id,
-        auth_context=auth_context,
-    )
-
-    if not user_org:
-        raise HTTPException(status_code=404, detail="You are not a member of this organization")
-
-    # Capture the role early to avoid greenlet exceptions later
-    user_role = user_org.role
-
-    # Check if this is the user's only organization
-    user_orgs = await crud.organization.get_user_organizations_with_roles(
-        db=db, user_id=auth_context.user.id
-    )
-
-    if len(user_orgs) <= 1:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot leave your only organization. "
-            "Users must belong to at least one organization. Delete the organization instead.",
-        )
-
-    # If user is an owner, check if there are other owners
-    if user_role == "owner":
-        other_owners = await crud.organization.get_organization_owners(
+    # Delete the organization using Auth0 service (handles both local and Auth0 deletion)
+    try:
+        success = await auth0_service.delete_organization_with_auth0(
             db=db,
             organization_id=organization_id,
-            auth_context=auth_context,
-            exclude_user_id=auth_context.user.id,
+            deleting_user=auth_context.user,
         )
 
-        if not other_owners:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot leave organization as the only owner. "
-                "Transfer ownership to another member first.",
-            )
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete organization")
 
-    # Remove the user from the organization (this validates permissions automatically)
-    success = await crud.organization.remove_member(
-        db=db,
-        organization_id=organization_id,
-        user_id=auth_context.user.id,
-        auth_context=auth_context,
-    )
+        # Return the deleted organization info
+        # Note: We use the captured values since the org is now deleted
+        return schemas.OrganizationWithRole(
+            id=organization_id,
+            name="",  # Organization name is no longer available after deletion
+            description="",
+            created_at=datetime.now(),  # Placeholder values
+            modified_at=datetime.now(),
+            role=user_role,
+            is_primary=user_is_primary,
+        )
 
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to leave organization")
-
-    return {"message": "Successfully left the organization"}
+    except Exception as e:
+        logger.error(f"Failed to delete organization {organization_id}: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to delete organization: {str(e)}"
+        ) from e
 
 
 @router.post("/{organization_id}/set-primary", response_model=schemas.OrganizationWithRole)
@@ -399,3 +340,268 @@ async def set_primary_organization(
         role=user_org.role,
         is_primary=user_org.is_primary,
     )
+
+
+# Member Management Endpoints
+
+
+@router.post("/{organization_id}/invite", response_model=schemas.InvitationResponse)
+async def invite_user_to_organization(
+    organization_id: UUID,
+    invitation_data: schemas.InvitationCreate,
+    db: AsyncSession = Depends(deps.get_db),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+) -> schemas.InvitationResponse:
+    """Send organization invitation via Auth0."""
+    # Validate user has admin access using auth context
+    user_org = None
+    for org in auth_context.user.user_organizations:
+        if org.organization.id == organization_id:
+            user_org = org
+            break
+
+    if not user_org or user_org.role not in ["owner", "admin"]:
+        raise HTTPException(
+            status_code=403, detail="Only organization owners and admins can invite members"
+        )
+
+    try:
+        invitation = await auth0_service.invite_user_to_organization(
+            db=db,
+            organization_id=organization_id,
+            email=invitation_data.email,
+            role=invitation_data.role,
+            inviter_user=auth_context.user,
+        )
+
+        return schemas.InvitationResponse(
+            id=invitation["id"],
+            email=invitation_data.email,
+            role=invitation_data.role,
+            status="pending",
+            invited_at=invitation.get("created_at"),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/{organization_id}/invitations", response_model=List[schemas.InvitationResponse])
+async def get_pending_invitations(
+    organization_id: UUID,
+    db: AsyncSession = Depends(deps.get_db),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+) -> List[schemas.InvitationResponse]:
+    """Get pending invitations for organization."""
+    # Validate user has access to organization using auth context
+    user_org = None
+    for org in auth_context.user.user_organizations:
+        if org.organization.id == organization_id:
+            user_org = org
+            break
+
+    if not user_org:
+        raise HTTPException(
+            status_code=404, detail="Organization not found or you don't have access to it"
+        )
+
+    try:
+        invitations = await auth0_service.get_pending_invitations(
+            db=db,
+            organization_id=organization_id,
+            requesting_user=auth_context.user,
+        )
+
+        return [
+            schemas.InvitationResponse(
+                id=inv["id"],
+                email=inv["email"],
+                role=inv["role"],
+                status=inv["status"],
+                invited_at=inv["invited_at"],
+            )
+            for inv in invitations
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.delete("/{organization_id}/invitations/{invitation_id}", response_model=dict)
+async def remove_pending_invitation(
+    organization_id: UUID,
+    invitation_id: str,
+    db: AsyncSession = Depends(deps.get_db),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+) -> dict:
+    """Remove a pending invitation."""
+    # Validate user has admin access using auth context
+    user_org = None
+    for org in auth_context.user.user_organizations:
+        if org.organization.id == organization_id:
+            user_org = org
+            break
+
+    if not user_org or user_org.role not in ["owner", "admin"]:
+        raise HTTPException(
+            status_code=403, detail="Only organization owners and admins can remove invitations"
+        )
+
+    try:
+        success = await auth0_service.remove_pending_invitation(
+            db=db,
+            organization_id=organization_id,
+            invitation_id=invitation_id,
+            remover_user=auth_context.user,
+        )
+
+        if success:
+            return {"message": "Invitation removed successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Invitation not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/{organization_id}/members", response_model=List[schemas.MemberResponse])
+async def get_organization_members(
+    organization_id: UUID,
+    db: AsyncSession = Depends(deps.get_db),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+) -> List[schemas.MemberResponse]:
+    """Get all members of an organization."""
+    # Validate user has access to organization using auth context
+    user_org = None
+    for org in auth_context.user.user_organizations:
+        if org.organization.id == organization_id:
+            user_org = org
+            break
+
+    if not user_org:
+        raise HTTPException(
+            status_code=404, detail="Organization not found or you don't have access to it"
+        )
+
+    try:
+        members = await auth0_service.get_organization_members(
+            db=db,
+            organization_id=organization_id,
+            requesting_user=auth_context.user,
+        )
+
+        return [
+            schemas.MemberResponse(
+                id=member["id"],
+                email=member["email"],
+                name=member["name"],
+                role=member["role"],
+                status=member["status"],
+                is_primary=member["is_primary"],
+                auth0_id=member["auth0_id"],
+            )
+            for member in members
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.delete("/{organization_id}/members/{user_id}", response_model=dict)
+async def remove_member_from_organization(
+    organization_id: UUID,
+    user_id: UUID,
+    db: AsyncSession = Depends(deps.get_db),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+) -> dict:
+    """Remove a member from organization."""
+    # Validate user has admin access using auth context
+    user_org = None
+    for org in auth_context.user.user_organizations:
+        if org.organization.id == organization_id:
+            user_org = org
+            break
+
+    if not user_org or user_org.role not in ["owner", "admin"]:
+        raise HTTPException(
+            status_code=403, detail="Only organization owners and admins can remove members"
+        )
+
+    # Don't allow removing yourself this way - use leave endpoint instead
+    if user_id == auth_context.user.id:
+        raise HTTPException(
+            status_code=400, detail="Use the leave organization endpoint to remove yourself"
+        )
+
+    try:
+        success = await auth0_service.remove_member_from_organization(
+            db=db,
+            organization_id=organization_id,
+            user_id=user_id,
+            remover_user=auth_context.user,
+        )
+
+        if success:
+            return {"message": "Member removed successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Member not found")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/{organization_id}/leave", response_model=dict)
+async def leave_organization(
+    organization_id: UUID,
+    db: AsyncSession = Depends(deps.get_db),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+) -> dict:
+    """Leave an organization."""
+    # Validate user is a member using auth context
+    user_org = None
+    for org in auth_context.user.user_organizations:
+        if org.organization.id == organization_id:
+            user_org = org
+            break
+
+    if not user_org:
+        raise HTTPException(status_code=404, detail="You are not a member of this organization")
+
+    # Check if this is the user's only organization
+    user_orgs = await crud.organization.get_user_organizations_with_roles(
+        db=db, user_id=auth_context.user.id
+    )
+
+    if len(user_orgs) <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot leave your only organization. "
+            "Users must belong to at least one organization. Delete the organization instead.",
+        )
+
+    # If user is an owner, check if there are other owners
+    user_role = user_org.role
+    if user_role == "owner":
+        other_owners = await crud.organization.get_organization_owners(
+            db=db,
+            organization_id=organization_id,
+            auth_context=auth_context,
+            exclude_user_id=auth_context.user.id,
+        )
+
+        if not other_owners:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot leave organization as the only owner. "
+                "Transfer ownership to another member first.",
+            )
+
+    try:
+        # Use the auth0_service to handle leaving (which handles both local and Auth0)
+        success = await auth0_service.handle_user_leaving_organization(
+            db=db,
+            organization_id=organization_id,
+            leaving_user=auth_context.user,
+        )
+
+        if success:
+            return {"message": "Successfully left the organization"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to leave organization")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e

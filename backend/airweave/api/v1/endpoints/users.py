@@ -69,7 +69,7 @@ async def read_user_organizations(
             modified_at=user_org.organization.modified_at,
             role=user_org.role,
             is_primary=user_org.is_primary,
-            auth0_org_id=user_org.auth0_org_id,
+            auth0_org_id=user_org.organization.auth0_org_id,
         )
         organizations.append(org_with_role)
 

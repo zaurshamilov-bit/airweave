@@ -26,7 +26,7 @@ class OrganizationBase(Base):
     @declared_attr
     def organization_id(cls):
         """Organization ID column."""
-        return Column(UUID, ForeignKey("organization.id"), nullable=False)
+        return Column(UUID, ForeignKey("organization.id", ondelete="CASCADE"), nullable=False)
 
 
 class UserMixin:

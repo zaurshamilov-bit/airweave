@@ -130,14 +130,11 @@ class CRUDOrganization:
         Returns:
             The created organization
         """
-        # Convert to OrganizationCreate schema
-        org_data = OrganizationCreate(name=obj_in.name, description=obj_in.description or "")
-
-        # Create the organization manually since it doesn't have organization_id
-        if not isinstance(org_data, dict):
-            org_data_dict = org_data.model_dump(exclude_unset=True)
+        # Use the full obj_in data to preserve all fields including auth0_org_id
+        if not isinstance(obj_in, dict):
+            org_data_dict = obj_in.model_dump(exclude_unset=True)
         else:
-            org_data_dict = org_data
+            org_data_dict = obj_in
 
         organization = Organization(**org_data_dict)
         db.add(organization)
@@ -589,10 +586,22 @@ class CRUDOrganization:
 
     async def remove(self, db: AsyncSession, id: UUID) -> Organization:
         """Remove an organization."""
-        stmt = delete(Organization).where(Organization.id == id)
-        result = await db.execute(stmt)
+        # First get the organization to return it
+        get_stmt = select(Organization).where(Organization.id == id)
+        get_result = await db.execute(get_stmt)
+        org_to_delete = get_result.scalar_one_or_none()
+
+        if org_to_delete is None:
+            from airweave.core.exceptions import NotFoundException
+
+            raise NotFoundException(f"Organization with ID {id} not found")
+
+        # Then delete it
+        delete_stmt = delete(Organization).where(Organization.id == id)
+        await db.execute(delete_stmt)
         await db.commit()
-        return result.scalar_one_or_none()
+
+        return org_to_delete
 
 
 # Create the instance with the updated class name

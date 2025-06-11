@@ -237,7 +237,7 @@ export function UserProfileDropdown() {
                 {currentOrganization?.name || 'Select Organization'}
               </span>
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-72 p-1 shadow-xs animate-none">
+            <DropdownMenuSubContent className="w-72 p-1 shadow-xs animate-none max-h-96 overflow-y-auto" alignOffset={-120}>
               {isLoadingOrgs ? (
                 <DropdownMenuItem disabled className="px-2 py-1.5 text-sm text-muted-foreground">
                   Loading organizations...

@@ -13,7 +13,6 @@ class UserOrganizationBase(BaseModel):
 
     role: str = "member"  # owner, admin, member
     is_primary: bool = False
-    auth0_org_id: Optional[str] = None
     user_id: UUID
     organization_id: UUID
 

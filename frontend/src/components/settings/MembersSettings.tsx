@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { apiClient } from '@/lib/api';
 
 // Member interfaces
 interface Member {
@@ -19,7 +20,8 @@ interface Member {
   name: string;
   role: string;
   status: 'active' | 'pending';
-  avatar?: string;
+  is_primary?: boolean;
+  auth0_id?: string;
 }
 
 interface PendingInvitation {
@@ -41,42 +43,46 @@ interface MembersSettingsProps {
   currentOrganization: Organization;
 }
 
-// Dummy data for members
-const DUMMY_MEMBERS: Member[] = [
-  {
-    id: '1',
-    email: 'john@acme.com',
-    name: 'John Doe',
-    role: 'owner',
-    status: 'active',
-  },
-  {
-    id: '2',
-    email: 'jane@acme.com',
-    name: 'Jane Smith',
-    role: 'admin',
-    status: 'active',
-  }
-];
-
-const DUMMY_INVITATIONS: PendingInvitation[] = [
-  {
-    id: '1',
-    email: 'bob@example.com',
-    role: 'member',
-    invited_at: '2024-01-15T10:00:00Z',
-    status: 'pending',
-  }
-];
-
 export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) => {
-  const [members, setMembers] = useState<Member[]>(DUMMY_MEMBERS);
-  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>(DUMMY_INVITATIONS);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('member');
   const [isInviting, setIsInviting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [emailError, setEmailError] = useState('');
   const [emailValidationTimeout, setEmailValidationTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // Fetch members and invitations on mount
+  useEffect(() => {
+    fetchMembersAndInvitations();
+  }, [currentOrganization.id]);
+
+  const fetchMembersAndInvitations = async () => {
+    try {
+      setIsLoading(true);
+
+      // Fetch members
+      const membersResponse = await apiClient.get(`/organizations/${currentOrganization.id}/members`);
+      if (membersResponse.ok) {
+        const membersData = await membersResponse.json();
+        setMembers(membersData);
+      }
+
+      // Fetch pending invitations
+      const invitationsResponse = await apiClient.get(`/organizations/${currentOrganization.id}/invitations`);
+      if (invitationsResponse.ok) {
+        const invitationsData = await invitationsResponse.json();
+        setPendingInvitations(invitationsData);
+      }
+
+    } catch (error) {
+      console.error('Failed to fetch members and invitations:', error);
+      toast.error('Failed to load member data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleInvite = async () => {
     if (!inviteEmail || emailError) return;
@@ -84,11 +90,27 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
     try {
       setIsInviting(true);
 
+      const response = await apiClient.post(
+        `/organizations/${currentOrganization.id}/invite`,
+        {
+          email: inviteEmail,
+          role: inviteRole
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to send invitation: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      // Add to pending invitations list
       const newInvitation: PendingInvitation = {
-        id: Date.now().toString(),
+        id: result.id,
         email: inviteEmail,
         role: inviteRole,
-        invited_at: new Date().toISOString(),
+        invited_at: result.invited_at || new Date().toISOString(),
         status: 'pending',
       };
 
@@ -97,11 +119,51 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
       setInviteRole('member');
       toast.success('Invitation sent successfully');
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to send invitation:', error);
-      toast.error('Failed to send invitation');
+      toast.error(error.message || 'Failed to send invitation');
     } finally {
       setIsInviting(false);
+    }
+  };
+
+  const handleRemoveInvitation = async (invitationId: string) => {
+    try {
+      const response = await apiClient.delete(
+        `/organizations/${currentOrganization.id}/invitations/${invitationId}`
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to remove invitation: ${response.status}`);
+      }
+
+      setPendingInvitations(prev => prev.filter(i => i.id !== invitationId));
+      toast.success('Invitation removed successfully');
+
+    } catch (error: any) {
+      console.error('Failed to remove invitation:', error);
+      toast.error(error.message || 'Failed to remove invitation');
+    }
+  };
+
+  const handleRemoveMember = async (memberId: string) => {
+    try {
+      const response = await apiClient.delete(
+        `/organizations/${currentOrganization.id}/members/${memberId}`
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to remove member: ${response.status}`);
+      }
+
+      setMembers(prev => prev.filter(m => m.id !== memberId));
+      toast.success('Member removed successfully');
+
+    } catch (error: any) {
+      console.error('Failed to remove member:', error);
+      toast.error(error.message || 'Failed to remove member');
     }
   };
 
@@ -122,7 +184,7 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
   };
 
   // Email validation function
-  const validateEmail = (email: string) => {
+  const validateEmail = useCallback((email: string) => {
     if (!email) {
       setEmailError('');
       return;
@@ -131,10 +193,34 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setEmailError('Please enter a valid email address');
-    } else {
-      setEmailError('');
+      return;
     }
-  };
+
+    // Check if email already exists as a member
+    const existingMember = members.find(member => member.email.toLowerCase() === email.toLowerCase());
+    if (existingMember) {
+      setEmailError('This person is already a member of the organization');
+      return;
+    }
+
+    // Check if email already has a pending invitation
+    const existingInvitation = pendingInvitations.find(invitation =>
+      invitation.email.toLowerCase() === email.toLowerCase()
+    );
+    if (existingInvitation) {
+      setEmailError('An invitation has already been sent to this email');
+      return;
+    }
+
+    setEmailError('');
+  }, [members, pendingInvitations]);
+
+  // Re-validate email when members or pending invitations change (but not on email change)
+  useEffect(() => {
+    if (inviteEmail) {
+      validateEmail(inviteEmail);
+    }
+  }, [members, pendingInvitations, validateEmail]);
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const email = e.target.value;
@@ -145,17 +231,32 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
       clearTimeout(emailValidationTimeout);
     }
 
-    // Check if email is valid immediately
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (email && emailRegex.test(email)) {
-      // Immediately clear error if email is valid
+    if (!email) {
       setEmailError('');
-    } else if (email) {
-      // Wait longer before showing error for invalid emails
-      const timeout = setTimeout(() => validateEmail(email), 1500);
-      setEmailValidationTimeout(timeout);
+      return;
+    }
+
+    // Check basic email format first
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (emailRegex.test(email)) {
+      // For valid format emails, check immediately for duplicates only
+      const existingMember = members.find(member => member.email.toLowerCase() === email.toLowerCase());
+      if (existingMember) {
+        setEmailError('This person is already a member of the organization');
+        return;
+      }
+
+      const existingInvitation = pendingInvitations.find(invitation =>
+        invitation.email.toLowerCase() === email.toLowerCase()
+      );
+      if (existingInvitation) {
+        setEmailError('An invitation has already been sent to this email');
+        return;
+      }
+
+      setEmailError('');
     } else {
-      // Clear error if email is empty
+      // Don't show errors while typing - only on blur
       setEmailError('');
     }
   };
@@ -166,6 +267,15 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
 
   const isValidEmail = inviteEmail && !emailError;
   const canEdit = ['owner', 'admin'].includes(currentOrganization.role);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-6 w-6 animate-spin" />
+        <span className="ml-2 text-sm text-muted-foreground">Loading members...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -254,14 +364,16 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
                   <Badge variant="secondary" className="text-xs">
                     Pending
                   </Badge>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
-                    onClick={() => setPendingInvitations(prev => prev.filter(i => i.id !== invitation.id))}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
+                  {canEdit && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleRemoveInvitation(invitation.id)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -283,7 +395,7 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
             <div key={member.id} className="flex items-center justify-between py-3 px-3 border border-border rounded-md">
               <div className="flex items-center gap-3">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={member.avatar} />
+                  <AvatarImage src={undefined} />
                   <AvatarFallback className="text-xs">
                     {member.name.split(' ').map(n => n[0]).join('')}
                   </AvatarFallback>
@@ -300,6 +412,17 @@ export const MembersSettings = ({ currentOrganization }: MembersSettingsProps) =
                     {member.role}
                   </span>
                 </Badge>
+                {/* Only show remove button for admins/owners, and not for themselves */}
+                {canEdit && member.role !== 'owner' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleRemoveMember(member.id)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
