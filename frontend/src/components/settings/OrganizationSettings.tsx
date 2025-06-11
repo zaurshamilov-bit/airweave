@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, Save } from 'lucide-react';
 import { apiClient } from "@/lib/api";
 import { toast } from 'sonner';
@@ -12,16 +14,21 @@ interface Organization {
   name: string;
   description?: string;
   role: string;
+  is_primary: boolean;
 }
 
 interface OrganizationSettingsProps {
   currentOrganization: Organization;
   onOrganizationUpdate: (id: string, updates: Partial<Organization>) => void;
+  onPrimaryToggle: (checked: boolean) => Promise<void>;
+  isPrimaryToggleLoading: boolean;
 }
 
 export const OrganizationSettings = ({
   currentOrganization,
-  onOrganizationUpdate
+  onOrganizationUpdate,
+  onPrimaryToggle,
+  isPrimaryToggleLoading
 }: OrganizationSettingsProps) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -147,6 +154,38 @@ export const OrganizationSettings = ({
             </Button>
           </div>
         )}
+      </div>
+
+      {/* Primary Organization Setting */}
+      <div className="pt-6 border-t border-border max-w-lg">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <h3 className="text-sm font-medium">Primary Organization</h3>
+            <p className="text-xs text-muted-foreground">
+              This organization will be used as the default.
+            </p>
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <Switch
+                  checked={currentOrganization.is_primary}
+                  onCheckedChange={onPrimaryToggle}
+                  disabled={isPrimaryToggleLoading}
+                  className="data-[state=checked]:bg-primary data-[state=unchecked]:bg-input"
+                />
+              </div>
+            </TooltipTrigger>
+            {currentOrganization.is_primary && (
+              <TooltipContent side="left" className="max-w-xs">
+                <p className="text-xs">
+                  Cannot unset primary organization directly.
+                  Set another organization as primary to change this.
+                </p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </div>
       </div>
 
       {/* Danger Zone */}

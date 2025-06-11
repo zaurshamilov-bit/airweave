@@ -3,7 +3,7 @@ import { useOrganizationStore } from '@/lib/stores/organizations';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   Plus, Crown, Shield, Users, Check, Copy, Star
 } from 'lucide-react';
@@ -163,113 +163,101 @@ export const OrganizationSettingsUnified = () => {
 
   return (
     <>
-      <div className="max-w-4xl mx-auto py-8">
-        {/* Header - Simplified without primary toggle */}
-        <div className="flex items-start justify-between mb-8">
-          <div className="flex flex-col">
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-xl font-medium">{currentOrganization.name}</h1>
+      <TooltipProvider delayDuration={200}>
+        <div className="max-w-4xl mx-auto py-8">
+          {/* Header - Simplified without primary toggle */}
+          <div className="flex items-start justify-between mb-8">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-xl font-medium">{currentOrganization.name}</h1>
 
-              {/* Subtle role indicator */}
-              <div className="flex items-center gap-1 text-brand-lime/90">
-                {getRoleIcon(currentOrganization.role)}
-                <span className="text-xs capitalize">{currentOrganization.role}</span>
+                {/* Subtle role indicator */}
+                <div className="flex items-center gap-1 text-brand-lime/90">
+                  {getRoleIcon(currentOrganization.role)}
+                  <span className="text-xs capitalize">{currentOrganization.role}</span>
+                </div>
+
+                {/* Subtle primary indicator */}
+                {currentOrganization.is_primary && (
+                  <div className="flex items-center gap-1 text-brand-yellow">
+                    <Star className="h-3 w-3" />
+                    <span className="text-xs">Primary</span>
+                  </div>
+                )}
               </div>
 
-              {/* Subtle primary indicator */}
-              {currentOrganization.is_primary && (
-                <div className="flex items-center gap-1 text-brand-yellow">
-                  <Star className="h-3 w-3" />
-                  <span className="text-xs">Primary</span>
-                </div>
-              )}
+              {/* Organization ID under title */}
+              <p className="text-muted-foreground text-xs group relative flex items-center">
+                {currentOrganization.id}
+                <button
+                  className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
+                  onClick={handleCopyId}
+                  title="Copy ID"
+                >
+                  {isCopied ? (
+                    <Check className="h-3.5 w-3.5 text-muted-foreground transition-all" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5 text-muted-foreground transition-all" />
+                  )}
+                </button>
+              </p>
             </div>
+          </div>
 
-            {/* Organization ID under title */}
-            <p className="text-muted-foreground text-xs group relative flex items-center">
-              {currentOrganization.id}
-              <button
-                className="ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 focus:outline-none"
-                onClick={handleCopyId}
-                title="Copy ID"
-              >
-                {isCopied ? (
-                  <Check className="h-3.5 w-3.5 text-muted-foreground transition-all" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5 text-muted-foreground transition-all" />
-                )}
-              </button>
-            </p>
+          {/* Tab Navigation */}
+          <div className="flex border-b border-border mb-8">
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={cn(
+                    "flex items-center gap-2 py-3 px-1 text-sm font-medium transition-colors border-b-2 border-transparent mr-8",
+                    isActive
+                      ? "text-foreground border-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tab Content */}
+          <div>
+            {/* Settings Tab */}
+            {activeTab === 'settings' && (
+              <div className="space-y-8">
+                <TooltipProvider delayDuration={200}>
+                  <OrganizationSettings
+                    currentOrganization={currentOrganization}
+                    onOrganizationUpdate={handleOrganizationUpdate}
+                    onPrimaryToggle={handlePrimaryToggle}
+                    isPrimaryToggleLoading={isPrimaryToggleLoading}
+                  />
+                </TooltipProvider>
+              </div>
+            )}
+
+            {/* API Keys Tab */}
+            {activeTab === 'api-keys' && (
+              <div>
+                <APIKeysSettings />
+              </div>
+            )}
+
+            {/* Members Tab */}
+            {activeTab === 'members' && (
+              <MembersSettings
+                currentOrganization={currentOrganization}
+              />
+            )}
           </div>
         </div>
-
-        {/* Tab Navigation */}
-        <div className="flex border-b border-border mb-8">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={cn(
-                  "flex items-center gap-2 py-3 px-1 text-sm font-medium transition-colors border-b-2 border-transparent mr-8",
-                  isActive
-                    ? "text-foreground border-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Tab Content */}
-        <div>
-          {/* Settings Tab */}
-          {activeTab === 'settings' && (
-            <div className="space-y-8">
-              <OrganizationSettings
-                currentOrganization={currentOrganization}
-                onOrganizationUpdate={handleOrganizationUpdate}
-              />
-
-              {/* Primary Organization Setting */}
-              <div className="border-t border-border pt-8">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <h3 className="text-base font-medium">Primary Organization</h3>
-                    <p className="text-sm text-muted-foreground">
-                      This organization will be used as the default for new resources and projects.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={currentOrganization.is_primary}
-                    onCheckedChange={handlePrimaryToggle}
-                    disabled={isPrimaryToggleLoading}
-                    className="scale-90 data-[state=checked]:bg-brand-yellow/60"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* API Keys Tab */}
-          {activeTab === 'api-keys' && (
-            <div>
-              <APIKeysSettings />
-            </div>
-          )}
-
-          {/* Members Tab */}
-          {activeTab === 'members' && (
-            <MembersSettings
-              currentOrganization={currentOrganization}
-            />
-          )}
-        </div>
-      </div>
+      </TooltipProvider>
 
       <CreateOrganizationModal
         open={showCreateOrgModal}

@@ -1,11 +1,13 @@
 """Initialize the database with the first superuser."""
 
 import datetime
+from venv import logger
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core.config import settings
+from airweave.core.exceptions import NotFoundException
 from airweave.db.init_db_native import init_db_with_native_connections
 from airweave.schemas.auth import AuthContext
 
@@ -19,10 +21,10 @@ async def init_db(db: AsyncSession) -> None:
     """
     # First initialize native connections
     await init_db_with_native_connections(db)
-
-    user = await crud.user.get_by_email(db, email=settings.FIRST_SUPERUSER)
-
-    if not user:
+    try:
+        user = await crud.user.get_by_email(db, email=settings.FIRST_SUPERUSER)
+    except NotFoundException:
+        logger.info(f"User {settings.FIRST_SUPERUSER} not found, creating...")
         user_in = schemas.UserCreate(
             email=settings.FIRST_SUPERUSER,
             full_name="Superuser",

@@ -3,10 +3,11 @@
 from typing import Any, List, Optional, Union
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave.core.exceptions import NotFoundException, PermissionException
+from airweave.core.logging import logger
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.organization import Organization
 from airweave.models.user import User
@@ -31,9 +32,9 @@ class CRUDOrganization:
         """Initialize the Organization CRUD."""
         self.model = Organization
 
-    async def get_by_name(self, db: AsyncSession, name: str) -> Organization | None:
-        """Get an organization by its name."""
-        stmt = select(Organization).where(Organization.name == name)
+    async def get_by_auth0_id(self, db: AsyncSession, auth0_org_id: str) -> Organization | None:
+        """Get an organization by its Auth0 organization ID."""
+        stmt = select(Organization).where(Organization.auth0_org_id == auth0_org_id)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -47,27 +48,40 @@ class CRUDOrganization:
             user_id: The user's ID
             organization_id: The organization ID to set as primary
         """
-        # First, clear any existing primary flags for this user
-        stmt_clear = (
-            select(UserOrganization)
+        # Log for debugging
+        logger.info(
+            f"Setting primary organization for user {user_id} to organization {organization_id}"
+        )
+
+        # First, directly update ALL user organizations to set is_primary=False
+        stmt_clear_all = (
+            update(UserOrganization)
             .where(UserOrganization.user_id == user_id)
-            .where(UserOrganization.is_primary is True)
+            .values(is_primary=False)
         )
-        result = await db.execute(stmt_clear)
-        existing_primary_orgs = result.scalars().all()
+        await db.execute(stmt_clear_all)
+        await db.flush()
 
-        for org in existing_primary_orgs:
-            org.is_primary = False
-
-        # Then set the new primary organization
-        stmt_set = select(UserOrganization).where(
-            UserOrganization.user_id == user_id, UserOrganization.organization_id == organization_id
+        # Then set the specific organization as primary
+        stmt_set_primary = (
+            update(UserOrganization)
+            .where(
+                UserOrganization.user_id == user_id,
+                UserOrganization.organization_id == organization_id,
+            )
+            .values(is_primary=True)
         )
-        result = await db.execute(stmt_set)
-        user_org = result.scalar_one_or_none()
+        result = await db.execute(stmt_set_primary)
 
-        if user_org:
-            user_org.is_primary = True
+        if result.rowcount == 0:
+            raise NotFoundException(
+                f"User with ID {user_id} not found in organization with ID {organization_id}"
+            )
+
+        await db.flush()
+        logger.info(
+            f"Successfully set organization {organization_id} as primary for user {user_id}"
+        )
 
     async def set_primary_organization(
         self, db: AsyncSession, user_id: UUID, organization_id: UUID, auth_context: AuthContext
@@ -439,7 +453,7 @@ class CRUDOrganization:
         return list(result.scalars().all())
 
     async def remove_member(
-        self, db: AsyncSession, organization_id: UUID, user_id: UUID, current_user: User
+        self, db: AsyncSession, organization_id: UUID, user_id: UUID, auth_context: AuthContext
     ) -> bool:
         """Remove a user from an organization with proper permission checks.
 
@@ -447,7 +461,7 @@ class CRUDOrganization:
             db: Database session
             organization_id: The organization's ID
             user_id: The user's ID to remove
-            current_user: Current authenticated user
+            auth_context: Current authentication context
 
         Returns:
             True if the relationship was removed, False if it didn't exist
@@ -458,13 +472,13 @@ class CRUDOrganization:
         from fastapi import HTTPException
 
         # If user is trying to remove themselves, we allow it with different validation
-        if user_id == current_user.id:
-            user_org = await self.get_user_membership(db, organization_id, user_id, current_user)
+        if user_id == auth_context.user.id:
+            user_org = await self.get_user_membership(db, organization_id, user_id, auth_context)
 
             # If they're an owner, check if there are other owners
             if user_org.role == "owner":
                 owners = await self.get_organization_owners(
-                    db, organization_id, current_user, exclude_user_id=user_id
+                    db, organization_id, auth_context, exclude_user_id=user_id
                 )
                 if not owners:
                     raise HTTPException(
@@ -474,7 +488,7 @@ class CRUDOrganization:
                     )
         else:
             # If removing someone else, validate current user has admin access
-            await self._validate_admin_access(db, current_user, organization_id)
+            await self._validate_admin_access(auth_context, organization_id)
 
         stmt = delete(UserOrganization).where(
             UserOrganization.user_id == user_id, UserOrganization.organization_id == organization_id

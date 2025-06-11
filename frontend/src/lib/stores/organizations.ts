@@ -157,26 +157,14 @@ export const useOrganizationStore = create<OrganizationState>()(
         try {
           set({ isLoading: true });
 
-          // Get current user data which includes user_organizations
-          const response = await apiClient.get('/users');
+          // Get organizations directly from the new endpoint
+          const response = await apiClient.get('/users/me/organizations');
 
           if (!response.ok) {
-            throw new Error(`Failed to fetch user data: ${response.status}`);
+            throw new Error(`Failed to fetch organizations: ${response.status}`);
           }
 
-          const user = await response.json();
-
-          // Extract organizations from user_organizations field
-          const organizations: Organization[] = user.user_organizations?.map((userOrg: any) => ({
-            id: userOrg.organization.id,
-            name: userOrg.organization.name,
-            description: userOrg.organization.description,
-            auth0_org_id: userOrg.auth0_org_id,
-            role: userOrg.role,
-            is_primary: userOrg.is_primary,
-            created_at: userOrg.organization.created_at,
-            modified_at: userOrg.organization.modified_at,
-          })) || [];
+          const organizations: Organization[] = await response.json();
 
           // For initialization (login), always prefer primary organization
           const currentOrg = selectBestOrganization(organizations, null); // Pass null to force primary selection
@@ -203,26 +191,14 @@ export const useOrganizationStore = create<OrganizationState>()(
         try {
           set({ isLoading: true });
 
-          // Get current user data which includes user_organizations
-          const response = await apiClient.get('/users');
+          // Get organizations directly from the new endpoint
+          const response = await apiClient.get('/users/me/organizations');
 
           if (!response.ok) {
-            throw new Error(`Failed to fetch user data: ${response.status}`);
+            throw new Error(`Failed to fetch organizations: ${response.status}`);
           }
 
-          const user = await response.json();
-
-          // Extract organizations from user_organizations field
-          const organizations: Organization[] = user.user_organizations?.map((userOrg: any) => ({
-            id: userOrg.organization.id,
-            name: userOrg.organization.name,
-            description: userOrg.organization.description,
-            auth0_org_id: userOrg.auth0_org_id,
-            role: userOrg.role,
-            is_primary: userOrg.is_primary,
-            created_at: userOrg.organization.created_at,
-            modified_at: userOrg.organization.modified_at,
-          })) || [];
+          const organizations: Organization[] = await response.json();
 
           // For regular fetches, preserve current selection if valid
           const currentOrgId = get().currentOrganization?.id;

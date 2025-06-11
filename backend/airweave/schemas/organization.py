@@ -24,7 +24,7 @@ class OrganizationUpdate(BaseModel):
     """Organization update schema."""
 
     name: str
-    description: str
+    description: Optional[str] = None
 
 
 class OrganizationInDBBase(OrganizationBase):
@@ -41,7 +41,7 @@ class Organization(OrganizationInDBBase):
     """Organization schema."""
 
     name: str
-    description: str
+    description: Optional[str] = None
 
 
 class OrganizationWithRole(BaseModel):
@@ -51,8 +51,9 @@ class OrganizationWithRole(BaseModel):
 
     id: UUID
     name: str
-    description: str
+    description: Optional[str] = None
     created_at: datetime
     modified_at: datetime
     role: str  # owner, admin, member
     is_primary: bool
+    auth0_org_id: Optional[str] = None

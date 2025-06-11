@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import authConfig from '../config/auth';
 
@@ -108,7 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Get token function
-  const getToken = async (): Promise<string | null> => {
+  const getToken = useCallback(async (): Promise<string | null> => {
     if (!authConfig.authEnabled) {
       return "dev-mode-token";
     }
@@ -129,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return null;
-  };
+  }, [authConfig.authEnabled, token, auth0IsAuthenticated, getAccessTokenSilently]);
 
   // Check if auth is ready
   const isReady = (): boolean => {

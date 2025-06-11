@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Building2, Loader2 } from 'lucide-react';
 import { useOrganizationStore } from '@/lib/stores/organizations';
+import { toast } from 'sonner';
 
 const createOrganizationSchema = z.object({
   name: z.string()
@@ -72,6 +73,12 @@ export function CreateOrganizationModal({
 
       const newOrganization = await createOrganization(submitData);
 
+      // Show success message with enhanced features note
+      toast.success('Organization created successfully!', {
+        description: 'You can now invite team members and manage collaboration settings.',
+        duration: 4000,
+      });
+
       // Reset form and close modal
       reset();
       onOpenChange(false);
@@ -103,6 +110,10 @@ export function CreateOrganizationModal({
           </DialogTitle>
           <DialogDescription>
             Create a new organization to manage your projects and team members.
+            {/* Note about Auth0 integration without exposing technical details */}
+            <span className="block text-xs text-muted-foreground mt-1">
+              Organizations support advanced collaboration features and seamless member management.
+            </span>
           </DialogDescription>
         </DialogHeader>
 

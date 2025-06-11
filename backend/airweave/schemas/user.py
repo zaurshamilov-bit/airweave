@@ -50,12 +50,13 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for creating a User object."""
 
-    pass
+    auth0_id: Optional[str] = None
 
 
 class UserUpdate(UserBase):
     """Schema for updating a User object."""
 
+    auth0_id: Optional[str] = None
     permissions: Optional[list[str]] = None
 
 
@@ -63,6 +64,7 @@ class UserInDBBase(UserBase):
     """Base schema for User stored in DB."""
 
     id: UUID
+    auth0_id: Optional[str] = None
     primary_organization_id: Optional[UUID] = None
     user_organizations: list[UserOrganization] = Field(default_factory=list)
 

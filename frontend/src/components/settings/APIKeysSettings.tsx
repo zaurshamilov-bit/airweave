@@ -165,23 +165,14 @@ export function APIKeysSettings() {
           <Button
             onClick={handleCreateApiKey}
             disabled={creating}
-            size="sm"
-            className={cn(
-              "w-full sm:w-auto",
-              isDark ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-500 hover:bg-blue-600"
-            )}
+            className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white h-8 px-3.5 text-sm w-full sm:w-auto"
           >
             {creating ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
-              </>
+              <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
-              <>
-                <Key className="mr-1 h-3 w-3" />
-                Create key
-              </>
+              <Key className="h-3 w-3" />
             )}
+            {creating ? 'Creating...' : 'Create key'}
           </Button>
         </div>
 

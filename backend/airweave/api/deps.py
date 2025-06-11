@@ -161,7 +161,6 @@ async def get_auth_context(
 
 async def get_user(
     db: AsyncSession = Depends(get_db),
-    x_api_key: Optional[str] = Header(None),
     x_organization_id: Optional[str] = Header(None, alias="X-Organization-ID"),
     auth0_user: Optional[Auth0User] = Depends(auth0.get_user),
 ) -> schemas.User:
@@ -188,14 +187,16 @@ async def get_user(
 
     """
     # Get auth context and extract user
-    auth_context = await get_auth_context(
-        db=db, x_api_key=x_api_key, x_organization_id=x_organization_id, auth0_user=auth0_user
-    )
+    if not settings.AUTH_ENABLED:
+        user, _, _ = await _authenticate_system_user(db)
+    # Auth0 auth
+    else:
+        user, _, _ = await _authenticate_auth0_user(db, auth0_user)
 
-    if not auth_context.user:
-        raise HTTPException(status_code=401, detail="User context required for this endpoint")
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
 
-    return auth_context.user
+    return user
 
 
 # Add this function to authenticate users with a token directly

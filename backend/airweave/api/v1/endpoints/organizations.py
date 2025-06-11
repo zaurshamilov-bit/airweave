@@ -9,23 +9,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
+from airweave.core.auth0_service import auth0_service
+from airweave.models.user import User
 from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
 
-@router.post("/", response_model=schemas.OrganizationWithRole)
+@router.post("/", response_model=schemas.Organization)
 async def create_organization(
     organization_data: schemas.OrganizationCreate,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
-) -> schemas.OrganizationWithRole:
+    user: User = Depends(deps.get_user),
+) -> schemas.Organization:
     """Create a new organization with current user as owner.
+
+    Integrates with Auth0 Organizations API when available for enhanced multi-org support.
 
     Args:
         organization_data: The organization data to create
         db: Database session
-        auth_context: The current authenticated user
+        user: The current authenticated user
 
     Returns:
         The created organization with user's role
@@ -33,29 +37,13 @@ async def create_organization(
     Raises:
         HTTPException: If organization name already exists or creation fails
     """
-    # Check if organization name already exists
-    existing_org = await crud.organization.get_by_name(db, name=organization_data.name)
-    if existing_org:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Organization with name '{organization_data.name}' already exists",
-        )
-
-    # Create the organization with the user as owner
+    # Create the organization with Auth0 integration
     try:
-        organization = await crud.organization.create_with_owner(
-            db=db, obj_in=organization_data, owner_user=auth_context.user
+        organization = await auth0_service.create_organization_with_auth0(
+            db=db, org_data=organization_data, owner_user=user
         )
 
-        return schemas.OrganizationWithRole(
-            id=organization.id,
-            name=organization.name,
-            description=organization.description or "",
-            created_at=organization.created_at,
-            modified_at=organization.modified_at,
-            role="owner",
-            is_primary=False,
-        )
+        return organization
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to create organization: {str(e)}"
@@ -65,19 +53,19 @@ async def create_organization(
 @router.get("/", response_model=List[schemas.OrganizationWithRole])
 async def list_user_organizations(
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    user: User = Depends(deps.get_user),
 ) -> List[schemas.OrganizationWithRole]:
     """Get all organizations the current user belongs to.
 
     Args:
         db: Database session
-        auth_context: The current authenticated user
+        user: The current authenticated user
 
     Returns:
         List of organizations with user's role in each
     """
     organizations = await crud.organization.get_user_organizations_with_roles(
-        db=db, user_id=auth_context.user.id
+        db=db, user_id=user.id
     )
 
     return [
@@ -191,13 +179,6 @@ async def update_organization(
 
     # Check if the new name conflicts with existing organizations (if name is being changed)
     organization = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
-    if organization_data.name != organization.name:
-        existing_org = await crud.organization.get_by_name(db, name=organization_data.name)
-        if existing_org and existing_org.id != organization_id:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Organization with name '{organization_data.name}' already exists",
-            )
 
     update_data = schemas.OrganizationUpdate(
         name=organization_data.name, description=organization_data.description or ""

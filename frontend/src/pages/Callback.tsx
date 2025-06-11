@@ -1,5 +1,5 @@
 import { useAuth0 } from '@auth0/auth0-react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
@@ -10,14 +10,19 @@ const Callback = () => {
   const { getToken, isLoading: authContextLoading } = useAuth();
   const navigate = useNavigate();
 
+  // Track if we've already attempted to sync to prevent duplicates
+  const syncAttempted = useRef(false);
+
   // Combine both loading states
   const isLoading = auth0Loading || authContextLoading;
 
   // Create or update user in backend when authenticated
   useEffect(() => {
     const syncUser = async () => {
-      // Only attempt if authenticated, have user data, and not loading
-      if (isAuthenticated && user && !isLoading) {
+      // Only attempt if authenticated, have user data, not loading, and haven't already attempted
+      if (isAuthenticated && user && !isLoading && !syncAttempted.current) {
+        syncAttempted.current = true; // Mark as attempted to prevent duplicates
+
         try {
           // Token is now managed by auth context
           const token = await getToken();
@@ -58,7 +63,7 @@ const Callback = () => {
     };
 
     syncUser();
-  }, [isAuthenticated, user, isLoading, getToken, navigate]);
+  }, [isAuthenticated, user, isLoading, navigate]); // Removed getToken from dependencies
 
   // Auto-redirect to login if there's an error
   useEffect(() => {
