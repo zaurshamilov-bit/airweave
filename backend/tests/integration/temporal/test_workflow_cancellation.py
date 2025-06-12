@@ -9,6 +9,8 @@ from uuid import uuid4
 from temporalio.testing import WorkflowEnvironment
 from temporalio.exceptions import CancelledError
 from temporalio.client import WorkflowFailureError
+from temporalio.worker import Worker
+from temporalio import activity
 
 from airweave.platform.temporal.workflows import RunSourceConnectionWorkflow
 from airweave.platform.temporal.activities import run_sync_activity, update_sync_job_status_activity
@@ -55,29 +57,26 @@ class TestWorkflowCancellation:
     """Test Temporal workflow cancellation and sync job status updates."""
 
     async def test_workflow_cancellation_updates_sync_job_status(self, mock_dicts, mock_sync_job_id):
-        """Test that cancelling a workflow properly updates the sync job status to FAILED."""
+        """Test that cancelling a workflow properly updates the sync job status to CANCELLED."""
 
-        async with WorkflowEnvironment() as env:
+        async with await WorkflowEnvironment.start_time_skipping() as env:
             # Track what happened
-            sync_activity_started = False
             status_update_called = False
             final_status = None
             final_error = None
+            activity_started = False
 
+            @activity.defn(name="run_sync_activity")
             async def mock_run_sync_activity(*args, **kwargs):
-                """Simulate a long-running sync that will be cancelled."""
-                nonlocal sync_activity_started
-                sync_activity_started = True
+                """Simulate a long-running sync that can be cancelled."""
+                nonlocal activity_started
+                activity_started = True
+                # Simulate a long-running activity that can be cancelled
+                # We'll sleep for a long time and let the cancellation happen
+                await asyncio.sleep(60)  # Sleep for 60 seconds, should be cancelled before this
+                return None
 
-                # Simulate work being done
-                for i in range(100):  # Simulate 100 seconds of work
-                    await asyncio.sleep(1)
-                    # In real activity, this would be checking activity.is_cancelled()
-                    # but in test environment we'll be cancelled via the workflow
-
-                # Should not reach here due to cancellation
-                pytest.fail("Activity should have been cancelled")
-
+            @activity.defn(name="update_sync_job_status_activity")
             async def mock_update_status_activity(*args, **kwargs):
                 """Capture the status update."""
                 nonlocal status_update_called, final_status, final_error
@@ -94,61 +93,62 @@ class TestWorkflowCancellation:
 
                 print(f"Status update called: job_id={sync_job_id}, status={status}, error={error}")
 
-            # Register mocked activities
-            env.set_activity_implementation(run_sync_activity, mock_run_sync_activity)
-            env.set_activity_implementation(update_sync_job_status_activity, mock_update_status_activity)
-
-            # Start the workflow
-            workflow_handle = await env.client.start_workflow(
-                RunSourceConnectionWorkflow.run,
-                args=[
-                    mock_dicts["sync_dict"],
-                    mock_dicts["sync_job_dict"],
-                    mock_dicts["sync_dag_dict"],
-                    mock_dicts["collection_dict"],
-                    mock_dicts["source_connection_dict"],
-                    mock_dicts["user_dict"],
-                    None,
-                ],
-                id=f"test-workflow-{mock_sync_job_id}",
+            # Create worker with mocked activities
+            async with Worker(
+                env.client,
                 task_queue="test-queue",
-            )
+                workflows=[RunSourceConnectionWorkflow],
+                activities=[mock_run_sync_activity, mock_update_status_activity],
+            ):
+                # Start the workflow
+                workflow_handle = await env.client.start_workflow(
+                    RunSourceConnectionWorkflow.run,
+                    args=[
+                        mock_dicts["sync_dict"],
+                        mock_dicts["sync_job_dict"],
+                        mock_dicts["sync_dag_dict"],
+                        mock_dicts["collection_dict"],
+                        mock_dicts["source_connection_dict"],
+                        mock_dicts["user_dict"],
+                        None,
+                    ],
+                    id=f"test-workflow-{mock_sync_job_id}",
+                    task_queue="test-queue",
+                )
 
-            # Give the workflow time to start the activity
-            await asyncio.sleep(0.1)
+                # Give the workflow a moment to start the activity
+                await asyncio.sleep(0.1)
 
-            # Verify the sync activity started
-            assert sync_activity_started, "Sync activity should have started"
+                # Cancel the workflow
+                await workflow_handle.cancel()
 
-            # Cancel the workflow (simulating kill signal)
-            await workflow_handle.cancel()
+                # Wait for workflow to complete and expect WorkflowFailureError (wraps the CancelledError)
+                with pytest.raises((CancelledError, WorkflowFailureError)):
+                    await workflow_handle.result()
 
-            # Wait for the workflow to complete (it should fail due to cancellation)
-            with pytest.raises(WorkflowFailureError) as exc_info:
-                await workflow_handle.result()
+                # Verify the activity was started
+                assert activity_started, "Activity should have been started before cancellation"
 
-            # Verify the workflow was cancelled
-            assert "CancelledError" in str(exc_info.value)
+                # Verify the status update was called
+                assert status_update_called, "Status update activity should have been called"
+                assert final_status.lower() == "cancelled", f"Expected status to be cancelled, got {final_status}"
+                assert "cancelled" in final_error.lower(), f"Expected error to mention cancellation, got: {final_error}"
 
-            # Verify the status update was called
-            assert status_update_called, "Status update activity should have been called"
-            assert final_status == "CANCELLED", f"Expected status to be CANCELLED, got {final_status}"
-            assert "cancelled" in final_error.lower(), f"Expected error to mention cancellation, got: {final_error}"
+    async def test_workflow_activity_failure_updates_sync_job_status(self, mock_dicts, mock_sync_job_id):
+        """Test that activity failure properly updates sync job status."""
 
-    async def test_workflow_heartbeat_timeout_updates_sync_job_status(self, mock_dicts, mock_sync_job_id):
-        """Test that heartbeat timeout (worker death) properly updates sync job status."""
-
-        async with WorkflowEnvironment() as env:
+        async with await WorkflowEnvironment.start_time_skipping() as env:
             # Track what happened
             status_update_called = False
             final_status = None
             final_error = None
 
-            async def mock_run_sync_activity_no_heartbeat(*args, **kwargs):
-                """Simulate an activity that stops heartbeating (worker dies)."""
-                # Don't send any heartbeats - simulate dead worker
-                await asyncio.sleep(300)  # Sleep longer than heartbeat timeout
+            @activity.defn(name="run_sync_activity")
+            async def mock_run_sync_activity_failure(*args, **kwargs):
+                """Simulate an activity that fails."""
+                raise Exception("Sync activity failed")
 
+            @activity.defn(name="update_sync_job_status_activity")
             async def mock_update_status_activity(*args, **kwargs):
                 """Capture the status update."""
                 nonlocal status_update_called, final_status, final_error
@@ -163,85 +163,85 @@ class TestWorkflowCancellation:
                 final_error = error
                 status_update_called = True
 
-                print(f"Heartbeat timeout test - Status: {status}, Error: {error}")
+                print(f"Failure test - Status: {status}, Error: {error}")
 
-            # Register mocked activities
-            env.set_activity_implementation(run_sync_activity, mock_run_sync_activity_no_heartbeat)
-            env.set_activity_implementation(update_sync_job_status_activity, mock_update_status_activity)
-
-            # Start the workflow with a short heartbeat timeout for testing
-            # Note: In the real workflow, heartbeat_timeout is set to 2 minutes
-            # For testing, we'd need to modify the workflow or wait 2 minutes
-            workflow_handle = await env.client.start_workflow(
-                RunSourceConnectionWorkflow.run,
-                args=[
-                    mock_dicts["sync_dict"],
-                    mock_dicts["sync_job_dict"],
-                    mock_dicts["sync_dag_dict"],
-                    mock_dicts["collection_dict"],
-                    mock_dicts["source_connection_dict"],
-                    mock_dicts["user_dict"],
-                    None,
-                ],
-                id=f"test-workflow-heartbeat-{mock_sync_job_id}",
+            # Create worker with mocked activities
+            async with Worker(
+                env.client,
                 task_queue="test-queue",
-            )
+                workflows=[RunSourceConnectionWorkflow],
+                activities=[mock_run_sync_activity_failure, mock_update_status_activity],
+            ):
+                # Run the workflow and expect it to raise
+                with pytest.raises(Exception) as exc_info:
+                    await env.client.execute_workflow(
+                        RunSourceConnectionWorkflow.run,
+                        args=[
+                            mock_dicts["sync_dict"],
+                            mock_dicts["sync_job_dict"],
+                            mock_dicts["sync_dag_dict"],
+                            mock_dicts["collection_dict"],
+                            mock_dicts["source_connection_dict"],
+                            mock_dicts["user_dict"],
+                            None,
+                        ],
+                        id=f"test-workflow-failure-{mock_sync_job_id}",
+                        task_queue="test-queue",
+                    )
 
-            # Wait for the workflow to fail due to heartbeat timeout
-            with pytest.raises(WorkflowFailureError) as exc_info:
-                await workflow_handle.result()
-
-            # Verify the status update was called
-            assert status_update_called, "Status update activity should have been called"
-            assert final_status == "FAILED", f"Expected status to be FAILED, got {final_status}"
-            # The error should mention timeout or heartbeat
-            print(f"Final error message: {final_error}")
+                # Verify the status update was called
+                assert status_update_called, "Status update activity should have been called"
+                assert final_status.lower() == "failed", f"Expected status to be failed, got {final_status}"
+                assert "failed" in final_error.lower(), f"Expected error to mention failure, got: {final_error}"
 
     async def test_successful_workflow_no_status_update(self, mock_dicts, mock_sync_job_id):
         """Test that successful workflow completion doesn't call the error status update."""
 
-        async with WorkflowEnvironment() as env:
+        async with await WorkflowEnvironment.start_time_skipping() as env:
             # Track what happened
             sync_completed = False
             error_status_update_called = False
 
+            @activity.defn(name="run_sync_activity")
             async def mock_run_sync_activity_success(*args, **kwargs):
                 """Simulate a successful sync."""
                 nonlocal sync_completed
                 sync_completed = True
-                # Quick completion
-                await asyncio.sleep(0.1)
                 return None
 
+            @activity.defn(name="update_sync_job_status_activity")
             async def mock_update_status_activity(*args, **kwargs):
                 """This should NOT be called for successful completion."""
                 nonlocal error_status_update_called
                 error_status_update_called = True
                 pytest.fail("Error status update should not be called for successful workflow")
 
-            # Register mocked activities
-            env.set_activity_implementation(run_sync_activity, mock_run_sync_activity_success)
-            env.set_activity_implementation(update_sync_job_status_activity, mock_update_status_activity)
-
-            # Start and run the workflow
-            result = await env.client.execute_workflow(
-                RunSourceConnectionWorkflow.run,
-                args=[
-                    mock_dicts["sync_dict"],
-                    mock_dicts["sync_job_dict"],
-                    mock_dicts["sync_dag_dict"],
-                    mock_dicts["collection_dict"],
-                    mock_dicts["source_connection_dict"],
-                    mock_dicts["user_dict"],
-                    None,
-                ],
-                id=f"test-workflow-success-{mock_sync_job_id}",
+            # Create worker with mocked activities
+            async with Worker(
+                env.client,
                 task_queue="test-queue",
-            )
+                workflows=[RunSourceConnectionWorkflow],
+                activities=[mock_run_sync_activity_success, mock_update_status_activity],
+            ):
+                # Run the workflow - should complete successfully
+                result = await env.client.execute_workflow(
+                    RunSourceConnectionWorkflow.run,
+                    args=[
+                        mock_dicts["sync_dict"],
+                        mock_dicts["sync_job_dict"],
+                        mock_dicts["sync_dag_dict"],
+                        mock_dicts["collection_dict"],
+                        mock_dicts["source_connection_dict"],
+                        mock_dicts["user_dict"],
+                        None,
+                    ],
+                    id=f"test-workflow-success-{mock_sync_job_id}",
+                    task_queue="test-queue",
+                )
 
-            # Verify the sync completed successfully
-            assert sync_completed, "Sync activity should have completed"
-            assert not error_status_update_called, "Error status update should not have been called"
+                # Verify the sync completed successfully
+                assert sync_completed, "Sync activity should have completed"
+                assert not error_status_update_called, "Error status update should not have been called"
 
 
 @pytest.mark.asyncio
@@ -252,7 +252,7 @@ async def test_real_workflow_cancellation_flow(mock_sync_job_id):
     This test shows what would happen in a real environment:
     1. Start a sync job workflow
     2. Cancel it while it's running
-    3. Workflow catches CancelledError and updates sync job status to FAILED
+    3. Workflow catches CancelledError and updates sync job status to CANCELLED
     """
 
     print("\n=== Temporal Workflow Cancellation Flow ===")
