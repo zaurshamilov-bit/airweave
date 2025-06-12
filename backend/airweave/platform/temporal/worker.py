@@ -36,7 +36,6 @@ class TemporalWorker:
             logger.info(f"Starting Temporal worker on task queue: {task_queue}")
 
             # Configure sandbox to allow debugger modules if debugging
-            sandbox_config = None
             disable_sandbox = os.environ.get("TEMPORAL_DISABLE_SANDBOX", "").lower() == "true"
 
             if disable_sandbox:
@@ -65,6 +64,12 @@ class TemporalWorker:
                 logger.warning(
                     "Running with debugger support - workflow sandbox restrictions relaxed"
                 )
+            else:
+                # Default sandbox configuration for production
+                from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner
+
+                sandbox_config = SandboxedWorkflowRunner()
+                logger.info("Using default sandboxed workflow runner")
 
             self.worker = Worker(
                 client,
