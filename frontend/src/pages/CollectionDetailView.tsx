@@ -26,6 +26,9 @@ import { emitCollectionEvent, COLLECTION_DELETED } from "@/lib/events";
 import { QueryToolAndLiveDoc } from '@/components/collection/QueryToolAndLiveDoc';
 import { DialogFlow } from '@/components/shared';
 import { protectedPaths } from "@/constants/paths";
+import { useSyncStateStore } from "@/stores/syncStateStore";
+import { syncStorageService } from "@/services/syncStorageService";
+import { deriveSyncStatus, getSyncStatusColorClass } from "@/utils/syncStatus";
 
 // DeleteCollectionDialog component
 interface DeleteCollectionDialogProps {
@@ -136,6 +139,10 @@ const Collections = () => {
     const [searchParams] = useSearchParams();
     const isFromOAuthSuccess = searchParams.get("connected") === "success";
 
+    // Sync state store
+    const syncStateStore = useSyncStateStore();
+    const { subscribe, cleanup, activeSubscriptions } = syncStateStore;
+
     // Page state
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -169,21 +176,55 @@ const Collections = () => {
      * API AND DATA FETCHING FUNCTIONS
      ********************************************/
 
-    // Fetch source connections for a collection
+    // Fetch source connections for a collection with detailed sync job status
     const fetchSourceConnections = async (collectionId: string) => {
         try {
             console.log("Fetching source connections for collection:", collectionId);
             const response = await apiClient.get(`/source-connections/?collection=${collectionId}`);
 
             if (response.ok) {
-                const data = await response.json();
-                console.log("Loaded source connections:", data);
-                setSourceConnections(data);
+                const listData = await response.json();
+                console.log("Loaded source connection list:", listData);
+
+                // Fetch detailed data for each connection to get sync job status
+                const detailedConnections = await Promise.all(
+                    listData.map(async (connection: any) => {
+                        try {
+                            const detailResponse = await apiClient.get(`/source-connections/${connection.id}`);
+                            if (detailResponse.ok) {
+                                const detailedData = await detailResponse.json();
+                                console.log(`📝 Fetched detailed data for ${connection.name}:`, {
+                                    latest_sync_job_status: detailedData.latest_sync_job_status,
+                                    latest_sync_job_id: detailedData.latest_sync_job_id
+                                });
+                                return detailedData;
+                            } else {
+                                console.warn(`Failed to fetch details for connection ${connection.id}`);
+                                return connection; // fallback to list data
+                            }
+                        } catch (err) {
+                            console.warn(`Error fetching details for connection ${connection.id}:`, err);
+                            return connection; // fallback to list data
+                        }
+                    })
+                );
+
+                setSourceConnections(detailedConnections);
+
+                // Check for active sync jobs and subscribe to them
+                detailedConnections.forEach(connection => {
+                    if ((connection.latest_sync_job_status === 'pending' ||
+                        connection.latest_sync_job_status === 'in_progress') &&
+                        connection.latest_sync_job_id) {
+                        console.log(`🔄 Found active sync job for ${connection.name}, subscribing...`);
+                        subscribe(connection.latest_sync_job_id, connection.id);
+                    }
+                });
 
                 // Always select the first connection when loading a new collection
-                if (data.length > 0) {
-                    console.log("Auto-selecting first connection:", data[0]);
-                    setSelectedConnection(data[0]);
+                if (detailedConnections.length > 0) {
+                    console.log("Auto-selecting first connection:", detailedConnections[0]);
+                    setSelectedConnection(detailedConnections[0]);
                 } else {
                     // If no connections, ensure selectedConnection is null
                     setSelectedConnection(null);
@@ -380,6 +421,23 @@ const Collections = () => {
         }
     };
 
+    // Restore sync state from session storage on mount
+    useEffect(() => {
+        const storedState = syncStorageService.getStoredState();
+        console.log("Restoring sync state from session storage:", storedState);
+
+        // We'll check and re-subscribe to active jobs after source connections are loaded
+        // This is handled in fetchSourceConnections
+    }, []);
+
+    // Cleanup subscriptions on unmount
+    useEffect(() => {
+        return () => {
+            console.log("CollectionDetailView unmounting, cleaning up subscriptions");
+            cleanup();
+        };
+    }, [cleanup]);
+
     // Add right before the source connections section in render
     useEffect(() => {
         console.log("Source connections state:", {
@@ -409,26 +467,24 @@ const Collections = () => {
                 const sourceIds = jobs.map(job => job.source_connection_id);
                 setRefreshingSourceIds(sourceIds);
 
+                // Subscribe to all new sync jobs
+                jobs.forEach(job => {
+                    if (job.id && job.source_connection_id) {
+                        console.log(`Subscribing to sync job ${job.id} for source ${job.source_connection_id}`);
+                        subscribe(job.id, job.source_connection_id);
+                    }
+                });
+
                 toast({
                     title: "Success",
                     description: `Started refreshing ${sourceIds.length} source connection${sourceIds.length !== 1 ? 's' : ''}`
                 });
 
-                // Reload data after starting the jobs
-                reloadData();
+                // Don't reload data immediately - we'll get live updates
 
-                // If you have a currently selected connection, reload its data too
-                if (selectedConnection) {
-                    // Force a complete re-render by briefly setting selectedConnection to null
-                    // This will ensure the SourceConnectionDetailView fully reloads
-                    setSelectedConnection(null);
-                    setTimeout(() => {
-                        // After a brief delay, select the connection again
-                        const reselect = sourceConnections.find(sc => sc.id === selectedConnection.id);
-                        if (reselect) setSelectedConnection(reselect);
-                        // Or reselect the first connection
-                        else if (sourceConnections.length > 0) setSelectedConnection(sourceConnections[0]);
-                    }, 50);
+                // Reset refreshing state if no jobs were started
+                if (!jobs || jobs.length === 0) {
+                    setIsRefreshingAll(false);
                 }
             } else {
                 throw new Error("Failed to refresh sources");
@@ -440,6 +496,7 @@ const Collections = () => {
                 description: "Failed to refresh all sources",
                 variant: "destructive"
             });
+            setIsRefreshingAll(false);
         }
     };
 
@@ -453,41 +510,26 @@ const Collections = () => {
         });
     }, [selectedConnection?.id]);
 
-    // Replace the existing getConnectionStatusIndicator function with this updated version
+    // Show sync job status for consistency with SourceConnectionDetailView
     const getConnectionStatusIndicator = (connection: SourceConnection) => {
-        // Use the status that comes directly from the API
-        // Prioritize latest_sync_job_status, then fall back to status field
-        const statusValue = connection.latest_sync_job_status || connection.status || "";
+        // Check if we have live progress for this connection
+        const liveProgress = syncStateStore.getProgressForSource(connection.id);
+        const hasActiveSubscription = syncStateStore.hasActiveSubscription(connection.id);
 
-        // Get the color directly from the statusConfig - same logic as StatusBadge
-        const getStatusConfig = (statusKey: string = "") => {
-            // Try exact match first
-            if (statusKey in statusConfig) {
-                return statusConfig[statusKey as keyof typeof statusConfig];
-            }
+        // Use shared utility to derive status
+        const statusValue = deriveSyncStatus(
+            liveProgress,
+            hasActiveSubscription,
+            connection.latest_sync_job_status
+        );
 
-            // Try case-insensitive match
-            const lowerKey = statusKey.toLowerCase();
-            for (const key in statusConfig) {
-                if (key.toLowerCase() === lowerKey) {
-                    return statusConfig[key as keyof typeof statusConfig];
-                }
-            }
-
-            // Return default if no match
-            return statusConfig["default"];
-        };
-
-        const config = getStatusConfig(statusValue);
-        const colorClass = config.color;
-
-        // Add animate-pulse class for in-progress statuses
-        const isInProgress = statusValue.toLowerCase() === "in_progress";
+        // Use shared utility to get color class
+        const colorClass = getSyncStatusColorClass(statusValue);
 
         return (
             <span
-                className={`inline-flex h-2.5 w-2.5 rounded-full ${colorClass} opacity-80 ${isInProgress ? 'animate-pulse' : ''}`}
-                title={config.label}
+                className={`inline-flex h-2.5 w-2.5 rounded-full ${colorClass} opacity-80`}
+                title={statusValue}
             />
         );
     };
@@ -738,8 +780,6 @@ const Collections = () => {
                     {selectedConnection && (
                         <SourceConnectionDetailView
                             sourceConnectionId={selectedConnection.id}
-                            shouldForceSubscribe={refreshingSourceIds.includes(selectedConnection.id)}
-                            onSubscriptionComplete={handleSubscriptionComplete}
                         />
                     )}
 
@@ -762,9 +802,20 @@ const Collections = () => {
                             collectionId={collection.readable_id}
                             collectionName={collection.name}
                             dialogId="collection-detail-add-source"
-                            onComplete={() => {
+                            onComplete={async (newSourceConnection?: any) => {
                                 setShowAddSourceDialog(false);
-                                reloadData();
+
+                                // If we have a new source connection with an active sync job, subscribe to it
+                                if (newSourceConnection &&
+                                    (newSourceConnection.latest_sync_job_status === 'pending' ||
+                                        newSourceConnection.latest_sync_job_status === 'in_progress') &&
+                                    newSourceConnection.latest_sync_job_id) {
+                                    console.log(`New source connection created, subscribing to sync job ${newSourceConnection.latest_sync_job_id}`);
+                                    subscribe(newSourceConnection.latest_sync_job_id, newSourceConnection.id);
+                                }
+
+                                // Reload to get the new source connection in the list
+                                await reloadData();
                             }}
                         />
                     )}

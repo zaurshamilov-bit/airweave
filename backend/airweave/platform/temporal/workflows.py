@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import CancelledError
+from temporalio.exceptions import ActivityError, CancelledError
 
 
 @workflow.defn
@@ -73,42 +73,122 @@ class RunSourceConnectionWorkflow:
             workflow.logger.error(f"Sync job {sync_job_id} was cancelled")
 
             # Update sync job status to CANCELLED
-            await workflow.execute_activity(
-                update_sync_job_status_activity,
-                args=[
-                    sync_job_id,
-                    "CANCELLED",  # Use CANCELLED status instead of FAILED
-                    user_dict,
-                    error_message,
-                    workflow.now().isoformat(),  # Use workflow.now() for deterministic time
-                ],
-                start_to_close_timeout=timedelta(seconds=30),
-                retry_policy=RetryPolicy(
-                    maximum_attempts=3,
-                    initial_interval=timedelta(seconds=1),
-                ),
-            )
+            try:
+                await workflow.execute_activity(
+                    update_sync_job_status_activity,
+                    args=[
+                        sync_job_id,
+                        "cancelled",  # Use Python enum value
+                        user_dict,
+                        error_message,
+                        workflow.now()
+                        .replace(tzinfo=None)
+                        .isoformat(),  # Remove timezone for database compatibility
+                    ],
+                    start_to_close_timeout=timedelta(seconds=30),
+                    retry_policy=RetryPolicy(
+                        maximum_attempts=3,
+                        initial_interval=timedelta(seconds=1),
+                    ),
+                )
+                workflow.logger.info(
+                    f"Successfully updated sync job {sync_job_id} status to CANCELLED"
+                )
+            except Exception as e:
+                workflow.logger.error(f"Failed to update sync job status: {e}")
+
+            # Re-raise the original error
+            raise
+
+        except ActivityError as e:
+            # Check if the activity was cancelled
+            if isinstance(e.cause, CancelledError) or "cancelled" in str(e).lower():
+                # Activity was cancelled, treat as cancellation not failure
+                error_message = "Job was cancelled"
+                workflow.logger.info(f"Sync job {sync_job_id} was cancelled (activity cancelled)")
+
+                # Update sync job status to CANCELLED
+                try:
+                    await workflow.execute_activity(
+                        update_sync_job_status_activity,
+                        args=[
+                            sync_job_id,
+                            "cancelled",  # Use Python enum value
+                            user_dict,
+                            error_message,
+                            workflow.now().replace(tzinfo=None).isoformat(),
+                        ],
+                        start_to_close_timeout=timedelta(seconds=30),
+                        retry_policy=RetryPolicy(
+                            maximum_attempts=3,
+                            initial_interval=timedelta(seconds=1),
+                        ),
+                    )
+                    workflow.logger.info(
+                        f"Successfully updated sync job {sync_job_id} status to CANCELLED"
+                    )
+                except Exception as update_error:
+                    workflow.logger.error(f"Failed to update sync job status: {update_error}")
+            else:
+                # Real activity failure, not cancellation
+                error_message = str(e)
+                workflow.logger.error(f"Sync job {sync_job_id} failed: {error_message}")
+
+                # Update sync job status to FAILED
+                try:
+                    await workflow.execute_activity(
+                        update_sync_job_status_activity,
+                        args=[
+                            sync_job_id,
+                            "failed",  # Use Python enum value
+                            user_dict,
+                            error_message,
+                            workflow.now().replace(tzinfo=None).isoformat(),
+                        ],
+                        start_to_close_timeout=timedelta(seconds=30),
+                        retry_policy=RetryPolicy(
+                            maximum_attempts=3,
+                            initial_interval=timedelta(seconds=1),
+                        ),
+                    )
+                    workflow.logger.info(
+                        f"Successfully updated sync job {sync_job_id} status to FAILED"
+                    )
+                except Exception as update_error:
+                    workflow.logger.error(f"Failed to update sync job status: {update_error}")
+
+            # Re-raise the original error
             raise
 
         except Exception as e:
-            # Handle any other errors (including heartbeat timeout)
+            # Handle any other errors (generic exceptions)
             error_message = str(e)
             workflow.logger.error(f"Sync job {sync_job_id} failed: {error_message}")
 
             # Update sync job status to FAILED
-            await workflow.execute_activity(
-                update_sync_job_status_activity,
-                args=[
-                    sync_job_id,
-                    "FAILED",
-                    user_dict,
-                    error_message,
-                    workflow.now().isoformat(),  # Use workflow.now() for deterministic time
-                ],
-                start_to_close_timeout=timedelta(seconds=30),
-                retry_policy=RetryPolicy(
-                    maximum_attempts=3,
-                    initial_interval=timedelta(seconds=1),
-                ),
-            )
+            try:
+                await workflow.execute_activity(
+                    update_sync_job_status_activity,
+                    args=[
+                        sync_job_id,
+                        "failed",  # Use Python enum value
+                        user_dict,
+                        error_message,
+                        workflow.now()
+                        .replace(tzinfo=None)
+                        .isoformat(),  # Remove timezone for database compatibility
+                    ],
+                    start_to_close_timeout=timedelta(seconds=30),
+                    retry_policy=RetryPolicy(
+                        maximum_attempts=3,
+                        initial_interval=timedelta(seconds=1),
+                    ),
+                )
+                workflow.logger.info(
+                    f"Successfully updated sync job {sync_job_id} status to FAILED"
+                )
+            except Exception as update_error:
+                workflow.logger.error(f"Failed to update sync job status: {update_error}")
+
+            # Re-raise the original error
             raise

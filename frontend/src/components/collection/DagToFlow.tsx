@@ -12,15 +12,21 @@ export function dagNodeToFlowNode(dagNode, xPosition, sourceName = '') {
     // Generate proper display name
     let displayName = dagNode.name;
 
+    console.log('Processing DAG node:', {
+        name: dagNode.name,
+        type: dagNode.type,
+        sourceName: sourceName
+    });
+
     // Clean entity names if it's an entity node
-    if (dagNode.type === 'entity' && sourceName) {
+    // Also check if the name ends with "Entity" to identify entity nodes
+    if ((dagNode.type === 'entity' || dagNode.name?.endsWith('Entity')) && sourceName) {
         displayName = cleanEntityName(dagNode.name, sourceName);
+        console.log(`Cleaned entity name from "${dagNode.name}" to "${displayName}"`);
     }
 
     // Use sourceName directly for source nodes, otherwise generate shortName from displayName
     const shortName = dagNode.type === 'source' ? sourceName : displayName.toLowerCase().replace(/\s+/g, '');
-
-    console.log(displayName)
 
     return {
         id: dagNode.id,
@@ -195,10 +201,14 @@ export function enrichFlowGraphVisualization(flowNodes, flowEdges) {
 }
 
 export function cleanEntityName(entityName: string, sourceName: string): string {
-    // Remove source name from beginning if it exists
-    const nameWithoutSource = entityName.startsWith(sourceName)
-        ? entityName.substring(sourceName.length)
-        : entityName;
+    // Remove source name from beginning if it exists (case-insensitive)
+    const sourceNameLower = sourceName.toLowerCase();
+    const entityNameLower = entityName.toLowerCase();
+
+    let nameWithoutSource = entityName;
+    if (entityNameLower.startsWith(sourceNameLower)) {
+        nameWithoutSource = entityName.substring(sourceName.length);
+    }
 
     // Remove 'Entity' suffix if present
     return nameWithoutSource.replace(/Entity$/, '');

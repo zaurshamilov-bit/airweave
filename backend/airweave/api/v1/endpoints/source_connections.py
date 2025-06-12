@@ -367,7 +367,11 @@ async def cancel_source_connection_job(
     )
 
     # Check if the job is in a cancellable state
-    if sync_job.status not in [SyncJobStatus.CREATED, SyncJobStatus.IN_PROGRESS]:
+    if sync_job.status not in [
+        SyncJobStatus.CREATED,
+        SyncJobStatus.PENDING,
+        SyncJobStatus.IN_PROGRESS,
+    ]:
         raise HTTPException(
             status_code=400, detail=f"Cannot cancel job in {sync_job.status} status"
         )
@@ -381,8 +385,8 @@ async def cancel_source_connection_job(
             else:
                 logger.warning(f"No running Temporal workflow found for job {job_id}")
                 # Even if no workflow found, we might want to update the status
-                # if it's stuck in IN_PROGRESS
-                if sync_job.status == SyncJobStatus.IN_PROGRESS:
+                # if it's stuck in IN_PROGRESS or PENDING
+                if sync_job.status in [SyncJobStatus.IN_PROGRESS, SyncJobStatus.PENDING]:
                     await sync_job_service.update_status(
                         sync_job_id=job_id,
                         status=SyncJobStatus.CANCELLED,
