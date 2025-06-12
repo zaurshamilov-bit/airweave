@@ -92,27 +92,52 @@ class TemporalService:
             client = await temporal_client.get_client()
 
             # List workflows to find the one matching our sync job
-            # Note: In production, you might want to store the workflow ID
-            # when starting it for direct lookup
+            # Only look for RUNNING workflows
             workflows = []
-            async for workflow in client.list_workflows(
-                query=f'WorkflowId STARTS_WITH "sync-{sync_job_id}-"'
-            ):
+            query = f'WorkflowId STARTS_WITH "sync-{sync_job_id}-" AND ExecutionStatus = "Running"'
+            logger.info(f"Searching for workflows with query: {query}")
+
+            async for workflow in client.list_workflows(query=query):
                 workflows.append(workflow)
+                logger.info(f"Found workflow: {workflow.id} with status: {workflow.status}")
 
             if not workflows:
                 logger.warning(f"No running workflow found for sync job {sync_job_id}")
+
+                # Let's also check without the status filter to see if workflow
+                # exists but is not running
+                all_workflows = []
+                async for workflow in client.list_workflows(
+                    query=f'WorkflowId STARTS_WITH "sync-{sync_job_id}-"'
+                ):
+                    all_workflows.append(workflow)
+                    logger.info(
+                        f"Found workflow (any status): {workflow.id} with status: {workflow.status}"
+                    )
+
+                if all_workflows:
+                    logger.info(
+                        f"Found {len(all_workflows)} workflow(s) for sync job "
+                        f"{sync_job_id}, but none are running"
+                    )
+
                 return False
 
             # Cancel the workflow(s)
+            cancelled_count = 0
             for workflow in workflows:
-                handle = client.get_workflow_handle(workflow.id)
-                await handle.cancel()
-                logger.info(
-                    f"Successfully cancelled workflow {workflow.id} for sync job {sync_job_id}"
-                )
+                try:
+                    handle = client.get_workflow_handle(workflow.id)
+                    await handle.cancel()
+                    logger.info(
+                        f"Successfully sent cancel request for workflow {workflow.id} "
+                        f"(sync job {sync_job_id})"
+                    )
+                    cancelled_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to cancel workflow {workflow.id}: {e}")
 
-            return True
+            return cancelled_count > 0
 
         except Exception as e:
             logger.error(f"Failed to cancel workflow for sync job {sync_job_id}: {e}")
