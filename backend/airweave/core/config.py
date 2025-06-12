@@ -23,6 +23,7 @@ class Settings(BaseSettings):
         FIRST_SUPERUSER_PASSWORD (str): The password of the first superuser.
         ENCRYPTION_KEY (str): The encryption key.
         CODE_SUMMARIZER_ENABLED (bool): Whether the code summarizer is enabled.
+        DEBUG (bool): Whether debug mode is enabled.
         LOG_LEVEL (str): The logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
         POSTGRES_HOST (str): The PostgreSQL server hostname.
         POSTGRES_DB (str): The PostgreSQL database name.
@@ -77,6 +78,9 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str
 
     CODE_SUMMARIZER_ENABLED: bool = False
+
+    # Debug configuration
+    DEBUG: bool = False
 
     # Logging configuration
     LOG_LEVEL: str = "INFO"
