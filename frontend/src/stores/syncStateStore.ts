@@ -3,6 +3,7 @@ import { fetchEventSource, EventSourceMessage } from '@microsoft/fetch-event-sou
 import { env } from '@/config/env';
 import { apiClient } from '@/lib/api';
 import { useOrganizationStore } from '@/lib/stores/organizations';
+import { syncStorageService } from '@/services/syncStorageService';
 
 // Types for sync progress updates
 export interface SyncProgressUpdate {
@@ -46,6 +47,9 @@ interface SyncStateStore {
 
     // Check if a source has an active subscription
     hasActiveSubscription: (sourceConnectionId: string) => boolean;
+
+    // Restore progress from storage (for page reloads)
+    restoreProgressFromStorage: (sourceConnectionId: string, jobId: string) => void;
 
     // Clean up all subscriptions
     cleanup: () => void;
@@ -230,6 +234,7 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
             get().stopHealthCheck();
         }
 
+        syncStorageService.removeProgress(sourceConnectionId);
         console.log(`🔌 Unsubscribed from ${sourceConnectionId}`);
     },
 
@@ -256,6 +261,8 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
         const newSubscriptions = new Map(state.activeSubscriptions);
         newSubscriptions.set(sourceConnectionId, { ...subscription });
         set({ activeSubscriptions: newSubscriptions });
+
+        syncStorageService.saveProgress(sourceConnectionId, subscription.jobId, update);
     },
 
     getProgressForSource: (sourceConnectionId: string) => {
@@ -279,8 +286,28 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
         // Clear the map
         set({ activeSubscriptions: new Map() });
         get().stopHealthCheck(); // Stop health checks
+        syncStorageService.clearAll();
 
         console.log('🧹 Cleaned up all sync subscriptions');
+    },
+
+    restoreProgressFromStorage: (sourceConnectionId: string, jobId: string) => {
+        const storedData = syncStorageService.getProgressForSource(sourceConnectionId);
+
+        if (storedData && storedData.jobId === jobId && storedData.status === 'active') {
+            const subscription: SyncSubscription = {
+                jobId,
+                sourceConnectionId,
+                controller: new AbortController(), // Placeholder, will be replaced by subscribe
+                lastUpdate: storedData.lastUpdate,
+                lastMessageTime: storedData.timestamp,
+                status: 'active'
+            };
+
+            const newSubscriptions = new Map(get().activeSubscriptions);
+            newSubscriptions.set(sourceConnectionId, subscription);
+            set({ activeSubscriptions: newSubscriptions });
+        }
     },
 
     startHealthCheck: () => {
