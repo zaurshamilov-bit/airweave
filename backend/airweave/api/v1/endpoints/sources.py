@@ -10,46 +10,8 @@ from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import logger
 from airweave.platform.configs._base import Fields
 from airweave.platform.locator import resource_locator
-from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
-
-
-def _get_enriched_source(source: schemas.Source) -> schemas.Source:
-    """Enrich the source object with auth and config fields.
-
-    Returns the enriched source on success or an error string on failure.
-    """
-    if not source.auth_config_class:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Source {source.short_name} does not have authentication configuration",
-        )
-
-    if not source.config_class:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Source {source.short_name} does not have a configuration class",
-        )
-
-    try:
-        auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
-        auth_fields = Fields.from_config_class(auth_config_class)
-        config_class = resource_locator.get_config(source.config_class)
-        config_fields = Fields.from_config_class(config_class)
-    except Exception as e:
-        logger.error(f"Failed to get source config fields for {source.short_name}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Invalid configuration for source {source.short_name}",
-        ) from e
-
-    source_dict = {
-        **{key: getattr(source, key) for key in source.__dict__ if not key.startswith("_")},
-        "auth_fields": auth_fields,
-        "config_fields": config_fields,
-    }
-    return schemas.Source.model_validate(source_dict)
 
 
 @router.get("/detail/{short_name}", response_model=schemas.Source)
@@ -57,7 +19,7 @@ async def read_source(
     *,
     db: AsyncSession = Depends(deps.get_db),
     short_name: str,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    user: schemas.User = Depends(deps.get_user),
 ) -> schemas.Source:
     """Get source by id.
 
@@ -65,7 +27,7 @@ async def read_source(
     ----
         db (AsyncSession): The database session.
         short_name (str): The short name of the source.
-        auth_context (AuthContext): The current authentication context.
+        user (schemas.User): The current user.
 
     Returns:
     -------
@@ -79,18 +41,62 @@ async def read_source(
     """
     try:
         source = await crud.source.get_by_short_name(db, short_name)
-        enriched_source = _get_enriched_source(source)
+        if not source:
+            raise HTTPException(status_code=404, detail=f"Source not found: {short_name}")
 
-        if isinstance(enriched_source, str):
-            status_code = 400 if "does not have" in enriched_source else 500
-            raise HTTPException(status_code=status_code, detail=enriched_source)
+        # Validate auth_config_class
+        if not source.auth_config_class:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Source {short_name} does not have authentication configuration",
+            )
 
-        return enriched_source
+        # Validate config_class
+        if not source.config_class:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Source {short_name} does not have a configuration class",
+            )
+
+        # Get auth fields
+        try:
+            auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
+            auth_fields = Fields.from_config_class(auth_config_class)
+        except Exception as e:
+            logger.error(f"Failed to get auth config for {short_name}: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Invalid auth configuration for source {short_name}"
+            ) from e
+
+        # Get config fields
+        try:
+            config_class = resource_locator.get_config(source.config_class)
+            config_fields = Fields.from_config_class(config_class)
+        except Exception as e:
+            logger.error(f"Failed to get config for {short_name}: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Invalid configuration for source {short_name}"
+            ) from e
+
+        # Create a dictionary with all required fields including auth_fields and config_fields
+        source_dict = {
+            **{key: getattr(source, key) for key in source.__dict__ if not key.startswith("_")},
+            "auth_fields": auth_fields,
+            "config_fields": config_fields,
+        }
+
+        # Validate in one step with all fields present
+        source_model = schemas.Source.model_validate(source_dict)
+        return source_model
 
     except NotFoundException as e:
-        raise HTTPException(status_code=404, detail=f"Source {short_name} not found") from e
+        raise HTTPException(status_code=404, detail=f"Source not found: {short_name}") from e
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as is
+        raise
     except Exception as e:
-        logger.exception(f"Error retrieving source {short_name}: {e}")
+        logger.exception(f"Error retrieving source {short_name}: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to retrieve source details for {short_name}"
         ) from e
@@ -100,8 +106,68 @@ async def read_source(
 async def read_sources(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    user: schemas.User = Depends(deps.get_user),
 ) -> list[schemas.Source]:
     """Get all sources with their authentication fields."""
-    sources = await crud.source.get_all(db)
-    return sources
+    logger.info("Starting read_sources endpoint")
+    try:
+        sources = await crud.source.get_all(db)
+        logger.info(f"Retrieved {len(sources)} sources from database")
+    except Exception as e:
+        logger.error(f"Failed to retrieve sources: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve sources") from e
+
+    # Initialize auth_fields for each source
+    result_sources = []
+    invalid_sources = []
+
+    for source in sources:
+        try:
+            # Strict validation for both config classes
+            if not source.auth_config_class:
+                invalid_sources.append(f"{source.short_name} (missing auth_config_class)")
+                continue
+
+            if not source.config_class:
+                invalid_sources.append(f"{source.short_name} (missing config_class)")
+                continue
+
+            # Get authentication configuration class
+            try:
+                auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
+                auth_fields = Fields.from_config_class(auth_config_class)
+            except AttributeError as e:
+                invalid_sources.append(f"{source.short_name} (invalid auth_config_class: {str(e)})")
+                continue
+
+            # Get configuration class
+            try:
+                config_class = resource_locator.get_config(source.config_class)
+                config_fields = Fields.from_config_class(config_class)
+            except AttributeError as e:
+                invalid_sources.append(f"{source.short_name} (invalid config_class: {str(e)})")
+                continue
+
+            # Create source model with all fields including auth_fields and config_fields
+            source_dict = {
+                **{key: getattr(source, key) for key in source.__dict__ if not key.startswith("_")},
+                "auth_fields": auth_fields,
+                "config_fields": config_fields,
+            }
+
+            source_model = schemas.Source.model_validate(source_dict)
+            result_sources.append(source_model)
+
+        except Exception as e:
+            # Log the error but continue processing other sources
+            logger.exception(f"Error processing source {source.short_name}: {str(e)}")
+            invalid_sources.append(f"{source.short_name} (error: {str(e)})")
+
+    # Log any invalid sources
+    if invalid_sources:
+        logger.warning(
+            f"Skipped {len(invalid_sources)} invalid sources: {', '.join(invalid_sources)}"
+        )
+
+    logger.info(f"Returning {len(result_sources)} valid sources")
+    return result_sources
