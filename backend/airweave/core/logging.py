@@ -294,23 +294,33 @@ class LoggerConfigurator:
         log_level = settings.LOG_LEVEL.upper()
         logger.setLevel(getattr(logging, log_level, logging.INFO))
 
-        # Add StreamHandler if not already added
-        if not any(isinstance(handler, logging.StreamHandler) for handler in logger.handlers):
-            stream_handler = logging.StreamHandler(sys.stdout)  # Explicitly use stdout
+        # CRITICAL FIX: Disable propagation to prevent duplicate logs
+        logger.propagate = False
 
-            # Use text format only for local development, JSON everywhere else
-            if settings.LOCAL_DEVELOPMENT:
-                # Use text formatter for local development
-                formatter = logging.Formatter(
-                    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-                )
-            else:
-                # Use JSON formatter for all non-local environments
-                # (Azure Log Analytics, Prometheus/Grafana)
-                formatter = JSONFormatter()
+        # Check if this logger has already been configured
+        if hasattr(logger, "_airweave_configured"):
+            return _ContextualLogger(logger, prefix, dimensions)
 
-            stream_handler.setFormatter(formatter)
-            logger.addHandler(stream_handler)
+        # Clear any existing handlers to prevent duplicates
+        logger.handlers.clear()
+
+        # Add our custom StreamHandler
+        stream_handler = logging.StreamHandler(sys.stdout)
+
+        # Use text format only for local development, JSON everywhere else
+        if settings.LOCAL_DEVELOPMENT:
+            # Use text formatter for local development
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        else:
+            # Use JSON formatter for all non-local environments
+            # (Azure Log Analytics, Prometheus/Grafana)
+            formatter = JSONFormatter()
+
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
+
+        # Mark logger as configured to prevent reconfiguration
+        logger._airweave_configured = True
 
         return _ContextualLogger(logger, prefix, dimensions)
 

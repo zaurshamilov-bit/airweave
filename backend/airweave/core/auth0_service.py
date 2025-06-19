@@ -45,13 +45,35 @@ class Auth0Service:
             name=self._create_org_name(org_data),
             display_name=org_data.name,
         )
+        auth0_org_id = auth0_org_data["id"]
 
         # Add user to Auth0 organization as owner
-        await auth0_management_client.add_user_to_organization(
-            auth0_org_data["id"], owner_user.auth0_id
-        )
+        await auth0_management_client.add_user_to_organization(auth0_org_id, owner_user.auth0_id)
 
-        logger.info(f"Successfully created Auth0 organization: {auth0_org_data['id']}")
+        # Enable default connections for the new organization
+        # Define the connections to be enabled by default
+        default_connection_names = [
+            "Username-Password-Authentication",
+            "google-oauth2",
+            "github",
+        ]
+
+        # Get all available connections from Auth0
+        all_connections = await auth0_management_client.get_all_connections()
+
+        # Find the connection IDs for our default connections
+        connections_to_enable = [
+            conn["id"] for conn in all_connections if conn["name"] in default_connection_names
+        ]
+
+        # Enable each connection for the new organization
+        for conn_id in connections_to_enable:
+            await auth0_management_client.add_enabled_connection_to_organization(
+                auth0_org_id, conn_id
+            )
+            logger.info(f"Enabled connection {conn_id} for organization {auth0_org_id}")
+
+        logger.info(f"Successfully created Auth0 organization: {auth0_org_id}")
 
         # Create local organization with Auth0 ID if available
         async with UnitOfWork(db) as uow:
@@ -59,8 +81,8 @@ class Auth0Service:
                 # Prepare organization data
                 org_dict = org_data.model_dump()
                 if auth0_org_data:
-                    org_dict["auth0_org_id"] = auth0_org_data["id"]
-                    logger.info(f"Setting auth0_org_id to: {auth0_org_data['id']}")
+                    org_dict["auth0_org_id"] = auth0_org_id
+                    logger.info(f"Setting auth0_org_id to: {auth0_org_id}")
                 else:
                     logger.info("No auth0_org_data - creating organization without auth0_org_id")
 
@@ -94,7 +116,7 @@ class Auth0Service:
 
                 # If we created an Auth0 org but failed locally, we should clean up
                 if auth0_org_data:
-                    await auth0_management_client.delete_organization(auth0_org_data["id"])
+                    await auth0_management_client.delete_organization(auth0_org_id)
                 raise
 
     async def handle_new_user_signup(

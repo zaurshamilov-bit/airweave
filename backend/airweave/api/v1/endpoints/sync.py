@@ -1,6 +1,7 @@
 """API endpoints for managing syncs."""
 
 import asyncio
+import json
 from typing import AsyncGenerator, List, Optional, Union
 from uuid import UUID
 
@@ -260,7 +261,6 @@ async def get_sync_job(
 async def subscribe_sync_job(
     job_id: UUID,
     auth_context: AuthContext = Depends(deps.get_auth_context),  # Standard dependency injection
-    db: AsyncSession = Depends(deps.get_db),
 ) -> StreamingResponse:
     """Server-Sent Events (SSE) endpoint to subscribe to a sync job's progress.
 
@@ -278,31 +278,56 @@ async def subscribe_sync_job(
         f"SSE sync subscription authenticated for user: {auth_context.user.id}, job: {job_id}"
     )
 
+    # Track active SSE connections
+    connection_id = f"{auth_context.user.id}:{job_id}:{asyncio.get_event_loop().time()}"
+
     # Get a new pubsub instance subscribed to this job
     pubsub = await sync_pubsub.subscribe(job_id)
 
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
+            # Send initial connection event
+            yield f"data: {json.dumps({'type': 'connected', 'job_id': str(job_id)})}\n\n"
+
+            # Send heartbeat every 30 seconds to keep connection alive
+            last_heartbeat = asyncio.get_event_loop().time()
+            heartbeat_interval = 30  # seconds
+
             async for message in pubsub.listen():
+                # Check if we need to send a heartbeat
+                current_time = asyncio.get_event_loop().time()
+                if current_time - last_heartbeat > heartbeat_interval:
+                    yield 'data: {"type": "heartbeat"}\n\n'
+                    last_heartbeat = current_time
+
                 if message["type"] == "message":
                     # Parse and forward the sync progress update
                     yield f"data: {message['data']}\n\n"
                 elif message["type"] == "subscribe":
-                    # Optionally log subscription confirmation
-                    logger.info(f"SSE subscribed to job {job_id}")
+                    # Log subscription confirmation
+                    logger.info(f"SSE subscribed to job {job_id} for connection {connection_id}")
+
         except asyncio.CancelledError:
-            logger.info(f"SSE connection cancelled for job {job_id}")
+            logger.info(f"SSE connection cancelled for job {job_id}, connection: {connection_id}")
+        except Exception as e:
+            logger.error(f"SSE error for job {job_id}: {str(e)}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
         finally:
             # Clean up when SSE connection closes
-            await pubsub.close()
+            try:
+                await pubsub.close()
+            except Exception as e:
+                logger.warning(f"Error closing pubsub for job {job_id}: {e}")
 
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Important for nginx
+            "X-Accel-Buffering": "no",  # Disable Nginx buffering
+            "Content-Type": "text/event-stream",
+            "Access-Control-Allow-Origin": "*",  # Adjust for your CORS needs
         },
     )
 

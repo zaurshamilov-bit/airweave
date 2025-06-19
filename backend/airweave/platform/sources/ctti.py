@@ -18,6 +18,41 @@ from airweave.platform.entities._base import Breadcrumb
 from airweave.platform.entities.ctti import CTTIWebEntity
 from airweave.platform.sources._base import BaseSource
 
+# Global connection pool for CTTI to prevent connection exhaustion
+_ctti_pool: Optional[asyncpg.Pool] = None
+_ctti_pool_lock = asyncio.Lock()
+
+
+async def get_ctti_pool(username: str, password: str) -> asyncpg.Pool:
+    """Get or create the shared CTTI connection pool.
+
+    Args:
+        username: AACT database username
+        password: AACT database password
+
+    Returns:
+        The shared connection pool
+    """
+    global _ctti_pool
+
+    async with _ctti_pool_lock:
+        if _ctti_pool is None:
+            logger.info("Creating shared CTTI connection pool")
+            _ctti_pool = await asyncpg.create_pool(
+                host=CTTISource.AACT_HOST,
+                port=CTTISource.AACT_PORT,
+                user=username,
+                password=password,
+                database=CTTISource.AACT_DATABASE,
+                min_size=2,  # Minimum connections in pool
+                max_size=5,  # Reduced from 10 - AACT is a public DB with strict limits
+                timeout=30.0,
+                command_timeout=60.0,
+            )
+            logger.info("CTTI connection pool created successfully")
+
+    return _ctti_pool
+
 
 async def _retry_with_backoff(func, *args, max_retries=3, **kwargs):
     """Retry a function with exponential backoff.
@@ -111,7 +146,7 @@ class CTTISource(BaseSource):
 
     def __init__(self):
         """Initialize the CTTI source."""
-        self.conn: Optional[asyncpg.Connection] = None
+        self.pool: Optional[asyncpg.Pool] = None
 
     @classmethod
     async def create(
@@ -126,7 +161,8 @@ class CTTISource(BaseSource):
                 - username: Username for AACT database
                 - password: Password for AACT database
             config: Optional configuration parameters:
-                - limit: Maximum number of studies to fetch (default: 1000)
+                - limit: Maximum number of studies to fetch (default: 10000)
+                - skip: Number of studies to skip for pagination (default: 0)
         """
         instance = cls()
         instance.credentials = credentials  # Store credentials separately
@@ -158,76 +194,58 @@ class CTTISource(BaseSource):
 
         return value
 
-    async def _connect(self) -> None:
-        """Establish connection to the AACT Clinical Trials database with retry logic."""
-        if not self.conn:
+    async def _ensure_pool(self) -> asyncpg.Pool:
+        """Ensure connection pool is initialized and return it."""
+        if not self.pool:
+            username = self._get_credential("username")
+            password = self._get_credential("password")
 
-            async def _establish_connection():
-                try:
-                    username = self._get_credential("username")
-                    password = self._get_credential("password")
+            # Use the shared connection pool
+            self.pool = await get_ctti_pool(username, password)
 
-                    logger.info(f"Connecting to AACT database at {self.AACT_HOST}:{self.AACT_PORT}")
-                    conn = await asyncpg.connect(
-                        host=self.AACT_HOST,
-                        port=self.AACT_PORT,
-                        user=username,
-                        password=password,
-                        database=self.AACT_DATABASE,
-                        timeout=30.0,
-                        command_timeout=60.0,
-                    )
-                    logger.info("Successfully connected to AACT database")
-                    return conn
-                except ValueError as e:
-                    # Re-raise credential validation errors with more context
-                    raise ValueError(f"Invalid AACT database credentials: {str(e)}") from e
-                except asyncpg.InvalidPasswordError as e:
-                    raise ValueError(
-                        "Invalid AACT database credentials: Authentication failed"
-                    ) from e
-                except asyncpg.InvalidCatalogNameError as e:
-                    raise ValueError(f"AACT database '{self.AACT_DATABASE}' does not exist") from e
-                except (
-                    OSError,
-                    asyncpg.CannotConnectNowError,
-                    asyncpg.ConnectionDoesNotExistError,
-                ) as e:
-                    raise RuntimeError(
-                        f"Could not connect to AACT database at {self.AACT_HOST}:{self.AACT_PORT}. "
-                        f"Please check your internet connection. Error: {str(e)}"
-                    ) from e
-                except Exception as e:
-                    raise RuntimeError(f"AACT database connection failed: {str(e)}") from e
-
-            # Use retry logic for connection establishment
-            self.conn = await _retry_with_backoff(_establish_connection)
+        return self.pool
 
     async def generate_entities(self) -> AsyncGenerator[Union[CTTIWebEntity], None]:
         """Generate WebEntity instances for each nct_id in the AACT studies table."""
         try:
-            await self._connect()
+            # Get the connection pool
+            pool = await self._ensure_pool()
 
-            # Get the limit from config
+            # Get the limit and skip from config
             limit = self.config.get("limit", 10000)
+            skip = self.config.get("skip", 0)
 
             # Simple query - URL construction in Python is fine
             query = f'''
                 SELECT nct_id
-                FROM "{self.AACT_SCHEMA}"."{self.AACT_TABLE}"
+                FROM "{CTTISource.AACT_SCHEMA}"."{CTTISource.AACT_TABLE}"
                 WHERE nct_id IS NOT NULL
                 ORDER BY nct_id
                 LIMIT {limit}
+                OFFSET {skip}
             '''
 
             async def _execute_query():
-                logger.info(f"Executing query to fetch {limit} clinical trials from AACT database")
-                records = await self.conn.fetch(query)
-                logger.info(f"Successfully fetched {len(records)} clinical trial records")
-                return records
+                # Use connection from pool
+                async with pool.acquire() as conn:
+                    if skip > 0:
+                        logger.info(
+                            f"Executing query to fetch {limit} clinical trials from AACT database "
+                            f"(skipping first {skip} records)"
+                        )
+                    else:
+                        logger.info(
+                            f"Executing query to fetch {limit} clinical trials from AACT database"
+                        )
+                    records = await conn.fetch(query)
+                    logger.info(f"Successfully fetched {len(records)} clinical trial records")
+                    return records
 
             # Use retry logic for query execution
             records = await _retry_with_backoff(_execute_query)
+
+            logger.info(f"Starting to process {len(records)} records into entities")
+            entities_created = 0
 
             # Process each nct_id
             for record in records:
@@ -247,7 +265,7 @@ class CTTISource(BaseSource):
                 entity_id = f"CTTI:study:{clean_nct_id}"
 
                 # Create WebEntity
-                yield CTTIWebEntity(
+                entity = CTTIWebEntity(
                     entity_id=entity_id,
                     url=url,
                     title=f"Clinical Trial {clean_nct_id}",
@@ -275,15 +293,30 @@ class CTTISource(BaseSource):
                         "database_table": self.AACT_TABLE,
                         "original_nct_id": nct_id,  # Keep original in case it had formatting
                         "limit_used": limit,
+                        "skip_used": skip,
                         "total_fetched": len(records),
                     },
                 )
 
+                # TODO: For faster startup, consider batching entity creation
+                # and checking Azure storage existence in parallel batches
+                # This would reduce the sequential processing time significantly
+
+                entities_created += 1
+
+                # Log progress every 100 entities
+                if entities_created % 100 == 0:
+                    logger.info(f"Created {entities_created}/{len(records)} CTTI entities")
+
+                # Yield control periodically to prevent blocking
+                if entities_created % 10 == 0:
+                    await asyncio.sleep(0)  # Allow other tasks to run
+
+                yield entity
+
+            logger.info(f"Completed creating all {entities_created} CTTI entities")
+
         except Exception as e:
             logger.error(f"Error in CTTI source generate_entities: {str(e)}")
             raise
-        finally:
-            if self.conn:
-                await self.conn.close()
-                self.conn = None
-                logger.info("Closed AACT database connection")
+        # Note: We don't close the pool here as it's shared across all CTTI instances

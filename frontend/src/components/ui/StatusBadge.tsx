@@ -85,6 +85,12 @@ export const statusConfig = {
     bgColor: "bg-rose-50 dark:bg-rose-950/80",
     label: "Failed"
   },
+  "cancelled": {
+    color: "bg-rose-500",
+    textColor: "text-rose-700 dark:text-rose-400",
+    bgColor: "bg-rose-50 dark:bg-rose-950/80",
+    label: "Cancelled"
+  },
 
   // Fallback for unknown statuses
   "default": {

@@ -73,10 +73,44 @@ def parse_arguments():
     return args
 
 
+def show_backend_logs(lines: int = 50) -> None:
+    """Show recent backend logs for debugging."""
+    try:
+        print(f"📋 Showing last {lines} lines of backend logs:")
+        print("=" * 80)
+
+        # Get logs from the backend container
+        result = subprocess.run(
+            ["docker", "logs", "--tail", str(lines), "airweave-backend"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode == 0:
+            if result.stdout:
+                print("STDOUT:")
+                print(result.stdout)
+            if result.stderr:
+                print("STDERR:")
+                print(result.stderr)
+        else:
+            print(f"Failed to get logs: {result.stderr}")
+
+    except subprocess.TimeoutExpired:
+        print("⚠️  Timeout getting backend logs")
+    except Exception as e:
+        print(f"⚠️  Error getting backend logs: {e}")
+    finally:
+        print("=" * 80)
+
+
 def wait_for_health(url: str, timeout: int = 300) -> bool:
     """Wait for service to be healthy."""
-    print(f"Waiting for {url} to be healthy...")
+    print(f"Waiting for {url} to be healthy (timeout: {timeout}s)...")
     start_time = time.time()
+    last_error = None
+    error_count = 0
 
     while time.time() - start_time < timeout:
         try:
@@ -84,13 +118,22 @@ def wait_for_health(url: str, timeout: int = 300) -> bool:
             if response.status_code == 200:
                 print("✓ Service is healthy")
                 return True
-        except requests.exceptions.RequestException:
-            pass
+            else:
+                last_error = f"HTTP {response.status_code}: {response.text}"
+        except requests.exceptions.RequestException as e:
+            last_error = str(e)
+            error_count += 1
+            # Only log errors occasionally to avoid spam
+            if error_count % 10 == 1:  # Log every 10th error
+                print(f"\n⚠️  Health check error (#{error_count}): {e}")
 
         time.sleep(2)
         print(".", end="", flush=True)
 
-    print("\n✗ Service health check timed out")
+    elapsed = time.time() - start_time
+    print(f"\n✗ Service health check timed out after {elapsed:.1f}s")
+    if last_error:
+        print(f"  Last error: {last_error}")
     return False
 
 
@@ -117,6 +160,18 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
         # If no API key, answer 'n' to both API key prompts, 'y' to remove containers
         automated_input = "n\nn\ny\n"
 
+    # Set environment variables to suppress Azure credential warnings
+    env = os.environ.copy()
+    env.update({
+        'AZURE_CLIENT_ID': '',
+        'AZURE_CLIENT_SECRET': '',
+        'AZURE_TENANT_ID': '',
+        'AZURE_USERNAME': '',
+        'AZURE_PASSWORD': '',
+        'MSI_ENDPOINT': '',  # Disable managed identity
+        'IMDS_ENDPOINT': '',  # Disable IMDS
+    })
+
     try:
         # Run start.sh script with automated input
         process = subprocess.Popen(
@@ -127,6 +182,7 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=env,  # Pass environment variables to suppress Azure warnings
         )
 
         # Send automated responses
@@ -186,10 +242,12 @@ def setup_environment(env: str, openai_api_key: Optional[str] = None) -> Optiona
         if not start_local_services(openai_api_key):
             return None
 
-        # Quick health check to verify (shorter timeout since services should already be ready)
+        # Health check to verify backend is accessible (longer timeout for full initialization)
         print("Verifying backend is accessible...")
-        if not wait_for_health(api_url, timeout=30):
-            print("✗ Backend is not responding - may need more time to initialize")
+        if not wait_for_health(api_url, timeout=120):  # Increased from 30 to 120 seconds
+            print("✗ Backend is not responding after 2 minutes")
+            print("📋 Checking backend logs for debugging...")
+            show_backend_logs()
             return None
 
     else:
@@ -232,6 +290,10 @@ def test_collections(api_url: str, headers: dict) -> str:
             print(f"  Parsed error: {error_detail}")
         except:
             pass
+
+        # Show backend logs to help debug the issue
+        print("📋 Backend logs for debugging:")
+        show_backend_logs(lines=20)
 
     assert response.status_code == 200, f"Failed to create collection: {response.text}"
 
@@ -567,6 +629,10 @@ def test_source_connections(
         except:
             pass
 
+        # Show backend logs to help debug the issue
+        print("📋 Backend logs for debugging:")
+        show_backend_logs(lines=30)
+
     assert response.status_code == 200, f"Failed to create source connection: {response.text}"
 
     source_conn = response.json()
@@ -746,6 +812,7 @@ def test_source_connections(
     max_wait = 300  # 5 minutes
     poll_interval = 5
     elapsed = 0
+    last_log_check = 0
 
     while elapsed < max_wait:
         response = requests.get(
@@ -763,9 +830,17 @@ def test_source_connections(
         elif current_status == "FAILED":
             error_msg = job_status.get("error", "Unknown error")
             print(f"  ✗ Sync failed: {error_msg}")
+            print("📋 Backend logs for sync failure debugging:")
+            show_backend_logs(lines=50)
             if "test" in stripe_api_key or "dummy" in stripe_api_key:
                 print("  ℹ️  Note: Sync failure expected with test API key")
             break
+
+        # Show backend logs every 30 seconds during sync to monitor progress
+        if elapsed - last_log_check >= 30:
+            print(f"\n  📋 Sync still running after {elapsed}s - checking backend logs:")
+            show_backend_logs(lines=10)
+            last_log_check = elapsed
 
         time.sleep(poll_interval)
         elapsed += poll_interval
@@ -773,6 +848,8 @@ def test_source_connections(
 
     if elapsed >= max_wait:
         print(f"\n  ⚠️  Sync did not complete within {max_wait} seconds")
+        print("📋 Backend logs for timeout debugging:")
+        show_backend_logs(lines=50)
 
     # CREATE SECOND: Source connection with immediate sync
     print("\n  Creating second source connection (sync_immediately=true)...")
@@ -945,6 +1022,10 @@ def test_sync_job_pubsub(api_url: str, job_id: str, headers: dict, timeout: int 
 
     # Verify message structure
     for msg in messages_received:
+        # Skip non-progress messages (connected, heartbeat, etc.)
+        if msg.get("type") in ["connected", "heartbeat", "error"]:
+            continue
+
         required_fields = [
             "inserted",
             "updated",
@@ -992,6 +1073,11 @@ def test_search_functionality(
         params={"query": search_query, "response_type": "raw"},
         headers=headers,
     )
+
+    if response.status_code != 200:
+        print(f"Search request failed: {response.status_code} - {response.text}")
+        print("📋 Backend logs for search failure debugging:")
+        show_backend_logs(lines=30)
 
     assert response.status_code == 200, f"Search failed: {response.text}"
 

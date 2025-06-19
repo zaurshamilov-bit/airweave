@@ -208,6 +208,31 @@ class Auth0ManagementClient:
             logger.error(f"Failed to delete invitation from Auth0: {e}")
             raise
 
+    async def get_all_connections(self) -> List[Dict]:
+        """Get all connections from Auth0."""
+        try:
+            return await self._make_request("GET", "/connections")
+        except Exception as e:
+            logger.error(f"Auth0 API error getting all connections: {e}")
+            raise
+
+    async def add_enabled_connection_to_organization(
+        self, auth0_org_id: str, connection_id: str
+    ) -> None:
+        """Enable a connection for an organization in Auth0."""
+        body = {"connection_id": connection_id, "assign_membership_on_login": False}
+        try:
+            await self._make_request(
+                "POST",
+                f"/organizations/{auth0_org_id}/enabled_connections",
+                json_data=body,
+            )
+        except Exception as e:
+            logger.error(
+                f"Auth0 API error adding connection {connection_id} to org {auth0_org_id}: {e}"
+            )
+            raise
+
 
 auth0_management_client = None
 if settings.AUTH_ENABLED:

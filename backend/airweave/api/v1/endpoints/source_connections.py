@@ -1,15 +1,19 @@
 """API endpoints for managing source connections."""
 
+from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import BackgroundTasks, Body, Depends, Query
+from fastapi import BackgroundTasks, Body, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
+from airweave.core.logging import logger
+from airweave.core.shared_models import SyncJobStatus
 from airweave.core.source_connection_service import source_connection_service
+from airweave.core.sync_job_service import sync_job_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
 from airweave.db.session import get_db_context
@@ -27,7 +31,7 @@ async def list_source_connections(
     limit: int = 100,
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> List[schemas.SourceConnectionListItem]:
-    """List all source connections for the current user.
+    """List all source connections for the organization.
 
     Args:
         db: The database session
@@ -341,6 +345,83 @@ async def get_source_connection_job(
         db=db, source_connection_id=source_connection_id, job_id=job_id, auth_context=auth_context
     )
     return tmp
+
+
+@router.post(
+    "/{source_connection_id}/jobs/{job_id}/cancel", response_model=schemas.SourceConnectionJob
+)
+async def cancel_source_connection_job(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    source_connection_id: UUID,
+    job_id: UUID,
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+) -> schemas.SourceConnectionJob:
+    """Cancel a running sync job for a source connection.
+
+    This will send a cancellation signal to the Temporal workflow if enabled.
+    The workflow will handle the cancellation and update the job status to CANCELLED.
+
+    Args:
+        db: The database session
+        source_connection_id: The ID of the source connection
+        job_id: The ID of the sync job to cancel
+        auth_context: The current authentication context
+
+    Returns:
+        The cancelled sync job
+    """
+    # First verify the job exists and belongs to this source connection
+    sync_job = await source_connection_service.get_source_connection_job(
+        db=db, source_connection_id=source_connection_id, job_id=job_id, auth_context=auth_context
+    )
+
+    # Check if the job is in a cancellable state
+    if sync_job.status not in [
+        SyncJobStatus.CREATED,
+        SyncJobStatus.PENDING,
+        SyncJobStatus.IN_PROGRESS,
+    ]:
+        raise HTTPException(
+            status_code=400, detail=f"Cannot cancel job in {sync_job.status} status"
+        )
+
+    # If Temporal is enabled, try to cancel the workflow
+    if await temporal_service.is_temporal_enabled():
+        try:
+            cancelled = await temporal_service.cancel_sync_job_workflow(str(job_id))
+            if cancelled:
+                logger.info(f"Successfully sent cancellation signal for job {job_id}")
+            else:
+                logger.warning(f"No running Temporal workflow found for job {job_id}")
+                # Even if no workflow found, we might want to update the status
+                # if it's stuck in IN_PROGRESS or PENDING
+                if sync_job.status in [SyncJobStatus.IN_PROGRESS, SyncJobStatus.PENDING]:
+                    await sync_job_service.update_status(
+                        sync_job_id=job_id,
+                        status=SyncJobStatus.CANCELLED,
+                        auth_context=auth_context,
+                        error="Job cancelled by user",
+                        failed_at=datetime.now(),  # Using failed_at for cancelled timestamp
+                    )
+        except Exception as e:
+            logger.error(f"Error cancelling Temporal workflow: {e}")
+            raise HTTPException(status_code=500, detail="Failed to cancel workflow") from None
+    else:
+        # For non-Temporal jobs, directly update the status
+        # (though background tasks can't really be cancelled)
+        await sync_job_service.update_status(
+            sync_job_id=job_id,
+            status=SyncJobStatus.CANCELLED,
+            auth_context=auth_context,
+            error="Job cancelled by user",
+            failed_at=datetime.now(),  # Using failed_at for cancelled timestamp
+        )
+
+    # Fetch the updated job
+    return await source_connection_service.get_source_connection_job(
+        db=db, source_connection_id=source_connection_id, job_id=job_id, auth_context=auth_context
+    )
 
 
 @router.get("/{source_short_name}/oauth2_url", response_model=schemas.OAuth2AuthUrl)

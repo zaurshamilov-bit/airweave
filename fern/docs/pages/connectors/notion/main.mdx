@@ -91,7 +91,7 @@ Schema for a Notion page with aggregated content.
 | parent_id | str | The ID of the parent |
 | parent_type | str | The type of the parent (workspace, page_id, database_id, etc.) |
 | title | str | The title of the page |
-| content | str | Full aggregated content of the page in markdown |
+| content | Optional[str] | Full aggregated content |
 | properties | Dict[str, Any] | Page properties |
 | property_entities | List[Any] | Structured property entities |
 | files | List[Any] | Files referenced in the page |

@@ -1,4 +1,8 @@
-"""Redis client for Airweave."""
+"""Redis client configuration."""
+
+import platform
+import socket
+from typing import Optional
 
 import redis.asyncio as redis
 
@@ -7,79 +11,104 @@ from airweave.core.logging import logger
 
 
 class RedisClient:
-    """Redis client singleton for pubsub operations."""
+    """Redis client wrapper with connection pooling."""
 
     def __init__(self):
-        """Initialize the Redis client."""
-        self.client = self._create_client()
+        """Initialize Redis clients with separate pools."""
+        self._client: Optional[redis.Redis] = None
+        self._pubsub_client: Optional[redis.Redis] = None
 
-    def _create_client(self) -> redis.Redis:
-        """Create and configure the Redis client.
+    @property
+    def client(self) -> redis.Redis:
+        """Get or create the main Redis client."""
+        if self._client is None:
+            self._client = self._create_client(max_connections=50)
+        return self._client
 
-        Returns:
-            redis.Redis: Configured Redis client instance.
+    @property
+    def pubsub_client(self) -> redis.Redis:
+        """Get or create the pubsub Redis client for SSE."""
+        if self._pubsub_client is None:
+            self._pubsub_client = self._create_client(max_connections=100)
+        return self._pubsub_client
+
+    def _get_socket_keepalive_options(self) -> dict:
+        """Get socket keepalive options based on the OS.
+
+        Returns empty dict for macOS to avoid socket option errors.
+        Returns proper TCP keepalive settings for Linux.
         """
-        client_kwargs = {
-            "host": settings.REDIS_HOST,
-            "port": settings.REDIS_PORT,
-            "decode_responses": True,
-            "socket_keepalive": True,
-            "socket_keepalive_options": {},
-            "health_check_interval": 30,
-            "max_connections": 50,
-        }
+        if platform.system() == "Darwin":  # macOS
+            return {}
+        else:  # Linux and others
+            # Use the correct Linux TCP keepalive constants
+            # TCP_KEEPIDLE = 4
+            # TCP_KEEPINTVL = 5
+            # TCP_KEEPCNT = 6
 
-        # Add password if configured
-        if settings.REDIS_PASSWORD:
-            client_kwargs["password"] = settings.REDIS_PASSWORD
+            if hasattr(socket, "TCP_KEEPIDLE"):
+                return {
+                    socket.TCP_KEEPIDLE: 60,  # Start keepalive after 60s idle
+                    socket.TCP_KEEPINTVL: 10,  # Interval between keepalive probes
+                    socket.TCP_KEEPCNT: 6,  # Number of keepalive probes
+                }
+            else:
+                # Fallback for systems without these constants
+                return {}
 
-        return redis.Redis(**client_kwargs)
+    def _create_client(self, max_connections: int = 50) -> redis.Redis:
+        """Create a Redis client with specified connection pool size."""
+        # Create connection pool with proper configuration
+        pool = redis.ConnectionPool(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            db=settings.REDIS_DB,
+            password=settings.REDIS_PASSWORD if settings.REDIS_PASSWORD else None,
+            decode_responses=True,
+            max_connections=max_connections,
+            retry_on_timeout=True,
+            socket_keepalive=True,
+            socket_keepalive_options=self._get_socket_keepalive_options(),
+            socket_connect_timeout=5,  # Add connection timeout
+            socket_timeout=5,  # Add socket timeout
+            retry_on_error=[ConnectionError, TimeoutError],  # Retry on these errors
+        )
+
+        return redis.Redis(connection_pool=pool)
 
     async def publish(self, channel: str, message: str) -> int:
         """Publish a message to a channel.
 
         Args:
-            channel: Channel name to publish to.
-            message: Message to publish (should be JSON string).
+            channel: The channel to publish to
+            message: The message to publish
 
         Returns:
-            int: Number of subscribers that received the message.
+            The number of subscribers that received the message
         """
-        try:
-            return await self.client.publish(channel, message)
-        except Exception as e:
-            logger.warning(f"Redis publish failed for channel '{channel}': {e}")
-            return 0
+        return await self.client.publish(channel, message)
 
-    async def subscribe(self, channel: str) -> redis.client.PubSub:
-        """Subscribe to a channel.
-
-        Args:
-            channel: Channel name to subscribe to.
-
-        Returns:
-            redis.client.PubSub: PubSub instance for listening to messages.
-        """
-        pubsub = self.client.pubsub()
-        await pubsub.subscribe(channel)
-        return pubsub
-
-    async def ping(self) -> bool:
+    async def test_connection(self) -> bool:
         """Test Redis connection.
 
         Returns:
-            bool: True if connected, False otherwise.
+            True if connection is successful, False otherwise
         """
         try:
             await self.client.ping()
+            logger.info("Redis connection successful")
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"Redis connection failed: {e}")
             return False
 
     async def close(self) -> None:
         """Close Redis connection gracefully."""
-        await self.client.close()
+        if self._client:
+            await self._client.close()
+        if self._pubsub_client:
+            await self._pubsub_client.close()
 
 
-# Global singleton instance
+# Create a global instance
 redis_client = RedisClient()

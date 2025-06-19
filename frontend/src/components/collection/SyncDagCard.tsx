@@ -169,7 +169,7 @@ export const SyncDagCard = ({
             <CardContent className="p-0 pb-0">
                 <div
                     ref={flowContainerRef}
-                    className="h-[320px] w-full overflow-hidden"
+                    className="h-[320px] w-full overflow-hidden pointer-events-none [&_.react-flow__handle]:!cursor-default [&_*]:!cursor-default"
                     style={{ minHeight: '320px' }}
                 >
                     <ReactFlow
@@ -189,8 +189,6 @@ export const SyncDagCard = ({
                         onInit={setReactFlowInstance}
                         defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
                         style={{
-                            touchAction: 'none',
-                            cursor: 'default',
                             background: isDark ? 'transparent' : '#ffffff'
                         }}
                         nodesDraggable={false}
@@ -201,7 +199,6 @@ export const SyncDagCard = ({
                         panOnDrag={false}
                         zoomOnPinch={false}
                         zoomOnDoubleClick={false}
-                        preventScrolling={true}
                         proOptions={{ hideAttribution: true }}
                     />
                 </div>

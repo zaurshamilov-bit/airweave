@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core.config import settings
+from airweave.core.exceptions import NotFoundException
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.platform.destinations.qdrant import QdrantDestination
 from airweave.schemas.auth import AuthContext
@@ -57,9 +58,13 @@ class CollectionService:
     ) -> schemas.Collection:
         """Create a new collection."""
         # Check if the collection already exists
-        existing_collection = await crud.collection.get_by_readable_id(
-            db, readable_id=collection_in.readable_id, auth_context=auth_context
-        )
+        try:
+            existing_collection = await crud.collection.get_by_readable_id(
+                db, readable_id=collection_in.readable_id, auth_context=auth_context
+            )
+        except NotFoundException:
+            existing_collection = None
+
         if existing_collection:
             raise HTTPException(
                 status_code=400, detail="Collection with this readable_id already exists"
