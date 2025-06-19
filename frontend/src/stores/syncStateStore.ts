@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { EventSourcePolyfill } from 'event-source-polyfill';
 import { env } from '@/config/env';
+import { syncStorageService } from '@/services/syncStorageService';
 
 // Types for sync progress updates
 export interface SyncProgressUpdate {
@@ -45,6 +46,9 @@ interface SyncStateStore {
     // Check if a source has an active subscription
     hasActiveSubscription: (sourceConnectionId: string) => boolean;
 
+    // Restore progress from storage (for page reloads)
+    restoreProgressFromStorage: (sourceConnectionId: string, jobId: string) => void;
+
     // Clean up all subscriptions
     cleanup: () => void;
 }
@@ -63,6 +67,10 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
         }
 
         try {
+            // Check if we have existing progress data (from restoration)
+            const existingSubscription = state.activeSubscriptions.get(sourceConnectionId);
+            const existingProgress = existingSubscription?.lastUpdate;
+
             // Create EventSource with auth token
             const token = localStorage.getItem('authToken');
 
@@ -154,12 +162,12 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
                 console.log(`✅ SSE connection opened for ${sourceConnectionId}`);
             };
 
-            // Create subscription object
+            // Create subscription object, preserving existing progress if available
             const subscription: SyncSubscription = {
                 jobId,
                 sourceConnectionId,
                 eventSource,
-                lastUpdate: {
+                lastUpdate: existingProgress || {
                     entities_inserted: 0,
                     entities_updated: 0,
                     entities_deleted: 0,
@@ -176,7 +184,8 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
             newSubscriptions.set(sourceConnectionId, subscription);
             set({ activeSubscriptions: newSubscriptions });
 
-            console.log(`✅ Subscribed to sync job ${jobId} for ${sourceConnectionId}`);
+            console.log(`✅ Subscribed to sync job ${jobId} for ${sourceConnectionId}`,
+                existingProgress ? 'with restored progress' : 'with fresh progress');
 
         } catch (error) {
             console.error(`Failed to subscribe to ${sourceConnectionId}:`, error);
@@ -235,6 +244,45 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
     hasActiveSubscription: (sourceConnectionId: string) => {
         const subscription = get().activeSubscriptions.get(sourceConnectionId);
         return subscription?.status === 'active';
+    },
+
+    restoreProgressFromStorage: (sourceConnectionId: string, jobId: string) => {
+        const storedData = syncStorageService.getProgressForSource(sourceConnectionId);
+
+        console.log(`🔍 Checking stored progress for ${sourceConnectionId}:`, {
+            found: !!storedData,
+            storedData,
+            requestedJobId: jobId,
+            storedJobId: storedData?.jobId,
+            matches: storedData?.jobId === jobId,
+            storedStatus: storedData?.status
+        });
+
+        if (storedData && storedData.jobId === jobId && storedData.status === 'active') {
+            console.log(`🔄 Restoring saved progress for ${sourceConnectionId} from session storage:`, storedData);
+
+            // Create a "restored" subscription with the saved progress
+            const subscription: SyncSubscription = {
+                jobId,
+                sourceConnectionId,
+                eventSource: null as any, // Will be replaced when real subscription starts
+                lastUpdate: storedData.lastUpdate,
+                lastMessageTime: storedData.timestamp,
+                status: 'active'
+            };
+
+            const newSubscriptions = new Map(get().activeSubscriptions);
+            newSubscriptions.set(sourceConnectionId, subscription);
+            set({ activeSubscriptions: newSubscriptions });
+
+            console.log(`✅ Progress restored successfully for ${sourceConnectionId}`);
+        } else {
+            console.log(`❌ Could not restore progress for ${sourceConnectionId}:`, {
+                hasStoredData: !!storedData,
+                jobIdMatch: storedData?.jobId === jobId,
+                statusIsActive: storedData?.status === 'active'
+            });
+        }
     },
 
     cleanup: () => {

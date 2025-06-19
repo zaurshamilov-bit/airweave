@@ -391,7 +391,19 @@ const SourceConnectionDetailView = ({
     const isDark = resolvedTheme === 'dark';
 
     // Sync state store
-    const { subscribe, getProgressForSource, hasActiveSubscription } = useSyncStateStore();
+    const { subscribe, getProgressForSource, hasActiveSubscription, restoreProgressFromStorage } = useSyncStateStore();
+
+    // Check for stored progress immediately on mount (before effects run)
+    const [hasCheckedStorage, setHasCheckedStorage] = useState(false);
+    if (!hasCheckedStorage && sourceConnectionId) {
+        const storedData = syncStorageService.getProgressForSource(sourceConnectionId);
+        if (storedData && storedData.status === 'active') {
+            console.log('💾 Found stored progress on mount, restoring immediately:', storedData);
+            restoreProgressFromStorage(sourceConnectionId, storedData.jobId);
+        }
+        setHasCheckedStorage(true);
+    }
+
     const liveProgress = getProgressForSource(sourceConnectionId);
 
     const [sourceConnection, setSourceConnection] = useState<SourceConnection | null>(null);
@@ -412,6 +424,7 @@ const SourceConnectionDetailView = ({
     const [isLoading, setIsLoading] = useState(true);
     const [isInitiatingSyncJob, setIsInitiatingSyncJob] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
+    const [pendingJobStartTime, setPendingJobStartTime] = useState<number | null>(null);
 
     // Entity processing and visualization state
     const [totalEntities, setTotalEntities] = useState<number>(0);
@@ -638,12 +651,16 @@ const SourceConnectionDetailView = ({
             // Clear the runtime from previous sync
             setTotalRuntime(null);
 
+            // Track approximate start time for immediate runtime display
+            setPendingJobStartTime(Date.now());
+
             // Also update the source connection's latest_sync_job_status to reflect the new job
             if (sourceConnection) {
                 setSourceConnection({
                     ...sourceConnection,
                     latest_sync_job_status: newJob.status,
-                    latest_sync_job_id: newJob.id
+                    latest_sync_job_id: newJob.id,
+                    latest_sync_job_started_at: newJob.started_at || undefined
                 });
             }
 
@@ -1009,10 +1026,49 @@ const SourceConnectionDetailView = ({
         setEntityDict({});
         setNodes([]);
         setEdges([]);
+        setHasCheckedStorage(false); // Reset storage check flag
 
         // Then load new data
         loadAllData();
     }, [sourceConnectionId]);
+
+    // Restore saved progress when sync job data is loaded
+    useEffect(() => {
+        // Only restore if the API confirms the job is still in progress
+        // This prevents restoring stale data if the job completed while the page was closed
+        if (syncJob?.status === 'in_progress' && syncJob.id && !liveProgress && sourceConnection?.id) {
+            console.log('🔄 Attempting to restore saved progress for running sync job:', syncJob.id);
+
+            // Check if we have stored data for this exact job
+            const storedData = syncStorageService.getProgressForSource(sourceConnectionId);
+
+            if (storedData && storedData.jobId === syncJob.id) {
+                console.log('📦 Found stored progress for job:', {
+                    jobId: storedData.jobId,
+                    storedStatus: storedData.status,
+                    apiStatus: syncJob.status,
+                    willRestore: true
+                });
+
+                // Only restore if it matches the current job
+                restoreProgressFromStorage(sourceConnectionId, syncJob.id);
+            } else if (storedData) {
+                console.log('⚠️ Stored progress is for different job, not restoring:', {
+                    storedJobId: storedData.jobId,
+                    currentJobId: syncJob.id
+                });
+            }
+        }
+    }, [syncJob?.id, syncJob?.status, sourceConnectionId, liveProgress, sourceConnection?.id, restoreProgressFromStorage]);
+
+    // Auto re-subscribe to in-progress sync jobs after page reload
+    useEffect(() => {
+        // If we have an in-progress sync job and no active subscription
+        if (syncJob?.status === 'in_progress' && syncJob.id && sourceConnection?.id && !hasActiveSubscription(sourceConnectionId)) {
+            console.log('🔌 Auto re-subscribing to in-progress sync job:', syncJob.id);
+            subscribe(syncJob.id, sourceConnectionId);
+        }
+    }, [syncJob?.id, syncJob?.status, sourceConnectionId, sourceConnection?.id, hasActiveSubscription, subscribe]);
 
     // Entity data processing (uses sync job data)
     useEffect(() => {
@@ -1171,9 +1227,27 @@ const SourceConnectionDetailView = ({
 
     // Live runtime calculation for running jobs
     useEffect(() => {
-        if (derivedSyncStatus === 'in_progress' && syncJob?.started_at) {
+        if (derivedSyncStatus === 'in_progress') {
+            // Determine the start time:
+            // 1. Use real started_at if available
+            // 2. Use pendingJobStartTime if this is a new job we just started
+            // 3. Fall back to current time
+            let startTime: number;
+
+            if (syncJob?.started_at) {
+                startTime = new Date(syncJob.started_at).getTime();
+                // Clear pending time if we have real started_at
+                if (pendingJobStartTime) {
+                    setPendingJobStartTime(null);
+                }
+            } else if (pendingJobStartTime) {
+                startTime = pendingJobStartTime;
+            } else {
+                startTime = Date.now();
+            }
+
             const updateRuntime = () => {
-                const runtime = new Date().getTime() - new Date(syncJob.started_at!).getTime();
+                const runtime = Date.now() - startTime;
                 setTotalRuntime(runtime);
             };
 
@@ -1184,8 +1258,26 @@ const SourceConnectionDetailView = ({
             const interval = setInterval(updateRuntime, 1000);
 
             return () => clearInterval(interval);
+        } else {
+            // Clear pending time if job is not in progress
+            if (pendingJobStartTime) {
+                setPendingJobStartTime(null);
+            }
         }
-    }, [derivedSyncStatus, syncJob?.started_at]);
+    }, [derivedSyncStatus, syncJob?.started_at, syncJob?.id, pendingJobStartTime]); // Added pendingJobStartTime
+
+    // Clean up stored progress when job completes or changes
+    useEffect(() => {
+        // If the API shows a completed/failed/cancelled job, clean up any stored progress
+        if (syncJob && (syncJob.status === 'completed' || syncJob.status === 'failed' || syncJob.status === 'cancelled')) {
+            const storedData = syncStorageService.getProgressForSource(sourceConnectionId);
+
+            if (storedData && storedData.jobId === syncJob.id) {
+                console.log('🧹 Cleaning up stored progress for completed job:', syncJob.id);
+                syncStorageService.removeProgress(sourceConnectionId);
+            }
+        }
+    }, [syncJob?.id, syncJob?.status, sourceConnectionId]);
 
     if (!sourceConnection) {
         return (
