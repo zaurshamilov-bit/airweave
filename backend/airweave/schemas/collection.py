@@ -105,8 +105,8 @@ class CollectionInDBBase(CollectionBase):
     created_at: datetime
     modified_at: datetime
     organization_id: UUID
-    created_by_email: EmailStr
-    modified_by_email: EmailStr
+    created_by_email: Optional[EmailStr] = None
+    modified_by_email: Optional[EmailStr] = None
 
     class Config:
         """Pydantic config."""

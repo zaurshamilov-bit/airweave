@@ -70,7 +70,7 @@ class SyncOrchestrator:
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.IN_PROGRESS,
-            current_user=self.sync_context.current_user,
+            auth_context=self.sync_context.auth_context,
             started_at=datetime.now(),
         )
 
@@ -128,7 +128,7 @@ class SyncOrchestrator:
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.COMPLETED,
-            current_user=self.sync_context.current_user,
+            auth_context=self.sync_context.auth_context,
             completed_at=datetime.now(),
             stats=stats,
         )
@@ -148,7 +148,7 @@ class SyncOrchestrator:
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.FAILED,
-            current_user=self.sync_context.current_user,
+            auth_context=self.sync_context.auth_context,
             error=str(error),
             failed_at=datetime.now(),
             stats=stats,

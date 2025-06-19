@@ -7,7 +7,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import Dashboard from '@/pages/Dashboard';
 import CollectionDetailView from "@/pages/CollectionDetailView";
 import CollectionsView from "@/pages/CollectionsView";
-import Chat from '@/pages/Chat';
+
 import WhiteLabel from '@/pages/WhiteLabel';
 import CreateWhiteLabel from '@/pages/CreateWhiteLabel';
 import WhiteLabelDetail from '@/pages/WhiteLabelDetail';
@@ -20,6 +20,8 @@ import Login from '@/pages/Login';
 import Callback from '@/pages/Callback';
 import { protectedPaths, publicPaths } from '@/constants/paths';
 import { AuthCallback } from '@/pages/AuthCallback';
+import { OrganizationSettingsUnified } from '@/pages/organization/OrganizationSettingsUnified';
+import NoOrganization from '@/pages/NoOrganization';
 
 function App() {
   // Initialize collections event listeners when the app loads
@@ -35,6 +37,7 @@ function App() {
         <Route path={publicPaths.login} element={<Login />} />
         <Route path={publicPaths.callback} element={<Callback />} />
         <Route path={publicPaths.semanticMcp} element={<SemanticMcp />} />
+        <Route path={publicPaths.noOrganization} element={<NoOrganization />} />
 
         {/* Auth callback routes - OUTSIDE of DashboardLayout */}
         <Route path="/auth/callback/:short_name" element={<AuthCallback />} />
@@ -50,6 +53,9 @@ function App() {
           <Route path={protectedPaths.whiteLabelCreate} element={<CreateWhiteLabel />} />
           <Route path={protectedPaths.whiteLabelDetail} element={<WhiteLabelDetail />} />
           <Route path={protectedPaths.whiteLabelEdit} element={<WhiteLabelEdit />} />
+
+          {/* Organization routes */}
+          <Route path="/organization/settings" element={<OrganizationSettingsUnified />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

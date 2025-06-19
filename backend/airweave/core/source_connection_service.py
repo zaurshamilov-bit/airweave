@@ -19,6 +19,7 @@ from airweave.platform.auth.schemas import AuthType, OAuth2TokenResponse
 from airweave.platform.auth.services import oauth2_service
 from airweave.platform.auth.settings import integration_settings
 from airweave.platform.locator import resource_locator
+from airweave.schemas.auth import AuthContext
 
 source_connection_logger = logger.with_prefix("Source Connection Service: ").with_context(
     component="source_connection_service"
@@ -199,7 +200,7 @@ class SourceConnectionService:
         self,
         db: AsyncSession,
         source_connection_in: schemas.SourceConnectionCreate,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> Tuple[schemas.SourceConnection, Optional[schemas.SyncJob]]:
         """Create a new source connection with all related objects.
 
@@ -214,7 +215,7 @@ class SourceConnectionService:
         Args:
             db: The database session
             source_connection_in: The source connection to create
-            current_user: The current user
+            auth_context: The authentication context
 
         Returns:
             A tuple of (source_connection, sync_job)
@@ -242,7 +243,7 @@ class SourceConnectionService:
             if aux_attrs.get("credential_id"):
                 # Verify the credential exists and belongs to this user
                 credential = await crud.integration_credential.get(
-                    uow.session, id=aux_attrs["credential_id"], current_user=current_user
+                    uow.session, id=aux_attrs["credential_id"], auth_context=auth_context
                 )
                 if not credential:
                     raise HTTPException(status_code=404, detail="Integration credential not found")
@@ -265,8 +266,8 @@ class SourceConnectionService:
 
                 # Create the integration credential
                 integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
-                    name=f"{source.name} - {current_user.email}",
-                    description=f"Credentials for {source.name} - {current_user.email}",
+                    name=f"{source.name} - {auth_context.organization_id}",
+                    description=f"Credentials for {source.name} - {auth_context.organization_id}",
                     integration_short_name=source_connection_in.short_name,
                     integration_type=IntegrationType.SOURCE,
                     auth_type=source.auth_type,
@@ -275,7 +276,7 @@ class SourceConnectionService:
                 )
 
                 integration_credential = await crud.integration_credential.create(
-                    uow.session, obj_in=integration_cred_in, current_user=current_user, uow=uow
+                    uow.session, obj_in=integration_cred_in, auth_context=auth_context, uow=uow
                 )
 
                 await uow.session.flush()
@@ -306,7 +307,7 @@ class SourceConnectionService:
             )
 
             connection = await crud.connection.create(
-                db=uow.session, obj_in=connection_create, current_user=current_user, uow=uow
+                db=uow.session, obj_in=connection_create, auth_context=auth_context, uow=uow
             )
 
             await uow.session.flush()
@@ -324,7 +325,7 @@ class SourceConnectionService:
                 collection = await collection_service.create(
                     db=uow.session,
                     collection_in=collection_create,
-                    current_user=current_user,
+                    auth_context=auth_context,
                     uow=uow,
                 )
             else:
@@ -332,7 +333,7 @@ class SourceConnectionService:
                 if "collection" in core_attrs:
                     del core_attrs["collection"]
                 collection = await crud.collection.get_by_readable_id(
-                    db=uow.session, readable_id=readable_collection_id, current_user=current_user
+                    db=uow.session, readable_id=readable_collection_id, auth_context=auth_context
                 )
                 if not collection:
                     raise HTTPException(
@@ -353,7 +354,7 @@ class SourceConnectionService:
 
             # 5. Use the sync service to create the sync and automatically the DAG
             sync, sync_job = await sync_service.create_and_run_sync(
-                db=uow.session, sync_in=sync_in, current_user=current_user, uow=uow
+                db=uow.session, sync_in=sync_in, auth_context=auth_context, uow=uow
             )
 
             # 6. Create the source connection from core attributes
@@ -368,7 +369,7 @@ class SourceConnectionService:
             }
 
             source_connection = await crud.source_connection.create(
-                db=uow.session, obj_in=source_connection_create, current_user=current_user, uow=uow
+                db=uow.session, obj_in=source_connection_create, auth_context=auth_context, uow=uow
             )
             await uow.session.flush()
 
@@ -404,8 +405,8 @@ class SourceConnectionService:
         self,
         db: AsyncSession,
         source_connection_id: UUID,
+        auth_context: AuthContext,
         show_auth_fields: bool = False,
-        current_user: schemas.User = None,
     ) -> schemas.SourceConnection:
         """Get a source connection with all related data.
 
@@ -418,8 +419,8 @@ class SourceConnectionService:
         Args:
             db: The database session
             source_connection_id: The ID of the source connection
+            auth_context: The current authentication context
             show_auth_fields: Whether to show the auth fields
-            current_user: The current user
 
         Returns:
             The enriched source connection
@@ -429,7 +430,7 @@ class SourceConnectionService:
         """
         # Get the source connection from database
         source_connection = await crud.source_connection.get(
-            db=db, id=source_connection_id, current_user=current_user
+            db=db, id=source_connection_id, auth_context=auth_context
         )
 
         if not source_connection:
@@ -443,13 +444,13 @@ class SourceConnectionService:
         # 1. Get the connection and its credentials if they exist
         if source_connection.connection_id:
             connection = await crud.connection.get(
-                db=db, id=source_connection.connection_id, current_user=current_user
+                db=db, id=source_connection.connection_id, auth_context=auth_context
             )
 
             if connection and connection.integration_credential_id:
                 # Get and decrypt the integration credential
                 integration_credential = await crud.integration_credential.get(
-                    db=db, id=connection.integration_credential_id, current_user=current_user
+                    db=db, id=connection.integration_credential_id, auth_context=auth_context
                 )
 
                 if integration_credential and integration_credential.encrypted_credentials:
@@ -465,7 +466,7 @@ class SourceConnectionService:
         # 2. Get the sync schedule information if sync_id exists
         if source_connection.sync_id:
             sync = await crud.sync.get(
-                db=db, id=source_connection.sync_id, current_user=current_user
+                db=db, id=source_connection.sync_id, auth_context=auth_context
             )
             if sync:
                 # Add cron_schedule and next_scheduled_run to the response
@@ -494,7 +495,7 @@ class SourceConnectionService:
     async def get_all_source_connections(
         self,
         db: AsyncSession,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         skip: int = 0,
         limit: int = 100,
     ) -> List[schemas.SourceConnectionListItem]:
@@ -505,7 +506,7 @@ class SourceConnectionService:
 
         Args:
             db: The database session
-            current_user: The current user
+            auth_context: The current authentication context
             skip: The number of source connections to skip
             limit: The maximum number of source connections to return
 
@@ -513,8 +514,8 @@ class SourceConnectionService:
             A list of simplified source connection list items
         """
         # Get all source connections for the user
-        source_connections = await crud.source_connection.get_all_for_user(
-            db=db, current_user=current_user, skip=skip, limit=limit
+        source_connections = await crud.source_connection.get_multi(
+            db=db, auth_context=auth_context, skip=skip, limit=limit
         )
 
         if not source_connections:
@@ -543,7 +544,7 @@ class SourceConnectionService:
         self,
         db: AsyncSession,
         collection: str,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         skip: int = 0,
         limit: int = 100,
     ) -> List[schemas.SourceConnectionListItem]:
@@ -552,7 +553,7 @@ class SourceConnectionService:
         Args:
             db: The database session
             collection: The collection to filter by
-            current_user: The current user
+            auth_context: The current authentication context
             skip: The number of source connections to skip
             limit: The maximum number of source connections to return
 
@@ -562,7 +563,7 @@ class SourceConnectionService:
         source_connections = await crud.source_connection.get_for_collection(
             db=db,
             readable_collection_id=collection,
-            current_user=current_user,
+            auth_context=auth_context,
             skip=skip,
             limit=limit,
         )
@@ -594,7 +595,7 @@ class SourceConnectionService:
         db: AsyncSession,
         source_connection_id: UUID,
         source_connection_in: schemas.SourceConnectionUpdate,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> schemas.SourceConnection:
         """Update a source connection and related objects.
 
@@ -607,7 +608,7 @@ class SourceConnectionService:
             db: The database session
             source_connection_id: The ID of the source connection to update
             source_connection_in: The updated source connection data
-            current_user: The current user
+            auth_context: The current authentication context
 
         Returns:
             The updated source connection
@@ -616,7 +617,7 @@ class SourceConnectionService:
             HTTPException: If the source connection is not found
         """
         source_connection = await crud.source_connection.get(
-            db=db, id=source_connection_id, current_user=current_user
+            db=db, id=source_connection_id, auth_context=auth_context
         )
         if not source_connection:
             raise HTTPException(status_code=404, detail="Source connection not found")
@@ -640,7 +641,7 @@ class SourceConnectionService:
                 db=uow.session,
                 db_obj=source_connection,
                 obj_in=source_connection_in,
-                current_user=current_user,
+                auth_context=auth_context,
                 uow=uow,
             )
 
@@ -649,7 +650,7 @@ class SourceConnectionService:
                 sync = await crud.sync.get(
                     uow.session,
                     id=source_connection.sync_id,
-                    current_user=current_user,
+                    auth_context=auth_context,
                     with_connections=False,
                 )
                 if sync:
@@ -660,7 +661,7 @@ class SourceConnectionService:
                         uow.session,
                         db_obj=sync,
                         obj_in=sync_update,
-                        current_user=current_user,
+                        auth_context=auth_context,
                         uow=uow,
                     )
 
@@ -668,7 +669,7 @@ class SourceConnectionService:
             if source_connection_in.auth_fields and source_connection.connection_id:
                 # First get the connection to get the credential ID
                 connection = await crud.connection.get(
-                    uow.session, id=source_connection.connection_id, current_user=current_user
+                    uow.session, id=source_connection.connection_id, auth_context=auth_context
                 )
 
                 if connection and connection.integration_credential_id:
@@ -676,7 +677,7 @@ class SourceConnectionService:
                     integration_credential = await crud.integration_credential.get(
                         uow.session,
                         id=connection.integration_credential_id,
-                        current_user=current_user,
+                        auth_context=auth_context,
                     )
 
                     if integration_credential:
@@ -693,7 +694,7 @@ class SourceConnectionService:
                             uow.session,
                             db_obj=integration_credential,
                             obj_in=credential_update,
-                            current_user=current_user,
+                            auth_context=auth_context,
                             uow=uow,
                         )
 
@@ -701,14 +702,16 @@ class SourceConnectionService:
 
             # Get the updated source connection with related data
             return await self.get_source_connection(
-                db=uow.session, source_connection_id=source_connection_id, current_user=current_user
+                db=uow.session,
+                source_connection_id=source_connection_id,
+                auth_context=auth_context,
             )
 
     async def delete_source_connection(
         self,
         db: AsyncSession,
         source_connection_id: UUID,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         delete_data: bool = False,
     ) -> schemas.SourceConnection:
         """Delete a source connection and all related components.
@@ -721,7 +724,7 @@ class SourceConnectionService:
         Args:
             db: The database session
             source_connection_id: The ID of the source connection to delete
-            current_user: The current user
+            auth_context: The current authentication context
             delete_data: Whether to delete the data in destinations
 
         Returns:
@@ -731,7 +734,7 @@ class SourceConnectionService:
             HTTPException: If the source connection is not found
         """
         source_connection = await crud.source_connection.get(
-            db=db, id=source_connection_id, current_user=current_user
+            db=db, id=source_connection_id, auth_context=auth_context
         )
         if not source_connection:
             raise HTTPException(status_code=404, detail="Source connection not found")
@@ -742,7 +745,7 @@ class SourceConnectionService:
         )
 
         await crud.source_connection.remove(
-            db=db, id=source_connection_id, current_user=current_user
+            db=db, id=source_connection_id, auth_context=auth_context
         )
 
         return source_connection_schema
@@ -751,7 +754,7 @@ class SourceConnectionService:
         self,
         db: AsyncSession,
         source_connection_id: UUID,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         access_token: Optional[str] = None,
     ) -> schemas.SyncJob:
         """Trigger a sync run for a source connection.
@@ -759,7 +762,7 @@ class SourceConnectionService:
         Args:
             db: The database session
             source_connection_id: The ID of the source connection to run
-            current_user: The current user
+            auth_context: The current authentication context
             access_token: Optional access token to use instead of stored credentials
 
         Returns:
@@ -769,7 +772,7 @@ class SourceConnectionService:
             HTTPException: If the source connection is not found or has no associated sync
         """
         source_connection = await crud.source_connection.get(
-            db=db, id=source_connection_id, current_user=current_user
+            db=db, id=source_connection_id, auth_context=auth_context
         )
         if not source_connection:
             raise HTTPException(status_code=404, detail="Source connection not found")
@@ -779,7 +782,7 @@ class SourceConnectionService:
 
         # Trigger the sync run using the sync service
         sync, sync_job, sync_dag = await sync_service.trigger_sync_run(
-            db=db, sync_id=source_connection.sync_id, current_user=current_user
+            db=db, sync_id=source_connection.sync_id, auth_context=auth_context
         )
 
         # Store access token directly without validation if provided
@@ -792,14 +795,14 @@ class SourceConnectionService:
         self,
         db: AsyncSession,
         source_connection_id: UUID,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> list[schemas.SourceConnectionJob]:
         """Get all sync jobs for a source connection.
 
         Args:
             db: The database session
             source_connection_id: The ID of the source connection
-            current_user: The current user
+            auth_context: The current authentication context
 
         Returns:
             A list of sync jobs
@@ -808,7 +811,7 @@ class SourceConnectionService:
             HTTPException: If the source connection is not found
         """
         source_connection = await crud.source_connection.get(
-            db=db, id=source_connection_id, current_user=current_user
+            db=db, id=source_connection_id, auth_context=auth_context
         )
         if not source_connection:
             raise HTTPException(status_code=404, detail="Source connection not found")
@@ -818,7 +821,7 @@ class SourceConnectionService:
 
         # Get all jobs for the sync
         sync_jobs = await sync_service.list_sync_jobs(
-            db=db, current_user=current_user, sync_id=source_connection.sync_id
+            db=db, auth_context=auth_context, sync_id=source_connection.sync_id
         )
 
         # Map SyncJob objects to SourceConnectionJob objects
@@ -836,7 +839,7 @@ class SourceConnectionService:
         db: AsyncSession,
         source_connection_id: UUID,
         job_id: UUID,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> schemas.SourceConnectionJob:
         """Get a specific sync job for a source connection.
 
@@ -844,7 +847,7 @@ class SourceConnectionService:
             db: The database session
             source_connection_id: The ID of the source connection
             job_id: The ID of the sync job
-            current_user: The current user
+            auth_context: The current authentication context
 
         Returns:
             The sync job
@@ -853,7 +856,7 @@ class SourceConnectionService:
             HTTPException: If the source connection or job is not found
         """
         source_connection = await crud.source_connection.get(
-            db=db, id=source_connection_id, current_user=current_user
+            db=db, id=source_connection_id, auth_context=auth_context
         )
         if not source_connection:
             raise HTTPException(status_code=404, detail="Source connection not found")
@@ -863,7 +866,7 @@ class SourceConnectionService:
 
         # Get the specific job for the sync
         sync_job = await sync_service.get_sync_job(
-            db=db, job_id=job_id, current_user=current_user, sync_id=source_connection.sync_id
+            db=db, job_id=job_id, auth_context=auth_context, sync_id=source_connection.sync_id
         )
 
         sync_job_schema = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
@@ -878,7 +881,7 @@ class SourceConnectionService:
         db: AsyncSession,
         source_connection_id: UUID,
         status: SourceConnectionStatus,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> schemas.SourceConnection:
         """Update the status of a source connection.
 
@@ -888,7 +891,7 @@ class SourceConnectionService:
             db: The database session
             source_connection_id: The ID of the source connection
             status: The new status
-            current_user: The current user
+            auth_context: The current authentication context
 
         Returns:
             The updated source connection
@@ -897,7 +900,7 @@ class SourceConnectionService:
             HTTPException: If the source connection is not found
         """
         source_connection = await crud.source_connection.get(
-            db=db, id=source_connection_id, current_user=current_user
+            db=db, id=source_connection_id, auth_context=auth_context
         )
         if not source_connection:
             raise HTTPException(status_code=404, detail="Source connection not found")
@@ -908,13 +911,13 @@ class SourceConnectionService:
                 db=uow.session,
                 id=source_connection_id,
                 status=status,
-                current_user=current_user,
+                auth_context=auth_context,
             )
 
             # Update connection status if it exists
             if hasattr(source_connection, "connection_id") and source_connection.connection_id:
                 connection = await crud.connection.get(
-                    uow.session, id=source_connection.connection_id, current_user=current_user
+                    uow.session, id=source_connection.connection_id, auth_context=auth_context
                 )
                 if connection:
                     connection_status = (
@@ -927,14 +930,14 @@ class SourceConnectionService:
                         uow.session,
                         db_obj=connection,
                         obj_in=connection_update,
-                        current_user=current_user,
+                        auth_context=auth_context,
                         uow=uow,
                     )
 
             # Update sync status if it exists
             if source_connection.sync_id:
                 sync = await crud.sync.get(
-                    uow.session, id=source_connection.sync_id, current_user=current_user
+                    uow.session, id=source_connection.sync_id, auth_context=auth_context
                 )
                 if sync:
                     sync_status = (
@@ -947,7 +950,7 @@ class SourceConnectionService:
                         uow.session,
                         db_obj=sync,
                         obj_in=sync_update,
-                        current_user=current_user,
+                        auth_context=auth_context,
                         uow=uow,
                     )
 
@@ -999,11 +1002,11 @@ class SourceConnectionService:
         db: AsyncSession,
         source_short_name: str,
         code: str,
+        auth_context: AuthContext,
         credential_name: Optional[str] = None,
         credential_description: Optional[str] = None,
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
-        current_user: schemas.User = None,
     ) -> schemas.IntegrationCredentialInDB:
         """Exchange OAuth2 code for token and create integration credentials.
 
@@ -1017,11 +1020,11 @@ class SourceConnectionService:
             db: The database session
             source_short_name: The short name of the source
             code: The authorization code to exchange
+            auth_context: The authentication context
             credential_name: Optional custom name for the credential
             credential_description: Optional description for the credential
             client_id: Optional client ID to override the default
             client_secret: Optional client secret to override the default
-            current_user: The current user
 
         Returns:
             The created integration credential
@@ -1086,7 +1089,7 @@ class SourceConnectionService:
                 )
 
                 integration_credential = await crud.integration_credential.create(
-                    uow.session, obj_in=integration_cred_in, current_user=current_user, uow=uow
+                    uow.session, obj_in=integration_cred_in, auth_context=auth_context, uow=uow
                 )
 
                 await uow.commit()

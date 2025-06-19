@@ -170,7 +170,7 @@ async function handleOriginalOAuthCallback(
       localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
 
       // Immediate redirect to dashboard with error flag
-      window.location.href = "/dashboard?connected=error";
+      window.location.href = "/?connected=error";
       return;
     }
 
@@ -201,7 +201,7 @@ async function handleOriginalOAuthCallback(
     sessionStorage.setItem('oauth_dialog_state', JSON.stringify(updatedState));
 
     // Redirect back to original page with flag to restore dialog
-    const returnPath = savedState.originPath || "/dashboard";
+    const returnPath = savedState.originPath || "/";
     window.location.href = `${returnPath}?restore_dialog=true`;
 
   } catch (error) {

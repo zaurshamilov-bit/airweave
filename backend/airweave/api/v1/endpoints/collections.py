@@ -13,7 +13,7 @@ from airweave.core.search_service import ResponseType, search_service
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
-from airweave.models.user import User
+from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
@@ -23,13 +23,12 @@ async def list_collections(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> List[schemas.Collection]:
     """List all collections for the current user's organization."""
-    return await crud.collection.get_multi_by_organization(
+    return await crud.collection.get_multi(
         db,
-        organization_id=current_user.organization_id,
-        current_user=current_user,
+        auth_context=auth_context,
         skip=skip,
         limit=limit,
     )
@@ -39,21 +38,21 @@ async def list_collections(
 async def create_collection(
     collection: schemas.CollectionCreate,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Collection:
     """Create a new collection."""
-    return await collection_service.create(db, collection_in=collection, current_user=current_user)
+    return await collection_service.create(db, collection_in=collection, auth_context=auth_context)
 
 
 @router.get("/{readable_id}", response_model=schemas.Collection)
 async def get_collection(
     readable_id: str,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Collection:
     """Get a specific collection by its readable ID."""
     db_obj = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, current_user=current_user
+        db, readable_id=readable_id, auth_context=auth_context
     )
     if db_obj is None:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -65,16 +64,16 @@ async def update_collection(
     readable_id: str,
     collection: schemas.CollectionUpdate,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Collection:
     """Update a collection by its readable ID."""
     db_obj = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, current_user=current_user
+        db, readable_id=readable_id, auth_context=auth_context
     )
     if db_obj is None:
         raise HTTPException(status_code=404, detail="Collection not found")
     return await crud.collection.update(
-        db, db_obj=db_obj, obj_in=collection, current_user=current_user
+        db, db_obj=db_obj, obj_in=collection, auth_context=auth_context
     )
 
 
@@ -83,7 +82,7 @@ async def delete_collection(
     readable_id: str,
     delete_data: bool = False,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Collection:
     """Delete a collection by its readable ID.
 
@@ -91,14 +90,14 @@ async def delete_collection(
         readable_id: The readable ID of the collection to delete
         delete_data: Whether to delete the data in destinations
         db: The database session
-        current_user: The current user
+        auth_context: The authentication context
 
     Returns:
         The deleted collection
     """
     # Find the collection
     db_obj = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, current_user=current_user
+        db, readable_id=readable_id, auth_context=auth_context
     )
     if db_obj is None:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -111,7 +110,7 @@ async def delete_collection(
         pass
 
     # Delete the collection - CASCADE will handle all child objects
-    return await crud.collection.remove(db, id=db_obj.id, current_user=current_user)
+    return await crud.collection.remove(db, id=db_obj.id, auth_context=auth_context)
 
 
 @router.get("/{readable_id}/search", response_model=schemas.SearchResponse)
@@ -122,7 +121,7 @@ async def search_collection(
         ResponseType.RAW, description="Type of response: raw search results or AI completion"
     ),
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SearchResponse:
     """Search within a collection identified by readable ID.
 
@@ -131,7 +130,7 @@ async def search_collection(
         query: The search query
         response_type: Type of response (raw results or AI completion)
         db: The database session
-        current_user: The current user
+        auth_context: The authentication context
 
     Returns:
         dict: Search results or AI completion response
@@ -141,7 +140,7 @@ async def search_collection(
             db,
             readable_id=readable_id,
             query=query,
-            current_user=current_user,
+            auth_context=auth_context,
             response_type=response_type,
         )
     except Exception as e:
@@ -179,7 +178,7 @@ async def refresh_all_source_connections(
     *,
     readable_id: str,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
     background_tasks: BackgroundTasks,
 ) -> list[schemas.SourceConnectionJob]:
     """Start sync jobs for all source connections in the collection.
@@ -187,7 +186,7 @@ async def refresh_all_source_connections(
     Args:
         readable_id: The readable ID of the collection
         db: The database session
-        current_user: The current user
+        auth_context: The authentication context
         background_tasks: Background tasks for async operations
 
     Returns:
@@ -195,7 +194,7 @@ async def refresh_all_source_connections(
     """
     # Check if collection exists
     collection = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, current_user=current_user
+        db, readable_id=readable_id, auth_context=auth_context
     )
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
@@ -205,7 +204,7 @@ async def refresh_all_source_connections(
 
     # Get all source connections for this collection
     source_connections = await source_connection_service.get_source_connections_by_collection(
-        db=db, collection=readable_id, current_user=current_user
+        db=db, collection=readable_id, auth_context=auth_context
     )
 
     if not source_connections:
@@ -217,15 +216,15 @@ async def refresh_all_source_connections(
     for sc in source_connections:
         # Create the sync job
         sync_job = await source_connection_service.run_source_connection(
-            db=db, source_connection_id=sc.id, current_user=current_user
+            db=db, source_connection_id=sc.id, auth_context=auth_context
         )
 
         # Get necessary objects for running the sync
         sync = await crud.sync.get(
-            db=db, id=sync_job.sync_id, current_user=current_user, with_connections=True
+            db=db, id=sync_job.sync_id, auth_context=auth_context, with_connections=True
         )
         sync_dag = await sync_service.get_sync_dag(
-            db=db, sync_id=sync_job.sync_id, current_user=current_user
+            db=db, sync_id=sync_job.sync_id, auth_context=auth_context
         )
 
         # Get source connection with auth_fields for temporal processing
@@ -233,7 +232,7 @@ async def refresh_all_source_connections(
             db=db,
             source_connection_id=sc.id,
             show_auth_fields=True,  # Important: Need actual auth_fields for temporal
-            current_user=current_user,
+            auth_context=auth_context,
         )
 
         # Prepare objects for background task
@@ -255,7 +254,7 @@ async def refresh_all_source_connections(
                 sync_dag=sync_dag,
                 collection=collection_obj,  # Use the already converted object
                 source_connection=source_connection,
-                user=current_user,
+                auth_context=auth_context,
             )
         else:
             # Fall back to background tasks
@@ -266,7 +265,7 @@ async def refresh_all_source_connections(
                 sync_dag,
                 collection_obj,  # Use the already converted object
                 source_connection,
-                current_user,
+                auth_context,
             )
 
     return sync_jobs

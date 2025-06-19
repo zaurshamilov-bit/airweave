@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
+from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import logger
 from airweave.platform.configs._base import Fields
 from airweave.platform.locator import resource_locator
@@ -87,6 +88,9 @@ async def read_source(
         # Validate in one step with all fields present
         source_model = schemas.Source.model_validate(source_dict)
         return source_model
+
+    except NotFoundException as e:
+        raise HTTPException(status_code=404, detail=f"Source not found: {short_name}") from e
 
     except HTTPException:
         # Re-raise HTTP exceptions as is

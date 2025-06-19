@@ -1,14 +1,25 @@
 import { useAuth0 } from '@auth0/auth0-react';
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
 const Callback = () => {
-  const { isLoading: auth0Loading, isAuthenticated, error, user } = useAuth0();
+  const {
+    isLoading: auth0Loading,
+    isAuthenticated,
+    error,
+    user,
+  } = useAuth0();
   const { getToken, isLoading: authContextLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const organizationName = location.state?.appState?.organizationName;
+
+  // Track if we've already attempted to sync to prevent duplicates
+  const syncAttempted = useRef(false);
 
   // Combine both loading states
   const isLoading = auth0Loading || authContextLoading;
@@ -16,8 +27,10 @@ const Callback = () => {
   // Create or update user in backend when authenticated
   useEffect(() => {
     const syncUser = async () => {
-      // Only attempt if authenticated, have user data, and not loading
-      if (isAuthenticated && user && !isLoading) {
+      // Only attempt if authenticated, have user data, not loading, and haven't already attempted
+      if (isAuthenticated && user && !isLoading && !syncAttempted.current) {
+        syncAttempted.current = true; // Mark as attempted to prevent duplicates
+
         try {
           // Token is now managed by auth context
           const token = await getToken();
@@ -58,7 +71,7 @@ const Callback = () => {
     };
 
     syncUser();
-  }, [isAuthenticated, user, isLoading, getToken, navigate]);
+  }, [isAuthenticated, user, isLoading, navigate]); // Removed getToken from dependencies
 
   // Auto-redirect to login if there's an error
   useEffect(() => {
@@ -80,7 +93,13 @@ const Callback = () => {
     <div className="flex h-screen w-full items-center justify-center bg-background">
       <div className="flex flex-col items-center justify-center space-y-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground">Finalizing authentication...</p>
+        {organizationName ? (
+          <p className="text-muted-foreground">
+            Finalizing your membership for {organizationName}...
+          </p>
+        ) : (
+          <p className="text-muted-foreground">Finalizing authentication...</p>
+        )}
       </div>
     </div>
   );

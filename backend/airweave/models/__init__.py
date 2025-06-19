@@ -1,7 +1,6 @@
 """Models for the application."""
 
 from .api_key import APIKey
-from .chat import Chat, ChatMessage
 from .collection import Collection
 from .connection import Connection
 from .dag import DagEdge, DagNode, SyncDag
@@ -19,12 +18,11 @@ from .sync_connection import SyncConnection
 from .sync_job import SyncJob
 from .transformer import Transformer
 from .user import User
+from .user_organization import UserOrganization
 from .white_label import WhiteLabel
 
 __all__ = [
     "APIKey",
-    "Chat",
-    "ChatMessage",
     "Collection",
     "Entity",
     "Connection",
@@ -44,5 +42,6 @@ __all__ = [
     "SyncJob",
     "Transformer",
     "User",
+    "UserOrganization",
     "WhiteLabel",
 ]

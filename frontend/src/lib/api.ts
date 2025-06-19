@@ -1,4 +1,8 @@
 import { env } from '../config/env';
+import { useOrganizationStore } from '@/lib/stores/organizations';
+import { useCollectionsStore } from '@/lib/stores/collections';
+import { useAPIKeysStore } from '@/lib/stores/apiKeys';
+import { toast } from 'sonner';
 
 // Define a token provider interface
 interface TokenProvider {
@@ -100,6 +104,96 @@ export const API_CONFIG = {
 type ApiResponse<T = any> = Promise<Response>;
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
+// Get headers with optional organization context
+const getHeaders = async (): Promise<Record<string, string>> => {
+  const token = await tokenProvider.getToken();
+  const { currentOrganization } = useOrganizationStore.getState();
+
+  const headers: Record<string, string> = {
+    ...API_CONFIG.headers,
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+
+  // Add organization context header if available
+  if (currentOrganization) {
+    headers['X-Organization-ID'] = currentOrganization.id;
+  }
+
+  return headers;
+};
+
+// Helper function to clear organization-specific state when auto-switching
+const clearOrganizationSpecificState = () => {
+  console.log("🧹 [AutoSwitch] Clearing organization-specific state");
+
+  // Clear collections store
+  useCollectionsStore.getState().clearCollections();
+
+  // Clear API keys store
+  useAPIKeysStore.getState().clearAPIKeys();
+
+  // Add any other organization-specific stores here in the future
+};
+
+// Helper to check and handle organization mismatch
+const handleOrganizationMismatch = async (responseData: any, method: HttpMethod): Promise<boolean> => {
+  // Only auto-switch on GET requests to avoid side effects
+  if (method !== 'GET') {
+    return false;
+  }
+
+  // Don't auto-switch on homepage to avoid conflicts with manual org switching
+  if (window.location.pathname === '/') {
+    return false;
+  }
+
+  const { currentOrganization, organizations, switchOrganization } = useOrganizationStore.getState();
+
+  if (!currentOrganization || !organizations.length) {
+    return false;
+  }
+
+  // Extract organization_id from response data
+  let responseOrgId: string | null = null;
+
+  if (responseData && typeof responseData === 'object') {
+    // Check if response is a single object with organization_id
+    if (responseData.organization_id) {
+      responseOrgId = responseData.organization_id;
+    }
+    // Check if response is an array and get org_id from first item
+    else if (Array.isArray(responseData) && responseData.length > 0 && responseData[0].organization_id) {
+      responseOrgId = responseData[0].organization_id;
+    }
+  }
+
+  // If no organization_id found in response, or it matches current org, no action needed
+  if (!responseOrgId || responseOrgId === currentOrganization.id) {
+    return false;
+  }
+
+  // Check if user has access to the response's organization
+  const targetOrg = organizations.find(org => org.id === responseOrgId);
+  if (!targetOrg) {
+    console.warn('Response contains organization_id that user does not have access to:', responseOrgId);
+    return false;
+  }
+
+  // Clear organization-specific state before switching
+  clearOrganizationSpecificState();
+
+  // Switch to the target organization
+  console.log(`🔄 Auto-switching from ${currentOrganization.name} to ${targetOrg.name} for this resource`);
+  switchOrganization(responseOrgId);
+
+  // Show user feedback
+  toast.info(`Switched to "${targetOrg.name}" to view this resource`, {
+    duration: 4000,
+  });
+
+  return true; // Indicate that we switched organizations
+};
+
 // Shared HTTP request function to eliminate duplication
 const makeRequest = async <T>(
   method: HttpMethod,
@@ -107,7 +201,8 @@ const makeRequest = async <T>(
   options?: {
     data?: any;
     params?: Record<string, any>;
-  }
+  },
+  _isRetry: boolean = false
 ): ApiResponse<T> => {
   const requestFn = async () => {
     const url = new URL(`${API_CONFIG.baseURL}${endpoint}`);
@@ -117,11 +212,7 @@ const makeRequest = async <T>(
       );
     }
 
-    let token = await tokenProvider.getToken();
-    const headers = {
-      ...API_CONFIG.headers,
-      ...(token && { Authorization: `Bearer ${token}` }),
-    };
+    let headers = await getHeaders();
 
     const fetchOptions: RequestInit = {
       method,
@@ -139,18 +230,36 @@ const makeRequest = async <T>(
     if ((response.status === 401 || response.status === 403) && tokenProvider.clearToken) {
       console.log(`Got ${response.status} error, attempting token refresh`);
       tokenProvider.clearToken(); // Clear the cached token
-      token = await tokenProvider.getToken(); // Get a fresh token
 
-      if (token) {
+      // Get fresh headers with new token
+      headers = await getHeaders();
+
+      if (headers.Authorization) {
         console.log('Retrying request with fresh token');
         // Retry with new token
-        const retryHeaders = {
-          ...API_CONFIG.headers,
-          Authorization: `Bearer ${token}`,
-        };
-
-        fetchOptions.headers = retryHeaders;
+        fetchOptions.headers = headers;
         response = await fetch(url.toString(), fetchOptions);
+      }
+    }
+
+    // Handle organization auto-switching for successful GET requests
+    if (response.ok && method === 'GET' && !_isRetry) {
+      try {
+        // Clone the response so we can read it twice
+        const responseClone = response.clone();
+        const responseData = await responseClone.json();
+
+        // Check if we need to switch organizations
+        const didSwitch = await handleOrganizationMismatch(responseData, method);
+
+        if (didSwitch) {
+          // Retry the request with the new organization context
+          console.log('🔄 Retrying request with new organization context');
+          return await makeRequest(method, endpoint, options, true); // Mark as retry to prevent infinite loops
+        }
+      } catch (error) {
+        // If we can't parse JSON, just continue with original response
+        console.warn('Could not parse response for organization check:', error);
       }
     }
 

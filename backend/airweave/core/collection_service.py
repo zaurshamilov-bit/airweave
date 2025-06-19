@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core.config import settings
+from airweave.core.exceptions import NotFoundException
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.platform.destinations.qdrant import QdrantDestination
+from airweave.schemas.auth import AuthContext
 
 
 def _determine_vector_size() -> int:
@@ -29,7 +31,7 @@ class CollectionService:
         self,
         db: AsyncSession,
         collection_in: schemas.CollectionCreate,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         uow: Optional[UnitOfWork] = None,
     ) -> schemas.Collection:
         """Create a new collection."""
@@ -37,12 +39,12 @@ class CollectionService:
             # Unit of work is not provided, so we create a new one
             async with UnitOfWork(db) as uow:
                 collection = await self._create(
-                    db, collection_in=collection_in, current_user=current_user, uow=uow
+                    db, collection_in=collection_in, auth_context=auth_context, uow=uow
                 )
         else:
             # Unit of work is provided, so we just create the collection
             collection = await self._create(
-                db, collection_in=collection_in, current_user=current_user, uow=uow
+                db, collection_in=collection_in, auth_context=auth_context, uow=uow
             )
 
         return collection
@@ -51,21 +53,25 @@ class CollectionService:
         self,
         db: AsyncSession,
         collection_in: schemas.CollectionCreate,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         uow: UnitOfWork,
     ) -> schemas.Collection:
         """Create a new collection."""
         # Check if the collection already exists
-        existing_collection = await crud.collection.get_by_readable_id(
-            db, readable_id=collection_in.readable_id, current_user=current_user
-        )
+        try:
+            existing_collection = await crud.collection.get_by_readable_id(
+                db, readable_id=collection_in.readable_id, auth_context=auth_context
+            )
+        except NotFoundException:
+            existing_collection = None
+
         if existing_collection:
             raise HTTPException(
                 status_code=400, detail="Collection with this readable_id already exists"
             )
 
         collection = await crud.collection.create(
-            db, obj_in=collection_in, current_user=current_user, uow=uow
+            db, obj_in=collection_in, auth_context=auth_context, uow=uow
         )
         await uow.session.flush()
 

@@ -3,6 +3,7 @@
 import json
 import logging
 
+from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
@@ -11,6 +12,7 @@ from airweave.core.exceptions import NotFoundException
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
 from airweave.platform.locator import resource_locator
+from airweave.schemas.auth import AuthContext
 from airweave.schemas.search import ResponseType, SearchStatus
 
 logger = logging.getLogger(__name__)
@@ -18,6 +20,45 @@ logger = logging.getLogger(__name__)
 
 class SearchService:
     """Service for handling vector database searches."""
+
+    # OpenAI configuration constants
+    DEFAULT_MODEL = "gpt-4o"
+    DEFAULT_MODEL_SETTINGS = {
+        "temperature": 0.7,
+        "max_tokens": 1000,
+        "top_p": 1,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+    }
+
+    CONTEXT_PROMPT = """You are an AI assistant with access to a knowledge base.
+    Use the following relevant context to help answer the user's question.
+    Always format your responses in proper markdown, including:
+    - Using proper headers (# ## ###)
+    - Formatting code blocks with ```language
+    - Using tables with | header | header |
+    - Using bullet points and numbered lists
+    - Using **bold** and *italic* where appropriate
+
+    Here's the context:
+    {context}
+
+    Remember to:
+    1. Be helpful, clear, and accurate
+    2. Maintain a professional tone
+    3. Format ALL responses in proper markdown
+    4. Use tables when presenting structured data
+    5. Use code blocks with proper language tags"""
+
+    def __init__(self):
+        """Initialize the search service with OpenAI client."""
+        if not settings.OPENAI_API_KEY:
+            logger.warning("OPENAI_API_KEY is not set in environment variables")
+            self.openai_client = None
+        else:
+            self.openai_client = AsyncOpenAI(
+                api_key=settings.OPENAI_API_KEY,
+            )
 
     def _clean_search_results(self, results: list[dict], for_display: bool = True) -> list[dict]:
         """Clean search results by removing large fields and optionally truncating content.
@@ -76,7 +117,7 @@ class SearchService:
         db: AsyncSession,
         query: str,
         readable_id: str,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> list[dict]:
         """Search across vector database using existing connections.
 
@@ -84,7 +125,7 @@ class SearchService:
             db (AsyncSession): Database session
             query (str): Search query text
             readable_id (str): Readable ID of the collection to search within
-            current_user (schemas.User): Current user performing the search
+            auth_context (AuthContext): Authentication context
 
         Returns:
             list[dict]: List of cleaned search results
@@ -93,7 +134,7 @@ class SearchService:
             NotFoundException: If sync or connections not found
         """
         try:
-            collection = await crud.collection.get_by_readable_id(db, readable_id, current_user)
+            collection = await crud.collection.get_by_readable_id(db, readable_id, auth_context)
             if not collection:
                 raise NotFoundException("Collection not found")
 
@@ -148,7 +189,7 @@ class SearchService:
         db: AsyncSession,
         query: str,
         readable_id: str,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         response_type: ResponseType = ResponseType.RAW,
     ) -> schemas.SearchResponse:
         """Search and optionally generate AI completion for results.
@@ -157,21 +198,17 @@ class SearchService:
             db: The database session
             query: The search query text
             readable_id: Readable ID of the collection to search in
-            current_user: The current user
+            auth_context: Authentication context
             response_type: Type of response (raw results or AI completion)
 
         Returns:
             dict: A dictionary containing search results or AI completion
         """
-        # Lazy import to avoid circular dependency
-        from airweave.core.chat_service import chat_service
-
-        # Note: search() now returns cleaned results
         results = await self.search(
             db=db,
             query=query,
             readable_id=readable_id,
-            current_user=current_user,
+            auth_context=auth_context,
         )
 
         if response_type == ResponseType.RAW:
@@ -179,6 +216,38 @@ class SearchService:
                 results=results, response_type=response_type, status=SearchStatus.SUCCESS
             )
 
+        # Check for no results or low-quality results
+        quality_response = self._check_result_quality(results)
+        if quality_response:
+            return quality_response
+
+        # For completion generation, we need full content (not truncated)
+        # So fetch results again but with less aggressive cleaning
+        raw_results = await self._get_raw_search_results(
+            db=db,
+            query=query,
+            readable_id=readable_id,
+            auth_context=auth_context,
+        )
+        context_results = self._clean_search_results(raw_results, for_display=False)
+
+        # Process results and generate completion
+        processed_results = self._process_search_results(results)
+        completion = await self._generate_ai_completion(query, context_results)
+
+        return schemas.SearchResponse(
+            results=processed_results,
+            completion=completion,
+            response_type=response_type,
+            status=SearchStatus.SUCCESS,
+        )
+
+    def _check_result_quality(self, results: list[dict]) -> schemas.SearchResponse | None:
+        """Check if results are empty or have low quality scores.
+
+        Returns:
+            SearchResponse if results are poor quality, None if results are good
+        """
         # If no results found, return a more specific message
         if not results:
             return schemas.SearchResponse(
@@ -204,23 +273,41 @@ class SearchService:
                 status=SearchStatus.NO_RELEVANT_RESULTS,
             )
 
-        # For completion generation, we need full content (not truncated)
-        # So fetch results again but with less aggressive cleaning
-        raw_results = await self._get_raw_search_results(
-            db=db,
-            query=query,
-            readable_id=readable_id,
-            current_user=current_user,
-        )
+        return None
 
-        # Clean raw results but don't truncate content
-        context_results = self._clean_search_results(raw_results, for_display=False)
+    def _process_search_results(self, results: list[dict]) -> list[dict]:
+        """Process search results by removing vector data and download URLs.
 
-        # Modify the context prompt to be more specific about only answering based on context
+        Args:
+            results: Raw search results
+
+        Returns:
+            Processed results with vectors and download URLs removed
+        """
+        for result in results:
+            if isinstance(result, dict) and "payload" in result:
+                # Remove vector from payload to avoid sending large data back
+                result["payload"].pop("vector", None)
+                # Also remove download URLs from payload
+                result["payload"].pop("download_url", None)
+
+        return results
+
+    async def _generate_ai_completion(self, query: str, context_results: list[dict]) -> str:
+        """Generate AI completion based on search results.
+
+        Args:
+            query: The user's search query
+            context_results: Processed search results for context
+
+        Returns:
+            AI-generated completion text
+        """
+        # Prepare messages for OpenAI
         messages = [
             {
                 "role": "system",
-                "content": chat_service.CONTEXT_PROMPT.format(
+                "content": self.CONTEXT_PROMPT.format(
                     context=str(context_results),
                     additional_instruction=(
                         "If the provided context doesn't contain information to answer "
@@ -233,46 +320,40 @@ class SearchService:
         ]
 
         # Generate completion
-        model = chat_service.DEFAULT_MODEL
-        model_settings = chat_service.DEFAULT_MODEL_SETTINGS.copy()
+        model = self.DEFAULT_MODEL
+        model_settings = self.DEFAULT_MODEL_SETTINGS.copy()
 
         # Remove streaming setting if present
-        if "stream" in model_settings:
-            model_settings.pop("stream")
+        model_settings.pop("stream", None)
 
         try:
-            response = await chat_service.client.chat.completions.create(
+            if not self.openai_client:
+                return "OpenAI API key not configured. Cannot generate completion."
+
+            response = await self.openai_client.chat.completions.create(
                 model=model, messages=messages, **model_settings
             )
 
-            completion = (
+            return (
                 response.choices[0].message.content
                 if response.choices
                 else "Unable to generate completion."
             )
         except Exception as e:
-            completion = f"Error generating completion: {str(e)}"
-
-        # Return the display-friendly cleaned results along with completion
-        return schemas.SearchResponse(
-            results=results,
-            completion=completion,
-            response_type=response_type,
-            status=SearchStatus.SUCCESS,
-        )
+            return f"Error generating completion: {str(e)}"
 
     async def _get_raw_search_results(
         self,
         db: AsyncSession,
         query: str,
         readable_id: str,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> list[dict]:
         """Get raw search results without cleaning (internal use only).
 
         This is used when we need the full content for AI completion generation.
         """
-        collection = await crud.collection.get_by_readable_id(db, readable_id, current_user)
+        collection = await crud.collection.get_by_readable_id(db, readable_id, auth_context)
         if not collection:
             raise NotFoundException("Collection not found")
 

@@ -1,12 +1,8 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Copy, Eye, Key, Plus, ExternalLink, FileText, Github } from "lucide-react";
 import { useNavigate, Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { getAppIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
 import {
   CollectionCard,
@@ -14,8 +10,7 @@ import {
   ApiKeyCard,
   ExampleProjectCard,
 } from "@/components/dashboard";
-import { cn } from "@/lib/utils";
-import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
+import { clearStoredErrorDetails } from "@/lib/error-utils";
 import { DialogFlow } from "@/components/shared/DialogFlow";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 

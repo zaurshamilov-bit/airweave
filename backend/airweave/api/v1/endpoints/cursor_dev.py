@@ -15,6 +15,7 @@ from airweave.core.shared_models import ConnectionStatus, IntegrationType
 from airweave.core.sync_service import sync_service
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.platform.auth.settings import integration_settings
+from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
@@ -74,7 +75,7 @@ async def test_sync(
     db: AsyncSession = Depends(deps.get_db),
     short_name: str,
     background_tasks: BackgroundTasks,
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SyncJob:
     """Run a sync for a specific source by short_name.
 
@@ -87,7 +88,7 @@ async def test_sync(
         db: The database session
         short_name: The short name of the source to sync
         background_tasks: The background tasks
-        user: The admin user
+        auth_context: The authentication context
 
     Returns:
     --------
@@ -123,23 +124,29 @@ async def test_sync(
             source_connection_id=source_system_connection.id,
         )
 
-        sync = await sync_service.create(db=db, sync=sync_in.to_base(), current_user=user, uow=uow)
+        sync = await sync_service.create(
+            db=db, sync=sync_in.to_base(), auth_context=auth_context, uow=uow
+        )
         await uow.session.flush()
 
         # Create a sync job
         sync_job_in = schemas.SyncJobCreate(sync_id=sync.id)
-        sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_in, current_user=user, uow=uow)
+        sync_job = await crud.sync_job.create(
+            db=db, obj_in=sync_job_in, auth_context=auth_context, uow=uow
+        )
         await uow.session.flush()  # Flush to ensure created_at and modified_at are populated
 
         # Get the DAG
-        sync_dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync.id, current_user=user)
+        sync_dag = await crud.sync_dag.get_by_sync_id(
+            db=db, sync_id=sync.id, auth_context=auth_context
+        )
 
         # Convert models to schemas
         sync_schema = schemas.Sync.model_validate(sync)
         sync_job_schema = schemas.SyncJob.model_validate(sync_job)
         sync_dag_schema = schemas.SyncDag.model_validate(sync_dag)
-        user_schema = schemas.User.model_validate(user)
+        auth_context_schema = schemas.AuthContext.model_validate(auth_context)
 
-    _ = await sync_service.run(sync_schema, sync_job_schema, sync_dag_schema, user_schema)
+    _ = await sync_service.run(sync_schema, sync_job_schema, sync_dag_schema, auth_context_schema)
 
     return sync_job_schema

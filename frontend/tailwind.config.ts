@@ -22,7 +22,7 @@ export default {
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
+        ring: "transparent",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
 
@@ -54,6 +54,13 @@ export default {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
         },
+
+        // Brand colors
+        brand: {
+          lime: "hsl(var(--brand-lime))", // Tertiary Brand Color
+          yellow: "hsl(var(--brand-yellow))", // Secondary Brand Color
+        },
+
         blue: {
           DEFAULT: "hsl(var(--blue))",
           foreground: "hsl(var(--blue-foreground))",
@@ -102,7 +109,7 @@ export default {
           "accent-solid": "hsl(var(--sidebar-accent-solid))",
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
-          ring: "hsl(var(--sidebar-ring))",
+          ring: "transparent",
         },
       },
       borderRadius: {

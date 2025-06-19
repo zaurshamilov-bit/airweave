@@ -28,11 +28,11 @@ export function AppearanceSettings() {
             <RadioGroup
               value={theme}
               onValueChange={setTheme}
-              className="grid grid-cols-3 gap-4"
+              className="grid grid-cols-3 gap-4 mx-2"
             >
               <Label
                 htmlFor="light"
-                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary"
+                className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary"
               >
                 <RadioGroupItem value="light" id="light" className="sr-only" />
                 <Sun className="mb-3 h-6 w-6" />
@@ -40,7 +40,7 @@ export function AppearanceSettings() {
               </Label>
               <Label
                 htmlFor="dark"
-                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary"
+                className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary"
               >
                 <RadioGroupItem value="dark" id="dark" className="sr-only" />
                 <Moon className="mb-3 h-6 w-6" />
@@ -48,7 +48,7 @@ export function AppearanceSettings() {
               </Label>
               <Label
                 htmlFor="system"
-                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary"
+                className="flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary"
               >
                 <RadioGroupItem
                   value="system"

@@ -26,16 +26,16 @@ class OrganizationBase(Base):
     @declared_attr
     def organization_id(cls):
         """Organization ID column."""
-        return Column(UUID, ForeignKey("organization.id"), nullable=False)
+        return Column(UUID, ForeignKey("organization.id", ondelete="CASCADE"), nullable=False)
 
 
 class UserMixin:
-    """Mixin for adding user tracking columns to a model."""
+    """Mixin for adding nullable user tracking to a model."""
 
     @declared_attr
     def created_by_email(cls):
-        return Column(String, ForeignKey("user.email"), nullable=False)
+        return Column(String, nullable=True)  # Made nullable for API key support
 
     @declared_attr
     def modified_by_email(cls):
-        return Column(String, ForeignKey("user.email"), nullable=False)
+        return Column(String, nullable=True)  # Made nullable for API key support

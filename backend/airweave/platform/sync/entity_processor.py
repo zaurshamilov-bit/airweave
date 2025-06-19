@@ -4,6 +4,7 @@ import asyncio
 from typing import Dict, List, Optional, Set
 
 from airweave import crud, schemas
+from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import logger
 from airweave.db.session import get_db_context
 from airweave.platform.entities._base import BaseEntity, DestinationAction
@@ -229,9 +230,12 @@ class EntityProcessor:
 
         # Create a new database session just for this lookup
         async with get_db_context() as db:
-            db_entity = await crud.entity.get_by_entity_and_sync_id(
-                db=db, entity_id=entity.entity_id, sync_id=sync_context.sync.id
-            )
+            try:
+                db_entity = await crud.entity.get_by_entity_and_sync_id(
+                    db=db, entity_id=entity.entity_id, sync_id=sync_context.sync.id
+                )
+            except NotFoundException:
+                db_entity = None
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
 
@@ -620,7 +624,7 @@ class EntityProcessor:
                     entity_id=parent_entity.entity_id,
                     hash=parent_hash,
                 ),
-                organization_id=sync_context.sync.organization_id,
+                auth_context=sync_context.auth_context,
             )
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
@@ -628,7 +632,6 @@ class EntityProcessor:
         logger.info(
             f"💾 INSERT_DB_DONE [{entity_context}] Database entity created in {db_elapsed:.3f}s"
         )
-
         # Destination insertion
         logger.info(
             f"🎯 INSERT_DEST_START [{entity_context}] "

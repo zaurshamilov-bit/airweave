@@ -9,7 +9,7 @@ encompasses the connection and sync information for a specific source.
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 from airweave.core.shared_models import ConnectionStatus, IntegrationType
 
@@ -45,8 +45,8 @@ class ConnectionInDBBase(ConnectionBase):
 
     id: UUID
     organization_id: Optional[UUID] = None
-    created_by_email: Optional[str] = None
-    modified_by_email: Optional[str] = None
+    created_by_email: Optional[EmailStr] = None
+    modified_by_email: Optional[EmailStr] = None
 
     class Config:
         """Pydantic configuration."""

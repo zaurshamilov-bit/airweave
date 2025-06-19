@@ -1,31 +1,61 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
+import { useOrganizationStore } from '@/lib/stores/organizations';
 import { Loader2 } from 'lucide-react';
 import authConfig from '@/config/auth';
+import { publicPaths } from '@/constants/paths';
 
 interface AuthGuardProps {
   children: React.ReactNode;
 }
 
 export const AuthGuard = ({ children }: AuthGuardProps) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // This state is crucial to prevent rendering children before the org check is complete
+  const [canRenderChildren, setCanRenderChildren] = useState(false);
+  const initializationAttempted = useRef(false);
 
   useEffect(() => {
-    // Only redirect if auth is enabled, not loading, and not authenticated
-    if (authConfig.authEnabled && !isLoading && !isAuthenticated) {
-      navigate('/login', { replace: true });
+    // Handle unauthenticated users first
+    if (authConfig.authEnabled && !authLoading && !isAuthenticated) {
+      // Allow access to login/callback pages without redirecting
+      if (location.pathname !== publicPaths.login && location.pathname !== publicPaths.callback) {
+        navigate(publicPaths.login, { replace: true });
+      }
+      return;
     }
-  }, [isAuthenticated, isLoading, navigate]);
 
-  // If auth is disabled, just render children
-  if (!authConfig.authEnabled) {
-    return <>{children}</>;
-  }
+    // Start organization check for authenticated users
+    if (isAuthenticated && !authLoading && !initializationAttempted.current) {
+      initializationAttempted.current = true;
 
-  // Show loading spinner while checking auth status
-  if (isLoading) {
+      useOrganizationStore.getState().initializeOrganizations()
+        .then((fetchedOrganizations) => {
+          if (fetchedOrganizations.length > 0) {
+            // It's safe to render the protected routes
+            setCanRenderChildren(true);
+          } else {
+            // User has no orgs, redirect them
+            navigate(publicPaths.noOrganization, { replace: true });
+          }
+        })
+        .catch(error => {
+          console.error('AuthGuard: Failed to initialize organizations, redirecting.', error);
+          navigate(publicPaths.noOrganization, { replace: true });
+        });
+    }
+  }, [isAuthenticated, authLoading, navigate, location.pathname]);
+
+  // Show a loading spinner during the initial auth check or org fetch
+  if (!canRenderChildren && (authLoading || (isAuthenticated && !initializationAttempted.current))) {
+     // A special check to prevent a flash of the loader on the no-org page
+    if (location.pathname === publicPaths.noOrganization) {
+      return null;
+    }
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -33,6 +63,11 @@ export const AuthGuard = ({ children }: AuthGuardProps) => {
     );
   }
 
-  // If authenticated, render children
-  return isAuthenticated ? <>{children}</> : null;
+  // Render children ONLY when the check is complete and successful
+  if (canRenderChildren) {
+    return <>{children}</>;
+  }
+
+  // Render nothing while redirecting or for unauthenticated users on public parts of the app
+  return null;
 };

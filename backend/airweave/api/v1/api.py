@@ -3,7 +3,6 @@
 from airweave.api.router import TrailingSlashRouter
 from airweave.api.v1.endpoints import (
     api_keys,
-    chat,
     collections,
     connections,
     cursor_dev,
@@ -12,6 +11,7 @@ from airweave.api.v1.endpoints import (
     embedding_models,
     entities,
     health,
+    organizations,
     source_connections,
     sources,
     sync,
@@ -26,6 +26,7 @@ api_router = TrailingSlashRouter()
 api_router.include_router(health.router, prefix="/health", tags=["health"])
 api_router.include_router(api_keys.router, prefix="/api-keys", tags=["api-keys"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(organizations.router, prefix="/organizations", tags=["organizations"])
 api_router.include_router(sources.router, prefix="/sources", tags=["sources"])
 api_router.include_router(destinations.router, prefix="/destinations", tags=["destinations"])
 api_router.include_router(
@@ -38,7 +39,6 @@ api_router.include_router(
 )
 api_router.include_router(sync.router, prefix="/sync", tags=["sync"])
 api_router.include_router(white_label.router, prefix="/white-labels", tags=["white-labels"])
-api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(dag.router, prefix="/dag", tags=["dag"])
 api_router.include_router(entities.router, prefix="/entities", tags=["entities"])
 api_router.include_router(transformers.router, prefix="/transformers", tags=["transformers"])

@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     AUTH0_DOMAIN: Optional[str] = None
     AUTH0_AUDIENCE: Optional[str] = None
     AUTH0_RULE_NAMESPACE: Optional[str] = None
+    AUTH0_CLIENT_ID: Optional[str] = None  # SPA Client ID
+    AUTH0_M2M_CLIENT_ID: Optional[str] = None  # Machine-to-Machine Client ID for Management API
+    AUTH0_M2M_CLIENT_SECRET: Optional[str] = None  # Machine-to-Machine Client Secret
 
     ENCRYPTION_KEY: str
 
@@ -168,7 +171,15 @@ class Settings(BaseSettings):
         # Default Pydantic behavior will handle comma separation
         return v
 
-    @field_validator("AUTH0_DOMAIN", "AUTH0_AUDIENCE", "AUTH0_RULE_NAMESPACE", mode="before")
+    @field_validator(
+        "AUTH0_DOMAIN",
+        "AUTH0_AUDIENCE",
+        "AUTH0_RULE_NAMESPACE",
+        "AUTH0_CLIENT_ID",
+        "AUTH0_M2M_CLIENT_ID",
+        "AUTH0_M2M_CLIENT_SECRET",
+        mode="before",
+    )
     def validate_auth0_settings(cls, v: str, info: ValidationInfo) -> str:
         """Validate Auth0 settings when AUTH_ENABLED is True.
 

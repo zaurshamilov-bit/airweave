@@ -12,7 +12,7 @@ from airweave.core.dag_service import dag_service
 from airweave.crud.crud_dag import (
     sync_dag,
 )
-from airweave.models.user import User
+from airweave.schemas.auth import AuthContext
 from airweave.schemas.dag import NodeType
 
 router = TrailingSlashRouter()
@@ -22,12 +22,10 @@ router = TrailingSlashRouter()
 async def get_sync_dag(
     sync_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ):
     """Get the DAG definition for a sync."""
-    dag = await sync_dag.get_by_sync_id(db, sync_id=sync_id, current_user=current_user)
-    if not dag:
-        raise HTTPException(status_code=404, detail="DAG not found")
+    dag = await sync_dag.get_by_sync_id(db, sync_id=sync_id, auth_context=auth_context)
     return dag
 
 
@@ -118,10 +116,10 @@ def _process_transformer_chain(
 async def get_sync_entity_dags(
     sync_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ):
     """Get list of DAGs, one for each entity."""
-    dag_model = await sync_dag.get_by_sync_id(db, sync_id=sync_id, current_user=current_user)
+    dag_model = await sync_dag.get_by_sync_id(db, sync_id=sync_id, auth_context=auth_context)
     dag = schemas.SyncDag.from_orm(dag_model)
 
     source_node = dag.get_source_node()
@@ -163,10 +161,10 @@ async def create_sync_dag(
     sync_id: UUID,
     dag: schemas.SyncDagCreate,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ):
     """Create a new DAG definition for a sync."""
-    return await sync_dag.create_with_nodes_and_edges(db, obj_in=dag, current_user=current_user)
+    return await sync_dag.create_with_nodes_and_edges(db, obj_in=dag, auth_context=auth_context)
 
 
 @router.put("/sync/{sync_id}/dag/", response_model=schemas.SyncDag)
@@ -174,15 +172,13 @@ async def update_sync_dag(
     sync_id: UUID,
     dag: schemas.SyncDagUpdate,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ):
     """Update a DAG definition for a sync."""
-    db_dag = await sync_dag.get_by_sync_id(db, sync_id=sync_id, current_user=current_user)
-    if not db_dag:
-        raise HTTPException(status_code=404, detail="DAG not found")
+    db_dag = await sync_dag.get_by_sync_id(db, sync_id=sync_id, auth_context=auth_context)
 
     return await sync_dag.update_with_nodes_and_edges(
-        db, db_obj=db_dag, obj_in=dag, current_user=current_user
+        db, db_obj=db_dag, obj_in=dag, auth_context=auth_context
     )
 
 
@@ -190,10 +186,10 @@ async def update_sync_dag(
 async def initialize_dag(
     sync_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SyncDag:
     """Initialize a new DAG with source, entities, and destination."""
-    dag = await dag_service.create_initial_dag(db, sync_id=sync_id, current_user=current_user)
+    dag = await dag_service.create_initial_dag(db, sync_id=sync_id, auth_context=auth_context)
     return dag
 
 

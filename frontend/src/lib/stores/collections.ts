@@ -30,6 +30,7 @@ interface CollectionsState {
   fetchCollections: (forceRefresh?: boolean) => Promise<Collection[]>;
   fetchSourceConnections: (collectionId: string, forceRefresh?: boolean) => Promise<SourceConnection[]>;
   subscribeToEvents: () => () => void;
+  clearCollections: () => void;
 }
 
 export const useCollectionsStore = create<CollectionsState>((set, get) => ({
@@ -172,5 +173,16 @@ export const useCollectionsStore = create<CollectionsState>((set, get) => ({
       unsubscribeCreated();
       unsubscribeUpdated();
     };
+  },
+
+  clearCollections: () => {
+    console.log("🧹 [CollectionsStore] Clearing collections state");
+    set({
+      collections: [],
+      isLoading: false,
+      error: null,
+      sourceConnections: {},
+      sourceConnectionsLoading: {}
+    });
   }
 }));

@@ -3,7 +3,34 @@
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from airweave.schemas.organization import Organization
+
+
+class UserOrganizationBase(BaseModel):
+    """Base schema for UserOrganization relationship."""
+
+    role: str = "member"  # owner, admin, member
+    is_primary: bool = False
+    user_id: UUID
+    organization_id: UUID
+
+    class Config:
+        """Pydantic config for UserOrganizationBase."""
+
+        from_attributes = True
+
+
+class UserOrganization(UserOrganizationBase):
+    """Schema for UserOrganization relationship with full organization details."""
+
+    organization: Organization
+
+    class Config:
+        """Pydantic config for UserOrganization."""
+
+        from_attributes = True
 
 
 class UserBase(BaseModel):
@@ -11,14 +38,6 @@ class UserBase(BaseModel):
 
     email: EmailStr
     full_name: Optional[str] = "Superuser"
-    organization_id: Optional[UUID] = None
-
-    @validator("organization_id", pre=True, always=True)
-    def organization_must_exist_for_operations(cls, v, values):
-        """Validate that the organization_id field is present for all operations except create."""
-        # During validation of incoming data, we allow None because create will handle it
-        # For database objects, this should never be None
-        return v
 
     class Config:
         """Pydantic config for UserBase."""
@@ -30,34 +49,42 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for creating a User object."""
 
-    # Allow organization_id to be None during creation, as it will be created if not provided
+    auth0_id: Optional[str] = None
 
 
 class UserUpdate(UserBase):
     """Schema for updating a User object."""
 
+    auth0_id: Optional[str] = None
     permissions: Optional[list[str]] = None
-
-    @validator("organization_id")
-    def organization_required_for_update(cls, v):
-        """Validate that the organization_id is not None for updates."""
-        if v is None:
-            raise ValueError("organization_id cannot be None when updating a user")
-        return v
 
 
 class UserInDBBase(UserBase):
     """Base schema for User stored in DB."""
 
     id: UUID
-    permissions: Optional[list[str]] = None
+    auth0_id: Optional[str] = None
+    primary_organization_id: Optional[UUID] = None
+    user_organizations: list[UserOrganization] = Field(default_factory=list)
 
-    @validator("organization_id")
-    def organization_required_in_db(cls, v):
-        """Validate that the organization_id is never None in the database."""
-        if v is None:
-            raise ValueError("User must have an organization_id in the database")
-        return v
+    @field_validator("user_organizations", mode="before")
+    @classmethod
+    def load_organizations(cls, v):
+        """Ensure organizations are always loaded."""
+        return v or []
+
+    @property
+    def primary_organization(self) -> Optional[UserOrganization]:
+        """Get the primary organization for this user."""
+        for org in self.user_organizations:
+            if org.is_primary:
+                return org
+        return None
+
+    @property
+    def organization_roles(self) -> dict[UUID, str]:
+        """Get a mapping of organization IDs to roles."""
+        return {org.organization.id: org.role for org in self.user_organizations}
 
     class Config:
         """Pydantic config for UserInDBBase."""
@@ -82,8 +109,6 @@ class UserInDB(UserInDBBase):
 
 
 class UserWithOrganizations(UserInDBBase):
-    """Schema for User with Organizations."""
+    """Schema for User with Organizations - now redundant as all users include orgs."""
 
     pass
-
-    # organizations: list[Organization]

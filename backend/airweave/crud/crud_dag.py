@@ -7,21 +7,21 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from airweave import schemas
-from airweave.crud._base import CRUDBase
+from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.dag import (
     DagEdge,
     DagNode,
     SyncDag,
 )
+from airweave.schemas.auth import AuthContext
 from airweave.schemas.dag import (
     SyncDagCreate,
     SyncDagUpdate,
 )
 
 
-class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
+class CRUDSyncDag(CRUDBaseOrganization[SyncDag, SyncDagCreate, SyncDagUpdate]):
     """CRUD operations for SyncDag."""
 
     async def create_with_nodes_and_edges(
@@ -29,7 +29,7 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
         db: AsyncSession,
         *,
         obj_in: SyncDagCreate,
-        current_user: schemas.User,
+        auth_context: AuthContext,
         uow: Optional[UnitOfWork] = None,
     ) -> SyncDag:
         """Create a DAG with its nodes and edges."""
@@ -38,9 +38,9 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
             name=obj_in.name,
             description=obj_in.description,
             sync_id=obj_in.sync_id,
-            organization_id=current_user.organization_id,
-            created_by_email=current_user.email,
-            modified_by_email=current_user.email,
+            organization_id=auth_context.organization_id,
+            created_by_email=auth_context.user.email if auth_context.has_user_context else None,
+            modified_by_email=auth_context.user.email if auth_context.has_user_context else None,
         )
         db.add(db_obj)
         await db.flush()  # Flush to get the ID
@@ -51,9 +51,11 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
             db_node = DagNode(
                 **node_data,
                 dag_id=db_obj.id,
-                organization_id=current_user.organization_id,
-                created_by_email=current_user.email,
-                modified_by_email=current_user.email,
+                organization_id=auth_context.organization_id,
+                created_by_email=auth_context.user.email if auth_context.has_user_context else None,
+                modified_by_email=(
+                    auth_context.user.email if auth_context.has_user_context else None
+                ),
             )
             db.add(db_node)
         await db.flush()
@@ -64,9 +66,11 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
                 from_node_id=edge_in.from_node_id,
                 to_node_id=edge_in.to_node_id,
                 dag_id=db_obj.id,
-                organization_id=current_user.organization_id,
-                created_by_email=current_user.email,
-                modified_by_email=current_user.email,
+                organization_id=auth_context.organization_id,
+                created_by_email=auth_context.user.email if auth_context.has_user_context else None,
+                modified_by_email=(
+                    auth_context.user.email if auth_context.has_user_context else None
+                ),
             )
             db.add(db_edge)
 
@@ -91,7 +95,7 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
         *,
         db_obj: SyncDag,
         obj_in: SyncDagUpdate,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> SyncDag:
         """Update a DAG with its nodes and edges."""
         # Create a copy of the input without nodes and edges for basic fields update
@@ -99,7 +103,7 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
 
         # Update only the parent SyncDag fields
         db_obj = await self.update(
-            db, db_obj=db_obj, obj_in=parent_update_data, current_user=current_user
+            db, db_obj=db_obj, obj_in=parent_update_data, auth_context=auth_context
         )
 
         # If nodes provided, replace all nodes
@@ -112,9 +116,13 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
                 db_node = DagNode(
                     **node_data,
                     dag_id=db_obj.id,
-                    organization_id=current_user.organization_id,
-                    created_by_email=current_user.email,
-                    modified_by_email=current_user.email,
+                    organization_id=auth_context.organization_id,
+                    created_by_email=(
+                        auth_context.user.email if auth_context.has_user_context else None
+                    ),
+                    modified_by_email=(
+                        auth_context.user.email if auth_context.has_user_context else None
+                    ),
                 )
                 db.add(db_node)
             await db.flush()
@@ -129,9 +137,13 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
                     from_node_id=edge_in.from_node_id,
                     to_node_id=edge_in.to_node_id,
                     dag_id=db_obj.id,
-                    organization_id=current_user.organization_id,
-                    created_by_email=current_user.email,
-                    modified_by_email=current_user.email,
+                    organization_id=auth_context.organization_id,
+                    created_by_email=(
+                        auth_context.user.email if auth_context.has_user_context else None
+                    ),
+                    modified_by_email=(
+                        auth_context.user.email if auth_context.has_user_context else None
+                    ),
                 )
                 db.add(db_edge)
 
@@ -154,14 +166,14 @@ class CRUDSyncDag(CRUDBase[SyncDag, SyncDagCreate, SyncDagUpdate]):
         db: AsyncSession,
         *,
         sync_id: UUID,
-        current_user: schemas.User,
+        auth_context: AuthContext,
     ) -> Optional[SyncDag]:
         """Get a DAG by sync ID."""
         result = await db.execute(
             select(SyncDag)
             .where(
                 SyncDag.sync_id == sync_id,
-                SyncDag.organization_id == current_user.organization_id,
+                SyncDag.organization_id == auth_context.organization_id,
             )
             .options(
                 selectinload(SyncDag.nodes),

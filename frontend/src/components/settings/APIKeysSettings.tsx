@@ -5,10 +5,10 @@ import { Key, Copy, Loader2, AlertCircle, Clock, CalendarIcon, CheckCircle, Tras
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { format, differenceInDays } from "date-fns";
-import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme-provider";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useAPIKeysStore, type APIKey } from "@/lib/stores/apiKeys";
 import {
   Dialog,
   DialogContent,
@@ -18,19 +18,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-interface APIKey {
-  id: string;
-  created_at: string;
-  last_used_date: string | null;
-  expiration_date: string;
-  decrypted_key: string;
-}
-
 export function APIKeysSettings() {
-  const [apiKeys, setApiKeys] = useState<APIKey[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  // Use the store instead of local state
+  const {
+    apiKeys,
+    isLoading: loading,
+    error,
+    fetchAPIKeys,
+    createAPIKey,
+    deleteAPIKey
+  } = useAPIKeysStore();
+
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<APIKey | null>(null);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const { resolvedTheme } = useTheme();
@@ -38,10 +36,11 @@ export function APIKeysSettings() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [keyToDelete, setKeyToDelete] = useState<APIKey | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    fetchApiKeys();
-  }, []);
+    fetchAPIKeys();
+  }, [fetchAPIKeys]);
 
   const maskApiKey = (key: string) => {
     if (!key) return "";
@@ -50,61 +49,16 @@ export function APIKeysSettings() {
     return `${firstFour}${masked}`;
   };
 
-  const fetchApiKeys = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await apiClient.get<APIKey[]>("/api-keys");
-
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-
-      const data = await response.json();
-      setApiKeys(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Failed to fetch API keys:", err);
-      setError(typeof err === 'object' && err !== null && 'message' in err
-        ? String(err.message)
-        : "Failed to load API keys. Please try again later.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleCreateApiKey = async () => {
     setCreating(true);
-    setError(null);
 
     try {
-      // Create API key with default expiration (backend will handle this)
-      const response = await apiClient.post<APIKey>("/api-keys", {});
-
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-
-      const newKey = await response.json();
-
-      if (!newKey || typeof newKey !== 'object' || !('id' in newKey)) {
-        throw new Error("Invalid response from server");
-      }
-
-      setNewlyCreatedKey(newKey as APIKey);
-
-      // Add to list but don't show the plain key in regular list
-      const keyForList = { ...newKey } as APIKey;
-      setApiKeys([keyForList, ...apiKeys]);
-
+      const newKey = await createAPIKey();
+      setNewlyCreatedKey(newKey);
       toast.success("API key created successfully");
     } catch (err) {
-      console.error("Failed to create API key:", err);
-      setError(typeof err === 'object' && err !== null && 'message' in err
-        ? String(err.message)
-        : "Failed to create API key. Please try again.");
-      toast.error(typeof err === 'object' && err !== null && 'message' in err
-        ? String(err.message)
-        : "Failed to create API key. Please try again.");
+      const errorMessage = err instanceof Error ? err.message : "Failed to create API key. Please try again.";
+      toast.error(errorMessage);
     } finally {
       setCreating(false);
     }
@@ -131,13 +85,7 @@ export function APIKeysSettings() {
   const handleDeleteKey = async (id: string) => {
     setDeleting(true);
     try {
-      const response = await apiClient.delete("/api-keys", { id });
-
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-
-      setApiKeys(apiKeys.filter((key) => key.id !== id));
+      await deleteAPIKey(id);
       toast.success("API key deleted successfully");
 
       // If we just deleted the newly created key, clear that state
@@ -148,10 +96,8 @@ export function APIKeysSettings() {
       setDeleteDialogOpen(false);
       setKeyToDelete(null);
     } catch (err) {
-      console.error("Failed to delete API key:", err);
-      toast.error(typeof err === 'object' && err !== null && 'message' in err
-        ? String(err.message)
-        : "Failed to delete API key. Please try again.");
+      const errorMessage = err instanceof Error ? err.message : "Failed to delete API key. Please try again.";
+      toast.error(errorMessage);
     } finally {
       setDeleting(false);
     }
@@ -205,19 +151,13 @@ export function APIKeysSettings() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-1">
+    <div className="space-y-4">
 
-        <p className="text-sm text-muted-foreground">
-          Create and manage API keys for authenticating with the Airweave API
-        </p>
-      </div>
-
-      <div className="py-6 space-y-8">
+      <div className="py-2 space-y-8">
         {/* Create new API key section */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <h3 className="text-sm font-medium">Create New API Key</h3>
+            <h3 className="text-sm font-medium">Create new API key</h3>
             <p className="text-xs text-muted-foreground">
               API keys will expire 180 days after creation
             </p>
@@ -225,23 +165,14 @@ export function APIKeysSettings() {
           <Button
             onClick={handleCreateApiKey}
             disabled={creating}
-            size="sm"
-            className={cn(
-              "w-full sm:w-auto",
-              isDark ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-500 hover:bg-blue-600"
-            )}
+            className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white h-8 px-3.5 text-sm w-full sm:w-auto"
           >
             {creating ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
-              </>
+              <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
-              <>
-                <Key className="mr-2 h-4 w-4" />
-                Create New Key
-              </>
+              <Key className="h-3 w-3" />
             )}
+            {creating ? 'Creating...' : 'Create key'}
           </Button>
         </div>
 
@@ -307,7 +238,7 @@ export function APIKeysSettings() {
             {/* API Keys list */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">Your API Keys</h3>
+                <h3 className="text-sm font-medium">Your API keys</h3>
                 <div className="text-xs text-muted-foreground">{apiKeys.length} key{apiKeys.length !== 1 ? 's' : ''}</div>
               </div>
 

@@ -15,4 +15,5 @@ export const publicPaths = {
     login: "/login",
     callback: "/callback",
     semanticMcp: "/semantic-mcp",
+    noOrganization: "/no-organization",
 }

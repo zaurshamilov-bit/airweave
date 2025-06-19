@@ -1,17 +1,17 @@
 """User model."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
-from sqlalchemy import Boolean, String
+from sqlalchemy import UUID, Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from airweave.models._base import OrganizationBase
+from airweave.models._base import Base
 
 if TYPE_CHECKING:
-    from airweave.models.organization import Organization
+    from airweave.models.user_organization import UserOrganization
 
 
-class User(OrganizationBase):
+class User(Base):
     """User model."""
 
     __tablename__ = "user"
@@ -22,6 +22,15 @@ class User(OrganizationBase):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Define the relationship to Organization
-    # Note: In async context, we'll handle eager loading in the CRUD class
-    organization: Mapped["Organization"] = relationship("Organization", back_populates="users")
+    # Many-to-many relationship with organizations
+    user_organizations: Mapped[List["UserOrganization"]] = relationship(
+        "UserOrganization", back_populates="user", cascade="all, delete-orphan", lazy="noload"
+    )
+
+    @property
+    def primary_organization_id(self) -> UUID | None:
+        """Get the primary organization ID from the relationship."""
+        for user_org in self.user_organizations:
+            if user_org.is_primary:
+                return user_org.organization_id
+        return None

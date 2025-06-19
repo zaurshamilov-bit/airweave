@@ -10,14 +10,14 @@ from airweave.core.logging import logger
 from airweave.core.shared_models import SourceConnectionStatus, SyncJobStatus
 from airweave.models.source_connection import SourceConnection
 from airweave.models.sync_job import SyncJob
+from airweave.schemas.auth import AuthContext
 from airweave.schemas.source_connection import SourceConnectionCreate, SourceConnectionUpdate
-from airweave.schemas.user import User
 
-from ._base import CRUDBase
+from ._base_organization import CRUDBaseOrganization
 
 
 class CRUDSourceConnection(
-    CRUDBase[SourceConnection, SourceConnectionCreate, SourceConnectionUpdate]
+    CRUDBaseOrganization[SourceConnection, SourceConnectionCreate, SourceConnectionUpdate]
 ):
     """CRUD operations for source connections."""
 
@@ -192,20 +192,20 @@ class CRUDSourceConnection(
         return source_connections
 
     async def get(
-        self, db: AsyncSession, id: UUID, current_user: User
+        self, db: AsyncSession, id: UUID, auth_context: AuthContext
     ) -> Optional[SourceConnection]:
         """Get a source connection by ID with its ephemeral status.
 
         Args:
             db: The database session
             id: The ID of the source connection
-            current_user: The current user
+            auth_context: The authentication context
 
         Returns:
             The source connection with ephemeral status
         """
         # Call parent class method to get the base source connection
-        source_connection = await super().get(db, id=id, current_user=current_user)
+        source_connection = await super().get(db, id=id, auth_context=auth_context)
 
         if source_connection:
             # Attach latest sync job info and compute status
@@ -217,14 +217,14 @@ class CRUDSourceConnection(
 
         return source_connection
 
-    async def get_all_for_user(
-        self, db: AsyncSession, *, current_user: User, skip: int = 0, limit: int = 100
+    async def get_multi(
+        self, db: AsyncSession, *, auth_context: AuthContext, skip: int = 0, limit: int = 100
     ) -> List[SourceConnection]:
         """Get all source connections for the current user with ephemeral statuses.
 
         Args:
             db: The database session
-            current_user: The current user
+            auth_context: The authentication context
             skip: The number of connections to skip
             limit: The number of connections to return
 
@@ -233,7 +233,7 @@ class CRUDSourceConnection(
         """
         query = (
             select(self.model)
-            .where(self.model.organization_id == current_user.organization_id)
+            .where(self.model.organization_id == auth_context.organization_id)
             .offset(skip)
             .limit(limit)
         )
@@ -254,14 +254,14 @@ class CRUDSourceConnection(
         readable_collection_id: str,
         skip: int = 0,
         limit: int = 100,
-        current_user: User,
+        auth_context: AuthContext,
     ) -> List[SourceConnection]:
         """Get all source connections for a specific collection with ephemeral statuses.
 
         Args:
             db: The database session
             readable_collection_id: The readable ID of the collection
-            current_user: The current user
+            auth_context: The authentication context
             skip: The number of source connections to skip
             limit: The maximum number of source connections to return
 
@@ -272,7 +272,7 @@ class CRUDSourceConnection(
             select(self.model)
             .where(
                 self.model.readable_collection_id == readable_collection_id,
-                self.model.organization_id == current_user.organization_id,
+                self.model.organization_id == auth_context.organization_id,
             )
             .offset(skip)
             .limit(limit)
@@ -288,21 +288,21 @@ class CRUDSourceConnection(
         return source_connections
 
     async def get_by_sync_id(
-        self, db: AsyncSession, *, sync_id: UUID, current_user: User
+        self, db: AsyncSession, *, sync_id: UUID, auth_context: AuthContext
     ) -> Optional[SourceConnection]:
         """Get a source connection by sync ID.
 
         Args:
             db: The database session
             sync_id: The ID of the sync
-            current_user: The current user
+            auth_context: The authentication context
 
         Returns:
             The source connection for the sync
         """
         query = select(self.model).where(
             self.model.sync_id == sync_id,
-            self.model.organization_id == current_user.organization_id,
+            self.model.organization_id == auth_context.organization_id,
         )
         result = await db.execute(query)
         source_connection = result.scalar_one_or_none()
@@ -318,21 +318,21 @@ class CRUDSourceConnection(
         return source_connection
 
     async def get_for_white_label(
-        self, db: AsyncSession, *, white_label_id: UUID, current_user: User
+        self, db: AsyncSession, *, white_label_id: UUID, auth_context: AuthContext
     ) -> List[SourceConnection]:
         """Get all source connections for a specific white label.
 
         Args:
             db: The database session
             white_label_id: The ID of the white label
-            current_user: The current user
+            auth_context: The authentication context
 
         Returns:
             A list of source connections for the white label
         """
         query = select(self.model).where(
             self.model.white_label_id == white_label_id,
-            self.model.organization_id == current_user.organization_id,
+            self.model.organization_id == auth_context.organization_id,
         )
         result = await db.execute(query)
         source_connections = list(result.scalars().all())

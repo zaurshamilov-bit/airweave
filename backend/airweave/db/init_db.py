@@ -1,12 +1,15 @@
 """Initialize the database with the first superuser."""
 
 import datetime
+from venv import logger
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core.config import settings
+from airweave.core.exceptions import NotFoundException
 from airweave.db.init_db_native import init_db_with_native_connections
+from airweave.schemas.auth import AuthContext
 
 
 async def init_db(db: AsyncSession) -> None:
@@ -18,26 +21,17 @@ async def init_db(db: AsyncSession) -> None:
     """
     # First initialize native connections
     await init_db_with_native_connections(db)
-
-    organization = await crud.organization.get_by_name(db, name=settings.FIRST_SUPERUSER)
-    if not organization:
-        organization_in = schemas.OrganizationCreate(
-            name=settings.FIRST_SUPERUSER,
-            description="Superuser organization",
-        )
-        organization = await crud.organization.create(db, obj_in=organization_in)
-
-    user = await crud.user.get_by_email(db, email=settings.FIRST_SUPERUSER)
-
-    if not user:
+    try:
+        user = await crud.user.get_by_email(db, email=settings.FIRST_SUPERUSER)
+    except NotFoundException:
+        logger.info(f"User {settings.FIRST_SUPERUSER} not found, creating...")
         user_in = schemas.UserCreate(
             email=settings.FIRST_SUPERUSER,
             full_name="Superuser",
             password=settings.FIRST_SUPERUSER_PASSWORD,
-            organization_id=organization.id,
         )
-        user = await crud.user.create(db, obj_in=user_in)
-        _ = await crud.api_key.create_with_user(
+        user, organization = await crud.user.create_with_organization(db, obj_in=user_in)
+        _ = await crud.api_key.create(
             db,
             obj_in=schemas.APIKeyCreate(
                 user_id=user.id,
@@ -45,5 +39,7 @@ async def init_db(db: AsyncSession) -> None:
                 description="Superuser API Key",
                 expires_at=datetime.datetime.now() + datetime.timedelta(days=365),
             ),
-            current_user=user,
+            auth_context=AuthContext(
+                user=user, organization_id=organization.id, auth_method="system"
+            ),
         )

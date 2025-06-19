@@ -9,7 +9,7 @@ from .api_key import (
     APIKeyInDBBase,
     APIKeyUpdate,
 )
-from .chat import Chat, ChatCreate, ChatMessage, ChatMessageCreate, ChatUpdate
+from .auth import AuthContext
 from .collection import (
     Collection,
     CollectionCreate,
@@ -48,11 +48,6 @@ from .entity_definition import (
     EntityDefinitionUpdate,
     EntityType,
 )
-from .entity_relation import (
-    EntityRelation,
-    EntityRelationCreate,
-    EntityRelationUpdate,
-)
 from .integration_credential import (
     IntegrationCredential,
     IntegrationCredentialCreate,
@@ -61,12 +56,19 @@ from .integration_credential import (
     IntegrationCredentialRawCreate,
     IntegrationCredentialUpdate,
 )
+from .invitation import (
+    InvitationBase,
+    InvitationCreate,
+    InvitationResponse,
+    MemberResponse,
+)
 from .organization import (
     Organization,
     OrganizationBase,
     OrganizationCreate,
     OrganizationInDBBase,
     OrganizationUpdate,
+    OrganizationWithRole,
 )
 from .search import SearchResponse
 from .source import (
@@ -104,6 +106,7 @@ from .user import (
     UserCreate,
     UserInDB,
     UserInDBBase,
+    UserOrganization,
     UserUpdate,
     UserWithOrganizations,
 )

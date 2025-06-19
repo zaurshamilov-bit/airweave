@@ -6,19 +6,20 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from airweave import schemas
+from airweave.core.exceptions import NotFoundException
 from airweave.core.shared_models import CollectionStatus, SourceConnectionStatus
-from airweave.crud._base import CRUDBase
+from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.crud.crud_source_connection import source_connection as crud_source_connection
 from airweave.models.collection import Collection
+from airweave.schemas.auth import AuthContext
 from airweave.schemas.collection import CollectionCreate, CollectionUpdate
 
 
-class CRUDCollection(CRUDBase[Collection, CollectionCreate, CollectionUpdate]):
+class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, CollectionUpdate]):
     """CRUD operations for collections."""
 
     async def _compute_collection_status(
-        self, db: AsyncSession, collection: Collection, current_user: schemas.User
+        self, db: AsyncSession, collection: Collection, auth_context: AuthContext
     ) -> CollectionStatus:
         """Compute the ephemeral status of a collection based on its source connections.
 
@@ -32,14 +33,14 @@ class CRUDCollection(CRUDBase[Collection, CollectionCreate, CollectionUpdate]):
         Args:
             db: The database session
             collection: The collection
-            current_user: Current user for authorization
+            auth_context: Authentication context
 
         Returns:
             The computed ephemeral status
         """
         # Get all source connections for this collection
         source_connections = await crud_source_connection.get_for_collection(
-            db, readable_collection_id=collection.readable_id, current_user=current_user
+            db, readable_collection_id=collection.readable_id, auth_context=auth_context
         )
 
         # If no source connections, the collection needs one
@@ -72,14 +73,14 @@ class CRUDCollection(CRUDBase[Collection, CollectionCreate, CollectionUpdate]):
         return CollectionStatus.ACTIVE
 
     async def _attach_ephemeral_status(
-        self, db: AsyncSession, collections: List[Collection], current_user: schemas.User
+        self, db: AsyncSession, collections: List[Collection], auth_context: AuthContext
     ) -> List[Collection]:
         """Attach ephemeral status to collections.
 
         Args:
             db: The database session
             collections: The collections to process
-            current_user: Current user for authorization
+            auth_context: Authentication context
 
         Returns:
             Collections with computed status
@@ -89,71 +90,49 @@ class CRUDCollection(CRUDBase[Collection, CollectionCreate, CollectionUpdate]):
 
         for collection in collections:
             # Compute and set the ephemeral status
-            collection.status = await self._compute_collection_status(db, collection, current_user)
+            collection.status = await self._compute_collection_status(db, collection, auth_context)
 
         return collections
 
     async def get(
-        self, db: AsyncSession, id: UUID, current_user: schemas.User
+        self, db: AsyncSession, id: UUID, auth_context: AuthContext
     ) -> Optional[Collection]:
         """Get a collection by its ID with computed ephemeral status."""
         # Get the collection using the parent method
-        collection = await super().get(db, id=id, current_user=current_user)
+        collection = await super().get(db, id=id, auth_context=auth_context)
 
         if collection:
             # Compute and set the ephemeral status
-            collection = (await self._attach_ephemeral_status(db, [collection], current_user))[0]
+            collection = (await self._attach_ephemeral_status(db, [collection], auth_context))[0]
 
         return collection
 
     async def get_by_readable_id(
-        self, db: AsyncSession, readable_id: str, current_user: schemas.User
+        self, db: AsyncSession, readable_id: str, auth_context: AuthContext
     ) -> Optional[Collection]:
         """Get a collection by its readable ID with computed ephemeral status."""
         result = await db.execute(select(Collection).where(Collection.readable_id == readable_id))
         collection = result.scalar_one_or_none()
 
-        if collection is None:
-            return None
+        if not collection:
+            raise NotFoundException(f"Collection with readable ID {readable_id} not found")
 
-        self._validate_if_user_has_permission(collection, current_user)
+        await self._validate_organization_access(auth_context, collection.organization_id)
 
         # Compute and set the ephemeral status
-        collection = (await self._attach_ephemeral_status(db, [collection], current_user))[0]
+        collection = (await self._attach_ephemeral_status(db, [collection], auth_context))[0]
 
         return collection
 
     async def get_multi(
-        self, db: AsyncSession, *, skip: int = 0, limit: int = 100, current_user: schemas.User
+        self, db: AsyncSession, *, skip: int = 0, limit: int = 100, auth_context: AuthContext
     ) -> List[Collection]:
         """Get multiple collections with computed ephemeral statuses."""
         # Get collections using the parent method
-        collections = await super().get_multi(db, skip=skip, limit=limit, current_user=current_user)
+        collections = await super().get_multi(db, skip=skip, limit=limit, auth_context=auth_context)
 
         # Compute and set the ephemeral status for each collection
-        collections = await self._attach_ephemeral_status(db, collections, current_user)
-
-        return collections
-
-    async def get_multi_by_organization(
-        self,
-        db: AsyncSession,
-        organization_id: UUID,
-        current_user: schemas.User,
-        skip: int = 0,
-        limit: int = 100,
-    ) -> List[Collection]:
-        """Get all collections for a specific organization with computed ephemeral statuses."""
-        result = await db.execute(
-            select(Collection)
-            .where(Collection.organization_id == organization_id)
-            .offset(skip)
-            .limit(limit)
-        )
-        collections = list(result.scalars().all())
-
-        # Compute and set the ephemeral status for each collection
-        collections = await self._attach_ephemeral_status(db, collections, current_user)
+        collections = await self._attach_ephemeral_status(db, collections, auth_context)
 
         return collections
 

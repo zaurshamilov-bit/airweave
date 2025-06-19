@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airweave.core.exceptions import NotFoundException
 from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.models.entity import Entity
 from airweave.schemas.entity import EntityCreate, EntityUpdate
@@ -14,6 +15,13 @@ from airweave.schemas.entity import EntityCreate, EntityUpdate
 
 class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
     """CRUD operations for entities."""
+
+    def __init__(self):
+        """Initialize the CRUD object.
+
+        Initialize with track_user=False since Entity model doesn't have user tracking fields.
+        """
+        super().__init__(Entity, track_user=False)
 
     async def get_by_entity_and_sync_id(
         self,
@@ -24,7 +32,12 @@ class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
         """Get a entity by entity id and sync id."""
         stmt = select(Entity).where(Entity.entity_id == entity_id, Entity.sync_id == sync_id)
         result = await db.execute(stmt)
-        return result.unique().scalars().one_or_none()
+        db_obj = result.unique().scalars().one_or_none()
+        if not db_obj:
+            raise NotFoundException(
+                f"Entity with entity ID {entity_id} and sync ID {sync_id} not found"
+            )
+        return db_obj
 
     async def update_job_id(
         self,
@@ -83,4 +96,4 @@ class CRUDEntity(CRUDBaseOrganization[Entity, EntityCreate, EntityUpdate]):
         return result.scalar_one_or_none()
 
 
-entity = CRUDEntity(Entity)
+entity = CRUDEntity()

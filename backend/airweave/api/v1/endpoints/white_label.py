@@ -20,14 +20,18 @@ from airweave.core.logging import logger
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.db.session import get_db_context
-from airweave.models.user import User
 from airweave.platform.auth.services import oauth2_service
+from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
 
 async def _handle_white_label_cors(
-    request: Request, response: Response, white_label_id: UUID, db: AsyncSession, current_user: User
+    request: Request,
+    response: Response,
+    white_label_id: UUID,
+    db: AsyncSession,
+    auth_context: AuthContext,
 ) -> None:
     """Validate white label origin - CORS headers are now handled by middleware.
 
@@ -36,7 +40,7 @@ async def _handle_white_label_cors(
         response: The response object
         white_label_id: The white label ID
         db: The database session
-        current_user: The current user
+        auth_context: The current authentication context
     """
     # Get origin from request headers
     origin = request.headers.get("origin")
@@ -46,7 +50,7 @@ async def _handle_white_label_cors(
     try:
         # Validate against the white label's allowed origins
         white_label = await crud.white_label.get(
-            db=db, id=white_label_id, current_user=current_user
+            db=db, id=white_label_id, auth_context=auth_context
         )
         if not white_label or not white_label.allowed_origins:
             logger.debug(f"White label {white_label_id} not found or has no allowed origins")
@@ -68,20 +72,20 @@ async def _handle_white_label_cors(
 @router.get("/list", response_model=list[schemas.WhiteLabel])
 async def list_white_labels(
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> list[schemas.WhiteLabel]:
     """List all white labels for the current user's organization.
 
     Args:
     -----
         db: The database session
-        current_user: The current user
+        auth_context: The authentication context
 
     Returns:
     --------
         list[schemas.WhiteLabel]: A list of white labels
     """
-    white_labels = await crud.white_label.get_all_for_user(db, current_user=current_user)
+    white_labels = await crud.white_label.get_multi(db, auth_context=auth_context)
     return white_labels
 
 
@@ -89,7 +93,7 @@ async def list_white_labels(
 async def create_white_label(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
     white_label_in: schemas.WhiteLabelCreate,
 ) -> schemas.WhiteLabel:
     """Create new white label integration.
@@ -97,7 +101,7 @@ async def create_white_label(
     Args:
     -----
         db: The database session
-        current_user: The current user
+        auth_context: The current user
         white_label_in: The white label to create
 
     Returns:
@@ -107,7 +111,7 @@ async def create_white_label(
     white_label = await crud.white_label.create(
         db,
         obj_in=white_label_in,
-        current_user=current_user,
+        auth_context=auth_context,
     )
     return white_label
 
@@ -116,7 +120,7 @@ async def create_white_label(
 async def get_white_label(
     white_label_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.WhiteLabel:
     """Get a specific white label integration.
 
@@ -124,16 +128,14 @@ async def get_white_label(
     -----
         db: The database session
         white_label_id: The ID of the white label to get
-        current_user: The current user
+        auth_context: The authentication context
 
     Returns:
     --------
         white_label (schemas.WhiteLabel): The white label
     """
-    white_label = await crud.white_label.get(db, id=white_label_id, current_user=current_user)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
-    if white_label.organization_id != current_user.organization_id:
+    white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
+    if white_label.organization_id != auth_context.organization_id:  # type: ignore
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return white_label
 
@@ -142,7 +144,7 @@ async def get_white_label(
 async def update_white_label(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
     white_label_id: UUID,
     white_label_in: schemas.WhiteLabelUpdate,
 ) -> schemas.WhiteLabel:
@@ -151,7 +153,7 @@ async def update_white_label(
     Args:
     -----
         db: The database session
-        current_user: The current user
+        auth_context: The authentication context
         white_label_id: The ID of the white label to update
         white_label_in: The white label to update
 
@@ -160,17 +162,15 @@ async def update_white_label(
         white_label (schemas.WhiteLabel): The updated white label
     """
     # TODO: Check if update is valid (i.e. scopes, source id etc)
-    white_label = await crud.white_label.get(db, id=white_label_id, current_user=current_user)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
-    if white_label.organization_id != current_user.organization_id:
+    white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
+    if white_label.organization_id != auth_context.organization_id:  # type: ignore
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     white_label = await crud.white_label.update(
         db,
         db_obj=white_label,
         obj_in=white_label_in,
-        current_user=current_user,
+        auth_context=auth_context,
     )
     return white_label
 
@@ -179,27 +179,25 @@ async def update_white_label(
 async def delete_white_label(
     white_label_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.WhiteLabel:
     """Delete a white label integration.
 
     Args:
     -----
         db: The database session
-        current_user: The current user
+        auth_context: The current authentication context
         white_label_id: The ID of the white label to delete
 
     Returns:
     --------
         white_label (schemas.WhiteLabel): The deleted white label
     """
-    white_label = await crud.white_label.get(db, id=white_label_id, current_user=current_user)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
-    if white_label.organization_id != current_user.organization_id:
+    white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
+    if white_label.organization_id != auth_context.user.organization_id:  # type: ignore
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
-    return await crud.white_label.remove(db, id=white_label_id, current_user=current_user)
+    return await crud.white_label.remove(db, id=white_label_id, auth_context=auth_context)
 
 
 @router.api_route(
@@ -211,7 +209,7 @@ async def get_white_label_oauth2_auth_url(
     response: Response,
     db: AsyncSession = Depends(deps.get_db),
     white_label_id: UUID,
-    user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> str:
     """Generate the OAuth2 authorization URL by delegating to oauth2_service.
 
@@ -221,23 +219,21 @@ async def get_white_label_oauth2_auth_url(
         response: The HTTP response
         db: The database session
         white_label_id: The ID of the white label to get the auth URL for
-        user: The current user
+        auth_context: The current authentication context
 
     Returns:
     --------
         str: The OAuth2 authorization URL
     """
     # Handle CORS for white label
-    await _handle_white_label_cors(request, response, white_label_id, db, user)
+    await _handle_white_label_cors(request, response, white_label_id, db, auth_context)
 
     # Handle OPTIONS request for preflight
     if request.method == "OPTIONS":
         return ""
 
-    white_label = await crud.white_label.get(db, id=white_label_id, current_user=user)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
-    if white_label.organization_id != user.organization_id:
+    white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
+    if white_label.organization_id != auth_context.organization_id:  # type: ignore
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     return await oauth2_service.generate_auth_url_for_whitelabel(db=db, white_label=white_label)
@@ -249,7 +245,7 @@ async def get_white_label_oauth2_auth_url(
 async def list_white_label_source_connections(
     white_label_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> list[schemas.SourceConnectionListItem]:
     """List all source connections for a specific white label.
 
@@ -257,20 +253,18 @@ async def list_white_label_source_connections(
     -----
         white_label_id: The ID of the white label to list source connections for
         db: The database session
-        current_user: The current user
+        auth_context: The authentication context
 
     Returns:
     --------
         list[schemas.SourceConnectionListItem]: A list of source connections
     """
-    white_label = await crud.white_label.get(db, id=white_label_id, current_user=current_user)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
-    if white_label.organization_id != current_user.organization_id:
+    white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
+    if white_label.organization_id != auth_context.organization_id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     source_connections = await crud.source_connection.get_for_white_label(
-        db, white_label_id=white_label_id, current_user=current_user
+        db, white_label_id=white_label_id, auth_context=auth_context
     )
 
     return [
@@ -292,7 +286,7 @@ async def exchange_white_label_oauth2_code(
     code: str = Body(...),
     source_connection_in: Optional[schemas.SourceConnectionCreate] = Body(None),
     db: AsyncSession = Depends(deps.get_db),
-    user: User = Depends(deps.get_user),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnection:
     """Exchange OAuth2 code for tokens and create connection with source connection.
@@ -305,7 +299,7 @@ async def exchange_white_label_oauth2_code(
         code: The OAuth2 code
         source_connection_in: Optional source connection configuration
         db: The database session
-        user: The current user
+        auth_context: The authentication context
         background_tasks: Background tasks for async operations
 
     Returns:
@@ -313,16 +307,15 @@ async def exchange_white_label_oauth2_code(
         source_connection (schemas.SourceConnection): The created source connection
     """
     # Handle CORS for white label
-    await _handle_white_label_cors(request, response, white_label_id, db, user)
+    await _handle_white_label_cors(request, response, white_label_id, db, auth_context)
 
     # Handle OPTIONS request for preflight
     if request.method == "OPTIONS":
         return ""
 
-    white_label = await crud.white_label.get(db, id=white_label_id, current_user=user)
-    if not white_label:
-        raise HTTPException(status_code=404, detail="White label integration not found")
-    if white_label.organization_id != user.organization_id:
+    white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
+
+    if white_label.organization_id != auth_context.organization_id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     white_label = schemas.WhiteLabel.model_validate(white_label, from_attributes=True)
@@ -330,7 +323,7 @@ async def exchange_white_label_oauth2_code(
     try:
         # Exchange code for connection
         connection = await oauth2_service.create_oauth2_connection_for_whitelabel(
-            db=db, white_label=white_label, code=code, user=user
+            db=db, white_label=white_label, code=code, auth_context=auth_context
         )
 
         # Create or use the provided source connection config
@@ -354,30 +347,36 @@ async def exchange_white_label_oauth2_code(
         source_connection, sync_job = await source_connection_service.create_source_connection(
             db=db,
             source_connection_in=source_connection_in,
-            current_user=user,
+            auth_context=auth_context,
         )
 
         # If job was created and sync_immediately is True, start it in background
         if sync_job:
             async with get_db_context() as sync_db:
                 sync_dag = await sync_service.get_sync_dag(
-                    db=sync_db, sync_id=source_connection.sync_id, current_user=user
+                    db=sync_db, sync_id=source_connection.sync_id, auth_context=auth_context
                 )
 
                 # Get the sync object
                 sync = await crud.sync.get(
-                    db=sync_db, id=source_connection.sync_id, current_user=user
+                    db=sync_db, id=source_connection.sync_id, auth_context=auth_context
                 )
                 sync = schemas.Sync.model_validate(sync, from_attributes=True)
                 sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
                 sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
                 collection = await crud.collection.get_by_readable_id(
-                    db=sync_db, readable_id=source_connection.collection, current_user=user
+                    db=sync_db, readable_id=source_connection.collection, auth_context=auth_context
                 )
                 collection = schemas.Collection.model_validate(collection, from_attributes=True)
 
             background_tasks.add_task(
-                sync_service.run, sync, sync_job, sync_dag, collection, source_connection, user
+                sync_service.run,
+                sync,
+                sync_job,
+                sync_dag,
+                collection,
+                source_connection,
+                auth_context,
             )
 
         # Make sure we are returning the source_connection, not anything else

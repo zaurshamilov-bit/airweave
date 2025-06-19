@@ -106,8 +106,8 @@ class APIKeyInDBBase(APIKeyBase):
     modified_at: datetime
     last_used_date: Optional[datetime] = None
     expiration_date: datetime
-    created_by_email: EmailStr
-    modified_by_email: EmailStr
+    created_by_email: Optional[EmailStr] = None
+    modified_by_email: Optional[EmailStr] = None
 
     class Config:
         """Pydantic config for APIKeyInDBBase."""
