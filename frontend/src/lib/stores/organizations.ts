@@ -35,7 +35,7 @@ interface OrganizationState {
   fetchUserOrganizations: () => Promise<void>;
   switchOrganization: (orgId: string) => void;
   setPrimaryOrganization: (orgId: string) => Promise<boolean>;
-  initializeOrganizations: () => Promise<void>;
+  initializeOrganizations: () => Promise<Organization[]>;
 
   // Member management actions
   inviteUserToOrganization: (orgId: string, email: string, role: string) => Promise<boolean>;
@@ -156,7 +156,7 @@ export const useOrganizationStore = create<OrganizationState>()(
         }
       },
 
-      initializeOrganizations: async () => {
+      initializeOrganizations: async (): Promise<Organization[]> => {
         try {
           set({ isLoading: true });
 
@@ -183,6 +183,8 @@ export const useOrganizationStore = create<OrganizationState>()(
             primary: currentOrg?.name,
             isPrimary: currentOrg?.is_primary
           });
+
+          return organizations;
         } catch (error) {
           console.error('Failed to initialize organizations:', error);
           set({ isLoading: false });
@@ -194,7 +196,6 @@ export const useOrganizationStore = create<OrganizationState>()(
         try {
           set({ isLoading: true });
 
-          // Get organizations directly from the new endpoint
           const response = await apiClient.get('/users/me/organizations');
 
           if (!response.ok) {

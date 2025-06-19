@@ -138,26 +138,9 @@ async def create_or_update_user(
             user_dict["auth0_id"] = auth0_user.id
 
         # Handle new user signup with Auth0 integration
-        user, signup_type = await auth0_service.handle_new_user_signup(db, user_dict)
+        user = await auth0_service.handle_new_user_signup(db, user_dict, create_org=False)
 
-        # Create API key for the user within their organization context
-        # Use the first organization if available
-        if user.user_organizations:
-            first_org = user.user_organizations[0]
-
-            async with UnitOfWork(db) as uow:
-                _ = await crud.api_key.create(
-                    db,
-                    obj_in=schemas.APIKeyCreate(name="Default API Key"),
-                    auth_context=AuthContext(
-                        user=user,
-                        organization_id=str(first_org.organization.id),
-                        auth_method="auth0" if user.auth0_id else "system",
-                    ),
-                    uow=uow,
-                )
-
-        logger.info(f"Created new user {user.email} with signup type: {signup_type}")
+        logger.info(f"Created new user {user.email}.")
         return schemas.User.model_validate(user)
 
     except Exception as e:

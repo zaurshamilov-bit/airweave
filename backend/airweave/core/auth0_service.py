@@ -1,7 +1,7 @@
 """Auth0 service for managing organization synchronization."""
 
 import uuid
-from typing import Dict, List, Tuple
+from typing import Dict, List
 from uuid import UUID
 
 from sqlalchemy import select
@@ -97,21 +97,27 @@ class Auth0Service:
                     await auth0_management_client.delete_organization(auth0_org_data["id"])
                 raise
 
-    async def handle_new_user_signup(self, db: AsyncSession, user_data: Dict) -> Tuple[User, str]:
+    async def handle_new_user_signup(
+        self, db: AsyncSession, user_data: Dict, create_org: bool = False
+    ) -> User:
         """Handle new user signup - check for Auth0 orgs or create new one.
 
         Args:
             db: Database session
             user_data: User data from signup
+            create_org: Whether to create an organization if none exists (defaults to False)
 
         Returns:
-            Tuple of (created_user, signup_type)
+            Created user
         """
         auth0_id = user_data.get("auth0_id")
 
         if not auth0_id:
-            # No Auth0 ID or Auth0 not enabled, create user with new organization (local-only)
-            return await self._create_user_with_new_org(db, user_data)
+            # No Auth0 ID or Auth0 not enabled
+            if create_org:
+                return await self._create_user_with_new_org(db, user_data)
+            else:
+                return await self._create_user_without_org(db, user_data)
 
         try:
             # Check if user has existing Auth0 organizations
@@ -124,16 +130,27 @@ class Auth0Service:
                 )
                 return await self._create_user_with_existing_orgs(db, user_data, auth0_orgs)
             else:
-                # No Auth0 orgs, create user with new organization
-                logger.info(
-                    f"User {user_data.get('email')} has no Auth0 organizations, creating new org"
-                )
-                return await self._create_user_with_new_org(db, user_data)
+                # No Auth0 orgs
+                if create_org:
+                    logger.info(
+                        f"User {user_data.get('email')} has no Auth0 organizations. "
+                        "Creating new org."
+                    )
+                    return await self._create_user_with_new_org(db, user_data)
+                else:
+                    logger.info(
+                        f"User {user_data.get('email')} has no Auth0 organizations. "
+                        "Creating user without org."
+                    )
+                    return await self._create_user_without_org(db, user_data)
 
         except Exception as e:
             logger.error(f"Failed to check Auth0 organizations for new user: {e}")
-            # Fallback to creating local organization
-            return await self._create_user_with_new_org(db, user_data)
+            # Fallback behavior
+            if create_org:
+                return await self._create_user_with_new_org(db, user_data)
+            else:
+                return await self._create_user_without_org(db, user_data)
 
     async def sync_user_organizations(self, db: AsyncSession, user: User) -> User:
         """Sync user's Auth0 organizations with local database.
@@ -217,9 +234,7 @@ class Auth0Service:
                 f"Created user-organization relationship for user {user.id} and org {local_org.id}"
             )
 
-    async def _create_user_with_new_org(
-        self, db: AsyncSession, user_data: Dict
-    ) -> Tuple[User, str]:
+    async def _create_user_with_new_org(self, db: AsyncSession, user_data: Dict) -> User:
         """Create user with a new organization."""
         try:
             # Use the existing CRUD method that creates user with organization
@@ -227,7 +242,7 @@ class Auth0Service:
             user, org = await crud.user.create_with_organization(db, obj_in=user_create)
 
             logger.info(f"Created user {user.email} with new organization {org.name}")
-            return user, "created_new_org"
+            return user
 
         except Exception as e:
             logger.error(f"Failed to create user with new organization: {e}")
@@ -235,7 +250,7 @@ class Auth0Service:
 
     async def _create_user_with_existing_orgs(
         self, db: AsyncSession, user_data: Dict, auth0_orgs: List[Dict]
-    ) -> Tuple[User, str]:
+    ) -> User:
         """Create user and sync with existing Auth0 organizations."""
         async with UnitOfWork(db) as uow:
             try:
@@ -253,12 +268,30 @@ class Auth0Service:
                 await db.refresh(user)
 
                 logger.info(f"Created user {user.email} and synced {len(auth0_orgs)} organizations")
-                return user, "synced_existing_orgs"
+                return user
 
             except Exception as e:
                 await uow.rollback()
                 logger.error(f"Failed to create user with existing organizations: {e}")
                 raise
+
+    async def _create_user_without_org(self, db: AsyncSession, user_data: Dict) -> User:
+        """Create user without an organization."""
+        try:
+            # Use the existing CRUD method that creates user without organization
+            user_create = schemas.UserCreate(**user_data)
+            user = User(**user_create.model_dump())
+            db.add(user)
+            await db.flush()  # Get the user ID
+            await db.commit()  # Commit the transaction
+            await db.refresh(user)  # Refresh to get the latest state
+
+            logger.info(f"Created user {user.email} without an organization")
+            return user
+
+        except Exception as e:
+            logger.error(f"Failed to create user without an organization: {e}")
+            raise
 
     # Member Management Methods
     async def invite_user_to_organization(

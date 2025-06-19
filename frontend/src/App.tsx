@@ -13,8 +13,6 @@ import CreateWhiteLabel from '@/pages/CreateWhiteLabel';
 import WhiteLabelDetail from '@/pages/WhiteLabelDetail';
 import WhiteLabelEdit from '@/pages/WhiteLabelEdit';
 import SemanticMcp from '@/pages/SemanticMcp';
-import { OrganizationSettings } from '@/pages/organization/OrganizationSettings';
-import { OrganizationMembers } from '@/pages/organization/OrganizationMembers';
 import { useCollectionsStore } from '@/lib/stores';
 import { NotFound } from '@/pages/NotFound';
 import { AuthGuard } from '@/components/AuthGuard';
@@ -23,6 +21,7 @@ import Callback from '@/pages/Callback';
 import { protectedPaths, publicPaths } from '@/constants/paths';
 import { AuthCallback } from '@/pages/AuthCallback';
 import { OrganizationSettingsUnified } from '@/pages/organization/OrganizationSettingsUnified';
+import NoOrganization from '@/pages/NoOrganization';
 
 function App() {
   // Initialize collections event listeners when the app loads
@@ -38,6 +37,7 @@ function App() {
         <Route path={publicPaths.login} element={<Login />} />
         <Route path={publicPaths.callback} element={<Callback />} />
         <Route path={publicPaths.semanticMcp} element={<SemanticMcp />} />
+        <Route path={publicPaths.noOrganization} element={<NoOrganization />} />
 
         {/* Auth callback routes - OUTSIDE of DashboardLayout */}
         <Route path="/auth/callback/:short_name" element={<AuthCallback />} />
