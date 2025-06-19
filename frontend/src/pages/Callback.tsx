@@ -1,14 +1,22 @@
 import { useAuth0 } from '@auth0/auth0-react';
 import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
 const Callback = () => {
-  const { isLoading: auth0Loading, isAuthenticated, error, user } = useAuth0();
+  const {
+    isLoading: auth0Loading,
+    isAuthenticated,
+    error,
+    user,
+  } = useAuth0();
   const { getToken, isLoading: authContextLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const organizationName = location.state?.appState?.organizationName;
 
   // Track if we've already attempted to sync to prevent duplicates
   const syncAttempted = useRef(false);
@@ -85,7 +93,13 @@ const Callback = () => {
     <div className="flex h-screen w-full items-center justify-center bg-background">
       <div className="flex flex-col items-center justify-center space-y-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground">Finalizing authentication...</p>
+        {organizationName ? (
+          <p className="text-muted-foreground">
+            Finalizing your membership for {organizationName}...
+          </p>
+        ) : (
+          <p className="text-muted-foreground">Finalizing authentication...</p>
+        )}
       </div>
     </div>
   );
