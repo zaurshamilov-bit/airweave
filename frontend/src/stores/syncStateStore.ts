@@ -52,7 +52,7 @@ interface SyncStateStore {
     restoreProgressFromStorage: (sourceConnectionId: string, jobId: string) => void;
 
     // Clean up all subscriptions
-    cleanup: () => void;
+    cleanup: (clearStorage?: boolean) => void;
 
     // Health check management
     startHealthCheck: () => void;
@@ -85,33 +85,56 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
             const token = await apiClient.getToken();
             const organizationId = useOrganizationStore.getState().currentOrganization?.id;
 
-            const headers: Record<string, string> = {};
-            if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
+            if (!token) {
+                console.error('Cannot subscribe to SSE: No authentication token available.');
+                return;
             }
 
-            if (organizationId) {
-                headers['X-Organization-Id'] = organizationId;
-            } else {
+            if (!organizationId) {
                 console.error('Cannot subscribe to SSE: No active organization selected.');
                 return;
             }
 
+            const headers: Record<string, string> = {
+                'Authorization': `Bearer ${token}`,
+                'X-Organization-ID': organizationId
+            };
+
             const controller = new AbortController();
 
-            // Create and add the subscription to the store *before* connecting
-            const subscription: SyncSubscription = {
-                jobId,
-                sourceConnectionId,
-                controller,
-                lastUpdate: {
+            // Check for existing progress data to preserve during subscription
+            const existingSubscription = state.activeSubscriptions.get(sourceConnectionId);
+            const storedData = syncStorageService.getProgressForSource(sourceConnectionId);
+
+            // Determine what progress data to use (priority: existing > stored > default zeros)
+            let lastUpdate: SyncProgressUpdate;
+            if (existingSubscription && existingSubscription.jobId === jobId) {
+                // Same job, preserve existing progress
+                lastUpdate = existingSubscription.lastUpdate;
+                console.log(`🔄 Preserving existing progress for ${sourceConnectionId}:`, lastUpdate);
+            } else if (storedData && storedData.jobId === jobId && storedData.status === 'active') {
+                // Different job or fresh subscription, but we have stored data for this job
+                lastUpdate = storedData.lastUpdate;
+                console.log(`💾 Using stored progress for ${sourceConnectionId}:`, lastUpdate);
+            } else {
+                // No existing data, start fresh
+                lastUpdate = {
                     entities_inserted: 0,
                     entities_updated: 0,
                     entities_deleted: 0,
                     entities_kept: 0,
                     entities_skipped: 0,
                     entities_encountered: {}
-                },
+                };
+                console.log(`🆕 Starting fresh progress for ${sourceConnectionId}`);
+            }
+
+            // Create and add the subscription to the store *before* connecting
+            const subscription: SyncSubscription = {
+                jobId,
+                sourceConnectionId,
+                controller,
+                lastUpdate,
                 lastMessageTime: Date.now(),
                 status: 'active'
             };
@@ -120,13 +143,21 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
             newSubscriptions.set(sourceConnectionId, subscription);
             set({ activeSubscriptions: newSubscriptions });
 
-            console.log(`✅ Subscribed to sync job ${jobId} for ${sourceConnectionId}`,
-                existingProgress ? 'with restored progress' : 'with fresh progress');
-
             // Use the proper API base URL from env config
             const apiBaseUrl = env.VITE_API_URL;
+            const sseUrl = `${apiBaseUrl}/sync/job/${jobId}/subscribe`;
+
+            console.log(`✅ Starting SSE subscription:`, {
+                url: sseUrl,
+                jobId,
+                sourceConnectionId,
+                hasToken: !!token,
+                organizationId,
+                headers
+            });
+
             // We don't await this call, so the UI doesn't block. It runs in the background.
-            void fetchEventSource(`${apiBaseUrl}/sync/job/${jobId}/subscribe`, {
+            void fetchEventSource(sseUrl, {
                 signal: controller.signal,
                 headers,
                 onopen: async (response) => {
@@ -136,13 +167,22 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
                     }
 
                     const status = response.status;
+                    const errorText = await response.text();
+                    console.error(`❌ SSE connection failed:`, {
+                        status,
+                        statusText: response.statusText,
+                        errorText,
+                        url: sseUrl,
+                        headers
+                    });
+
                     if (status === 401 || status === 403) {
                         apiClient.clearToken();
-                        throw new Error(`SSE authentication failed with status ${status}`);
+                        throw new Error(`SSE authentication failed with status ${status}: ${errorText}`);
                     } else if (status === 404) {
                         throw new Error(`SSE endpoint not found for job ${jobId}.`);
                     } else {
-                        throw new Error(`SSE connection failed with status ${status}: ${response.statusText}`);
+                        throw new Error(`SSE connection failed with status ${status}: ${response.statusText} - ${errorText}`);
                     }
                 },
                 onmessage: (event: EventSourceMessage) => {
@@ -295,7 +335,7 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
             const subscription: SyncSubscription = {
                 jobId,
                 sourceConnectionId,
-                eventSource: null as any, // Will be replaced when real subscription starts
+                controller: new AbortController(), // Placeholder, will be replaced by subscribe
                 lastUpdate: storedData.lastUpdate,
                 lastMessageTime: storedData.timestamp,
                 status: 'active'
@@ -315,7 +355,7 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
         }
     },
 
-    cleanup: () => {
+    cleanup: (clearStorage: boolean = false) => {
         const state = get();
 
         // Close all EventSource connections
@@ -326,27 +366,13 @@ export const useSyncStateStore = create<SyncStateStore>((set, get) => ({
         // Clear the map
         set({ activeSubscriptions: new Map() });
         get().stopHealthCheck(); // Stop health checks
-        syncStorageService.clearAll();
 
-        console.log('🧹 Cleaned up all sync subscriptions');
-    },
-
-    restoreProgressFromStorage: (sourceConnectionId: string, jobId: string) => {
-        const storedData = syncStorageService.getProgressForSource(sourceConnectionId);
-
-        if (storedData && storedData.jobId === jobId && storedData.status === 'active') {
-            const subscription: SyncSubscription = {
-                jobId,
-                sourceConnectionId,
-                controller: new AbortController(), // Placeholder, will be replaced by subscribe
-                lastUpdate: storedData.lastUpdate,
-                lastMessageTime: storedData.timestamp,
-                status: 'active'
-            };
-
-            const newSubscriptions = new Map(get().activeSubscriptions);
-            newSubscriptions.set(sourceConnectionId, subscription);
-            set({ activeSubscriptions: newSubscriptions });
+        // Only clear session storage if explicitly requested (e.g., user logout)
+        if (clearStorage) {
+            syncStorageService.clearAll();
+            console.log('🧹 Cleaned up all sync subscriptions and cleared storage');
+        } else {
+            console.log('🧹 Cleaned up all sync subscriptions (preserving storage)');
         }
     },
 

@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { SyncErrorCard } from './SyncErrorCard';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { SyncSchedule, SyncScheduleConfig, buildCronExpression, isValidCronExpression } from '@/components/sync/SyncSchedule';
-import { useSyncStateStore } from "@/stores/syncStateStore";
+import { useSyncStateStore, SyncProgressUpdate } from "@/stores/syncStateStore";
 import { syncStorageService } from "@/services/syncStorageService";
 import { deriveSyncStatus, getSyncStatusColorClass, getSyncStatusDisplayText } from "@/utils/syncStatus";
 
@@ -393,16 +393,14 @@ const SourceConnectionDetailView = ({
     // Sync state store
     const { subscribe, getProgressForSource, hasActiveSubscription, restoreProgressFromStorage } = useSyncStateStore();
 
-    // Check for stored progress immediately on mount (before effects run)
-    const [hasCheckedStorage, setHasCheckedStorage] = useState(false);
-    if (!hasCheckedStorage && sourceConnectionId) {
+    // Check for stored progress on mount
+    useEffect(() => {
         const storedData = syncStorageService.getProgressForSource(sourceConnectionId);
         if (storedData && storedData.status === 'active') {
             console.log('💾 Found stored progress on mount, restoring immediately:', storedData);
             restoreProgressFromStorage(sourceConnectionId, storedData.jobId);
         }
-        setHasCheckedStorage(true);
-    }
+    }, []); // Empty deps - only runs once on mount
 
     const liveProgress = getProgressForSource(sourceConnectionId);
 
@@ -1026,7 +1024,6 @@ const SourceConnectionDetailView = ({
         setEntityDict({});
         setNodes([]);
         setEdges([]);
-        setHasCheckedStorage(false); // Reset storage check flag
 
         // Then load new data
         loadAllData();
@@ -1034,9 +1031,36 @@ const SourceConnectionDetailView = ({
 
     // Restore saved progress when sync job data is loaded
     useEffect(() => {
+        // Handle case where job completed while page was closed
+        if (syncJob && (syncJob.status === 'completed' || syncJob.status === 'failed' || syncJob.status === 'cancelled')) {
+            const storedData = syncStorageService.getProgressForSource(sourceConnectionId);
+
+            if (storedData && storedData.jobId === syncJob.id && storedData.status === 'active') {
+                console.log('🧹 Updating stale progress for completed job:', {
+                    jobId: syncJob.id,
+                    apiStatus: syncJob.status,
+                    storedStatus: storedData.status
+                });
+
+                // Update the stored progress to reflect the completed status
+                const updatedProgress: SyncProgressUpdate = {
+                    ...storedData.lastUpdate,
+                    is_complete: syncJob.status === 'completed',
+                    is_failed: syncJob.status === 'failed'
+                };
+
+                // Save the updated progress with the correct status
+                syncStorageService.saveProgress(sourceConnectionId, syncJob.id, updatedProgress);
+
+                // Also remove from active subscriptions if present
+                if (hasActiveSubscription(sourceConnectionId)) {
+                    useSyncStateStore.getState().unsubscribe(sourceConnectionId);
+                }
+            }
+        }
         // Only restore if the API confirms the job is still in progress
         // This prevents restoring stale data if the job completed while the page was closed
-        if (syncJob?.status === 'in_progress' && syncJob.id && !liveProgress && sourceConnection?.id) {
+        else if (syncJob?.status === 'in_progress' && syncJob.id && !liveProgress && sourceConnection?.id) {
             console.log('🔄 Attempting to restore saved progress for running sync job:', syncJob.id);
 
             // Check if we have stored data for this exact job
@@ -1059,7 +1083,7 @@ const SourceConnectionDetailView = ({
                 });
             }
         }
-    }, [syncJob?.id, syncJob?.status, sourceConnectionId, liveProgress, sourceConnection?.id, restoreProgressFromStorage]);
+    }, [syncJob?.id, syncJob?.status, sourceConnectionId, liveProgress, sourceConnection?.id, restoreProgressFromStorage, hasActiveSubscription]);
 
     // Auto re-subscribe to in-progress sync jobs after page reload
     useEffect(() => {
