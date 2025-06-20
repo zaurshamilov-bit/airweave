@@ -136,10 +136,11 @@ class Auth0Service:
 
         if not auth0_id:
             # No Auth0 ID or Auth0 not enabled
-            if create_org:
-                return await self._create_user_with_new_org(db, user_data)
-            else:
-                return await self._create_user_without_org(db, user_data)
+            raise ValueError("No Auth0 ID provided")
+            # if create_org:
+            #     return await self._create_user_with_new_org(db, user_data)
+            # else:
+            #     return await self._create_user_without_org(db, user_data)
 
         try:
             # Check if user has existing Auth0 organizations

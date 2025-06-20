@@ -169,8 +169,9 @@ export const useOrganizationStore = create<OrganizationState>()(
 
           const organizations: Organization[] = await response.json();
 
-          // For initialization (login), always prefer primary organization
-          const currentOrg = selectBestOrganization(organizations, null); // Pass null to force primary selection
+          // Respect persisted organization selection if available, otherwise prefer primary organization
+          const currentOrgId = get().currentOrganization?.id;
+          const currentOrg = selectBestOrganization(organizations, currentOrgId);
 
           set({
             organizations,
@@ -180,8 +181,9 @@ export const useOrganizationStore = create<OrganizationState>()(
 
           console.log('Organizations initialized:', {
             total: organizations.length,
-            primary: currentOrg?.name,
-            isPrimary: currentOrg?.is_primary
+            selected: currentOrg?.name,
+            isPrimary: currentOrg?.is_primary,
+            wasFromPersistence: !!currentOrgId && currentOrgId === currentOrg?.id
           });
 
           return organizations;
