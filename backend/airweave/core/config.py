@@ -96,7 +96,7 @@ class Settings(BaseSettings):
 
     LOCAL_NGROK_SERVER: Optional[str] = None
 
-    RUN_ALEMBIC_MIGRATIONS: bool = False
+    RUN_ALEMBIC_MIGRATIONS: bool = True
     RUN_DB_SYNC: bool = True
 
     # Redis configuration
