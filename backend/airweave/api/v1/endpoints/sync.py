@@ -275,7 +275,7 @@ async def subscribe_sync_job(
         StreamingResponse: The streaming response
     """
     logger.info(
-        f"SSE sync subscription authenticated for user: {auth_context.user.id}, job: {job_id}"
+        f"SSE sync subscription authenticated for user: {auth_context.user.email}, job: {job_id}"
     )
 
     # Track active SSE connections
