@@ -11,6 +11,7 @@ const Callback = () => {
     isAuthenticated,
     error,
     user,
+    logout,
   } = useAuth0();
   const { getToken, isLoading: authContextLoading } = useAuth();
   const navigate = useNavigate();
@@ -30,6 +31,11 @@ const Callback = () => {
 
   // Combine both loading states
   const isLoading = auth0Loading || authContextLoading;
+
+  // Function to handle logout - just log out, don't specify returnTo
+  const handleLogout = () => {
+    logout();
+  };
 
   // Create or update user in backend when authenticated
   useEffect(() => {
@@ -90,12 +96,23 @@ const Callback = () => {
     syncUser();
   }, [isAuthenticated, user, isLoading, navigate]); // Removed getToken from dependencies
 
-  // Auto-redirect to login if there's an error
+  // Auto-logout after showing Auth0 conflict error
+  useEffect(() => {
+    if (authConflictError) {
+      const timer = setTimeout(() => {
+        logout();
+      }, 10000); // Logout after 10 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [authConflictError, logout]);
+
+  // Auto-redirect to login if there's an error (and log out first)
   useEffect(() => {
     if (error && !isLoading) {
-      navigate('/login');
+      handleLogout();
     }
-  }, [error, isLoading, navigate]);
+  }, [error, isLoading]);
 
   // Non-authenticated state - auto redirect after a short delay
   useEffect(() => {
@@ -117,7 +134,7 @@ const Callback = () => {
 
           <div className="space-y-4">
             <p className="text-muted-foreground">
-              {authConflictError.message}
+              This email is already associated with a different Auth0 account. Please try a different sign-in method or contact support.
             </p>
 
             <div className="bg-muted p-4 rounded-md">
@@ -126,9 +143,7 @@ const Callback = () => {
                 What happened?
               </h2>
               <p className="text-sm text-muted-foreground">
-                Your email address is already associated with a different Auth0 account in our system.
-                This typically occurs when you've previously signed up using a different authentication method
-                (like Google, GitHub, or email/password).
+                You previously signed up using a different authentication method (Google, GitHub, or email/password).
               </p>
             </div>
 
@@ -138,15 +153,15 @@ const Callback = () => {
                 Next steps
               </h2>
               <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• Try signing in with a different authentication method</li>
-                <li>• Contact support if you need help merging accounts</li>
-                <li>• Use a different email address to create a new account</li>
+                <li>• Try a different sign-in method</li>
+                <li>• Contact support to merge accounts</li>
+                <li>• Use a different email address</li>
               </ul>
             </div>
 
             <div className="flex space-x-3">
               <button
-                onClick={() => navigate('/login')}
+                onClick={handleLogout}
                 className="flex-1 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
               >
                 Try Different Login
