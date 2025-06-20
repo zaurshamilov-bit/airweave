@@ -100,7 +100,9 @@ class PlatformScheduler:
                         next_run = ensure_utc(cron.get_next(datetime))
 
                     # Update the sync
-                    auth_context = AuthContext(organization_id=sync.organization_id)
+                    auth_context = AuthContext(
+                        organization_id=sync.organization_id, auth_method="system"
+                    )
                     db_sync = await crud.sync.get(
                         db, id=sync.id, auth_context=auth_context, with_connections=False
                     )
@@ -257,7 +259,7 @@ class PlatformScheduler:
         # Get the latest job for this sync
         logger.debug(f"Getting latest job for sync {sync.id}")
         latest_job = await crud.sync_job.get_latest_by_sync_id(db, sync_id=sync.id)
-        auth_context = AuthContext(organization_id=sync.organization_id)
+        auth_context = AuthContext(organization_id=sync.organization_id, auth_method="system")
 
         if latest_job:
             logger.debug(
@@ -349,7 +351,7 @@ class PlatformScheduler:
         try:
             logger.debug(f"Triggering sync {sync.id} ({sync.name})")
 
-            auth_context = AuthContext(organization_id=sync.organization_id)
+            auth_context = AuthContext(organization_id=sync.organization_id, auth_method="system")
 
             # Create a new sync job with unit of work
             logger.debug(f"Creating new sync job for sync {sync.id}")
