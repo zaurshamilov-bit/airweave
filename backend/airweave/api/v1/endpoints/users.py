@@ -97,6 +97,7 @@ async def create_or_update_user(
 
     Raises:
         HTTPException: If the user is not authorized to create this user.
+        HTTPException: If a user with the same email but different auth0_id already exists.
     """
     if user_data.email != auth0_user.email:
         logger.error(f"User {user_data.email} is not authorized to create user {auth0_user.email}")
@@ -114,7 +115,29 @@ async def create_or_update_user(
         logger.info(f"User {user_data.email} not found, creating...")
 
     if existing_user:
-        # User exists - sync their Auth0 organizations
+        # Check for Auth0 ID conflicts
+        incoming_auth0_id = auth0_user.id if auth0_user else user_data.auth0_id
+
+        if (
+            existing_user.auth0_id
+            and incoming_auth0_id
+            and existing_user.auth0_id != incoming_auth0_id
+        ):
+            logger.warning(
+                f"Auth0 ID conflict for user {user_data.email}: "
+                f"existing={existing_user.auth0_id}, incoming={incoming_auth0_id}"
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "auth0_id_conflict",
+                    "message": "A user with this email already exists but with a different "
+                    "Auth0 ID. This typically happens when you use a different authentication "
+                    "method to sign up for Airweave. Please contact support for assistance.",
+                },
+            )
+
+        # User exists and no conflict - sync their Auth0 organizations
         from airweave.core.auth0_service import Auth0Service
 
         auth0_service = Auth0Service()

@@ -1,7 +1,7 @@
 import { useAuth0 } from '@auth0/auth0-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle, Mail, HelpCircle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
@@ -20,6 +20,13 @@ const Callback = () => {
 
   // Track if we've already attempted to sync to prevent duplicates
   const syncAttempted = useRef(false);
+
+  // State for handling Auth0 ID conflicts
+  const [authConflictError, setAuthConflictError] = useState<{
+    message: string;
+    existingAuth0Id: string;
+    incomingAuth0Id: string;
+  } | null>(null);
 
   // Combine both loading states
   const isLoading = auth0Loading || authContextLoading;
@@ -56,11 +63,21 @@ const Callback = () => {
           if (response.ok) {
             console.log("✅ User created/updated in backend");
           } else {
-            const errorText = await response.text();
-            console.error("❌ Failed to create/update user:", errorText);
+            const errorData = await response.json();
+            console.error("❌ Failed to create/update user:", errorData);
+
+            // Check for Auth0 ID conflict
+            if (response.status === 409 && errorData.detail?.error === 'auth0_id_conflict') {
+              setAuthConflictError({
+                message: errorData.detail.message,
+                existingAuth0Id: errorData.detail.existing_auth0_id,
+                incomingAuth0Id: errorData.detail.incoming_auth0_id,
+              });
+              return; // Don't redirect, show the error
+            }
           }
 
-          // Redirect to home regardless of sync result
+          // Redirect to home if successful or for other errors
           navigate('/');
         } catch (err) {
           console.error("❌ Error syncing user with backend:", err);
@@ -88,7 +105,81 @@ const Callback = () => {
     }
   }, [isAuthenticated, isLoading, error, navigate]);
 
-  // Loading state is the only visible UI now
+  // Show Auth0 ID conflict error
+  if (authConflictError) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <div className="max-w-md w-full mx-4 p-6 bg-card border border-border rounded-lg shadow-lg">
+          <div className="flex items-center space-x-3 mb-4">
+            <AlertTriangle className="h-8 w-8 text-destructive" />
+            <h1 className="text-xl font-semibold text-foreground">Account Conflict</h1>
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-muted-foreground">
+              {authConflictError.message}
+            </p>
+
+            <div className="bg-muted p-4 rounded-md">
+              <h2 className="font-medium text-foreground mb-2 flex items-center">
+                <HelpCircle className="h-4 w-4 mr-2" />
+                What happened?
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Your email address is already associated with a different Auth0 account in our system.
+                This typically occurs when you've previously signed up using a different authentication method
+                (like Google, GitHub, or email/password).
+              </p>
+            </div>
+
+            <div className="bg-muted p-4 rounded-md">
+              <h2 className="font-medium text-foreground mb-2 flex items-center">
+                <Mail className="h-4 w-4 mr-2" />
+                Next steps
+              </h2>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• Try signing in with a different authentication method</li>
+                <li>• Contact support if you need help merging accounts</li>
+                <li>• Use a different email address to create a new account</li>
+              </ul>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => navigate('/login')}
+                className="flex-1 bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors"
+              >
+                Try Different Login
+              </button>
+              <button
+                onClick={() => window.open('mailto:support@airweave.ai?subject=Auth0 Account Conflict', '_blank')}
+                className="flex-1 bg-secondary text-secondary-foreground px-4 py-2 rounded-md hover:bg-secondary/90 transition-colors"
+              >
+                Contact Support
+              </button>
+            </div>
+
+            {process.env.NODE_ENV === 'development' && (
+              <details className="mt-4">
+                <summary className="text-xs text-muted-foreground cursor-pointer">
+                  Debug Information (Development Only)
+                </summary>
+                <pre className="text-xs text-muted-foreground mt-2 bg-background p-2 rounded border overflow-x-auto">
+                  {JSON.stringify({
+                    existingAuth0Id: authConflictError.existingAuth0Id,
+                    incomingAuth0Id: authConflictError.incomingAuth0Id,
+                    userEmail: user?.email,
+                  }, null, 2)}
+                </pre>
+              </details>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state is the only visible UI for normal flow
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">
       <div className="flex flex-col items-center justify-center space-y-4">
