@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from uuid import UUID
 
 from airweave import crud, schemas
+from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus
 from airweave.db.session import get_db_context
@@ -64,7 +65,7 @@ class SyncJobService:
             update_data["completed_at"] = completed_at
         elif status == SyncJobStatus.FAILED:
             if failed_at:
-                update_data["failed_at"] = failed_at or datetime.now()
+                update_data["failed_at"] = failed_at or utc_now_naive()
             if error:
                 update_data["error"] = error
 
@@ -82,7 +83,7 @@ class SyncJobService:
             ),
             {
                 "status": db_status_value,
-                "modified_at": datetime.now(),
+                "modified_at": utc_now_naive(),
                 "sync_job_id": sync_job_id,
             },
         )

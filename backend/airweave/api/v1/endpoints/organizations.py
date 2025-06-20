@@ -1,6 +1,5 @@
 """API endpoints for organizations."""
 
-from datetime import datetime
 from typing import List
 from uuid import UUID
 
@@ -11,6 +10,7 @@ from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.auth0_service import auth0_service
+from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import logger
 from airweave.models.user import User
 from airweave.schemas.auth import AuthContext
@@ -273,8 +273,8 @@ async def delete_organization(
             id=organization_id,
             name="",  # Organization name is no longer available after deletion
             description="",
-            created_at=datetime.now(),  # Placeholder values
-            modified_at=datetime.now(),
+            created_at=utc_now_naive(),  # Placeholder values
+            modified_at=utc_now_naive(),
             role=user_role,
             is_primary=user_is_primary,
         )

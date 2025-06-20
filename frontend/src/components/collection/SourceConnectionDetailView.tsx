@@ -28,6 +28,7 @@ import { SyncSchedule, SyncScheduleConfig, buildCronExpression, isValidCronExpre
 import { useSyncStateStore, SyncProgressUpdate } from "@/stores/syncStateStore";
 import { syncStorageService } from "@/services/syncStorageService";
 import { deriveSyncStatus, getSyncStatusColorClass, getSyncStatusDisplayText } from "@/utils/syncStatus";
+import { utcNow, parseBackendTimestamp, calculateRuntime, formatRuntime } from "@/utils/dateTime";
 
 const nodeTypes = {
     sourceNode: SourceNode,
@@ -409,14 +410,7 @@ const SourceConnectionDetailView = ({
     // CLEAR SEPARATION: Sync Job data (from /source-connections/{id}/jobs/{job_id})
     const [syncJob, setSyncJob] = useState<SourceConnectionJob | null>(null);
 
-    // Add debug logging for re-renders
-    console.log('🔍 SourceConnectionDetailView render:', {
-        sourceConnectionId,
-        liveProgress,
-        hasLiveProgress: !!liveProgress,
-        syncJobStatus: syncJob?.status,
-        timestamp: new Date().toISOString()
-    });
+
 
     // Loading and UI state
     const [isLoading, setIsLoading] = useState(true);
@@ -457,25 +451,7 @@ const SourceConnectionDetailView = ({
         const skipped = liveProgress?.entities_skipped ?? syncJob?.entities_skipped ?? 0;
         const total = inserted + updated + kept + skipped - deleted;
 
-        console.log('📊 syncJobData computed:', {
-            liveProgress: {
-                entities_inserted: liveProgress?.entities_inserted,
-                entities_updated: liveProgress?.entities_updated,
-                entities_deleted: liveProgress?.entities_deleted,
-                entities_kept: liveProgress?.entities_kept,
-                entities_skipped: liveProgress?.entities_skipped,
-            },
-            syncJob: {
-                entities_inserted: syncJob?.entities_inserted,
-                entities_updated: syncJob?.entities_updated,
-                entities_deleted: syncJob?.entities_deleted,
-                entities_kept: syncJob?.entities_kept,
-                entities_skipped: syncJob?.entities_skipped,
-                status: syncJob?.status
-            },
-            computed: { inserted, updated, deleted, kept, skipped, total },
-            hasActiveSubscription: hasActiveSubscription(sourceConnectionId)
-        });
+
 
         return { inserted, updated, deleted, kept, skipped, total };
     }, [syncJob, liveProgress]);
@@ -488,6 +464,8 @@ const SourceConnectionDetailView = ({
             syncJob?.status
         );
     }, [liveProgress, syncJob?.status, hasActiveSubscription, sourceConnectionId]);
+
+
 
     // API CALL 1: Fetch Source Connection details (from /source-connections/{id})
     const fetchSourceConnection = async () => {
@@ -544,11 +522,18 @@ const SourceConnectionDetailView = ({
             console.log("Sync job data received:", jobData);
             setSyncJob(jobData);
 
-            // Calculate runtime for this job (using sync job timestamps)
+            // Calculate runtime for this job (using UTC parsing for backend timestamps)
             if (jobData.started_at && (jobData.completed_at || jobData.failed_at)) {
-                const endTime = jobData.completed_at || jobData.failed_at;
-                const runtime = new Date(endTime).getTime() - new Date(jobData.started_at).getTime();
-                setTotalRuntime(runtime);
+                const startTime = parseBackendTimestamp(jobData.started_at);
+                const endTime = parseBackendTimestamp(jobData.completed_at || jobData.failed_at);
+
+                if (startTime !== null && endTime !== null) {
+                    const runtime = endTime - startTime;
+                    setTotalRuntime(runtime);
+                } else {
+                    console.warn('Failed to parse job timestamps for runtime calculation');
+                    setTotalRuntime(null);
+                }
             }
 
             // Always fetch entity DAGs if we have sync_id (regardless of job data)
@@ -649,8 +634,8 @@ const SourceConnectionDetailView = ({
             // Clear the runtime from previous sync
             setTotalRuntime(null);
 
-            // Track approximate start time for immediate runtime display
-            setPendingJobStartTime(Date.now());
+            // Track approximate start time for immediate runtime display (use UTC)
+            setPendingJobStartTime(utcNow());
 
             // Also update the source connection's latest_sync_job_status to reflect the new job
             if (sourceConnection) {
@@ -868,24 +853,12 @@ const SourceConnectionDetailView = ({
     }, [syncJob?.entities_encountered, entityDags, selectedEntity, extractEntityNamesFromDags, liveProgress]);
 
     // Time formatting utilities
-    const formatTotalRuntime = (ms: number) => {
-        const seconds = Math.floor(ms / 1000);
-        const minutes = Math.floor(seconds / 60);
-        const hours = Math.floor(minutes / 60);
-
-        if (hours > 0) {
-            return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
-        } else if (minutes > 0) {
-            return `${minutes}m ${seconds % 60}s`;
-        } else {
-            return `${seconds}s`;
-        }
-    };
-
     const formatTimeSince = (dateStr: string) => {
-        const now = new Date();
-        const date = new Date(dateStr);
-        const diffMs = now.getTime() - date.getTime();
+        const now = utcNow();
+        const date = parseBackendTimestamp(dateStr);
+        if (date === null) return 'Unknown';
+
+        const diffMs = now - date;
         const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
         const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
@@ -912,7 +885,7 @@ const SourceConnectionDetailView = ({
             }
 
             const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-            const now = new Date();
+            const now = new Date(utcNow());
             const nowUtc = new Date(Date.UTC(
                 now.getUTCFullYear(),
                 now.getUTCMonth(),
@@ -1097,11 +1070,7 @@ const SourceConnectionDetailView = ({
     // Entity data processing (uses sync job data)
     useEffect(() => {
         const totalEntitiesCount = syncJobData.total;
-        console.log('📈 Total entities calculated:', {
-            totalEntitiesCount,
-            syncJobData,
-            formula: `${syncJobData.inserted} + ${syncJobData.updated} + ${syncJobData.kept} + ${syncJobData.skipped} - ${syncJobData.deleted} = ${totalEntitiesCount}`
-        });
+
         setTotalEntities(totalEntitiesCount);
     }, [syncJobData]);
 
@@ -1216,7 +1185,6 @@ const SourceConnectionDetailView = ({
                 liveProgress.entities_skipped > 0 ||
                 liveProgress.is_complete ||
                 liveProgress.is_failed)) {
-            console.log("Saving live progress to session storage", liveProgress);
             syncStorageService.saveProgress(
                 sourceConnectionId,
                 sourceConnection.latest_sync_job_id,
@@ -1242,7 +1210,6 @@ const SourceConnectionDetailView = ({
     // Clear cancelling state when we see the status change to cancelled
     useEffect(() => {
         if (derivedSyncStatus === 'cancelled' && isCancelling) {
-            console.log('🚫 Sync cancelled, clearing cancelling state');
             setIsCancelling(false);
             // Reload data to get the final state
             loadAllData();
@@ -1253,25 +1220,31 @@ const SourceConnectionDetailView = ({
     useEffect(() => {
         if (derivedSyncStatus === 'in_progress') {
             // Determine the start time:
-            // 1. Use real started_at if available
+            // 1. Use real started_at if available (parse as UTC)
             // 2. Use pendingJobStartTime if this is a new job we just started
             // 3. Fall back to current time
             let startTime: number;
 
             if (syncJob?.started_at) {
-                startTime = new Date(syncJob.started_at).getTime();
-                // Clear pending time if we have real started_at
-                if (pendingJobStartTime) {
-                    setPendingJobStartTime(null);
+                const parsedStartTime = parseBackendTimestamp(syncJob.started_at);
+                if (parsedStartTime !== null) {
+                    startTime = parsedStartTime;
+                    // Clear pending time if we have real started_at
+                    if (pendingJobStartTime) {
+                        setPendingJobStartTime(null);
+                    }
+                } else {
+                    console.warn('Failed to parse started_at timestamp:', syncJob.started_at);
+                    startTime = pendingJobStartTime || utcNow();
                 }
             } else if (pendingJobStartTime) {
                 startTime = pendingJobStartTime;
             } else {
-                startTime = Date.now();
+                startTime = utcNow();
             }
 
             const updateRuntime = () => {
-                const runtime = Date.now() - startTime;
+                const runtime = calculateRuntime(startTime);
                 setTotalRuntime(runtime);
             };
 
@@ -1288,7 +1261,7 @@ const SourceConnectionDetailView = ({
                 setPendingJobStartTime(null);
             }
         }
-    }, [derivedSyncStatus, syncJob?.started_at, syncJob?.id, pendingJobStartTime]); // Added pendingJobStartTime
+    }, [derivedSyncStatus, syncJob?.started_at, syncJob?.id, pendingJobStartTime]);
 
     // Clean up stored progress when job completes or changes
     useEffect(() => {
@@ -1297,7 +1270,6 @@ const SourceConnectionDetailView = ({
             const storedData = syncStorageService.getProgressForSource(sourceConnectionId);
 
             if (storedData && storedData.jobId === syncJob.id) {
-                console.log('🧹 Cleaning up stored progress for completed job:', syncJob.id);
                 syncStorageService.removeProgress(sourceConnectionId);
             }
         }
@@ -1360,15 +1332,7 @@ const SourceConnectionDetailView = ({
                                     <span className="capitalize text-xs">
                                         {getSyncStatusDisplayText(derivedSyncStatus)}
                                     </span>
-                                    {(() => {
-                                        console.log('Status rendering:', {
-                                            syncJobStatus: derivedSyncStatus,
-                                            liveProgress,
-                                            hasActiveSubscription: hasActiveSubscription(sourceConnectionId),
-                                            shouldShowLiveStatus: liveProgress && !liveProgress.is_complete && !liveProgress.is_failed
-                                        });
-                                        return null;
-                                    })()}
+
                                 </div>
                             </div>
 
@@ -1383,7 +1347,7 @@ const SourceConnectionDetailView = ({
                                     Runtime
                                 </div>
                                 <div className="text-base font-medium">
-                                    {totalRuntime ? formatTotalRuntime(totalRuntime) : 'N/A'}
+                                    {totalRuntime ? formatRuntime(totalRuntime) : 'N/A'}
                                 </div>
                             </div>
 

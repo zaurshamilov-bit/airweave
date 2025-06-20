@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
+from airweave.core.datetime_utils import utc_now_naive
+
 
 class APIKeyBase(BaseModel):
     """Base schema for APIKey."""
@@ -73,7 +75,7 @@ class APIKeyCreate(BaseModel):
         if v is None:
             return None
 
-        now = datetime.now(timezone.utc)
+        now = utc_now_naive()
         if v < now:
             raise ValueError("Expiration date cannot be in the past.")
         if v > now.replace(year=now.year + 1):

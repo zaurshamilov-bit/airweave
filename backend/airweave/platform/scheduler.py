@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.core.datetime_utils import utc_now, utc_now_naive
 from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus, SyncStatus
 from airweave.core.source_connection_service import source_connection_service
@@ -75,7 +76,7 @@ class PlatformScheduler:
                 return
 
             logger.debug(f"Found {len(syncs)} syncs with cron schedules")
-            now = datetime.now(timezone.utc)
+            now = utc_now()
 
             # Process each sync
             for sync in syncs:
@@ -169,7 +170,7 @@ class PlatformScheduler:
 
         while self.running:
             loop_count += 1
-            loop_start_time = datetime.now(timezone.utc)
+            loop_start_time = utc_now_naive()
             logger.debug(f"Starting scheduler loop iteration #{loop_count}")
 
             try:
@@ -178,7 +179,7 @@ class PlatformScheduler:
                 logger.error(f"Error in scheduler loop: {e}", exc_info=True)
 
             # Calculate how long this loop iteration took
-            loop_duration = (datetime.now(timezone.utc) - loop_start_time).total_seconds()
+            loop_duration = (utc_now_naive() - loop_start_time).total_seconds()
             logger.debug(
                 f"Scheduler loop iteration #{loop_count} completed in {loop_duration:.3f}s"
             )
@@ -188,7 +189,7 @@ class PlatformScheduler:
 
     async def _check_syncs(self):
         """Check for syncs that are due to run."""
-        check_start_time = datetime.now(timezone.utc)
+        check_start_time = utc_now_naive()
         logger.debug(f"Checking for due syncs at {check_start_time.isoformat()}")
 
         async with get_db_context() as db:
@@ -204,7 +205,7 @@ class PlatformScheduler:
             processed_count = 0
             triggered_count = 0
             for sync in syncs:
-                sync_start_time = datetime.now(timezone.utc)
+                sync_start_time = utc_now_naive()
                 logger.debug(f"Processing sync {sync.id} ({sync.name})")
 
                 was_triggered = await self._process_sync(db, sync)
@@ -212,10 +213,10 @@ class PlatformScheduler:
                 if was_triggered:
                     triggered_count += 1
 
-                sync_duration = (datetime.now(timezone.utc) - sync_start_time).total_seconds()
+                sync_duration = (utc_now_naive() - sync_start_time).total_seconds()
                 logger.debug(f"Processed sync {sync.id} in {sync_duration:.3f}s")
 
-            check_duration = (datetime.now(timezone.utc) - check_start_time).total_seconds()
+            check_duration = (utc_now_naive() - check_start_time).total_seconds()
             if processed_count > 0:
                 logger.debug(
                     f"Processed {processed_count} syncs, triggered {triggered_count} in "
@@ -226,13 +227,13 @@ class PlatformScheduler:
 
     async def _get_active_syncs_with_schedule(self, db: AsyncSession) -> list[schemas.Sync]:
         """Get all active syncs with cron schedules that are due to run."""
-        now = datetime.now(timezone.utc)
+        now = utc_now_naive()
         logger.debug(f"Querying for active syncs with schedules at {now.isoformat()}")
 
         # First, get syncs with next_scheduled_run in the past or null
-        query_start = datetime.now(timezone.utc)
+        query_start = utc_now_naive()
         syncs = await crud.sync.get_all_with_schedule(db)
-        query_duration = (datetime.now(timezone.utc) - query_start).total_seconds()
+        query_duration = (utc_now_naive() - query_start).total_seconds()
 
         sync_list = [schemas.SyncWithoutConnections.model_validate(sync) for sync in syncs]
         logger.debug(f"Found {len(sync_list)} candidate syncs in {query_duration:.3f}s")
@@ -287,7 +288,7 @@ class PlatformScheduler:
         logger.debug(f"Last run time for sync {sync.id}: {last_run_time.isoformat()}")
 
         # Calculate the next run time
-        now = datetime.now(timezone.utc)
+        now = utc_now_naive()
         cron = croniter(sync.cron_schedule, last_run_time)
         next_run = ensure_utc(cron.get_next(datetime))
         logger.debug(

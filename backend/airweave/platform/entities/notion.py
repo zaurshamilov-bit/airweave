@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
+from airweave.core.datetime_utils import utc_now_naive
 from airweave.platform.entities._base import ChunkEntity, FileEntity
 from airweave.platform.entities._lazy import LazyEntity
 
@@ -115,9 +116,7 @@ class NotionFileEntity(FileEntity):
     def needs_refresh(self) -> bool:
         """Check if the file URL needs to be refreshed (for Notion-hosted files)."""
         if self.file_type == "file" and self.expiry_time:
-            from datetime import datetime, timezone
-
-            return datetime.now(timezone.utc) >= self.expiry_time
+            return utc_now_naive() >= self.expiry_time
         return False
 
     def hash(self) -> str:

@@ -1,6 +1,5 @@
 """Service for data synchronization."""
 
-from datetime import datetime
 from typing import List, Optional, Union
 from uuid import UUID
 
@@ -9,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core.dag_service import dag_service
+from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus
 from airweave.core.sync_job_service import sync_job_service
@@ -105,7 +105,7 @@ class SyncService:
                 status=SyncJobStatus.FAILED,
                 auth_context=auth_context,
                 error=str(e),
-                failed_at=datetime.now(),
+                failed_at=utc_now_naive(),
             )
             raise e
 

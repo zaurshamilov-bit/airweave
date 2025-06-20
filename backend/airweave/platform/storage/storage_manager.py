@@ -3,11 +3,11 @@
 import io
 import json
 import os
-from datetime import datetime
 from pathlib import Path
 from typing import Any, BinaryIO, Dict, Optional
 from uuid import UUID
 
+from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import LoggerConfigurator
 from airweave.platform.storage.storage_client import StorageClient
 
@@ -140,7 +140,7 @@ class StorageManager:
                 "size": entity.total_size,
                 "checksum": entity.checksum,
                 "mime_type": getattr(entity, "mime_type", None),
-                "stored_at": datetime.utcnow().isoformat(),
+                "stored_at": utc_now_naive().isoformat(),
                 "fully_processed": False,  # Will be updated after chunking
             }
 
@@ -188,7 +188,7 @@ class StorageManager:
                 {
                     "fully_processed": True,
                     "chunk_count": chunk_count,
-                    "processed_at": datetime.utcnow().isoformat(),
+                    "processed_at": utc_now_naive().isoformat(),
                 }
             )
 
@@ -373,7 +373,7 @@ class StorageManager:
                 "filename": safe_filename,
                 "size": getattr(entity, "total_size", 0),
                 "checksum": getattr(entity, "checksum", None),
-                "stored_at": datetime.utcnow().isoformat(),
+                "stored_at": utc_now_naive().isoformat(),
                 "source": "CTTI",
                 "global_dedupe": True,
             }

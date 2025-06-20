@@ -16,6 +16,7 @@ export interface SyncProgressUpdate {
     is_complete?: boolean;
     is_failed?: boolean;
     error?: string;
+    started_at?: string;
 }
 
 // Individual subscription tracking

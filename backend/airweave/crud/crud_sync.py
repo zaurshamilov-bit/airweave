@@ -1,6 +1,5 @@
 """CRUD operations for syncs."""
 
-from datetime import datetime, timezone
 from typing import Any, Optional, Union
 from uuid import UUID
 
@@ -8,6 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, models, schemas
+from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.exceptions import NotFoundException
 from airweave.core.shared_models import IntegrationType, SyncStatus
 from airweave.crud._base_organization import CRUDBaseOrganization
@@ -213,7 +213,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         Returns:
             list[schemas.SyncWithoutConnections]: The syncs without connections
         """
-        now = datetime.now(timezone.utc)
+        now = utc_now_naive()
         stmt = select(Sync).where(
             (Sync.status == SyncStatus.ACTIVE)
             & (Sync.cron_schedule.is_not(None))
@@ -591,12 +591,12 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             cron_schedule = obj_in["cron_schedule"]
             if cron_schedule is not None:
                 try:
-                    from datetime import datetime, timezone
+                    from datetime import datetime
 
                     from croniter import croniter
 
                     # Create a croniter instance with the cron expression
-                    base = datetime.now(timezone.utc)
+                    base = utc_now_naive()
                     iter = croniter(cron_schedule, base)
 
                     # Get the next run time

@@ -1,9 +1,9 @@
 """Module for data synchronization with improved architecture."""
 
-from datetime import datetime
 from typing import Optional
 
 from airweave import schemas
+from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.shared_models import SyncJobStatus
 from airweave.core.sync_job_service import sync_job_service
 from airweave.platform.sync.context import SyncContext
@@ -71,7 +71,7 @@ class SyncOrchestrator:
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.IN_PROGRESS,
             auth_context=self.sync_context.auth_context,
-            started_at=datetime.now(),
+            started_at=utc_now_naive(),
         )
 
     async def _process_entities(self) -> None:
@@ -129,7 +129,7 @@ class SyncOrchestrator:
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.COMPLETED,
             auth_context=self.sync_context.auth_context,
-            completed_at=datetime.now(),
+            completed_at=utc_now_naive(),
             stats=stats,
         )
 
@@ -150,6 +150,6 @@ class SyncOrchestrator:
             status=SyncJobStatus.FAILED,
             auth_context=self.sync_context.auth_context,
             error=str(error),
-            failed_at=datetime.now(),
+            failed_at=utc_now_naive(),
             stats=stats,
         )

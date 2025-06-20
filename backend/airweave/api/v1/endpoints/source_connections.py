@@ -1,6 +1,5 @@
 """API endpoints for managing source connections."""
 
-from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -10,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
+from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus
 from airweave.core.source_connection_service import source_connection_service
@@ -402,7 +402,7 @@ async def cancel_source_connection_job(
                         status=SyncJobStatus.CANCELLED,
                         auth_context=auth_context,
                         error="Job cancelled by user",
-                        failed_at=datetime.now(),  # Using failed_at for cancelled timestamp
+                        failed_at=utc_now_naive(),  # Using failed_at for cancelled timestamp
                     )
         except Exception as e:
             logger.error(f"Error cancelling Temporal workflow: {e}")
@@ -415,7 +415,7 @@ async def cancel_source_connection_job(
             status=SyncJobStatus.CANCELLED,
             auth_context=auth_context,
             error="Job cancelled by user",
-            failed_at=datetime.now(),  # Using failed_at for cancelled timestamp
+            failed_at=utc_now_naive(),  # Using failed_at for cancelled timestamp
         )
 
     # Fetch the updated job

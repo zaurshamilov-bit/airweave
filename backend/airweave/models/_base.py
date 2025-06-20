@@ -1,21 +1,20 @@
 """Base models for the application."""
 
 import uuid
-from datetime import datetime
 
 from sqlalchemy import UUID, Column, DateTime, ForeignKey, String
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import DeclarativeBase
+
+from airweave.core.datetime_utils import utc_now_naive
 
 
 class Base(DeclarativeBase):
     """Base class for all models."""
 
     id = Column(UUID, primary_key=True, default=uuid.uuid4, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    modified_at = Column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
-    )
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False)
+    modified_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive, nullable=False)
 
 
 class OrganizationBase(Base):
