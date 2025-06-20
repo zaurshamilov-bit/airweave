@@ -277,7 +277,7 @@ async def subscribe_sync_job(
     logger.info(f"SSE sync subscription authenticated for user: {auth_context}, job: {job_id}")
 
     # Track active SSE connections
-    connection_id = f"{auth_context.user.id}:{job_id}:{asyncio.get_event_loop().time()}"
+    connection_id = f"{auth_context}:{job_id}:{asyncio.get_event_loop().time()}"
 
     # Get a new pubsub instance subscribed to this job
     pubsub = await sync_pubsub.subscribe(job_id)
