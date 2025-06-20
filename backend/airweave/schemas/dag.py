@@ -56,8 +56,8 @@ class DagNode(DagNodeBase):
     id: UUID
     dag_id: UUID
     organization_id: UUID
-    created_by_email: str
-    modified_by_email: str
+    created_by_email: Optional[EmailStr] = None
+    modified_by_email: Optional[EmailStr] = None
 
     class Config:
         """Pydantic config."""

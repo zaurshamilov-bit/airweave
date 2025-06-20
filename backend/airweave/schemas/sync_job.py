@@ -61,8 +61,8 @@ class SyncJobInDBBase(SyncJobBase):
     organization_id: UUID
     created_by_email: EmailStr
     modified_by_email: EmailStr
-    created_at: datetime
-    modified_at: datetime
+    created_at: Optional[datetime] = None
+    modified_at: Optional[datetime] = None
     sync_name: Optional[str] = Field(
         None, description="Name of the sync, populated from join query"
     )
@@ -112,8 +112,8 @@ class SourceConnectionJob(BaseModel):
     organization_id: UUID
     created_by_email: Optional[EmailStr] = None
     modified_by_email: Optional[EmailStr] = None
-    created_at: datetime
-    modified_at: datetime
+    created_at: Optional[datetime] = None
+    modified_at: Optional[datetime] = None
     status: SyncJobStatus = SyncJobStatus.PENDING
     entities_inserted: Optional[int] = 0
     entities_updated: Optional[int] = 0
