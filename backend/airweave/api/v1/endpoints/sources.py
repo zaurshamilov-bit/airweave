@@ -19,7 +19,7 @@ async def read_source(
     *,
     db: AsyncSession = Depends(deps.get_db),
     short_name: str,
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: schemas.AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Source:
     """Get source by id.
 
@@ -27,7 +27,7 @@ async def read_source(
     ----
         db (AsyncSession): The database session.
         short_name (str): The short name of the source.
-        user (schemas.User): The current user.
+        auth_context (schemas.AuthContext): The current auth context.
 
     Returns:
     -------
@@ -106,7 +106,7 @@ async def read_source(
 async def read_sources(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    user: schemas.User = Depends(deps.get_user),
+    auth_context: schemas.AuthContext = Depends(deps.get_auth_context),
 ) -> list[schemas.Source]:
     """Get all sources with their authentication fields."""
     logger.info("Starting read_sources endpoint")

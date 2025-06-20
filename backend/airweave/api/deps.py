@@ -104,7 +104,7 @@ async def _validate_organization_access(
 
 async def get_auth_context(
     db: AsyncSession = Depends(get_db),
-    x_api_key: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     x_organization_id: Optional[str] = Header(None, alias="X-Organization-ID"),
     auth0_user: Optional[Auth0User] = Depends(auth0.get_user),
 ) -> AuthContext:
@@ -161,7 +161,6 @@ async def get_auth_context(
 
 async def get_user(
     db: AsyncSession = Depends(get_db),
-    x_organization_id: Optional[str] = Header(None, alias="X-Organization-ID"),
     auth0_user: Optional[Auth0User] = Depends(auth0.get_user),
 ) -> schemas.User:
     """Retrieve user from super user from database.
