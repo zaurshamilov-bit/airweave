@@ -779,6 +779,7 @@ const Collections = () => {
                     {/* Render SourceConnectionDetailView when a connection is selected */}
                     {selectedConnection && (
                         <SourceConnectionDetailView
+                            key={selectedConnection.id}
                             sourceConnectionId={selectedConnection.id}
                         />
                     )}
