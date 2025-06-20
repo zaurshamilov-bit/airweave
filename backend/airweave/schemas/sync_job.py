@@ -59,8 +59,8 @@ class SyncJobInDBBase(SyncJobBase):
 
     id: UUID
     organization_id: UUID
-    created_by_email: EmailStr
-    modified_by_email: EmailStr
+    created_by_email: Optional[EmailStr] = None
+    modified_by_email: Optional[EmailStr] = None
     created_at: Optional[datetime] = None
     modified_at: Optional[datetime] = None
     sync_name: Optional[str] = Field(
