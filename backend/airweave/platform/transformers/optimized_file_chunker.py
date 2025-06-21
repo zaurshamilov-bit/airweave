@@ -210,6 +210,25 @@ async def optimized_file_chunker(file: FileEntity) -> list[ParentEntity | ChunkE
             if not chunk_text.strip():
                 continue
 
+            # Prepare chunk metadata with web-specific information if available
+            chunk_metadata = {
+                "chunk_index": i,
+                "total_chunks": len(final_chunk_texts),
+            }
+
+            # If this is a WebFileEntity, add web-specific metadata
+            md_parent_url = None
+            if hasattr(file, "original_url") and file.original_url:
+                md_parent_url = file.original_url
+                chunk_metadata.update(
+                    {
+                        "original_url": file.original_url,
+                        "web_title": getattr(file, "web_title", None),
+                        "web_description": getattr(file, "web_description", None),
+                        "crawl_metadata": getattr(file, "crawl_metadata", {}),
+                    }
+                )
+
             chunk = FileChunkClass(
                 name=f"{file.name} - Chunk {i + 1}",
                 entity_id=file.entity_id,
@@ -220,10 +239,8 @@ async def optimized_file_chunker(file: FileEntity) -> list[ParentEntity | ChunkE
                 md_type="text",
                 md_position=i,
                 md_parent_title=file.name,
-                metadata={
-                    "chunk_index": i,
-                    "total_chunks": len(final_chunk_texts),
-                },
+                md_parent_url=md_parent_url,  # Set the parent URL
+                metadata=chunk_metadata,  # Include web metadata
             )
             produced_entities.append(chunk)
 
