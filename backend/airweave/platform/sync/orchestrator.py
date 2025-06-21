@@ -1,5 +1,6 @@
 """Module for data synchronization with improved architecture."""
 
+import asyncio
 from typing import Optional
 
 from airweave import schemas
@@ -88,6 +89,7 @@ class SyncOrchestrator:
         )
 
         stream_error: Optional[Exception] = None
+        pending_tasks: set[asyncio.Task] = set()
 
         try:
             async with AsyncSourceStream(
@@ -102,24 +104,68 @@ class SyncOrchestrator:
                         await self.sync_context.progress.increment("skipped")
                         continue
 
-                    # Wait for a worker slot before processing
-                    # This creates natural backpressure - we only pull the next entity
-                    # when we have capacity to process it
-                    async with self.worker_pool.semaphore:
-                        await self.entity_processor.process(
-                            entity=entity,
-                            source_node=source_node,
-                            sync_context=self.sync_context,
-                        )
+                    # Submit entity processing to worker pool
+                    # This creates a task that runs concurrently with others
+                    task = await self.worker_pool.submit(
+                        self.entity_processor.process,
+                        entity=entity,
+                        source_node=source_node,
+                        sync_context=self.sync_context,
+                    )
+                    pending_tasks.add(task)
+
+                    # Clean up completed tasks periodically to avoid memory buildup
+                    if len(pending_tasks) >= self.worker_pool.max_workers:
+                        pending_tasks = await self._handle_completed_tasks(pending_tasks)
 
         except Exception as e:
             stream_error = e
             self.sync_context.logger.error(f"Error during entity streaming: {e}")
+            # Cancel all pending tasks
+            for task in pending_tasks:
+                task.cancel()
             raise
 
         finally:
-            # No need to wait for completion - all processing is done inline
+            # Wait for all remaining tasks to complete
+            await self._wait_for_remaining_tasks(pending_tasks)
             await self.sync_context.progress.finalize(is_complete=(stream_error is None))
+
+    async def _handle_completed_tasks(self, pending_tasks: set[asyncio.Task]) -> set[asyncio.Task]:
+        """Handle completed tasks and check for exceptions.
+
+        Args:
+            pending_tasks: Set of pending tasks
+
+        Returns:
+            Updated set of pending tasks with completed ones removed
+        """
+        completed, pending_tasks = await asyncio.wait(
+            pending_tasks, return_when=asyncio.FIRST_COMPLETED
+        )
+        # Check for exceptions in completed tasks
+        for task in completed:
+            if task.exception():
+                raise task.exception()
+        return pending_tasks
+
+    async def _wait_for_remaining_tasks(self, pending_tasks: set[asyncio.Task]) -> None:
+        """Wait for all remaining tasks to complete and handle exceptions.
+
+        Args:
+            pending_tasks: Set of pending tasks to wait for
+        """
+        if pending_tasks:
+            self.sync_context.logger.info(
+                f"Waiting for {len(pending_tasks)} remaining tasks to complete"
+            )
+            done, _ = await asyncio.wait(pending_tasks)
+            # Check for exceptions in completed tasks
+            for task in done:
+                if not task.cancelled() and task.exception():
+                    self.sync_context.logger.error(
+                        f"Task failed with exception: {task.exception()}"
+                    )
 
     async def _complete_sync(self) -> None:
         """Mark sync job as completed with final statistics."""
