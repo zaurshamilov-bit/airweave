@@ -58,7 +58,7 @@ class RunSourceConnectionWorkflow:
                     user_dict,
                     access_token,
                 ],
-                start_to_close_timeout=timedelta(hours=1),  # 1 hour timeout for sync
+                start_to_close_timeout=timedelta(days=7),
                 heartbeat_timeout=timedelta(minutes=2),  # Fail if no heartbeat for 2 minutes
                 retry_policy=RetryPolicy(
                     initial_interval=timedelta(seconds=1),
