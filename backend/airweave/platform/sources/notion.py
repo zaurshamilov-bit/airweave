@@ -7,7 +7,7 @@ responses to entity objects.
 
 import asyncio
 from datetime import datetime
-from typing import Any, AsyncGenerator, Dict, List, Optional, Set, Tuple
+from typing import Any, AsyncGenerator, ClassVar, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
 import httpx
@@ -45,6 +45,11 @@ class NotionSource(BaseSource):
     RATE_LIMIT_PERIOD = 1.0  # Time period in seconds
     MAX_RETRIES = 3
 
+    # Class-level shared rate limiter
+    _shared_rate_limiter: ClassVar[Optional[asyncio.Semaphore]] = None
+    _shared_request_times: ClassVar[List[float]] = []
+    _shared_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
+
     @classmethod
     async def create(cls, credentials, config: Optional[Dict[str, Any]] = None) -> "NotionSource":
         """Create a new Notion source."""
@@ -52,6 +57,37 @@ class NotionSource(BaseSource):
         instance = cls()
         instance.access_token = credentials.access_token
         return instance
+
+    @classmethod
+    async def _get_shared_rate_limiter(cls):
+        """Get or create the shared rate limiter for all Notion instances."""
+        if cls._shared_rate_limiter is None:
+            cls._shared_rate_limiter = asyncio.Semaphore(cls.RATE_LIMIT_REQUESTS)
+        return cls._shared_rate_limiter
+
+    @classmethod
+    async def _shared_wait_for_rate_limit(cls):
+        """Shared rate limiting across all Notion instances."""
+        async with cls._shared_lock:
+            current_time = asyncio.get_event_loop().time()
+
+            # Remove old request times
+            cls._shared_request_times = [
+                t for t in cls._shared_request_times if current_time - t < cls.RATE_LIMIT_PERIOD
+            ]
+
+            if len(cls._shared_request_times) >= cls.RATE_LIMIT_REQUESTS:
+                sleep_time = cls._shared_request_times[0] + cls.RATE_LIMIT_PERIOD - current_time
+                if sleep_time > 0:
+                    await asyncio.sleep(sleep_time)
+
+                # Clean up again after waiting
+                current_time = asyncio.get_event_loop().time()
+                cls._shared_request_times = [
+                    t for t in cls._shared_request_times if current_time - t < cls.RATE_LIMIT_PERIOD
+                ]
+
+            cls._shared_request_times.append(current_time)
 
     def __init__(self):
         """Initialize rate limiting state and tracking."""
@@ -1319,53 +1355,28 @@ class NotionSource(BaseSource):
         return entity
 
     def _create_content_fetcher(self, access_token: str, rate_limit_config: dict):
-        """Create a self-contained content fetcher that creates its own client."""
+        """Create a content fetcher that uses the shared rate limiter."""
 
         async def fetch_content(page_id: str, breadcrumbs: List[Breadcrumb]) -> dict:
-            """Fetch page content with a new client instance."""
+            """Fetch page content with shared rate limiting."""
             async with httpx.AsyncClient() as client:
                 headers = {
                     "Authorization": f"Bearer {access_token}",
                     "Notion-Version": "2022-06-28",
                 }
 
-                # Create rate limiter
-                rate_limiter = self._create_rate_limiter(rate_limit_config)
-
-                # Create request helper
+                # Create request helper with shared rate limiting
                 async def make_request(method: str, url: str, **kwargs):
-                    await rate_limiter()
+                    await NotionSource._shared_wait_for_rate_limit()  # Use shared rate limiter
                     response = await getattr(client, method.lower())(url, headers=headers, **kwargs)
                     response.raise_for_status()
                     return response.json()
 
                 # Fetch all blocks and aggregate content
                 result = await self._fetch_and_aggregate_blocks(make_request, page_id, breadcrumbs)
-
                 return result
 
         return fetch_content
-
-    def _create_rate_limiter(self, rate_limit_config: dict):
-        """Create a rate limiter function."""
-        request_times = []
-        lock = asyncio.Lock()
-
-        async def rate_limit():
-            async with lock:
-                current_time = asyncio.get_event_loop().time()
-                request_times[:] = [
-                    t for t in request_times if current_time - t < rate_limit_config["period"]
-                ]
-
-                if len(request_times) >= rate_limit_config["requests_per_second"]:
-                    sleep_time = request_times[0] + rate_limit_config["period"] - current_time
-                    if sleep_time > 0:
-                        await asyncio.sleep(sleep_time)
-
-                request_times.append(asyncio.get_event_loop().time())
-
-        return rate_limit
 
     async def _fetch_and_aggregate_blocks(
         self, make_request, page_id: str, breadcrumbs: List[Breadcrumb]
