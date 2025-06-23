@@ -10,6 +10,7 @@ from airweave.api.v1.endpoints import (
     destinations,
     embedding_models,
     entities,
+    file_retrieval,
     health,
     organizations,
     source_connections,
@@ -42,6 +43,7 @@ api_router.include_router(white_label.router, prefix="/white-labels", tags=["whi
 api_router.include_router(dag.router, prefix="/dag", tags=["dag"])
 api_router.include_router(entities.router, prefix="/entities", tags=["entities"])
 api_router.include_router(transformers.router, prefix="/transformers", tags=["transformers"])
+api_router.include_router(file_retrieval.router, prefix="/files", tags=["files"])
 
 # Only include cursor development endpoints if LOCAL_CURSOR_DEVELOPMENT is enabled
 if settings.LOCAL_CURSOR_DEVELOPMENT:

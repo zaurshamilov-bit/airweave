@@ -4,7 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
-from typing import Any, BinaryIO, Dict, Optional
+from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from airweave.core.datetime_utils import utc_now_naive
@@ -454,6 +454,185 @@ class StorageManager:
                 },
             )
             return None
+
+    async def download_ctti_file(
+        self,
+        entity_id: str,
+        output_path: Optional[str] = None,
+        create_dirs: bool = True,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Download a CTTI file from Azure storage based on entity ID.
+
+        This method retrieves CTTI clinical trial markdown files from the global
+        'aactmarkdowns' container in Azure storage.
+
+        Args:
+            entity_id: The CTTI entity ID (e.g., "CTTI:study:NCT00000001")
+            output_path: Optional path to save the file. If not provided, returns content only.
+                        Can be a directory (file will be named after entity) or full file path.
+            create_dirs: Whether to create parent directories if they don't exist (default: True)
+
+        Returns:
+            A tuple of (content, file_path):
+            - content: The markdown content as a string, or None if not found
+            - file_path: The path where the file was saved, or None if output_path not provided
+
+        Raises:
+            ValueError: If the entity_id is not a valid CTTI entity ID
+            OSError: If there are file system errors when saving
+        """
+        # Validate entity ID format
+        if not entity_id or not entity_id.startswith("CTTI:"):
+            raise ValueError(
+                f"Invalid CTTI entity ID: '{entity_id}'. "
+                "Expected format: 'CTTI:study:NCT...' or similar"
+            )
+
+        logger.info(f"Downloading CTTI file for entity: {entity_id}")
+
+        try:
+            # Check if file exists first
+            if not await self.check_ctti_file_exists(entity_id):
+                logger.warning(
+                    "CTTI file not found in storage",
+                    extra={
+                        "entity_id": entity_id,
+                        "container": "aactmarkdowns",
+                    },
+                )
+                return None, None
+
+            # Retrieve content from storage
+            content = await self.get_ctti_file_content(entity_id)
+
+            if content is None:
+                logger.error("Failed to retrieve CTTI file content", extra={"entity_id": entity_id})
+                return None, None
+
+            # If no output path specified, just return content
+            if not output_path:
+                logger.info(
+                    "CTTI file retrieved successfully",
+                    extra={
+                        "entity_id": entity_id,
+                        "content_length": len(content),
+                        "output": "memory_only",
+                    },
+                )
+                return content, None
+
+            # Determine output file path
+            output_file_path = self._determine_ctti_output_path(entity_id, output_path)
+
+            # Create parent directories if needed
+            if create_dirs:
+                Path(output_file_path).parent.mkdir(parents=True, exist_ok=True)
+
+            # Save content to file
+            with open(output_file_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            logger.info(
+                "CTTI file saved successfully",
+                extra={
+                    "entity_id": entity_id,
+                    "content_length": len(content),
+                    "output_path": output_file_path,
+                },
+            )
+
+            return content, output_file_path
+
+        except Exception as e:
+            logger.error(
+                "Error downloading CTTI file",
+                extra={
+                    "entity_id": entity_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
+            raise
+
+    async def download_ctti_files_batch(
+        self,
+        entity_ids: List[str],
+        output_dir: Optional[str] = None,
+        create_dirs: bool = True,
+        continue_on_error: bool = True,
+    ) -> Dict[str, Tuple[Optional[str], Optional[str]]]:
+        """Download multiple CTTI files in batch.
+
+        Args:
+            entity_ids: List of CTTI entity IDs to download
+            output_dir: Optional directory to save files. If not provided, returns content only.
+            create_dirs: Whether to create the output directory if it doesn't exist
+            continue_on_error: Whether to continue downloading if one file fails
+
+        Returns:
+            Dictionary mapping entity_id to (content, file_path) tuples.
+            Failed downloads will have (None, None) values.
+        """
+        results = {}
+
+        logger.info(
+            f"Starting batch download of {len(entity_ids)} CTTI files",
+            extra={"output_dir": output_dir or "memory_only"},
+        )
+
+        for entity_id in entity_ids:
+            try:
+                content, file_path = await self.download_ctti_file(
+                    entity_id, output_dir, create_dirs=create_dirs
+                )
+                results[entity_id] = (content, file_path)
+
+            except Exception as e:
+                logger.error(
+                    "Failed to download CTTI file in batch",
+                    extra={
+                        "entity_id": entity_id,
+                        "error": str(e),
+                    },
+                )
+                results[entity_id] = (None, None)
+
+                if not continue_on_error:
+                    raise
+
+        # Log summary
+        successful = sum(1 for content, _ in results.values() if content is not None)
+        logger.info(
+            "Batch download completed",
+            extra={
+                "total": len(entity_ids),
+                "successful": successful,
+                "failed": len(entity_ids) - successful,
+            },
+        )
+
+        return results
+
+    def _determine_ctti_output_path(self, entity_id: str, output_path: str) -> str:
+        """Determine the actual output file path for CTTI files.
+
+        Args:
+            entity_id: The CTTI entity ID
+            output_path: The provided output path (file or directory)
+
+        Returns:
+            The full file path where the content should be saved
+        """
+        path = Path(output_path)
+
+        # If output_path is a directory or ends with /, generate filename
+        if path.is_dir() or output_path.endswith(os.sep):
+            # Generate safe filename from entity_id
+            safe_filename = entity_id.replace(":", "_").replace("/", "_") + ".md"
+            return os.path.join(output_path, safe_filename)
+
+        # Otherwise use the provided path as-is
+        return output_path
 
 
 # Global instance
