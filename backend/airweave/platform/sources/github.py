@@ -83,6 +83,7 @@ class GitHubSource(BaseSource):
         retry=retry_if_exception_type(httpx.HTTPError),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         stop=stop_after_attempt(3),
+        reraise=True,
     )
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict[str, Any]] = None

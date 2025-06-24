@@ -100,7 +100,9 @@ class JiraSource(BaseSource):
         logger.info(f"Initialized Jira source with base URL: {instance.base_url}")
         return instance
 
-    @tenacity.retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @tenacity.retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
+    )
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Any:
         """Make an authenticated GET request to the Jira REST API."""
         logger.debug(f"Making authenticated request to {url}")

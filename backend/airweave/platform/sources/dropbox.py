@@ -52,7 +52,9 @@ class DropboxSource(BaseSource):
 
         return instance
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
+    )
     async def _post_with_auth(
         self, client: httpx.AsyncClient, url: str, json_data: Dict = None
     ) -> Dict:

@@ -38,7 +38,9 @@ class SlackSource(BaseSource):
         instance.access_token = credentials.access_token
         return instance
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
+    )
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict] = None
     ) -> Dict:

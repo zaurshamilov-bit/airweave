@@ -60,6 +60,7 @@ class GoogleDriveSource(BaseSource):
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((httpx.ConnectTimeout, httpx.ReadTimeout)),
+        reraise=True,
     )
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict] = None

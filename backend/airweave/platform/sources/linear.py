@@ -114,7 +114,9 @@ class LinearSource(BaseSource):
             # Record this request
             self._request_times.append(current_time)
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
+    )
     async def _post_with_auth(self, client: httpx.AsyncClient, query: str) -> Dict:
         """Send authenticated GraphQL query to Linear API with rate limiting.
 

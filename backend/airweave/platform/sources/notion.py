@@ -143,6 +143,7 @@ class NotionSource(BaseSource):
         retry=retry_if_exception_type((TimeoutException, ReadTimeout)),
         stop=stop_after_attempt(MAX_RETRIES),
         wait=wait_exponential(multiplier=1, min=4, max=10),
+        reraise=True,
     )
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> dict:
         """Make an authenticated GET request to the Notion API."""
@@ -175,6 +176,7 @@ class NotionSource(BaseSource):
         retry=retry_if_exception_type((TimeoutException, ReadTimeout)),
         stop=stop_after_attempt(MAX_RETRIES),
         wait=wait_exponential(multiplier=1, min=4, max=10),
+        reraise=True,
     )
     async def _post_with_auth(self, client: httpx.AsyncClient, url: str, json_data: dict) -> dict:
         """Make an authenticated POST request to the Notion API."""

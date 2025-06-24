@@ -54,7 +54,9 @@ class ElasticsearchSource(BaseSource):
         instance.fields = credentials.fields
         return instance
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
+    )
     async def _get(
         self,
         client: httpx.AsyncClient,
@@ -67,7 +69,9 @@ class ElasticsearchSource(BaseSource):
         response.raise_for_status()
         return response.json()
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
+    )
     async def _post(self, client: httpx.AsyncClient, path: str, json_body: Dict[str, Any]) -> Any:
         """Make an authenticated POST request to the Elasticsearch API."""
         headers = (
