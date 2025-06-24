@@ -1429,7 +1429,7 @@ class NotionSource(BaseSource):
 
                 except Exception as e:
                     logger.error(f"Error fetching blocks for {block_id}: {str(e)}")
-                    break
+                    raise e
 
         # Start fetching from the page
         await fetch_blocks(page_id)
