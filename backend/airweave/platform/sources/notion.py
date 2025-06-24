@@ -1389,9 +1389,6 @@ class NotionSource(BaseSource):
         blocks_count = 0
         max_depth = 0
 
-        # Create notion instance for formatting
-        notion_source = NotionSource()
-
         async def fetch_blocks(block_id: str, depth: int = 0):
             nonlocal blocks_count, max_depth
 
@@ -1411,9 +1408,7 @@ class NotionSource(BaseSource):
                         max_depth = max(max_depth, depth)
 
                         # Format block content
-                        block_result = await notion_source._format_block_content(
-                            block, depth, breadcrumbs
-                        )
+                        block_result = await self._format_block_content(block, depth, breadcrumbs)
 
                         if block_result["content"]:
                             content_parts.append(block_result["content"])

@@ -48,6 +48,7 @@ temporalio = "^1.8.0"
 azure-storage-blob = "^12.25.1"
 azure-identity = "^1.23.0"
 posthog = "^5.4.0"
+aiolimiter = "^1.1.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

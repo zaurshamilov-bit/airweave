@@ -3,8 +3,10 @@
 import asyncio
 from typing import List, Optional
 
+from aiolimiter import AsyncLimiter
 from openai import AsyncOpenAI
 from pydantic import Field
+from tiktoken import get_encoding
 
 from airweave.core.config import settings
 from airweave.core.logging import logger
@@ -15,6 +17,9 @@ from ._base import BaseEmbeddingModel
 
 # Global semaphore for OpenAI API rate limiting
 _openai_semaphore: Optional[asyncio.Semaphore] = None
+
+# One limiter for the whole process – 5M TPM, 0.5M TP10s gives big smoothing buffer
+_tpm_limiter: AsyncLimiter | None = None
 
 
 @embedding_model(
@@ -38,6 +43,13 @@ class OpenAIText2Vec(BaseEmbeddingModel):
     def __init__(self, **kwargs):
         """Initialize the OpenAI Text2Vec model with a shared client."""
         super().__init__(**kwargs)
+        global _openai_semaphore, _tpm_limiter
+
+        _openai_semaphore = asyncio.Semaphore(getattr(settings, "OPENAI_MAX_CONCURRENT", 20))
+
+        # 5 000 000 tokens / 60 s  ≈ 83 333 TPs
+        if _tpm_limiter is None:
+            _tpm_limiter = AsyncLimiter(5_000_000, time_period=60)
 
         # Create a single shared client with extended timeout for high concurrency
         # Default is 10 minutes, but we extend it for reliability with 100 concurrent workers
@@ -48,13 +60,27 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         )
         logger.info("Created shared OpenAI client with 20 minute timeout")
 
-        # Initialize rate limiting semaphore (limit concurrent OpenAI requests)
-        global _openai_semaphore
-        if _openai_semaphore is None:
-            # Limit concurrent OpenAI requests to prevent API overload
-            max_concurrent = getattr(settings, "OPENAI_MAX_CONCURRENT", 20)
-            _openai_semaphore = asyncio.Semaphore(max_concurrent)
-            logger.info(f"Initialized OpenAI rate limiting to {max_concurrent} concurrent requests")
+    @staticmethod
+    def _count_tokens(txt: str) -> int:  # ~1 µs – negligible
+        enc = get_encoding("cl100k_base")
+        return len(enc.encode(txt))
+
+    async def _rate_limited_embed(self, batch: list[str], model: str, encoding_format: str):
+        """Single OpenAI call, guarded by concurrency AND token bucket."""
+        global _tpm_limiter, _openai_semaphore
+
+        needed = sum(self._count_tokens(t) for t in batch)
+        # Acquire the required token budget before proceeding; this blocks until enough
+        # capacity is available. aiolimiter returns immediately once the budget can be
+        # taken – no explicit release is required because the limiter refunds capacity
+        # automatically over ``time_period`` seconds.
+
+        await _tpm_limiter.acquire(needed)
+
+        async with _openai_semaphore:
+            return await self._client.embeddings.create(
+                input=batch, model=model, encoding_format=encoding_format
+            )
 
     async def embed(
         self,
@@ -95,11 +121,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         cpu_start = loop.time()
         try:
             # Wait for the API call to complete with await
-            response = await self._client.embeddings.create(
-                input=text,
-                model=used_model,
-                encoding_format=encoding_format,
-            )
+            response = await self._rate_limited_embed([text], used_model, encoding_format)
 
             embedding = response.data[0].embedding
             cpu_elapsed = loop.time() - cpu_start
@@ -269,37 +291,18 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         self, batch: List[str], model: str, encoding_format: str, context_prefix: str
     ) -> List[List[float]]:
         """Process a single batch of texts."""
-        global _openai_semaphore
-
         loop = asyncio.get_event_loop()
-        batch_start = loop.time()
-
+        t0 = loop.time()
         try:
-            # Use global rate limiter
-            async with _openai_semaphore:
-                max_concurrent = getattr(settings, "OPENAI_MAX_CONCURRENT", 20)
-                logger.info(
-                    f"🔗 OPENAI_BATCH_API_CALL [{context_prefix}] "
-                    f"Processing batch of {len(batch)} texts "
-                    f"(active: {max_concurrent - _openai_semaphore._value}/{max_concurrent})"
-                )
-
-                response = await self._client.embeddings.create(
-                    input=batch,
-                    model=model,
-                    encoding_format=encoding_format,
-                )
-
-            batch_embeddings = [embedding_data.embedding for embedding_data in response.data]
-            batch_elapsed = loop.time() - batch_start
-
+            response = await self._rate_limited_embed(batch, model, encoding_format)
+            embeddings = [e.embedding for e in response.data]
             logger.info(
-                f"✅ OPENAI_BATCH_SUCCESS [{context_prefix}] "
-                f"Batch completed in {batch_elapsed:.2f}s"
+                "✅ OPENAI_BATCH_SUCCESS [%s] %d tokens, %.2fs",
+                context_prefix,
+                len(batch),
+                loop.time() - t0,
             )
-
-            return batch_embeddings
-
+            return embeddings
         except Exception as e:
             # Check if it's a token limit error
             if "maximum context length" in str(e) or "max_tokens_per_request" in str(e):

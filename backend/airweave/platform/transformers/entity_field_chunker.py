@@ -293,134 +293,75 @@ async def entity_chunker(entity: BaseEntity) -> List[BaseEntity]:
     if getattr(entity, "chunk_index", None) is not None:
         return [entity]
 
-    # Calculate the actual stringified size
-    stringified_size = calculate_entity_string_size(entity)
+    # iterative safe-size enforcement ➊
+    entity_queue = [entity]
+    output: list[BaseEntity] = []
 
-    logger.info(
-        f"Entity {entity.entity_id} stringified size: {stringified_size} tokens "
-        f"(limit: {SAFE_ENTITY_SIZE})"
-    )
+    while entity_queue:
+        current = entity_queue.pop()
+        size = calculate_entity_string_size(current)
 
-    # If entity is small enough, return as is
-    if stringified_size <= SAFE_ENTITY_SIZE:
-        return [entity]
+        if size <= SAFE_ENTITY_SIZE:
+            output.append(current)
+            continue
 
-    # Get entity data and calculate field sizes
-    entity_dict = entity.model_dump()
-    total_size, field_sizes = calculate_entity_size(entity_dict)
+        # compute field sizes once
+        e_dict = current.model_dump()
+        _, f_sizes = calculate_entity_size(e_dict)
 
-    # Find the largest field to chunk
-    largest_field, largest_field_size = find_field_to_chunk(entity_dict, field_sizes)
-
-    # If no suitable field found, log warning and return original
-    if not largest_field:
-        logger.warning(
-            f"Entity {entity.entity_id} exceeds safe size "
-            f"({stringified_size} > {SAFE_ENTITY_SIZE}), but no suitable field found for chunking. "
-            f"Returning as-is, may cause embedding errors."
-        )
-        return [entity]
-
-    logger.info(
-        f"Chunking entity {entity.entity_id} (stringified size: {stringified_size}) "
-        f"using field '{largest_field}' (size: {largest_field_size})"
-    )
-
-    # Calculate a very conservative target chunk size
-    # We need to account for:
-    # 1. JSON overhead (can be 30-50% more)
-    # 2. All other fields in the entity
-    # 3. Safety margin
-
-    # Estimate the overhead from other fields and JSON formatting
-    base_overhead = stringified_size - largest_field_size
-
-    # For Gmail entities with lots of fields, be extra conservative
-    entity_type = type(entity).__name__
-    if "Gmail" in entity_type:
-        json_overhead_factor = 2.5  # Gmail entities have MASSIVE overhead due to many fields
-        safety_limit = 3500  # Even more conservative for Gmail
-        # For very large Gmail entities, be even more aggressive
-        if stringified_size > 15000:
-            json_overhead_factor = 3.0
-            safety_limit = 3000
-    else:
-        json_overhead_factor = 1.5  # Assume 50% overhead for JSON formatting
-        safety_limit = SAFE_ENTITY_SIZE
-
-    # Calculate target chunk size to ensure final stringified entity < safety_limit
-    target_chunk_size = int((safety_limit - base_overhead) / json_overhead_factor)
-
-    # Ensure we have a reasonable minimum chunk size but cap maximum
-    target_chunk_size = max(300, min(target_chunk_size, 2000))  # Cap at 2000 tokens
-
-    logger.info(
-        f"Calculated target chunk size: {target_chunk_size} "
-        f"(base overhead: {base_overhead}, with JSON factor: {json_overhead_factor})"
-    )
-
-    # Chunk the text using optimized approach (no embeddings)
-    chunks = await chunk_text_optimized(
-        entity_dict[largest_field], target_chunk_size, largest_field, entity.entity_id
-    )
-
-    # Create a copy of the entity for each chunk
-    chunked_entities = []
-    entity_class = type(entity)
-    oversized_chunks = []
-
-    for i, chunk in enumerate(chunks):
-        # Create a new entity with the chunked field
-        # IMPORTANT: Create a unique entity_id for each chunk to avoid database conflicts
-        chunked_entity_data = {
-            **entity_dict,
-            largest_field: chunk.text,
-            "chunk_index": i,
-            # Append chunk index to create unique entity_id
-            "entity_id": f"{entity.entity_id}_chunk_{i}",
-        }
-        chunked_entity = entity_class(**chunked_entity_data)
-
-        # Verify the chunk size
-        chunk_stringified_size = calculate_entity_string_size(chunked_entity)
-
-        if chunk_stringified_size > 7500:  # More conservative limit
-            logger.error(
-                f"🚨 OVERSIZED CHUNK: Chunk {i} of entity {entity.entity_id} is "
-                f"{chunk_stringified_size} tokens! (limit: 8191). Chunk text length: "
-                f"{len(chunk.text)} chars"
+        # ➋ select the largest *chunk-able* field **even if we already cut body_plain**
+        target_field, f_size = find_field_to_chunk(e_dict, f_sizes)
+        if not target_field:
+            logger.warning(
+                "Entity %s still %d tokens after chunking; "
+                "dropping remaining giant fields until safe size",
+                current.entity_id,
+                size,
             )
-            oversized_chunks.append((i, chunk.text, chunk_stringified_size))
 
-            # Force a smaller chunk by truncating
-            max_chars = int(
-                len(chunk.text) * 7000 / chunk_stringified_size
-            )  # Scale down proportionally
-            truncated_text = chunk.text[:max_chars]
-            logger.warning(f"Truncating chunk {i} from {len(chunk.text)} to {max_chars} chars")
+            # Sort remaining LARGE string fields by size (desc)
+            oversize_fields = sorted(
+                (
+                    (fname, fsize)
+                    for fname, fsize in f_sizes.items()
+                    if isinstance(e_dict[fname], str) and fsize > 0
+                ),
+                key=lambda t: t[1],
+                reverse=True,
+            )
 
-            # Re-create with truncated text
-            chunked_entity_data = {**entity_dict, largest_field: truncated_text, "chunk_index": i}
-            chunked_entity = entity_class(**chunked_entity_data)
+            if not oversize_fields:
+                # Nothing left to drop – append anyway, we tried our best
+                output.append(current)
+                continue
 
-            # Verify again
-            new_size = calculate_entity_string_size(chunked_entity)
-            logger.info(f"After truncation, chunk {i} is now {new_size} tokens")
+            # Drop the biggest one and retry
+            field_to_drop, drop_size = oversize_fields[0]
+            logger.warning(
+                "Dropping field '%s' (%d tokens) from entity %s",
+                field_to_drop,
+                drop_size,
+                current.entity_id,
+            )
+            e_dict[field_to_drop] = ""
+            current = type(current)(**e_dict)
+            entity_queue.append(current)
+            continue
 
-        chunked_entities.append(chunked_entity)
-
-    # Log final chunk information
-    chunk_sizes = [calculate_entity_string_size(e) for e in chunked_entities]
-    logger.info(
-        f"Created {len(chunks)} chunks for entity {entity.entity_id} with stringified sizes: "
-        f"{', '.join(str(size) for size in chunk_sizes)}"
-    )
-
-    if oversized_chunks:
-        logger.error(
-            f"⚠️ Entity {entity.entity_id} had {len(oversized_chunks)} oversized chunks "
-            f"that required truncation. This suggests the chunker is not handling "
-            f"the content properly."
+        # ➌ halve chunk size each recursion → exponential shrink
+        tgt_chunk = int(max(300, f_size / 2 / 1.5))
+        chunks = await chunk_text_optimized(
+            e_dict[target_field], tgt_chunk, target_field, current.entity_id
         )
 
-    return chunked_entities
+        # re-queue new chunks for further checking
+        for i, ch in enumerate(chunks):
+            new_data = {
+                **e_dict,
+                target_field: ch.text,
+                "chunk_index": i,
+                "entity_id": f"{current.entity_id}_{target_field}_{i}",
+            }
+            entity_queue.append(type(current)(**new_data))
+
+    return output
