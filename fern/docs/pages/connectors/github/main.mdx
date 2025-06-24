@@ -51,7 +51,7 @@ GitHub authentication credentials schema.
   type="str"
   required={true}
 >
-  GitHub PAT with read rights (code, contents, metadata) to the repository
+  GitHub Personal Access Token with repo scope
 </ParamField>
 <ParamField
   path="repo_name"
@@ -134,3 +134,52 @@ References:
 
 
 {/* AUTO-GENERATED CONTENT END */}
+
+## Setting up a GitHub Personal Access Token for Airweave
+
+To connect your GitHub repositories to Airweave, you'll need to create a Personal Access Token (PAT) with the appropriate permissions. This guide walks you through the process of creating and configuring a fine-grained token for use with Airweave.
+
+### Step 1: Access Developer Settings in GitHub
+
+Navigate to your GitHub account settings by clicking on your profile picture in the top right corner, then select "Settings". From there, scroll down to find and click on "Developer settings" in the left sidebar.
+
+<img src="find-developer-settings.png" alt="Finding Developer Settings in GitHub" width="600" />
+
+### Step 2: Create a New Fine-Grained Token
+
+In the Developer settings page, select "Fine-grained tokens" from the left menu, then click on "Generate new token".
+
+<img src="fine-grained-token.png" alt="Fine-grained tokens section" width="600" />
+
+### Step 3: Configure Your Token
+
+Fill out the token form with the following details:
+
+1. **Token name**: Choose a descriptive name like "Airweave Integration"
+2. **Expiration**: Select an appropriate expiration date (recommended: 1 year for production use)
+3. **Repository access**: Choose either "All repositories" or select specific repositories you want to connect to Airweave
+
+<img src="create-new-token.png" alt="Creating a new token" width="600" />
+
+### Step 4: Set Required Permissions
+
+For the GitHub connector to work properly, you need to grant the following permissions:
+
+Under "Repository permissions":
+- Set "Contents" to "Read-only" - This allows Airweave to read repository files
+
+<img src="add-conent-to-read-rights.png" alt="Setting content permissions" width="600" />
+
+### Step 5: Generate and Save Your Token
+
+After configuring the permissions, scroll to the bottom of the page and click "Generate token".
+
+**Important**: GitHub will display your token only once. Make sure to copy and store it in a secure location, as you won't be able to view it again.
+
+### Step 6: Add Your Token to Airweave
+
+When setting up the GitHub connector in Airweave:
+1. Paste your personal access token in the "Personal Access Token" field
+2. Enter the repository name in the format `owner/repo` (e.g., `airweave-ai/airweave`)
+
+Your GitHub repository is now connected to Airweave and ready for synchronization.
