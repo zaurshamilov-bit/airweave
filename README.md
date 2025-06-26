@@ -23,7 +23,6 @@ The search interface is exposed via REST API or MCP. When using MCP, Airweave es
 ## Table of Contents
 
 - [Airweave](#airweave)
-    - [🎥 Watch Demo](#-watch-demo)
   - [Overview](#overview)
   - [Table of Contents](#table-of-contents)
   - [🚀 Quick Start](#-quick-start)
