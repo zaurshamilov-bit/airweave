@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
@@ -51,22 +52,22 @@ class GmailSource(BaseSource):
         logger.info(f"GmailSource instance created with config: {config}")
         return instance
 
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
+    )
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[dict] = None
     ) -> dict:
         """Make an authenticated GET request to the Gmail API."""
         logger.info(f"Making authenticated GET request to: {url} with params: {params}")
         headers = {"Authorization": f"Bearer {self.access_token}"}
-        try:
-            response = await client.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            data = response.json()
-            logger.info(f"Received response from {url} - Status: {response.status_code}")
-            logger.debug(f"Response data keys: {list(data.keys())}")
-            return data
-        except Exception as e:
-            logger.error(f"Error in API request to {url}: {str(e)}")
-            raise
+
+        response = await client.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json()
+        logger.info(f"Received response from {url} - Status: {response.status_code}")
+        logger.debug(f"Response data keys: {list(data.keys())}")
+        return data
 
     async def _generate_thread_entities(
         self, client: httpx.AsyncClient, processed_message_ids: set
