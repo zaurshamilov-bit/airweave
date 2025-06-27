@@ -14,7 +14,10 @@ class BaseSource:
     """Base class for all sources."""
 
     _labels: ClassVar[list[str]] = []
-    _logger: Optional[Any] = None  # Store contextual logger
+
+    def __init__(self):
+        """Initialize the base source."""
+        self._logger: Optional[Any] = None  # Store contextual logger as instance variable
 
     @property
     def logger(self):
