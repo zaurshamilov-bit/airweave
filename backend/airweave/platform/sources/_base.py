@@ -1,23 +1,19 @@
 """Base source class."""
 
 from abc import abstractmethod
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, ClassVar, Dict, Optional
 
 from pydantic import BaseModel
 
 from airweave.core.logging import logger
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.entities._base import ChunkEntity
 from airweave.platform.file_handling.file_manager import file_manager
 
 
-class BaseSource(BaseModel):
+class BaseSource:
     """Base class for all sources."""
 
-    _name: str
-    _short_name: str
-    _auth_type: AuthType
-    _labels: list[str]
+    _labels: ClassVar[list[str]] = []
     _logger: Optional[Any] = None  # Store contextual logger
 
     @property
