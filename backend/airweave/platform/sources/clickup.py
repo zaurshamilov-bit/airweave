@@ -13,7 +13,6 @@ References:
     https://clickup.com/api/developer-portal/
 """
 
-import logging
 from typing import Any, AsyncGenerator, Dict, Optional
 
 import httpx
@@ -30,8 +29,6 @@ from airweave.platform.entities.clickup import (
     ClickUpWorkspaceEntity,
 )
 from airweave.platform.sources._base import BaseSource
-
-logger = logging.getLogger(__name__)
 
 
 @source(

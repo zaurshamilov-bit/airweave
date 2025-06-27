@@ -32,7 +32,7 @@ import {
     DialogDescription,
     DialogFooter,
 } from "@/components/ui/dialog";
-import { DialogViewProps } from "../FlowDialog";
+import { DialogViewProps } from "../DialogFlow";
 import { getAppIconUrl } from "@/lib/utils/icons";
 import { useNavigate } from "react-router-dom";
 import { redirectWithError } from "@/lib/error-utils";
@@ -104,6 +104,10 @@ export interface CreateCollectionViewProps extends DialogViewProps {
         sourceShortName?: string;
         /** ID of the source (if pre-selected) */
         sourceId?: string;
+        /** Dialog ID for error handling */
+        dialogId?: string;
+        /** Any other properties passed by DialogFlow */
+        [key: string]: any;
     };
     onError?: (error: Error | string, errorSource?: string) => void;
 }
@@ -271,8 +275,17 @@ export const CreateCollectionView: React.FC<CreateCollectionViewProps> = ({
     const handleError = (error: Error | string, errorType: string) => {
         console.error(`❌ [CreateCollectionView] ${errorType}:`, error);
 
-        // Use the common error utility to redirect
-        redirectWithError(navigate, error, sourceName || sourceShortName);
+        // Use the common error utility to redirect with dialogId
+        const errorDetails = {
+            serviceName: sourceName || sourceShortName || "Collection Creation",
+            sourceShortName: sourceShortName,
+            errorMessage: error instanceof Error ? error.message : String(error),
+            errorDetails: error instanceof Error ? error.stack : undefined,
+            dialogId: viewData?.dialogId, // Include dialogId from viewData
+            timestamp: Date.now()
+        };
+
+        redirectWithError(navigate, errorDetails, sourceName || sourceShortName);
     };
 
     /**

@@ -158,11 +158,17 @@ async function handleOriginalOAuthCallback(
       // Set processing to false
       setIsProcessing(false);
 
+      // Get the saved state to extract dialogId
+      const savedStateJson = sessionStorage.getItem('oauth_dialog_state');
+      const savedState = savedStateJson ? JSON.parse(savedStateJson) : {};
+
       // Create error data and store it
       const errorData = {
-        serviceName: shortName,
+        serviceName: savedState.sourceName || shortName,
+        sourceShortName: savedState.sourceShortName || shortName,
         errorMessage: `OAuth error: ${errorParam} - ${errorDesc}`,
         errorDetails: `The OAuth provider rejected the authorization request with error: ${errorParam}`,
+        dialogId: savedState.dialogId, // Include the dialogId
         timestamp: Date.now()
       };
 
@@ -170,7 +176,8 @@ async function handleOriginalOAuthCallback(
       localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
 
       // Immediate redirect to dashboard with error flag
-      window.location.href = "/?connected=error";
+      const returnPath = savedState.originPath || "/";
+      window.location.href = `${returnPath}?connected=error`;
       return;
     }
 
@@ -212,11 +219,17 @@ async function handleOriginalOAuthCallback(
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorDetails = error instanceof Error ? error.stack : undefined;
 
-    // Create error details object
+    // Get the saved state to extract dialogId
+    const savedState = sessionStorage.getItem('oauth_dialog_state');
+    const parsedState = savedState ? JSON.parse(savedState) : {};
+
+    // Create error details object INCLUDING dialogId
     const errorData = {
-      serviceName: shortName,
+      serviceName: parsedState.sourceName || shortName,
+      sourceShortName: parsedState.sourceShortName || shortName,
       errorMessage,
       errorDetails,
+      dialogId: parsedState.dialogId, // Include the dialogId so DialogFlow can match it
       timestamp: Date.now()
     };
 
@@ -224,8 +237,6 @@ async function handleOriginalOAuthCallback(
     localStorage.setItem(CONNECTION_ERROR_STORAGE_KEY, JSON.stringify(errorData));
 
     // Redirect with error flag - this will trigger the error UI
-    const savedState = sessionStorage.getItem('oauth_dialog_state');
-    const parsedState = savedState ? JSON.parse(savedState) : {};
     const returnPath = parsedState.originPath || "/dashboard";
     window.location.href = `${returnPath}?connected=error`;
   }

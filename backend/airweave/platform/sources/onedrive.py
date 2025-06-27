@@ -20,7 +20,6 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
@@ -61,28 +60,28 @@ class OneDriveSource(BaseSource):
         headers = {"Authorization": f"Bearer {self.access_token}"}
         try:
             resp = await client.get(url, headers=headers, params=params, timeout=30.0)
-            logger.info(f"Request URL: {url}")
+            self.logger.info(f"Request URL: {url}")
             resp.raise_for_status()
             return resp.json()
         except httpx.ConnectTimeout:
-            logger.error(f"Connection timeout accessing Microsoft Graph API: {url}")
+            self.logger.error(f"Connection timeout accessing Microsoft Graph API: {url}")
             raise
         except httpx.ReadTimeout:
-            logger.error(f"Read timeout accessing Microsoft Graph API: {url}")
+            self.logger.error(f"Read timeout accessing Microsoft Graph API: {url}")
             raise
         except httpx.HTTPStatusError as e:
-            logger.error(
+            self.logger.error(
                 f"HTTP status error {e.response.status_code} from Microsoft Graph API: {url}"
             )
             # Log the response body for debugging
             try:
                 error_body = e.response.json()
-                logger.error(f"Error response body: {error_body}")
+                self.logger.error(f"Error response body: {error_body}")
             except Exception:  # Catch specific exception instead of bare except
-                logger.error(f"Error response text: {e.response.text}")
+                self.logger.error(f"Error response text: {e.response.text}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error accessing Microsoft Graph API: {url}, {str(e)}")
+            self.logger.error(f"Unexpected error accessing Microsoft Graph API: {url}, {str(e)}")
             raise
 
     async def _get_available_drives(self, client: httpx.AsyncClient) -> List[Dict]:
@@ -96,7 +95,7 @@ class OneDriveSource(BaseSource):
             return data.get("value", [])
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 400:
-                logger.warning("Cannot access /me/drives, will try app folder access")
+                self.logger.warning("Cannot access /me/drives, will try app folder access")
                 return []
             raise
 
@@ -113,14 +112,16 @@ class OneDriveSource(BaseSource):
             if e.response.status_code == 400:
                 error_body = e.response.json() if hasattr(e.response, "json") else {}
                 if "SPO license" in str(error_body):
-                    logger.warning("Tenant does not have SPO license, trying alternative endpoints")
+                    self.logger.warning(
+                        "Tenant does not have SPO license, trying alternative endpoints"
+                    )
                     # Try to get drives list instead
                     drives = await self._get_available_drives(client)
                     if drives:
-                        logger.info(f"Found {len(drives)} drives via /me/drives")
+                        self.logger.info(f"Found {len(drives)} drives via /me/drives")
                         return drives[0]  # Return first available drive
                     else:
-                        logger.info("No drives found, will create virtual app folder drive")
+                        self.logger.info("No drives found, will create virtual app folder drive")
                         return None
             raise
 
@@ -148,9 +149,9 @@ class OneDriveSource(BaseSource):
         if not drive_obj:
             # Fallback to app folder if no drive is accessible
             drive_obj = await self._create_app_folder_drive()
-            logger.info("Using app folder access mode")
+            self.logger.info("Using app folder access mode")
 
-        logger.info(f"Drive: {drive_obj}")
+        self.logger.info(f"Drive: {drive_obj}")
 
         yield OneDriveDriveEntity(
             entity_id=drive_obj["id"],
@@ -196,7 +197,7 @@ class OneDriveSource(BaseSource):
                 data = await self._get_with_auth(client, url, params=params)
 
                 for item in data.get("value", []):
-                    logger.info(f"DriveItem: {item}")
+                    self.logger.info(f"DriveItem: {item}")
                     yield item
 
                 # Handle pagination using @odata.nextLink
@@ -205,10 +206,10 @@ class OneDriveSource(BaseSource):
                     params = None  # nextLink already includes parameters
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 403:
-                logger.warning(f"Access denied to folder {folder_id}, skipping")
+                self.logger.warning(f"Access denied to folder {folder_id}, skipping")
                 return
             elif e.response.status_code == 404:
-                logger.warning(f"Folder {folder_id} not found, skipping")
+                self.logger.warning(f"Folder {folder_id} not found, skipping")
                 return
             else:
                 raise
@@ -225,7 +226,7 @@ class OneDriveSource(BaseSource):
             data = await self._get_with_auth(client, url)
             return data.get("@microsoft.graph.downloadUrl")
         except Exception as e:
-            logger.error(f"Failed to get download URL for item {item_id}: {e}")
+            self.logger.error(f"Failed to get download URL for item {item_id}: {e}")
             return None
 
     async def _list_all_drive_items_recursively(
@@ -254,7 +255,7 @@ class OneDriveSource(BaseSource):
                     if "folder" in item and len(folder_queue) < 100:  # Limit queue size
                         folder_queue.append(item["id"])
             except Exception as e:
-                logger.error(f"Error processing folder {current_folder_id}: {e}")
+                self.logger.error(f"Error processing folder {current_folder_id}: {e}")
                 continue
 
     def _build_file_entity(
@@ -266,12 +267,12 @@ class OneDriveSource(BaseSource):
         """
         # Skip if this is a folder without downloadable content
         if "folder" in item:
-            logger.info(f"Skipping folder: {item.get('name', 'Untitled')}")
+            self.logger.info(f"Skipping folder: {item.get('name', 'Untitled')}")
             return None
 
         # Skip if no download URL provided
         if not download_url:
-            logger.warning(f"No download URL for file: {item.get('name', 'Untitled')}")
+            self.logger.warning(f"No download URL for file: {item.get('name', 'Untitled')}")
             return None
 
         # Create drive breadcrumb
@@ -334,16 +335,16 @@ class OneDriveSource(BaseSource):
                     if processed_entity:
                         yield processed_entity
                         file_count += 1
-                        logger.info(f"Processed file {file_count}: {file_entity.name}")
+                        self.logger.info(f"Processed file {file_count}: {file_entity.name}")
                 else:
-                    logger.warning(f"No download URL available for {file_entity.name}")
+                    self.logger.warning(f"No download URL available for {file_entity.name}")
 
             except Exception as e:
-                logger.error(f"Failed to process item {item.get('name', 'unknown')}: {str(e)}")
+                self.logger.error(f"Failed to process item {item.get('name', 'unknown')}: {str(e)}")
                 # Continue processing other items
                 continue
 
-        logger.info(f"Total files processed: {file_count}")
+        self.logger.info(f"Total files processed: {file_count}")
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all OneDrive entities.
@@ -361,14 +362,14 @@ class OneDriveSource(BaseSource):
                 break  # Only one drive for personal OneDrive
 
             if not drive_entity:
-                logger.error("No drive found for user")
+                self.logger.error("No drive found for user")
                 return
 
             # 2) Generate file entities for the drive
             drive_id = drive_entity.entity_id
             drive_name = drive_entity.drive_type or "OneDrive"
 
-            logger.info(f"Starting to process files from drive: {drive_id} ({drive_name})")
+            self.logger.info(f"Starting to process files from drive: {drive_id} ({drive_name})")
 
             async for file_entity in self._generate_drive_item_entities(
                 client, drive_id, drive_name

@@ -9,7 +9,6 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
-from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import MondayAuthConfig
 from airweave.platform.decorators import source
@@ -100,23 +99,23 @@ class MondaySource(BaseSource):
                     error_messages.append(message)
 
                 error_string = "; ".join(error_messages)
-                logger.error(f"GraphQL error in Monday.com API: {error_string}")
-                logger.error(f"Query that caused the error: {query}")
+                self.logger.error(f"GraphQL error in Monday.com API: {error_string}")
+                self.logger.error(f"Query that caused the error: {query}")
                 if variables:
-                    logger.error(f"Variables: {variables}")
+                    self.logger.error(f"Variables: {variables}")
 
             return data.get("data", {})
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error in Monday.com API: {e.response.status_code}")
-            logger.error(f"Response text: {e.response.text}")
-            logger.error(
+            self.logger.error(f"HTTP error in Monday.com API: {e.response.status_code}")
+            self.logger.error(f"Response text: {e.response.text}")
+            self.logger.error(
                 f"Request details: URL={self.GRAPHQL_ENDPOINT}, "
                 f"Headers={headers} (sensitive info redacted)"
             )
-            logger.error(f"Query that caused the error: {query}")
+            self.logger.error(f"Query that caused the error: {query}")
             if variables:
-                logger.error(f"Variables: {variables}")
+                self.logger.error(f"Variables: {variables}")
             raise
 
     async def _generate_board_entities(

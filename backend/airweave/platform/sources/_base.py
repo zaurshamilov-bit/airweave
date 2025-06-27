@@ -1,20 +1,36 @@
 """Base source class."""
 
 from abc import abstractmethod
-from typing import Any, AsyncGenerator, ClassVar, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, Optional
 
 from pydantic import BaseModel
 
 from airweave.core.logging import logger
+from airweave.platform.auth.schemas import AuthType
 from airweave.platform.entities._base import ChunkEntity
 from airweave.platform.file_handling.file_manager import file_manager
 
 
-class BaseSource:
-    """Base source class."""
+class BaseSource(BaseModel):
+    """Base class for all sources."""
 
-    # Class variables for integration metadata
-    _labels: ClassVar[List[str]] = []
+    _name: str
+    _short_name: str
+    _auth_type: AuthType
+    _labels: list[str]
+    _logger: Optional[Any] = None  # Store contextual logger
+
+    @property
+    def logger(self):
+        """Get the logger for this source, falling back to default if not set."""
+        if self._logger is not None:
+            return self._logger
+        # Fall back to default logger
+        return logger
+
+    def set_logger(self, logger) -> None:
+        """Set a contextual logger for this source."""
+        self._logger = logger
 
     @classmethod
     @abstractmethod
@@ -55,7 +71,7 @@ class BaseSource:
         # Use entity download_url if not explicitly provided
         url = download_url or file_entity.download_url
         if not url:
-            logger.warning(f"No download URL for file {file_entity.name}")
+            self.logger.warning(f"No download URL for file {file_entity.name}")
             return None
 
         # Get access token (from parameter or instance)
@@ -63,10 +79,10 @@ class BaseSource:
 
         # Validate we have an access token for authentication
         if not token:
-            logger.error(f"No access token provided for file {file_entity.name}")
+            self.logger.error(f"No access token provided for file {file_entity.name}")
             raise ValueError(f"No access token available for processing file {file_entity.name}")
 
-        logger.info(f"Processing file entity: {file_entity.name}")
+        self.logger.info(f"Processing file entity: {file_entity.name}")
 
         try:
             # Create stream (pass token as before)
@@ -81,21 +97,21 @@ class BaseSource:
 
             # Skip if file was too large
             if hasattr(processed_entity, "should_skip") and processed_entity.should_skip:
-                logger.warning(
+                self.logger.warning(
                     f"Skipping file {processed_entity.name}: "
                     f"{processed_entity.metadata.get('error', 'Unknown reason')}"
                 )
 
             return processed_entity
         except Exception as e:
-            logger.error(f"Error processing file {file_entity.name}: {e}")
+            self.logger.error(f"Error processing file {file_entity.name}: {e}")
             return None
 
     async def process_file_entity_with_content(
         self, file_entity, content_stream, metadata: Optional[Dict[str, Any]] = None
     ) -> Optional[ChunkEntity]:
         """Process a file entity with content directly available as a stream."""
-        logger.info(f"Processing file entity with direct content: {file_entity.name}")
+        self.logger.info(f"Processing file entity with direct content: {file_entity.name}")
 
         try:
             # Process entity with the file manager directly
@@ -112,14 +128,14 @@ class BaseSource:
 
             # Skip if file was too large
             if hasattr(processed_entity, "should_skip") and processed_entity.should_skip:
-                logger.warning(
+                self.logger.warning(
                     f"Skipping file {processed_entity.name}: "
                     f"{processed_entity.metadata.get('error', 'Unknown reason')}"
                 )
 
             return processed_entity
         except Exception as e:
-            logger.error(f"Error processing file {file_entity.name} with direct content: {e}")
+            self.logger.error(f"Error processing file {file_entity.name} with direct content: {e}")
             return None
 
 

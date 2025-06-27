@@ -91,8 +91,7 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
                 serviceName: errorData.serviceName || sourceName || "the service",
                 sourceShortName: errorData.sourceShortName || sourceShortName || viewData.sourceShortName || "unknown",
                 errorMessage: errorData.errorMessage || "Connection failed",
-                errorDetails: errorData.errorDetails,
-                retryAction: errorData.retryAction
+                errorDetails: errorData.errorDetails
             });
             setShowErrorView(true);
         }
@@ -211,13 +210,7 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
                             viewData.sourceShortName ||
                             "unknown",
                         errorMessage: errorMessage,
-                        errorDetails: errorDetailsText,
-                        retryAction: errorDetails.canRetry ? () => {
-                            setShowErrorView(false);
-                            if (errorDetails.dialogState?.dialogFlowStep) {
-                                setCurrentStep(errorDetails.dialogState.dialogFlowStep);
-                            }
-                        } : undefined
+                        errorDetails: errorDetailsText
                     });
 
                     setShowErrorView(true);
@@ -299,19 +292,7 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
         if (showErrorView || currentView === "error") {
             return (
                 <ConnectionErrorView
-                    onCancel={() => {
-                        setShowErrorView(false);
-                        onOpenChange(false);
-
-                        setTimeout(() => {
-                            clearStoredErrorDetails();
-                            const url = new URL(window.location.href);
-                            if (url.searchParams.has('connected')) {
-                                url.searchParams.delete('connected');
-                                window.history.replaceState({}, '', url.toString());
-                            }
-                        }, 100);
-                    }}
+                    onCancel={handleCancel}
                     viewData={errorViewData}
                 />
             );
@@ -320,9 +301,7 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
         if (currentView === null) {
             return (
                 <ConnectionErrorView
-                    onCancel={() => {
-                        onOpenChange(false);
-                    }}
+                    onCancel={handleCancel}
                     viewData={{
                         serviceName: "Dialog Flow",
                         sourceShortName: "dialog",
@@ -360,7 +339,7 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
             default:
                 return (
                     <ConnectionErrorView
-                        onCancel={() => onOpenChange(false)}
+                        onCancel={handleCancel}
                         viewData={{
                             serviceName: "Dialog Flow",
                             sourceShortName: "dialog",
@@ -455,13 +434,10 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
     const handleError = (error: Error | string, errorSource?: string) => {
         console.error(`❌ [DialogFlow] Error with dialogId=${dialogId}:`, error);
 
-        // Create the ability to retry by default
-        const canRetry = currentStep > 0;
-
         // First, close the dialog to prevent stale state
         onOpenChange(false);
 
-        // Add the retry capability to the error data
+        // Get the error message and stack
         const errorMsg = error instanceof Error ? error.message : error;
         const errorStack = error instanceof Error ? error.stack : undefined;
 
@@ -471,8 +447,7 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
             sourceShortName: viewData.sourceShortName || sourceShortName || "unknown",
             errorMessage: errorMsg,
             errorDetails: errorStack,
-            canRetry,
-            // Store current dialog state for potential retry
+            // Store current dialog state
             dialogState: {
                 ...viewData,
                 dialogFlowStep: currentStep

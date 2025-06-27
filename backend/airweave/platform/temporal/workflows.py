@@ -9,6 +9,8 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, CancelledError
 
+from airweave.platform.utils.error_utils import get_error_message
+
 
 @workflow.defn
 class RunSourceConnectionWorkflow:
@@ -103,9 +105,9 @@ class RunSourceConnectionWorkflow:
         except ActivityError as e:
             # Extract the real error message
             if hasattr(e, "cause") and e.cause:
-                error_message = f"{type(e.cause).__name__}: {str(e.cause)}"
+                error_message = get_error_message(e.cause)
             else:
-                error_message = str(e)
+                error_message = get_error_message(e)
 
             workflow.logger.error(f"Sync job {sync_job_id} failed: {error_message}")
 
@@ -131,7 +133,7 @@ class RunSourceConnectionWorkflow:
 
         except Exception as e:
             # Handle any other errors (generic exceptions)
-            error_message = str(e)
+            error_message = get_error_message(e)
             workflow.logger.error(f"Sync job {sync_job_id} failed: {error_message}")
 
             # Update sync job status to FAILED

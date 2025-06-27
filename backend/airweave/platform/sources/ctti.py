@@ -229,22 +229,22 @@ class CTTISource(BaseSource):
                 # Use connection from pool
                 async with pool.acquire() as conn:
                     if skip > 0:
-                        logger.info(
+                        self.logger.info(
                             f"Executing query to fetch {limit} clinical trials from AACT database "
                             f"(skipping first {skip} records)"
                         )
                     else:
-                        logger.info(
+                        self.logger.info(
                             f"Executing query to fetch {limit} clinical trials from AACT database"
                         )
                     records = await conn.fetch(query)
-                    logger.info(f"Successfully fetched {len(records)} clinical trial records")
+                    self.logger.info(f"Successfully fetched {len(records)} clinical trial records")
                     return records
 
             # Use retry logic for query execution
             records = await _retry_with_backoff(_execute_query)
 
-            logger.info(f"Starting to process {len(records)} records into entities")
+            self.logger.info(f"Starting to process {len(records)} records into entities")
             entities_created = 0
 
             # Process each nct_id
@@ -306,7 +306,7 @@ class CTTISource(BaseSource):
 
                 # Log progress every 100 entities
                 if entities_created % 100 == 0:
-                    logger.info(f"Created {entities_created}/{len(records)} CTTI entities")
+                    self.logger.info(f"Created {entities_created}/{len(records)} CTTI entities")
 
                 # Yield control periodically to prevent blocking
                 if entities_created % 10 == 0:
@@ -314,9 +314,9 @@ class CTTISource(BaseSource):
 
                 yield entity
 
-            logger.info(f"Completed creating all {entities_created} CTTI entities")
+            self.logger.info(f"Completed creating all {entities_created} CTTI entities")
 
         except Exception as e:
-            logger.error(f"Error in CTTI source generate_entities: {str(e)}")
+            self.logger.error(f"Error in CTTI source generate_entities: {str(e)}")
             raise
         # Note: We don't close the pool here as it's shared across all CTTI instances

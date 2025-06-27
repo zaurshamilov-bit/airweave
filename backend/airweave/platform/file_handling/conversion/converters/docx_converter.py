@@ -10,6 +10,7 @@ from airweave.platform.file_handling.conversion._base import (
     DocumentConverter,
     DocumentConverterResult,
 )
+from airweave.platform.sync.async_helpers import run_in_thread_pool
 
 
 class DocxConverter(DocumentConverter):
@@ -139,6 +140,11 @@ class DocxConverter(DocumentConverter):
             raise RuntimeError("Pandoc is not installed")
 
         with tempfile.NamedTemporaryFile(suffix=".md") as temp_file:
-            subprocess.run(["pandoc", local_path, "-o", temp_file.name], check=True)
+            # Run pandoc in thread pool to avoid blocking
+            def _run_pandoc():
+                return subprocess.run(["pandoc", local_path, "-o", temp_file.name], check=True)
+
+            await run_in_thread_pool(_run_pandoc)
+
             with open(temp_file.name, "r") as f:
                 return f.read()

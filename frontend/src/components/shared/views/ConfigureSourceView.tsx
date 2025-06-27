@@ -122,8 +122,17 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
         if (onError) {
             onError(error, errorSource || sourceName || sourceShortName);
         } else {
-            // Otherwise redirect directly
-            redirectWithError(navigate, error, errorSource || sourceName || sourceShortName);
+            // Otherwise redirect directly with dialogId
+            const errorDetails = {
+                serviceName: errorSource || sourceName || sourceShortName || "Source Configuration",
+                sourceShortName: sourceShortName,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorDetails: error instanceof Error ? error.stack : undefined,
+                dialogId: viewData?.dialogId, // Include dialogId from viewData
+                timestamp: Date.now()
+            };
+
+            redirectWithError(navigate, errorDetails, errorSource || sourceName || sourceShortName);
         }
     };
 

@@ -5,6 +5,7 @@ import logging
 from typing import AsyncGenerator, Generic, Optional, TypeVar
 
 from airweave.platform.entities._base import BaseEntity
+from airweave.platform.utils.error_utils import get_error_message
 
 T = TypeVar("T", bound=BaseEntity)
 
@@ -78,7 +79,7 @@ class AsyncSourceStream(Generic[T]):
 
             self.logger.info(f"Source generator exhausted after producing {items_produced} items")
         except Exception as e:
-            self.logger.error(f"Error in producer: {e}")
+            self.logger.error(f"Error in producer: {get_error_message(e)}")
             self.producer_exception = e
             # Re-raise to ensure proper error handling -> THIS DOES NOT WORK
             raise

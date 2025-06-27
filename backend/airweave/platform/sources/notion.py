@@ -125,7 +125,7 @@ class NotionSource(BaseSource):
                 # Wait until enough time has passed
                 sleep_time = self._request_times[0] + self.RATE_LIMIT_PERIOD - current_time
                 if sleep_time > 0:
-                    logger.debug(
+                    self.logger.debug(
                         f"Rate limit reached. Waiting {sleep_time:.2f}s before next request"
                     )
                     self._stats["rate_limit_waits"] += 1
@@ -148,7 +148,7 @@ class NotionSource(BaseSource):
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> dict:
         """Make an authenticated GET request to the Notion API."""
         await self._wait_for_rate_limit()
-        logger.debug(f"GET request to {url}")
+        self.logger.debug(f"GET request to {url}")
         self._stats["api_calls"] += 1
 
         headers = {
@@ -158,18 +158,18 @@ class NotionSource(BaseSource):
 
         try:
             response = await client.get(url, headers=headers, timeout=self.TIMEOUT_SECONDS)
-            logger.debug(f"GET response from {url}: status={response.status_code}")
+            self.logger.debug(f"GET response from {url}: status={response.status_code}")
 
             if response.status_code != 200:
-                logger.warning(
+                self.logger.warning(
                     f"Non-200 response from Notion API: {response.status_code} for {url}"
                 )
-                logger.debug(f"Response body: {response.text[:200]}...")
+                self.logger.debug(f"Response body: {response.text[:200]}...")
 
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.error(f"Error during GET request to {url}: {str(e)}")
+            self.logger.error(f"Error during GET request to {url}: {str(e)}")
             raise
 
     @retry(
@@ -181,7 +181,7 @@ class NotionSource(BaseSource):
     async def _post_with_auth(self, client: httpx.AsyncClient, url: str, json_data: dict) -> dict:
         """Make an authenticated POST request to the Notion API."""
         await self._wait_for_rate_limit()
-        logger.debug(f"POST request to {url}")
+        self.logger.debug(f"POST request to {url}")
         self._stats["api_calls"] += 1
 
         headers = {
@@ -193,40 +193,40 @@ class NotionSource(BaseSource):
             response = await client.post(
                 url, headers=headers, json=json_data, timeout=self.TIMEOUT_SECONDS
             )
-            logger.debug(f"POST response from {url}: status={response.status_code}")
+            self.logger.debug(f"POST response from {url}: status={response.status_code}")
 
             if response.status_code != 200:
-                logger.warning(
+                self.logger.warning(
                     f"Non-200 response from Notion API: {response.status_code} for {url}"
                 )
-                logger.debug(f"Response body: {response.text[:200]}...")
+                self.logger.debug(f"Response body: {response.text[:200]}...")
 
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            logger.error(f"Error during POST request to {url}: {str(e)}")
+            self.logger.error(f"Error during POST request to {url}: {str(e)}")
             raise
 
     # Phase 1: Top-Level Discovery
     async def _discover_all_objects(self, client: httpx.AsyncClient) -> Dict[str, List[dict]]:
         """Discover all databases and pages using the search endpoint."""
-        logger.info("Phase 1: Discovering all objects via search")
+        self.logger.info("Phase 1: Discovering all objects via search")
 
         discovered = {"databases": [], "pages": []}
 
         # Search for databases
-        logger.info("Searching for databases...")
+        self.logger.info("Searching for databases...")
         async for database in self._search_objects(client, "database"):
             discovered["databases"].append(database)
             self._stats["databases_found"] += 1
 
         # Search for pages
-        logger.info("Searching for pages...")
+        self.logger.info("Searching for pages...")
         async for page in self._search_objects(client, "page"):
             discovered["pages"].append(page)
             self._stats["pages_found"] += 1
 
-        logger.info(
+        self.logger.info(
             f"Discovery complete: {len(discovered['databases'])} databases, "
             f"{len(discovered['pages'])} pages"
         )
@@ -260,7 +260,7 @@ class NotionSource(BaseSource):
                 start_cursor = response.get("next_cursor")
 
             except Exception as e:
-                logger.error(f"Error searching for {object_type}: {str(e)}")
+                self.logger.error(f"Error searching for {object_type}: {str(e)}")
                 raise
 
     # Phase 2: Database Schema Analysis
@@ -268,7 +268,7 @@ class NotionSource(BaseSource):
         self, client: httpx.AsyncClient, databases: List[dict]
     ) -> Dict[str, dict]:
         """Analyze database schemas and return detailed database information."""
-        logger.info("Phase 2: Analyzing database schemas")
+        self.logger.info("Phase 2: Analyzing database schemas")
 
         database_schemas = {}
 
@@ -278,7 +278,7 @@ class NotionSource(BaseSource):
                 continue
 
             try:
-                logger.info(f"Analyzing database schema: {database_id}")
+                self.logger.info(f"Analyzing database schema: {database_id}")
                 schema = await self._get_with_auth(
                     client, f"https://api.notion.com/v1/databases/{database_id}"
                 )
@@ -286,10 +286,10 @@ class NotionSource(BaseSource):
                 self._processed_databases.add(database_id)
 
             except Exception as e:
-                logger.error(f"Error analyzing database {database_id}: {str(e)}")
+                self.logger.error(f"Error analyzing database {database_id}: {str(e)}")
                 continue
 
-        logger.info(f"Analyzed {len(database_schemas)} database schemas")
+        self.logger.info(f"Analyzed {len(database_schemas)} database schemas")
         return database_schemas
 
     # Phase 3: Database Content Extraction with Aggregation
@@ -297,11 +297,11 @@ class NotionSource(BaseSource):
         self, client: httpx.AsyncClient, database_schemas: Dict[str, dict]
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Extract all content from databases with full page content aggregation."""
-        logger.info("Phase 3: Extracting database content with aggregation")
+        self.logger.info("Phase 3: Extracting database content with aggregation")
 
         for database_id, schema in database_schemas.items():
             database_title = self._extract_rich_text_plain(schema.get("title", []))
-            logger.info(f"Processing database: {database_title}")
+            self.logger.info(f"Processing database: {database_title}")
 
             # Yield database entity
             database_entity = self._create_database_entity(schema)
@@ -331,7 +331,7 @@ class NotionSource(BaseSource):
                     self._processed_pages.add(page_id)
 
                 except Exception as e:
-                    logger.error(f"Error processing database page {page_id}: {str(e)}")
+                    self.logger.error(f"Error processing database page {page_id}: {str(e)}")
                     continue
 
     async def _query_database_pages(
@@ -358,7 +358,7 @@ class NotionSource(BaseSource):
                 start_cursor = response.get("next_cursor")
 
             except Exception as e:
-                logger.error(f"Error querying database {database_id}: {str(e)}")
+                self.logger.error(f"Error querying database {database_id}: {str(e)}")
                 raise
 
     # Phase 4: Standalone Page Processing with Aggregation
@@ -366,7 +366,7 @@ class NotionSource(BaseSource):
         self, client: httpx.AsyncClient, all_pages: List[dict]
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Process pages that are not in databases with full content aggregation."""
-        logger.info("Phase 4: Processing standalone pages with aggregation")
+        self.logger.info("Phase 4: Processing standalone pages with aggregation")
 
         for page in all_pages:
             page_id = page["id"]
@@ -397,7 +397,7 @@ class NotionSource(BaseSource):
                 self._processed_pages.add(page_id)
 
             except Exception as e:
-                logger.error(f"Error processing standalone page {page_id}: {str(e)}")
+                self.logger.error(f"Error processing standalone page {page_id}: {str(e)}")
                 continue
 
     # Phase 5: Child Database Processing
@@ -405,7 +405,7 @@ class NotionSource(BaseSource):
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Process child databases discovered during page content extraction."""
-        logger.info("Phase 5: Processing child databases")
+        self.logger.info("Phase 5: Processing child databases")
 
         # Process child databases until no new ones are discovered
         while self._child_databases_to_process:
@@ -419,11 +419,11 @@ class NotionSource(BaseSource):
             if not unprocessed_databases:
                 break
 
-            logger.info(f"Processing {len(unprocessed_databases)} child databases")
+            self.logger.info(f"Processing {len(unprocessed_databases)} child databases")
 
             for database_id in unprocessed_databases:
                 try:
-                    logger.info(f"Processing child database: {database_id}")
+                    self.logger.info(f"Processing child database: {database_id}")
 
                     # Get database schema
                     schema = await self._get_with_auth(
@@ -466,13 +466,13 @@ class NotionSource(BaseSource):
                             self._processed_pages.add(page_id)
 
                         except Exception as e:
-                            logger.error(
+                            self.logger.error(
                                 f"Error processing child database page {page_id}: {str(e)}"
                             )
                             continue
 
                 except Exception as e:
-                    logger.error(f"Error processing child database {database_id}: {str(e)}")
+                    self.logger.error(f"Error processing child database {database_id}: {str(e)}")
                     continue
 
     async def _build_page_breadcrumbs(
@@ -498,7 +498,7 @@ class NotionSource(BaseSource):
                     )
                     current_page = parent_page
                 except Exception as e:
-                    logger.warning(f"Could not fetch parent page {parent_id}: {str(e)}")
+                    self.logger.warning(f"Could not fetch parent page {parent_id}: {str(e)}")
                     break
             elif parent_type == "database_id":
                 # This shouldn't happen for standalone pages, but handle it
@@ -522,7 +522,7 @@ class NotionSource(BaseSource):
         page_id = page["id"]
         title = self._extract_page_title(page)
 
-        logger.info(f"Creating comprehensive page entity: {title} ({page_id})")
+        self.logger.info(f"Creating comprehensive page entity: {title} ({page_id})")
 
         # Reset child database tracking for this page
         self._child_databases_to_process.clear()
@@ -568,7 +568,7 @@ class NotionSource(BaseSource):
             file_entity.breadcrumbs = breadcrumbs.copy()
             files_with_breadcrumbs.append(file_entity)
 
-        logger.info(
+        self.logger.info(
             f"Page entity created: {len(content_result['content'])} chars, "
             f"{content_result['blocks_count']} blocks, "
             f"{len(files_with_breadcrumbs)} files, "
@@ -650,7 +650,7 @@ class NotionSource(BaseSource):
                 start_cursor = response.get("next_cursor")
 
             except Exception as e:
-                logger.error(f"Error extracting blocks from {block_id}: {str(e)}")
+                self.logger.error(f"Error extracting blocks from {block_id}: {str(e)}")
                 raise
 
     async def _format_block_content(
@@ -806,7 +806,7 @@ class NotionSource(BaseSource):
 
         self._stats["child_databases_found"] += 1
         breadcrumb_names = [b.name for b in child_db_breadcrumbs]
-        logger.info(
+        self.logger.info(
             f"Found child database: {title} ({database_id}) in page breadcrumbs: {breadcrumb_names}"
         )
 
@@ -888,7 +888,7 @@ class NotionSource(BaseSource):
                     property_entities.append(property_entity)
 
                 except Exception as e:
-                    logger.warning(
+                    self.logger.warning(
                         f"Error processing property {prop_name} for page {page_id}: {str(e)}"
                     )
                     continue
@@ -1157,13 +1157,13 @@ class NotionSource(BaseSource):
                 datetime_str = datetime_str[:-1] + "+00:00"
             return datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
         except (ValueError, AttributeError):
-            logger.warning(f"Could not parse datetime: {datetime_str}")
+            self.logger.warning(f"Could not parse datetime: {datetime_str}")
             return None
 
     # Main Entry Point
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all entities from Notion using comprehensive discovery."""
-        logger.info("Starting comprehensive Notion entity generation with content aggregation")
+        self.logger.info("Starting comprehensive Notion entity generation with content aggregation")
         self._stats = {
             "api_calls": 0,
             "rate_limit_waits": 0,
@@ -1199,10 +1199,10 @@ class NotionSource(BaseSource):
                 async for entity in self._process_child_databases(client):
                     yield entity
 
-            logger.info(f"Notion sync complete. Final stats: {self._stats}")
+            self.logger.info(f"Notion sync complete. Final stats: {self._stats}")
 
         except Exception as e:
-            logger.error(
+            self.logger.error(
                 f"Error during comprehensive Notion entity generation: {str(e)}", exc_info=True
             )
             raise
@@ -1214,12 +1214,12 @@ class NotionSource(BaseSource):
         try:
             # Skip files that need refresh (expired URLs)
             if file_entity.needs_refresh():
-                logger.warning(f"Skipping file {file_entity.name} - URL expired")
+                self.logger.warning(f"Skipping file {file_entity.name} - URL expired")
                 return None
 
             # Skip external files (can't be downloaded)
             if file_entity.file_type == "external":
-                logger.info(f"Skipping external file {file_entity.name} - external URL")
+                self.logger.info(f"Skipping external file {file_entity.name} - external URL")
                 return None
 
             # Download the file using BaseSource.process_file_entity
@@ -1239,28 +1239,30 @@ class NotionSource(BaseSource):
                     )
                 except Exception:
                     # If that fails, try the custom pre-signed file processing
-                    logger.info(f"Falling back to pre-signed URL processing for {file_entity.name}")
+                    self.logger.info(
+                        f"Falling back to pre-signed URL processing for {file_entity.name}"
+                    )
                     processed_entity = await self._process_presigned_file(file_entity)
 
             if processed_entity and not getattr(processed_entity, "should_skip", False):
-                logger.info(
+                self.logger.info(
                     f"Successfully processed file {processed_entity.name} "
                     f"with local_path: {processed_entity.local_path}"
                 )
                 return processed_entity
             else:
-                logger.warning(f"File {file_entity.name} was skipped during processing")
+                self.logger.warning(f"File {file_entity.name} was skipped during processing")
                 return None
 
         except Exception as e:
-            logger.error(f"Error processing file {file_entity.name}: {str(e)}")
+            self.logger.error(f"Error processing file {file_entity.name}: {str(e)}")
             return None
 
     async def _process_presigned_file(
         self, file_entity: NotionFileEntity
     ) -> Optional[NotionFileEntity]:
         """Process a file with a pre-signed URL that doesn't need authentication."""
-        logger.info(f"Processing pre-signed file entity: {file_entity.name}")
+        self.logger.info(f"Processing pre-signed file entity: {file_entity.name}")
 
         try:
             # Create stream without access token for pre-signed URLs
@@ -1278,11 +1280,11 @@ class NotionSource(BaseSource):
                 error_msg = "Unknown reason"
                 if processed_entity.metadata:
                     error_msg = processed_entity.metadata.get("error", "Unknown reason")
-                logger.warning(f"Skipping file {processed_entity.name}: {error_msg}")
+                self.logger.warning(f"Skipping file {processed_entity.name}: {error_msg}")
 
             return processed_entity
         except Exception as e:
-            logger.error(f"Error processing pre-signed file {file_entity.name}: {e}")
+            self.logger.error(f"Error processing pre-signed file {file_entity.name}: {e}")
             return None
 
     async def _create_lazy_page_entity(
@@ -1296,7 +1298,7 @@ class NotionSource(BaseSource):
         page_id = page["id"]
         parent = page.get("parent", {})
 
-        logger.info(f"🦴 LAZY_SKELETON Creating skeleton entity for page: {page_id}")
+        self.logger.info(f"🦴 LAZY_SKELETON Creating skeleton entity for page: {page_id}")
 
         # Create entity with only immediately available data
         entity = NotionPageEntity(
@@ -1339,7 +1341,9 @@ class NotionSource(BaseSource):
             breadcrumbs,
         )
 
-        logger.info(f"🔄 LAZY_OPERATION Added content aggregation operation for page: {page_id}")
+        self.logger.info(
+            f"🔄 LAZY_OPERATION Added content aggregation operation for page: {page_id}"
+        )
 
         # If it's a database page, add property extraction operation
         if database_id and database_schema:
@@ -1350,7 +1354,7 @@ class NotionSource(BaseSource):
                 database_id,
                 database_schema,
             )
-            logger.info(
+            self.logger.info(
                 f"🔄 LAZY_OPERATION Added property extraction operation for page: {page_id}"
             )
 
@@ -1423,7 +1427,7 @@ class NotionSource(BaseSource):
                     start_cursor = response.get("next_cursor")
 
                 except Exception as e:
-                    logger.error(f"Error fetching blocks for {block_id}: {str(e)}")
+                    self.logger.error(f"Error fetching blocks for {block_id}: {str(e)}")
                     raise e
 
         # Start fetching from the page
@@ -1464,7 +1468,7 @@ class NotionSource(BaseSource):
                         property_entities.append(property_entity)
 
                     except Exception as e:
-                        logger.warning(
+                        self.logger.warning(
                             f"Error processing property {prop_name} for page {page_id}: {str(e)}"
                         )
 

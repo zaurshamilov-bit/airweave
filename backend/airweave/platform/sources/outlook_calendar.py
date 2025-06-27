@@ -54,7 +54,7 @@ class OutlookCalendarSource(BaseSource):
         self, client: httpx.AsyncClient, url: str, params: Optional[dict] = None
     ) -> dict:
         """Make an authenticated GET request to Microsoft Graph API."""
-        logger.debug(f"Making authenticated GET request to: {url} with params: {params}")
+        self.logger.debug(f"Making authenticated GET request to: {url} with params: {params}")
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Accept": "application/json",
@@ -63,10 +63,10 @@ class OutlookCalendarSource(BaseSource):
             response = await client.get(url, headers=headers, params=params)
             response.raise_for_status()
             data = response.json()
-            logger.debug(f"Received response from {url} - Status: {response.status_code}")
+            self.logger.debug(f"Received response from {url} - Status: {response.status_code}")
             return data
         except Exception as e:
-            logger.error(f"Error in API request to {url}: {str(e)}")
+            self.logger.error(f"Error in API request to {url}: {str(e)}")
             raise
 
     async def _generate_calendar_entities(
@@ -76,23 +76,23 @@ class OutlookCalendarSource(BaseSource):
 
         Endpoint: GET /me/calendars
         """
-        logger.info("Starting calendar entity generation")
+        self.logger.info("Starting calendar entity generation")
         url = f"{self.GRAPH_BASE_URL}/me/calendars"
         calendar_count = 0
 
         try:
             while url:
-                logger.debug(f"Fetching calendars from: {url}")
+                self.logger.debug(f"Fetching calendars from: {url}")
                 data = await self._get_with_auth(client, url)
                 calendars = data.get("value", [])
-                logger.info(f"Retrieved {len(calendars)} calendars")
+                self.logger.info(f"Retrieved {len(calendars)} calendars")
 
                 for calendar_data in calendars:
                     calendar_count += 1
                     calendar_id = calendar_data["id"]
                     calendar_name = calendar_data.get("name", "Unknown Calendar")
 
-                    logger.debug(f"Processing calendar #{calendar_count}: {calendar_name}")
+                    self.logger.debug(f"Processing calendar #{calendar_count}: {calendar_name}")
 
                     yield OutlookCalendarCalendarEntity(
                         entity_id=calendar_id,
@@ -119,12 +119,12 @@ class OutlookCalendarSource(BaseSource):
                 # Handle pagination
                 url = data.get("@odata.nextLink")
                 if url:
-                    logger.debug("Following pagination to next page")
+                    self.logger.debug("Following pagination to next page")
 
-            logger.info(f"Completed calendar generation. Total calendars: {calendar_count}")
+            self.logger.info(f"Completed calendar generation. Total calendars: {calendar_count}")
 
         except Exception as e:
-            logger.error(f"Error generating calendar entities: {str(e)}")
+            self.logger.error(f"Error generating calendar entities: {str(e)}")
             raise
 
     async def _generate_event_entities(
@@ -138,7 +138,7 @@ class OutlookCalendarSource(BaseSource):
         """
         calendar_id = calendar.entity_id
         calendar_name = calendar.name
-        logger.info(f"Starting event generation for calendar: {calendar_name}")
+        self.logger.info(f"Starting event generation for calendar: {calendar_name}")
 
         url = f"{self.GRAPH_BASE_URL}/me/calendars/{calendar_id}/events"
         params = {"$top": 50}
@@ -153,39 +153,39 @@ class OutlookCalendarSource(BaseSource):
 
         try:
             while url:
-                logger.debug(f"Fetching events from: {url}")
+                self.logger.debug(f"Fetching events from: {url}")
                 data = await self._get_with_auth(client, url, params=params)
                 events = data.get("value", [])
-                logger.info(f"Retrieved {len(events)} events from calendar {calendar_name}")
+                self.logger.info(f"Retrieved {len(events)} events from calendar {calendar_name}")
 
                 for event_data in events:
                     event_count += 1
                     event_id = event_data.get("id", "unknown")
                     event_subject = event_data.get("subject", f"Event {event_count}")
 
-                    logger.debug(f"Processing event #{event_count}: {event_subject}")
+                    self.logger.debug(f"Processing event #{event_count}: {event_subject}")
 
                     try:
                         # Process the event
                         async for entity in self._process_event(client, event_data, cal_breadcrumb):
                             yield entity
                     except Exception as e:
-                        logger.error(f"Error processing event {event_id}: {str(e)}")
+                        self.logger.error(f"Error processing event {event_id}: {str(e)}")
                         # Continue with other events
 
                 # Handle pagination
                 url = data.get("@odata.nextLink")
                 if url:
-                    logger.debug("Following pagination to next page")
+                    self.logger.debug("Following pagination to next page")
                     params = None  # params are included in the nextLink
 
-            logger.info(
+            self.logger.info(
                 f"Completed event generation for calendar {calendar_name}. "
                 f"Total events: {event_count}"
             )
 
         except Exception as e:
-            logger.error(f"Error generating events for calendar {calendar_name}: {str(e)}")
+            self.logger.error(f"Error generating events for calendar {calendar_name}: {str(e)}")
             raise
 
     def _parse_datetime_field(self, dt_obj: Optional[Dict]) -> Optional[datetime]:
@@ -203,7 +203,7 @@ class OutlookCalendarSource(BaseSource):
                     dt_str += "+00:00"
                 return datetime.fromisoformat(dt_str)
         except (ValueError, TypeError) as e:
-            logger.warning(f"Error parsing datetime: {str(e)}")
+            self.logger.warning(f"Error parsing datetime: {str(e)}")
         return None
 
     def _parse_simple_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
@@ -216,7 +216,7 @@ class OutlookCalendarSource(BaseSource):
                     dt_str = dt_str.replace("Z", "+00:00")
                 return datetime.fromisoformat(dt_str)
         except (ValueError, TypeError) as e:
-            logger.warning(f"Error parsing simple datetime: {str(e)}")
+            self.logger.warning(f"Error parsing simple datetime: {str(e)}")
         return None
 
     def _create_event_entity(
@@ -286,12 +286,12 @@ class OutlookCalendarSource(BaseSource):
         event_id = event_data["id"]
         event_subject = event_data.get("subject", "No Subject")
 
-        logger.debug(f"Processing event: {event_subject} (ID: {event_id})")
+        self.logger.debug(f"Processing event: {event_subject} (ID: {event_id})")
 
         # Create event entity
         event_entity = self._create_event_entity(event_data, cal_breadcrumb)
         yield event_entity
-        logger.debug(f"Event entity yielded for {event_subject}")
+        self.logger.debug(f"Event entity yielded for {event_subject}")
 
         # Create event breadcrumb for attachments
         event_breadcrumb = Breadcrumb(
@@ -302,20 +302,22 @@ class OutlookCalendarSource(BaseSource):
 
         # Process attachments if the event has any
         if event_entity.has_attachments:
-            logger.debug(f"Event {event_subject} has attachments, processing them")
+            self.logger.debug(f"Event {event_subject} has attachments, processing them")
             attachment_count = 0
             try:
                 async for attachment_entity in self._process_event_attachments(
                     client, event_id, [cal_breadcrumb, event_breadcrumb]
                 ):
                     attachment_count += 1
-                    logger.debug(
+                    self.logger.debug(
                         f"Yielding attachment #{attachment_count} from event {event_subject}"
                     )
                     yield attachment_entity
-                logger.debug(f"Processed {attachment_count} attachments for event {event_subject}")
+                self.logger.debug(
+                    f"Processed {attachment_count} attachments for event {event_subject}"
+                )
             except Exception as e:
-                logger.error(f"Error processing attachments for event {event_id}: {str(e)}")
+                self.logger.error(f"Error processing attachments for event {event_id}: {str(e)}")
 
     async def _create_content_stream(self, binary_data: bytes):
         """Create an async generator for binary content."""
@@ -328,16 +330,16 @@ class OutlookCalendarSource(BaseSource):
         breadcrumbs: List[Breadcrumb],
     ) -> AsyncGenerator[OutlookCalendarAttachmentEntity, None]:
         """Process event attachments using the standard file processing pipeline."""
-        logger.debug(f"Processing attachments for event {event_id}")
+        self.logger.debug(f"Processing attachments for event {event_id}")
 
         url = f"{self.GRAPH_BASE_URL}/me/events/{event_id}/attachments"
 
         try:
             while url:
-                logger.debug(f"Making request to: {url}")
+                self.logger.debug(f"Making request to: {url}")
                 data = await self._get_with_auth(client, url)
                 attachments = data.get("value", [])
-                logger.debug(f"Retrieved {len(attachments)} attachments for event {event_id}")
+                self.logger.debug(f"Retrieved {len(attachments)} attachments for event {event_id}")
 
                 for att_idx, attachment in enumerate(attachments):
                     processed_entity = await self._process_single_attachment(
@@ -349,10 +351,10 @@ class OutlookCalendarSource(BaseSource):
                 # Handle pagination
                 url = data.get("@odata.nextLink")
                 if url:
-                    logger.debug("Following pagination link")
+                    self.logger.debug("Following pagination link")
 
         except Exception as e:
-            logger.error(f"Error processing attachments for event {event_id}: {str(e)}")
+            self.logger.error(f"Error processing attachments for event {event_id}: {str(e)}")
 
     async def _process_single_attachment(
         self,
@@ -368,14 +370,14 @@ class OutlookCalendarSource(BaseSource):
         attachment_type = attachment.get("@odata.type", "")
         attachment_name = attachment.get("name", "unknown")
 
-        logger.debug(
+        self.logger.debug(
             f"Processing attachment #{att_idx + 1}/{total_attachments} "
             f"(ID: {attachment_id}, Name: {attachment_name}, Type: {attachment_type})"
         )
 
         # Only process file attachments
         if "#microsoft.graph.fileAttachment" not in attachment_type:
-            logger.debug(
+            self.logger.debug(
                 f"Skipping non-file attachment: {attachment_name} (type: {attachment_type})"
             )
             return None
@@ -384,7 +386,7 @@ class OutlookCalendarSource(BaseSource):
             # Get attachment content if not already included
             content_bytes = attachment.get("contentBytes")
             if not content_bytes:
-                logger.debug(f"Fetching content for attachment {attachment_id}")
+                self.logger.debug(f"Fetching content for attachment {attachment_id}")
                 attachment_url = (
                     f"{self.GRAPH_BASE_URL}/me/events/{event_id}/attachments/{attachment_id}"
                 )
@@ -392,7 +394,7 @@ class OutlookCalendarSource(BaseSource):
                 content_bytes = attachment_data.get("contentBytes")
 
                 if not content_bytes:
-                    logger.warning(f"No content found for attachment {attachment_name}")
+                    self.logger.warning(f"No content found for attachment {attachment_name}")
                     return None
 
             # Create file entity
@@ -421,11 +423,13 @@ class OutlookCalendarSource(BaseSource):
             try:
                 binary_data = base64.b64decode(content_bytes)
             except Exception as e:
-                logger.error(f"Error decoding attachment content: {str(e)}")
+                self.logger.error(f"Error decoding attachment content: {str(e)}")
                 return None
 
             # Process using the BaseSource method
-            logger.debug(f"Processing file entity for {attachment_name} with direct content stream")
+            self.logger.debug(
+                f"Processing file entity for {attachment_name} with direct content stream"
+            )
             processed_entity = await self.process_file_entity_with_content(
                 file_entity=file_entity,
                 content_stream=self._create_content_stream(binary_data),
@@ -433,29 +437,29 @@ class OutlookCalendarSource(BaseSource):
             )
 
             if processed_entity:
-                logger.debug(f"Successfully processed attachment: {attachment_name}")
+                self.logger.debug(f"Successfully processed attachment: {attachment_name}")
                 return processed_entity
             else:
-                logger.warning(f"Processing failed for attachment: {attachment_name}")
+                self.logger.warning(f"Processing failed for attachment: {attachment_name}")
                 return None
 
         except Exception as e:
-            logger.error(f"Error processing attachment {attachment_id}: {str(e)}")
+            self.logger.error(f"Error processing attachment {attachment_id}: {str(e)}")
             return None
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all Outlook Calendar entities: Calendars, Events and Attachments."""
-        logger.info("===== STARTING OUTLOOK CALENDAR ENTITY GENERATION =====")
+        self.logger.info("===== STARTING OUTLOOK CALENDAR ENTITY GENERATION =====")
         entity_count = 0
 
         try:
             async with httpx.AsyncClient() as client:
-                logger.info("HTTP client created, starting entity generation")
+                self.logger.info("HTTP client created, starting entity generation")
 
                 # Generate calendar entities and their events
                 async for calendar_entity in self._generate_calendar_entities(client):
                     entity_count += 1
-                    logger.info(
+                    self.logger.info(
                         f"Yielding entity #{entity_count}: Calendar - {calendar_entity.name}"
                     )
                     yield calendar_entity
@@ -467,15 +471,15 @@ class OutlookCalendarSource(BaseSource):
                         entity_count += 1
                         entity_type = type(event_entity).__name__
                         entity_id = event_entity.entity_id
-                        logger.info(
+                        self.logger.info(
                             f"Yielding entity #{entity_count}: {entity_type} with ID {entity_id}"
                         )
                         yield event_entity
 
         except Exception as e:
-            logger.error(f"Error in entity generation: {str(e)}", exc_info=True)
+            self.logger.error(f"Error in entity generation: {str(e)}", exc_info=True)
             raise
         finally:
-            logger.info(
+            self.logger.info(
                 f"===== OUTLOOK CALENDAR ENTITY GENERATION COMPLETE: {entity_count} entities ====="
             )

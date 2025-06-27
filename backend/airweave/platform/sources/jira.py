@@ -105,7 +105,7 @@ class JiraSource(BaseSource):
     )
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Any:
         """Make an authenticated GET request to the Jira REST API."""
-        logger.debug(f"Making authenticated request to {url}")
+        self.logger.debug(f"Making authenticated request to {url}")
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Accept": "application/json",
@@ -116,25 +116,25 @@ class JiraSource(BaseSource):
         if self.cloud_id:
             headers["X-Cloud-ID"] = self.cloud_id
 
-        logger.debug(f"Request headers: {headers}")
+        self.logger.debug(f"Request headers: {headers}")
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
-            logger.debug(f"Response status: {response.status_code}")
-            logger.debug(f"Response size: {len(response.content)} bytes")
+            self.logger.debug(f"Response status: {response.status_code}")
+            self.logger.debug(f"Response size: {len(response.content)} bytes")
             return data
         except Exception as e:
-            logger.error(f"Request failed: {str(e)}")
+            self.logger.error(f"Request failed: {str(e)}")
             if isinstance(e, httpx.HTTPStatusError):
-                logger.error(f"Response status: {e.response.status_code}")
-                logger.error(f"Response body: {e.response.text}")
+                self.logger.error(f"Response status: {e.response.status_code}")
+                self.logger.error(f"Response body: {e.response.text}")
             raise
 
     # Entity Creation Functions
     def _create_project_entity(self, project_data):
         """Transform raw project data into a JiraProjectEntity."""
-        logger.debug(
+        self.logger.debug(
             f"Creating project entity for: {project_data.get('key')} - {project_data.get('name')}"
         )
         # Use a composite ID format that includes the entity type for uniqueness
@@ -194,12 +194,12 @@ class JiraSource(BaseSource):
         if description:
             if isinstance(description, dict):
                 # Extract plain text from the ADF structure
-                logger.debug(f"Converting ADF description to text for issue {issue_key}")
+                self.logger.debug(f"Converting ADF description to text for issue {issue_key}")
                 description_text = self._extract_text_from_adf(description)
             else:
                 description_text = description
 
-        logger.debug(
+        self.logger.debug(
             f"Creating issue entity: {issue_key} - Type: {issue_type_name}, Status: {status_name}"
         )
 
@@ -224,7 +224,7 @@ class JiraSource(BaseSource):
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[JiraProjectEntity, None]:
         """Generate JiraProjectEntity objects."""
-        logger.info("Starting project entity generation")
+        self.logger.info("Starting project entity generation")
         search_api_path = "/rest/api/3/project/search"
         max_results = 50
         start_at = 0
@@ -236,12 +236,12 @@ class JiraSource(BaseSource):
             project_search_url = (
                 f"{self.base_url}{search_api_path}?startAt={start_at}&maxResults={max_results}"
             )
-            logger.info(f"Fetching project page {page} from {project_search_url}")
+            self.logger.info(f"Fetching project page {page} from {project_search_url}")
 
             # Get project data
             data = await self._get_with_auth(client, project_search_url)
             projects = data.get("values", [])
-            logger.info(f"Retrieved {len(projects)} projects on page {page}")
+            self.logger.info(f"Retrieved {len(projects)} projects on page {page}")
 
             # Process each project
             for project in projects:
@@ -251,21 +251,23 @@ class JiraSource(BaseSource):
 
             # Handle pagination
             if data.get("isLast", True):
-                logger.info(
+                self.logger.info(
                     f"Reached last page of projects, total projects found: {total_projects}"
                 )
                 break
 
             start_at = data.get("startAt", 0) + max_results
             page += 1
-            logger.debug(f"Moving to next page, startAt={start_at}")
+            self.logger.debug(f"Moving to next page, startAt={start_at}")
 
     async def _generate_issue_entities(
         self, client: httpx.AsyncClient, project: JiraProjectEntity
     ) -> AsyncGenerator[JiraIssueEntity, None]:
         """Generate JiraIssueEntity for each issue in the given project using JQL search."""
         project_key = project.project_key
-        logger.info(f"Starting issue entity generation for project: {project_key} ({project.name})")
+        self.logger.info(
+            f"Starting issue entity generation for project: {project_key} ({project.name})"
+        )
 
         # Setup for pagination
         search_url = f"{self.base_url}/rest/api/3/search"
@@ -287,13 +289,15 @@ class JiraSource(BaseSource):
             query_string = "&".join([f"{k}={v}" for k, v in params.items()])
             full_url = f"{search_url}?{query_string}"
 
-            logger.info(f"Fetching issues page {page} for project {project_key}")
+            self.logger.info(f"Fetching issues page {page} for project {project_key}")
             data = await self._get_with_auth(client, full_url)
 
             # Log response overview
             total = data.get("total", 0)
             issues = data.get("issues", [])
-            logger.info(f"Found {len(issues)} issues on page {page} (total available: {total})")
+            self.logger.info(
+                f"Found {len(issues)} issues on page {page} (total available: {total})"
+            )
 
             # Process each issue
             for issue_data in issues:
@@ -306,16 +310,16 @@ class JiraSource(BaseSource):
             page += 1
 
             if start_at >= total:
-                logger.info(
+                self.logger.info(
                     f"Completed fetching all {total_issues} issues for project {project_key}"
                 )
                 break
 
-            logger.debug(f"Moving to next page, startAt={start_at}")
+            self.logger.debug(f"Moving to next page, startAt={start_at}")
 
     async def generate_entities(self) -> AsyncGenerator[BaseEntity, None]:
         """Generate all entities from Jira."""
-        logger.info("Starting Jira entity generation process")
+        self.logger.info("Starting Jira entity generation process")
         async with httpx.AsyncClient() as client:
             project_count = 0
             issue_count = 0
@@ -330,14 +334,14 @@ class JiraSource(BaseSource):
 
                 # Skip if already processed
                 if project_identifier in processed_entities:
-                    logger.warning(
+                    self.logger.warning(
                         f"Skipping duplicate project: {project_entity.project_key} "
                         f"(ID: {project_entity.entity_id})"
                     )
                     continue
 
                 processed_entities.add(project_identifier)
-                logger.info(
+                self.logger.info(
                     f"Yielding project entity: {project_entity.project_key} ({project_entity.name})"
                 )
                 yield project_entity
@@ -350,7 +354,7 @@ class JiraSource(BaseSource):
 
                     # Skip if already processed
                     if issue_identifier in processed_entities:
-                        logger.warning(
+                        self.logger.warning(
                             f"Skipping duplicate issue: {issue_entity.issue_key} "
                             f"(ID: {issue_entity.entity_id})"
                         )
@@ -359,15 +363,15 @@ class JiraSource(BaseSource):
                     processed_entities.add(issue_identifier)
                     issue_count += 1
                     project_issue_count += 1
-                    logger.info(f"Yielding issue entity: {issue_entity.issue_key}")
+                    self.logger.info(f"Yielding issue entity: {issue_entity.issue_key}")
                     yield issue_entity
 
-                logger.info(
+                self.logger.info(
                     f"Completed {project_issue_count} issues for project "
                     f"{project_entity.project_key}"
                 )
 
-            logger.info(
+            self.logger.info(
                 f"Completed Jira entity generation: {project_count} projects, "
                 f"{issue_count} issues total"
             )

@@ -67,10 +67,28 @@ const create_credentials_oauth = async (
         // Replace the alert with redirectWithError
         if (navigate) {
             // If navigate is available, use it for redirection
-            redirectWithError(navigate, error, dialogState.sourceDetails?.name || dialogState.sourceShortName);
+            redirectWithError(navigate, {
+                serviceName: dialogState.sourceDetails?.name || dialogState.sourceShortName,
+                sourceShortName: dialogState.sourceShortName,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorDetails: error instanceof Error ? error.stack : undefined,
+                dialogId: dialogState.dialogId,
+                canRetry: true,
+                dialogState: dialogState,
+                timestamp: Date.now()
+            }, dialogState.sourceDetails?.name || dialogState.sourceShortName);
         } else {
             // Fallback to window.location if navigate isn't available
-            redirectWithError(window.location, error, dialogState.sourceDetails?.name || dialogState.sourceShortName);
+            redirectWithError(window.location, {
+                serviceName: dialogState.sourceDetails?.name || dialogState.sourceShortName,
+                sourceShortName: dialogState.sourceShortName,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorDetails: error instanceof Error ? error.stack : undefined,
+                dialogId: dialogState.dialogId,
+                canRetry: true,
+                dialogState: dialogState,
+                timestamp: Date.now()
+            }, dialogState.sourceDetails?.name || dialogState.sourceShortName);
         }
         return false;
     }
@@ -81,7 +99,8 @@ const create_credential_non_oauth = async (
     authValues: Record<string, any>,
     sourceDetails: any,
     sourceShortName: string,
-    navigate?: any
+    navigate?: any,
+    dialogState?: Record<string, any>  // Add this parameter
 ): Promise<{ success: boolean, credentialId?: string }> => {
     try {
         // Prepare the credential data according to IntegrationCredentialRawCreate schema
@@ -117,9 +136,27 @@ const create_credential_non_oauth = async (
     } catch (error) {
         // Replace the alert with redirectWithError
         if (navigate) {
-            redirectWithError(navigate, error, sourceDetails?.name || sourceShortName);
+            redirectWithError(navigate, {
+                serviceName: sourceDetails?.name || sourceShortName,
+                sourceShortName: sourceShortName,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorDetails: error instanceof Error ? error.stack : undefined,
+                dialogId: dialogState?.dialogId,
+                canRetry: true,
+                dialogState: dialogState,
+                timestamp: Date.now()
+            }, sourceDetails?.name || sourceShortName);
         } else {
-            redirectWithError(window.location, error, sourceDetails?.name || sourceShortName);
+            redirectWithError(window.location, {
+                serviceName: sourceDetails?.name || sourceShortName,
+                sourceShortName: sourceShortName,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorDetails: error instanceof Error ? error.stack : undefined,
+                dialogId: dialogState?.dialogId,
+                canRetry: true,
+                dialogState: dialogState,
+                timestamp: Date.now()
+            }, sourceDetails?.name || sourceShortName);
         }
         return { success: false };
     }
@@ -155,16 +192,34 @@ ${authFieldsInfo}
         if (sourceDetails.auth_type && sourceDetails.auth_type.startsWith('oauth2')) {
             return { success: await create_credentials_oauth(dialogState, navigate) };
         } else {
-            return await create_credential_non_oauth(authValues, sourceDetails, sourceShortName, navigate);
+            return await create_credential_non_oauth(authValues, sourceDetails, sourceShortName, navigate, dialogState);
         }
     } catch (error) {
         console.error("Authentication failed:", error);
 
         // Add redirect here too for any uncaught errors
         if (navigate) {
-            redirectWithError(navigate, error, sourceDetails?.name || sourceShortName);
+            redirectWithError(navigate, {
+                serviceName: dialogState.sourceDetails?.name || dialogState.sourceShortName,
+                sourceShortName: dialogState.sourceShortName,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorDetails: error instanceof Error ? error.stack : undefined,
+                dialogId: dialogState.dialogId,
+                canRetry: true,
+                dialogState: dialogState,
+                timestamp: Date.now()
+            }, dialogState.sourceDetails?.name || dialogState.sourceShortName);
         } else {
-            redirectWithError(window.location, error, sourceDetails?.name || sourceShortName);
+            redirectWithError(window.location, {
+                serviceName: dialogState.sourceDetails?.name || dialogState.sourceShortName,
+                sourceShortName: dialogState.sourceShortName,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorDetails: error instanceof Error ? error.stack : undefined,
+                dialogId: dialogState.dialogId,
+                canRetry: true,
+                dialogState: dialogState,
+                timestamp: Date.now()
+            }, dialogState.sourceDetails?.name || dialogState.sourceShortName);
         }
         return { success: false };
     }

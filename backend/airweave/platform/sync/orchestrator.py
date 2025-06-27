@@ -11,6 +11,7 @@ from airweave.platform.sync.context import SyncContext
 from airweave.platform.sync.entity_processor import EntityProcessor
 from airweave.platform.sync.stream import AsyncSourceStream
 from airweave.platform.sync.worker_pool import AsyncWorkerPool
+from airweave.platform.utils.error_utils import get_error_message
 
 
 class SyncOrchestrator:
@@ -120,7 +121,7 @@ class SyncOrchestrator:
 
         except Exception as e:
             stream_error = e
-            self.sync_context.logger.error(f"Error during entity streaming: {e}")
+            self.sync_context.logger.error(f"Error during entity streaming: {get_error_message(e)}")
             # Cancel all pending tasks
             for task in pending_tasks:
                 task.cancel()
@@ -185,8 +186,9 @@ class SyncOrchestrator:
 
     async def _handle_sync_failure(self, error: Exception) -> None:
         """Handle sync failure by updating job status with error details."""
+        error_message = get_error_message(error)
         self.sync_context.logger.error(
-            f"Sync job {self.sync_context.sync_job.id} failed: {error}", exc_info=True
+            f"Sync job {self.sync_context.sync_job.id} failed: {error_message}", exc_info=True
         )
 
         stats = getattr(self.sync_context.progress, "stats", None)
@@ -195,7 +197,7 @@ class SyncOrchestrator:
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.FAILED,
             auth_context=self.sync_context.auth_context,
-            error=str(error),
+            error=error_message,
             failed_at=utc_now_naive(),
             stats=stats,
         )

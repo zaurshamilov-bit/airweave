@@ -82,13 +82,22 @@ export const SourceSelectorView: React.FC<SourceSelectorViewProps> = ({
 
         // Create the service name with collection info if available
         const service = collectionId && collectionName ?
-            `Collection: ${collectionName}` : undefined;
+            `Collection: ${collectionName}` : "Source Selection";
 
         if (onError) {
             onError(error, service);
         } else {
-            // Use the common error utility to redirect
-            redirectWithError(navigate, error, service);
+            // Use the common error utility to redirect with dialogId
+            const errorDetails = {
+                serviceName: service,
+                sourceShortName: undefined, // No specific source selected yet
+                errorMessage: error instanceof Error ? error.message : String(error),
+                errorDetails: error instanceof Error ? error.stack : undefined,
+                dialogId: viewData?.dialogId, // Include dialogId from viewData
+                timestamp: Date.now()
+            };
+
+            redirectWithError(navigate, errorDetails, service);
         }
     };
 

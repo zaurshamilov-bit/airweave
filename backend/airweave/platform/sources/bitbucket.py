@@ -27,7 +27,6 @@ import httpx
 import tenacity
 from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import BitbucketAuthConfig
 from airweave.platform.decorators import source
@@ -389,7 +388,7 @@ class BitbucketSource(BaseSource):
                             yield file_entity
 
         except Exception as e:
-            logger.error(f"Error traversing path {path}: {str(e)}")
+            self.logger.error(f"Error traversing path {path}: {str(e)}")
 
     async def _process_file(
         self,
@@ -454,7 +453,7 @@ class BitbucketSource(BaseSource):
                     try:
                         line_count = content_text.count("\n") + 1
                     except Exception as e:
-                        logger.error(f"Error counting lines for {item_path}: {str(e)}")
+                        self.logger.error(f"Error counting lines for {item_path}: {str(e)}")
 
                 # Create file entity with content stored in memory
                 file_entity = BitbucketCodeFileEntity(
@@ -487,7 +486,7 @@ class BitbucketSource(BaseSource):
 
                 yield file_entity
         except Exception as e:
-            logger.error(f"Error processing file {item_path}: {str(e)}")
+            self.logger.error(f"Error processing file {item_path}: {str(e)}")
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate entities from Bitbucket.
@@ -515,7 +514,7 @@ class BitbucketSource(BaseSource):
 
                 # Use specified branch or default branch
                 branch = self.branch or repo_data.mainbranch or "master"
-                logger.info(f"Using branch: {branch} for repo {self.repo_slug}")
+                self.logger.info(f"Using branch: {branch} for repo {self.repo_slug}")
 
                 async for entity in self._traverse_repository(
                     client, self.workspace, self.repo_slug, branch
@@ -536,7 +535,7 @@ class BitbucketSource(BaseSource):
 
                     # Use specified branch or default branch
                     branch = self.branch or repo_entity.mainbranch or "master"
-                    logger.info(f"Using branch: {branch} for repo {repo_slug}")
+                    self.logger.info(f"Using branch: {branch} for repo {repo_slug}")
 
                     async for entity in self._traverse_repository(
                         client, self.workspace, repo_slug, branch

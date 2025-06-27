@@ -10,6 +10,7 @@ from airweave.platform.file_handling.conversion._base import (
     DocumentConverter,
     DocumentConverterResult,
 )
+from airweave.platform.sync.async_helpers import run_in_thread_pool
 
 # Initialize Mistral client if API key is available
 mistral_client = None
@@ -98,27 +99,36 @@ class PdfConverter(DocumentConverter):
         Returns:
             Tuple of (markdown_content, title)
         """
-        # Upload file to Mistral
-        with open(pdf_path, "rb") as file:
-            uploaded_pdf = self.mistral_client.files.upload(
-                file={
-                    "file_name": os.path.basename(pdf_path),
-                    "content": file,
+
+        # Upload file to Mistral (non-blocking)
+        def _upload_file():
+            with open(pdf_path, "rb") as file:
+                return self.mistral_client.files.upload(
+                    file={
+                        "file_name": os.path.basename(pdf_path),
+                        "content": file,
+                    },
+                    purpose="ocr",
+                )
+
+        uploaded_pdf = await run_in_thread_pool(_upload_file)
+
+        # Get signed URL for accessing the file (non-blocking)
+        signed_url = await run_in_thread_pool(
+            self.mistral_client.files.get_signed_url, file_id=uploaded_pdf.id
+        )
+
+        # Process file with OCR (non-blocking)
+        def _process_ocr():
+            return self.mistral_client.ocr.process(
+                model="mistral-ocr-latest",
+                document={
+                    "type": "document_url",
+                    "document_url": signed_url.url,
                 },
-                purpose="ocr",
             )
 
-        # Get signed URL for accessing the file
-        signed_url = self.mistral_client.files.get_signed_url(file_id=uploaded_pdf.id)
-
-        # Process file with OCR
-        ocr_response = self.mistral_client.ocr.process(
-            model="mistral-ocr-latest",
-            document={
-                "type": "document_url",
-                "document_url": signed_url.url,
-            },
-        )
+        ocr_response = await run_in_thread_pool(_process_ocr)
 
         # Extract markdown content from each page
         md_content = ""

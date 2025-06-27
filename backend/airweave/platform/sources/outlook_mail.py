@@ -57,16 +57,16 @@ class OutlookMailSource(BaseSource):
         self, client: httpx.AsyncClient, url: str, params: Optional[dict] = None
     ) -> dict:
         """Make an authenticated GET request to Microsoft Graph API."""
-        logger.debug(f"Making authenticated GET request to: {url} with params: {params}")
+        self.logger.debug(f"Making authenticated GET request to: {url} with params: {params}")
         headers = {"Authorization": f"Bearer {self.access_token}"}
         try:
             response = await client.get(url, headers=headers, params=params)
             response.raise_for_status()
             data = response.json()
-            logger.debug(f"Received response from {url} - Status: {response.status_code}")
+            self.logger.debug(f"Received response from {url} - Status: {response.status_code}")
             return data
         except Exception as e:
-            logger.error(f"Error in API request to {url}: {str(e)}")
+            self.logger.error(f"Error in API request to {url}: {str(e)}")
             raise
 
     async def _process_folder_messages(
@@ -76,14 +76,14 @@ class OutlookMailSource(BaseSource):
         folder_breadcrumb: Breadcrumb,
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Process messages in a folder and handle errors gracefully."""
-        logger.info(f"Processing messages in folder: {folder_entity.display_name}")
+        self.logger.info(f"Processing messages in folder: {folder_entity.display_name}")
         try:
             async for entity in self._generate_message_entities(
                 client, folder_entity, folder_breadcrumb
             ):
                 yield entity
         except Exception as e:
-            logger.error(
+            self.logger.error(
                 f"Error processing messages in folder {folder_entity.display_name}: {str(e)}"
             )
             # Continue with other folders even if one fails
@@ -97,7 +97,7 @@ class OutlookMailSource(BaseSource):
     ) -> AsyncGenerator[OutlookMailFolderEntity, None]:
         """Process child folders recursively and handle errors gracefully."""
         if folder_entity.child_folder_count > 0:
-            logger.info(
+            self.logger.info(
                 f"Folder {folder_entity.display_name} has "
                 f"{folder_entity.child_folder_count} child folders, recursively processing"
             )
@@ -109,7 +109,7 @@ class OutlookMailSource(BaseSource):
                 ):
                     yield child_entity
             except Exception as e:
-                logger.error(
+                self.logger.error(
                     f"Error processing child folders of {folder_entity.display_name}: {str(e)}"
                 )
                 # Continue with other folders even if one fails
@@ -130,18 +130,18 @@ class OutlookMailSource(BaseSource):
         # Decide the endpoint: top-level vs. child folders
         if folder_id:
             url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/childFolders"
-            logger.info(f"Fetching child folders for folder ID: {folder_id}")
+            self.logger.info(f"Fetching child folders for folder ID: {folder_id}")
         else:
             # top-level mail folders
             url = f"{self.GRAPH_BASE_URL}/me/mailFolders"
-            logger.info("Fetching top-level mail folders")
+            self.logger.info("Fetching top-level mail folders")
 
         try:
             while url:
-                logger.debug(f"Making request to: {url}")
+                self.logger.debug(f"Making request to: {url}")
                 data = await self._get_with_auth(client, url)
                 folders = data.get("value", [])
-                logger.info(f"Retrieved {len(folders)} folders")
+                self.logger.info(f"Retrieved {len(folders)} folders")
 
                 for folder in folders:
                     # Create and yield folder entity
@@ -156,7 +156,7 @@ class OutlookMailSource(BaseSource):
                         well_known_name=folder.get("wellKnownName"),
                     )
 
-                    logger.info(
+                    self.logger.info(
                         f"Processing folder: {folder_entity.display_name} "
                         f"(ID: {folder_entity.entity_id}, Items: {folder_entity.total_item_count})"
                     )
@@ -184,11 +184,11 @@ class OutlookMailSource(BaseSource):
                 # Handle pagination
                 next_link = data.get("@odata.nextLink")
                 if next_link:
-                    logger.debug(f"Following pagination link: {next_link}")
+                    self.logger.debug(f"Following pagination link: {next_link}")
                 url = next_link if next_link else None
 
         except Exception as e:
-            logger.error(f"Error fetching folders: {str(e)}")
+            self.logger.error(f"Error fetching folders: {str(e)}")
             raise
 
     async def _generate_message_entities(
@@ -200,10 +200,10 @@ class OutlookMailSource(BaseSource):
         """Generate OutlookMessageEntity objects and their attachments for a given folder."""
         # Skip folders with no messages
         if folder_entity.total_item_count == 0:
-            logger.debug(f"Skipping folder {folder_entity.display_name} - no messages")
+            self.logger.debug(f"Skipping folder {folder_entity.display_name} - no messages")
             return
 
-        logger.info(
+        self.logger.info(
             f"Starting message generation for folder: {folder_entity.display_name} "
             f"({folder_entity.total_item_count} items)"
         )
@@ -217,13 +217,13 @@ class OutlookMailSource(BaseSource):
         try:
             while url:
                 page_count += 1
-                logger.info(
+                self.logger.info(
                     f"Fetching message list page #{page_count} for folder "
                     f"{folder_entity.display_name}"
                 )
                 data = await self._get_with_auth(client, url, params=params)
                 messages = data.get("value", [])
-                logger.info(
+                self.logger.info(
                     f"Found {len(messages)} messages on page {page_count} in folder "
                     f"{folder_entity.display_name}"
                 )
@@ -231,14 +231,14 @@ class OutlookMailSource(BaseSource):
                 for msg_idx, message_data in enumerate(messages):
                     message_count += 1
                     message_id = message_data.get("id", "unknown")
-                    logger.debug(
+                    self.logger.debug(
                         f"Processing message #{msg_idx + 1}/{len(messages)} (ID: {message_id}) "
                         f"in folder {folder_entity.display_name}"
                     )
 
                     # If message doesn't have full data, fetch it
                     if "body" not in message_data:
-                        logger.debug(f"Fetching full message details for {message_id}")
+                        self.logger.debug(f"Fetching full message details for {message_id}")
                         message_url = f"{self.GRAPH_BASE_URL}/me/messages/{message_id}"
                         message_data = await self._get_with_auth(client, message_url)
 
@@ -249,23 +249,23 @@ class OutlookMailSource(BaseSource):
                         ):
                             yield entity
                     except Exception as e:
-                        logger.error(f"Error processing message {message_id}: {str(e)}")
+                        self.logger.error(f"Error processing message {message_id}: {str(e)}")
                         # Continue with other messages even if one fails
 
                 # Handle pagination
                 url = data.get("@odata.nextLink")
                 if url:
-                    logger.debug("Following pagination to next page")
+                    self.logger.debug("Following pagination to next page")
                     params = None  # params are included in the nextLink
                 else:
-                    logger.info(
+                    self.logger.info(
                         f"Completed folder {folder_entity.display_name}. "
                         f"Processed {message_count} messages in {page_count} pages."
                     )
                     break
 
         except Exception as e:
-            logger.error(
+            self.logger.error(
                 f"Error processing messages in folder {folder_entity.display_name}: {str(e)}"
             )
             raise
@@ -279,7 +279,7 @@ class OutlookMailSource(BaseSource):
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Process a message and its attachments."""
         message_id = message_data["id"]
-        logger.debug(f"Processing message ID: {message_id} in folder: {folder_name}")
+        self.logger.debug(f"Processing message ID: {message_id} in folder: {folder_name}")
 
         # Extract message fields
         subject = message_data.get("subject")
@@ -312,7 +312,7 @@ class OutlookMailSource(BaseSource):
                     message_data["receivedDateTime"].replace("Z", "+00:00")
                 )
         except (ValueError, TypeError) as e:
-            logger.warning(f"Error parsing dates for message {message_id}: {str(e)}")
+            self.logger.warning(f"Error parsing dates for message {message_id}: {str(e)}")
 
         # Extract body content
         body_content = ""
@@ -320,7 +320,7 @@ class OutlookMailSource(BaseSource):
         if message_data.get("body"):
             body_content = message_data["body"].get("content", "")
 
-        logger.debug(f"Creating message entity for message {message_id}")
+        self.logger.debug(f"Creating message entity for message {message_id}")
 
         # Create message entity
         message_entity = OutlookMessageEntity(
@@ -343,7 +343,7 @@ class OutlookMailSource(BaseSource):
         )
 
         yield message_entity
-        logger.debug(f"Message entity yielded for {message_id}")
+        self.logger.debug(f"Message entity yielded for {message_id}")
 
         # Create message breadcrumb for attachments
         message_breadcrumb = Breadcrumb(
@@ -354,20 +354,24 @@ class OutlookMailSource(BaseSource):
 
         # Process attachments if the message has any
         if message_entity.has_attachments:
-            logger.debug(f"Message {message_id} has attachments, processing them")
+            self.logger.debug(f"Message {message_id} has attachments, processing them")
             attachment_count = 0
             try:
                 async for attachment_entity in self._process_attachments(
                     client, message_id, [folder_breadcrumb, message_breadcrumb]
                 ):
                     attachment_count += 1
-                    logger.debug(
+                    self.logger.debug(
                         f"Yielding attachment #{attachment_count} from message {message_id}"
                     )
                     yield attachment_entity
-                logger.debug(f"Processed {attachment_count} attachments for message {message_id}")
+                self.logger.debug(
+                    f"Processed {attachment_count} attachments for message {message_id}"
+                )
             except Exception as e:
-                logger.error(f"Error processing attachments for message {message_id}: {str(e)}")
+                self.logger.error(
+                    f"Error processing attachments for message {message_id}: {str(e)}"
+                )
                 # Continue with message processing even if attachments fail
 
     async def _create_content_stream(self, binary_data: bytes):
@@ -378,7 +382,7 @@ class OutlookMailSource(BaseSource):
         self, client: httpx.AsyncClient, message_id: str, attachment_id: str
     ) -> Optional[str]:
         """Fetch attachment content from Microsoft Graph API."""
-        logger.debug(f"Fetching content for attachment {attachment_id}")
+        self.logger.debug(f"Fetching content for attachment {attachment_id}")
         attachment_url = (
             f"{self.GRAPH_BASE_URL}/me/messages/{message_id}/attachments/{attachment_id}"
         )
@@ -399,14 +403,14 @@ class OutlookMailSource(BaseSource):
         attachment_type = attachment.get("@odata.type", "")
         attachment_name = attachment.get("name", "unknown")
 
-        logger.debug(
+        self.logger.debug(
             f"Processing attachment #{att_idx + 1}/{total_attachments} "
             f"(ID: {attachment_id}, Name: {attachment_name}, Type: {attachment_type})"
         )
 
         # Only process file attachments
         if "#microsoft.graph.fileAttachment" not in attachment_type:
-            logger.debug(
+            self.logger.debug(
                 f"Skipping non-file attachment: {attachment_name} (type: {attachment_type})"
             )
             return None
@@ -420,7 +424,7 @@ class OutlookMailSource(BaseSource):
                 )
 
                 if not content_bytes:
-                    logger.warning(f"No content found for attachment {attachment_name}")
+                    self.logger.warning(f"No content found for attachment {attachment_name}")
                     return None
 
             # Create file entity
@@ -448,11 +452,13 @@ class OutlookMailSource(BaseSource):
             try:
                 binary_data = base64.b64decode(content_bytes)
             except Exception as e:
-                logger.error(f"Error decoding attachment content: {str(e)}")
+                self.logger.error(f"Error decoding attachment content: {str(e)}")
                 return None
 
             # Process using the BaseSource method
-            logger.debug(f"Processing file entity for {attachment_name} with direct content stream")
+            self.logger.debug(
+                f"Processing file entity for {attachment_name} with direct content stream"
+            )
             processed_entity = await self.process_file_entity_with_content(
                 file_entity=file_entity,
                 content_stream=self._create_content_stream(binary_data),
@@ -460,14 +466,14 @@ class OutlookMailSource(BaseSource):
             )
 
             if processed_entity:
-                logger.debug(f"Successfully processed attachment: {attachment_name}")
+                self.logger.debug(f"Successfully processed attachment: {attachment_name}")
                 return processed_entity
             else:
-                logger.warning(f"Processing failed for attachment: {attachment_name}")
+                self.logger.warning(f"Processing failed for attachment: {attachment_name}")
                 return None
 
         except Exception as e:
-            logger.error(f"Error processing attachment {attachment_id}: {str(e)}")
+            self.logger.error(f"Error processing attachment {attachment_id}: {str(e)}")
             return None
 
     async def _process_attachments(
@@ -477,16 +483,18 @@ class OutlookMailSource(BaseSource):
         breadcrumbs: List[Breadcrumb],
     ) -> AsyncGenerator[OutlookAttachmentEntity, None]:
         """Process message attachments using the standard file processing pipeline."""
-        logger.debug(f"Processing attachments for message {message_id}")
+        self.logger.debug(f"Processing attachments for message {message_id}")
 
         url = f"{self.GRAPH_BASE_URL}/me/messages/{message_id}/attachments"
 
         try:
             while url:
-                logger.debug(f"Making request to: {url}")
+                self.logger.debug(f"Making request to: {url}")
                 data = await self._get_with_auth(client, url)
                 attachments = data.get("value", [])
-                logger.debug(f"Retrieved {len(attachments)} attachments for message {message_id}")
+                self.logger.debug(
+                    f"Retrieved {len(attachments)} attachments for message {message_id}"
+                )
 
                 for att_idx, attachment in enumerate(attachments):
                     processed_entity = await self._process_single_attachment(
@@ -498,34 +506,34 @@ class OutlookMailSource(BaseSource):
                 # Handle pagination
                 url = data.get("@odata.nextLink")
                 if url:
-                    logger.debug("Following pagination link")
+                    self.logger.debug("Following pagination link")
 
         except Exception as e:
-            logger.error(f"Error processing attachments for message {message_id}: {str(e)}")
+            self.logger.error(f"Error processing attachments for message {message_id}: {str(e)}")
             # Don't re-raise - continue with other messages even if attachments fail
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate all Outlook mail entities: Folders, Messages and Attachments."""
-        logger.info("===== STARTING OUTLOOK MAIL ENTITY GENERATION =====")
+        self.logger.info("===== STARTING OUTLOOK MAIL ENTITY GENERATION =====")
         entity_count = 0
 
         try:
             async with httpx.AsyncClient() as client:
-                logger.info("HTTP client created, starting entity generation")
+                self.logger.info("HTTP client created, starting entity generation")
 
                 # Start with top-level folders and recursively process all folders and contents
                 async for entity in self._generate_folder_entities(client):
                     entity_count += 1
                     entity_type = type(entity).__name__
-                    logger.info(
+                    self.logger.info(
                         f"Yielding entity #{entity_count}: {entity_type} with ID {entity.entity_id}"
                     )
                     yield entity
 
         except Exception as e:
-            logger.error(f"Error in entity generation: {str(e)}", exc_info=True)
+            self.logger.error(f"Error in entity generation: {str(e)}", exc_info=True)
             raise
         finally:
-            logger.info(
+            self.logger.info(
                 f"===== OUTLOOK MAIL ENTITY GENERATION COMPLETE: {entity_count} entities ====="
             )

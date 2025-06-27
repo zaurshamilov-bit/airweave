@@ -8,7 +8,6 @@ from uuid import uuid4
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb
@@ -104,7 +103,7 @@ class LinearSource(BaseSource):
                 last_request = max(self._request_times)
                 sleep_time = last_request + wait_time - current_time
                 if sleep_time > 0:
-                    logger.debug(
+                    self.logger.debug(
                         f"Rate limit throttling ({hourly_count}/1200 requests). "
                         f"Waiting {sleep_time:.2f}s"
                     )
@@ -147,16 +146,16 @@ class LinearSource(BaseSource):
             # Monitor rate limit status
             if "X-RateLimit-Requests-Remaining" in response.headers:
                 remaining = int(response.headers.get("X-RateLimit-Requests-Remaining", "0"))
-                logger.debug(f"Rate limit remaining: {remaining}")
+                self.logger.debug(f"Rate limit remaining: {remaining}")
 
             return response.json()
         except httpx.HTTPStatusError as e:
             # Log error details
             try:
                 error_content = e.response.json()
-                logger.error(f"GraphQL API error: {error_content}")
+                self.logger.error(f"GraphQL API error: {error_content}")
             except Exception:
-                logger.error(f"HTTP Error content: {e.response.text}")
+                self.logger.error(f"HTTP Error content: {e.response.text}")
             raise
 
     async def _generate_attachment_entities_from_description(
@@ -186,7 +185,7 @@ class LinearSource(BaseSource):
         markdown_link_pattern = r"\[([^\]]+)\]\(([^)]+)\)"
         matches = re.findall(markdown_link_pattern, issue_description)
 
-        logger.info(
+        self.logger.info(
             f"Found {len(matches)} potential attachments in description "
             f"for issue {issue_identifier}"
         )
@@ -194,7 +193,9 @@ class LinearSource(BaseSource):
         for file_name, url in matches:
             # Only process Linear upload URLs
             if "uploads.linear.app" in url:
-                logger.info(f"Processing attachment from description: {file_name} - URL: {url}")
+                self.logger.info(
+                    f"Processing attachment from description: {file_name} - URL: {url}"
+                )
 
                 # Generate a unique ID for this attachment
                 attachment_id = str(uuid4())
@@ -225,7 +226,7 @@ class LinearSource(BaseSource):
                     )
                     yield processed_entity
                 except Exception as e:
-                    logger.error(
+                    self.logger.error(
                         f"Error processing attachment {attachment_id} from description: {str(e)}"
                     )
 
@@ -283,13 +284,13 @@ class LinearSource(BaseSource):
 
             # Skip issues matching exclude_path
             if self.exclude_path and issue_identifier and self.exclude_path in issue_identifier:
-                logger.info(f"Skipping excluded issue: {issue_identifier}")
+                self.logger.info(f"Skipping excluded issue: {issue_identifier}")
                 return
 
             issue_title = issue.get("title")
             issue_description = issue.get("description", "")
 
-            logger.info(f"Processing issue: {issue_identifier} - '{issue_title}'")
+            self.logger.info(f"Processing issue: {issue_identifier} - '{issue_title}'")
 
             # Build breadcrumbs list
             breadcrumbs = []
@@ -417,7 +418,7 @@ class LinearSource(BaseSource):
             project_id = project.get("id")
             project_name = project.get("name")
 
-            logger.info(f"Processing project: {project_name}")
+            self.logger.info(f"Processing project: {project_name}")
 
             # Extract team data
             team_ids = []
@@ -470,7 +471,7 @@ class LinearSource(BaseSource):
             ):
                 yield entity
         except Exception as e:
-            logger.error(f"Error in project entity generation: {str(e)}")
+            self.logger.error(f"Error in project entity generation: {str(e)}")
 
     async def _generate_team_entities(
         self, client: httpx.AsyncClient
@@ -521,7 +522,7 @@ class LinearSource(BaseSource):
             team_parent_id = parent.get("id", "") if parent else ""
             team_parent_name = parent.get("name", "") if parent else ""
 
-            logger.info(f"Processing team: {team_name} ({team_key})")
+            self.logger.info(f"Processing team: {team_name} ({team_key})")
 
             # Create team URL
             team_url = f"https://linear.app/team/{team.get('key')}"
@@ -556,7 +557,7 @@ class LinearSource(BaseSource):
             ):
                 yield entity
         except Exception as e:
-            logger.error(f"Error in team entity generation: {str(e)}")
+            self.logger.error(f"Error in team entity generation: {str(e)}")
 
     async def _generate_user_entities(
         self, client: httpx.AsyncClient
@@ -613,7 +614,7 @@ class LinearSource(BaseSource):
             user_name = user.get("name")
             display_name = user.get("displayName")
 
-            logger.info(f"Processing user: {user_name} ({display_name})")
+            self.logger.info(f"Processing user: {user_name} ({display_name})")
 
             # Extract team data
             team_ids = []
@@ -667,7 +668,7 @@ class LinearSource(BaseSource):
             ):
                 yield entity
         except Exception as e:
-            logger.error(f"Error in user entity generation: {str(e)}")
+            self.logger.error(f"Error in user entity generation: {str(e)}")
 
     async def _paginated_query(
         self,
@@ -712,7 +713,7 @@ class LinearSource(BaseSource):
                 collection_key = next(iter(data.keys()), None)
 
                 if not collection_key:
-                    logger.error(f"Unexpected response structure: {response}")
+                    self.logger.error(f"Unexpected response structure: {response}")
                     break
 
                 collection_data = data[collection_key]
@@ -721,7 +722,7 @@ class LinearSource(BaseSource):
                 # Log the batch
                 batch_count = len(nodes)
                 items_processed += batch_count
-                logger.info(
+                self.logger.info(
                     f"Processing batch of {batch_count} {entity_type} (total: {items_processed})"
                 )
 
@@ -742,7 +743,7 @@ class LinearSource(BaseSource):
                     break
 
             except Exception as e:
-                logger.error(f"Error processing {entity_type} batch: {str(e)}")
+                self.logger.error(f"Error processing {entity_type} batch: {str(e)}")
                 break
 
     async def generate_entities(
@@ -768,33 +769,33 @@ class LinearSource(BaseSource):
         async with httpx.AsyncClient() as client:
             # Generate team entities
             try:
-                logger.info("Starting team entity generation")
+                self.logger.info("Starting team entity generation")
                 async for team_entity in self._generate_team_entities(client):
                     yield team_entity
             except Exception as e:
-                logger.error(f"Failed to generate team entities: {str(e)}")
-                logger.info("Continuing with other entity types")
+                self.logger.error(f"Failed to generate team entities: {str(e)}")
+                self.logger.info("Continuing with other entity types")
 
             # Generate project entities
             try:
-                logger.info("Starting project entity generation")
+                self.logger.info("Starting project entity generation")
                 async for project_entity in self._generate_project_entities(client):
                     yield project_entity
             except Exception as e:
-                logger.error(f"Failed to generate project entities: {str(e)}")
+                self.logger.error(f"Failed to generate project entities: {str(e)}")
 
             # Generate user entities
             try:
-                logger.info("Starting user entity generation")
+                self.logger.info("Starting user entity generation")
                 async for user_entity in self._generate_user_entities(client):
                     yield user_entity
             except Exception as e:
-                logger.error(f"Failed to generate user entities: {str(e)}")
+                self.logger.error(f"Failed to generate user entities: {str(e)}")
 
             # Generate issue and attachment entities
             try:
-                logger.info("Starting issue and attachment entity generation")
+                self.logger.info("Starting issue and attachment entity generation")
                 async for entity in self._generate_issue_entities(client):
                     yield entity
             except Exception as e:
-                logger.error(f"Failed to generate issue/attachment entities: {str(e)}")
+                self.logger.error(f"Failed to generate issue/attachment entities: {str(e)}")

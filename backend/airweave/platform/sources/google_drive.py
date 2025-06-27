@@ -19,7 +19,6 @@ from typing import Any, AsyncGenerator, Dict, Optional
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import ChunkEntity
@@ -70,23 +69,25 @@ class GoogleDriveSource(BaseSource):
         try:
             # Add a longer timeout (30 seconds)
             resp = await client.get(url, headers=headers, params=params, timeout=30.0)
-            logger.info(f"Request URL: {url}")  # Changed from error to info level
+            self.logger.info(f"Request URL: {url}")  # Changed from error to info level
             resp.raise_for_status()
             return resp.json()
         except httpx.ConnectTimeout:
-            logger.error(f"Connection timeout accessing Google Drive API: {url}")
+            self.logger.error(f"Connection timeout accessing Google Drive API: {url}")
             raise
         except httpx.ReadTimeout:
-            logger.error(f"Read timeout accessing Google Drive API: {url}")
+            self.logger.error(f"Read timeout accessing Google Drive API: {url}")
             raise
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP status error {e.response.status_code} from Google Drive API: {url}")
+            self.logger.error(
+                f"HTTP status error {e.response.status_code} from Google Drive API: {url}"
+            )
             raise
         except httpx.HTTPError as e:
-            logger.error(f"HTTP error when accessing Google Drive API: {url}, {str(e)}")
+            self.logger.error(f"HTTP error when accessing Google Drive API: {url}, {str(e)}")
             raise
         except Exception as e:
-            logger.error(f"Unexpected error accessing Google Drive API: {url}, {str(e)}")
+            self.logger.error(f"Unexpected error accessing Google Drive API: {url}, {str(e)}")
             raise
 
     async def _list_drives(self, client: httpx.AsyncClient) -> AsyncGenerator[Dict, None]:
@@ -100,7 +101,7 @@ class GoogleDriveSource(BaseSource):
             data = await self._get_with_auth(client, url, params=params)
             drives = data.get("drives", [])
             for drive_obj in drives:
-                logger.info(f"\nDrives: {drive_obj}\n")
+                self.logger.info(f"\nDrives: {drive_obj}\n")
                 yield drive_obj
 
             # Handle pagination
@@ -164,7 +165,7 @@ class GoogleDriveSource(BaseSource):
             data = await self._get_with_auth(client, url, params=params)
             for file_obj in data.get("files", []):
                 log_context = f"drive_id {drive_id}" if drive_id else "MY DRIVE"
-                logger.info(f"\nfiles in {log_context}: {file_obj}\n")
+                self.logger.info(f"\nfiles in {log_context}: {file_obj}\n")
                 yield file_obj
 
             # Handle pagination
@@ -181,7 +182,7 @@ class GoogleDriveSource(BaseSource):
         """
         # Create download URL based on file type
         download_url = None
-        logger.info(f"\n{file_obj.get('mimeType', 'nothing')}\n")
+        self.logger.info(f"\n{file_obj.get('mimeType', 'nothing')}\n")
         if file_obj.get("mimeType", "").startswith("application/vnd.google-apps."):
             # For Google native files, need export URL
             download_url = f"https://www.googleapis.com/drive/v3/files/{file_obj['id']}/export?mimeType=application/pdf"
@@ -193,14 +194,14 @@ class GoogleDriveSource(BaseSource):
         if not download_url:
             file_name = file_obj.get("name", "Untitled")
             trashed = file_obj.get("trashed", False)
-            logger.info(
+            self.logger.info(
                 f"Skipping file '{file_name}' (ID: {file_obj['id']}). "
                 f"File is {'trashed' if trashed else 'not trashed'}. "
                 f"Mime type: {file_obj.get('mimeType', 'unknown')}"
             )
             return None
 
-        logger.info(f"\n{download_url}\n")
+        self.logger.info(f"\n{download_url}\n")
         return GoogleDriveFileEntity(
             entity_id=file_obj["id"],
             breadcrumbs=[],
@@ -255,10 +256,10 @@ class GoogleDriveSource(BaseSource):
                     yield processed_entity
                 else:
                     # This should never happen now that we return None for files without URLs
-                    logger.warning(f"No download URL available for {file_entity.name}")
+                    self.logger.warning(f"No download URL available for {file_entity.name}")
             except Exception as e:
                 error_context = f"in drive {drive_id}" if drive_id else "in MY DRIVE"
-                logger.error(
+                self.logger.error(
                     f"\nFailed to process file {file_obj.get('name', 'unknown')} "
                     f"{error_context}: {str(e)}\n"
                 )
@@ -299,7 +300,7 @@ class GoogleDriveSource(BaseSource):
                     yield file_entity
                     file_entity_count += 1
                     if stop_after_first_file and file_entity_count >= 4:
-                        logger.info("Stopping after first file entity for testing purposes")
+                        self.logger.info("Stopping after first file entity for testing purposes")
                         return
 
             # 3) Finally, yield file entities for My Drive (corpora=user)
@@ -311,7 +312,7 @@ class GoogleDriveSource(BaseSource):
                     yield mydrive_file_entity
                     file_entity_count += 1
                     if stop_after_first_file and file_entity_count >= 4:
-                        logger.info("Stopping after first file entity for testing purposes")
+                        self.logger.info("Stopping after first file entity for testing purposes")
                         return
 
     async def _get_file_path(self, client: httpx.AsyncClient, file_obj: Dict) -> str:
@@ -319,17 +320,17 @@ class GoogleDriveSource(BaseSource):
         path_parts = [file_obj.get("name", "")]
         file_id = file_obj.get("id", "unknown")
 
-        logger.debug(f"Building path for file: {path_parts[0]} (ID: {file_id})")
+        self.logger.debug(f"Building path for file: {path_parts[0]} (ID: {file_id})")
 
         # Get parents from file object
         parents = file_obj.get("parents", [])
         if not parents:
-            logger.debug(f"No parents found for file: {path_parts[0]}")
+            self.logger.debug(f"No parents found for file: {path_parts[0]}")
             return path_parts[0]
 
         # Start with the first parent
         current_parent_id = parents[0]
-        logger.debug(f"Starting parent resolution with ID: {current_parent_id}")
+        self.logger.debug(f"Starting parent resolution with ID: {current_parent_id}")
 
         # Limit recursion depth to avoid potential infinite loops
         max_depth = 20
@@ -356,12 +357,12 @@ class GoogleDriveSource(BaseSource):
                 current_parent_id = parents[0] if parents else None
 
             except Exception as e:
-                logger.error(f"Error retrieving parent folder {current_parent_id}: {str(e)}")
+                self.logger.error(f"Error retrieving parent folder {current_parent_id}: {str(e)}")
                 break
 
         # Build path string
         final_path = "/".join(path_parts)
-        logger.debug(f"Final path for {file_id}: {final_path}")
+        self.logger.debug(f"Final path for {file_id}: {final_path}")
         return final_path
 
     async def _should_include_file(self, client: httpx.AsyncClient, file_obj: Dict) -> bool:
@@ -372,25 +373,25 @@ class GoogleDriveSource(BaseSource):
         file_path = await self._get_file_path(client, file_obj)
 
         # Log full path info for EVERY file - this makes debugging easier
-        logger.info(
+        self.logger.info(
             f"FILE PATH: '{file_path}' (name: {file_name}, id: {file_obj.get('id', 'unknown')})"
         )
 
         # If no exclusion patterns, include everything
         if not self.exclude_patterns:
-            logger.info(f"No exclusion patterns set, including file: {file_name}")
+            self.logger.info(f"No exclusion patterns set, including file: {file_name}")
             return True
 
         # Check against each exclusion pattern
         for pattern in self.exclude_patterns:
             if self._path_matches_pattern(file_path, pattern):
-                logger.info(
+                self.logger.info(
                     f"EXCLUDED: File '{file_name}' (path: {file_path}) matches "
                     f"exclusion pattern '{pattern}'"
                 )
                 return False
 
-        logger.info(
+        self.logger.info(
             f"INCLUDED: File '{file_name}' (path: {file_path}) doesn't match any exclusion patterns"
         )
         return True
@@ -400,7 +401,7 @@ class GoogleDriveSource(BaseSource):
         import fnmatch
 
         match_result = fnmatch.fnmatch(path, pattern)
-        logger.debug(
+        self.logger.debug(
             f"Pattern match check: path '{path}' against pattern '{pattern}' -> {match_result}"
         )
         return match_result

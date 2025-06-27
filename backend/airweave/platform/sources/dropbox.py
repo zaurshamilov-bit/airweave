@@ -5,7 +5,6 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
@@ -73,12 +72,12 @@ class DropboxSource(BaseSource):
             return json_response
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP Error in Dropbox API call: {e}")
-            logger.error(f"Response body: {e.response.text}")
+            self.logger.error(f"HTTP Error in Dropbox API call: {e}")
+            self.logger.error(f"Response body: {e.response.text}")
             raise
 
         except Exception as e:
-            logger.error(f"Unexpected error in Dropbox API call: {e}")
+            self.logger.error(f"Unexpected error in Dropbox API call: {e}")
             raise
 
     async def _generate_account_entities(
@@ -142,7 +141,7 @@ class DropboxSource(BaseSource):
 
         except Exception as e:
             # Log error and yield a minimal fallback entity
-            logger.error(f"Error fetching Dropbox account info: {str(e)}")
+            self.logger.error(f"Error fetching Dropbox account info: {str(e)}")
             raise
 
     def _create_folder_entity(
@@ -223,7 +222,7 @@ class DropboxSource(BaseSource):
                     yield entry
 
         except Exception as e:
-            logger.error(f"Error fetching paginated entries from {url}: {str(e)}")
+            self.logger.error(f"Error fetching paginated entries from {url}: {str(e)}")
             raise
 
     async def _generate_folder_entities(
@@ -267,7 +266,7 @@ class DropboxSource(BaseSource):
                         folders_to_process.append((folder_path, folder_entity.name))
 
             except Exception as e:
-                logger.error(f"Error listing Dropbox folder {current_path}: {str(e)}")
+                self.logger.error(f"Error listing Dropbox folder {current_path}: {str(e)}")
                 raise
 
     def _create_file_entity(
@@ -371,7 +370,7 @@ class DropboxSource(BaseSource):
                 if entry.get(".tag") == "file":
                     # Skip non-downloadable files
                     if not entry.get("is_downloadable", True):
-                        logger.info(
+                        self.logger.info(
                             f"Skipping non-downloadable file: "
                             f"{entry.get('path_display', 'unknown path')}"
                         )
@@ -391,12 +390,12 @@ class DropboxSource(BaseSource):
                         yield processed_entity
 
                     except Exception as e:
-                        logger.error(f"Failed to process file {file_entity.name}: {str(e)}")
+                        self.logger.error(f"Failed to process file {file_entity.name}: {str(e)}")
                         # Continue with other files even if one fails
                         continue
 
         except Exception as e:
-            logger.error(f"Error listing files in Dropbox folder {folder_path}: {str(e)}")
+            self.logger.error(f"Error listing files in Dropbox folder {folder_path}: {str(e)}")
             raise
 
     async def _process_folder_and_contents(
@@ -461,7 +460,7 @@ class DropboxSource(BaseSource):
                         yield entity
 
         except Exception as e:
-            logger.error(f"Error processing folder {folder_path}: {str(e)}")
+            self.logger.error(f"Error processing folder {folder_path}: {str(e)}")
             raise
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
@@ -503,7 +502,7 @@ class DropboxSource(BaseSource):
                         and folder_entity.path_lower
                         and self.exclude_path in folder_entity.path_lower
                     ):
-                        logger.info(f"Skipping excluded folder: {folder_entity.path_lower}")
+                        self.logger.info(f"Skipping excluded folder: {folder_entity.path_lower}")
                         continue
 
                     yield folder_entity

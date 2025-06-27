@@ -80,11 +80,20 @@ async def exception_logging_middleware(request: Request, call_next: callable) ->
         response = await call_next(request)
         return response
     except Exception as exc:
-        if settings.LOCAL_CURSOR_DEVELOPMENT:
-            logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
-        else:
-            logger.error(f"Unhandled exception: {exc}")
-        return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+        # Always log the full exception details
+        logger.error(f"Unhandled exception: {exc}\n{traceback.format_exc()}")
+
+        # Create error message with actual exception details
+        error_message = f"Internal Server Error: {exc.__class__.__name__}: {str(exc)}"
+
+        # Build response content
+        response_content = {"detail": error_message}
+
+        # Include stack trace only in development mode
+        if settings.LOCAL_CURSOR_DEVELOPMENT or settings.DEBUG:
+            response_content["trace"] = traceback.format_exc()
+
+        return JSONResponse(status_code=500, content=response_content)
 
 
 class DynamicCORSMiddleware(BaseHTTPMiddleware):

@@ -5,7 +5,6 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
@@ -99,7 +98,7 @@ class AsanaSource(BaseSource):
 
             # Skip projects matching exclude_path
             if self.exclude_path and self.exclude_path in project_name:
-                logger.info(f"Skipping excluded project: {project_name}")
+                self.logger.info(f"Skipping excluded project: {project_name}")
                 continue
 
             yield AsanaProjectEntity(
@@ -264,7 +263,7 @@ class AsanaSource(BaseSource):
                 "download_url" not in attachment_detail
                 or attachment_detail.get("download_url") is None
             ):
-                logger.warning(
+                self.logger.warning(
                     f"No download URL found for attachment {attachment['gid']} "
                     f"in task {task['gid']}"
                 )

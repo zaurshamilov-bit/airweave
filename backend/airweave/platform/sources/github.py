@@ -27,7 +27,6 @@ import httpx
 import tenacity
 from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import GitHubAuthConfig
 from airweave.platform.decorators import source
@@ -331,7 +330,7 @@ class GitHubSource(BaseSource):
                         yield file_entity
 
         except Exception as e:
-            logger.error(f"Error traversing path {path}: {str(e)}")
+            self.logger.error(f"Error traversing path {path}: {str(e)}")
 
     async def _process_file(
         self,
@@ -390,7 +389,7 @@ class GitHubSource(BaseSource):
                     try:
                         line_count = content_text.count("\n") + 1
                     except Exception as e:
-                        logger.error(f"Error counting lines for {item_path}: {str(e)}")
+                        self.logger.error(f"Error counting lines for {item_path}: {str(e)}")
 
                 # Create file entity with guaranteed valid paths and store content in memory
                 file_entity = GitHubCodeFileEntity(
@@ -416,7 +415,7 @@ class GitHubSource(BaseSource):
                 # Let the file handler manage actual file processing
                 yield file_entity
         except Exception as e:
-            logger.error(f"Error processing file {item_path}: {str(e)}")
+            self.logger.error(f"Error processing file {item_path}: {str(e)}")
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate entities from GitHub repository.
@@ -452,7 +451,7 @@ class GitHubSource(BaseSource):
                         f"Available branches: {available_branches}"
                     )
 
-            logger.info(f"Using branch: {branch} for repo {self.repo_name}")
+            self.logger.info(f"Using branch: {branch} for repo {self.repo_name}")
 
             async for entity in self._traverse_repository(client, self.repo_name, branch):
                 yield entity

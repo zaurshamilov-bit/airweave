@@ -173,13 +173,13 @@ class ConfluenceSource(BaseSource):
         if self.cloud_id:
             headers["X-Cloud-ID"] = self.cloud_id
 
-        logger.debug(f"Making request to {url} with headers: {headers}")
+        self.logger.debug(f"Making request to {url} with headers: {headers}")
         response = await client.get(url, headers=headers)
 
         if not response.is_success:
-            logger.error(f"Request failed with status {response.status_code}")
-            logger.error(f"Response headers: {dict(response.headers)}")
-            logger.error(f"Response body: {response.text}")
+            self.logger.error(f"Request failed with status {response.status_code}")
+            self.logger.error(f"Response headers: {dict(response.headers)}")
+            self.logger.error(f"Response body: {response.text}")
 
             # Special handling for scope-related errors
             if response.status_code == 401:
@@ -191,10 +191,10 @@ class ConfluenceSource(BaseSource):
                     or "x-failure-category" in response.headers
                     and "SCOPE" in response.headers.get("x-failure-category", "")
                 ):
-                    logger.error(
+                    self.logger.error(
                         "OAuth scope error. The token doesn't have the required permissions."
                     )
-                    logger.error(
+                    self.logger.error(
                         "Please verify that your OAuth app has the correct scopes configured."
                     )
                     raise ValueError(f"OAuth scope error: {error_message}.")

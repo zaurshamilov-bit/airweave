@@ -141,6 +141,16 @@ class SyncFactory:
         Returns:
             SyncContext object with all required components
         """
+        # Create a contextualized logger with sync job metadata first
+        logger = LoggerConfigurator.configure_logger(
+            "airweave.platform.sync",
+            dimensions={
+                "sync_id": str(sync.id),
+                "sync_job_id": str(sync_job.id),
+                "organization_id": str(auth_context.organization_id),
+            },
+        )
+
         # Fetch white label if set in sync
         white_label = None
         if source_connection.white_label_id:
@@ -154,6 +164,7 @@ class SyncFactory:
             auth_context=auth_context,
             white_label=white_label,
             access_token=access_token,
+            logger=logger,  # Pass the contextual logger
         )
         embedding_model = cls._get_embedding_model(sync=sync)
         destinations = await cls._create_destination_instances(
@@ -167,16 +178,6 @@ class SyncFactory:
 
         progress = SyncProgress(sync_job.id)
         router = SyncDAGRouter(dag, entity_map)
-
-        # Create a contextualized logger with sync job metadata
-        logger = LoggerConfigurator.configure_logger(
-            "airweave.platform.sync",
-            dimensions={
-                "sync_id": str(sync.id),
-                "sync_job_id": str(sync_job.id),
-                "organization_id": str(auth_context.organization_id),
-            },
-        )
 
         return SyncContext(
             source=source,
@@ -204,6 +205,7 @@ class SyncFactory:
         auth_context: AuthContext,
         white_label: Optional[schemas.WhiteLabel] = None,
         access_token: Optional[str] = None,
+        logger=None,
     ) -> BaseSource:
         """Create and configure the source instance based on authentication type."""
         # Retrieve source connection and model
@@ -229,7 +231,11 @@ class SyncFactory:
 
         # If access token is provided, use it directly
         if access_token:
-            return await source_class.create(access_token, config=config_fields)
+            source = await source_class.create(access_token, config=config_fields)
+            # Set logger if provided
+            if logger and hasattr(source, "set_logger"):
+                source.set_logger(logger)
+            return source
 
         # Otherwise get credentials from database as before
         if not source_connection.integration_credential_id:
@@ -259,7 +265,13 @@ class SyncFactory:
             source_credentials = decrypted_credential
 
         # Pass both credentials and config to source creation
-        return await source_class.create(source_credentials, config=config_fields)
+        source = await source_class.create(source_credentials, config=config_fields)
+
+        # Set logger if provided
+        if logger and hasattr(source, "set_logger"):
+            source.set_logger(logger)
+
+        return source
 
     @classmethod
     async def _get_integration_credential(
