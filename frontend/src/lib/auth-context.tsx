@@ -19,10 +19,10 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   isLoading: true,
   user: null,
-  login: () => {},
-  logout: () => {},
+  login: () => { },
+  logout: () => { },
   getToken: async () => null,
-  clearToken: () => {},
+  clearToken: () => { },
   token: null,
   tokenInitialized: false,
   isReady: () => false,
@@ -70,7 +70,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setTokenInitialized(true); // Mark as initialized even on error
           console.log('Auth initialization complete (with error)');
         }
-      } else {
+      } else if (authConfig.authEnabled && auth0IsLoading) {
+        // Auth is enabled but Auth0 is still loading - do nothing, wait for it to finish
+        console.log('Waiting for Auth0 to finish loading...');
+      } else if (authConfig.authEnabled && !auth0IsAuthenticated && !auth0IsLoading) {
+        // Auth is enabled, Auth0 has finished loading, but user is not authenticated
+        setTokenInitialized(true);
+        console.log('Auth initialization complete (user not authenticated)');
+      } else if (!authConfig.authEnabled) {
         // For non-auth cases, mark as initialized immediately
         setTokenInitialized(true);
         console.log('Auth initialization complete (non-auth mode)');
@@ -78,7 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     getAccessToken();
-  }, [auth0IsAuthenticated, getAccessTokenSilently]);
+  }, [auth0IsAuthenticated, auth0IsLoading, getAccessTokenSilently]);
 
   // Login function
   const login = () => {
