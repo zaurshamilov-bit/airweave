@@ -219,12 +219,12 @@ class OneDriveSource(BaseSource):
     ) -> Optional[str]:
         """Get the download URL for a specific file item.
 
-        The @microsoft.graph.downloadUrl is only available when fetching individual items.
+        Returns a Graph API content endpoint URL that can be used with the access token.
         """
         try:
-            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{item_id}"
-            data = await self._get_with_auth(client, url)
-            return data.get("@microsoft.graph.downloadUrl")
+            # Use the Graph API /content endpoint instead of SharePoint download URLs
+            # This works with Files.Read.All permission without needing Sites.Read.All
+            return f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{item_id}/content"
         except Exception as e:
             self.logger.error(f"Failed to get download URL for item {item_id}: {e}")
             return None

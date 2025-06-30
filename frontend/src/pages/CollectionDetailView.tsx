@@ -778,10 +778,42 @@ const Collections = () => {
 
                     {/* Render SourceConnectionDetailView when a connection is selected */}
                     {selectedConnection && (
-                        <SourceConnectionDetailView
-                            key={selectedConnection.id}
-                            sourceConnectionId={selectedConnection.id}
-                        />
+                        selectedConnection.short_name === "postgresql" ? (
+                            <div className={cn(
+                                "mt-6 p-8 rounded-lg border text-center",
+                                isDark ? "border-gray-700/50 bg-gray-800/30" : "border-gray-200 bg-gray-50"
+                            )}>
+                                <AlertCircle className={cn(
+                                    "h-12 w-12 mx-auto mb-4",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                )} />
+                                <p className={cn(
+                                    "text-lg font-medium",
+                                    isDark ? "text-gray-300" : "text-gray-700"
+                                )}>
+                                    PostgreSQL sync visualization not yet supported
+                                </p>
+                                <p className={cn(
+                                    "text-sm mt-2 max-w-md mx-auto",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                )}>
+                                    Entity graph and progress tracking for PostgreSQL sources is coming soon.
+                                    You can still run syncs and query your data - the sync will complete in the background.
+                                </p>
+                                <div className={cn(
+                                    "mt-4 p-3 rounded-md text-sm text-left max-w-sm mx-auto",
+                                    isDark ? "bg-gray-700/50 text-gray-300" : "bg-gray-100 text-gray-600"
+                                )}>
+                                    <p className="font-medium mb-1">💡 Tip:</p>
+                                    <p>Check the sync status badge in the source connection list above to see if your sync is running.</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <SourceConnectionDetailView
+                                key={selectedConnection.id}
+                                sourceConnectionId={selectedConnection.id}
+                            />
+                        )
                     )}
 
                     {/* Delete Collection Dialog */}
