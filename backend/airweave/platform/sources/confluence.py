@@ -47,6 +47,7 @@ class AsyncIteratorWrapper:
             sync_iter: A synchronous iterator to wrap
         """
         self.sync_iter = sync_iter
+        self._consumed = False  # Track if iterator has been consumed
 
     def __aiter__(self):
         """Return self as an async iterator.
@@ -65,9 +66,13 @@ class AsyncIteratorWrapper:
         Raises:
             StopAsyncIteration: When the iterator is exhausted
         """
+        if self._consumed:
+            raise StopAsyncIteration
+
         try:
             return next(self.sync_iter)
         except StopIteration as err:
+            self._consumed = True
             raise StopAsyncIteration from err
 
 
@@ -312,7 +317,9 @@ class ConfluenceSource(BaseSource):
                     metadata={"source": "confluence", "page_id": page["id"]},
                 )
 
-                yield processed_entity
+                # Only yield if processing was successful
+                if processed_entity:
+                    yield processed_entity
 
             # Handle pagination
             next_link = data.get("_links", {}).get("next")
@@ -460,6 +467,10 @@ class ConfluenceSource(BaseSource):
                     space_id=space_entity.entity_id,
                     space_breadcrumb=space_breadcrumb,
                 ):
+                    # Skip if page_entity is None (failed to process)
+                    if page_entity is None:
+                        continue
+
                     yield page_entity
 
                     page_breadcrumbs = [

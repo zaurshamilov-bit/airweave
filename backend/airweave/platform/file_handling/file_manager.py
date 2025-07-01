@@ -162,6 +162,9 @@ class FileManager:
             f"name: {entity.name}, url: {url_display})"
         )
 
+        # Ensure the directory exists before writing
+        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+
         async with aiofiles.open(temp_path, "wb") as f:
             async for chunk in stream:
                 downloaded_size += len(chunk)
