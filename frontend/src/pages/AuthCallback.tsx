@@ -20,6 +20,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useSearchParams, useParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { CONNECTION_ERROR_STORAGE_KEY } from "@/lib/error-utils";
+import { useAuth } from "@/lib/auth-context";
 
 /**
  * Shared function to exchange OAuth code for credentials
@@ -257,8 +258,17 @@ export function AuthCallback() {
   const [isProcessing, setIsProcessing] = useState(true);
   const [isSemanticMcpFlow, setIsSemanticMcpFlow] = useState(false);
   const hasProcessedRef = useRef(false);
+  const auth = useAuth();
 
   useEffect(() => {
+    // We must wait for our auth context to be ready and the user to be authenticated
+    // before making an authenticated API call.
+    if (!auth.isReady() || !auth.isAuthenticated) {
+      console.log("[AuthCallback] Waiting for authentication to be ready...");
+      setIsProcessing(true); // Ensure loading indicator is shown
+      return;
+    }
+
     const processCallback = async () => {
       // Skip if we've already processed this code
       if (hasProcessedRef.current) return;
@@ -343,7 +353,7 @@ export function AuthCallback() {
     };
 
     processCallback();
-  }, [searchParams, short_name]);
+  }, [searchParams, short_name, auth.isReady, auth.isAuthenticated]);
 
   // Simple loading UI - errors are handled by redirecting back to source page
   return (
