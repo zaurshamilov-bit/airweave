@@ -19,6 +19,9 @@ export const Auth0ProviderWithNavigation = ({ children }: Auth0ProviderWithNavig
     return <>{children}</>;
   }
 
+  // We are on a third-party OAuth callback path, so we should skip the redirect callback
+  const isThirdPartyCallback = window.location.pathname.startsWith('/auth/callback/');
+
   console.log('Auth0 Configuration:', {
     domain: authConfig.auth0.domain,
     clientId: authConfig.auth0.clientId,
@@ -36,6 +39,7 @@ export const Auth0ProviderWithNavigation = ({ children }: Auth0ProviderWithNavig
       }}
       onRedirectCallback={onRedirectCallback}
       cacheLocation="localstorage"
+      skipRedirectCallback={isThirdPartyCallback}
     >
       {children}
     </Auth0Provider>

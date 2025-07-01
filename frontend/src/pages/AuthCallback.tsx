@@ -18,10 +18,8 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useSearchParams, useParams } from "react-router-dom";
-import { useAuth0 } from "@auth0/auth0-react";
 import { apiClient } from "@/lib/api";
 import { CONNECTION_ERROR_STORAGE_KEY } from "@/lib/error-utils";
-import authConfig from "@/config/auth";
 
 /**
  * Shared function to exchange OAuth code for credentials
@@ -259,28 +257,8 @@ export function AuthCallback() {
   const [isProcessing, setIsProcessing] = useState(true);
   const [isSemanticMcpFlow, setIsSemanticMcpFlow] = useState(false);
   const hasProcessedRef = useRef(false);
-  const { isAuthenticated, isLoading } = useAuth0();
 
   useEffect(() => {
-    // Only wait for auth if auth is enabled
-    if (authConfig.authEnabled) {
-      // We must wait for the auth state to be fully resolved before
-      // making an authenticated API call.
-      if (isLoading) {
-        console.log("[AuthCallback] Waiting for authentication to initialize...");
-        setIsProcessing(true); // Ensure loading indicator is shown
-        return;
-      }
-
-      // If we're done loading but not authenticated, there's a problem,
-      // but we let it proceed to let the API client handle the 401.
-      // In production, this call is expected to fail, and the retry logic
-      // in the api client will not have a token.
-      if (!isLoading && !isAuthenticated) {
-        console.warn("[AuthCallback] Auth loaded, but user is not authenticated. API calls will likely fail.");
-      }
-    }
-
     const processCallback = async () => {
       // Skip if we've already processed this code
       if (hasProcessedRef.current) return;
@@ -365,7 +343,7 @@ export function AuthCallback() {
     };
 
     processCallback();
-  }, [searchParams, short_name, isAuthenticated, isLoading]);
+  }, [searchParams, short_name]);
 
   // Simple loading UI - errors are handled by redirecting back to source page
   return (

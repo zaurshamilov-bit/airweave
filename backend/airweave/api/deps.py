@@ -28,11 +28,13 @@ async def _authenticate_auth0_user(
     db: AsyncSession, auth0_user: Auth0User
 ) -> Tuple[Optional[schemas.User], str, dict]:
     """Authenticate Auth0 user."""
-    user = await crud.user.get_by_email(db, email=auth0_user.email)
-    if user:
-        user_context = schemas.User.model_validate(user)
-        return user_context, "auth0", {"auth0_id": auth0_user.id}
-    return None, "", {}
+    try:
+        user = await crud.user.get_by_email(db, email=auth0_user.email)
+    except NotFoundException:
+        logger.error(f"User {auth0_user.email} not found in database")
+        return None, "", {}
+    user_context = schemas.User.model_validate(user)
+    return user_context, "auth0", {"auth0_id": auth0_user.id}
 
 
 async def _authenticate_api_key(db: AsyncSession, api_key: str) -> Tuple[None, str, dict]:
