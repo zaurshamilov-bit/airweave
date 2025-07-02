@@ -61,7 +61,7 @@ class RunSourceConnectionWorkflow:
                     access_token,
                 ],
                 start_to_close_timeout=timedelta(days=7),
-                heartbeat_timeout=timedelta(minutes=2),  # Fail if no heartbeat for 2 minutes
+                heartbeat_timeout=timedelta(minutes=10),  # Fail if no heartbeat for 10 minutes
                 retry_policy=RetryPolicy(
                     initial_interval=timedelta(seconds=1),
                     maximum_interval=timedelta(minutes=5),
