@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger, logger
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.db.session import get_db_context
@@ -95,6 +95,7 @@ async def create_white_label(
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
     white_label_in: schemas.WhiteLabelCreate,
+    logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.WhiteLabel:
     """Create new white label integration.
 
@@ -103,11 +104,13 @@ async def create_white_label(
         db: The database session
         auth_context: The current user
         white_label_in: The white label to create
+        logger: The logger with the current authentication context
 
     Returns:
     --------
         white_label (schemas.WhiteLabel): The created white label
     """
+    logger.info(f"Creating white label {white_label_in.name}.")
     white_label = await crud.white_label.create(
         db,
         obj_in=white_label_in,
@@ -121,6 +124,7 @@ async def get_white_label(
     white_label_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
+    logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.WhiteLabel:
     """Get a specific white label integration.
 
@@ -129,11 +133,15 @@ async def get_white_label(
         db: The database session
         white_label_id: The ID of the white label to get
         auth_context: The authentication context
+        logger: The logger with the current authentication context
 
     Returns:
     --------
         white_label (schemas.WhiteLabel): The white label
     """
+    logger.info(
+        f"Getting white label {white_label_id} for organization {auth_context.organization_id}"
+    )
     white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
     if white_label.organization_id != auth_context.organization_id:  # type: ignore
         raise HTTPException(status_code=403, detail="Not enough permissions")
@@ -287,6 +295,7 @@ async def exchange_white_label_oauth2_code(
     source_connection_in: Optional[schemas.SourceConnectionCreate] = Body(None),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
+    logger: ContextualLogger = Depends(deps.get_logger),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnection:
     """Exchange OAuth2 code for tokens and create connection with source connection.
@@ -300,6 +309,7 @@ async def exchange_white_label_oauth2_code(
         source_connection_in: Optional source connection configuration
         db: The database session
         auth_context: The authentication context
+        logger: The logger with the current authentication context
         background_tasks: Background tasks for async operations
 
     Returns:
@@ -319,12 +329,13 @@ async def exchange_white_label_oauth2_code(
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     white_label = schemas.WhiteLabel.model_validate(white_label, from_attributes=True)
-
+    logger.info(f"Exchanging OAuth2 code for WhiteLabel {white_label.id}.")
     try:
         # Exchange code for connection
         connection = await oauth2_service.create_oauth2_connection_for_whitelabel(
             db=db, white_label=white_label, code=code, auth_context=auth_context
         )
+        logger.info(f"Created connection {connection.id} for WhiteLabel {white_label.id}.")
 
         # Create or use the provided source connection config
         if source_connection_in is None:
@@ -340,6 +351,7 @@ async def exchange_white_label_oauth2_code(
         else:
             # Ensure white_label_id and short_name are set correctly
             source_connection_in.white_label_id = white_label_id
+            source_connection_in.credential_id = connection.integration_credential_id
             if not source_connection_in.short_name:
                 source_connection_in.short_name = white_label.source_short_name
 
