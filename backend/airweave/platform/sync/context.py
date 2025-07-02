@@ -4,7 +4,7 @@ from typing import Optional
 from uuid import UUID
 
 from airweave import schemas
-from airweave.core.logging import _ContextualLogger
+from airweave.core.logging import ContextualLogger
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
 from airweave.platform.entities._base import BaseEntity
@@ -46,7 +46,7 @@ class SyncContext:
     source_connection: schemas.Connection
     entity_map: dict[type[BaseEntity], UUID]
     auth_context: AuthContext
-    logger: _ContextualLogger
+    logger: ContextualLogger
 
     white_label: Optional[schemas.WhiteLabel] = None
 
@@ -65,7 +65,7 @@ class SyncContext:
         source_connection: schemas.Connection,
         entity_map: dict[type[BaseEntity], UUID],
         auth_context: AuthContext,
-        logger: _ContextualLogger,
+        logger: ContextualLogger,
         white_label: Optional[schemas.WhiteLabel] = None,
     ):
         """Initialize the sync context."""

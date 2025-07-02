@@ -4,7 +4,10 @@ import json
 import logging
 import sys
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from airweave.schemas.auth import AuthContext
 
 
 class JSONFormatter(logging.Formatter):
@@ -134,7 +137,7 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_entry, default=str)
 
 
-class _ContextualLogger(logging.LoggerAdapter):
+class ContextualLogger(logging.LoggerAdapter):
     """A LoggerAdapter that supports both custom dimensions and prefixes."""
 
     def __init__(
@@ -155,6 +158,19 @@ class _ContextualLogger(logging.LoggerAdapter):
         super().__init__(logger, {})
         self.prefix = prefix
         self.dimensions = dimensions or {}
+
+    def from_auth_context(self, auth_context: "AuthContext") -> "ContextualLogger":
+        """Create a new logger with additional context from an AuthContext object."""
+        new_dimensions = self.dimensions.copy()
+        new_dimensions["organization_id"] = str(auth_context.organization_id)
+        new_dimensions["auth_method"] = auth_context.auth_method
+
+        if auth_context.user_id:
+            new_dimensions["user_id"] = str(auth_context.user_id)
+        if auth_context.tracking_email:
+            new_dimensions["user_email"] = auth_context.tracking_email
+
+        return ContextualLogger(self.logger, self.prefix, new_dimensions)
 
     def process(self, msg: str, kwargs: dict) -> tuple[str, dict]:
         """Process the log message and keywords.
@@ -185,7 +201,7 @@ class _ContextualLogger(logging.LoggerAdapter):
 
         return msg, kwargs
 
-    def with_prefix(self, prefix: str) -> "_ContextualLogger":
+    def with_prefix(self, prefix: str) -> "ContextualLogger":
         """Create a new logger with an additional prefix while maintaining dimensions.
 
         Args:
@@ -194,12 +210,12 @@ class _ContextualLogger(logging.LoggerAdapter):
 
         Returns:
         -------
-            _ContextualLogger: New logger instance with updated prefix
+            ContextualLogger: New logger instance with updated prefix
 
         """
-        return _ContextualLogger(self.logger, prefix, self.dimensions)
+        return ContextualLogger(self.logger, prefix, self.dimensions)
 
-    def with_context(self, **dimensions: str | int | float | bool) -> "_ContextualLogger":
+    def with_context(self, **dimensions: str | int | float | bool) -> "ContextualLogger":
         """Create a new logger with additional context dimensions.
 
         Args:
@@ -208,11 +224,11 @@ class _ContextualLogger(logging.LoggerAdapter):
 
         Returns:
         -------
-            _ContextualLogger: New logger instance with updated dimensions
+            ContextualLogger: New logger instance with updated dimensions
 
         """
         new_dimensions = {**self.dimensions, **dimensions}
-        return _ContextualLogger(self.logger, self.prefix, new_dimensions)
+        return ContextualLogger(self.logger, self.prefix, new_dimensions)
 
 
 class LoggerConfigurator:
@@ -271,7 +287,7 @@ class LoggerConfigurator:
         name: str,
         prefix: str = "",
         dimensions: Optional[dict] = None,
-    ) -> _ContextualLogger:
+    ) -> ContextualLogger:
         """Configure and return a logger with the given name and initial context.
 
         Args:
@@ -282,7 +298,7 @@ class LoggerConfigurator:
 
         Returns:
         -------
-            _ContextualLogger: Configured logger with context support
+            ContextualLogger: Configured logger with context support
 
         """
         logger = logging.getLogger(name)
@@ -299,7 +315,7 @@ class LoggerConfigurator:
 
         # Check if this logger has already been configured
         if hasattr(logger, "_airweave_configured"):
-            return _ContextualLogger(logger, prefix, dimensions)
+            return ContextualLogger(logger, prefix, dimensions)
 
         # Clear any existing handlers to prevent duplicates
         logger.handlers.clear()
@@ -311,6 +327,7 @@ class LoggerConfigurator:
         if settings.LOCAL_DEVELOPMENT:
             # Use text formatter for local development
             formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            formatter = JSONFormatter()
         else:
             # Use JSON formatter for all non-local environments
             # (Azure Log Analytics, Prometheus/Grafana)
@@ -322,7 +339,7 @@ class LoggerConfigurator:
         # Mark logger as configured to prevent reconfiguration
         logger._airweave_configured = True
 
-        return _ContextualLogger(logger, prefix, dimensions)
+        return ContextualLogger(logger, prefix, dimensions)
 
 
 # Default logger instance

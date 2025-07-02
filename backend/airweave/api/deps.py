@@ -10,7 +10,7 @@ from airweave import crud, schemas
 from airweave.api.auth import auth0
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger, logger
 from airweave.db.session import get_db
 from airweave.schemas.auth import AuthContext
 
@@ -159,6 +159,13 @@ async def get_auth_context(
         auth_method=auth_method,
         auth_metadata=auth_metadata,
     )
+
+
+async def get_logger(
+    auth_context: AuthContext = Depends(get_auth_context),
+) -> ContextualLogger:
+    """Get a logger with the current authentication context."""
+    return logger.from_auth_context(auth_context)
 
 
 async def get_user(
