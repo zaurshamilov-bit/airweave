@@ -207,31 +207,6 @@ class NotionSource(BaseSource):
             self.logger.error(f"Error during POST request to {url}: {str(e)}")
             raise
 
-    # Phase 1: Top-Level Discovery
-    async def _discover_all_objects(self, client: httpx.AsyncClient) -> Dict[str, List[dict]]:
-        """Discover all databases and pages using the search endpoint."""
-        self.logger.info("Phase 1: Discovering all objects via search")
-
-        discovered = {"databases": [], "pages": []}
-
-        # Search for databases
-        self.logger.info("Searching for databases...")
-        async for database in self._search_objects(client, "database"):
-            discovered["databases"].append(database)
-            self._stats["databases_found"] += 1
-
-        # Search for pages
-        self.logger.info("Searching for pages...")
-        async for page in self._search_objects(client, "page"):
-            discovered["pages"].append(page)
-            self._stats["pages_found"] += 1
-
-        self.logger.info(
-            f"Discovery complete: {len(discovered['databases'])} databases, "
-            f"{len(discovered['pages'])} pages"
-        )
-        return discovered
-
     async def _search_objects(
         self, client: httpx.AsyncClient, object_type: str
     ) -> AsyncGenerator[dict, None]:
@@ -263,77 +238,6 @@ class NotionSource(BaseSource):
                 self.logger.error(f"Error searching for {object_type}: {str(e)}")
                 raise
 
-    # Phase 2: Database Schema Analysis
-    async def _analyze_database_schemas(
-        self, client: httpx.AsyncClient, databases: List[dict]
-    ) -> Dict[str, dict]:
-        """Analyze database schemas and return detailed database information."""
-        self.logger.info("Phase 2: Analyzing database schemas")
-
-        database_schemas = {}
-
-        for database in databases:
-            database_id = database["id"]
-            if database_id in self._processed_databases:
-                continue
-
-            try:
-                self.logger.info(f"Analyzing database schema: {database_id}")
-                schema = await self._get_with_auth(
-                    client, f"https://api.notion.com/v1/databases/{database_id}"
-                )
-                database_schemas[database_id] = schema
-                self._processed_databases.add(database_id)
-
-            except Exception as e:
-                self.logger.error(f"Error analyzing database {database_id}: {str(e)}")
-                continue
-
-        self.logger.info(f"Analyzed {len(database_schemas)} database schemas")
-        return database_schemas
-
-    # Phase 3: Database Content Extraction with Aggregation
-    async def _extract_database_content(
-        self, client: httpx.AsyncClient, database_schemas: Dict[str, dict]
-    ) -> AsyncGenerator[ChunkEntity, None]:
-        """Extract all content from databases with full page content aggregation."""
-        self.logger.info("Phase 3: Extracting database content with aggregation")
-
-        for database_id, schema in database_schemas.items():
-            database_title = self._extract_rich_text_plain(schema.get("title", []))
-            self.logger.info(f"Processing database: {database_title}")
-
-            # Yield database entity
-            database_entity = self._create_database_entity(schema)
-            yield database_entity
-
-            # Query all pages in the database
-            async for page in self._query_database_pages(client, database_id):
-                page_id = page["id"]
-                if page_id in self._processed_pages:
-                    continue
-
-                try:
-                    # Create breadcrumbs for database pages
-                    breadcrumbs = [
-                        Breadcrumb(
-                            entity_id=database_id, name=database_entity.title, type="database"
-                        )
-                    ]
-
-                    # Always use lazy loading for better performance
-                    page_entity = await self._create_lazy_page_entity(
-                        page, breadcrumbs, database_id, schema
-                    )
-                    yield page_entity
-
-                    # Don't yield files separately - they'll be handled during materialization
-                    self._processed_pages.add(page_id)
-
-                except Exception as e:
-                    self.logger.error(f"Error processing database page {page_id}: {str(e)}")
-                    continue
-
     async def _query_database_pages(
         self, client: httpx.AsyncClient, database_id: str
     ) -> AsyncGenerator[dict, None]:
@@ -361,51 +265,12 @@ class NotionSource(BaseSource):
                 self.logger.error(f"Error querying database {database_id}: {str(e)}")
                 raise
 
-    # Phase 4: Standalone Page Processing with Aggregation
-    async def _process_standalone_pages(
-        self, client: httpx.AsyncClient, all_pages: List[dict]
-    ) -> AsyncGenerator[ChunkEntity, None]:
-        """Process pages that are not in databases with full content aggregation."""
-        self.logger.info("Phase 4: Processing standalone pages with aggregation")
-
-        for page in all_pages:
-            page_id = page["id"]
-            if page_id in self._processed_pages:
-                continue
-
-            parent = page.get("parent", {})
-            parent_type = parent.get("type", "")
-
-            # Skip database pages (already processed)
-            if parent_type == "database_id":
-                continue
-
-            try:
-                # Get full page details
-                full_page = await self._get_with_auth(
-                    client, f"https://api.notion.com/v1/pages/{page_id}"
-                )
-
-                # Build breadcrumbs for standalone pages
-                breadcrumbs = await self._build_page_breadcrumbs(client, full_page)
-
-                # Always use lazy loading for better performance
-                page_entity = await self._create_lazy_page_entity(full_page, breadcrumbs)
-                yield page_entity
-
-                # Don't yield files separately - they'll be handled during materialization
-                self._processed_pages.add(page_id)
-
-            except Exception as e:
-                self.logger.error(f"Error processing standalone page {page_id}: {str(e)}")
-                continue
-
-    # Phase 5: Child Database Processing
+    # Child Database Processing
     async def _process_child_databases(
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Process child databases discovered during page content extraction."""
-        self.logger.info("Phase 5: Processing child databases")
+        self.logger.info("Processing child databases")
 
         # Process child databases until no new ones are discovered
         while self._child_databases_to_process:
@@ -1162,8 +1027,8 @@ class NotionSource(BaseSource):
 
     # Main Entry Point
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
-        """Generate all entities from Notion using comprehensive discovery."""
-        self.logger.info("Starting comprehensive Notion entity generation with content aggregation")
+        """Generate all entities from Notion using streaming discovery."""
+        self.logger.info("Starting streaming Notion entity generation with content aggregation")
         self._stats = {
             "api_calls": 0,
             "rate_limit_waits": 0,
@@ -1179,24 +1044,21 @@ class NotionSource(BaseSource):
             async with httpx.AsyncClient() as client:
                 self._client_ref = client  # Store for lazy operations
 
-                # Phase 1: Top-Level Discovery
-                discovered = await self._discover_all_objects(client)
+                # Process databases and pages as we discover them
+                # This allows the orchestrator to start processing immediately
 
-                # Phase 2: Database Schema Analysis
-                database_schemas = await self._analyze_database_schemas(
-                    client, discovered["databases"]
-                )
-
-                # Phase 3: Database Content Extraction with Aggregation
-
-                async for entity in self._extract_database_content(client, database_schemas):
+                # Phase 1 & 2: Discover and yield databases with their schemas
+                self.logger.info("Phase 1 & 2: Streaming database discovery and schema analysis")
+                async for entity in self._stream_database_discovery(client):
                     yield entity
 
-                # Phase 4: Standalone Page Processing with Aggregation
-                async for entity in self._process_standalone_pages(client, discovered["pages"]):
+                # Phase 3: Discover and yield standalone pages
+                self.logger.info("Phase 3: Streaming standalone page discovery")
+                async for entity in self._stream_page_discovery(client):
                     yield entity
 
-                # Phase 5: Child Database Processing
+                # Phase 4: Process any child databases found during page processing
+                self.logger.info("Phase 4: Processing child databases")
                 async for entity in self._process_child_databases(client):
                     yield entity
 
@@ -1204,9 +1066,108 @@ class NotionSource(BaseSource):
 
         except Exception as e:
             self.logger.error(
-                f"Error during comprehensive Notion entity generation: {str(e)}", exc_info=True
+                f"Error during streaming Notion entity generation: {str(e)}", exc_info=True
             )
             raise
+
+    async def _stream_database_discovery(
+        self, client: httpx.AsyncClient
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Stream database discovery and immediately yield database entities with their pages."""
+        self.logger.info("Streaming database discovery...")
+
+        # Search for databases and process them one by one
+        async for database in self._search_objects(client, "database"):
+            database_id = database["id"]
+            if database_id in self._processed_databases:
+                continue
+
+            self._stats["databases_found"] += 1
+
+            try:
+                # Get the database schema
+                self.logger.info(f"Fetching schema for database: {database_id}")
+                schema = await self._get_with_auth(
+                    client, f"https://api.notion.com/v1/databases/{database_id}"
+                )
+                self._processed_databases.add(database_id)
+
+                # Yield the database entity immediately
+                database_entity = self._create_database_entity(schema)
+                yield database_entity
+
+                database_title = self._extract_rich_text_plain(schema.get("title", []))
+                self.logger.info(f"Processing pages in database: {database_title}")
+
+                # Query and yield pages in this database
+                async for page in self._query_database_pages(client, database_id):
+                    page_id = page["id"]
+                    if page_id in self._processed_pages:
+                        continue
+
+                    try:
+                        # Create breadcrumbs for database pages
+                        breadcrumbs = [
+                            Breadcrumb(
+                                entity_id=database_id, name=database_entity.title, type="database"
+                            )
+                        ]
+
+                        # Always use lazy loading for better performance
+                        page_entity = await self._create_lazy_page_entity(
+                            page, breadcrumbs, database_id, schema
+                        )
+                        yield page_entity
+
+                        self._processed_pages.add(page_id)
+
+                    except Exception as e:
+                        self.logger.error(f"Error processing database page {page_id}: {str(e)}")
+                        continue
+
+            except Exception as e:
+                self.logger.error(f"Error processing database {database_id}: {str(e)}")
+                continue
+
+    async def _stream_page_discovery(
+        self, client: httpx.AsyncClient
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Stream page discovery and immediately yield page entities."""
+        self.logger.info("Streaming page discovery...")
+
+        # Search for pages and process them one by one
+        async for page in self._search_objects(client, "page"):
+            page_id = page["id"]
+            if page_id in self._processed_pages:
+                continue
+
+            parent = page.get("parent", {})
+            parent_type = parent.get("type", "")
+
+            # Skip database pages (already processed during database discovery)
+            if parent_type == "database_id":
+                continue
+
+            self._stats["pages_found"] += 1
+
+            try:
+                # Get full page details
+                full_page = await self._get_with_auth(
+                    client, f"https://api.notion.com/v1/pages/{page_id}"
+                )
+
+                # Build breadcrumbs for standalone pages
+                breadcrumbs = await self._build_page_breadcrumbs(client, full_page)
+
+                # Always use lazy loading for better performance
+                page_entity = await self._create_lazy_page_entity(full_page, breadcrumbs)
+                yield page_entity
+
+                self._processed_pages.add(page_id)
+
+            except Exception as e:
+                self.logger.error(f"Error processing standalone page {page_id}: {str(e)}")
+                continue
 
     async def _process_and_yield_file(
         self, file_entity: NotionFileEntity
