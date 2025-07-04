@@ -3,6 +3,7 @@
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
@@ -48,16 +49,33 @@ class HubspotSource(BaseSource):
         instance.access_token = access_token
         return instance
 
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
+    )
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict:
         """Make authenticated GET request to HubSpot API.
 
         For example, to retrieve contacts:
           GET https://api.hubapi.com/crm/v3/objects/contacts
         """
-        response = await client.get(
-            url,
-            headers={"Authorization": f"Bearer {self.access_token}"},
-        )
+        # Get fresh token (will refresh if needed)
+        access_token = await self.get_access_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        response = await client.get(url, headers=headers)
+
+        # Handle 401 errors by refreshing token and retrying
+        if response.status_code == 401:
+            self.logger.warning(
+                f"Got 401 Unauthorized from HubSpot API at {url}, refreshing token..."
+            )
+            await self.refresh_on_unauthorized()
+
+            # Get new token and retry
+            access_token = await self.get_access_token()
+            headers = {"Authorization": f"Bearer {access_token}"}
+            response = await client.get(url, headers=headers)
+
         response.raise_for_status()
         return response.json()
 

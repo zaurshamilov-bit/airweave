@@ -58,7 +58,8 @@ class DropboxSource(BaseSource):
         self, client: httpx.AsyncClient, url: str, json_data: Dict = None
     ) -> Dict:
         """Make an authenticated POST request to the Dropbox API."""
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        access_token = await self.get_access_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
 
         try:
             # Only include JSON data if it's provided
@@ -72,6 +73,16 @@ class DropboxSource(BaseSource):
             return json_response
 
         except httpx.HTTPStatusError as e:
+            # Handle 401 Unauthorized - try refreshing token
+            if e.response.status_code == 401 and self._token_manager:
+                self.logger.info("Received 401 error, attempting to refresh token")
+                refreshed = await self._token_manager.refresh_on_unauthorized()
+
+                if refreshed:
+                    # Retry with new token (the retry decorator will handle this)
+                    self.logger.info("Token refreshed, retrying request")
+                    raise  # Let tenacity retry with the refreshed token
+
             self.logger.error(f"HTTP Error in Dropbox API call: {e}")
             self.logger.error(f"Response body: {e.response.text}")
             raise

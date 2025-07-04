@@ -5,6 +5,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from airweave.core.exceptions import TokenRefreshError
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import Breadcrumb, ChunkEntity
@@ -58,13 +59,54 @@ class AsanaSource(BaseSource):
         stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
     )
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict:
-        """Make authenticated GET request to Asana API."""
-        response = await client.get(
-            url,
-            headers={"Authorization": f"Bearer {self.access_token}"},
-        )
-        response.raise_for_status()
-        return response.json()
+        """Make authenticated GET request to Asana API with token manager support.
+
+        This method uses the token manager for authentication and handles
+        401 errors by refreshing the token and retrying.
+        """
+        # Get a valid token (will refresh if needed)
+        access_token = await self.get_access_token()
+        if not access_token:
+            raise ValueError("No access token available")
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        try:
+            response = await client.get(url, headers=headers)
+
+            # Handle 401 Unauthorized - token might have expired
+            if response.status_code == 401:
+                self.logger.warning(f"Received 401 Unauthorized for {url}, refreshing token...")
+
+                # If we have a token manager, try to refresh
+                if self.token_manager:
+                    try:
+                        # Force refresh the token
+                        new_token = await self.token_manager.refresh_on_unauthorized()
+                        headers = {"Authorization": f"Bearer {new_token}"}
+
+                        # Retry the request with the new token
+                        self.logger.info(f"Retrying request with refreshed token: {url}")
+                        response = await client.get(url, headers=headers)
+
+                    except TokenRefreshError as e:
+                        self.logger.error(f"Failed to refresh token: {str(e)}")
+                        response.raise_for_status()
+                else:
+                    # No token manager, can't refresh
+                    self.logger.error("No token manager available to refresh expired token")
+                    response.raise_for_status()
+
+            # Raise for other HTTP errors
+            response.raise_for_status()
+            return response.json()
+
+        except httpx.HTTPStatusError as e:
+            self.logger.error(f"HTTP error from Asana API: {e.response.status_code} for {url}")
+            raise
+        except Exception as e:
+            self.logger.error(f"Unexpected error accessing Asana API: {url}, {str(e)}")
+            raise
 
     async def _generate_workspace_entities(
         self, client: httpx.AsyncClient
@@ -293,13 +335,15 @@ class AsanaSource(BaseSource):
             # Different headers based on URL type
             headers = None
             if file_entity.download_url.startswith("https://app.asana.com/"):
-                headers = {"Authorization": f"Bearer {self.access_token}"}
+                # Get fresh token for the download request
+                token = await self.get_access_token()
+                headers = {"Authorization": f"Bearer {token}"}
 
-            # Use the BaseSource helper method instead of direct file_manager calls
+            # Use the BaseSource helper method - it will use token manager automatically
             processed_entity = await self.process_file_entity(
                 file_entity=file_entity,
                 headers=headers,
-                access_token=self.access_token,  # Always pass the access token
+                # No need to pass access_token - process_file_entity will get it from token manager
             )
 
             yield processed_entity

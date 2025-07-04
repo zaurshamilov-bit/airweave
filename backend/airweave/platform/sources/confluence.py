@@ -168,8 +168,9 @@ class ConfluenceSource(BaseSource):
 
         By default, we're using OAuth 2.0 with refresh tokens for authentication.
         """
+        access_token = await self.get_access_token()
         headers = {
-            "Authorization": f"Bearer {self.access_token}",
+            "Authorization": f"Bearer {access_token}",
             "Accept": "application/json",
             "X-Atlassian-Token": "no-check",  # Required for CSRF protection
         }
@@ -179,7 +180,25 @@ class ConfluenceSource(BaseSource):
             headers["X-Cloud-ID"] = self.cloud_id
 
         self.logger.debug(f"Making request to {url} with headers: {headers}")
-        response = await client.get(url, headers=headers)
+
+        try:
+            response = await client.get(url, headers=headers)
+        except httpx.HTTPStatusError as e:
+            # Handle 401 Unauthorized - try refreshing token
+            if e.response.status_code == 401 and self._token_manager:
+                self.logger.info("Received 401 error, attempting to refresh token")
+                refreshed = await self._token_manager.refresh_on_unauthorized()
+
+                if refreshed:
+                    # Retry with new token
+                    new_access_token = await self.get_access_token()
+                    headers["Authorization"] = f"Bearer {new_access_token}"
+                    self.logger.info("Retrying request with refreshed token")
+                    response = await client.get(url, headers=headers)
+                else:
+                    raise
+            else:
+                raise
 
         if not response.is_success:
             self.logger.error(f"Request failed with status {response.status_code}")

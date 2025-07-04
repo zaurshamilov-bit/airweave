@@ -18,6 +18,7 @@ class BaseSource:
     def __init__(self):
         """Initialize the base source."""
         self._logger: Optional[Any] = None  # Store contextual logger as instance variable
+        self._token_manager: Optional[Any] = None  # Store token manager for OAuth sources
 
     @property
     def logger(self):
@@ -30,6 +31,42 @@ class BaseSource:
     def set_logger(self, logger) -> None:
         """Set a contextual logger for this source."""
         self._logger = logger
+
+    @property
+    def token_manager(self):
+        """Get the token manager for this source."""
+        return self._token_manager
+
+    def set_token_manager(self, token_manager) -> None:
+        """Set a token manager for this source.
+
+        Args:
+            token_manager: TokenManager instance for handling OAuth token refresh
+        """
+        self._token_manager = token_manager
+
+    async def get_access_token(self) -> Optional[str]:
+        """Get a valid access token using the token manager.
+
+        Returns:
+            A valid access token if token manager is set and source uses OAuth,
+            None otherwise
+        """
+        if self._token_manager:
+            return await self._token_manager.get_valid_token()
+
+        # Fallback to instance access_token if no token manager
+        return getattr(self, "access_token", None)
+
+    async def refresh_on_unauthorized(self) -> Optional[str]:
+        """Refresh token after receiving a 401 error.
+
+        Returns:
+            New access token if refresh was successful, None otherwise
+        """
+        if self._token_manager:
+            return await self._token_manager.refresh_on_unauthorized()
+        return None
 
     @classmethod
     @abstractmethod
@@ -73,8 +110,8 @@ class BaseSource:
             self.logger.warning(f"No download URL for file {file_entity.name}")
             return None
 
-        # Get access token (from parameter or instance)
-        token = access_token or getattr(self, "access_token", None)
+        # Get access token (from parameter, token manager, or instance)
+        token = access_token or await self.get_access_token()
 
         # Validate we have an access token for authentication
         if not token:

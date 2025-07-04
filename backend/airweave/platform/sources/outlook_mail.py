@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
@@ -53,14 +54,34 @@ class OutlookMailSource(BaseSource):
         logger.info(f"OutlookMailSource instance created with config: {config}")
         return instance
 
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
+    )
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[dict] = None
     ) -> dict:
         """Make an authenticated GET request to Microsoft Graph API."""
         self.logger.debug(f"Making authenticated GET request to: {url} with params: {params}")
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+
+        # Get fresh token (will refresh if needed)
+        access_token = await self.get_access_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+
         try:
             response = await client.get(url, headers=headers, params=params)
+
+            # Handle 401 errors by refreshing token and retrying
+            if response.status_code == 401:
+                self.logger.warning(
+                    f"Got 401 Unauthorized from Microsoft Graph API at {url}, refreshing token..."
+                )
+                await self.refresh_on_unauthorized()
+
+                # Get new token and retry
+                access_token = await self.get_access_token()
+                headers = {"Authorization": f"Bearer {access_token}"}
+                response = await client.get(url, headers=headers, params=params)
+
             response.raise_for_status()
             data = response.json()
             self.logger.debug(f"Received response from {url} - Status: {response.status_code}")

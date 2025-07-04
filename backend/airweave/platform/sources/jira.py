@@ -106,8 +106,9 @@ class JiraSource(BaseSource):
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Any:
         """Make an authenticated GET request to the Jira REST API."""
         self.logger.debug(f"Making authenticated request to {url}")
+        access_token = await self.get_access_token()
         headers = {
-            "Authorization": f"Bearer {self.access_token}",
+            "Authorization": f"Bearer {access_token}",
             "Accept": "application/json",
             "X-Atlassian-Token": "no-check",  # Required for CSRF protection
         }
@@ -124,11 +125,24 @@ class JiraSource(BaseSource):
             self.logger.debug(f"Response status: {response.status_code}")
             self.logger.debug(f"Response size: {len(response.content)} bytes")
             return data
+        except httpx.HTTPStatusError as e:
+            # Handle 401 Unauthorized - try refreshing token
+            if e.response.status_code == 401 and self._token_manager:
+                self.logger.info("Received 401 error, attempting to refresh token")
+                refreshed = await self._token_manager.refresh_on_unauthorized()
+
+                if refreshed:
+                    # Retry with new token (the retry decorator will handle this)
+                    self.logger.info("Token refreshed, retrying request")
+                    raise  # Let tenacity retry with the refreshed token
+
+            # Log the error details
+            self.logger.error(f"Request failed: {str(e)}")
+            self.logger.error(f"Response status: {e.response.status_code}")
+            self.logger.error(f"Response body: {e.response.text}")
+            raise
         except Exception as e:
             self.logger.error(f"Request failed: {str(e)}")
-            if isinstance(e, httpx.HTTPStatusError):
-                self.logger.error(f"Response status: {e.response.status_code}")
-                self.logger.error(f"Response body: {e.response.text}")
             raise
 
     # Entity Creation Functions

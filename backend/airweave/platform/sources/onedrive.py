@@ -57,9 +57,25 @@ class OneDriveSource(BaseSource):
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict] = None
     ) -> Dict:
         """Make an authenticated GET request to Microsoft Graph API with retry logic."""
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        # Get fresh token (will refresh if needed)
+        access_token = await self.get_access_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+
         try:
             resp = await client.get(url, headers=headers, params=params, timeout=30.0)
+
+            # Handle 401 errors by refreshing token and retrying
+            if resp.status_code == 401:
+                self.logger.warning(
+                    f"Got 401 Unauthorized from Microsoft Graph API at {url}, refreshing token..."
+                )
+                await self.refresh_on_unauthorized()
+
+                # Get new token and retry
+                access_token = await self.get_access_token()
+                headers = {"Authorization": f"Bearer {access_token}"}
+                resp = await client.get(url, headers=headers, params=params, timeout=30.0)
+
             self.logger.info(f"Request URL: {url}")
             resp.raise_for_status()
             return resp.json()
@@ -329,9 +345,7 @@ class OneDriveSource(BaseSource):
 
                 # Process the file entity (download and process content)
                 if file_entity.download_url:
-                    processed_entity = await self.process_file_entity(
-                        file_entity=file_entity, access_token=self.access_token
-                    )
+                    processed_entity = await self.process_file_entity(file_entity=file_entity)
                     if processed_entity:
                         yield processed_entity
                         file_count += 1

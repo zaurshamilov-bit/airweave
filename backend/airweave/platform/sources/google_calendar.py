@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
@@ -57,22 +58,59 @@ class GoogleCalendarSource(BaseSource):
         instance.access_token = access_token
         return instance
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict] = None
     ) -> Dict:
         """Make an authenticated GET request to the Google Calendar API."""
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        # Get fresh token (will refresh if needed)
+        access_token = await self.get_access_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+
         response = await client.get(url, headers=headers, params=params)
+
+        # Handle 401 errors by refreshing token and retrying
+        if response.status_code == 401:
+            self.logger.warning(
+                f"Got 401 Unauthorized from Google Calendar API at {url}, refreshing token..."
+            )
+            await self.refresh_on_unauthorized()
+
+            # Get new token and retry
+            access_token = await self.get_access_token()
+            headers = {"Authorization": f"Bearer {access_token}"}
+            response = await client.get(url, headers=headers, params=params)
+
         response.raise_for_status()
         return response.json()
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     async def _post_with_auth(self, client: httpx.AsyncClient, url: str, json_data: Dict) -> Dict:
         """Make an authenticated POST request to the Google Calendar API."""
+        # Get fresh token (will refresh if needed)
+        access_token = await self.get_access_token()
         headers = {
-            "Authorization": f"Bearer {self.access_token}",
+            "Authorization": f"Bearer {access_token}",
             "Content-Type": "application/json",
         }
+
         response = await client.post(url, headers=headers, json=json_data)
+
+        # Handle 401 errors by refreshing token and retrying
+        if response.status_code == 401:
+            self.logger.warning(
+                f"Got 401 Unauthorized from Google Calendar API at {url}, refreshing token..."
+            )
+            await self.refresh_on_unauthorized()
+
+            # Get new token and retry
+            access_token = await self.get_access_token()
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            }
+            response = await client.post(url, headers=headers, json=json_data)
+
         response.raise_for_status()
         return response.json()
 

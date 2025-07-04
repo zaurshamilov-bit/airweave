@@ -19,6 +19,7 @@ from typing import Any, AsyncGenerator, Dict, Optional
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from airweave.core.exceptions import TokenRefreshError
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import ChunkEntity
@@ -64,14 +65,54 @@ class GoogleDriveSource(BaseSource):
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict] = None
     ) -> Dict:
-        """Make an authenticated GET request to the Google Drive API with retry logic."""
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        """Make an authenticated GET request to the Google Drive API with retry logic.
+
+        This method now uses the token manager for authentication and handles
+        401 errors by refreshing the token and retrying.
+        """
+        # Get a valid token (will refresh if needed)
+        access_token = await self.get_access_token()
+        if not access_token:
+            raise ValueError("No access token available")
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+
         try:
             # Add a longer timeout (30 seconds)
             resp = await client.get(url, headers=headers, params=params, timeout=30.0)
-            self.logger.info(f"Request URL: {url}")  # Changed from error to info level
+            self.logger.info(f"Request URL: {url}")
+
+            # Handle 401 Unauthorized - token might have expired
+            if resp.status_code == 401:
+                self.logger.warning(f"Received 401 Unauthorized for {url}, refreshing token...")
+
+                # If we have a token manager, try to refresh
+                if self.token_manager:
+                    try:
+                        # Force refresh the token
+                        new_token = await self.token_manager.refresh_on_unauthorized()
+                        headers = {"Authorization": f"Bearer {new_token}"}
+
+                        # Retry the request with the new token
+                        self.logger.info(f"Retrying request with refreshed token: {url}")
+                        resp = await client.get(url, headers=headers, params=params, timeout=30.0)
+
+                    except TokenRefreshError as e:
+                        self.logger.error(f"Failed to refresh token: {str(e)}")
+                        raise httpx.HTTPStatusError(
+                            "Authentication failed and token refresh was unsuccessful",
+                            request=resp.request,
+                            response=resp,
+                        ) from e
+                else:
+                    # No token manager, can't refresh
+                    self.logger.error("No token manager available to refresh expired token")
+                    resp.raise_for_status()
+
+            # Raise for other HTTP errors
             resp.raise_for_status()
             return resp.json()
+
         except httpx.ConnectTimeout:
             self.logger.error(f"Connection timeout accessing Google Drive API: {url}")
             raise
@@ -250,9 +291,8 @@ class GoogleDriveSource(BaseSource):
 
                 # Process the entity if it has a download URL
                 if file_entity.download_url:
-                    processed_entity = await self.process_file_entity(
-                        file_entity=file_entity, access_token=self.access_token
-                    )
+                    # Note: process_file_entity now uses the token manager automatically
+                    processed_entity = await self.process_file_entity(file_entity=file_entity)
                     yield processed_entity
                 else:
                     # This should never happen now that we return None for files without URLs

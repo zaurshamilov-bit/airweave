@@ -60,9 +60,25 @@ class GmailSource(BaseSource):
     ) -> dict:
         """Make an authenticated GET request to the Gmail API."""
         self.logger.info(f"Making authenticated GET request to: {url} with params: {params}")
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+
+        # Get fresh token (will refresh if needed)
+        access_token = await self.get_access_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
 
         response = await client.get(url, headers=headers, params=params)
+
+        # Handle 401 errors by refreshing token and retrying
+        if response.status_code == 401:
+            self.logger.warning(
+                f"Got 401 Unauthorized from Gmail API at {url}, refreshing token..."
+            )
+            await self.refresh_on_unauthorized()
+
+            # Get new token and retry
+            access_token = await self.get_access_token()
+            headers = {"Authorization": f"Bearer {access_token}"}
+            response = await client.get(url, headers=headers, params=params)
+
         response.raise_for_status()
         data = response.json()
         self.logger.info(f"Received response from {url} - Status: {response.status_code}")
