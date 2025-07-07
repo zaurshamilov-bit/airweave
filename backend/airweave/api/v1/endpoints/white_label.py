@@ -292,7 +292,7 @@ async def exchange_white_label_oauth2_code(
     response: Response,
     white_label_id: UUID,
     code: str = Body(...),
-    source_connection_in: Optional[schemas.SourceConnectionCreate] = Body(None),
+    source_connection_in: Optional[schemas.SourceConnectionCreateWithWhiteLabel] = Body(None),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
     logger: ContextualLogger = Depends(deps.get_logger),
@@ -340,7 +340,7 @@ async def exchange_white_label_oauth2_code(
         # Create or use the provided source connection config
         if source_connection_in is None:
             # If no source connection provided, create one with defaults
-            source_connection_in = schemas.SourceConnectionCreate(
+            source_connection_in = schemas.SourceConnectionCreateWithWhiteLabel(
                 name=f"{connection.name} from {white_label.name}",
                 description=f"Created from white label {white_label.name}",
                 short_name=white_label.source_short_name,

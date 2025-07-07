@@ -111,7 +111,7 @@ class TestSyncServiceIntegration:
             created_sync = await service.create(
                 db=mock_db,
                 sync=sync_create,
-                current_user=mock_user,
+                auth_context=mock_user,
                 uow=complete_uow,
             )
 
@@ -122,7 +122,7 @@ class TestSyncServiceIntegration:
                 dag=mock_sync_dag,
                 collection=mock_collection,
                 source_connection=mock_source_connection,
-                current_user=mock_user,
+                auth_context=mock_user,
             )
 
             # Assert - Verify the flow
@@ -130,7 +130,7 @@ class TestSyncServiceIntegration:
             mock_create_sync.assert_called_once()
             complete_uow.session.flush.assert_called_once()
             mock_create_dag.assert_called_once_with(
-                db=mock_db, sync_id=sync_id, current_user=mock_user, uow=complete_uow
+                db=mock_db, sync_id=sync_id, auth_context=mock_user, uow=complete_uow
             )
 
             # Run assertions
@@ -142,7 +142,7 @@ class TestSyncServiceIntegration:
                 dag=mock_sync_dag,
                 collection=mock_collection,
                 source_connection=mock_source_connection,
-                current_user=mock_user,
+                auth_context=mock_user,
                 access_token=None
             )
             mock_orchestrator.run.assert_called_once()
@@ -191,7 +191,7 @@ class TestSyncServiceIntegration:
                     dag=mock_sync_dag,
                     collection=mock_collection,
                     source_connection=mock_source_connection,
-                    current_user=mock_user,
+                    auth_context=mock_user,
                 )
 
             # Verify the exception was logged and re-raised

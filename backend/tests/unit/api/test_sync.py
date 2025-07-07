@@ -35,12 +35,12 @@ class TestListSyncs:
 
             # Act
             result = await sync.list_syncs(
-                db=mock_db, skip=0, limit=100, with_source_connection=False, user=mock_user
+                db=mock_db, skip=0, limit=100, with_source_connection=False, auth_context=mock_user
             )
 
             # Assert
             mock_list_syncs.assert_called_once_with(
-                db=mock_db, current_user=mock_user, skip=0, limit=100, with_source_connection=False
+                db=mock_db, auth_context=mock_user, skip=0, limit=100, with_source_connection=False
             )
             assert result == [mock_sync]
 
@@ -67,12 +67,12 @@ class TestListSyncs:
 
             # Act
             result = await sync.list_syncs(
-                db=mock_db, skip=0, limit=100, with_source_connection=True, user=mock_user
+                db=mock_db, skip=0, limit=100, with_source_connection=True, auth_context=mock_user
             )
 
             # Assert
             mock_list_syncs.assert_called_once_with(
-                db=mock_db, current_user=mock_user, skip=0, limit=100, with_source_connection=True
+                db=mock_db, auth_context=mock_user, skip=0, limit=100, with_source_connection=True
             )
             assert result == [mock_sync_with_source]
 
@@ -89,11 +89,11 @@ class TestGetSync:
             sync_id = mock_sync.id
 
             # Act
-            result = await sync.get_sync(db=mock_db, sync_id=sync_id, user=mock_user)
+            result = await sync.get_sync(db=mock_db, sync_id=sync_id, auth_context=mock_user)
 
             # Assert
             mock_get_sync.assert_called_once_with(
-                db=mock_db, sync_id=sync_id, current_user=mock_user
+                db=mock_db, sync_id=sync_id, auth_context=mock_user
             )
             assert result == mock_sync
 
@@ -107,7 +107,7 @@ class TestGetSync:
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
-                await sync.get_sync(db=mock_db, sync_id=sync_id, user=mock_user)
+                await sync.get_sync(db=mock_db, sync_id=sync_id, auth_context=mock_user)
 
             assert exc_info.value.status_code == 404
             assert exc_info.value.detail == "Sync not found"
@@ -188,13 +188,13 @@ class TestCreateSync:
             result = await sync.create_sync(
                 db=mock_db,
                 sync_in=sync_in,
-                user=mock_user,
+                auth_context=mock_user,
                 background_tasks=mock_background_tasks,
             )
 
             # Assert
             mock_create_and_run.assert_called_once_with(
-                db=mock_db, sync_in=sync_in, current_user=mock_user
+                db=mock_db, sync_in=sync_in, auth_context=mock_user
             )
             assert result == mock_sync
             mock_background_tasks.add_task.assert_not_called()
@@ -275,16 +275,16 @@ class TestCreateSync:
             result = await sync.create_sync(
                 db=mock_db,
                 sync_in=sync_in,
-                user=mock_user,
+                auth_context=mock_user,
                 background_tasks=mock_background_tasks,
             )
 
             # Assert
             mock_create_and_run.assert_called_once_with(
-                db=mock_db, sync_in=sync_in, current_user=mock_user
+                db=mock_db, sync_in=sync_in, auth_context=mock_user
             )
             mock_get_dag.assert_called_once_with(
-                db=mock_db, sync_id=mock_sync.id, current_user=mock_user
+                db=mock_db, sync_id=mock_sync.id, auth_context=mock_user
             )
             assert result == mock_sync
             mock_background_tasks.add_task.assert_called_once()
@@ -303,12 +303,12 @@ class TestDeleteSync:
 
             # Act
             result = await sync.delete_sync(
-                db=mock_db, sync_id=sync_id, delete_data=False, user=mock_user
+                db=mock_db, sync_id=sync_id, delete_data=False, auth_context=mock_user
             )
 
             # Assert
             mock_delete_sync.assert_called_once_with(
-                db=mock_db, sync_id=sync_id, current_user=mock_user, delete_data=False
+                db=mock_db, sync_id=sync_id, auth_context=mock_user, delete_data=False
             )
             assert result == mock_sync
 
@@ -322,12 +322,12 @@ class TestDeleteSync:
 
             # Act
             result = await sync.delete_sync(
-                db=mock_db, sync_id=sync_id, delete_data=True, user=mock_user
+                db=mock_db, sync_id=sync_id, delete_data=True, auth_context=mock_user
             )
 
             # Assert
             mock_delete_sync.assert_called_once_with(
-                db=mock_db, sync_id=sync_id, current_user=mock_user, delete_data=True
+                db=mock_db, sync_id=sync_id, auth_context=mock_user, delete_data=True
             )
             assert result == mock_sync
 
@@ -342,7 +342,7 @@ class TestDeleteSync:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await sync.delete_sync(
-                    db=mock_db, sync_id=sync_id, delete_data=False, user=mock_user
+                    db=mock_db, sync_id=sync_id, delete_data=False, auth_context=mock_user
                 )
 
             assert exc_info.value.status_code == 404
@@ -368,13 +368,13 @@ class TestRunSync:
             result = await sync.run_sync(
                 db=mock_db,
                 sync_id=sync_id,
-                user=mock_user,
+                auth_context=mock_user,
                 background_tasks=mock_background_tasks,
             )
 
             # Assert
             mock_trigger_run.assert_called_once_with(
-                db=mock_db, sync_id=sync_id, current_user=mock_user
+                db=mock_db, sync_id=sync_id, auth_context=mock_user
             )
             mock_background_tasks.add_task.assert_called_once()
             assert result == mock_sync_job
@@ -394,7 +394,7 @@ class TestRunSync:
                 await sync.run_sync(
                     db=mock_db,
                     sync_id=sync_id,
-                    user=mock_user,
+                    auth_context=mock_user,
                     background_tasks=mock_background_tasks,
                 )
 
@@ -414,11 +414,11 @@ class TestListSyncJobs:
             mock_list_jobs.return_value = [mock_sync_job]
 
             # Act
-            result = await sync.list_sync_jobs(db=mock_db, sync_id=sync_id, user=mock_user)
+            result = await sync.list_sync_jobs(db=mock_db, sync_id=sync_id, auth_context=mock_user)
 
             # Assert
             mock_list_jobs.assert_called_once_with(
-                db=mock_db, current_user=mock_user, sync_id=sync_id
+                db=mock_db, auth_context=mock_user, sync_id=sync_id
             )
             assert result == [mock_sync_job]
 
@@ -432,7 +432,7 @@ class TestListSyncJobs:
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
-                await sync.list_sync_jobs(db=mock_db, sync_id=sync_id, user=mock_user)
+                await sync.list_sync_jobs(db=mock_db, sync_id=sync_id, auth_context=mock_user)
 
             assert exc_info.value.status_code == 404
             assert exc_info.value.detail == "Sync not found"
@@ -454,12 +454,12 @@ class TestGetSyncJob:
 
             # Act
             result = await sync.get_sync_job(
-                db=mock_db, sync_id=sync_id, job_id=job_id, user=mock_user
+                db=mock_db, sync_id=sync_id, job_id=job_id, auth_context=mock_user
             )
 
             # Assert
             mock_get_job.assert_called_once_with(
-                db=mock_db, job_id=job_id, current_user=mock_user, sync_id=sync_id
+                db=mock_db, job_id=job_id, auth_context=mock_user, sync_id=sync_id
             )
             assert result == mock_sync_job
 
@@ -475,7 +475,7 @@ class TestGetSyncJob:
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
-                await sync.get_sync_job(db=mock_db, sync_id=sync_id, job_id=job_id, user=mock_user)
+                await sync.get_sync_job(db=mock_db, sync_id=sync_id, job_id=job_id, auth_context=mock_user)
 
             assert exc_info.value.status_code == 404
             assert exc_info.value.detail == "Sync job not found"
@@ -492,7 +492,7 @@ class TestGetSyncJob:
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
-                await sync.get_sync_job(db=mock_db, sync_id=sync_id, job_id=job_id, user=mock_user)
+                await sync.get_sync_job(db=mock_db, sync_id=sync_id, job_id=job_id, auth_context=mock_user)
 
             assert exc_info.value.status_code == 404
             assert exc_info.value.detail == "Sync job not found"
@@ -532,8 +532,8 @@ class TestSubscribeSyncJob:
         ) as mock_subscribe:
             mock_subscribe.return_value = mock_pubsub
 
-            # Act - Use new signature with user dependency injection
-            response = await sync.subscribe_sync_job(job_id=job_id, user=mock_user)
+            # Act - Use new signature with auth_context dependency injection
+            response = await sync.subscribe_sync_job(job_id=job_id, auth_context=mock_user)
 
             # Assert
             mock_subscribe.assert_called_once_with(job_id)
@@ -571,8 +571,8 @@ class TestSubscribeSyncJob:
             # Subscribe will always return a pubsub instance
             mock_subscribe.return_value = mock_pubsub
 
-            # Act - Use new signature with user dependency injection
-            response = await sync.subscribe_sync_job(job_id=job_id, user=mock_user)
+            # Act - Use new signature with auth_context dependency injection
+            response = await sync.subscribe_sync_job(job_id=job_id, auth_context=mock_user)
 
             # Assert - it creates a streaming response even for non-existent jobs
             mock_subscribe.assert_called_once_with(job_id)
@@ -592,11 +592,11 @@ class TestGetSyncDag:
             mock_get_dag.return_value = mock_sync_dag
 
             # Act
-            result = await sync.get_sync_dag(sync_id=sync_id, db=mock_db, user=mock_user)
+            result = await sync.get_sync_dag(sync_id=sync_id, db=mock_db, auth_context=mock_user)
 
             # Assert
             mock_get_dag.assert_called_once_with(
-                db=mock_db, sync_id=sync_id, current_user=mock_user
+                db=mock_db, sync_id=sync_id, auth_context=mock_user
             )
             assert result == mock_sync_dag
 
@@ -612,7 +612,7 @@ class TestGetSyncDag:
 
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
-                await sync.get_sync_dag(sync_id=sync_id, db=mock_db, user=mock_user)
+                await sync.get_sync_dag(sync_id=sync_id, db=mock_db, auth_context=mock_user)
 
             assert exc_info.value.status_code == 404
             assert exc_info.value.detail == f"DAG for sync {sync_id} not found"
@@ -633,12 +633,12 @@ class TestUpdateSync:
 
             # Act
             result = await sync.update_sync(
-                db=mock_db, sync_id=sync_id, sync_update=sync_update, user=mock_user
+                db=mock_db, sync_id=sync_id, sync_update=sync_update, auth_context=mock_user
             )
 
             # Assert
             mock_update_sync.assert_called_once_with(
-                db=mock_db, sync_id=sync_id, sync_update=sync_update, current_user=mock_user
+                db=mock_db, sync_id=sync_id, sync_update=sync_update, auth_context=mock_user
             )
             assert result == mock_sync
 
@@ -655,7 +655,7 @@ class TestUpdateSync:
             # Act & Assert
             with pytest.raises(HTTPException) as exc_info:
                 await sync.update_sync(
-                    db=mock_db, sync_id=sync_id, sync_update=sync_update, user=mock_user
+                    db=mock_db, sync_id=sync_id, sync_update=sync_update, auth_context=mock_user
                 )
 
             assert exc_info.value.status_code == 404

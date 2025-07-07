@@ -12,7 +12,7 @@ from airweave.platform.configs._base import ConfigValues
 
 
 class SourceConnectionBase(BaseModel):
-    """Base schema for source connection."""
+    """Base schema for source connection (includes white label fields for existing connections)."""
 
     name: str = Field(..., description="Name of the source connection", min_length=4, max_length=42)
     description: Optional[str] = None
@@ -26,17 +26,56 @@ class SourceConnectionBase(BaseModel):
         from_attributes = True
 
 
-class SourceConnectionCreate(SourceConnectionBase):
-    """Schema for creating a source connection.
+class SourceConnectionCreateBase(BaseModel):
+    """Base schema for source connection creation without white label fields."""
 
-    Contains all fields that are required to create a source connection.
-    - Sync specific fields are included here.
+    name: str = Field(..., description="Name of the source connection", min_length=4, max_length=42)
+    description: Optional[str] = None
+    config_fields: Optional[ConfigValues] = None  # stored in core table
+    short_name: str  # Short name of the source
+
+    class Config:
+        """Pydantic config for SourceConnectionCreateBase."""
+
+        from_attributes = True
+
+    def map_to_core_and_auxiliary_attributes(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Map the source connection create schema to core and auxiliary attributes.
+
+        This separates the attributes in the schema into two groups:
+        1. Core attributes: These are used to create the SourceConnection model directly
+        2. Auxiliary attributes: These are used in the creation process but aren't part of the model
+
+        Returns:
+            A tuple containing (core_attributes, auxiliary_attributes)
+        """
+        data = self.model_dump(exclude_unset=True)
+
+        # Auxiliary attributes used in the creation process but not directly in the model
+        auxiliary_attrs = {
+            "auth_fields": data.pop("auth_fields", None),
+            "credential_id": data.pop("credential_id", None),
+            "cron_schedule": data.pop("cron_schedule", None),
+            "sync_immediately": data.pop("sync_immediately", True),
+        }
+
+        # Everything else is a core attribute for the SourceConnection model
+        core_attrs = data
+
+        return core_attrs, auxiliary_attrs
+
+
+class SourceConnectionCreate(SourceConnectionCreateBase):
+    """Schema for creating a source connection through the regular endpoint.
+
+    This schema does NOT include credential_id as it's not supported
+    by the public source connection creation endpoint. Users should provide
+    auth_fields instead and let the system manage credentials internally.
     """
 
     collection: Optional[str] = None
     cron_schedule: Optional[str] = None
     auth_fields: Optional[ConfigValues] = None
-    credential_id: Optional[UUID] = None
     sync_immediately: bool = True
 
     model_config = ConfigDict(
@@ -81,22 +120,136 @@ class SourceConnectionCreate(SourceConnectionBase):
             raise ValueError("Invalid cron schedule format")
         return v
 
+
+class SourceConnectionCreateWithWhiteLabel(SourceConnectionCreateBase):
+    """Schema for creating a source connection through the white label endpoint.
+
+    This schema includes white_label_id and is used specifically for
+    white label source connection creation.
+    """
+
+    collection: Optional[str] = None
+    cron_schedule: Optional[str] = None
+    auth_fields: Optional[ConfigValues] = None
+    credential_id: Optional[UUID] = None
+    sync_immediately: bool = True
+    white_label_id: Optional[UUID] = Field(
+        None,
+        description="ID of the white label integration (set automatically by white label endpoint)",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "My Stripe Connection",
+                    "description": "Production Stripe account for payment data",
+                    "short_name": "stripe",
+                    "collection": "finance-data",
+                    "auth_fields": {"api_key": "sk_live_51H..."},
+                    "cron_schedule": "0 */6 * * *",
+                    "sync_immediately": True,
+                    "white_label_id": "123e4567-e89b-12d3-a456-426614174000",
+                }
+            ]
+        }
+    )
+
+    @field_validator("cron_schedule")
+    def validate_cron_schedule(cls, v: str) -> str:
+        """Validate cron schedule format.
+
+        Format: * * * * *
+        minute (0-59)
+        hour (0-23)
+        day of month (1-31)
+        month (1-12 or JAN-DEC)
+        day of week (0-6 or SUN-SAT)
+
+        * * * * *
+        │ │ │ │ │
+        │ │ │ │ └─ Day of week (0-6 or SUN-SAT)
+        │ │ │ └─── Month (1-12 or JAN-DEC)
+        │ │ └───── Day of month (1-31)
+        │ └─────── Hour (0-23)
+        └───────── Minute (0-59)
+        """
+        if v is None:
+            return None
+        cron_pattern = r"^(\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-6]|SUN|MON|TUE|WED|THU|FRI|SAT|[0-6]-[0-6]|[0-6]/[0-6]|[0-6],[0-6]|\*\/[0-6])$"  # noqa: E501
+        if not re.match(cron_pattern, v):
+            raise ValueError("Invalid cron schedule format")
+        return v
+
+
+class SourceConnectionCreateWithCredential(SourceConnectionCreateBase):
+    """Schema for creating a source connection with an existing credential (internal use).
+
+    This schema includes credential_id and is used internally by the frontend
+    after credentials have already been created via OAuth or other flows.
+    This should NOT be exposed in public API documentation.
+    """
+
+    collection: Optional[str] = None
+    cron_schedule: Optional[str] = None
+    credential_id: UUID = Field(..., description="ID of the existing integration credential to use")
+    config_fields: Optional[ConfigValues] = None
+    sync_immediately: bool = True
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "My Stripe Connection",
+                    "description": "Production Stripe account for payment data",
+                    "short_name": "stripe",
+                    "collection": "finance-data",
+                    "credential_id": "123e4567-e89b-12d3-a456-426614174000",
+                    "config_fields": {"webhook_url": "https://my-app.com/webhooks"},
+                    "cron_schedule": "0 */6 * * *",
+                    "sync_immediately": True,
+                }
+            ]
+        }
+    )
+
+    @field_validator("cron_schedule")
+    def validate_cron_schedule(cls, v: str) -> str:
+        """Validate cron schedule format.
+
+        Format: * * * * *
+        minute (0-59)
+        hour (0-23)
+        day of month (1-31)
+        month (1-12 or JAN-DEC)
+        day of week (0-6 or SUN-SAT)
+
+        * * * * *
+        │ │ │ │ │
+        │ │ │ │ └─ Day of week (0-6 or SUN-SAT)
+        │ │ │ └─── Month (1-12 or JAN-DEC)
+        │ │ └───── Day of month (1-31)
+        │ └─────── Hour (0-23)
+        └───────── Minute (0-59)
+        """
+        if v is None:
+            return None
+        cron_pattern = r"^(\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-6]|SUN|MON|TUE|WED|THU|FRI|SAT|[0-6]-[0-6]|[0-6]/[0-6]|[0-6],[0-6]|\*\/[0-6])$"  # noqa: E501
+        if not re.match(cron_pattern, v):
+            raise ValueError("Invalid cron schedule format")
+        return v
+
     def map_to_core_and_auxiliary_attributes(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """Map the source connection create schema to core and auxiliary attributes.
 
-        This separates the attributes in the schema into two groups:
-        1. Core attributes: These are used to create the SourceConnection model directly
-        2. Auxiliary attributes: These are used in the creation process but aren't part of the model
-
-        Returns:
-            A tuple containing (core_attributes, auxiliary_attributes)
+        For credential-based creation, the credential_id is an auxiliary attribute.
         """
         data = self.model_dump(exclude_unset=True)
 
         # Auxiliary attributes used in the creation process but not directly in the model
         auxiliary_attrs = {
-            "auth_fields": data.pop("auth_fields", None),
-            "credential_id": data.pop("credential_id", None),
+            "auth_fields": None,  # No auth_fields for credential-based creation
+            "credential_id": data.pop("credential_id"),
             "cron_schedule": data.pop("cron_schedule", None),
             "sync_immediately": data.pop("sync_immediately", True),
         }

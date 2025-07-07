@@ -87,9 +87,9 @@ class TestOpenAIText2Vec:
             assert len(result) == 1536  # Default dimensions for OpenAI
             assert result == mock_embedding
 
-            # Verify the API call
+            # Verify the API call - Updated to expect list input
             mock_create.assert_called_once_with(
-                input="Test text",
+                input=["Test text"],  # Changed from string to list
                 model="text-embedding-3-small",
                 encoding_format="float",
             )
@@ -116,9 +116,9 @@ class TestOpenAIText2Vec:
 
             await model.embed("Test text", model="text-embedding-3-large")
 
-            # Verify the API call uses the overridden model
+            # Verify the API call uses the overridden model - Updated to expect list input
             mock_create.assert_called_once_with(
-                input="Test text",
+                input=["Test text"],  # Changed from string to list
                 model="text-embedding-3-large",
                 encoding_format="float",
             )
@@ -299,9 +299,9 @@ class TestOpenAIText2Vec:
             # Verify the result is the same (entity_context only affects logging)
             assert result == mock_embedding
 
-            # Verify the API call is the same
+            # Verify the API call is the same - Updated to expect list input
             mock_create.assert_called_once_with(
-                input="Test text",
+                input=["Test text"],  # Changed from string to list
                 model="text-embedding-3-small",
                 encoding_format="float",
             )

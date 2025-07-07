@@ -65,7 +65,7 @@ class TestSyncServiceCreate:
                 result = await service.create(
                     db=mock_db,
                     sync=sync_create,
-                    current_user=mock_user,
+                    auth_context=mock_user,
                     uow=mock_uow,
                 )
 
@@ -73,14 +73,14 @@ class TestSyncServiceCreate:
                 mock_create.assert_called_once_with(
                     db=mock_db,
                     obj_in=sync_create,
-                    current_user=mock_user,
+                    auth_context=mock_user,
                     uow=mock_uow,
                 )
                 mock_uow.session.flush.assert_called_once()
                 mock_create_dag.assert_called_once_with(
                     db=mock_db,
                     sync_id=sync_id,
-                    current_user=mock_user,
+                    auth_context=mock_user,
                     uow=mock_uow,
                 )
                 assert result == mock_sync
@@ -119,7 +119,7 @@ class TestSyncServiceRun:
                     dag=mock_sync_dag,
                     collection=mock_collection,
                     source_connection=mock_source_connection,
-                    current_user=mock_user,
+                    auth_context=mock_user,
                 )
 
                 # Assert
@@ -131,7 +131,7 @@ class TestSyncServiceRun:
                     dag=mock_sync_dag,
                     collection=mock_collection,
                     source_connection=mock_source_connection,
-                    current_user=mock_user,
+                    auth_context=mock_user,
                     access_token=None,
                 )
                 mock_orchestrator.run.assert_called_once()
@@ -169,7 +169,7 @@ class TestSyncServiceRun:
                                 dag=mock_sync_dag,
                                 collection=mock_collection,
                                 source_connection=mock_source_connection,
-                                current_user=mock_user,
+                                auth_context=mock_user,
                             )
 
                     # Verify the exception was logged and re-raised

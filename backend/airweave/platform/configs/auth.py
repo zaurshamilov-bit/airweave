@@ -13,6 +13,48 @@ class AuthConfig(BaseConfig):
     pass
 
 
+class OAuth2AuthConfig(AuthConfig):
+    """Base OAuth2 authentication config.
+
+    This is for OAuth2 sources that only have access tokens (no refresh).
+    These sources require going through the OAuth flow and cannot be created via API.
+    """
+
+    access_token: str = Field(
+        title="Access Token",
+        description="The access token for the OAuth2 app. This is obtained through the OAuth flow.",
+    )
+
+
+class OAuth2WithRefreshAuthConfig(OAuth2AuthConfig):
+    """OAuth2 authentication config with refresh token support.
+
+    These sources support refresh tokens for long-lived access.
+    They require going through the OAuth flow and cannot be created via API.
+    """
+
+    refresh_token: str = Field(
+        title="Refresh Token",
+        description="The refresh token for the OAuth2 app. "
+        "This is obtained through the OAuth flow.",
+    )
+
+
+class OAuth2BYOCAuthConfig(OAuth2WithRefreshAuthConfig):
+    """OAuth2 Bring Your Own Credentials authentication config.
+
+    These are OAuth2 sources where users provide their own client credentials.
+    While they still require OAuth flow, users need to configure client_id/client_secret first.
+    """
+
+    client_id: Optional[str] = Field(
+        default=None, title="Client ID", description="Your OAuth application's client ID"
+    )
+    client_secret: Optional[str] = Field(
+        default=None, title="Client Secret", description="Your OAuth application's client secret"
+    )
+
+
 class APIKeyAuthConfig(AuthConfig):
     """API key authentication credentials schema."""
 
@@ -114,15 +156,10 @@ class Neo4jAuthConfig(AuthConfig):
 # AUTH CONFIGS FOR ALL SOURCES
 
 
-class AsanaAuthConfig(AuthConfig):
+class AsanaAuthConfig(OAuth2WithRefreshAuthConfig):
     """Asana authentication credentials schema."""
 
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your Asana app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Asana app."
-    )
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
 class BitbucketAuthConfig(AuthConfig):
@@ -148,42 +185,22 @@ class BitbucketAuthConfig(AuthConfig):
     )
 
 
-class ClickUpAuthConfig(AuthConfig):
+class ClickUpAuthConfig(OAuth2AuthConfig):
     """Clickup authentication credentials schema."""
 
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Clickup app."
-    )
+    # Inherits access_token from OAuth2AuthConfig
 
 
-class ConfluenceAuthConfig(AuthConfig):
+class ConfluenceAuthConfig(OAuth2WithRefreshAuthConfig):
     """Confluence authentication credentials schema."""
 
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your Confluence app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Confluence app."
-    )
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
-class DropboxAuthConfig(AuthConfig):
+class DropboxAuthConfig(OAuth2BYOCAuthConfig):
     """Dropbox authentication credentials schema."""
 
-    client_id: Optional[str] = Field(
-        default=None, title="Client ID", description="The OAuth client ID for your Dropbox app"
-    )
-    client_secret: Optional[str] = Field(
-        default=None,
-        title="Client Secret",
-        description="The OAuth client secret for your Dropbox app",
-    )
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your Dropbox app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Dropbox app."
-    )
+    # Inherits client_id, client_secret, refresh_token and access_token from OAuth2BYOCAuthConfig
 
 
 class ElasticsearchAuthConfig(AuthConfig):
@@ -227,156 +244,84 @@ class GitHubAuthConfig(AuthConfig):
     )
 
 
-class GmailAuthConfig(AuthConfig):
+class GmailAuthConfig(OAuth2BYOCAuthConfig):
     """Gmail authentication credentials schema."""
 
-    client_id: Optional[str] = Field(
-        default=None, title="Client ID", description="The OAuth client ID for your Google app"
-    )
-    client_secret: Optional[str] = Field(
-        default=None,
-        title="Client Secret",
-        description="The OAuth client secret for your Google app",
-    )
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your Gmail app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Gmail app."
-    )
+    # Inherits client_id, client_secret, refresh_token and access_token from OAuth2BYOCAuthConfig
 
 
-class GoogleCalendarAuthConfig(AuthConfig):
+class GoogleCalendarAuthConfig(OAuth2BYOCAuthConfig):
     """Google Calendar authentication credentials schema."""
 
-    client_id: Optional[str] = Field(
-        default=None, title="Client ID", description="The OAuth client ID for your Google app"
-    )
-    client_secret: Optional[str] = Field(
-        default=None,
-        title="Client Secret",
-        description="The OAuth client secret for your Google app",
-    )
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your Google Calendar app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Google Calendar app."
-    )
+    # Inherits client_id, client_secret, refresh_token and access_token from OAuth2BYOCAuthConfig
 
 
-class GoogleDriveAuthConfig(AuthConfig):
+class GoogleDriveAuthConfig(OAuth2BYOCAuthConfig):
     """Google Drive authentication credentials schema."""
 
-    client_id: Optional[str] = Field(
-        default=None, title="Client ID", description="The OAuth client ID for your Google app"
-    )
-    client_secret: Optional[str] = Field(
-        default=None,
-        title="Client Secret",
-        description="The OAuth client secret for your Google app",
-    )
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your Google Drive app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Google Drive app."
-    )
+    # Inherits client_id, client_secret, refresh_token and access_token from OAuth2BYOCAuthConfig
 
 
-class HubspotAuthConfig(AuthConfig):
+class HubspotAuthConfig(OAuth2WithRefreshAuthConfig):
     """Hubspot authentication credentials schema."""
 
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your Hubspot app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Hubspot app."
-    )
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
-class IntercomAuthConfig(AuthConfig):
+class IntercomAuthConfig(OAuth2AuthConfig):
     """Intercom authentication credentials schema."""
 
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Intercom app."
-    )
+    # Inherits access_token from OAuth2AuthConfig
 
 
-class JiraAuthConfig(AuthConfig):
+class JiraAuthConfig(OAuth2WithRefreshAuthConfig):
     """Jira authentication credentials schema."""
 
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your Jira app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Jira app."
-    )
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
-class LinearAuthConfig(AuthConfig):
+class LinearAuthConfig(OAuth2AuthConfig):
     """Linear authentication credentials schema."""
 
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Linear app."
-    )
+    # Inherits access_token from OAuth2AuthConfig
 
 
-class MondayAuthConfig(AuthConfig):
+class MondayAuthConfig(OAuth2AuthConfig):
     """Monday authentication credentials schema."""
 
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Monday app."
-    )
+    # Inherits access_token from OAuth2AuthConfig
 
 
 class MySQLAuthConfig(BaseDatabaseAuthConfig):
     """MySQL authentication configuration."""
 
 
-class NotionAuthConfig(AuthConfig):
+class NotionAuthConfig(OAuth2AuthConfig):
     """Notion authentication credentials schema."""
 
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Notion app."
-    )
+    # Inherits access_token from OAuth2AuthConfig
 
 
-class OneDriveAuthConfig(AuthConfig):
+class OneDriveAuthConfig(OAuth2WithRefreshAuthConfig):
     """OneDrive authentication credentials schema."""
 
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your OneDrive app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your OneDrive app."
-    )
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
 class OracleAuthConfig(BaseDatabaseAuthConfig):
     """Oracle authentication configuration."""
 
 
-class OutlookCalendarAuthConfig(AuthConfig):
+class OutlookCalendarAuthConfig(OAuth2WithRefreshAuthConfig):
     """Outlook Calendar authentication credentials schema."""
 
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your Outlook Calendar app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Outlook Calendar app."
-    )
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
-class OutlookMailAuthConfig(AuthConfig):
+class OutlookMailAuthConfig(OAuth2WithRefreshAuthConfig):
     """Outlook Mail authentication credentials schema."""
 
-    refresh_token: str = Field(
-        title="Refresh Token", description="The refresh token for your Outlook Mail app."
-    )
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Outlook Mail app."
-    )
+    # Inherits refresh_token and access_token from OAuth2WithRefreshAuthConfig
 
 
 class CTTIAuthConfig(AuthConfig):
@@ -394,12 +339,10 @@ class PostgreSQLAuthConfig(BaseDatabaseAuthConfig):
     """PostgreSQL authentication configuration."""
 
 
-class SlackAuthConfig(AuthConfig):
+class SlackAuthConfig(OAuth2AuthConfig):
     """Slack authentication credentials schema."""
 
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Slack app."
-    )
+    # Inherits access_token from OAuth2AuthConfig
 
 
 class SQLServerAuthConfig(BaseDatabaseAuthConfig):
@@ -421,9 +364,7 @@ class StripeAuthConfig(AuthConfig):
     )
 
 
-class TodoistAuthConfig(AuthConfig):
+class TodoistAuthConfig(OAuth2AuthConfig):
     """Todoist authentication credentials schema."""
 
-    access_token: str = Field(
-        title="Access Token", description="The access token for your Todoist app."
-    )
+    # Inherits access_token from OAuth2AuthConfig

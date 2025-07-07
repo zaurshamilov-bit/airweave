@@ -80,6 +80,8 @@ from .source import (
 from .source_connection import (
     SourceConnection,
     SourceConnectionCreate,
+    SourceConnectionCreateWithCredential,
+    SourceConnectionCreateWithWhiteLabel,
     SourceConnectionInDBBase,
     SourceConnectionListItem,
     SourceConnectionUpdate,

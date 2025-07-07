@@ -103,33 +103,67 @@ class RunSourceConnectionWorkflow:
             raise
 
         except ActivityError as e:
-            # Extract the real error message
-            if hasattr(e, "cause") and e.cause:
-                error_message = get_error_message(e.cause)
+            # Check if the cause is a CancelledError - handle as cancellation
+            if hasattr(e, "cause") and isinstance(e.cause, CancelledError):
+                error_message = "Workflow was cancelled"
+                workflow.logger.error(f"Sync job {sync_job_id} was cancelled (via ActivityError)")
+
+                # Update sync job status to CANCELLED
+                try:
+                    await workflow.execute_activity(
+                        update_sync_job_status_activity,
+                        args=[
+                            sync_job_id,
+                            "cancelled",  # Use Python enum value for cancellation
+                            user_dict,
+                            error_message,
+                            workflow.now()
+                            .replace(tzinfo=None)
+                            .isoformat(),  # Remove timezone for database compatibility
+                        ],
+                        start_to_close_timeout=timedelta(seconds=30),
+                        retry_policy=RetryPolicy(
+                            maximum_attempts=3,
+                            initial_interval=timedelta(seconds=1),
+                        ),
+                    )
+                    workflow.logger.info(
+                        f"Successfully updated sync job {sync_job_id} status to CANCELLED"
+                    )
+                except Exception as update_error:
+                    workflow.logger.error(f"Failed to update sync job status: {update_error}")
+
+                # Re-raise the original error
+                raise
             else:
-                error_message = get_error_message(e)
+                # Handle other ActivityErrors as failures
+                # Extract the real error message
+                if hasattr(e, "cause") and e.cause:
+                    error_message = get_error_message(e.cause)
+                else:
+                    error_message = get_error_message(e)
 
-            workflow.logger.error(f"Sync job {sync_job_id} failed: {error_message}")
+                workflow.logger.error(f"Sync job {sync_job_id} failed: {error_message}")
 
-            # Update sync job with the real error
-            await workflow.execute_activity(
-                update_sync_job_status_activity,
-                args=[
-                    sync_job_id,
-                    "failed",
-                    user_dict,
-                    error_message,  # Now contains the actual error
-                    workflow.now().replace(tzinfo=None).isoformat(),
-                ],
-                start_to_close_timeout=timedelta(seconds=30),
-                retry_policy=RetryPolicy(
-                    maximum_attempts=3,
-                    initial_interval=timedelta(seconds=1),
-                ),
-            )
+                # Update sync job with the real error
+                await workflow.execute_activity(
+                    update_sync_job_status_activity,
+                    args=[
+                        sync_job_id,
+                        "failed",
+                        user_dict,
+                        error_message,  # Now contains the actual error
+                        workflow.now().replace(tzinfo=None).isoformat(),
+                    ],
+                    start_to_close_timeout=timedelta(seconds=30),
+                    retry_policy=RetryPolicy(
+                        maximum_attempts=3,
+                        initial_interval=timedelta(seconds=1),
+                    ),
+                )
 
-            # Re-raise the original error
-            raise
+                # Re-raise the original error
+                raise
 
         except Exception as e:
             # Handle any other errors (generic exceptions)

@@ -166,6 +166,92 @@ async def create_source_connection(
     return source_connection
 
 
+@router.post("/internal/", response_model=schemas.SourceConnection)
+async def create_source_connection_with_credential(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    source_connection_in: schemas.SourceConnectionCreateWithCredential = Body(...),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+    background_tasks: BackgroundTasks,
+) -> schemas.SourceConnection:
+    """Create a new source connection using an existing credential (internal use only).
+
+    This endpoint is designed for internal frontend use where credentials have already
+    been created through OAuth flows or other authentication processes. It should NOT
+    be exposed in public API documentation.
+
+    This endpoint:
+    1. Uses an existing integration credential (by credential_id)
+    2. Creates a collection if not provided
+    3. Creates the source connection
+    4. Creates a sync configuration and DAG
+    5. Creates a sync job if immediate execution is requested
+
+    Args:
+        db: The database session
+        source_connection_in: The source connection to create with credential_id
+        auth_context: The current authentication context
+        background_tasks: Background tasks for async operations
+
+    Returns:
+        The created source connection
+    """
+    source_connection, sync_job = await source_connection_service.create_source_connection(
+        db=db, source_connection_in=source_connection_in, auth_context=auth_context
+    )
+
+    # If job was created and sync_immediately is True, start it in background
+    if sync_job and source_connection_in.sync_immediately:
+        async with get_db_context() as db:
+            sync_dag = await sync_service.get_sync_dag(
+                db=db, sync_id=source_connection.sync_id, auth_context=auth_context
+            )
+
+            # Get the sync object
+            sync = await crud.sync.get(
+                db=db, id=source_connection.sync_id, auth_context=auth_context
+            )
+            sync = schemas.Sync.model_validate(sync, from_attributes=True)
+            sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+            collection = await crud.collection.get_by_readable_id(
+                db=db, readable_id=source_connection.collection, auth_context=auth_context
+            )
+            collection = schemas.Collection.model_validate(collection, from_attributes=True)
+
+            # Get source connection with auth_fields for temporal processing
+            source_connection_with_auth = await source_connection_service.get_source_connection(
+                db=db,
+                source_connection_id=source_connection.id,
+                show_auth_fields=True,  # Important: Need actual auth_fields for temporal
+                auth_context=auth_context,
+            )
+
+            # Check if Temporal is enabled, otherwise fall back to background tasks
+            if await temporal_service.is_temporal_enabled():
+                # Use Temporal workflow
+                await temporal_service.run_source_connection_workflow(
+                    sync=sync,
+                    sync_job=sync_job,
+                    sync_dag=sync_dag,
+                    collection=collection,
+                    source_connection=source_connection_with_auth,
+                    auth_context=auth_context,
+                )
+            else:
+                # Fall back to background tasks
+                background_tasks.add_task(
+                    sync_service.run,
+                    sync,
+                    sync_job,
+                    sync_dag,
+                    collection,
+                    source_connection_with_auth,
+                    auth_context,
+                )
+
+    return source_connection
+
+
 @router.put("/{source_connection_id}", response_model=schemas.SourceConnection)
 async def update_source_connection(
     *,

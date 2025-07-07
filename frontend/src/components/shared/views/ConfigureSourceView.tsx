@@ -302,7 +302,7 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
                 throw new Error("Missing credential ID. Authentication may not have completed properly.");
             }
 
-            // Now create the source connection with the credential
+            // Now create the source connection with the credential using internal endpoint
             console.log(`🔌 Creating source connection in collection: ${collectionId}`);
 
             const sourceConnectionData = {
@@ -316,7 +316,8 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
 
             console.log(`📝 Source connection data:`, sourceConnectionData);
 
-            const sourceConnectionResponse = await apiClient.post('/source-connections/', sourceConnectionData);
+            // Use internal endpoint since we're using a credential_id
+            const sourceConnectionResponse = await apiClient.post('/source-connections/internal/', sourceConnectionData);
 
             if (!sourceConnectionResponse.ok) {
                 const errorText = await sourceConnectionResponse.text();
