@@ -51,28 +51,28 @@ Dropbox authentication credentials schema.
   type="Optional[str]"
   required={false}
 >
-  The OAuth client ID for your Dropbox app
+  Your OAuth application's client ID
 </ParamField>
 <ParamField
   path="client_secret"
   type="Optional[str]"
   required={false}
 >
-  The OAuth client secret for your Dropbox app
+  Your OAuth application's client secret
 </ParamField>
 <ParamField
   path="refresh_token"
   type="str"
   required={true}
 >
-  The refresh token for your Dropbox app.
+  The refresh token for the OAuth2 app. This is obtained through the OAuth flow.
 </ParamField>
 <ParamField
   path="access_token"
   type="str"
   required={true}
 >
-  The access token for your Dropbox app.
+  The access token for the OAuth2 app. This is obtained through the OAuth flow.
 </ParamField>
 </Card>
 
