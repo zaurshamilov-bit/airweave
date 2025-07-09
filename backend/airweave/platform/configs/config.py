@@ -269,3 +269,19 @@ class TodoistConfig(SourceConfig):
     """Todoist configuration schema."""
 
     pass
+
+
+# AUTH PROVIDER CONFIGURATION CLASSES
+# These are for configuring auth provider behavior
+
+
+class AuthProviderConfig(BaseConfig):
+    """Base auth provider configuration schema."""
+
+    pass
+
+
+class ComposioConfig(AuthProviderConfig):
+    """Composio Auth Provider configuration schema."""
+
+    pass

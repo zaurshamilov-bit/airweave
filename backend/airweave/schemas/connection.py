@@ -6,7 +6,7 @@ encompasses the connection and sync information for a specific source.
 
 """
 
-from typing import Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
@@ -18,6 +18,8 @@ class ConnectionBase(BaseModel):
     """Base schema for connections."""
 
     name: str
+    description: Optional[str] = None
+    config_fields: Optional[Dict[str, Any]] = None
     integration_type: IntegrationType
     integration_credential_id: Optional[UUID] = None
     status: ConnectionStatus
@@ -37,6 +39,8 @@ class ConnectionUpdate(BaseModel):
     """Schema for updating a connection."""
 
     name: Optional[str] = None
+    description: Optional[str] = None
+    config_fields: Optional[Dict[str, Any]] = None
     status: Optional[ConnectionStatus] = None
 
 
