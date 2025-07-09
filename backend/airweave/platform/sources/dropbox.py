@@ -25,7 +25,12 @@ from airweave.platform.sources._base import BaseSource
     labels=["File Storage"],
 )
 class DropboxSource(BaseSource):
-    """Dropbox source implementation."""
+    """Dropbox source connector integrates with the Dropbox API to extract and synchronize files.
+
+    Connects to folder structures from your Dropbox account.
+
+    It supports downloading and processing files.
+    """
 
     @classmethod
     async def create(

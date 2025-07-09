@@ -1,40 +1,42 @@
 instances:
 - url: airweave.docs.buildwithfern.com
   custom-domain: docs.airweave.ai
+  edit-this-page:
+    github:
+      owner: airweave-ai
+      repo: airweave
+      branch: main
 title: Airweave
 layout:
   searchbar-placement: header
   page-width: full
+  content-width: 1000px
 default-language: python
 navigation:
 - section: Docs
   contents:
-  - page: Welcome
-    path: docs/pages/welcome.mdx
   - page: Quickstart
     path: docs/pages/quickstart.mdx
   - page: MCP Server
     path: docs/pages/mcp-server.mdx
-  - page: White Labels
+  - page: Direct Token Injection
+    path: docs/pages/direct-token-injection.mdx
+  - page: White Label
     path: docs/pages/white-labeling.mdx
-  - page: Direct Token Authentication
-    path: docs/pages/byo-creds.mdx
-  - page: Add New Source
+  - page: Add New Connector
     path: docs/pages/add-new-source.mdx
-  - section: Sources
+  - section: Connectors
     contents:
     - page: Asana
       path: docs/pages/connectors/asana/main.mdx
-    - page: Clickup
-      path: docs/pages/connectors/clickup/main.mdx
+    - page: Bitbucket
+      path: docs/pages/connectors/bitbucket/main.mdx
     - page: Confluence
       path: docs/pages/connectors/confluence/main.mdx
     - page: Ctti
       path: docs/pages/connectors/ctti/main.mdx
     - page: Dropbox
       path: docs/pages/connectors/dropbox/main.mdx
-    - page: Elasticsearch
-      path: docs/pages/connectors/elasticsearch/main.mdx
     - page: Github
       path: docs/pages/connectors/github/main.mdx
     - page: Gmail
@@ -45,50 +47,63 @@ navigation:
       path: docs/pages/connectors/google_drive/main.mdx
     - page: Hubspot
       path: docs/pages/connectors/hubspot/main.mdx
-    - page: Intercom
-      path: docs/pages/connectors/intercom/main.mdx
     - page: Jira
       path: docs/pages/connectors/jira/main.mdx
     - page: Linear
       path: docs/pages/connectors/linear/main.mdx
     - page: Monday
       path: docs/pages/connectors/monday/main.mdx
-    - page: Mysql
-      path: docs/pages/connectors/mysql/main.mdx
     - page: Notion
       path: docs/pages/connectors/notion/main.mdx
     - page: Onedrive
       path: docs/pages/connectors/onedrive/main.mdx
-    - page: Oracle
-      path: docs/pages/connectors/oracle/main.mdx
     - page: Outlook Calendar
       path: docs/pages/connectors/outlook_calendar/main.mdx
     - page: Outlook Mail
       path: docs/pages/connectors/outlook_mail/main.mdx
     - page: Postgresql
       path: docs/pages/connectors/postgresql/main.mdx
-    - page: Slack
-      path: docs/pages/connectors/slack/main.mdx
-    - page: Sql Server
-      path: docs/pages/connectors/sql_server/main.mdx
-    - page: Sqlite
-      path: docs/pages/connectors/sqlite/main.mdx
     - page: Stripe
       path: docs/pages/connectors/stripe/main.mdx
     - page: Todoist
       path: docs/pages/connectors/todoist/main.mdx
-- section: API
-  contents:
-  - page: Concepts
-    path: docs/pages/api-concepts.mdx
-  - api: Reference
-    snippets:
-      python: airweave-sdk
-      typescript: '@airweave/sdk'
-    playground:
-      environments:
-      - Production
-      - Local
+- api: API Reference
+  alphabetized: false
+  display-errors: true
+  layout:
+  - collections:
+    - GET /collections
+    - GET /collections/{readable_id}
+    - GET /collections/{readable_id}/search
+    - PUT /collections/{readable_id}
+    - POST /collections
+    - POST /collections/{readable_id}/refresh_all
+    - DELETE /collections/{readable_id}
+  - source-connections:
+    - GET /source-connections
+    - GET /source-connections/{source_connection_id}
+    - GET /source-connections/{source_connection_id}/jobs
+    - GET /source-connections/{source_connection_id}/jobs/{job_id}
+    - PUT /source-connections/{source_connection_id}
+    - POST /source-connections
+    - POST /source-connections/{source_connection_id}/run
+    - POST /source-connections/{source_connection_id}/jobs/{job_id}/cancel
+    - DELETE /source-connections/{source_connection_id}
+  - sources:
+    - GET /sources/list
+    - GET /sources/detail/{short_name}
+  - white-labels:
+    - GET /white-labels/list
+    - GET /white-labels/{white_label_id}
+    - GET /white-labels/{white_label_id}/source-connections
+    - GET /white-labels/{white_label_id}/oauth2/auth_url
+    - PUT /white-labels/{white_label_id}
+    - POST /white-labels
+    - POST /white-labels/{white_label_id}/oauth2/code
+    - DELETE /white-labels/{white_label_id}
+  snippets:
+    python: airweave-sdk
+    typescript: '@airweave/sdk'
 navbar-links:
 - type: secondary
   text: Fork this repo
@@ -98,11 +113,17 @@ navbar-links:
   url: https://cal.com/lennert-airweave/airweave-q-a-demo
 colors:
   accentPrimary:
-    dark: '#1A1A1A'
-    light: '#F8F6F3'
+    dark: '#4199D3'
+    light: '#4199D3'
   background:
     dark: '#060606'
     light: '#FAFCFE'
+  header-background:
+    dark: '#000000'
+    light: '#FFFFFF'
+  card-background:
+    dark: '#000000'
+    light: '#FFFFFF'
   border:
     dark: '#2A2A2A'
     light: '#D0D0D0'

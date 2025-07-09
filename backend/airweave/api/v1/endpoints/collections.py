@@ -2,11 +2,12 @@
 
 from typing import List
 
-from fastapi import BackgroundTasks, Depends, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, HTTPException, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
+from airweave.api.examples import create_collection_list_response, create_job_list_response
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
 from airweave.core.search_service import ResponseType, search_service
@@ -18,14 +19,23 @@ from airweave.schemas.auth import AuthContext
 router = TrailingSlashRouter()
 
 
-@router.get("/", response_model=List[schemas.Collection])
+@router.get(
+    "/",
+    response_model=List[schemas.Collection],
+    responses=create_collection_list_response(
+        ["finance_data"],
+        "Finance data collection",
+    ),
+)
 async def list_collections(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, description="Number of collections to skip for pagination"),
+    limit: int = Query(
+        100, description="Maximum number of collections to return (1-1000)", le=1000, ge=1
+    ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> List[schemas.Collection]:
-    """List all collections for the current user's organization."""
+    """List all collections that belong to your organization."""
     return await crud.collection.get_multi(
         db,
         auth_context=auth_context,
@@ -40,17 +50,25 @@ async def create_collection(
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Collection:
-    """Create a new collection."""
+    """Create a new collection.
+
+    <br/><br/>
+    The newly created collection is initially empty and does not contain any data
+    until you explicitly add source connections to it.
+    """
     return await collection_service.create(db, collection_in=collection, auth_context=auth_context)
 
 
 @router.get("/{readable_id}", response_model=schemas.Collection)
 async def get_collection(
-    readable_id: str,
+    readable_id: str = Path(
+        ...,
+        description="The unique readable identifier of the collection (e.g., 'finance-data-ab123')",
+    ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Collection:
-    """Get a specific collection by its readable ID."""
+    """Retrieve a specific collection by its readable ID."""
     db_obj = await crud.collection.get_by_readable_id(
         db, readable_id=readable_id, auth_context=auth_context
     )
@@ -59,14 +77,22 @@ async def get_collection(
     return db_obj
 
 
-@router.patch("/{readable_id}", response_model=schemas.Collection)
+@router.put("/{readable_id}", response_model=schemas.Collection)
 async def update_collection(
-    readable_id: str,
     collection: schemas.CollectionUpdate,
+    readable_id: str = Path(
+        ..., description="The unique readable identifier of the collection to update"
+    ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Collection:
-    """Update a collection by its readable ID."""
+    """Update a collection's properties.
+
+    <br/><br/>
+    Modifies the display name of an existing collection.
+    Note that the readable ID cannot be changed after creation to maintain stable
+    API endpoints and preserve any existing integrations or bookmarks.
+    """
     db_obj = await crud.collection.get_by_readable_id(
         db, readable_id=readable_id, auth_context=auth_context
     )
@@ -79,21 +105,23 @@ async def update_collection(
 
 @router.delete("/{readable_id}", response_model=schemas.Collection)
 async def delete_collection(
-    readable_id: str,
-    delete_data: bool = False,
+    readable_id: str = Path(
+        ..., description="The unique readable identifier of the collection to delete"
+    ),
+    delete_data: bool = Query(
+        False,
+        description="Whether to also delete all associated data from destination systems",
+    ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Collection:
-    """Delete a collection by its readable ID.
+    """Delete a collection and optionally its associated data.
 
-    Args:
-        readable_id: The readable ID of the collection to delete
-        delete_data: Whether to delete the data in destinations
-        db: The database session
-        auth_context: The authentication context
-
-    Returns:
-        The deleted collection
+    <br/><br/>
+    Permanently removes a collection from your organization. By default, this only
+    deletes the collection metadata while preserving the actual data in the
+    destination systems.<br/><br/>All source connections within this collection
+    will also be deleted as part of the cleanup process.
     """
     # Find the collection
     db_obj = await crud.collection.get_by_readable_id(
@@ -115,26 +143,26 @@ async def delete_collection(
 
 @router.get("/{readable_id}/search", response_model=schemas.SearchResponse)
 async def search_collection(
-    readable_id: str,
-    query: str = Query(..., description="Search query"),
+    readable_id: str = Path(
+        ..., description="The unique readable identifier of the collection to search"
+    ),
+    query: str = Query(
+        ...,
+        description="The search query text to find relevant documents and data",
+        examples=["customer payment issues", "Q4 revenue trends", "support tickets about billing"],
+    ),
     response_type: ResponseType = Query(
-        ResponseType.RAW, description="Type of response: raw search results or AI completion"
+        ResponseType.RAW,
+        description=(
+            "Format of the response: 'raw' returns search results, "
+            "'completion' returns AI-generated answers"
+        ),
+        examples=["raw", "completion"],
     ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SearchResponse:
-    """Search within a collection identified by readable ID.
-
-    Args:
-        readable_id: The readable ID of the collection to search
-        query: The search query
-        response_type: Type of response (raw results or AI completion)
-        db: The database session
-        auth_context: The authentication context
-
-    Returns:
-        dict: Search results or AI completion response
-    """
+    """Search across all data sources within the specified collection."""
     try:
         return await search_service.search_with_completion(
             db,
@@ -173,24 +201,26 @@ async def search_collection(
             ) from e
 
 
-@router.post("/{readable_id}/refresh_all", response_model=list[schemas.SourceConnectionJob])
+@router.post(
+    "/{readable_id}/refresh_all",
+    response_model=list[schemas.SourceConnectionJob],
+    responses=create_job_list_response(["completed"], "Multiple sync jobs triggered"),
+)
 async def refresh_all_source_connections(
     *,
-    readable_id: str,
+    readable_id: str = Path(
+        ..., description="The unique readable identifier of the collection to refresh"
+    ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
     background_tasks: BackgroundTasks,
 ) -> list[schemas.SourceConnectionJob]:
-    """Start sync jobs for all source connections in the collection.
+    """Trigger data synchronization for all source connections in the collection.
 
-    Args:
-        readable_id: The readable ID of the collection
-        db: The database session
-        auth_context: The authentication context
-        background_tasks: Background tasks for async operations
-
-    Returns:
-        A list of created sync jobs
+    <br/><br/>The sync jobs run asynchronously in the background, so this endpoint
+    returns immediately with job details that you can use to track progress. You can
+    monitor the status of individual data synchronization using the source connection
+    endpoints.
     """
     # Check if collection exists
     collection = await crud.collection.get_by_readable_id(

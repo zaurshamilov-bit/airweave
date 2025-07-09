@@ -30,10 +30,12 @@ from airweave.platform.sources._base import BaseSource
     labels=["Project Management"],
 )
 class LinearSource(BaseSource):
-    """Linear source implementation for syncing data from Linear into Airweave.
+    """Linear source connector integrates with the Linear GraphQL API to extract project data.
 
-    This source connects to Linear's GraphQL API and extracts teams, projects,
-    users, issues, and attachments with proper rate limiting and error handling.
+    Connects to your Linear workspace.
+
+    It provides comprehensive access to teams, projects, issues, and
+    users with advanced rate limiting and error handling for optimal performance.
     """
 
     # Rate limiting constants

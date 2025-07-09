@@ -7,25 +7,16 @@ description: "Github integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Github logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Github</h1>
-    <p>Connect your Github data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Github logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Github</h1>
 </div>
-
-## Overview
-
-The Github connector allows you to sync data from Github into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### GitHubSource
-
-GitHub source implementation.
-
+GitHub source connector integrates with the GitHub REST API to extract and synchronize data from your GitHub
+repositories. It supports syncing repository metadata, directory structures, and code files with
+configurable filtering options for branches and file types.
 
 <Card
   title="View Source Code"
@@ -37,7 +28,7 @@ GitHub source implementation.
 
 ### Authentication
 
-This connector uses a custom authentication configuration class: `GitHubAuthConfig`.
+This connector uses a custom authentication configuration.
 
 <Card
   title="Authentication Configuration"
@@ -62,11 +53,51 @@ GitHub authentication credentials schema.
 </ParamField>
 </Card>
 
+### Configuration Options
 
-## Entities
+The following configuration options are available for this connector:
+
+<Card
+  title="Configuration Parameters"
+  className="config-card"
+  style={{ backgroundColor: 'rgba(0, 0, 0, 0.05)', padding: '16px', marginBottom: '24px' }}
+>
+
+Github configuration schema.
+<ParamField
+  path="branch"
+  type="str"
+  required={true}
+>
+  Specific branch to sync (e.g., 'main', 'development'). If empty, uses the default branch.
+</ParamField>
+</Card>
+
+## Data Models
 
 The following data models are available for this connector:
 
+<Accordion title="GitHubRepositoryEntity">
+
+Schema for GitHub repository entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | str | Repository name |
+| full_name | str | Full repository name including owner |
+| description | Optional[str] | Repository description |
+| default_branch | str | Default branch of the repository |
+| created_at | datetime | Creation timestamp |
+| updated_at | datetime | Last update timestamp |
+| language | Optional[str] | Primary language of the repository |
+| fork | bool | Whether the repository is a fork |
+| size | int | Size of the repository in KB |
+| stars_count | Optional[int] | Number of stars |
+| watchers_count | Optional[int] | Number of watchers |
+| forks_count | Optional[int] | Number of forks |
+| open_issues_count | Optional[int] | Number of open issues |
+
+</Accordion>
 <Accordion title="GitHubDirectoryEntity">
 
 Schema for GitHub directory entity.
@@ -76,6 +107,17 @@ Schema for GitHub directory entity.
 | path | str | Path of the directory within the repository |
 | repo_name | str | Name of the repository containing this directory |
 | repo_owner | str | Owner of the repository |
+
+</Accordion>
+<Accordion title="GitHubCodeFileEntity">
+
+Schema for GitHub code file entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| sha | str | SHA hash of the file content |
+| path | str | Path of the file within the repository |
+| is_binary | bool | Flag indicating if file is binary |
 
 </Accordion>
 <Accordion title="GithubRepoEntity">

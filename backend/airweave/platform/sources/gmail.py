@@ -1,12 +1,4 @@
-"""Gmail source implementation.
-
-Simplified version that retrieves:
-  - Threads
-  - Messages
-  - Attachments
-
-Follows the same structure as other connector implementations.
-"""
+"""Gmail source implementation for syncing email threads, messages, and attachments."""
 
 import base64
 from datetime import datetime
@@ -36,9 +28,11 @@ from airweave.platform.sources._base import BaseSource
     labels=["Communication", "Email"],
 )
 class GmailSource(BaseSource):
-    """Gmail source implementation (read-only).
+    """Gmail source connector integrates with the Gmail API to extract and synchronize email data.
 
-    Retrieves and yields Gmail objects (threads, messages, attachments).
+    Connects to your Gmail account.
+
+    It supports syncing email threads, individual messages, and file attachments.
     """
 
     @classmethod

@@ -2,6 +2,7 @@
 
 import ast
 import re
+
 from ..constants import BACKEND_SOURCES_DIR
 
 
@@ -39,6 +40,7 @@ def parse_source_file(connector_name):
             class_name = node.name
             auth_type = None
             auth_config_class = None
+            config_class = None
 
             # Check decorators for @source
             for decorator in node.decorator_list:
@@ -48,7 +50,9 @@ def parse_source_file(connector_name):
                     and decorator.func.id == "source"
                 ):
                     # Extract arguments from the @source decorator
-                    if len(decorator.args) >= 3 and isinstance(decorator.args[2], ast.Attribute):
+                    if len(decorator.args) >= 3 and isinstance(
+                        decorator.args[2], ast.Attribute
+                    ):
                         # Handle AuthType enum reference (e.g., AuthType.config_class)
                         if hasattr(decorator.args[2], "attr"):
                             auth_type = decorator.args[2].attr
@@ -56,20 +60,30 @@ def parse_source_file(connector_name):
                     # Extract named arguments and keyword args
                     for i, arg in enumerate(decorator.args):
                         # First arg is name, second is short_name, third might be auth_type
-                        if i == 2 and isinstance(arg, ast.Name) and arg.id.startswith("AuthType"):
+                        if (
+                            i == 2
+                            and isinstance(arg, ast.Name)
+                            and arg.id.startswith("AuthType")
+                        ):
                             auth_type = arg.id.replace("AuthType.", "")
                         # Fourth arg might be auth_config_class
                         elif (
-                            i == 3 and isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+                            i == 3
+                            and isinstance(arg, ast.Constant)
+                            and isinstance(arg.value, str)
                         ):
                             auth_config_class = arg.value
 
-                    # Check for auth_config_class in keywords
+                    # Check for auth_config_class and config_class in keywords
                     for keyword in decorator.keywords:
                         if keyword.arg == "auth_config_class" and isinstance(
                             keyword.value, ast.Constant
                         ):
                             auth_config_class = keyword.value.value
+                        elif keyword.arg == "config_class" and isinstance(
+                            keyword.value, ast.Constant
+                        ):
+                            config_class = keyword.value.value
                         elif keyword.arg == "auth_type" and isinstance(
                             keyword.value, ast.Attribute
                         ):
@@ -79,6 +93,7 @@ def parse_source_file(connector_name):
                     decorators_info[class_name] = {
                         "auth_type": auth_type,
                         "auth_config_class": auth_config_class,
+                        "config_class": config_class,
                     }
 
     # Now process class definitions
@@ -100,16 +115,18 @@ def parse_source_file(connector_name):
             # Get auth information from decorators or class attributes
             auth_type = None
             auth_config_class = None
+            config_class = None
 
             # Check if we found decorator info
             if class_name in decorators_info:
                 auth_type = decorators_info[class_name]["auth_type"]
                 auth_config_class = decorators_info[class_name]["auth_config_class"]
+                config_class = decorators_info[class_name]["config_class"]
 
             # If not found in decorator, check for class attributes
-            if not auth_type or not auth_config_class:
+            if not auth_type or not auth_config_class or not config_class:
                 for item in node.body:
-                    # Look for _auth_type and _auth_config_class attributes
+                    # Look for _auth_type, _auth_config_class, and _config_class attributes
                     if isinstance(item, ast.Assign) and len(item.targets) == 1:
                         target = item.targets[0]
                         if isinstance(target, ast.Name):
@@ -127,12 +144,18 @@ def parse_source_file(connector_name):
                                     item.value.value, str
                                 ):
                                     auth_config_class = item.value.value
+                            elif target.id == "_config_class":
+                                if isinstance(item.value, ast.Constant) and isinstance(
+                                    item.value.value, str
+                                ):
+                                    config_class = item.value.value
 
             # If we still don't have auth info, try to extract from the source code using regex
             # This is a fallback for complex cases the AST parser might miss
             if not auth_type:
                 auth_type_match = re.search(
-                    r'_auth_type\s*=\s*(?:AuthType\.([^\s,\)]*)|[\'"]([^\'"]*)[\'"])', content
+                    r'_auth_type\s*=\s*(?:AuthType\.([^\s,\)]*)|[\'"]([^\'"]*)[\'"])',
+                    content,
                 )
                 if auth_type_match:
                     auth_type = auth_type_match.group(1) or auth_type_match.group(2)
@@ -144,12 +167,22 @@ def parse_source_file(connector_name):
                 if auth_config_match:
                     auth_config_class = auth_config_match.group(1)
 
+            if not config_class:
+                config_match = re.search(
+                    r'_config_class\s*=\s*[\'"]([^\'"]*)[\'"]', content
+                )
+                if config_match:
+                    config_class = config_match.group(1)
+
             source_classes.append(
                 {
                     "name": class_name,
-                    "docstring": docstring.strip() if docstring else "No description available.",
+                    "docstring": docstring.strip()
+                    if docstring
+                    else "No description available.",
                     "auth_type": auth_type,
                     "auth_config_class": auth_config_class,
+                    "config_class": config_class,
                 }
             )
 

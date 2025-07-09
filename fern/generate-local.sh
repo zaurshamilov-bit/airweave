@@ -3,10 +3,15 @@ set -e  # Exit on error
 
 echo "🌿 Generating Airweave API documentation..."
 
-# Check if we're in the fern directory
-if [[ $(basename "$PWD") != "fern" ]]; then
-    echo "❌ Please run this script from the fern directory"
+# Check if we're in the fern directory or being run via Poetry
+if [[ $(basename "$PWD") != "fern" ]] && [[ "$PWD" != *"/backend" ]]; then
+    echo "❌ Please run this script from the fern directory or via Poetry from the backend directory"
     exit 1
+fi
+
+# If we're in the backend directory, change to fern
+if [[ $(basename "$PWD") == "backend" ]]; then
+    cd ../fern
 fi
 
 # Make scripts executable if needed

@@ -33,11 +33,12 @@ from airweave.platform.sources._base import BaseSource
     labels=["Project Management", "Issue Tracking"],
 )
 class JiraSource(BaseSource):
-    """Simplified Jira source implementation (read-only).
+    """Jira source connector integrates with the Jira REST API to extract project management data.
 
-    This connector retrieves hierarchical data from Jira's REST API:
-      - Projects
-      - Issues (within each project)
+    Connects to your Jira Cloud instance.
+
+    It provides comprehensive access to projects, issues, and their
+    relationships for agile development and issue tracking workflows.
     """
 
     @staticmethod

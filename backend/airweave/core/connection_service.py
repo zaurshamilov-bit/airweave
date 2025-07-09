@@ -436,8 +436,7 @@ class ConnectionService:
 
         # Check if auth config class is defined
         BASE_ERROR_MESSAGE = (
-            f"See https://docs.airweave.ai/docs/connectors/{short_name}#authentication "
-            f"for more information."
+            f"See https://docs.airweave.ai/{short_name}#authentication for more information."
         )
 
         if not auth_config_class:

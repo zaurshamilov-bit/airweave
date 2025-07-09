@@ -1,21 +1,4 @@
-"""GitHub source implementation (read-only).
-
-Retrieves data from a user's GitHub account, focusing on:
- - Repositories
- - Repository Contents (files, directories, etc.)
-
-and yields them as entities using the corresponding GitHub entity schemas
-(GithubRepoEntity and GithubContentEntity).
-
-References:
-  https://docs.github.com/en/rest/repos/repos
-  https://docs.github.com/en/rest/repos/contents
-
-Notes:
-  - This connector uses a read-only scope.
-  - For each repository, we gather basic repo metadata, then traverse the
-    repository contents recursively (default branch only).
-"""
+"""GitHub source implementation for syncing repositories, directories, and code files."""
 
 import base64
 import mimetypes
@@ -52,7 +35,13 @@ from airweave.platform.utils.file_extensions import (
     labels=["Code"],
 )
 class GitHubSource(BaseSource):
-    """GitHub source implementation."""
+    """GitHub source connector integrates with the GitHub REST API to extract and synchronize data.
+
+    Connects to your GitHub repositories.
+
+    It supports syncing repository metadata, directory structures, and code files with
+    configurable filtering options for branches and file types.
+    """
 
     BASE_URL = "https://api.github.com"
 

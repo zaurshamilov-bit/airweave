@@ -37,7 +37,13 @@ from airweave.platform.sources._base import BaseSource
     labels=["Knowledge Base", "Productivity"],
 )
 class NotionSource(BaseSource):
-    """Comprehensive Notion source implementation with content aggregation."""
+    """Notion source connector integrates with the Notion API to extract and synchronize content.
+
+    Connects to your Notion workspace.
+
+    It provides comprehensive access to databases, pages, and content with advanced content
+    aggregation, lazy loading, and file processing capabilities for optimal performance.
+    """
 
     # Rate limiting constants
     TIMEOUT_SECONDS = 30.0

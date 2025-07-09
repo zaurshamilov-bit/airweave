@@ -7,25 +7,16 @@ description: "Onedrive integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Onedrive logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Onedrive</h1>
-    <p>Connect your Onedrive data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Onedrive logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Onedrive</h1>
 </div>
-
-## Overview
-
-The Onedrive connector allows you to sync data from Onedrive into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### OneDriveSource
-
-OneDrive source implementation using Microsoft Graph API.
-
+OneDrive source connector integrates with the Microsoft Graph API to extract and synchronize files from
+OneDrive personal and business accounts. It supports various OneDrive scenarios including
+personal drives, business drives, and app folder access with intelligent fallback handling.
 
 <Card
   title="View Source Code"
@@ -37,33 +28,13 @@ OneDrive source implementation using Microsoft Graph API.
 
 ### Authentication
 
-This connector uses **OAuth 2.0 with refresh token**.
+This connector uses **OAuth 2.0 authentication**. Connect this source through the Airweave UI, which will guide you through the OAuth flow.
 
-<Card
-  title="Authentication Configuration"
-  className="auth-config-card"
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
->
+### Configuration Options
 
-OneDrive authentication credentials schema.
-<ParamField
-  path="refresh_token"
-  type="str"
-  required={true}
->
-  The refresh token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-<ParamField
-  path="access_token"
-  type="str"
-  required={true}
->
-  The access token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-</Card>
+This connector does not have any additional configuration options.
 
-
-## Entities
+## Data Models
 
 The following data models are available for this connector:
 
@@ -81,6 +52,28 @@ from the Microsoft Graph drive resource.
 | quota | Optional[Dict[str, Any]] | Information about the drive's storage quota (total, used, remaining, etc.). |
 | created_at | Optional[datetime] | Datetime when the drive was created (from createdDateTime). |
 | updated_at | Optional[datetime] | Datetime when the drive was last modified (from lastModifiedDateTime). |
+
+</Accordion>
+<Accordion title="OneDriveDriveItemEntity">
+
+Schema for a OneDrive DriveItem object (file or folder).
+
+Inherits from FileEntity to support file processing capabilities.
+The inherited entity_id stores the DriveItem's unique ID.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | Optional[str] | The name of the item (folder or file). |
+| description | Optional[str] | Description of the item (if available). |
+| etag | Optional[str] | An eTag for the content of the item. Used for change tracking. |
+| ctag | Optional[str] | A cTag for the content of the item. Used for internal sync. |
+| created_at | Optional[datetime] | Datetime when the item was created (from createdDateTime). |
+| updated_at | Optional[datetime] | Datetime when the item was last modified (from lastModifiedDateTime). |
+| size | Optional[int] | Size of the item in bytes. |
+| web_url | Optional[str] | URL that displays the resource in the browser. |
+| file | Optional[Dict[str, Any]] | File metadata if the item is a file (e.g., mimeType, hashes). |
+| folder | Optional[Dict[str, Any]] | Folder metadata if the item is a folder (e.g., childCount). |
+| parent_reference | Optional[Dict[str, Any]] | Information about the parent of this item, such as driveId or parent folder path. |
 
 </Accordion>
 

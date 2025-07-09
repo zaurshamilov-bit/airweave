@@ -27,11 +27,11 @@ from airweave.platform.sources._base import BaseSource
     labels=["CRM", "Marketing"],
 )
 class HubspotSource(BaseSource):
-    """HubSpot source implementation.
+    """HubSpot source connector integrates with the HubSpot CRM API to extract CRM data.
 
-    This connector retrieves data from HubSpot CRM objects such as Contacts,
-    Companies, Deals, and Tickets, then yields them as entities using
-    their respective entity schemas.
+    Synchronizes customer relationship management data.
+
+    It provides comprehensive access to contacts, companies, deals, and support tickets.
     """
 
     def __init__(self):

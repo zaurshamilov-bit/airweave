@@ -36,7 +36,13 @@ from airweave.platform.sources._base import BaseSource
     labels=["Productivity", "Calendar"],
 )
 class OutlookCalendarSource(BaseSource):
-    """Outlook Calendar source implementation (read-only)."""
+    """Outlook Calendar source connector integrates with the Microsoft Graph API to extract data.
+
+    Synchronizes data from Outlook calendars.
+
+    It provides comprehensive access to calendars, events, and attachments
+    with proper timezone handling and meeting management features.
+    """
 
     GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 

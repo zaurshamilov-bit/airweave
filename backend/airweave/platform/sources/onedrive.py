@@ -36,7 +36,13 @@ from airweave.platform.sources._base import BaseSource
     labels=["File Storage"],
 )
 class OneDriveSource(BaseSource):
-    """OneDrive source implementation using Microsoft Graph API."""
+    """OneDrive source connector integrates with the Microsoft Graph API to extract files.
+
+    Supports OneDrive personal and business accounts.
+
+    It supports various OneDrive scenarios including
+    personal drives, business drives, and app folder access with intelligent fallback handling.
+    """
 
     @classmethod
     async def create(

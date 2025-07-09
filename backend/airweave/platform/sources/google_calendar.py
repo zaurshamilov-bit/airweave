@@ -42,11 +42,12 @@ from airweave.platform.sources._base import BaseSource
     labels=["Productivity", "Calendar"],
 )
 class GoogleCalendarSource(BaseSource):
-    """Google Calendar source implementation (read-only).
+    """Google Calendar source connector integrates with the Google Calendar API to extract data.
 
-    Retrieves and yields Google Calendar objects (CalendarList entries,
-    Calendars, Events, and Free/Busy data) as entity schemas defined in
-    entities/google_calendar.py.
+    Synchronizes calendars, events, and free/busy information.
+
+    It provides comprehensive access to your
+    Google Calendar scheduling information for productivity and time management insights.
     """
 
     @classmethod

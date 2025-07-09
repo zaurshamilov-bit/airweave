@@ -1,21 +1,4 @@
-"""Bitbucket source implementation (read-only).
-
-Retrieves data from Bitbucket Cloud, focusing on:
- - Workspaces
- - Repositories
- - Repository Contents (files, directories, etc.)
-
-and yields them as entities using the corresponding Bitbucket entity schemas.
-
-References:
-  https://developer.atlassian.com/cloud/bitbucket/rest/intro/
-  https://developer.atlassian.com/cloud/bitbucket/rest/api-group-repositories/
-  https://developer.atlassian.com/cloud/bitbucket/rest/api-group-source/
-
-Notes:
-  - This connector uses Basic authentication with app passwords
-  - For each workspace, we gather repositories and traverse their contents
-"""
+"""Bitbucket source implementation for syncing repositories, workspaces, and code files."""
 
 import base64
 import mimetypes
@@ -53,7 +36,13 @@ from airweave.platform.utils.file_extensions import (
     labels=["Code"],
 )
 class BitbucketSource(BaseSource):
-    """Bitbucket source implementation."""
+    """Bitbucket source connector integrates with the Bitbucket REST API to extract data.
+
+    Connects to your Bitbucket workspaces and repositories.
+
+    It supports syncing workspaces, repositories, directories,
+    and code files with configurable filtering options for branches and file types.
+    """
 
     BASE_URL = "https://api.bitbucket.org/2.0"
 

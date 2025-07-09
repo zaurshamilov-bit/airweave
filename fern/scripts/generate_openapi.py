@@ -1,13 +1,14 @@
 """Generate OpenAPI schema for Airweave API."""
 
-from airweave.main import app
-from api_config import API_GROUPS, is_included_endpoint
-from fastapi.openapi.utils import get_openapi
 import json
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
+
+from airweave.main import app
+from api_config import API_GROUPS, is_included_endpoint
+from fastapi.openapi.utils import get_openapi
 
 # Get the absolute path to the project root (2 levels up from fern/scripts)
 project_root = Path(__file__).parent.parent.parent.absolute()
@@ -31,9 +32,13 @@ def filter_paths(openapi_schema: Dict[str, Any]) -> Dict[str, Any]:
         filtered_operations = {}
 
         for method, operation in path_item.items():
-            if method.lower() in ["get", "post", "put", "delete", "patch"] and is_included_endpoint(
-                path, method
-            ):
+            if method.lower() in [
+                "get",
+                "post",
+                "put",
+                "delete",
+                "patch",
+            ] and is_included_endpoint(path, method):
                 filtered_operations[method] = operation
                 include_path = True
 
@@ -53,7 +58,10 @@ def fix_security_scheme(openapi_schema: Dict[str, Any]) -> Dict[str, Any]:
     This function thoroughly removes any duplicated authentication parameters
     to avoid the "duplicate parameter" error in generated SDKs.
     """
-    if "components" in openapi_schema and "securitySchemes" in openapi_schema["components"]:
+    if (
+        "components" in openapi_schema
+        and "securitySchemes" in openapi_schema["components"]
+    ):
         # Replace the security scheme to use only apiKey with header
         openapi_schema["components"]["securitySchemes"] = {
             "ApiKeyAuth": {
@@ -78,12 +86,25 @@ def fix_security_scheme(openapi_schema: Dict[str, Any]) -> Dict[str, Any]:
                             param
                             for param in operation["parameters"]
                             if not (
+                                # Remove Authorization header
                                 (
                                     param.get("name") == "Authorization"
                                     and param.get("in") == "header"
                                 )
+                                # Remove x-api-key (lowercase)
                                 or (
-                                    param.get("name") == "x-api-key" and param.get("in") == "header"
+                                    param.get("name") == "x-api-key"
+                                    and param.get("in") == "header"
+                                )
+                                # Remove X-API-Key (capitalized)
+                                or (
+                                    param.get("name") == "X-API-Key"
+                                    and param.get("in") == "header"
+                                )
+                                # Remove X-Organization-ID (we don't want this in the public API spec)
+                                or (
+                                    param.get("name") == "X-Organization-ID"
+                                    and param.get("in") == "header"
                                 )
                             )
                         ]

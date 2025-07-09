@@ -7,25 +7,16 @@ description: "Bitbucket integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Bitbucket logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Bitbucket</h1>
-    <p>Connect your Bitbucket data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Bitbucket logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Bitbucket</h1>
 </div>
-
-## Overview
-
-The Bitbucket connector allows you to sync data from Bitbucket into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### BitbucketSource
-
-Bitbucket source implementation.
-
+Bitbucket source connector integrates with the Bitbucket REST API to extract and synchronize data from your
+Bitbucket workspaces and repositories. It supports syncing workspaces, repositories, directories,
+and code files with configurable filtering options for branches and file types.
 
 <Card
   title="View Source Code"
@@ -37,7 +28,7 @@ Bitbucket source implementation.
 
 ### Authentication
 
-This connector uses a custom authentication configuration class: `BitbucketAuthConfig`.
+This connector uses a custom authentication configuration.
 
 <Card
   title="Authentication Configuration"
@@ -77,11 +68,72 @@ Bitbucket authentication credentials schema.
 </ParamField>
 </Card>
 
+### Configuration Options
 
-## Entities
+The following configuration options are available for this connector:
+
+<Card
+  title="Configuration Parameters"
+  className="config-card"
+  style={{ backgroundColor: 'rgba(0, 0, 0, 0.05)', padding: '16px', marginBottom: '24px' }}
+>
+
+Bitbucket configuration schema.
+<ParamField
+  path="branch"
+  type="str"
+  required={false}
+  default=""
+>
+  Specific branch to sync (e.g., 'main', 'develop'). If empty, uses the default branch.
+</ParamField>
+<ParamField
+  path="file_extensions"
+  type="list[str]"
+  required={false}
+  default="[]"
+>
+  List of file extensions to include (e.g., '.py', '.js', '.md'). If empty, includes all text files. Use '.*' to include all files.
+</ParamField>
+</Card>
+
+## Data Models
 
 The following data models are available for this connector:
 
+<Accordion title="BitbucketWorkspaceEntity">
+
+Schema for Bitbucket workspace entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| slug | str | Workspace slug identifier |
+| name | str | Workspace display name |
+| uuid | str | Workspace UUID |
+| is_private | bool | Whether the workspace is private |
+| created_on | Optional[datetime] | Creation timestamp |
+
+</Accordion>
+<Accordion title="BitbucketRepositoryEntity">
+
+Schema for Bitbucket repository entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | str | Repository name |
+| slug | str | Repository slug |
+| full_name | str | Full repository name including workspace |
+| description | Optional[str] | Repository description |
+| is_private | bool | Whether the repository is private |
+| fork_policy | Optional[str] | Fork policy of the repository |
+| language | Optional[str] | Primary language of the repository |
+| created_on | datetime | Creation timestamp |
+| updated_on | datetime | Last update timestamp |
+| size | Optional[int] | Size of the repository in bytes |
+| mainbranch | Optional[str] | Main branch name |
+| workspace_slug | str | Slug of the parent workspace |
+
+</Accordion>
 <Accordion title="BitbucketDirectoryEntity">
 
 Schema for Bitbucket directory entity.
@@ -90,6 +142,19 @@ Schema for Bitbucket directory entity.
 |-------|------|-------------|
 | path | str | Path of the directory within the repository |
 | repo_slug | str | Slug of the repository containing this directory |
+| repo_full_name | str | Full name of the repository |
+| workspace_slug | str | Slug of the workspace |
+
+</Accordion>
+<Accordion title="BitbucketCodeFileEntity">
+
+Schema for Bitbucket code file entity.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| commit_hash | Optional[str] | Commit hash of the file version |
+| path | str | Path of the file within the repository |
+| repo_slug | str | Slug of the repository |
 | repo_full_name | str | Full name of the repository |
 | workspace_slug | str | Slug of the workspace |
 

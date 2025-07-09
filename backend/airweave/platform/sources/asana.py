@@ -1,4 +1,4 @@
-"""Asana source implementation."""
+"""Asana source implementation for syncing workspaces, projects, tasks, and comments."""
 
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -29,7 +29,12 @@ from airweave.platform.sources._base import BaseSource
     labels=["Project Management"],
 )
 class AsanaSource(BaseSource):
-    """Asana source implementation."""
+    """Asana source connector integrates with the Asana API to extract and synchronize data.
+
+    Connects to your Asana workspaces.
+
+    It supports syncing workspaces, projects, tasks, sections, comments, and file attachments.
+    """
 
     @classmethod
     async def create(

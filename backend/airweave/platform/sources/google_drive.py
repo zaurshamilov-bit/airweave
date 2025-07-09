@@ -36,12 +36,12 @@ from airweave.platform.sources._base import BaseSource
     labels=["File Storage"],
 )
 class GoogleDriveSource(BaseSource):
-    """Google Drive source implementation (read-only).
+    """Google Drive source connector integrates with the Google Drive API to extract files.
 
-    Retrieves and yields:
-      - GoogleDriveDriveEntity objects, representing shared drives
-      - GoogleDriveFileEntity objects, representing files in each shared drive
-      - GoogleDriveFileEntity objects, representing files in the user's My Drive
+    Supports both personal Google Drive (My Drive) and shared drives.
+
+    It supports downloading and processing files
+    while maintaining proper organization and access permissions.
     """
 
     @classmethod

@@ -8,6 +8,7 @@ from fastapi import (
     Body,
     Depends,
     HTTPException,
+    Path,
     Request,
     Response,
 )
@@ -15,6 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
+from airweave.api.examples import (
+    create_source_connection_list_response,
+    create_white_label_list_response,
+)
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.logging import ContextualLogger, logger
 from airweave.core.source_connection_service import source_connection_service
@@ -69,21 +74,26 @@ async def _handle_white_label_cors(
         raise HTTPException(status_code=400, detail="Failed to validate white label origin.") from e
 
 
-@router.get("/list", response_model=list[schemas.WhiteLabel])
+@router.get(
+    "/list",
+    response_model=list[schemas.WhiteLabel],
+    responses=create_white_label_list_response(
+        ["github_integration"],
+        "GitHub integration",
+    ),
+)
 async def list_white_labels(
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> list[schemas.WhiteLabel]:
-    """List all white labels for the current user's organization.
+    """List all white label integrations for your organization.
 
-    Args:
-    -----
-        db: The database session
-        auth_context: The authentication context
-
-    Returns:
-    --------
-        list[schemas.WhiteLabel]: A list of white labels
+    <br/><br/>
+    Returns all custom OAuth integrations configured with your own branding and
+    credentials. These integrations allow you to present OAuth consent screens with
+    your company name instead of Airweave.<br/><br/>**White label integrations only
+    work with OAuth2.0 sources** like Slack, Google Drive, or HubSpot that require
+    OAuth consent flows.
     """
     white_labels = await crud.white_label.get_multi(db, auth_context=auth_context)
     return white_labels
@@ -94,21 +104,18 @@ async def create_white_label(
     *,
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
-    white_label_in: schemas.WhiteLabelCreate,
+    white_label_in: schemas.WhiteLabelCreate = Body(...),
     logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.WhiteLabel:
-    """Create new white label integration.
+    """Create a new white label integration.
 
-    Args:
-    -----
-        db: The database session
-        auth_context: The current user
-        white_label_in: The white label to create
-        logger: The logger with the current authentication context
-
-    Returns:
-    --------
-        white_label (schemas.WhiteLabel): The created white label
+    <br/><br/>
+    **This only works for sources that use OAuth2.0 authentication** like Slack,
+    Google Drive, GitHub, or HubSpot.<br/><br/>Sets up a custom OAuth integration
+    using your own OAuth application credentials and branding. Once created,
+    customers will see your company name during OAuth consent flows instead of
+    Airweave. This requires you to have already configured your own OAuth
+    application with the target service provider.
     """
     logger.info(f"Creating white label {white_label_in.name}.")
     white_label = await crud.white_label.create(
@@ -121,24 +128,14 @@ async def create_white_label(
 
 @router.get("/{white_label_id}", response_model=schemas.WhiteLabel)
 async def get_white_label(
-    white_label_id: UUID,
+    white_label_id: UUID = Path(
+        ..., description="The unique identifier of the white label integration"
+    ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
     logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.WhiteLabel:
-    """Get a specific white label integration.
-
-    Args:
-    -----
-        db: The database session
-        white_label_id: The ID of the white label to get
-        auth_context: The authentication context
-        logger: The logger with the current authentication context
-
-    Returns:
-    --------
-        white_label (schemas.WhiteLabel): The white label
-    """
+    """Retrieve a specific white label integration by its ID."""
     logger.info(
         f"Getting white label {white_label_id} for organization {auth_context.organization_id}"
     )
@@ -153,22 +150,12 @@ async def update_white_label(
     *,
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
-    white_label_id: UUID,
-    white_label_in: schemas.WhiteLabelUpdate,
+    white_label_id: UUID = Path(
+        ..., description="The unique identifier of the white label integration to update"
+    ),
+    white_label_in: schemas.WhiteLabelUpdate = Body(...),
 ) -> schemas.WhiteLabel:
-    """Update a white label integration.
-
-    Args:
-    -----
-        db: The database session
-        auth_context: The authentication context
-        white_label_id: The ID of the white label to update
-        white_label_in: The white label to update
-
-    Returns:
-    --------
-        white_label (schemas.WhiteLabel): The updated white label
-    """
+    """Update a white label integration's configuration."""
     # TODO: Check if update is valid (i.e. scopes, source id etc)
     white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
     if white_label.organization_id != auth_context.organization_id:  # type: ignore
@@ -185,21 +172,18 @@ async def update_white_label(
 
 @router.delete("/{white_label_id}")
 async def delete_white_label(
-    white_label_id: UUID,
+    white_label_id: UUID = Path(
+        ..., description="The unique identifier of the white label integration to delete"
+    ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.WhiteLabel:
     """Delete a white label integration.
 
-    Args:
-    -----
-        db: The database session
-        auth_context: The current authentication context
-        white_label_id: The ID of the white label to delete
-
-    Returns:
-    --------
-        white_label (schemas.WhiteLabel): The deleted white label
+    <br/><br/>
+    Permanently removes the white label configuration and OAuth credentials.
+    Existing source connections created through this integration will continue to work,
+    but no new OAuth flows can be initiated until a new white label integration is created.
     """
     white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
     if white_label.organization_id != auth_context.user.organization_id:  # type: ignore
@@ -209,29 +193,41 @@ async def delete_white_label(
 
 
 @router.api_route(
-    "/{white_label_id}/oauth2/auth_url", response_model=str, methods=["GET", "OPTIONS"]
+    "/{white_label_id}/oauth2/auth_url",
+    response_model=str,
+    methods=["GET", "OPTIONS"],
+    responses={
+        200: {
+            "description": "OAuth2 authorization URL with your branding",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "slack_auth_url": {
+                            "summary": "Slack OAuth URL",
+                            "value": "https://slack.com/oauth/v2/authorize?response_type=code&client_id=1234567890.1234567890123&redirect_uri=https%3A//yourapp.com/auth/slack/callback&scope=channels%3Aread+chat%3Awrite+users%3Aread",
+                        },
+                    }
+                }
+            },
+        }
+    },
 )
 async def get_white_label_oauth2_auth_url(
     *,
     request: Request,
     response: Response,
     db: AsyncSession = Depends(deps.get_db),
-    white_label_id: UUID,
+    white_label_id: UUID = Path(
+        ..., description="The unique identifier of the white label integration"
+    ),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> str:
-    """Generate the OAuth2 authorization URL by delegating to oauth2_service.
+    """Generate a branded OAuth2 authorization URL for customer authentication.
 
-    Args:
-    -----
-        request: The HTTP request
-        response: The HTTP response
-        db: The database session
-        white_label_id: The ID of the white label to get the auth URL for
-        auth_context: The current authentication context
-
-    Returns:
-    --------
-        str: The OAuth2 authorization URL
+    <br/><br/>
+    Creates the OAuth consent URL that customers should be redirected to for
+    authentication. The OAuth consent screen will display your company name and
+    branding instead of Airweave.
     """
     # Handle CORS for white label
     await _handle_white_label_cors(request, response, white_label_id, db, auth_context)
@@ -248,24 +244,24 @@ async def get_white_label_oauth2_auth_url(
 
 
 @router.get(
-    "/{white_label_id}/source-connections", response_model=list[schemas.SourceConnectionListItem]
+    "/{white_label_id}/source-connections",
+    response_model=list[schemas.SourceConnectionListItem],
+    responses=create_source_connection_list_response(
+        ["white_label_slack"],
+        "Source connections created through white label OAuth flows",
+    ),
 )
 async def list_white_label_source_connections(
-    white_label_id: UUID,
+    white_label_id: UUID = Path(
+        ..., description="The unique identifier of the white label integration"
+    ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> list[schemas.SourceConnectionListItem]:
-    """List all source connections for a specific white label.
+    """List all source connections created through a specific white label integration.
 
-    Args:
-    -----
-        white_label_id: The ID of the white label to list source connections for
-        db: The database session
-        auth_context: The authentication context
-
-    Returns:
-    --------
-        list[schemas.SourceConnectionListItem]: A list of source connections
+    <br/><br/>
+    Returns source connections that were established using this white label's OAuth flow.
     """
     white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
     if white_label.organization_id != auth_context.organization_id:
@@ -290,31 +286,40 @@ async def exchange_white_label_oauth2_code(
     *,
     request: Request,
     response: Response,
-    white_label_id: UUID,
-    code: str = Body(...),
-    source_connection_in: Optional[schemas.SourceConnectionCreateWithWhiteLabel] = Body(None),
+    white_label_id: UUID = Path(
+        ..., description="The unique identifier of the white label integration"
+    ),
+    code: str = Body(
+        ...,
+        description=(
+            "The OAuth2 authorization code received from the OAuth callback "
+            "after customer authentication"
+        ),
+        examples=[
+            "4/P7q7W91a-oMsCeLvIaQm6bTrgtp7",
+        ],
+    ),
+    source_connection_in: Optional[schemas.SourceConnectionCreateWithWhiteLabel] = Body(
+        None,
+        description=(
+            "Optional configuration for the source connection. If not provided, "
+            "a source connection will be created automatically with default settings. "
+            "The white label integration is automatically linked to the source connection."
+        ),
+    ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
     logger: ContextualLogger = Depends(deps.get_logger),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnection:
-    """Exchange OAuth2 code for tokens and create connection with source connection.
+    """Complete the OAuth flow and create a source connection.
 
-    Args:
-    -----
-        request: The HTTP request
-        response: The HTTP response
-        white_label_id: The ID of the white label to exchange the code for
-        code: The OAuth2 code
-        source_connection_in: Optional source connection configuration
-        db: The database session
-        auth_context: The authentication context
-        logger: The logger with the current authentication context
-        background_tasks: Background tasks for async operations
-
-    Returns:
-    --------
-        source_connection (schemas.SourceConnection): The created source connection
+    <br/><br/>
+    **This is the core endpoint that converts OAuth authorization codes into working
+    source connections.**<br/><br/>The OAuth credentials are obtained automatically
+    from the authorization code - you do not need to provide auth_fields. The white
+    label integration is automatically linked to the created source connection for
+    tracking and branding purposes.
     """
     # Handle CORS for white label
     await _handle_white_label_cors(request, response, white_label_id, db, auth_context)

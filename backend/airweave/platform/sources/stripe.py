@@ -50,25 +50,12 @@ from airweave.platform.sources._base import BaseSource
     labels=["Payment"],
 )
 class StripeSource(BaseSource):
-    """Stripe source implementation.
+    """Stripe source connector integrates with the Stripe API to extract payment and financial data.
 
-    This connector retrieves data from various Stripe objects, yielding them as entities
-    through their respective schemas. The following resource endpoints are used:
+    Synchronizes comprehensive data from your Stripe account.
 
-      - /v1/balance
-      - /v1/balance_transactions
-      - /v1/charges
-      - /v1/customers
-      - /v1/events
-      - /v1/invoices
-      - /v1/payment_intents
-      - /v1/payment_methods
-      - /v1/payouts
-      - /v1/refunds
-      - /v1/subscriptions
-
-    Each resource endpoint may use Stripe's pagination (has_more + starting_after) to
-    retrieve all objects. Fields are mapped to the entity schemas defined in entities/stripe.py.
+    It provides access to all major Stripe resources
+    including transactions, customers, subscriptions, and account analytics.
     """
 
     @classmethod

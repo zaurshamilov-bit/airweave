@@ -47,13 +47,12 @@ PG_TYPE_MAP = {
     labels=["Database"],
 )
 class PostgreSQLSource(BaseSource):
-    """PostgreSQL source implementation.
+    """PostgreSQL source connector integrates with PostgreSQL databases to extract structured data.
 
-    This source connects to a PostgreSQL database and generates entities for each table
-    in the specified schemas. It uses database introspection to:
-    1. Discover tables and their structures
-    2. Create appropriate entity classes dynamically
-    3. Generate entities for each table's data
+    Synchronizes data from database tables.
+
+    It uses dynamic schema introspection to create appropriate entity classes
+    and provides comprehensive access to relational data with proper type mapping and relationships.
     """
 
     def __init__(self):

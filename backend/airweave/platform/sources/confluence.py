@@ -85,18 +85,13 @@ class AsyncIteratorWrapper:
     labels=["Knowledge Base", "Documentation"],
 )
 class ConfluenceSource(BaseSource):
-    """Confluence source implementation, retrieving content in a hierarchical fashion.
+    """Confluence source connector integrates with the Confluence REST API to extract content.
 
-    This connector retrieves data from Confluence to yield the following entities:
-      - Space
-      - Page (including child pages as desired)
-      - Blog Post
-      - Comment
-      - Label
-      - Task
-      - Whiteboard
-      - Custom Content
-      - (Optionally) Database, Folder, etc.
+    Connects to your Confluence instance.
+
+    It supports syncing spaces, pages, blog posts, comments, labels, and other
+    content types. It converts Confluence pages to HTML format for content extraction and
+    extracts embedded files and attachments from page content.
     """
 
     @staticmethod

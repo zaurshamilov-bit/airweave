@@ -12,9 +12,15 @@ INCLUDED_ENDPOINTS = {
     "/collections/{readable_id}/refresh_all/": {"post": True},
     # Source Connections
     "/source-connections/": {"get": True, "post": True},
-    "/source-connections/{source_connection_id}/": {"get": True, "put": True, "delete": True},
+    "/source-connections/{source_connection_id}/": {
+        "get": True,
+        "put": True,
+        "delete": True,
+    },
     "/source-connections/{source_connection_id}/run/": {"post": True},
     "/source-connections/{source_connection_id}/jobs/": {"get": True},
+    "/source-connections/{source_connection_id}/jobs/{job_id}/": {"get": True},
+    "/source-connections/{source_connection_id}/jobs/{job_id}/cancel/": {"post": True},
     # White Labels
     "/white-labels/": {"get": True, "post": True},
     "/white-labels/{white_label_id}/": {"get": True, "put": True, "delete": True},

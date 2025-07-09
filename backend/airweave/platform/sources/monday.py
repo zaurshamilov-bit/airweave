@@ -33,10 +33,12 @@ from airweave.platform.sources._base import BaseSource
     labels=["Project Management"],
 )
 class MondaySource(BaseSource):
-    """Monday source implementation.
+    """Monday source connector integrates with the Monday.com GraphQL API to extract work data.
 
-    Connects to Monday.com using GraphQL queries to retrieve and entity various
-    data types including boards, groups, columns, items, subitems, and updates.
+    Connects to your Monday.com workspace.
+
+    It provides comprehensive access to boards, items, and team
+    collaboration features with full relationship mapping and custom field support.
     """
 
     GRAPHQL_ENDPOINT = "https://api.monday.com/v2"

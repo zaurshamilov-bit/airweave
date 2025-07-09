@@ -7,36 +7,16 @@ description: "Confluence integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Confluence logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Confluence</h1>
-    <p>Connect your Confluence data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Confluence logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Confluence</h1>
 </div>
-
-## Overview
-
-The Confluence connector allows you to sync data from Confluence into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### ConfluenceSource
-
-Confluence source implementation, retrieving content in a hierarchical fashion.
-
-This connector retrieves data from Confluence to yield the following entities:
-  - Space
-  - Page (including child pages as desired)
-  - Blog Post
-  - Comment
-  - Label
-  - Task
-  - Whiteboard
-  - Custom Content
-  - (Optionally) Database, Folder, etc.
-
+Confluence source connector integrates with the Confluence REST API to extract and synchronize content from your
+Confluence instance. It supports syncing spaces, pages, blog posts, comments, labels, and other
+content types. It converts Confluence pages to HTML format for content extraction and extracts embedded files and attachments from page content.
 
 <Card
   title="View Source Code"
@@ -48,33 +28,13 @@ This connector retrieves data from Confluence to yield the following entities:
 
 ### Authentication
 
-This connector uses **OAuth 2.0 with refresh token**.
+This connector uses **OAuth 2.0 authentication**. Connect this source through the Airweave UI, which will guide you through the OAuth flow.
 
-<Card
-  title="Authentication Configuration"
-  className="auth-config-card"
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
->
+### Configuration Options
 
-Confluence authentication credentials schema.
-<ParamField
-  path="refresh_token"
-  type="str"
-  required={true}
->
-  The refresh token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-<ParamField
-  path="access_token"
-  type="str"
-  required={true}
->
-  The access token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-</Card>
+This connector does not have any additional configuration options.
 
-
-## Entities
+## Data Models
 
 The following data models are available for this connector:
 
@@ -94,6 +54,26 @@ See:
 | status | Optional[str] | Status of the space if applicable. |
 | created_at | Optional[datetime] | Timestamp when the space was created. |
 | updated_at | Optional[datetime] | Timestamp when the space was last updated. |
+
+</Accordion>
+<Accordion title="ConfluencePageEntity">
+
+Schema for a Confluence Page.
+
+See:
+  https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-pages/
+
+| Field | Type | Description |
+|-------|------|-------------|
+| content_id | Optional[str] | Actual Confluence page ID. |
+| title | Optional[str] | Title of the page. |
+| space_id | Optional[str] | ID of the space this page belongs to. |
+| body | Optional[str] | HTML body or excerpt of the page. |
+| version | Optional[int] | Page version number. |
+| status | Optional[str] | Status of the page (e.g., 'current'). |
+| created_at | Optional[datetime] | Timestamp when the page was created. |
+| updated_at | Optional[datetime] | Timestamp when the page was last updated. |
+| metadata | Optional[Dict[str, Any]] | Additional metadata about the page |
 
 </Accordion>
 <Accordion title="ConfluenceBlogPostEntity">

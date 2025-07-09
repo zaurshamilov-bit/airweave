@@ -7,31 +7,16 @@ description: "Postgresql integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Postgresql logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Postgresql</h1>
-    <p>Connect your Postgresql data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Postgresql logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Postgresql</h1>
 </div>
-
-## Overview
-
-The Postgresql connector allows you to sync data from Postgresql into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### PostgreSQLSource
-
-PostgreSQL source implementation.
-
-This source connects to a PostgreSQL database and generates entities for each table
-in the specified schemas. It uses database introspection to:
-1. Discover tables and their structures
-2. Create appropriate entity classes dynamically
-3. Generate entities for each table's data
-
+PostgreSQL source connector integrates with PostgreSQL databases to extract and synchronize structured data
+from database tables. It uses dynamic schema introspection to create appropriate entity classes
+and provides comprehensive access to relational data with proper type mapping and relationships.
 
 <Card
   title="View Source Code"
@@ -43,7 +28,7 @@ in the specified schemas. It uses database introspection to:
 
 ### Authentication
 
-This connector uses a custom authentication configuration class: `PostgreSQLAuthConfig`.
+This connector uses a custom authentication configuration.
 
 <Card
   title="Authentication Configuration"
@@ -104,6 +89,10 @@ PostgreSQL authentication configuration.
   Comma separated list of tables to sync. For example, 'users,orders'. For all tables, use '*'
 </ParamField>
 </Card>
+
+### Configuration Options
+
+This connector does not have any additional configuration options.
 
 
 

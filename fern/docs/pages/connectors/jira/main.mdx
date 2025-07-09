@@ -7,29 +7,16 @@ description: "Jira integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Jira logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Jira</h1>
-    <p>Connect your Jira data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Jira logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Jira</h1>
 </div>
-
-## Overview
-
-The Jira connector allows you to sync data from Jira into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### JiraSource
-
-Simplified Jira source implementation (read-only).
-
-This connector retrieves hierarchical data from Jira's REST API:
-  - Projects
-  - Issues (within each project)
-
+Jira source connector integrates with the Jira REST API to extract and synchronize project management data
+from your Jira Cloud instance. It provides comprehensive access to projects, issues, and their
+relationships for agile development and issue tracking workflows.
 
 <Card
   title="View Source Code"
@@ -41,33 +28,13 @@ This connector retrieves hierarchical data from Jira's REST API:
 
 ### Authentication
 
-This connector uses **OAuth 2.0 with refresh token**.
+This connector uses **OAuth 2.0 authentication**. Connect this source through the Airweave UI, which will guide you through the OAuth flow.
 
-<Card
-  title="Authentication Configuration"
-  className="auth-config-card"
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
->
+### Configuration Options
 
-Jira authentication credentials schema.
-<ParamField
-  path="refresh_token"
-  type="str"
-  required={true}
->
-  The refresh token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-<ParamField
-  path="access_token"
-  type="str"
-  required={true}
->
-  The access token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-</Card>
+This connector does not have any additional configuration options.
 
-
-## Entities
+## Data Models
 
 The following data models are available for this connector:
 

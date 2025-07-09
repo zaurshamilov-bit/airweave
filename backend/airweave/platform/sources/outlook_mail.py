@@ -36,9 +36,12 @@ from airweave.platform.sources._base import BaseSource
     labels=["Communication", "Email"],
 )
 class OutlookMailSource(BaseSource):
-    """Outlook Mail source implementation (read-only).
+    """Outlook Mail source connector integrates with the Microsoft Graph API to extract email data.
 
-    Retrieves and yields Outlook mail folders, messages and attachments.
+    Synchronizes data from Outlook mailboxes.
+
+    It provides comprehensive access to mail folders, messages, and
+    attachments with hierarchical folder organization and content processing capabilities.
     """
 
     GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"

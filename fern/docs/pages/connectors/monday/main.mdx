@@ -7,28 +7,16 @@ description: "Monday integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Monday logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Monday</h1>
-    <p>Connect your Monday data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Monday logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Monday</h1>
 </div>
-
-## Overview
-
-The Monday connector allows you to sync data from Monday into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### MondaySource
-
-Monday source implementation.
-
-Connects to Monday.com using GraphQL queries to retrieve and entity various
-data types including boards, groups, columns, items, subitems, and updates.
-
+Monday source connector integrates with the Monday.com GraphQL API to extract and synchronize work management
+data from your Monday.com workspace. It provides comprehensive access to boards, items, and team
+collaboration features with full relationship mapping and custom field support.
 
 <Card
   title="View Source Code"
@@ -40,26 +28,13 @@ data types including boards, groups, columns, items, subitems, and updates.
 
 ### Authentication
 
-This connector uses **OAuth 2.0 authentication flow**.
+This connector uses **OAuth 2.0 authentication**. Connect this source through the Airweave UI, which will guide you through the OAuth flow.
 
-<Card
-  title="Authentication Configuration"
-  className="auth-config-card"
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
->
+### Configuration Options
 
-Monday authentication credentials schema.
-<ParamField
-  path="access_token"
-  type="str"
-  required={true}
->
-  The access token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-</Card>
+This connector does not have any additional configuration options.
 
-
-## Entities
+## Data Models
 
 The following data models are available for this connector:
 

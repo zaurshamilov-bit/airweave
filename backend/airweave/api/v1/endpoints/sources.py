@@ -1,10 +1,11 @@
 """The API module that contains the endpoints for sources."""
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
+from airweave.api.examples import create_single_source_response, create_source_list_response
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import logger
@@ -14,31 +15,23 @@ from airweave.platform.locator import resource_locator
 router = TrailingSlashRouter()
 
 
-@router.get("/detail/{short_name}", response_model=schemas.Source)
+@router.get(
+    "/detail/{short_name}",
+    response_model=schemas.Source,
+    responses=create_single_source_response(
+        "github", "Source details with authentication and configuration schemas"
+    ),
+)
 async def read_source(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    short_name: str,
+    short_name: str = Path(
+        ...,
+        description="Technical identifier of the source type (e.g., 'github', 'stripe', 'slack')",
+    ),
     auth_context: schemas.AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Source:
-    """Get source by id.
-
-    Args:
-    ----
-        db (AsyncSession): The database session.
-        short_name (str): The short name of the source.
-        auth_context (schemas.AuthContext): The current auth context.
-
-    Returns:
-    -------
-        schemas.Source: The source object.
-
-    Raises:
-        HTTPException:
-            - 404 if source not found
-            - 400 if source missing required configuration classes
-            - 500 if there's an error retrieving auth configuration
-    """
+    """Get detailed information about a specific data source connector."""
     try:
         source = await crud.source.get_by_short_name(db, short_name)
         if not source:
@@ -102,13 +95,23 @@ async def read_source(
         ) from e
 
 
-@router.get("/list", response_model=list[schemas.Source])
+@router.get(
+    "/list",
+    response_model=list[schemas.Source],
+    responses=create_source_list_response(
+        ["github"], "List of all available data source connectors"
+    ),
+)
 async def read_sources(
     *,
     db: AsyncSession = Depends(deps.get_db),
     auth_context: schemas.AuthContext = Depends(deps.get_auth_context),
 ) -> list[schemas.Source]:
-    """Get all sources with their authentication fields."""
+    """List all available data source connectors.
+
+    <br/><br/>
+    Returns the complete catalog of source types that Airweave can connect to.
+    """
     logger.info("Starting read_sources endpoint")
     try:
         sources = await crud.source.get_all(db)

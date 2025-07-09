@@ -2,6 +2,7 @@
 
 import ast
 import re
+
 from ..constants import BACKEND_ENTITIES_DIR
 
 
@@ -34,16 +35,32 @@ def parse_entity_file(connector_name):
     # Find all class definitions that inherit from BaseEntity or ChunkEntity
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
-            # Check if this class inherits from BaseEntity or ChunkEntity
+            # Check if this class inherits from any entity base class
             is_entity = False
             for base in node.bases:
                 if isinstance(base, ast.Name):
-                    if base.id in ["BaseEntity", "ChunkEntity", "PolymorphicEntity"]:
+                    if base.id in [
+                        "BaseEntity",
+                        "ChunkEntity",
+                        "PolymorphicEntity",
+                        "ParentEntity",
+                        "CodeFileEntity",
+                        "FileEntity",
+                    ]:
                         is_entity = True
                         break
                 # Handle complex inheritance (like with subscripts)
-                elif isinstance(base, ast.Subscript) and isinstance(base.value, ast.Name):
-                    if base.value.id in ["BaseEntity", "ChunkEntity", "PolymorphicEntity"]:
+                elif isinstance(base, ast.Subscript) and isinstance(
+                    base.value, ast.Name
+                ):
+                    if base.value.id in [
+                        "BaseEntity",
+                        "ChunkEntity",
+                        "PolymorphicEntity",
+                        "ParentEntity",
+                        "CodeFileEntity",
+                        "FileEntity",
+                    ]:
                         is_entity = True
                         break
 
@@ -87,14 +104,14 @@ def parse_entity_file(connector_name):
                                     if isinstance(keyword.value, ast.Str):
                                         description = keyword.value.s
                                     # String in Python 3.8+ (ast.Constant)
-                                    elif isinstance(keyword.value, ast.Constant) and isinstance(
-                                        keyword.value.value, str
-                                    ):
+                                    elif isinstance(
+                                        keyword.value, ast.Constant
+                                    ) and isinstance(keyword.value.value, str):
                                         description = keyword.value.value
                                     # Concatenated strings or multiline description
-                                    elif isinstance(keyword.value, ast.BinOp) or isinstance(
-                                        keyword.value, ast.Tuple
-                                    ):
+                                    elif isinstance(
+                                        keyword.value, ast.BinOp
+                                    ) or isinstance(keyword.value, ast.Tuple):
                                         # We need the original source for this part
                                         try:
                                             lines = content.split("\n")
@@ -123,13 +140,19 @@ def parse_entity_file(connector_name):
                         description = re.sub(r"\s+", " ", description).strip()
 
                         fields.append(
-                            {"name": field_name, "type": field_type, "description": description}
+                            {
+                                "name": field_name,
+                                "type": field_type,
+                                "description": description,
+                            }
                         )
 
             entity_classes.append(
                 {
                     "name": class_name,
-                    "docstring": docstring.strip() if docstring else "No description available.",
+                    "docstring": docstring.strip()
+                    if docstring
+                    else "No description available.",
                     "fields": fields,
                 }
             )

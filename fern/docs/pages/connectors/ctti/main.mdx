@@ -7,36 +7,16 @@ description: "Ctti integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Ctti logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Ctti</h1>
-    <p>Connect your Ctti data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Ctti logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Ctti</h1>
 </div>
-
-## Overview
-
-The Ctti connector allows you to sync data from Ctti into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### CTTISource
-
-CTTI source implementation.
-
-This source connects to the AACT Clinical Trials PostgreSQL database and queries
-the nct_id column from the studies table to create WebEntity instances with
-ClinicalTrials.gov URLs.
-
-Connection details are hardcoded to the public AACT database:
-- Host: aact-db.ctti-clinicaltrials.org
-- Port: 5432
-- Database: aact
-- Schema: ctgov
-- Table: studies
-
+CTTI source connector integrates with the AACT (Aggregate Analysis of ClinicalTrials.gov) PostgreSQL database
+to extract and synchronize clinical trial information. It creates web entities that link to
+ClinicalTrials.gov pages.
 
 <Card
   title="View Source Code"
@@ -48,7 +28,7 @@ Connection details are hardcoded to the public AACT database:
 
 ### Authentication
 
-This connector uses a custom authentication configuration class: `CTTIAuthConfig`.
+This connector uses a custom authentication configuration.
 
 <Card
   title="Authentication Configuration"
@@ -70,6 +50,35 @@ CTTI Clinical Trials authentication credentials schema.
   required={true}
 >
   Password for the AACT Clinical Trials database
+</ParamField>
+</Card>
+
+### Configuration Options
+
+The following configuration options are available for this connector:
+
+<Card
+  title="Configuration Parameters"
+  className="config-card"
+  style={{ backgroundColor: 'rgba(0, 0, 0, 0.05)', padding: '16px', marginBottom: '24px' }}
+>
+
+CTTI AACT configuration schema.
+<ParamField
+  path="limit"
+  type="int"
+  required={false}
+  default={10000}
+>
+  Maximum number of clinical trial studies to fetch from AACT database
+</ParamField>
+<ParamField
+  path="skip"
+  type="int"
+  required={false}
+  default={0}
+>
+  Number of clinical trial studies to skip (for pagination). Use with limit to fetch different batches.
 </ParamField>
 </Card>
 

@@ -87,8 +87,7 @@ class SourceConnectionService:
             raise HTTPException(status_code=404, detail=f"Source '{source_short_name}' not found")
 
         BASE_ERROR_MESSAGE = (
-            f"See https://docs.airweave.ai/docs/connectors/{source.short_name}#authentication "
-            f"for more information."
+            f"See https://docs.airweave.ai/{source.short_name}#authentication for more information."
         )
 
         # Check if auth_config_class is defined for the source
@@ -161,8 +160,7 @@ class SourceConnectionService:
             raise HTTPException(status_code=404, detail=f"Source '{source_short_name}' not found")
 
         BASE_ERROR_MESSAGE = (
-            f"See https://docs.airweave.ai/docs/connectors/{source.short_name}#configuration "
-            f"for more information."
+            f"See https://docs.airweave.ai/{source.short_name}#configuration for more information."
         )
 
         # Check if source has a config class defined - it MUST be defined

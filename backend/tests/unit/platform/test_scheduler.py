@@ -197,11 +197,6 @@ class TestUpdateAllNextScheduledRuns:
                 return_value=mock_sync_job,
             ),
             patch(
-                "airweave.platform.scheduler.crud.user.get_by_email",
-                new_callable=AsyncMock,
-                return_value=mock_user,
-            ),
-            patch(
                 "airweave.platform.scheduler.crud.sync.get",
                 new_callable=AsyncMock,
                 return_value=mock_sync_with_schedule,
@@ -214,9 +209,7 @@ class TestUpdateAllNextScheduledRuns:
             crud.sync_job.get_latest_by_sync_id.assert_called_once_with(
                 mock_db, sync_id=mock_sync_with_schedule.id
             )
-            crud.user.get_by_email.assert_called_once_with(
-                mock_db, email=mock_sync_with_schedule.created_by_email
-            )
+            # NOTE: crud.user.get_by_email is not actually called in the scheduler code
             crud.sync.get.assert_called_once()
             crud.sync.update.assert_called_once()
 
@@ -363,26 +356,12 @@ class TestProcessSync:
         scheduler = PlatformScheduler()
         mock_db = AsyncMock()
 
-        # Create a proper mock user that will pass Pydantic validation
-        mock_user = schemas.User(
-            id=uuid.uuid4(),
-            email="test@example.com",
-            full_name="Test User",
-            organization_id=uuid.uuid4(),
-            is_active=True,
-        )
-
-        # Set up a datetime that will make the sync due
+        # Set up timezone-aware datetimes
         now = datetime.now(timezone.utc)
         next_run = now - timedelta(minutes=5)  # 5 minutes in the past
 
         # Mock database operations
         with (
-            patch(
-                "airweave.platform.scheduler.crud.user.get_by_email",
-                new_callable=AsyncMock,
-                return_value=mock_user,
-            ),
             patch(
                 "airweave.platform.scheduler.crud.sync_job.get_latest_by_sync_id",
                 new_callable=AsyncMock,
@@ -399,13 +378,9 @@ class TestProcessSync:
                 new_callable=AsyncMock,
                 return_value=True,
             ),
-            patch("airweave.platform.scheduler.datetime") as mock_datetime,
+            patch("airweave.platform.scheduler.utc_now", return_value=now),  # Mock utc_now() instead
             patch("airweave.platform.scheduler.croniter") as mock_croniter,
         ):
-            # Set the mock datetime to return our fixed "now"
-            mock_datetime.now.return_value = now
-            mock_datetime.fromtimestamp.return_value = datetime.fromtimestamp(0, tz=timezone.utc)
-
             # Make croniter return our fixed next_run time
             mock_cron = MagicMock()
             mock_cron.get_next.return_value = next_run
@@ -424,26 +399,12 @@ class TestProcessSync:
         scheduler = PlatformScheduler()
         mock_db = AsyncMock()
 
-        # Create a proper mock user that will pass Pydantic validation
-        mock_user = schemas.User(
-            id=uuid.uuid4(),
-            email="test@example.com",
-            full_name="Test User",
-            organization_id=uuid.uuid4(),
-            is_active=True,
-        )
-
-        # Set up a datetime that will make the sync not due
+        # Set up timezone-aware datetimes
         now = datetime.now(timezone.utc)
         next_run = now + timedelta(minutes=5)  # 5 minutes in the future
 
         # Mock crud operations and time functions
         with (
-            patch(
-                "airweave.platform.scheduler.crud.user.get_by_email",
-                new_callable=AsyncMock,
-                return_value=mock_user,
-            ),
             patch(
                 "airweave.platform.scheduler.crud.sync_job.get_latest_by_sync_id",
                 new_callable=AsyncMock,
@@ -455,13 +416,9 @@ class TestProcessSync:
                 return_value=not_due_sync,
             ),
             patch("airweave.platform.scheduler.crud.sync.update", new_callable=AsyncMock),
-            patch("airweave.platform.scheduler.datetime") as mock_datetime,
+            patch("airweave.platform.scheduler.utc_now", return_value=now),  # Mock utc_now() instead
             patch("airweave.platform.scheduler.croniter") as mock_croniter,
         ):
-            # Set the mock datetime to return our fixed "now"
-            mock_datetime.now.return_value = now
-            mock_datetime.fromtimestamp.return_value = datetime.fromtimestamp(0, tz=timezone.utc)
-
             # Make croniter return our fixed next_run time
             mock_cron = MagicMock()
             mock_cron.get_next.return_value = next_run
@@ -482,27 +439,11 @@ class TestProcessSync:
         in_progress_job = mock_sync_job
         in_progress_job.status = SyncJobStatus.IN_PROGRESS
 
-        # Create a proper mock user that will pass Pydantic validation
-        mock_user = schemas.User(
-            id=uuid.uuid4(),
-            email="test@example.com",
-            full_name="Test User",
-            organization_id=uuid.uuid4(),
-            is_active=True,
-        )
-
         # Mock necessary crud operations
-        with (
-            patch(
-                "airweave.platform.scheduler.crud.user.get_by_email",
-                new_callable=AsyncMock,
-                return_value=mock_user,
-            ),
-            patch(
-                "airweave.platform.scheduler.crud.sync_job.get_latest_by_sync_id",
-                new_callable=AsyncMock,
-                return_value=in_progress_job,
-            ),
+        with patch(
+            "airweave.platform.scheduler.crud.sync_job.get_latest_by_sync_id",
+            new_callable=AsyncMock,
+            return_value=in_progress_job,
         ):
             result = await scheduler._process_sync(mock_db, mock_sync_with_schedule)
 
@@ -547,11 +488,6 @@ class TestTriggerSync:
         with (
             patch("airweave.platform.scheduler.get_db_context") as mock_get_db,
             patch(
-                "airweave.platform.scheduler.crud.user.get_by_email",
-                new_callable=AsyncMock,
-                return_value=mock_user,
-            ),
-            patch(
                 "airweave.platform.scheduler.crud.sync_job.create",
                 new_callable=AsyncMock,
                 return_value=mock_sync_job,
@@ -588,28 +524,44 @@ class TestTriggerSync:
             await scheduler._trigger_sync(mock_db, mock_sync_with_schedule)
 
             # Assert crud operations were called
-            crud.user.get_by_email.assert_called_once()
             crud.sync_job.create.assert_called_once()
             crud.sync_dag.get_by_sync_id.assert_called_once()
             asyncio.create_task.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_trigger_sync_user_not_found(self, mock_sync_with_schedule):
-        """Test triggering a sync with a user that doesn't exist."""
+        """Test triggering a sync when creation proceeds normally."""
         scheduler = PlatformScheduler()
         mock_db = AsyncMock()
 
-        # Mock user not found
-        with patch(
-            "airweave.platform.scheduler.crud.user.get_by_email",
-            new_callable=AsyncMock,
-            return_value=None,
+        # Mock sync job creation
+        mock_sync_job = MagicMock()
+        mock_sync_job.id = uuid.uuid4()
+
+        # Mock crud operations
+        with (
+            patch("airweave.platform.scheduler.get_db_context") as mock_get_db,
+            patch(
+                "airweave.platform.scheduler.crud.sync_job.create",
+                new_callable=AsyncMock,
+                return_value=mock_sync_job,
+            ),
+            patch(
+                "airweave.platform.scheduler.crud.sync_dag.get_by_sync_id",
+                new_callable=AsyncMock,
+                return_value=None,  # No DAG found
+            ),
         ):
-            # Execute method
+            # Configure mock_get_db
+            db_context = AsyncMock()
+            db_context.__aenter__.return_value = mock_db
+            mock_get_db.return_value = db_context
+
+            # Execute method (should handle missing DAG gracefully)
             await scheduler._trigger_sync(mock_db, mock_sync_with_schedule)
 
-            # Assert user lookup was attempted
-            crud.user.get_by_email.assert_called_once()
+            # Assert sync job creation was attempted
+            crud.sync_job.create.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_trigger_sync_no_dag(self, mock_sync_with_schedule, mock_user):
@@ -617,25 +569,32 @@ class TestTriggerSync:
         scheduler = PlatformScheduler()
         mock_db = AsyncMock()
 
+        # Mock sync job creation
+        mock_sync_job = MagicMock()
+        mock_sync_job.id = uuid.uuid4()
+
         # Mock crud operations
         with (
-            patch("airweave.platform.scheduler.get_db_context"),
+            patch("airweave.platform.scheduler.get_db_context") as mock_get_db,
             patch(
-                "airweave.platform.scheduler.crud.user.get_by_email",
+                "airweave.platform.scheduler.crud.sync_job.create",
                 new_callable=AsyncMock,
-                return_value=mock_user,
+                return_value=mock_sync_job,
             ),
-            patch("airweave.platform.scheduler.crud.sync_job.create", new_callable=AsyncMock),
             patch(
                 "airweave.platform.scheduler.crud.sync_dag.get_by_sync_id",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
         ):
+            # Configure mock_get_db
+            db_context = AsyncMock()
+            db_context.__aenter__.return_value = mock_db
+            mock_get_db.return_value = db_context
+
             # Execute method
             await scheduler._trigger_sync(mock_db, mock_sync_with_schedule)
 
             # Assert crud operations were called
-            crud.user.get_by_email.assert_called_once()
             crud.sync_job.create.assert_called_once()
             crud.sync_dag.get_by_sync_id.assert_called_once()

@@ -7,29 +7,16 @@ description: "Google Calendar integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Google Calendar logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Google Calendar</h1>
-    <p>Connect your Google Calendar data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Google Calendar logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Google Calendar</h1>
 </div>
-
-## Overview
-
-The Google Calendar connector allows you to sync data from Google Calendar into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### GoogleCalendarSource
-
-Google Calendar source implementation (read-only).
-
-Retrieves and yields Google Calendar objects (CalendarList entries,
-Calendars, Events, and Free/Busy data) as entity schemas defined in
-entities/google_calendar.py.
-
+Google Calendar source connector integrates with the Google Calendar API to extract and synchronize calendar data
+including calendars, events, and free/busy information. It provides comprehensive access to your
+Google Calendar scheduling information for productivity and time management insights.
 
 <Card
   title="View Source Code"
@@ -41,47 +28,25 @@ entities/google_calendar.py.
 
 ### Authentication
 
-This connector uses **OAuth 2.0 with refresh token**.
+This connector uses **OAuth 2.0 with custom credentials**. You need to provide your OAuth application's Client ID and Client Secret in the Airweave UI, then go through the OAuth consent screen.
 
 <Card
-  title="Authentication Configuration"
-  className="auth-config-card"
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
+  title="OAuth Setup Required"
+  className="auth-setup-card"
+  style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', padding: '16px', marginBottom: '24px' }}
 >
 
-Google Calendar authentication credentials schema.
-<ParamField
-  path="client_id"
-  type="Optional[str]"
-  required={false}
->
-  Your OAuth application's client ID
-</ParamField>
-<ParamField
-  path="client_secret"
-  type="Optional[str]"
-  required={false}
->
-  Your OAuth application's client secret
-</ParamField>
-<ParamField
-  path="refresh_token"
-  type="str"
-  required={true}
->
-  The refresh token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-<ParamField
-  path="access_token"
-  type="str"
-  required={true}
->
-  The access token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
+1. Create an OAuth application in your provider's developer console
+2. Enter your Client ID and Client Secret in the Airweave UI
+3. Complete the OAuth consent flow when connecting the source
+
 </Card>
 
+### Configuration Options
 
-## Entities
+This connector does not have any additional configuration options.
+
+## Data Models
 
 The following data models are available for this connector:
 

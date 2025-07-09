@@ -1,0 +1,108 @@
+---
+title: Direct Token Injection
+edit-this-page-url: https://github.com/airweave-ai/airweave/blob/main/fern/docs/pages/direct-token-injection.mdx
+subtitle: Create source connections or trigger syncs by supplying OAuth&nbsp;2.0 tokens directly.
+slug: direct-token-injection
+---
+
+### Use case
+
+If you embed Airweave inside your own product you might already manage OAuth 2.0 tokens for your users.
+In that case, you do not want to have to ask them to click through a second consent screen for Airweave.
+Airweave therefore allows you to provide existing tokens to Airweave directly, so that
+
+• Your service owns token storage and rotation.
+• Airweave consumes the tokens solely for data sync.
+• No additional user interaction required.
+
+There are two common scenarios:
+
+1. **Trigger a sync** on an existing source connection with a one-off access token.
+2. **Create a new source connection** by sending both the access token and, if available, the refresh token.
+
+The next sections walk you through both flows.
+
+### Trigger a sync with a temporary token
+
+By default, Airweave uses the credentials obtained during the initial OAuth 2.0 handshake to run a data synchronization job.
+If you pass an `access_token` in the request body, Airweave temporarily overrides the stored credentials for this run and uses your provided token instead.
+
+> **Note**: Airweave will *not* attempt to refresh the provided token. If the token expires before the sync finishes the job will fail.
+
+Here is an example:
+
+
+<CodeBlocks>
+```Python title="Python"
+from airweave import AirweaveSDK
+
+airweave = AirweaveSDK(api_key="YOUR_API_KEY", base_url="https://api.airweave.ai")
+
+collection = airweave.source_connections.run(name="My First Collection")
+```
+
+```javascript title="Node.js"
+import { AirweaveSDKClient } from "@airweave/sdk";
+
+const airweave = new AirweaveSDKClient({apiKey: "YOUR_API_KEY", base_url="https://api.airweave.ai"});
+```
+
+```bash title="cURL"
+curl -X POST https://api.airweave.ai/source-connections/source_connection_id/run \
+     -H "x-api-key: <apiKey>" \
+     -H "Content-Type: application/json" \
+     -d '{
+        "access_token": "ya29.a0AWY7CkkH3CqZXRQ3ZQZHy3lFf6zM7G_9Z5FgkUOzAeoKZs8opR7KXpK5RvXWkGq2vFQmE"
+     }'
+```
+</CodeBlocks>
+
+
+### Create a source connection with your own tokens
+
+Skip the OAuth 2.0 flow entirely by sending your own tokens in the `POST /source-connections` call. You are responsible for acquiring and storing these tokens—Airweave simply uses what you provide.
+
+> **Note on token refresh**: If you include a `refresh_token`, Airweave *will* refresh the access token as needed. This can invalidate the copy you store, so be prepared to handle token updates.
+
+If you are using this because you prefer to keep Airweave invisible to your users and show your own branding on the consent screen, check out our [white labeling feature](https://docs.airweave.ai/white-labeling).
+
+Creating a source connection with direct tokens looks like this:
+
+<CodeBlocks>
+```Python title="Python"
+from airweave import AirweaveSDK
+
+airweave = AirweaveSDK(api_key="YOUR_API_KEY", base_url="https://api.airweave.ai")
+
+collection = airweave.collections.create_collection(name="My First Collection")
+```
+
+```javascript title="Node.js"
+import { AirweaveSDKClient } from "@airweave/sdk";
+
+const airweave = new AirweaveSDKClient({apiKey: "YOUR_API_KEY", base_url="https://api.airweave.ai"});
+
+const collection = await airweave.collections.createCollection({name: "My First Collection"});
+```
+
+```bash title="cURL"
+curl -X POST https://api.airweave.ai/source-connections \
+     -H "x-api-key: <apiKey>" \
+     -H "Content-Type: application/json" \
+     -d '{
+  "name": "Asana connection",
+  "short_name": "asana",
+  "auth_fields": {
+    "access_token": "YOUR_ACCESS_TOKEN",
+    "refresh_token": "YOUR_REFRESH_TOKEN"
+  },
+  "sync_immediately": true
+}'
+```
+</CodeBlocks>
+
+### Upcoming feature: Pipedream & Composio integrations
+
+We are currently building a way for users to connect to a source via **Pipedream** and **Composio**, with Airweave integrating with these platforms directly.
+
+If you have an edge case that isn’t covered by these features, please let us know at **hello@airweave.ai**.

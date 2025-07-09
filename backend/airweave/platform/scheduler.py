@@ -288,7 +288,7 @@ class PlatformScheduler:
         logger.debug(f"Last run time for sync {sync.id}: {last_run_time.isoformat()}")
 
         # Calculate the next run time
-        now = utc_now_naive()
+        now = utc_now()  # Changed from utc_now_naive() to utc_now() for timezone consistency
         cron = croniter(sync.cron_schedule, last_run_time)
         next_run = ensure_utc(cron.get_next(datetime))
         logger.debug(

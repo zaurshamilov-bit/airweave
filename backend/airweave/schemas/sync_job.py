@@ -1,4 +1,9 @@
-"""SyncJob schema."""
+"""SyncJob schema.
+
+Sync jobs represent individual data synchronization operations that extract, transform,
+and load data from source connections into searchable collections. They provide detailed
+tracking of sync progress, performance metrics, and error reporting.
+"""
 
 from datetime import datetime
 from typing import Optional
@@ -101,27 +106,101 @@ class SyncJob(SyncJobInDBBase):
 
 
 class SourceConnectionJob(BaseModel):
-    """Schema for SourceConnectionJob.
+    """Data synchronization job for a specific source connection."""
 
-    This is a public schema that is used to return sync jobs for a source connection.
-    Sync / sync jobs are system tables, and are not exposed to the public API.
-    """
-
-    source_connection_id: UUID
-    id: UUID
-    organization_id: UUID
-    created_by_email: Optional[EmailStr] = None
-    modified_by_email: Optional[EmailStr] = None
-    created_at: Optional[datetime] = None
-    modified_at: Optional[datetime] = None
-    status: SyncJobStatus = SyncJobStatus.PENDING
-    entities_inserted: Optional[int] = 0
-    entities_updated: Optional[int] = 0
-    entities_deleted: Optional[int] = 0
-    entities_kept: Optional[int] = 0
-    entities_skipped: Optional[int] = 0
-    entities_encountered: Optional[dict[str, int]] = {}
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    failed_at: Optional[datetime] = None
-    error: Optional[str] = None
+    source_connection_id: UUID = Field(
+        ...,
+        description=(
+            "Unique identifier of the source connection for which this data refresh is running."
+        ),
+    )
+    id: UUID = Field(
+        ...,
+        description="Unique identifier for this specific data refresh operation.",
+    )
+    organization_id: UUID = Field(
+        ...,
+        description="Identifier of the organization that owns this data refresh operation.",
+    )
+    created_by_email: Optional[EmailStr] = Field(
+        None,
+        description=(
+            "Email address of the user who initiated this data refresh "
+            "(for manually triggered operations)."
+        ),
+    )
+    modified_by_email: Optional[EmailStr] = Field(
+        None,
+        description="Email address of the user who last modified this data refresh operation.",
+    )
+    created_at: Optional[datetime] = Field(
+        None,
+        description="Timestamp when this data refresh was created and queued (ISO 8601 format).",
+    )
+    modified_at: Optional[datetime] = Field(
+        None,
+        description="Timestamp when this data refresh was last modified (ISO 8601 format).",
+    )
+    status: SyncJobStatus = Field(
+        SyncJobStatus.PENDING,
+        description="Current execution status of the data refresh:<br/>"
+        "• **created**: Operation has been created but not yet queued<br/>"
+        "• **pending**: Operation is queued and waiting to start<br/>"
+        "• **in_progress**: Currently running and processing data<br/>"
+        "• **completed**: Finished successfully with all data processed<br/>"
+        "• **failed**: Encountered errors and could not complete<br/>"
+        "• **cancelled**: Manually cancelled before completion",
+    )
+    entities_inserted: Optional[int] = Field(
+        0,
+        description=(
+            "Number of new data entities that were added to the collection during this refresh."
+        ),
+    )
+    entities_updated: Optional[int] = Field(
+        0,
+        description=(
+            "Number of existing entities that were modified and updated during this refresh."
+        ),
+    )
+    entities_deleted: Optional[int] = Field(
+        0,
+        description=(
+            "Number of entities that were removed from the collection because they no longer "
+            "exist in the source."
+        ),
+    )
+    entities_kept: Optional[int] = Field(
+        0,
+        description=(
+            "Number of entities that were checked but required no changes because they were "
+            "already up-to-date."
+        ),
+    )
+    entities_skipped: Optional[int] = Field(
+        0,
+        description=(
+            "Number of entities that were intentionally skipped due to filtering rules or "
+            "processing decisions."
+        ),
+    )
+    entities_encountered: Optional[dict[str, int]] = Field(
+        {},
+        description="Detailed breakdown of entities processed by type or category.",
+    )
+    started_at: Optional[datetime] = Field(
+        None,
+        description="Timestamp when the data refresh began active processing (ISO 8601 format).",
+    )
+    completed_at: Optional[datetime] = Field(
+        None,
+        description="Timestamp when the data refresh finished successfully (ISO 8601 format).",
+    )
+    failed_at: Optional[datetime] = Field(
+        None,
+        description="Timestamp when the data refresh failed (ISO 8601 format).",
+    )
+    error: Optional[str] = Field(
+        None,
+        description="Detailed error message if the data refresh failed.",
+    )

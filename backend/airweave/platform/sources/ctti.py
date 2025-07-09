@@ -123,18 +123,12 @@ async def _retry_with_backoff(func, *args, max_retries=3, **kwargs):
     labels=["Clinical Trials", "Database"],
 )
 class CTTISource(BaseSource):
-    """CTTI source implementation.
+    """CTTI source connector integrates with the AACT PostgreSQL database to extract trials.
 
-    This source connects to the AACT Clinical Trials PostgreSQL database and queries
-    the nct_id column from the studies table to create WebEntity instances with
-    ClinicalTrials.gov URLs.
+    Connects to the Aggregate Analysis of ClinicalTrials.gov database.
 
-    Connection details are hardcoded to the public AACT database:
-    - Host: aact-db.ctti-clinicaltrials.org
-    - Port: 5432
-    - Database: aact
-    - Schema: ctgov
-    - Table: studies
+    It creates web entities that link to
+    ClinicalTrials.gov pages.
     """
 
     # Hardcoded AACT database connection details

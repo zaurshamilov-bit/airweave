@@ -25,15 +25,12 @@ from airweave.platform.sources._base import BaseSource
     labels=["Productivity", "Task Management"],
 )
 class TodoistSource(BaseSource):
-    """Todoist source implementation.
+    """Todoist source connector integrates with the Todoist REST API to extract task data.
 
-    This connector retrieves hierarchical data from the Todoist REST API:
-    - Projects
-    - Sections (within each project)
-    - Tasks (within each project, optionally nested under a section)
-    - Comments (within each task)
+    Connects to your Todoist workspace.
 
-    The Todoist entity schemas are defined in entities/todoist.py.
+    It provides comprehensive access to projects, tasks, and
+    collaboration features with proper hierarchical organization and productivity insights.
     """
 
     @classmethod

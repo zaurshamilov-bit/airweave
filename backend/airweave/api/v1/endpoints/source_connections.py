@@ -3,11 +3,16 @@
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import BackgroundTasks, Body, Depends, HTTPException, Query
+from fastapi import BackgroundTasks, Body, Depends, HTTPException, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
+from airweave.api.examples import (
+    create_job_list_response,
+    create_single_job_response,
+    create_source_connection_list_response,
+)
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import logger
@@ -22,26 +27,32 @@ from airweave.schemas.auth import AuthContext
 router = TrailingSlashRouter()
 
 
-@router.get("/", response_model=List[schemas.SourceConnectionListItem])
+@router.get(
+    "/",
+    response_model=List[schemas.SourceConnectionListItem],
+    responses=create_source_connection_list_response(
+        ["engineering_docs"], "Multiple source connections across collections"
+    ),
+)
 async def list_source_connections(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    collection: Optional[str] = Query(None, description="Filter by collection"),
-    skip: int = 0,
-    limit: int = 100,
+    collection: Optional[str] = Query(
+        None, description="Filter source connections by collection readable ID"
+    ),
+    skip: int = Query(0, description="Number of source connections to skip for pagination"),
+    limit: int = Query(
+        100, description="Maximum number of source connections to return (1-1000)", le=1000, ge=1
+    ),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> List[schemas.SourceConnectionListItem]:
-    """List all source connections for the organization.
+    """List source connections across your organization.
 
-    Args:
-        db: The database session
-        collection: The collection to filter by
-        skip: The number of connections to skip
-        limit: The number of connections to return
-        auth_context: The current authentication context
-
-    Returns:
-        A list of source connection list items with essential information
+    <br/><br/>
+    By default, returns ALL source connections from every collection in your
+    organization. Use the 'collection' parameter to filter results to a specific
+    collection. This is useful for getting an overview of all your data sources
+    or managing connections within a particular collection.
     """
     if collection:
         return await source_connection_service.get_source_connections_by_collection(
@@ -61,21 +72,16 @@ async def list_source_connections(
 async def get_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    source_connection_id: UUID,
-    show_auth_fields: bool = False,
+    source_connection_id: UUID = Path(
+        ..., description="The unique identifier of the source connection"
+    ),
+    show_auth_fields: bool = Query(
+        False,
+        description="Whether to reveal authentication credentials.",
+    ),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SourceConnection:
-    """Get a specific source connection by ID.
-
-    Args:
-        db: The database session
-        source_connection_id: The ID of the source connection
-        show_auth_fields: Whether to show the auth fields, default is False
-        auth_context: The current authentication context
-
-    Returns:
-        The source connection
-    """
+    """Retrieve a specific source connection by its ID."""
     return await source_connection_service.get_source_connection(
         db=db,
         source_connection_id=source_connection_id,
@@ -92,23 +98,21 @@ async def create_source_connection(
     auth_context: AuthContext = Depends(deps.get_auth_context),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnection:
-    """Create a new source connection.
+    """Create a new source connection to sync data into your collection.
 
-    This endpoint creates:
-    1. An integration credential with the provided auth fields
-    2. A collection if not provided
-    3. The source connection
-    4. A sync configuration and DAG
-    5. A sync job if immediate execution is requested
+    <br/><br/>
 
-    Args:
-        db: The database session
-        source_connection_in: The source connection to create
-        auth_context: The current authentication context
-        background_tasks: Background tasks for async operations
+    **This endpoint only works for sources that do not use OAuth2.0.**
+    Sources that do use OAuth2.0 like Google Drive, Slack, or HubSpot must be
+    connected through the UI where you can complete the OAuth consent flow.<br/><br/>
 
-    Returns:
-        The created source connection
+    Credentials for a source have to be provided using the `auth_fields` field.
+    Currently, it is not automatically checked if the provided credentials are valid.
+    If they are not valid, the data synchronization will fail.<br/><br/>
+
+    Check the documentation of a specific source (for example
+    [Github](https://docs.airweave.ai/docs/connectors/github)) to see what kind
+    of authentication is used.
     """
     source_connection, sync_job = await source_connection_service.create_source_connection(
         db=db, source_connection_in=source_connection_in, auth_context=auth_context
@@ -256,20 +260,18 @@ async def create_source_connection_with_credential(
 async def update_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    source_connection_id: UUID,
+    source_connection_id: UUID = Path(
+        ..., description="The unique identifier of the source connection to update"
+    ),
     source_connection_in: schemas.SourceConnectionUpdate = Body(...),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SourceConnection:
-    """Update a source connection.
+    """Update a source connection's properties.
 
-    Args:
-        db: The database session
-        source_connection_id: The ID of the source connection to update
-        source_connection_in: The updated source connection data
-        auth_context: The current authentication context
+    <br/><br/>
 
-    Returns:
-        The updated source connection
+    Modify the configuration of an existing source connection including its name,
+    authentication credentials, configuration fields, sync schedule, or source-specific settings.
     """
     return await source_connection_service.update_source_connection(
         db=db,
@@ -283,20 +285,22 @@ async def update_source_connection(
 async def delete_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    source_connection_id: UUID,
-    delete_data: bool = False,
+    source_connection_id: UUID = Path(
+        ..., description="The unique identifier of the source connection to delete"
+    ),
+    delete_data: bool = Query(
+        False,
+        description="Whether to also delete all synced data from destination systems",
+    ),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SourceConnection:
-    """Delete a source connection and all related components.
+    """Delete a source connection.
 
-    Args:
-        db: The database session
-        source_connection_id: The ID of the source connection to delete
-        delete_data: Whether to delete the associated data in destinations
-        auth_context: The current authentication context
+    <br/><br/>
 
-    Returns:
-        The deleted source connection
+    Permanently removes the source connection configuration and credentials.
+    By default, previously synced data remains in your destination systems for continuity.
+    Use delete_data=true to also remove all associated data from destination systems.
     """
     return await source_connection_service.delete_source_connection(
         db=db,
@@ -306,26 +310,41 @@ async def delete_source_connection(
     )
 
 
-@router.post("/{source_connection_id}/run", response_model=schemas.SourceConnectionJob)
+@router.post(
+    "/{source_connection_id}/run",
+    response_model=schemas.SourceConnectionJob,
+    responses=create_single_job_response("completed", "Sync job successfully triggered"),
+)
 async def run_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    source_connection_id: UUID,
-    access_token: Optional[str] = Body(None, embed=True),
+    source_connection_id: UUID = Path(
+        ..., description="The unique identifier of the source connection to sync"
+    ),
+    access_token: Optional[str] = Body(
+        None,
+        embed=True,
+        description=(
+            "This parameter gives you the ability to start a sync job with an access "
+            "token for an OAuth2.0 source directly instead of using the credentials "
+            "that Airweave has stored for you. Learn more about direct token injection "
+            "[here](https://docs.airweave.ai/direct-token-injection)."
+        ),
+        examples=[
+            "ya29.a0AfH6SMBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "gho_abcdefghijklmnopqrstuvwxyz1234567890",
+            "sk-1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQR",
+        ],
+    ),
     auth_context: AuthContext = Depends(deps.get_auth_context),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnectionJob:
-    """Trigger a sync run for a source connection.
+    """Manually trigger a data sync for this source connection.
 
-    Args:
-        db: The database session
-        source_connection_id: The ID of the source connection to run
-        access_token: Optional access token to use instead of stored credentials
-        auth_context: The current authentication context
-        background_tasks: Background tasks for async operations
-
-    Returns:
-        The created sync job
+    <br/><br/>
+    Starts an immediate synchronization job that extracts fresh data from your source,
+    transforms it according to your configuration, and updates the destination systems.
+    The job runs asynchronously and endpoint returns immediately with tracking information.
     """
     sync_job = await source_connection_service.run_source_connection(
         db=db,
@@ -386,47 +405,45 @@ async def run_source_connection(
     return sync_job.to_source_connection_job(source_connection_id)
 
 
-@router.get("/{source_connection_id}/jobs", response_model=List[schemas.SourceConnectionJob])
+@router.get(
+    "/{source_connection_id}/jobs",
+    response_model=List[schemas.SourceConnectionJob],
+    responses=create_job_list_response(["completed"], "Complete sync job history"),
+)
 async def list_source_connection_jobs(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    source_connection_id: UUID,
+    source_connection_id: UUID = Path(
+        ..., description="The unique identifier of the source connection"
+    ),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> List[schemas.SourceConnectionJob]:
     """List all sync jobs for a source connection.
 
-    Args:
-        db: The database session
-        source_connection_id: The ID of the source connection
-        auth_context: The current authentication context
-
-    Returns:
-        A list of sync jobs
+    <br/><br/>
+    Returns the complete history of data synchronization jobs including successful syncs,
+    failed attempts, and currently running operations.
     """
     return await source_connection_service.get_source_connection_jobs(
         db=db, source_connection_id=source_connection_id, auth_context=auth_context
     )
 
 
-@router.get("/{source_connection_id}/jobs/{job_id}", response_model=schemas.SourceConnectionJob)
+@router.get(
+    "/{source_connection_id}/jobs/{job_id}",
+    response_model=schemas.SourceConnectionJob,
+    responses=create_single_job_response("completed", "Detailed sync job information"),
+)
 async def get_source_connection_job(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    source_connection_id: UUID,
-    job_id: UUID,
+    source_connection_id: UUID = Path(
+        ..., description="The unique identifier of the source connection"
+    ),
+    job_id: UUID = Path(..., description="The unique identifier of the sync job"),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SourceConnectionJob:
-    """Get a specific sync job for a source connection.
-
-    Args:
-        db: The database session
-        source_connection_id: The ID of the source connection
-        job_id: The ID of the sync job
-        auth_context: The current authentication context
-
-    Returns:
-        The sync job
-    """
+    """Get detailed information about a specific sync job."""
     tmp = await source_connection_service.get_source_connection_job(
         db=db, source_connection_id=source_connection_id, job_id=job_id, auth_context=auth_context
     )
@@ -434,28 +451,25 @@ async def get_source_connection_job(
 
 
 @router.post(
-    "/{source_connection_id}/jobs/{job_id}/cancel", response_model=schemas.SourceConnectionJob
+    "/{source_connection_id}/jobs/{job_id}/cancel",
+    response_model=schemas.SourceConnectionJob,
+    responses=create_single_job_response("cancelled", "Successfully cancelled sync job"),
 )
 async def cancel_source_connection_job(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    source_connection_id: UUID,
-    job_id: UUID,
+    source_connection_id: UUID = Path(
+        ..., description="The unique identifier of the source connection"
+    ),
+    job_id: UUID = Path(..., description="The unique identifier of the sync job to cancel"),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.SourceConnectionJob:
-    """Cancel a running sync job for a source connection.
+    """Cancel a running sync job.
 
-    This will send a cancellation signal to the Temporal workflow if enabled.
-    The workflow will handle the cancellation and update the job status to CANCELLED.
-
-    Args:
-        db: The database session
-        source_connection_id: The ID of the source connection
-        job_id: The ID of the sync job to cancel
-        auth_context: The current authentication context
-
-    Returns:
-        The cancelled sync job
+    <br/><br/>
+    Sends a cancellation signal to stop an in-progress data synchronization.
+    The job will complete its current operation and then terminate gracefully.
+    Only jobs in 'created', 'pending', or 'in_progress' states can be cancelled.
     """
     # First verify the job exists and belongs to this source connection
     sync_job = await source_connection_service.get_source_connection_job(
@@ -513,17 +527,19 @@ async def cancel_source_connection_job(
 @router.get("/{source_short_name}/oauth2_url", response_model=schemas.OAuth2AuthUrl)
 async def get_oauth2_authorization_url(
     *,
-    source_short_name: str,
-    client_id: Optional[str] = None,
+    source_short_name: str = Path(
+        ..., description="The source type identifier (e.g., 'google_drive', 'slack')"
+    ),
+    client_id: Optional[str] = Query(
+        None, description="Optional custom OAuth client ID (for bring-your-own-credentials)"
+    ),
 ) -> schemas.OAuth2AuthUrl:
     """Get the OAuth2 authorization URL for a source.
 
-    Args:
-        source_short_name: The short name of the source
-        client_id: The OAuth2 client ID
-
-    Returns:
-        The OAuth2 authorization URL
+    <br/><br/>
+    Generates the URL where users should be redirected to authorize Airweave
+    to access their data. This is the first step in the OAuth flow for sources
+    like Google Drive, Slack, or HubSpot.
     """
     return await source_connection_service.get_oauth2_authorization_url(
         source_short_name=source_short_name, client_id=client_id
@@ -537,33 +553,30 @@ async def get_oauth2_authorization_url(
 async def create_credentials_from_authorization_code(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    source_short_name: str,
-    code: str = Query(..., description="The authorization code to exchange"),
-    credential_name: Optional[str] = Body(None),
-    credential_description: Optional[str] = Body(None),
-    client_id: Optional[str] = Body(None),
-    client_secret: Optional[str] = Body(None),
+    source_short_name: str = Path(
+        ..., description="The source type identifier (e.g., 'google_drive', 'slack')"
+    ),
+    code: str = Query(..., description="The authorization code received from the OAuth callback"),
+    credential_name: Optional[str] = Body(
+        None, description="Custom name for the stored credential"
+    ),
+    credential_description: Optional[str] = Body(
+        None, description="Description to help identify this credential"
+    ),
+    client_id: Optional[str] = Body(
+        None, description="OAuth client ID (required for bring-your-own-credentials)"
+    ),
+    client_secret: Optional[str] = Body(
+        None, description="OAuth client secret (required for bring-your-own-credentials)"
+    ),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.IntegrationCredentialInDB:
-    """Exchange OAuth2 code for a token and create integration credentials.
+    """Exchange an OAuth2 authorization code for access credentials.
 
-    This endpoint:
-    1. Exchanges the authorization code for a token
-    2. Creates and stores integration credentials with the token
-    3. Returns the created credential
-
-    Args:
-        db: The database session
-        source_short_name: The short name of the source
-        code: The authorization code to exchange
-        credential_name: Optional custom name for the credential
-        credential_description: Optional description for the credential
-        client_id: Optional client ID to override the default
-        client_secret: Optional client secret to override the default
-        auth_context: The current authentication context
-
-    Returns:
-        The created integration credential
+    <br/><br/>
+    After users authorize Airweave through the OAuth consent screen, use this endpoint
+    to exchange the temporary authorization code for permanent access credentials.
+    The credentials are securely encrypted and stored for future syncs.
     """
     return await source_connection_service.create_credential_from_oauth2_code(
         db=db,

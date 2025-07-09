@@ -7,25 +7,16 @@ description: "Outlook Calendar integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Outlook Calendar logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Outlook Calendar</h1>
-    <p>Connect your Outlook Calendar data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Outlook Calendar logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Outlook Calendar</h1>
 </div>
-
-## Overview
-
-The Outlook Calendar connector allows you to sync data from Outlook Calendar into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### OutlookCalendarSource
-
-Outlook Calendar source implementation (read-only).
-
+Outlook Calendar source connector integrates with the Microsoft Graph API to extract and synchronize calendar data
+from Outlook calendars. It provides comprehensive access to calendars, events, and attachments
+with proper timezone handling and meeting management features.
 
 <Card
   title="View Source Code"
@@ -37,33 +28,13 @@ Outlook Calendar source implementation (read-only).
 
 ### Authentication
 
-This connector uses **OAuth 2.0 with rotating refresh token**.
+This connector uses **OAuth 2.0 authentication**. Connect this source through the Airweave UI, which will guide you through the OAuth flow.
 
-<Card
-  title="Authentication Configuration"
-  className="auth-config-card"
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
->
+### Configuration Options
 
-Outlook Calendar authentication credentials schema.
-<ParamField
-  path="refresh_token"
-  type="str"
-  required={true}
->
-  The refresh token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-<ParamField
-  path="access_token"
-  type="str"
-  required={true}
->
-  The access token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-</Card>
+This connector does not have any additional configuration options.
 
-
-## Entities
+## Data Models
 
 The following data models are available for this connector:
 
@@ -137,6 +108,23 @@ Based on the Microsoft Graph Event resource.
 | original_end_timezone | Optional[str] | End timezone when event was originally created. |
 | allow_new_time_proposals | bool | Whether invitees can propose new meeting times. |
 | hide_attendees | bool | Whether attendees are hidden from each other. |
+
+</Accordion>
+<Accordion title="OutlookCalendarAttachmentEntity">
+
+Schema for Outlook Calendar Event attachments.
+
+Represents files attached to calendar events.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| event_id | str | ID of the event this attachment belongs to |
+| attachment_id | str | Microsoft Graph attachment ID |
+| content_type | Optional[str] | MIME type of the attachment |
+| is_inline | bool | Whether the attachment is inline |
+| content_id | Optional[str] | Content ID for inline attachments |
+| last_modified_at | Optional[str] | When the attachment was last modified |
+| metadata | Optional[Dict[str, Any]] | Additional metadata about the attachment |
 
 </Accordion>
 

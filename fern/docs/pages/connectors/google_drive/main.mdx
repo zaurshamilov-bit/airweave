@@ -7,30 +7,16 @@ description: "Google Drive integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Google Drive logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Google Drive</h1>
-    <p>Connect your Google Drive data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Google Drive logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Google Drive</h1>
 </div>
-
-## Overview
-
-The Google Drive connector allows you to sync data from Google Drive into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### GoogleDriveSource
-
-Google Drive source implementation (read-only).
-
-Retrieves and yields:
-  - GoogleDriveDriveEntity objects, representing shared drives
-  - GoogleDriveFileEntity objects, representing files in each shared drive
-  - GoogleDriveFileEntity objects, representing files in the user's My Drive
-
+Google Drive source connector integrates with the Google Drive API to extract and synchronize files from both
+personal Google Drive (My Drive) and shared drives. It supports downloading and processing files
+while maintaining proper organization and access permissions.
 
 <Card
   title="View Source Code"
@@ -42,47 +28,42 @@ Retrieves and yields:
 
 ### Authentication
 
-This connector uses **OAuth 2.0 with refresh token**.
+This connector uses **OAuth 2.0 with custom credentials**. You need to provide your OAuth application's Client ID and Client Secret in the Airweave UI, then go through the OAuth consent screen.
 
 <Card
-  title="Authentication Configuration"
-  className="auth-config-card"
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
+  title="OAuth Setup Required"
+  className="auth-setup-card"
+  style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', padding: '16px', marginBottom: '24px' }}
 >
 
-Google Drive authentication credentials schema.
+1. Create an OAuth application in your provider's developer console
+2. Enter your Client ID and Client Secret in the Airweave UI
+3. Complete the OAuth consent flow when connecting the source
+
+</Card>
+
+### Configuration Options
+
+The following configuration options are available for this connector:
+
+<Card
+  title="Configuration Parameters"
+  className="config-card"
+  style={{ backgroundColor: 'rgba(0, 0, 0, 0.05)', padding: '16px', marginBottom: '24px' }}
+>
+
+Google Drive configuration schema.
 <ParamField
-  path="client_id"
-  type="Optional[str]"
+  path="exclude_patterns"
+  type="list[str]"
   required={false}
+  default="[]"
 >
-  Your OAuth application's client ID
-</ParamField>
-<ParamField
-  path="client_secret"
-  type="Optional[str]"
-  required={false}
->
-  Your OAuth application's client secret
-</ParamField>
-<ParamField
-  path="refresh_token"
-  type="str"
-  required={true}
->
-  The refresh token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-<ParamField
-  path="access_token"
-  type="str"
-  required={true}
->
-  The access token for the OAuth2 app. This is obtained through the OAuth flow.
+  List of file/folder paths or patterns to exclude from synchronization. Examples: '*.tmp', 'Private/*', 'Confidential Reports/'. Separate multiple patterns with commas.
 </ParamField>
 </Card>
 
-
-## Entities
+## Data Models
 
 The following data models are available for this connector:
 
@@ -102,6 +83,32 @@ Reference:
 | created_time | Optional[datetime] | When the shared drive was created (RFC 3339 date-time). |
 | hidden | bool | Whether the shared drive is hidden from default view. |
 | org_unit_id | Optional[str] | The organizational unit of this shared drive, if applicable. |
+
+</Accordion>
+<Accordion title="GoogleDriveFileEntity">
+
+Schema for a File resource (in a user's or shared drive).
+
+Reference:
+  https://developers.google.com/drive/api/v3/reference/files
+
+| Field | Type | Description |
+|-------|------|-------------|
+| file_id | str | Unique ID of the file. |
+| name | Optional[str] | Name of the file. |
+| mime_type | Optional[str] | MIME type of the file. |
+| description | Optional[str] | Optional description of the file. |
+| starred | bool | Indicates whether the user has starred the file. |
+| trashed | bool | Whether the file is in the trash. |
+| explicitly_trashed | bool | Whether the file was explicitly trashed by the user. |
+| parents | List[str] | IDs of the parent folders containing this file. |
+| shared | bool | Whether the file is shared. |
+| web_view_link | Optional[str] | Link for opening the file in a relevant Google editor or viewer. |
+| icon_link | Optional[str] | A static, far-reaching URL to the file's icon. |
+| created_time | Optional[datetime] | When the file was created (RFC 3339 date-time). |
+| modified_time | Optional[datetime] | When the file was last modified (RFC 3339 date-time). |
+| size | Optional[int] | The size of the file's content in bytes. |
+| md5_checksum | Optional[str] | MD5 checksum for the content of the file. |
 
 </Accordion>
 

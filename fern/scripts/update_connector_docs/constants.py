@@ -8,7 +8,12 @@ FRONTEND_ICONS_DIR = REPO_ROOT / "frontend" / "src" / "components" / "icons" / "
 BACKEND_ENTITIES_DIR = REPO_ROOT / "backend" / "airweave" / "platform" / "entities"
 BACKEND_SOURCES_DIR = REPO_ROOT / "backend" / "airweave" / "platform" / "sources"
 DOCS_CONNECTORS_DIR = REPO_ROOT / "fern" / "docs" / "pages" / "connectors"
-AUTH_CONFIG_PATH = REPO_ROOT / "backend" / "airweave" / "platform" / "configs" / "auth.py"
+AUTH_CONFIG_PATH = (
+    REPO_ROOT / "backend" / "airweave" / "platform" / "configs" / "auth.py"
+)
+CONFIG_CONFIG_PATH = (
+    REPO_ROOT / "backend" / "airweave" / "platform" / "configs" / "config.py"
+)
 DOCS_YML_PATH = REPO_ROOT / "fern" / "docs.yml"
 
 # Define auth type descriptions for documentation

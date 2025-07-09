@@ -1,4 +1,8 @@
-"""Source connection schemas."""
+"""Source connection schemas.
+
+A source connection is an authenticated and configured link to a data source that
+automatically syncs data into your collection, enabling unified search across multiple systems.
+"""
 
 import re
 from datetime import datetime
@@ -12,30 +16,105 @@ from airweave.platform.configs._base import ConfigValues
 
 
 class SourceConnectionBase(BaseModel):
-    """Base schema for source connection (includes white label fields for existing connections)."""
+    """Base schema for source connections with common fields."""
 
-    name: str = Field(..., description="Name of the source connection", min_length=4, max_length=42)
-    description: Optional[str] = None
-    config_fields: Optional[ConfigValues] = None  # stored in core table
-    short_name: str  # Short name of the source
-    white_label_id: Optional[UUID] = None  # ID of the white label integration
+    name: str = Field(
+        ...,
+        description=(
+            "Human-readable display name for the source connection. This helps you identify "
+            "the connection in the UI and should clearly describe what data it connects to "
+            "(e.g., 'Production Stripe Account', 'Customer Support Database')."
+        ),
+        min_length=1,
+        max_length=64,
+    )
+    description: Optional[str] = Field(
+        None,
+        description=(
+            "Optional additional context about the data this connection provides. Use this to "
+            "document the purpose, data types, or any special considerations for this connection."
+        ),
+        max_length=255,
+    )
+    config_fields: Optional[ConfigValues] = Field(
+        None,
+        description=(
+            "Source-specific configuration options that control data retrieval behavior. "
+            "These vary by source type and control how data is retrieved (e.g., database "
+            "queries, API filters, file paths). Check the documentation of a specific source "
+            "(for example [Github](https://docs.airweave.ai/docs/connectors/github)) to see "
+            "what is required."
+        ),
+        examples=[],
+    )
+    short_name: str = Field(
+        ...,
+        description=(
+            "Technical identifier of the source type (e.g., 'github', 'stripe', "
+            "'postgresql', 'slack'). This determines which connector Airweave uses to sync data."
+        ),
+        examples=["stripe", "postgresql", "slack"],
+    )
+    white_label_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "Optional identifier for white label OAuth integrations that use your own "
+            "branding and credentials. Only applicable for sources that support OAuth "
+            "authentication."
+        ),
+    )
 
     class Config:
-        """Pydantic config for SourceConnectionBase."""
+        """Pydantic configuration."""
 
         from_attributes = True
 
 
 class SourceConnectionCreateBase(BaseModel):
-    """Base schema for source connection creation without white label fields."""
+    """Base schema for creating source connections without white label fields."""
 
-    name: str = Field(..., description="Name of the source connection", min_length=4, max_length=42)
-    description: Optional[str] = None
-    config_fields: Optional[ConfigValues] = None  # stored in core table
-    short_name: str  # Short name of the source
+    name: str = Field(
+        ...,
+        description=(
+            "Human-readable name for the source connection. This helps you identify the "
+            "connection in the UI and should clearly describe what data it connects to."
+        ),
+        min_length=4,
+        max_length=42,
+        examples=["Production Stripe Account", "Main PostgreSQL DB", "Support Tickets API"],
+    )
+    description: Optional[str] = Field(
+        None,
+        description=(
+            "Optional detailed description of what this source connection provides. Use this to "
+            "document the purpose, data types, or any special considerations for this connection."
+        ),
+        examples=[
+            "Production Stripe account for payment and subscription data",
+            "Customer support tickets from Zendesk",
+        ],
+    )
+    config_fields: Optional[ConfigValues] = Field(
+        None,
+        description=(
+            "Source-specific configuration parameters required for data extraction. "
+            "These vary by source type and control how data is retrieved (e.g., database "
+            "queries, API filters, file paths). Check the documentation of a specific source "
+            "(for example [Github](https://docs.airweave.ai/docs/connectors/github)) to see "
+            "what is required."
+        ),
+    )
+    short_name: str = Field(
+        ...,
+        description=(
+            "Technical identifier of the source type that determines which connector to use for "
+            "data synchronization."
+        ),
+        examples=["stripe", "postgresql", "slack", "notion"],
+    )
 
     class Config:
-        """Pydantic config for SourceConnectionCreateBase."""
+        """Pydantic configuration."""
 
         from_attributes = True
 
@@ -66,88 +145,130 @@ class SourceConnectionCreateBase(BaseModel):
 
 
 class SourceConnectionCreate(SourceConnectionCreateBase):
-    """Schema for creating a source connection through the regular endpoint.
+    """Schema for creating a source connection through the public API."""
 
-    This schema does NOT include credential_id as it's not supported
-    by the public source connection creation endpoint. Users should provide
-    auth_fields instead and let the system manage credentials internally.
-    """
-
-    collection: Optional[str] = None
-    cron_schedule: Optional[str] = None
-    auth_fields: Optional[ConfigValues] = None
-    sync_immediately: bool = True
+    collection: Optional[str] = Field(
+        None,
+        description=(
+            "Readable ID of the collection where synced data will be stored. If not provided, "
+            "a new collection will be automatically created."
+        ),
+    )
+    cron_schedule: Optional[str] = Field(
+        None,
+        description=(
+            "Cron expression for automatic data synchronization schedule. If not provided, "
+            "data will only sync when manually triggered. Use standard cron format: "
+            "minute hour day month weekday."
+        ),
+    )
+    auth_fields: Optional[ConfigValues] = Field(
+        None,
+        description=(
+            "Authentication credentials required to access the data source. The required fields "
+            "vary by source type. Check the documentation of a specific source (for example "
+            "[Github](https://docs.airweave.ai/docs/connectors/github)) to see what is required."
+        ),
+    )
+    sync_immediately: bool = Field(
+        True,
+        description=(
+            "Whether to start an initial data synchronization immediately after "
+            "creating the connection."
+        ),
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
                 {
-                    "name": "My Stripe Connection",
-                    "description": "Production Stripe account for payment data",
-                    "short_name": "stripe",
-                    "collection": "finance-data",
-                    "auth_fields": {"api_key": "sk_live_51H..."},
+                    "name": "GitHub - Airweave Repository",
+                    "description": "Sync code and documentation from our main repository",
+                    "short_name": "github",
+                    "collection": "engineering-docs",
+                    "auth_fields": {
+                        "personal_access_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                        "repo_name": "airweave-ai/airweave",
+                    },
+                    "config_fields": {"branch": "main"},
                     "cron_schedule": "0 */6 * * *",
                     "sync_immediately": True,
-                }
+                },
             ]
         }
     )
 
     @field_validator("cron_schedule")
     def validate_cron_schedule(cls, v: str) -> str:
-        """Validate cron schedule format.
-
-        Format: * * * * *
-        minute (0-59)
-        hour (0-23)
-        day of month (1-31)
-        month (1-12 or JAN-DEC)
-        day of week (0-6 or SUN-SAT)
-
-        * * * * *
-        │ │ │ │ │
-        │ │ │ │ └─ Day of week (0-6 or SUN-SAT)
-        │ │ │ └─── Month (1-12 or JAN-DEC)
-        │ │ └───── Day of month (1-31)
-        │ └─────── Hour (0-23)
-        └───────── Minute (0-59)
-        """
+        """Validate cron schedule format using standard cron syntax."""
         if v is None:
             return None
         cron_pattern = r"^(\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-6]|SUN|MON|TUE|WED|THU|FRI|SAT|[0-6]-[0-6]|[0-6]/[0-6]|[0-6],[0-6]|\*\/[0-6])$"  # noqa: E501
         if not re.match(cron_pattern, v):
-            raise ValueError("Invalid cron schedule format")
+            raise ValueError(
+                "Invalid cron schedule format. Use standard cron syntax: "
+                "minute hour day month weekday"
+            )
         return v
 
 
 class SourceConnectionCreateWithWhiteLabel(SourceConnectionCreateBase):
-    """Schema for creating a source connection through the white label endpoint.
+    """Schema for creating a source connection through white label OAuth integrations."""
 
-    This schema includes white_label_id and is used specifically for
-    white label source connection creation.
-    """
-
-    collection: Optional[str] = None
-    cron_schedule: Optional[str] = None
-    auth_fields: Optional[ConfigValues] = None
-    credential_id: Optional[UUID] = None
-    sync_immediately: bool = True
+    collection: Optional[str] = Field(
+        None,
+        description=(
+            "Readable ID of the collection where synced data will be stored. If not provided, "
+            "a new collection will be automatically created."
+        ),
+        examples=["finance-data-ab123", "customer-support-xy789"],
+    )
+    cron_schedule: Optional[str] = Field(
+        None,
+        description=(
+            "Cron expression for automatic data synchronization schedule. Uses standard cron "
+            "format: minute hour day month weekday."
+        ),
+        examples=["0 */6 * * *", "0 9 * * 1-5"],
+    )
+    auth_fields: Optional[ConfigValues] = Field(
+        None,
+        description=(
+            "Authentication credentials for the data source. For white label OAuth flows, these "
+            "are typically obtained automatically during the OAuth consent process."
+        ),
+    )
+    credential_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "ID of an existing integration credential to use instead of creating a new one. "
+            "Useful when credentials have already been established through OAuth flows."
+        ),
+    )
+    sync_immediately: bool = Field(
+        True,
+        description=(
+            "Whether to start an initial data synchronization immediately after creating the "
+            "connection."
+        ),
+    )
     white_label_id: Optional[UUID] = Field(
         None,
-        description="ID of the white label integration (set automatically by white label endpoint)",
+        description=(
+            "ID of the white label integration configuration. This is automatically set by the "
+            "white label OAuth endpoint and links the connection to your custom OAuth application."
+        ),
     )
 
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
                 {
-                    "name": "My Stripe Connection",
-                    "description": "Production Stripe account for payment data",
-                    "short_name": "stripe",
-                    "collection": "finance-data",
-                    "auth_fields": {"api_key": "sk_live_51H..."},
-                    "cron_schedule": "0 */6 * * *",
+                    "name": "Company Slack Workspace",
+                    "description": "Main Slack workspace for team communications",
+                    "short_name": "slack",
+                    "collection": "team-communications",
+                    "cron_schedule": "0 */2 * * *",
                     "sync_immediately": True,
                     "white_label_id": "123e4567-e89b-12d3-a456-426614174000",
                 }
@@ -157,56 +278,65 @@ class SourceConnectionCreateWithWhiteLabel(SourceConnectionCreateBase):
 
     @field_validator("cron_schedule")
     def validate_cron_schedule(cls, v: str) -> str:
-        """Validate cron schedule format.
-
-        Format: * * * * *
-        minute (0-59)
-        hour (0-23)
-        day of month (1-31)
-        month (1-12 or JAN-DEC)
-        day of week (0-6 or SUN-SAT)
-
-        * * * * *
-        │ │ │ │ │
-        │ │ │ │ └─ Day of week (0-6 or SUN-SAT)
-        │ │ │ └─── Month (1-12 or JAN-DEC)
-        │ │ └───── Day of month (1-31)
-        │ └─────── Hour (0-23)
-        └───────── Minute (0-59)
-        """
+        """Validate cron schedule format using standard cron syntax."""
         if v is None:
             return None
         cron_pattern = r"^(\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-6]|SUN|MON|TUE|WED|THU|FRI|SAT|[0-6]-[0-6]|[0-6]/[0-6]|[0-6],[0-6]|\*\/[0-6])$"  # noqa: E501
         if not re.match(cron_pattern, v):
-            raise ValueError("Invalid cron schedule format")
+            raise ValueError(
+                "Invalid cron schedule format. Use standard cron syntax: "
+                "minute hour day month weekday"
+            )
         return v
 
 
 class SourceConnectionCreateWithCredential(SourceConnectionCreateBase):
-    """Schema for creating a source connection with an existing credential (internal use).
+    """Schema for creating a source connection with pre-existing credentials (internal use)."""
 
-    This schema includes credential_id and is used internally by the frontend
-    after credentials have already been created via OAuth or other flows.
-    This should NOT be exposed in public API documentation.
-    """
-
-    collection: Optional[str] = None
-    cron_schedule: Optional[str] = None
-    credential_id: UUID = Field(..., description="ID of the existing integration credential to use")
-    config_fields: Optional[ConfigValues] = None
-    sync_immediately: bool = True
+    collection: Optional[str] = Field(
+        None,
+        description="Readable ID of the collection where synced data will be stored.",
+    )
+    cron_schedule: Optional[str] = Field(
+        None,
+        description="Cron expression for automatic data synchronization schedule.",
+    )
+    credential_id: UUID = Field(
+        ...,
+        description=(
+            "ID of the existing integration credential to use for authentication. "
+            "This credential must already exist and be associated with the same source type."
+        ),
+    )
+    config_fields: Optional[ConfigValues] = Field(
+        None,
+        description=(
+            "Source-specific configuration parameters required for data extraction. "
+            "These vary by source type and control how data is retrieved (e.g., database "
+            "queries, API filters, file paths). Check the documentation of a specific source "
+            "(for example [Github](https://docs.airweave.ai/docs/connectors/github)) to see "
+            "what is required."
+        ),
+    )
+    sync_immediately: bool = Field(
+        True,
+        description=(
+            "Whether to start an initial data synchronization immediately after creating "
+            "the connection."
+        ),
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
                 {
-                    "name": "My Stripe Connection",
-                    "description": "Production Stripe account for payment data",
+                    "name": "OAuth Stripe Connection",
+                    "description": "Stripe connection created through OAuth flow",
                     "short_name": "stripe",
                     "collection": "finance-data",
                     "credential_id": "123e4567-e89b-12d3-a456-426614174000",
                     "config_fields": {"webhook_url": "https://my-app.com/webhooks"},
-                    "cron_schedule": "0 */6 * * *",
+                    "cron_schedule": "0 0,6,12,18 * * *",
                     "sync_immediately": True,
                 }
             ]
@@ -215,28 +345,15 @@ class SourceConnectionCreateWithCredential(SourceConnectionCreateBase):
 
     @field_validator("cron_schedule")
     def validate_cron_schedule(cls, v: str) -> str:
-        """Validate cron schedule format.
-
-        Format: * * * * *
-        minute (0-59)
-        hour (0-23)
-        day of month (1-31)
-        month (1-12 or JAN-DEC)
-        day of week (0-6 or SUN-SAT)
-
-        * * * * *
-        │ │ │ │ │
-        │ │ │ │ └─ Day of week (0-6 or SUN-SAT)
-        │ │ │ └─── Month (1-12 or JAN-DEC)
-        │ │ └───── Day of month (1-31)
-        │ └─────── Hour (0-23)
-        └───────── Minute (0-59)
-        """
+        """Validate cron schedule format using standard cron syntax."""
         if v is None:
             return None
         cron_pattern = r"^(\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-9]{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|[0-9]{1,2}-[0-9]{1,2}|[0-9]{1,2}/[0-9]{1,2}|[0-9]{1,2},[0-9]{1,2}|\*\/[0-9]{1,2}) (\*|[0-6]|SUN|MON|TUE|WED|THU|FRI|SAT|[0-6]-[0-6]|[0-6]/[0-6]|[0-6],[0-6]|\*\/[0-6])$"  # noqa: E501
         if not re.match(cron_pattern, v):
-            raise ValueError("Invalid cron schedule format")
+            raise ValueError(
+                "Invalid cron schedule format. Use standard cron syntax: "
+                "minute hour day month weekday"
+            )
         return v
 
     def map_to_core_and_auxiliary_attributes(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
@@ -261,59 +378,215 @@ class SourceConnectionCreateWithCredential(SourceConnectionCreateBase):
 
 
 class SourceConnectionUpdate(BaseModel):
-    """Schema for updating a source connection."""
+    """Schema for updating an existing source connection."""
 
     name: Optional[str] = Field(
-        None, description="Name of the source connection", min_length=4, max_length=42
+        None,
+        description="Updated name for the source connection. Must be between 4 and 42 characters.",
+        min_length=4,
+        max_length=42,
+        examples=["Updated Stripe Connection", "Main DB - Updated"],
     )
-    description: Optional[str] = None
-    auth_fields: Optional[Union[ConfigValues, str]] = None
-    config_fields: Optional[ConfigValues] = None
-    cron_schedule: Optional[str] = None
-    connection_id: Optional[UUID] = None
-    white_label_id: Optional[UUID] = None
+    description: Optional[str] = Field(
+        None,
+        description="Updated description of what this source connection provides.",
+        examples=["Updated: Now includes subscription events and customer data"],
+    )
+    auth_fields: Optional[Union[ConfigValues, str]] = Field(
+        None,
+        description=(
+            "Updated authentication credentials for the data source. "
+            "Provide new credentials to refresh or update authentication."
+        ),
+    )
+    config_fields: Optional[ConfigValues] = Field(
+        None,
+        description=(
+            "Source-specific configuration parameters required for data extraction. "
+            "These vary by source type and control how data is retrieved (e.g., database "
+            "queries, API filters, file paths). Check the documentation of a specific source "
+            "(for example [Github](https://docs.airweave.ai/docs/connectors/github)) to see "
+            "what is required."
+        ),
+    )
+    cron_schedule: Optional[str] = Field(
+        None,
+        description=(
+            "Updated cron expression for automatic synchronization schedule. "
+            "Set to null to disable automatic syncing."
+        ),
+        examples=["0 */4 * * *", "0 9,17 * * 1-5"],
+    )
+    connection_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "Internal connection identifier. This is typically managed automatically "
+            "and should not be modified manually."
+        ),
+    )
+    white_label_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "ID of the white label integration. Used for custom OAuth integrations "
+            "with your own branding."
+        ),
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "GitHub - Updated Engineering Documentation",
+                    "description": (
+                        "Updated: Now includes API documentation and code examples "
+                        "from multiple repositories"
+                    ),
+                    "auth_fields": {
+                        "personal_access_token": "ghp_yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+                        "repo_name": "airweave-ai/engineering-docs",
+                    },
+                    "config_fields": {"branch": "develop"},
+                    "cron_schedule": "0 */4 * * *",
+                }
+            ]
+        }
+    )
 
 
 class SourceConnectionInDBBase(SourceConnectionBase):
-    """Core schema for source connection stored in DB."""
+    """Base schema for source connections stored in the database with system fields."""
 
-    id: UUID
-    sync_id: Optional[UUID] = None
-    organization_id: UUID
-    created_at: datetime
-    modified_at: datetime
-    connection_id: Optional[UUID] = None  # ID of the underlying connection object
-    collection: str
-    white_label_id: Optional[UUID] = None
-    created_by_email: Optional[EmailStr] = None
-    modified_by_email: Optional[EmailStr] = None
+    id: UUID = Field(
+        ...,
+        description=(
+            "Unique system identifier for this source connection. This UUID is generated "
+            "automatically and used for API operations."
+        ),
+    )
+    sync_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "Internal identifier for the sync configuration associated with this source "
+            "connection. Managed automatically by the system."
+        ),
+    )
+    organization_id: UUID = Field(
+        ...,
+        description=(
+            "Identifier of the organization that owns this source connection. "
+            "Source connections are isolated per organization."
+        ),
+    )
+    created_at: datetime = Field(
+        ...,
+        description="Timestamp when the source connection was created (ISO 8601 format).",
+    )
+    modified_at: datetime = Field(
+        ...,
+        description="Timestamp when the source connection was last modified (ISO 8601 format).",
+    )
+    connection_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "Internal identifier for the underlying connection object that manages "
+            "authentication and configuration."
+        ),
+    )
+    collection: str = Field(
+        ...,
+        description=(
+            "Readable ID of the collection where this source connection syncs its data. "
+            "This creates the link between your data source and searchable content."
+        ),
+        examples=["finance-data-ab123", "customer-support-xy789"],
+    )
+    white_label_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "Identifier for custom OAuth integrations. Only present for connections "
+            "created through white label OAuth flows."
+        ),
+    )
+    created_by_email: Optional[EmailStr] = Field(
+        None,
+        description="Email address of the user who created this source connection.",
+    )
+    modified_by_email: Optional[EmailStr] = Field(
+        None,
+        description="Email address of the user who last modified this source connection.",
+    )
 
     class Config:
-        """Pydantic config for SourceConnectionInDBBase."""
+        """Pydantic configuration."""
 
         from_attributes = True
 
 
 class SourceConnection(SourceConnectionInDBBase):
-    """Schema for source connection."""
+    """Complete source connection representation returned by the API."""
 
-    # str if encrypted/masked, ConfigValues if not
-    # comes from integration_credential
-    auth_fields: Optional[Union[ConfigValues, str]] = None
-
-    # Ephemeral status derived from the latest sync job
-    status: Optional[SourceConnectionStatus] = None
-
-    # sync job info
-    latest_sync_job_status: Optional[SyncJobStatus] = None
-    latest_sync_job_id: Optional[UUID] = None
-    latest_sync_job_started_at: Optional[datetime] = None
-    latest_sync_job_completed_at: Optional[datetime] = None
-    latest_sync_job_error: Optional[str] = None
-
-    # Sync schedule information
-    cron_schedule: Optional[str] = None
-    next_scheduled_run: Optional[datetime] = None
+    auth_fields: Optional[Union[ConfigValues, str]] = Field(
+        None,
+        description=(
+            "Authentication credentials for the data source. "
+            "Returns '********' by default for security."
+        ),
+    )
+    status: Optional[SourceConnectionStatus] = Field(
+        None,
+        description="Current operational status of the source connection:<br/>"
+        "• **active**: Connection is healthy and ready for data synchronization<br/>"
+        "• **in_progress**: Currently syncing data from the source<br/>"
+        "• **failing**: Recent sync attempts have failed and require attention",
+    )
+    latest_sync_job_status: Optional[SyncJobStatus] = Field(
+        None,
+        description="Status of the most recent data synchronization job:<br/>"
+        "• **completed**: Last sync finished successfully<br/>"
+        "• **failed**: Last sync encountered errors<br/>"
+        "• **in_progress**: Currently running a sync job<br/>"
+        "• **pending**: Sync job is queued and waiting to start",
+    )
+    latest_sync_job_id: Optional[UUID] = Field(
+        None,
+        description=(
+            "Unique identifier of the most recent sync job. Use this to track sync progress "
+            "or retrieve detailed job information."
+        ),
+    )
+    latest_sync_job_started_at: Optional[datetime] = Field(
+        None,
+        description="Timestamp when the most recent sync job started (ISO 8601 format).",
+    )
+    latest_sync_job_completed_at: Optional[datetime] = Field(
+        None,
+        description=(
+            "Timestamp when the most recent sync job completed (ISO 8601 format). "
+            "Null if the job is still running or failed."
+        ),
+    )
+    latest_sync_job_error: Optional[str] = Field(
+        None,
+        description=(
+            "Error message from the most recent sync job if it failed. "
+            "Use this to diagnose and resolve sync issues."
+        ),
+    )
+    cron_schedule: Optional[str] = Field(
+        None,
+        description=(
+            "Cron expression defining when automatic data synchronization occurs. "
+            "Null if automatic syncing is disabled and syncs must be triggered manually."
+        ),
+        examples=["0 */6 * * *", "0 9,17 * * 1-5"],
+    )
+    next_scheduled_run: Optional[datetime] = Field(
+        None,
+        description=(
+            "Timestamp when the next automatic sync is scheduled to run (ISO 8601 format). "
+            "Null if no automatic schedule is configured."
+        ),
+    )
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -321,10 +594,12 @@ class SourceConnection(SourceConnectionInDBBase):
             "examples": [
                 {
                     "id": "550e8400-e29b-41d4-a716-446655440000",
-                    "name": "My Stripe Connection",
-                    "description": "Production Stripe account for payment data",
-                    "short_name": "stripe",
-                    "collection": "finance-data",
+                    "name": "GitHub - Engineering Documentation",
+                    "description": (
+                        "Sync technical documentation and code from our engineering repos"
+                    ),
+                    "short_name": "github",
+                    "collection": "engineering-docs-ab123",
                     "status": "active",
                     "sync_id": "123e4567-e89b-12d3-a456-426614174000",
                     "organization_id": "org12345-6789-abcd-ef01-234567890abc",
@@ -332,10 +607,13 @@ class SourceConnection(SourceConnectionInDBBase):
                     "white_label_id": None,
                     "created_at": "2024-01-15T09:30:00Z",
                     "modified_at": "2024-01-15T14:22:15Z",
-                    "created_by_email": "finance@company.com",
-                    "modified_by_email": "finance@company.com",
-                    "auth_fields": {"api_key": "sk_live_51H..."},
-                    "config_fields": {},
+                    "created_by_email": "engineering@company.com",
+                    "modified_by_email": "engineering@company.com",
+                    "auth_fields": {
+                        "personal_access_token": "********",
+                        "repo_name": "airweave-ai/docs",
+                    },
+                    "config_fields": {"branch": "main"},
                     "latest_sync_job_status": "completed",
                     "latest_sync_job_id": "987fcdeb-51a2-43d7-8f3e-1234567890ab",
                     "latest_sync_job_started_at": "2024-01-15T14:00:00Z",
@@ -362,22 +640,49 @@ class SourceConnection(SourceConnectionInDBBase):
 
 
 class SourceConnectionListItem(BaseModel):
-    """Simplified schema for source connection list item.
+    """Simplified source connection representation for list operations."""
 
-    This is a compact representation containing only core attributes
-    directly from the source connection model.
-    """
-
-    id: UUID
-    name: str
-    description: Optional[str] = None
-    short_name: str
-    status: SourceConnectionStatus
-    created_at: datetime
-    modified_at: datetime
-    sync_id: UUID
-    collection: str
-    white_label_id: Optional[UUID] = None
+    id: UUID = Field(
+        ...,
+        description="Unique identifier for the source connection.",
+    )
+    name: str = Field(
+        ...,
+        description="Human-readable name of the source connection.",
+    )
+    description: Optional[str] = Field(
+        None,
+        description="Brief description of what data this connection provides.",
+    )
+    short_name: str = Field(
+        ...,
+        description="Technical identifier of the source type (e.g., 'stripe', 'postgresql').",
+    )
+    status: SourceConnectionStatus = Field(
+        ...,
+        description="Current operational status: active, in_progress, or failing.",
+    )
+    created_at: datetime = Field(
+        ...,
+        description="When the source connection was created (ISO 8601 format).",
+    )
+    modified_at: datetime = Field(
+        ...,
+        description="When the source connection was last modified (ISO 8601 format).",
+    )
+    sync_id: UUID = Field(
+        ...,
+        description="Internal identifier for the sync configuration.",
+    )
+    collection: str = Field(
+        ...,
+        description="Readable ID of the collection where this connection syncs data.",
+        examples=["finance-data-ab123", "customer-support-xy789"],
+    )
+    white_label_id: Optional[UUID] = Field(
+        None,
+        description="Identifier for custom OAuth integrations, if applicable.",
+    )
 
     @model_validator(mode="after")
     def map_collection_readable_id(self) -> "SourceConnectionListItem":
@@ -412,14 +717,16 @@ class SourceConnectionListItem(BaseModel):
             "examples": [
                 {
                     "id": "550e8400-e29b-41d4-a716-446655440000",
-                    "name": "My Stripe Connection",
-                    "description": "Production Stripe account for payment data",
-                    "short_name": "stripe",
+                    "name": "GitHub - Engineering Documentation",
+                    "description": (
+                        "Sync technical documentation and code from our engineering repos"
+                    ),
+                    "short_name": "github",
                     "status": "active",
                     "created_at": "2024-01-15T09:30:00Z",
                     "modified_at": "2024-01-15T14:22:15Z",
                     "sync_id": "123e4567-e89b-12d3-a456-426614174000",
-                    "collection": "finance-data-x236",
+                    "collection": "engineering-docs-ab123",
                     "white_label_id": None,
                 }
             ]

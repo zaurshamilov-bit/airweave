@@ -7,27 +7,15 @@ description: "Gmail integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Gmail logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Gmail</h1>
-    <p>Connect your Gmail data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Gmail logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Gmail</h1>
 </div>
-
-## Overview
-
-The Gmail connector allows you to sync data from Gmail into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### GmailSource
-
-Gmail source implementation (read-only).
-
-Retrieves and yields Gmail objects (threads, messages, attachments).
-
+Gmail source connector integrates with the Gmail API to extract and synchronize email data from your Gmail account.
+It supports syncing email threads, individual messages, and file attachments.
 
 <Card
   title="View Source Code"
@@ -39,47 +27,25 @@ Retrieves and yields Gmail objects (threads, messages, attachments).
 
 ### Authentication
 
-This connector uses **OAuth 2.0 with refresh token**.
+This connector uses **OAuth 2.0 with custom credentials**. You need to provide your OAuth application's Client ID and Client Secret in the Airweave UI, then go through the OAuth consent screen.
 
 <Card
-  title="Authentication Configuration"
-  className="auth-config-card"
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
+  title="OAuth Setup Required"
+  className="auth-setup-card"
+  style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', padding: '16px', marginBottom: '24px' }}
 >
 
-Gmail authentication credentials schema.
-<ParamField
-  path="client_id"
-  type="Optional[str]"
-  required={false}
->
-  Your OAuth application's client ID
-</ParamField>
-<ParamField
-  path="client_secret"
-  type="Optional[str]"
-  required={false}
->
-  Your OAuth application's client secret
-</ParamField>
-<ParamField
-  path="refresh_token"
-  type="str"
-  required={true}
->
-  The refresh token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-<ParamField
-  path="access_token"
-  type="str"
-  required={true}
->
-  The access token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
+1. Create an OAuth application in your provider's developer console
+2. Enter your Client ID and Client Secret in the Airweave UI
+3. Complete the OAuth consent flow when connecting the source
+
 </Card>
 
+### Configuration Options
 
-## Entities
+This connector does not have any additional configuration options.
+
+## Data Models
 
 The following data models are available for this connector:
 
@@ -119,6 +85,20 @@ Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.messa
 | label_ids | List[str] | Labels applied to this message |
 | internal_date | Optional[datetime] | Internal Gmail timestamp |
 | size_estimate | Optional[int] | Estimated size in bytes |
+
+</Accordion>
+<Accordion title="GmailAttachmentEntity">
+
+Schema for Gmail attachment entities.
+
+Reference: https://developers.google.com/gmail/api/reference/rest/v1/users.messages.attachments
+
+| Field | Type | Description |
+|-------|------|-------------|
+| message_id | str | ID of the message this attachment belongs to |
+| attachment_id | str | Gmail's attachment ID |
+| thread_id | str | ID of the thread containing the message |
+| metadata | Optional[Dict[str, Any]] | Additional metadata about the attachment |
 
 </Accordion>
 

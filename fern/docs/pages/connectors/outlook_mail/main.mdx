@@ -7,27 +7,16 @@ description: "Outlook Mail integration with Airweave"
 
 
 
-<div className="connector-header">
-  <img src="icon.svg" alt="Outlook Mail logo" width="72" height="72" className="connector-icon" />
-  <div className="connector-info">
-    <h1>Outlook Mail</h1>
-    <p>Connect your Outlook Mail data to Airweave</p>
-  </div>
+<div className="connector-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+  <img src="icon.svg" alt="Outlook Mail logo" width="48" height="48" className="connector-icon" />
+  <h1 style={{ margin: 0 }}>Outlook Mail</h1>
 </div>
-
-## Overview
-
-The Outlook Mail connector allows you to sync data from Outlook Mail into Airweave, making it available for search and retrieval by your agents.
 
 ## Configuration
 
-
-### OutlookMailSource
-
-Outlook Mail source implementation (read-only).
-
-Retrieves and yields Outlook mail folders, messages and attachments.
-
+Outlook Mail source connector integrates with the Microsoft Graph API to extract and synchronize email data
+from Outlook mailboxes. It provides comprehensive access to mail folders, messages, and
+attachments with hierarchical folder organization and content processing capabilities.
 
 <Card
   title="View Source Code"
@@ -39,33 +28,13 @@ Retrieves and yields Outlook mail folders, messages and attachments.
 
 ### Authentication
 
-This connector uses **OAuth 2.0 with rotating refresh token**.
+This connector uses **OAuth 2.0 authentication**. Connect this source through the Airweave UI, which will guide you through the OAuth flow.
 
-<Card
-  title="Authentication Configuration"
-  className="auth-config-card"
-  style={{ backgroundColor: 'rgba(0, 0, 0, 0.1)', padding: '16px', marginBottom: '24px' }}
->
+### Configuration Options
 
-Outlook Mail authentication credentials schema.
-<ParamField
-  path="refresh_token"
-  type="str"
-  required={true}
->
-  The refresh token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-<ParamField
-  path="access_token"
-  type="str"
-  required={true}
->
-  The access token for the OAuth2 app. This is obtained through the OAuth flow.
-</ParamField>
-</Card>
+This connector does not have any additional configuration options.
 
-
-## Entities
+## Data Models
 
 The following data models are available for this connector:
 
@@ -108,6 +77,22 @@ Reference: https://learn.microsoft.com/en-us/graph/api/resources/message?view=gr
 | importance | Optional[str] | Importance level (Low, Normal, High) |
 | has_attachments | bool | Whether the message has attachments |
 | internet_message_id | Optional[str] | Internet message ID |
+
+</Accordion>
+<Accordion title="OutlookAttachmentEntity">
+
+Schema for Outlook attachment entities.
+
+Reference: https://learn.microsoft.com/en-us/graph/api/resources/fileattachment?view=graph-rest-1.0
+
+| Field | Type | Description |
+|-------|------|-------------|
+| message_id | str | ID of the message this attachment belongs to |
+| attachment_id | str | Outlook's attachment ID |
+| content_type | Optional[str] | Content type of the attachment |
+| is_inline | bool | Whether this is an inline attachment |
+| content_id | Optional[str] | Content ID for inline attachments |
+| metadata | Dict[str, Any] | Additional metadata about the attachment |
 
 </Accordion>
 
