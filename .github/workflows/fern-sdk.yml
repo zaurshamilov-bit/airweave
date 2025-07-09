@@ -66,7 +66,7 @@ jobs:
         run: |
           cd fern
           VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
-          fern generate --group public --version $VERSION
+          fern generate --group public --version $VERSION --log-level debug
 
       - name: Trigger Docs Generation
         uses: actions/github-script@v6
