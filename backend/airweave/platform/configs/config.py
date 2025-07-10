@@ -73,6 +73,7 @@ class GitHubConfig(SourceConfig):
     """Github configuration schema."""
 
     branch: str = Field(
+        default="",
         title="Branch name",
         description=(
             "Specific branch to sync (e.g., 'main', 'development'). "

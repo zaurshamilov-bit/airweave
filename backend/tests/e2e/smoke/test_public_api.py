@@ -337,7 +337,7 @@ def test_collections(api_url: str, headers: dict) -> str:
     updated_name = f"Updated Test Collection {int(time.time())}"
     update_data = {"name": updated_name}
 
-    response = requests.patch(
+    response = requests.put(
         f"{api_url}/collections/{readable_id}", json=update_data, headers=headers
     )
     assert response.status_code == 200, f"Failed to update collection: {response.text}"
@@ -418,7 +418,7 @@ def test_collections(api_url: str, headers: dict) -> str:
     ), f"Expected 404 for non-existent collection, got {response.status_code}"
 
     # Test 404: Update non-existent collection
-    response = requests.patch(
+    response = requests.put(
         f"{api_url}/collections/nonexistent-collection", json={"name": "Test"}, headers=headers
     )
     assert (
@@ -445,7 +445,7 @@ def test_collections(api_url: str, headers: dict) -> str:
     ), f"Expected 422 for too long collection name, got {response.status_code}"
 
     # Test 422: Update collection with invalid name
-    response = requests.patch(
+    response = requests.put(
         f"{api_url}/collections/{readable_id}", json={"name": "ab"}, headers=headers
     )
     assert (

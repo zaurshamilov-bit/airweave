@@ -158,6 +158,13 @@ class Source(SourceInDBBase):
             "Describes field types, validation rules, and user interface hints."
         ),
     )
+    config_fields: Fields = Field(
+        ...,
+        description=(
+            "Schema definition for configuration fields required to customize this source. "
+            "Describes field types, validation rules, and user interface hints."
+        ),
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -200,6 +207,19 @@ class Source(SourceInDBBase):
                                 "description": (
                                     "Full repository name in format 'owner/repo' "
                                     "(e.g., 'airweave-ai/airweave')"
+                                ),
+                                "type": "string",
+                            },
+                        ]
+                    },
+                    "config_fields": {
+                        "fields": [
+                            {
+                                "name": "branch",
+                                "title": "Branch name",
+                                "description": (
+                                    "Specific branch to sync (e.g., 'main', 'development'). "
+                                    "If empty, uses the default branch."
                                 ),
                                 "type": "string",
                             },
