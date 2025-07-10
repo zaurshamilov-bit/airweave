@@ -259,6 +259,9 @@ class SyncFactory:
         if not source_model:
             raise NotFoundException(f"Source not found: {source_connection.short_name}")
 
+        # Access auth_type while we still have database session context to avoid lazy loading issues
+        auth_type = source_model.auth_type
+
         source_class = resource_locator.get_source(source_model)
 
         return {
@@ -266,6 +269,7 @@ class SyncFactory:
             "source_model": source_model,
             "source_class": source_class,
             "config_fields": config_fields,
+            "auth_type": auth_type,  # Store auth_type separately to avoid lazy loading issues
         }
 
     @classmethod
@@ -383,6 +387,8 @@ class SyncFactory:
         """Set up token manager for OAuth sources."""
         source_model = source_connection_data["source_model"]
         source_connection = source_connection_data["source_connection"]
+        # Use pre-fetched auth_type to avoid SQLAlchemy lazy loading issues
+        auth_type = source_connection_data["auth_type"]
 
         # Only create token manager for OAuth sources
         from airweave.platform.auth.schemas import AuthType
@@ -393,7 +399,7 @@ class SyncFactory:
             AuthType.oauth2_with_refresh_rotating,
         }
 
-        if source_model.auth_type in oauth_types:
+        if auth_type in oauth_types:
             # Create a minimal connection object with only the fields needed by TokenManager
             minimal_source_connection = type(
                 "SourceConnection",
@@ -409,7 +415,7 @@ class SyncFactory:
                 source_short_name=source_model.short_name,
                 source_connection=minimal_source_connection,
                 auth_context=auth_context,
-                auth_type=source_model.auth_type,
+                auth_type=auth_type,
                 initial_token=final_access_token,
                 white_label=white_label,
                 is_direct_injection=final_access_token is not None,
@@ -420,7 +426,7 @@ class SyncFactory:
             if logger:
                 logger.info(
                     f"Token manager initialized for {source_model.short_name} "
-                    f"(auth_type: {source_model.auth_type}, "
+                    f"(auth_type: {auth_type}, "
                     f"is_direct_injection: {final_access_token is not None})"
                 )
 

@@ -24,6 +24,7 @@ NON_CHUNKABLE_FIELDS = {
     "url",
     "sync_metadata",
     "parent_entity_id",
+    "parent_id",  # Add parent_id to prevent infinite loops
     "vector",
     "chunk_index",
 }
