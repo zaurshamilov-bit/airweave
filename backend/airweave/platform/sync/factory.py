@@ -279,13 +279,22 @@ class SyncFactory:
 
         # Get all fields from the RIGHT places:
         config_fields = source_connection_obj.config_fields or {}  # From SourceConnection
-        white_label_id = source_connection_obj.white_label_id  # From SourceConnection
-        short_name = source_connection_obj.short_name  # From SourceConnection
-        integration_credential_id = connection.integration_credential_id  # From Connection
 
-        # Pre-fetch to avoid lazy loading
+        # Pre-fetch to avoid lazy loading - convert to pure Python types
         auth_type = source_model.auth_type
-        connection_id = connection.id
+        auth_config_class = source_model.auth_config_class
+        # Convert SQLAlchemy values to clean Python types to avoid lazy loading
+        short_name = str(source_connection_obj.short_name)  # From SourceConnection
+        white_label_id = (
+            UUID(str(source_connection_obj.white_label_id))
+            if source_connection_obj.white_label_id
+            else None
+        )
+        connection_id = UUID(str(connection.id))
+        # integration_credential_id must be set for sync to work
+        if not connection.integration_credential_id:
+            raise NotFoundException(f"Connection {connection_id} has no integration credential")
+        integration_credential_id = UUID(str(connection.integration_credential_id))
 
         source_class = resource_locator.get_source(source_model)
 
@@ -298,6 +307,7 @@ class SyncFactory:
             "white_label_id": white_label_id,  # From SourceConnection
             "short_name": short_name,  # From SourceConnection
             "auth_type": auth_type,
+            "auth_config_class": auth_config_class,
             "connection_id": connection_id,
             "integration_credential_id": integration_credential_id,  # From Connection
         }
@@ -312,8 +322,6 @@ class SyncFactory:
         access_token: Optional[str],
     ) -> tuple[Optional[str], any]:
         """Handle source credentials, either from direct token or database."""
-        source_model = source_connection_data["source_model"]
-
         # If access token is provided, use it directly
         if access_token:
             return access_token, access_token
@@ -329,10 +337,12 @@ class SyncFactory:
         decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
 
         # Handle auth configuration if required
-        if source_model.auth_config_class:
+        # Use pre-fetched auth_config_class to avoid SQLAlchemy lazy loading issues
+        auth_config_class = source_connection_data["auth_config_class"]
+        if auth_config_class:
             return await cls._handle_auth_config_credentials(
                 db,
-                source_model,
+                source_connection_data,
                 decrypted_credential,
                 auth_context,
                 source_connection_data["connection_id"],
@@ -350,21 +360,25 @@ class SyncFactory:
     async def _handle_auth_config_credentials(
         cls,
         db: AsyncSession,
-        source_model: schemas.Source,
+        source_connection_data: dict,
         decrypted_credential: dict,
         auth_context: AuthContext,
         connection_id: UUID,
         white_label: Optional[schemas.WhiteLabel],
     ) -> tuple[Optional[str], any]:
         """Handle credentials that require auth configuration."""
-        auth_config = resource_locator.get_auth_config(source_model.auth_config_class)
+        # Use pre-fetched auth_config_class to avoid SQLAlchemy lazy loading issues
+        auth_config_class = source_connection_data["auth_config_class"]
+        short_name = source_connection_data["short_name"]
+
+        auth_config = resource_locator.get_auth_config(auth_config_class)
         source_credentials = auth_config.model_validate(decrypted_credential)
 
         # If the source_credential has a refresh token, exchange it for an access token
         if hasattr(source_credentials, "refresh_token") and source_credentials.refresh_token:
             oauth2_response = await oauth2_service.refresh_access_token(
                 db,
-                source_model.short_name,
+                short_name,
                 auth_context,
                 connection_id,
                 decrypted_credential,
@@ -415,9 +429,8 @@ class SyncFactory:
         logger,
     ) -> None:
         """Set up token manager for OAuth sources."""
-        source_model = source_connection_data["source_model"]
-        # Use pre-fetched auth_type to avoid SQLAlchemy lazy loading issues
         auth_type = source_connection_data["auth_type"]
+        short_name = source_connection_data["short_name"]
 
         # Only create token manager for OAuth sources
         from airweave.platform.auth.schemas import AuthType
@@ -444,7 +457,7 @@ class SyncFactory:
 
             token_manager = TokenManager(
                 db=db,
-                source_short_name=source_model.short_name,
+                source_short_name=short_name,
                 source_connection=minimal_source_connection,
                 auth_context=auth_context,
                 auth_type=auth_type,
@@ -457,7 +470,7 @@ class SyncFactory:
 
             if logger:
                 logger.info(
-                    f"Token manager initialized for {source_model.short_name} "
+                    f"Token manager initialized for {short_name} "
                     f"(auth_type: {auth_type}, "
                     f"is_direct_injection: {final_access_token is not None})"
                 )
