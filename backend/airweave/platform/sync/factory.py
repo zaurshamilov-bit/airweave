@@ -152,16 +152,19 @@ class SyncFactory:
             },
         )
 
-        # Fetch white label if set in sync
+        # Get source connection data first to access white_label_id safely
+        source_connection_data = await cls._get_source_connection_data(db, sync, auth_context)
+
+        # Fetch white label if set in sync using pre-fetched white_label_id
         white_label = None
-        if source_connection.white_label_id:
+        if source_connection_data["white_label_id"]:
             white_label = await crud.white_label.get(
-                db, id=source_connection.white_label_id, auth_context=auth_context
+                db, id=source_connection_data["white_label_id"], auth_context=auth_context
             )
 
-        source = await cls._create_source_instance(
+        source = await cls._create_source_instance_with_data(
             db=db,
-            sync=sync,
+            source_connection_data=source_connection_data,
             auth_context=auth_context,
             white_label=white_label,
             access_token=access_token,
@@ -212,6 +215,21 @@ class SyncFactory:
         # Get source connection and model
         source_connection_data = await cls._get_source_connection_data(db, sync, auth_context)
 
+        return await cls._create_source_instance_with_data(
+            db, source_connection_data, auth_context, white_label, access_token, logger
+        )
+
+    @classmethod
+    async def _create_source_instance_with_data(
+        cls,
+        db: AsyncSession,
+        source_connection_data: dict,
+        auth_context: AuthContext,
+        white_label: Optional[schemas.WhiteLabel] = None,
+        access_token: Optional[str] = None,
+        logger=None,
+    ) -> BaseSource:
+        """Create and configure the source instance using pre-fetched connection data."""
         # Handle credentials (either direct token or from database)
         final_access_token, source_credentials = await cls._handle_source_credentials(
             db, source_connection_data, auth_context, white_label, access_token
@@ -259,8 +277,14 @@ class SyncFactory:
         if not source_model:
             raise NotFoundException(f"Source not found: {source_connection.short_name}")
 
-        # Access auth_type while we still have database session context to avoid lazy loading issues
+        # Access auth_type and other fields while we still have database session context
+        # to avoid lazy loading issues
         auth_type = source_model.auth_type
+        source_connection_id = source_connection.id
+        integration_credential_id = source_connection.integration_credential_id
+        white_label_id = (
+            source_connection.white_label_id
+        )  # Store white_label_id to avoid lazy loading issues
 
         source_class = resource_locator.get_source(source_model)
 
@@ -269,7 +293,10 @@ class SyncFactory:
             "source_model": source_model,
             "source_class": source_class,
             "config_fields": config_fields,
-            "auth_type": auth_type,  # Store auth_type separately to avoid lazy loading issues
+            "auth_type": auth_type,
+            "source_connection_id": source_connection_id,
+            "integration_credential_id": integration_credential_id,
+            "white_label_id": white_label_id,
         }
 
     @classmethod
@@ -282,7 +309,6 @@ class SyncFactory:
         access_token: Optional[str],
     ) -> tuple[Optional[str], any]:
         """Handle source credentials, either from direct token or database."""
-        source_connection = source_connection_data["source_connection"]
         source_model = source_connection_data["source_model"]
 
         # If access token is provided, use it directly
@@ -290,11 +316,12 @@ class SyncFactory:
             return access_token, access_token
 
         # Otherwise get credentials from database
-        if not source_connection.integration_credential_id:
+        integration_credential_id = source_connection_data["integration_credential_id"]
+        if not integration_credential_id:
             raise NotFoundException("Source connection has no integration credential")
 
         credential = await cls._get_integration_credential(
-            db, source_connection.integration_credential_id, auth_context
+            db, integration_credential_id, auth_context
         )
         decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
 
@@ -305,7 +332,7 @@ class SyncFactory:
                 source_model,
                 decrypted_credential,
                 auth_context,
-                source_connection.id,
+                source_connection_data["source_connection_id"],
                 white_label,
             )
 
@@ -386,7 +413,6 @@ class SyncFactory:
     ) -> None:
         """Set up token manager for OAuth sources."""
         source_model = source_connection_data["source_model"]
-        source_connection = source_connection_data["source_connection"]
         # Use pre-fetched auth_type to avoid SQLAlchemy lazy loading issues
         auth_type = source_connection_data["auth_type"]
 
@@ -401,12 +427,15 @@ class SyncFactory:
 
         if auth_type in oauth_types:
             # Create a minimal connection object with only the fields needed by TokenManager
+            # Use pre-fetched IDs to avoid SQLAlchemy lazy loading issues
             minimal_source_connection = type(
                 "SourceConnection",
                 (),
                 {
-                    "id": source_connection.id,
-                    "integration_credential_id": source_connection.integration_credential_id,
+                    "id": source_connection_data["source_connection_id"],
+                    "integration_credential_id": source_connection_data[
+                        "integration_credential_id"
+                    ],
                 },
             )()
 
