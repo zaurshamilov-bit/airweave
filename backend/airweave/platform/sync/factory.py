@@ -258,45 +258,48 @@ class SyncFactory:
         cls, db: AsyncSession, sync: schemas.Sync, auth_context: AuthContext
     ) -> dict:
         """Get source connection and model data."""
-        # Retrieve source connection and model
-        source_connection = await crud.connection.get(db, sync.source_connection_id, auth_context)
-        if not source_connection:
-            raise NotFoundException("Source connection not found")
-
-        # Get the source_connection record to access config_fields using sync_id
+        # 1. Get SourceConnection first (has most of our data)
         source_connection_obj = await crud.source_connection.get_by_sync_id(
             db, sync_id=sync.id, auth_context=auth_context
         )
         if not source_connection_obj:
             raise NotFoundException("Source connection record not found")
 
-        # Get config fields (will be empty dict if none)
-        config_fields = source_connection_obj.config_fields or {}
+        # 2. Get Connection only to access integration_credential_id
+        connection = await crud.connection.get(
+            db, source_connection_obj.connection_id, auth_context
+        )
+        if not connection:
+            raise NotFoundException("Connection not found")
 
-        source_model = await crud.source.get_by_short_name(db, source_connection.short_name)
+        # 3. Get Source model using short_name from SourceConnection
+        source_model = await crud.source.get_by_short_name(db, source_connection_obj.short_name)
         if not source_model:
-            raise NotFoundException(f"Source not found: {source_connection.short_name}")
+            raise NotFoundException(f"Source not found: {source_connection_obj.short_name}")
 
-        # Access auth_type and other fields while we still have database session context
-        # to avoid lazy loading issues
+        # Get all fields from the RIGHT places:
+        config_fields = source_connection_obj.config_fields or {}  # From SourceConnection
+        white_label_id = source_connection_obj.white_label_id  # From SourceConnection
+        short_name = source_connection_obj.short_name  # From SourceConnection
+        integration_credential_id = connection.integration_credential_id  # From Connection
+
+        # Pre-fetch to avoid lazy loading
         auth_type = source_model.auth_type
-        source_connection_id = source_connection.id
-        integration_credential_id = source_connection.integration_credential_id
-        white_label_id = (
-            source_connection.white_label_id
-        )  # Store white_label_id to avoid lazy loading issues
+        connection_id = connection.id
 
         source_class = resource_locator.get_source(source_model)
 
         return {
-            "source_connection": source_connection,
+            "source_connection_obj": source_connection_obj,  # The main entity
+            "connection": connection,  # Just for credential access
             "source_model": source_model,
             "source_class": source_class,
-            "config_fields": config_fields,
+            "config_fields": config_fields,  # From SourceConnection
+            "white_label_id": white_label_id,  # From SourceConnection
+            "short_name": short_name,  # From SourceConnection
             "auth_type": auth_type,
-            "source_connection_id": source_connection_id,
-            "integration_credential_id": integration_credential_id,
-            "white_label_id": white_label_id,
+            "connection_id": connection_id,
+            "integration_credential_id": integration_credential_id,  # From Connection
         }
 
     @classmethod
@@ -332,7 +335,7 @@ class SyncFactory:
                 source_model,
                 decrypted_credential,
                 auth_context,
-                source_connection_data["source_connection_id"],
+                source_connection_data["connection_id"],
                 white_label,
             )
 
@@ -350,7 +353,7 @@ class SyncFactory:
         source_model: schemas.Source,
         decrypted_credential: dict,
         auth_context: AuthContext,
-        source_connection_id: UUID,
+        connection_id: UUID,
         white_label: Optional[schemas.WhiteLabel],
     ) -> tuple[Optional[str], any]:
         """Handle credentials that require auth configuration."""
@@ -363,7 +366,7 @@ class SyncFactory:
                 db,
                 source_model.short_name,
                 auth_context,
-                source_connection_id,
+                connection_id,
                 decrypted_credential,
                 white_label,
             )
