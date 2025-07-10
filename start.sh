@@ -119,7 +119,15 @@ if [ -n "$EXISTING_CONTAINERS" ]; then
 fi
 
 # Now run the appropriate Docker Compose command with the new path
-$COMPOSE_CMD -f docker/docker-compose.yml up -d
+echo ""
+echo "Starting Docker services..."
+if ! $COMPOSE_CMD -f docker/docker-compose.yml up -d; then
+    echo "❌ Failed to start Docker services"
+    echo "Check the error messages above and try running:"
+    echo "  docker logs airweave-backend"
+    echo "  docker logs airweave-frontend"
+    exit 1
+fi
 
 # Wait a moment for services to initialize
 echo ""
@@ -130,10 +138,12 @@ sleep 10
 echo "Checking backend health..."
 MAX_RETRIES=30
 RETRY_COUNT=0
+BACKEND_HEALTHY=false
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
   if ${CONTAINER_CMD} exec airweave-backend curl -f http://localhost:8001/health >/dev/null 2>&1; then
     echo "✅ Backend is healthy!"
+    BACKEND_HEALTHY=true
     break
   else
     echo "⏳ Backend is still starting... (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)"
@@ -141,6 +151,15 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     sleep 5
   fi
 done
+
+if [ "$BACKEND_HEALTHY" = false ]; then
+  echo "❌ Backend failed to start after $MAX_RETRIES attempts"
+  echo "Check backend logs with: docker logs airweave-backend"
+  echo "Common issues:"
+  echo "  - Database connection problems"
+  echo "  - Missing environment variables"
+  echo "  - Platform sync errors"
+fi
 
 # Check if frontend needs to be started manually
 FRONTEND_STATUS=$(${CONTAINER_CMD} inspect airweave-frontend --format='{{.State.Status}}' 2>/dev/null)
@@ -155,17 +174,21 @@ echo ""
 echo "🚀 Airweave Status:"
 echo "=================="
 
+SERVICES_HEALTHY=true
+
 # Check each service
 if ${CONTAINER_CMD} exec airweave-backend curl -f http://localhost:8001/health >/dev/null 2>&1; then
   echo "✅ Backend API:    http://localhost:8001"
 else
   echo "❌ Backend API:    Not responding (check logs with: docker logs airweave-backend)"
+  SERVICES_HEALTHY=false
 fi
 
 if curl -f http://localhost:8080 >/dev/null 2>&1; then
   echo "✅ Frontend UI:    http://localhost:8080"
 else
   echo "❌ Frontend UI:    Not responding (check logs with: docker logs airweave-frontend)"
+  SERVICES_HEALTHY=false
 fi
 
 echo ""
@@ -177,4 +200,10 @@ echo ""
 echo "To view logs: docker logs <container-name>"
 echo "To stop all services: docker compose -f docker/docker-compose.yml down"
 echo ""
-echo "Services started!"
+
+if [ "$SERVICES_HEALTHY" = true ]; then
+  echo "🎉 All services started successfully!"
+else
+  echo "⚠️  Some services failed to start properly. Check the logs above for details."
+  exit 1
+fi
