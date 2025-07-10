@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.core import credentials
+from airweave.core.auth_provider_service import auth_provider_service
 from airweave.core.collection_service import collection_service
 from airweave.core.constants.native_connections import NATIVE_QDRANT_UUID, NATIVE_TEXT2VEC_UUID
 from airweave.core.logging import logger
@@ -237,61 +238,6 @@ class SourceConnectionService:
                 ),
             )
 
-    async def _get_or_create_credential(
-        self,
-        uow: Any,
-        source: Any,
-        source_connection_in: Any,
-        aux_attrs: Dict[str, Any],
-        auth_context: AuthContext,
-    ) -> UUID:
-        """Get existing credential or create new one from auth_fields."""
-        # If credential_id is provided, use it
-        if aux_attrs.get("credential_id"):
-            credential = await crud.integration_credential.get(
-                uow.session, id=aux_attrs["credential_id"], auth_context=auth_context
-            )
-            if not credential:
-                raise HTTPException(status_code=404, detail="Integration credential not found")
-
-            if (
-                credential.integration_short_name != source_connection_in.short_name
-                or credential.integration_type != IntegrationType.SOURCE
-            ):
-                raise HTTPException(
-                    status_code=400, detail="Credential doesn't match the source type"
-                )
-            return credential.id
-
-        # If auth_fields are provided, create new credential
-        elif aux_attrs["auth_fields"] is not None:
-            auth_fields = await self._validate_auth_fields(
-                uow.session, source_connection_in.short_name, aux_attrs["auth_fields"]
-            )
-
-            integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
-                name=f"{source.name} - {auth_context.organization_id}",
-                description=f"Credentials for {source.name} - {auth_context.organization_id}",
-                integration_short_name=source_connection_in.short_name,
-                integration_type=IntegrationType.SOURCE,
-                auth_type=source.auth_type,
-                encrypted_credentials=credentials.encrypt(auth_fields),
-                auth_config_class=source.auth_config_class,
-            )
-
-            integration_credential = await crud.integration_credential.create(
-                uow.session, obj_in=integration_cred_in, auth_context=auth_context, uow=uow
-            )
-            await uow.session.flush()
-            return integration_credential.id
-        else:
-            # Neither credential_id nor auth_fields provided
-            raise HTTPException(
-                status_code=400,
-                detail="Either auth_fields or credential_id must be "
-                "provided to create a source connection",
-            )
-
     async def _get_or_create_collection(
         self,
         uow: Any,
@@ -371,13 +317,61 @@ class SourceConnectionService:
                     status_code=404, detail=f"Source not found: {source_connection_in.short_name}"
                 )
 
-            # Check OAuth validation
-            await self._handle_oauth_validation(db, source, source_connection_in, aux_attrs)
+            integration_credential_id = None
+            if aux_attrs.get("auth_provider"):
+                integration_credential = await auth_provider_service.get_source_credentials(
+                    uow.session, source_connection_in, auth_context
+                )
+                integration_credential_id = integration_credential.id
+                raise HTTPException(
+                    status_code=501,
+                    detail="Auth provider credential creation not yet implemented. "
+                    "Please use auth_fields or credential_id for now.",
+                )
+            elif aux_attrs.get("credential_id"):
+                integration_credential = await crud.integration_credential.get(
+                    uow.session, id=aux_attrs["credential_id"], auth_context=auth_context
+                )
+                if not integration_credential:
+                    raise HTTPException(status_code=404, detail="Integration credential not found")
 
-            # Get or create integration credential
-            integration_credential_id = await self._get_or_create_credential(
-                uow, source, source_connection_in, aux_attrs, auth_context
-            )
+                if (
+                    integration_credential.integration_short_name != source_connection_in.short_name
+                    or integration_credential.integration_type != IntegrationType.SOURCE
+                ):
+                    raise HTTPException(
+                        status_code=400, detail="Credential doesn't match the source type"
+                    )
+                integration_credential_id = integration_credential.id
+            elif aux_attrs.get("auth_fields"):
+                # If auth fields are given, the source cannot be OAuth
+                await self._handle_oauth_validation(db, source, source_connection_in, aux_attrs)
+
+                auth_fields = await self._validate_auth_fields(
+                    uow.session, source_connection_in.short_name, aux_attrs["auth_fields"]
+                )
+
+                integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
+                    name=f"{source.name} - {auth_context.organization_id}",
+                    description=f"Credentials for {source.name} - {auth_context.organization_id}",
+                    integration_short_name=source_connection_in.short_name,
+                    integration_type=IntegrationType.SOURCE,
+                    auth_type=source.auth_type,
+                    encrypted_credentials=credentials.encrypt(auth_fields),
+                    auth_config_class=source.auth_config_class,
+                )
+
+                integration_credential = await crud.integration_credential.create(
+                    uow.session, obj_in=integration_cred_in, auth_context=auth_context, uow=uow
+                )
+                await uow.session.flush()
+                integration_credential_id = integration_credential.id
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Either auth_provider, auth_fields or credential_id must be "
+                    "provided to create a source connection",
+                )
 
             # Validate config fields
             config_fields = await self._validate_config_fields(

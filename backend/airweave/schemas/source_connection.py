@@ -133,6 +133,7 @@ class SourceConnectionCreateBase(BaseModel):
         # Auxiliary attributes used in the creation process but not directly in the model
         auxiliary_attrs = {
             "auth_fields": data.pop("auth_fields", None),
+            "auth_provider": data.pop("auth_provider", None),
             "credential_id": data.pop("credential_id", None),
             "cron_schedule": data.pop("cron_schedule", None),
             "sync_immediately": data.pop("sync_immediately", True),
@@ -170,6 +171,17 @@ class SourceConnectionCreate(SourceConnectionCreateBase):
             "[Github](https://docs.airweave.ai/docs/connectors/github)) to see what is required."
         ),
     )
+    auth_provider: Optional[str] = Field(
+        None,
+        description=(
+            "Unique short name of an auth provider to use for authentication instead of providing "
+            "auth_fields directly. When specified, credentials for the source will be obtained and "
+            "refreshed automatically by Airweave interaction with the auth provider. "
+            "To see which auth providers are supported and learn more about how to use them, "
+            "check [this page](https://docs.airweave.ai/docs/auth-providers)."
+        ),
+        examples=["composio"],
+    )
     sync_immediately: bool = Field(
         True,
         description=(
@@ -190,6 +202,16 @@ class SourceConnectionCreate(SourceConnectionCreateBase):
                         "personal_access_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                         "repo_name": "airweave-ai/airweave",
                     },
+                    "config_fields": {"branch": "main"},
+                    "cron_schedule": "0 */6 * * *",
+                    "sync_immediately": True,
+                },
+                {
+                    "name": "GitHub via Composio Auth Provider",
+                    "description": "Sync code using Composio auth provider for authentication",
+                    "short_name": "github",
+                    "collection": "engineering-docs",
+                    "auth_provider": "composio",
                     "config_fields": {"branch": "main"},
                     "cron_schedule": "0 */6 * * *",
                     "sync_immediately": True,
