@@ -435,7 +435,7 @@ class SyncFactory:
                 "SourceConnection",
                 (),
                 {
-                    "id": source_connection_data["source_connection_id"],
+                    "id": source_connection_data["connection_id"],
                     "integration_credential_id": source_connection_data[
                         "integration_credential_id"
                     ],
