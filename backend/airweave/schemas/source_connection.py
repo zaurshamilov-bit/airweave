@@ -134,6 +134,7 @@ class SourceConnectionCreateBase(BaseModel):
         auxiliary_attrs = {
             "auth_fields": data.pop("auth_fields", None),
             "auth_provider": data.pop("auth_provider", None),
+            "auth_provider_config": data.pop("auth_provider_config", None),
             "credential_id": data.pop("credential_id", None),
             "cron_schedule": data.pop("cron_schedule", None),
             "sync_immediately": data.pop("sync_immediately", True),
@@ -182,6 +183,15 @@ class SourceConnectionCreate(SourceConnectionCreateBase):
         ),
         examples=["composio"],
     )
+    auth_provider_config: Optional[ConfigValues] = Field(
+        None,
+        description=(
+            "Configuration for the auth provider when using auth_provider field. "
+            "Required fields vary by auth provider. For Composio, use integration_id and "
+            " account_id to specify which integration and account from Composio you want "
+            "to use to connect to the source."
+        ),
+    )
     sync_immediately: bool = Field(
         True,
         description=(
@@ -202,16 +212,6 @@ class SourceConnectionCreate(SourceConnectionCreateBase):
                         "personal_access_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                         "repo_name": "airweave-ai/airweave",
                     },
-                    "config_fields": {"branch": "main"},
-                    "cron_schedule": "0 */6 * * *",
-                    "sync_immediately": True,
-                },
-                {
-                    "name": "GitHub via Composio Auth Provider",
-                    "description": "Sync code using Composio auth provider for authentication",
-                    "short_name": "github",
-                    "collection": "engineering-docs",
-                    "auth_provider": "composio",
                     "config_fields": {"branch": "main"},
                     "cron_schedule": "0 */6 * * *",
                     "sync_immediately": True,

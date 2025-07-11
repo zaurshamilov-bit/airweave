@@ -323,11 +323,6 @@ class SourceConnectionService:
                     uow.session, source_connection_in, auth_context
                 )
                 integration_credential_id = integration_credential.id
-                raise HTTPException(
-                    status_code=501,
-                    detail="Auth provider credential creation not yet implemented. "
-                    "Please use auth_fields or credential_id for now.",
-                )
             elif aux_attrs.get("credential_id"):
                 integration_credential = await crud.integration_credential.get(
                     uow.session, id=aux_attrs["credential_id"], auth_context=auth_context

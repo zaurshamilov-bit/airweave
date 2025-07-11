@@ -285,4 +285,11 @@ class AuthProviderConfig(BaseConfig):
 class ComposioConfig(AuthProviderConfig):
     """Composio Auth Provider configuration schema."""
 
-    pass
+    integration_id: str = Field(
+        title="Integration ID",
+        description="Integration ID for the Composio connection",
+    )
+    account_id: str = Field(
+        title="Account ID",
+        description="Account ID for the Composio connection",
+    )

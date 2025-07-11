@@ -19,16 +19,40 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add description column to connection table
-    op.add_column('connection', sa.Column('description', sa.Text(), nullable=True))
+    # Add description column to connection table if it doesn't exist
+    op.execute("""
+        DO $$ BEGIN
+            ALTER TABLE connection ADD COLUMN description TEXT;
+        EXCEPTION
+            WHEN duplicate_column THEN null;
+        END $$;
+    """)
 
-    # Add config_fields column to connection table
-    op.add_column('connection', sa.Column('config_fields', sa.JSON(), nullable=True))
+    # Add config_fields column to connection table if it doesn't exist
+    op.execute("""
+        DO $$ BEGIN
+            ALTER TABLE connection ADD COLUMN config_fields JSON;
+        EXCEPTION
+            WHEN duplicate_column THEN null;
+        END $$;
+    """)
 
 
 def downgrade() -> None:
-    # Remove config_fields column from connection table
-    op.drop_column('connection', 'config_fields')
+    # Remove config_fields column from connection table if it exists
+    op.execute("""
+        DO $$ BEGIN
+            ALTER TABLE connection DROP COLUMN config_fields;
+        EXCEPTION
+            WHEN undefined_column THEN null;
+        END $$;
+    """)
 
-    # Remove description column from connection table
-    op.drop_column('connection', 'description')
+    # Remove description column from connection table if it exists
+    op.execute("""
+        DO $$ BEGIN
+            ALTER TABLE connection DROP COLUMN description;
+        EXCEPTION
+            WHEN undefined_column THEN null;
+        END $$;
+    """)

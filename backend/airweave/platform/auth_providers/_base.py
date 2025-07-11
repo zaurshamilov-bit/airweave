@@ -1,7 +1,7 @@
 """Base auth provider class."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from airweave.core.logging import logger
 
@@ -43,10 +43,13 @@ class BaseAuthProvider(ABC):
 
     # TODO something like: get_creds_for_source
     @abstractmethod
-    async def get_creds_for_source(self, source_short_name: str) -> Dict[str, Any]:
+    async def get_creds_for_source(
+        self, source_short_name: str, source_auth_config_fields: List[str]
+    ) -> Dict[str, Any]:
         """Get credentials for a source.
 
         Args:
             source_short_name: The short name of the source to get credentials for
+            source_auth_config_fields: The fields required for the source auth config
         """
         pass

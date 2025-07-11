@@ -137,7 +137,7 @@ class AuthProviderConnectionCreate(BaseModel):
         json_schema_extra = {
             "example": {
                 "name": "My Composio Connection",
-                "short_name": "composio_test",
+                "short_name": "composio",
                 "description": "My Composio Connection",
                 "auth_fields": {"api_key": "comp_1234567890abcdef"},
                 "config_fields": {"environment": "production", "timeout": 30},

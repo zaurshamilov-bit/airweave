@@ -22,7 +22,20 @@ def upgrade():
     # First add AUTH_PROVIDER to the integrationType enum if not exists
     op.execute("ALTER TYPE integrationtype ADD VALUE IF NOT EXISTS 'AUTH_PROVIDER'")
 
-    # Create auth_provider table
+    # Check if authtype enum exists, if not create it
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE authtype AS ENUM (
+                'oauth2', 'oauth2_with_refresh', 'oauth2_with_refresh_rotating',
+                'api_key', 'native_functionality', 'config_class', 'trello_auth',
+                'none'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    # Create auth_provider table using existing enum
     op.create_table(
         'auth_provider',
         sa.Column('name', sa.String(), nullable=False),
@@ -30,9 +43,7 @@ def upgrade():
         sa.Column('class_name', sa.String(), nullable=False),
         sa.Column('auth_config_class', sa.String(), nullable=False),
         sa.Column('config_class', sa.String(), nullable=False),
-        sa.Column('auth_type', postgresql.ENUM('oauth2', 'oauth2_with_refresh', 'oauth2_with_refresh_rotating',
-                                              'api_key', 'native_functionality', 'config_class', 'trello_auth',
-                                              'none', name='authtype'), nullable=False),
+        sa.Column('auth_type', postgresql.ENUM(name='authtype', create_type=False), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('organization_id', sa.UUID(), nullable=True),
         sa.Column('id', sa.UUID(), nullable=False),
