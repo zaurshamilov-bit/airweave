@@ -33,6 +33,10 @@ class SourceConnection(OrganizationBase, UserMixin):
     # Configuration fields for the source connection
     config_fields: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
+    # Auth provider tracking fields
+    auth_provider_short_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    auth_provider_config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
     # Related objects
     sync_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("sync.id", ondelete="CASCADE"), nullable=True

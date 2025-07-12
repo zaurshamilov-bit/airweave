@@ -63,6 +63,20 @@ class SourceConnectionBase(BaseModel):
             "authentication."
         ),
     )
+    auth_provider_short_name: Optional[str] = Field(
+        None,
+        description=(
+            "Short name of the auth provider used to create this connection. "
+            "Present only if the connection was created through an auth provider."
+        ),
+    )
+    auth_provider_config: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Configuration used with the auth provider to create this connection. "
+            "Present only if the connection was created through an auth provider."
+        ),
+    )
 
     class Config:
         """Pydantic configuration."""
@@ -130,17 +144,26 @@ class SourceConnectionCreateBase(BaseModel):
         """
         data = self.model_dump(exclude_unset=True)
 
+        # Handle auth provider fields - map to database column names
+        if "auth_provider" in data:
+            data["auth_provider_short_name"] = data.pop("auth_provider")
+
+        if "auth_provider_config" in data:
+            # Convert ConfigValues to dict if needed
+            config = data["auth_provider_config"]
+            if hasattr(config, "model_dump"):
+                data["auth_provider_config"] = config.model_dump()
+
         # Auxiliary attributes used in the creation process but not directly in the model
         auxiliary_attrs = {
             "auth_fields": data.pop("auth_fields", None),
-            "auth_provider": data.pop("auth_provider", None),
-            "auth_provider_config": data.pop("auth_provider_config", None),
             "credential_id": data.pop("credential_id", None),
             "cron_schedule": data.pop("cron_schedule", None),
             "sync_immediately": data.pop("sync_immediately", True),
         }
 
         # Everything else is a core attribute for the SourceConnection model
+        # This now includes auth_provider_short_name and auth_provider_config
         core_attrs = data
 
         return core_attrs, auxiliary_attrs
@@ -451,6 +474,20 @@ class SourceConnectionUpdate(BaseModel):
         description=(
             "ID of the white label integration. Used for custom OAuth integrations "
             "with your own branding."
+        ),
+    )
+    auth_provider_short_name: Optional[str] = Field(
+        None,
+        description=(
+            "Updated auth provider short name. "
+            "Only relevant if the connection uses an auth provider."
+        ),
+    )
+    auth_provider_config: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Updated configuration for the auth provider. "
+            "Only relevant if the connection uses an auth provider."
         ),
     )
 

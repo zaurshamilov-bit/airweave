@@ -298,6 +298,13 @@ class SyncFactory:
 
         source_class = resource_locator.get_source(source_model)
 
+        # Debug logging to check auth provider fields
+        logger.info(
+            f"Source connection auth provider info - "
+            f"short_name: {getattr(source_connection_obj, 'auth_provider_short_name', 'NOT FOUND')}"
+            f"config: {getattr(source_connection_obj, 'auth_provider_config', 'NOT FOUND')}"
+        )
+
         return {
             "source_connection_obj": source_connection_obj,  # The main entity
             "connection": connection,  # Just for credential access
@@ -310,6 +317,10 @@ class SyncFactory:
             "auth_config_class": auth_config_class,
             "connection_id": connection_id,
             "integration_credential_id": integration_credential_id,  # From Connection
+            "auth_provider_short_name": getattr(
+                source_connection_obj, "auth_provider_short_name", None
+            ),
+            "auth_provider_config": getattr(source_connection_obj, "auth_provider_config", None),
         }
 
     @classmethod
@@ -342,7 +353,7 @@ class SyncFactory:
         if auth_config_class:
             return await cls._handle_auth_config_credentials(
                 db,
-                source_connection_data,
+                source_connection_data,  # Pass full data including auth provider info
                 decrypted_credential,
                 auth_context,
                 source_connection_data["connection_id"],
@@ -374,6 +385,69 @@ class SyncFactory:
         auth_config = resource_locator.get_auth_config(auth_config_class)
         source_credentials = auth_config.model_validate(decrypted_credential)
 
+        # Check if this source connection was created with an auth provider
+        auth_provider_short_name = source_connection_data.get("auth_provider_short_name")
+        auth_provider_config = source_connection_data.get("auth_provider_config")
+
+        # Debug logging
+        logger.info(
+            f"Checking auth provider for source '{short_name}': "
+            f"auth_provider_short_name={auth_provider_short_name}, "
+            f"auth_provider_config={auth_provider_config}"
+        )
+
+        if auth_provider_short_name:
+            # Get fresh credentials from auth provider instead of OAuth refresh
+            logger.info(
+                f"Getting fresh credentials from auth provider '{auth_provider_short_name}' "
+                f"for source '{short_name}'"
+            )
+
+            from airweave.core.auth_provider_service import auth_provider_service
+
+            fresh_credentials = await auth_provider_service.get_source_credentials(
+                db=db,
+                source_short_name=short_name,
+                auth_provider_short_name=auth_provider_short_name,
+                auth_provider_config=auth_provider_config,
+                auth_context=auth_context,
+            )
+
+            # Update the stored credentials in the database with fresh ones
+            integration_credential_id = source_connection_data.get("integration_credential_id")
+            if integration_credential_id:
+                # First, get the integration credential object
+                integration_credential = await crud.integration_credential.get(
+                    db, id=integration_credential_id, auth_context=auth_context
+                )
+                if integration_credential:
+                    credential_update = schemas.IntegrationCredentialUpdate(
+                        encrypted_credentials=credentials.encrypt(fresh_credentials)
+                    )
+                    await crud.integration_credential.update(
+                        db,
+                        db_obj=integration_credential,
+                        obj_in=credential_update,
+                        auth_context=auth_context,
+                    )
+                    logger.info(
+                        f"Updated stored credentials for source '{short_name}' "
+                        f"with fresh data from auth provider"
+                    )
+
+            # Validate the fresh credentials with auth config
+            validated_credentials = auth_config.model_validate(fresh_credentials)
+
+            # Extract access token if it exists, otherwise return the validated credentials object
+            access_token = (
+                fresh_credentials.get("access_token")
+                if isinstance(fresh_credentials, dict)
+                else getattr(validated_credentials, "access_token", None)
+            )
+
+            return access_token, validated_credentials
+
+        # Original OAuth refresh logic for non-auth-provider sources
         # If the source_credential has a refresh token, exchange it for an access token
         if hasattr(source_credentials, "refresh_token") and source_credentials.refresh_token:
             oauth2_response = await oauth2_service.refresh_access_token(
@@ -455,6 +529,10 @@ class SyncFactory:
                 },
             )()
 
+            # Extract auth provider info for TokenManager
+            auth_provider_short_name = source_connection_data.get("auth_provider_short_name")
+            auth_provider_config = source_connection_data.get("auth_provider_config")
+
             token_manager = TokenManager(
                 db=db,
                 source_short_name=short_name,
@@ -465,6 +543,8 @@ class SyncFactory:
                 white_label=white_label,
                 is_direct_injection=final_access_token is not None,
                 logger_instance=logger,
+                auth_provider_short_name=auth_provider_short_name,
+                auth_provider_config=auth_provider_config,
             )
             source.set_token_manager(token_manager)
 
@@ -472,7 +552,8 @@ class SyncFactory:
                 logger.info(
                     f"Token manager initialized for {short_name} "
                     f"(auth_type: {auth_type}, "
-                    f"is_direct_injection: {final_access_token is not None})"
+                    f"is_direct_injection: {final_access_token is not None}, "
+                    f"auth_provider: {auth_provider_short_name or 'None'})"
                 )
 
     @classmethod

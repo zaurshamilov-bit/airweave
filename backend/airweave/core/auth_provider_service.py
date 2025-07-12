@@ -1,6 +1,6 @@
 """Service for managing auth provider operations."""
 
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,22 +8,147 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.core import credentials
 from airweave.core.logging import logger
-from airweave.core.shared_models import IntegrationType
 from airweave.platform.locator import resource_locator
-from airweave.schemas import (
-    IntegrationCredential,
-    SourceConnectionCreate,
-    SourceConnectionCreateWithWhiteLabel,
-)
 from airweave.schemas.auth import AuthContext
 
 auth_provider_logger = logger.with_prefix("Auth Provider Service: ").with_context(
     component="auth_provider_service"
 )
 
+# function to get most recent connection for an auth provider short name
+# function to get credentials of most recent connection
+
 
 class AuthProviderService:
     """Service for managing auth provider operations."""
+
+    async def get_most_recent_connection(
+        self,
+        db: AsyncSession,
+        auth_provider_short_name: str,
+        auth_context: AuthContext,
+    ) -> schemas.Connection:
+        """Get the most recent connection for an auth provider.
+
+        Args:
+            db: The database session
+            auth_provider_short_name: The short name of the auth provider
+            auth_context: The current authentication context
+
+        Returns:
+            The most recent connection for the auth provider
+
+        Raises:
+            HTTPException: If no connections found
+        """
+        # Get all connections for the auth provider for this organization
+        connections = await crud.connection.get_all_by_short_name(
+            db, auth_provider_short_name, auth_context
+        )
+
+        auth_provider_logger.info(
+            f"\nFound {len(connections)} connection(s) for auth provider {auth_provider_short_name}"
+            f"\n{connections}'\n"
+        )
+
+        if not connections:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No connections found for auth provider '{auth_provider_short_name}'",
+            )
+
+        # If there are multiple connections, use the most recent one (by modified_at)
+        # TODO: have the option to select a specific connection
+        most_recent_connection = max(connections, key=lambda conn: conn.modified_at)
+
+        auth_provider_logger.info(
+            f"\nMost recent connection (modified_at: {most_recent_connection.modified_at}): "
+            f"{most_recent_connection.name}\n"
+        )
+
+        return most_recent_connection
+
+    async def get_decrypted_credentials(
+        self,
+        db: AsyncSession,
+        connection: schemas.Connection,
+        auth_context: AuthContext,
+    ) -> Dict[str, Any]:
+        """Get the decrypted credentials from a connection.
+
+        Args:
+            db: The database session
+            connection: The connection to get credentials from
+            auth_context: The current authentication context
+
+        Returns:
+            The decrypted credentials dictionary
+
+        Raises:
+            HTTPException: If no integration credential found
+        """
+        # Get the integration credential for this connection
+        if not connection.integration_credential_id:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Connection '{connection.name}' has no integration credential",
+            )
+
+        # Get the integration credential
+        integration_credential = await crud.integration_credential.get(
+            db, id=connection.integration_credential_id, auth_context=auth_context
+        )
+
+        if not integration_credential:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Integration credential not found for connection '{connection.name}'",
+            )
+
+        auth_provider_logger.info(
+            f"\nRetrieved integration credential: {integration_credential.name}\n"
+        )
+
+        # Decrypt the credentials
+        decrypted_credentials = credentials.decrypt(integration_credential.encrypted_credentials)
+
+        return decrypted_credentials
+
+    async def get_source_auth_config_fields(
+        self,
+        db: AsyncSession,
+        source_short_name: str,
+    ) -> List[str]:
+        """Get the list of auth config fields required by a source.
+
+        Args:
+            db: The database session
+            source_short_name: The short name of the source
+
+        Returns:
+            List of auth config field names
+
+        Raises:
+            HTTPException: If source not found
+        """
+        # Get the required auth fields from the source using the auth config class
+        source = await crud.source.get_by_short_name(db, short_name=source_short_name)
+
+        if not source:
+            raise HTTPException(status_code=404, detail=f"Source '{source_short_name}' not found")
+
+        if not source.auth_config_class:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Source '{source_short_name}' does not have an auth config class defined",
+            )
+
+        source_auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
+        source_auth_config_fields = list(source_auth_config_class.model_fields.keys())
+
+        auth_provider_logger.info(f"\nSource auth config fields: {source_auth_config_fields}\n")
+
+        return source_auth_config_fields
 
     async def _validate_auth_provider_config(
         self,
@@ -120,35 +245,33 @@ class AuthProviderService:
     async def get_source_credentials(
         self,
         db: AsyncSession,
-        source_connection_in: Union[
-            SourceConnectionCreate,
-            SourceConnectionCreateWithWhiteLabel,
-        ],
+        source_short_name: str,
+        auth_provider_short_name: str,
+        auth_provider_config: Optional[Dict[str, Any]],
         auth_context: AuthContext,
-    ) -> IntegrationCredential:
+    ) -> Dict[str, Any]:  # Return dict instead of IntegrationCredential
         """Get source credentials from auth provider.
 
         Creates an auth provider instance with credentials and uses it to get source credentials.
 
         Args:
             db: The database session
-            source_connection_in: The source connection being created
+            source_short_name: The short name of the source to get credentials for
+            auth_provider_short_name: The short name of the auth provider to use
+            auth_provider_config: Configuration for the auth provider
+            (e.g., integration_id, account_id)
             auth_context: The current authentication context
 
         Returns:
-            Integration credential for the source
+            Dictionary of source credentials (e.g., access_token, refresh_token)
 
         Raises:
-            HTTPException: If the auth provider doesn't exist or has no connections
-        """
-        auth_provider_short_name = getattr(source_connection_in, "auth_provider", None)
-        if not auth_provider_short_name:
-            raise HTTPException(
-                status_code=400, detail="Auth provider short name not found in source connection"
-            )
+            HTTPException: If the auth provider doesn't exist or has no connections:
 
+        """
         auth_provider_logger.info(
-            f"\nGetting source credentials from auth provider '{auth_provider_short_name}'\n"
+            f"\nGetting source credentials from auth provider '{auth_provider_short_name}' "
+            f"for source '{source_short_name}'\n"
         )
 
         # 1. Check if auth provider exists
@@ -165,78 +288,26 @@ class AuthProviderService:
 
         auth_provider_logger.info(f"\nFound auth provider: {auth_provider.name}\n")
 
-        # Validate auth provider config fields
-        auth_provider_config_dict = None
-        if (
-            hasattr(source_connection_in, "auth_provider_config")
-            and source_connection_in.auth_provider_config
-        ):
-            # Convert ConfigValues to dict if needed
-            if hasattr(source_connection_in.auth_provider_config, "model_dump"):
-                auth_provider_config_dict = source_connection_in.auth_provider_config.model_dump()
-            else:
-                auth_provider_config_dict = source_connection_in.auth_provider_config
-
+        # 2. Validate auth provider config fields
         validated_auth_provider_config = await self._validate_auth_provider_config(
-            db, auth_provider_short_name, auth_provider_config_dict
+            db, auth_provider_short_name, auth_provider_config
         )
 
         auth_provider_logger.info(
             f"\nValidated auth provider config: {validated_auth_provider_config}\n"
         )
 
-        # 2. Get all connections for the auth provider for this organization
-        connections = await crud.connection.get_all_by_short_name(
+        # 3. Get the most recent connection for the auth provider
+        most_recent_connection = await self.get_most_recent_connection(
             db, auth_provider_short_name, auth_context
         )
 
-        auth_provider_logger.info(
-            f"\nFound {len(connections)} connection(s) for auth provider {auth_provider_short_name}"
-            f"\n{connections}'\n"
+        # 4. Get the decrypted credentials from the auth provider connection
+        decrypted_credentials = await self.get_decrypted_credentials(
+            db, most_recent_connection, auth_context
         )
 
-        if not connections:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No connections found for auth provider '{auth_provider_short_name}'",
-            )
-
-        # If there are multiple connections, use the most recent one (by modified_at)
-        # TODO: have the option to select a specific connection
-        most_recent_connection = max(connections, key=lambda conn: conn.modified_at)
-
-        auth_provider_logger.info(
-            f"\nMost recent connection (modified_at: {most_recent_connection.modified_at}): "
-            f"{most_recent_connection.name}\n"
-        )
-
-        # Get the integration credential for this connection
-        if not most_recent_connection.integration_credential_id:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Connection '{most_recent_connection.name}' has no integration credential",
-            )
-
-        # Get the integration credential
-        integration_credential = await crud.integration_credential.get(
-            db, id=most_recent_connection.integration_credential_id, auth_context=auth_context
-        )
-
-        if not integration_credential:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Integration credential not found for connection "
-                f"'{most_recent_connection.name}'",
-            )
-
-        auth_provider_logger.info(
-            f"\nRetrieved integration credential: {integration_credential.name}\n"
-        )
-
-        # Decrypt the credentials
-        decrypted_credentials = credentials.decrypt(integration_credential.encrypted_credentials)
-
-        # Create auth provider instance with credentials and validated config
+        # 5. Create auth provider instance with credentials and validated config
         auth_provider_class = resource_locator.get_auth_provider(auth_provider)
         auth_provider_instance = await auth_provider_class.create(
             credentials=decrypted_credentials,
@@ -247,36 +318,16 @@ class AuthProviderService:
             f"\nCreated auth provider instance: {auth_provider_instance.__class__.__name__}\n"
         )
 
-        source_short_name = source_connection_in.short_name
-        auth_provider_logger.info(
-            f"\nGetting source credentials from auth provider for source: {source_short_name}\n"
-        )
+        # 6. Get the list of auth config fields required by the source
+        source_auth_config_fields = await self.get_source_auth_config_fields(db, source_short_name)
 
-        # Get the required auth fields from the source using the auth config class
-        source = await crud.source.get_by_short_name(db, short_name=source_short_name)
-        source_auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
-        source_auth_config_fields = list(source_auth_config_class.model_fields.keys())
-        auth_provider_logger.info(f"\nSource auth config fields: {source_auth_config_fields}\n")
-
+        # 7. Get source credentials from the auth provider
         source_credentials = await auth_provider_instance.get_creds_for_source(
             source_short_name=source_short_name, source_auth_config_fields=source_auth_config_fields
         )
         auth_provider_logger.info(f"\nSource credentials: {source_credentials}\n")
 
-        integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
-            name=f"{source.name} - {auth_context.organization_id}",
-            description=f"Credentials for {source.name} - {auth_context.organization_id}",
-            integration_short_name=source_short_name,
-            integration_type=IntegrationType.SOURCE,
-            auth_type=source.auth_type,
-            encrypted_credentials=credentials.encrypt(source_credentials),
-            auth_config_class=source.auth_config_class,
-        )
-        integration_credential = await crud.integration_credential.create(
-            db, obj_in=integration_cred_in, auth_context=auth_context
-        )
-
-        return integration_credential
+        return source_credentials  # Just return the credentials dict
 
 
 # Singleton instance

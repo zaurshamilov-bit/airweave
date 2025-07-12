@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,7 @@ class TokenManager:
     - Concurrent refresh prevention
     - White label support
     - Direct token injection scenarios
+    - Auth provider token refresh
     """
 
     # Token refresh interval (25 minutes to be safe with 1-hour tokens)
@@ -40,6 +41,8 @@ class TokenManager:
         white_label: Optional[schemas.WhiteLabel] = None,
         is_direct_injection: bool = False,
         logger_instance=None,
+        auth_provider_short_name: Optional[str] = None,
+        auth_provider_config: Optional[Dict[str, Any]] = None,
     ):
         """Initialize the token manager.
 
@@ -53,6 +56,8 @@ class TokenManager:
             white_label: Optional white label configuration
             is_direct_injection: Whether token was directly injected (no refresh)
             logger_instance: Optional logger instance for contextual logging
+            auth_provider_short_name: Optional auth provider used to create the connection
+            auth_provider_config: Optional auth provider configuration
         """
         self.db = db
         self.source_short_name = source_short_name
@@ -68,6 +73,10 @@ class TokenManager:
         self.is_direct_injection = is_direct_injection
         self.logger = logger_instance or logger
 
+        # Auth provider information
+        self.auth_provider_short_name = auth_provider_short_name
+        self.auth_provider_config = auth_provider_config
+
         # Token state
         self._current_token = initial_token
         self._last_refresh_time = time.time()
@@ -82,7 +91,11 @@ class TokenManager:
         if self.is_direct_injection:
             return False
 
-        # Only these auth types support refresh
+        # If auth provider is used, we can always refresh through it
+        if self.auth_provider_short_name:
+            return True
+
+        # Only these auth types support direct OAuth refresh
         return self.auth_type in (
             AuthType.oauth2_with_refresh,
             AuthType.oauth2_with_refresh_rotating,
@@ -185,6 +198,77 @@ class TokenManager:
 
         Raises:
             Exception: If refresh fails
+        """
+        # If auth provider was used, refresh through it
+        if self.auth_provider_short_name:
+            return await self._refresh_via_auth_provider()
+
+        # Otherwise use standard OAuth refresh
+        return await self._refresh_via_oauth()
+
+    async def _refresh_via_auth_provider(self) -> str:
+        """Refresh token using auth provider.
+
+        Returns:
+            The new access token
+
+        Raises:
+            TokenRefreshError: If refresh fails
+        """
+        from airweave.core.auth_provider_service import auth_provider_service
+
+        self.logger.info(
+            f"Refreshing token via auth provider '{self.auth_provider_short_name}' "
+            f"for source '{self.source_short_name}'"
+        )
+
+        try:
+            # Get fresh credentials from auth provider
+            fresh_credentials = await auth_provider_service.get_source_credentials(
+                db=self.db,
+                source_short_name=self.source_short_name,
+                auth_provider_short_name=self.auth_provider_short_name,
+                auth_provider_config=self.auth_provider_config,
+                auth_context=self.auth_context,
+            )
+
+            # Extract access token
+            access_token = fresh_credentials.get("access_token")
+            if not access_token:
+                raise TokenRefreshError(
+                    f"No access token in credentials from auth provider "
+                    f"'{self.auth_provider_short_name}'"
+                )
+
+            # Update the stored credentials in the database
+            if self.integration_credential_id:
+                credential_update = schemas.IntegrationCredentialUpdate(
+                    encrypted_credentials=credentials.encrypt(fresh_credentials)
+                )
+                await crud.integration_credential.update_by_id(
+                    self.db,
+                    id=self.integration_credential_id,
+                    obj_in=credential_update,
+                    auth_context=self.auth_context,
+                )
+
+            return access_token
+
+        except Exception as e:
+            self.logger.error(
+                f"Failed to refresh token via auth provider '{self.auth_provider_short_name}'"
+                f": {str(e)}"
+            )
+            raise TokenRefreshError(f"Auth provider refresh failed: {str(e)}") from e
+
+    async def _refresh_via_oauth(self) -> str:
+        """Refresh token using standard OAuth flow.
+
+        Returns:
+            The new access token
+
+        Raises:
+            TokenRefreshError: If refresh fails
         """
         # Get the stored credentials
         if not self.integration_credential_id:

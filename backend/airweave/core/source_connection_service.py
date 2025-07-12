@@ -318,10 +318,47 @@ class SourceConnectionService:
                 )
 
             integration_credential_id = None
-            if aux_attrs.get("auth_provider"):
-                integration_credential = await auth_provider_service.get_source_credentials(
-                    uow.session, source_connection_in, auth_context
+            if core_attrs.get("auth_provider_short_name"):
+                # Extract auth provider config
+                auth_provider_config_dict = None
+                if (
+                    hasattr(source_connection_in, "auth_provider_config")
+                    and source_connection_in.auth_provider_config
+                ):
+                    # Convert ConfigValues to dict if needed
+                    if hasattr(source_connection_in.auth_provider_config, "model_dump"):
+                        auth_provider_config_dict = (
+                            source_connection_in.auth_provider_config.model_dump()
+                        )
+                    else:
+                        auth_provider_config_dict = source_connection_in.auth_provider_config
+
+                # Get credentials from auth provider
+                source_credentials = await auth_provider_service.get_source_credentials(
+                    db=uow.session,
+                    source_short_name=source_connection_in.short_name,
+                    auth_provider_short_name=core_attrs.get("auth_provider_short_name"),
+                    auth_provider_config=auth_provider_config_dict,
+                    auth_context=auth_context,
                 )
+
+                # Create the integration credential
+                source = await crud.source.get_by_short_name(
+                    db, short_name=source_connection_in.short_name
+                )
+                integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
+                    name=f"{source.name} - {auth_context.organization_id}",
+                    description=f"Credentials for {source.name} - {auth_context.organization_id}",
+                    integration_short_name=source_connection_in.short_name,
+                    integration_type=IntegrationType.SOURCE,
+                    auth_type=source.auth_type,
+                    encrypted_credentials=credentials.encrypt(source_credentials),
+                    auth_config_class=source.auth_config_class,
+                )
+                integration_credential = await crud.integration_credential.create(
+                    uow.session, obj_in=integration_cred_in, auth_context=auth_context, uow=uow
+                )
+                await uow.session.flush()  # Ensure credential is persisted before using its ID
                 integration_credential_id = integration_credential.id
             elif aux_attrs.get("credential_id"):
                 integration_credential = await crud.integration_credential.get(
@@ -412,6 +449,9 @@ class SourceConnectionService:
             )
 
             # Create the source connection from core attributes
+            # IMPORTANT: We explicitly include auth_provider_short_name and auth_provider_config
+            # so that future token refreshes can use the same auth provider instead of
+            # attempting direct OAuth refresh (which would fail with wrong client_id/secret)
             source_connection_create = {
                 **core_attrs,
                 "connection_id": connection_id,
@@ -420,6 +460,12 @@ class SourceConnectionService:
                 "white_label_id": core_attrs.get(
                     "white_label_id"
                 ),  # Include white_label_id if provided
+                "auth_provider_short_name": core_attrs.get(
+                    "auth_provider_short_name"
+                ),  # Track which auth provider was used
+                "auth_provider_config": core_attrs.get(
+                    "auth_provider_config"
+                ),  # Store auth provider config for future use
             }
 
             source_connection = await crud.source_connection.create(
