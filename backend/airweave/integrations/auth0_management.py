@@ -141,7 +141,9 @@ class Auth0ManagementClient:
     async def remove_user_from_organization(self, org_id: str, user_id: str) -> None:
         """Remove user from Auth0 organization."""
         try:
-            await self._make_request("DELETE", f"/organizations/{org_id}/members/{user_id}")
+            await self._make_request(
+                "DELETE", f"/organizations/{org_id}/members", json_data={"members": [user_id]}
+            )
             logger.info(f"Successfully removed user {user_id} from Auth0 organization {org_id}")
         except Exception as e:
             logger.error(f"Failed to remove user from Auth0 organization: {e}")

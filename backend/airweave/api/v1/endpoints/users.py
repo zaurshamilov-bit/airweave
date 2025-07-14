@@ -138,11 +138,11 @@ async def create_or_update_user(
             )
 
         # User exists and no conflict - sync their Auth0 organizations
-        from airweave.core.auth0_service import Auth0Service
+        from airweave.core.organization_service import OrganizationService
 
-        auth0_service = Auth0Service()
+        organization_service = OrganizationService()
         try:
-            updated_user = await auth0_service.sync_user_organizations(db, existing_user)
+            updated_user = await organization_service.sync_user_organizations(db, existing_user)
             logger.info(f"Synced Auth0 organizations for existing user: {user_data.email}")
             return schemas.User.model_validate(updated_user)
         except Exception as e:
@@ -150,9 +150,9 @@ async def create_or_update_user(
             return schemas.User.model_validate(existing_user)
 
     # New user - handle signup with Auth0 organization sync
-    from airweave.core.auth0_service import Auth0Service
+    from airweave.core.organization_service import OrganizationService
 
-    auth0_service = Auth0Service()
+    organization_service = OrganizationService()
 
     try:
         # Add auth0_id to user data if available
@@ -161,7 +161,7 @@ async def create_or_update_user(
             user_dict["auth0_id"] = auth0_user.id
 
         # Handle new user signup with Auth0 integration
-        user = await auth0_service.handle_new_user_signup(db, user_dict, create_org=False)
+        user = await organization_service.handle_new_user_signup(db, user_dict, create_org=False)
 
         logger.info(f"Created new user {user.email}.")
         return schemas.User.model_validate(user)
