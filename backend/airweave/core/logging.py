@@ -303,39 +303,29 @@ class LoggerConfigurator:
         """
         logger = logging.getLogger(name)
 
-        # Import settings here to avoid circular imports
         from airweave.core.config import settings
 
-        # Set log level from settings
         log_level = settings.LOG_LEVEL.upper()
         logger.setLevel(getattr(logging, log_level, logging.INFO))
 
-        # CRITICAL FIX: Disable propagation to prevent duplicate logs
         logger.propagate = False
 
-        # Check if this logger has already been configured
         if hasattr(logger, "_airweave_configured"):
             return ContextualLogger(logger, prefix, dimensions)
 
-        # Clear any existing handlers to prevent duplicates
         logger.handlers.clear()
 
-        # Add our custom StreamHandler
         stream_handler = logging.StreamHandler(sys.stdout)
 
         # Use text format only for local development, JSON everywhere else
         if settings.LOCAL_DEVELOPMENT:
-            # Use text formatter for local development
             formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         else:
-            # Use JSON formatter for all non-local environments
-            # (Azure Log Analytics, Prometheus/Grafana)
             formatter = JSONFormatter()
 
         stream_handler.setFormatter(formatter)
         logger.addHandler(stream_handler)
 
-        # Mark logger as configured to prevent reconfiguration
         logger._airweave_configured = True
 
         return ContextualLogger(logger, prefix, dimensions)
