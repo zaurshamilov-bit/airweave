@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
-from airweave.core.auth0_service import auth0_service
 from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import logger
+from airweave.core.organization_service import organization_service
 from airweave.models.user import User
 from airweave.schemas.auth import AuthContext
 
@@ -41,7 +41,7 @@ async def create_organization(
     """
     # Create the organization with Auth0 integration
     try:
-        organization = await auth0_service.create_organization_with_auth0(
+        organization = await organization_service.create_organization_with_auth0(
             db=db, org_data=organization_data, owner_user=user
         )
 
@@ -258,7 +258,7 @@ async def delete_organization(
 
     # Delete the organization using Auth0 service (handles both local and Auth0 deletion)
     try:
-        success = await auth0_service.delete_organization_with_auth0(
+        success = await organization_service.delete_organization_with_auth0(
             db=db,
             organization_id=organization_id,
             deleting_user=auth_context.user,
@@ -366,7 +366,7 @@ async def invite_user_to_organization(
         )
 
     try:
-        invitation = await auth0_service.invite_user_to_organization(
+        invitation = await organization_service.invite_user_to_organization(
             db=db,
             organization_id=organization_id,
             email=invitation_data.email,
@@ -405,7 +405,7 @@ async def get_pending_invitations(
         )
 
     try:
-        invitations = await auth0_service.get_pending_invitations(
+        invitations = await organization_service.get_pending_invitations(
             db=db,
             organization_id=organization_id,
             requesting_user=auth_context.user,
@@ -446,7 +446,7 @@ async def remove_pending_invitation(
         )
 
     try:
-        success = await auth0_service.remove_pending_invitation(
+        success = await organization_service.remove_pending_invitation(
             db=db,
             organization_id=organization_id,
             invitation_id=invitation_id,
@@ -481,7 +481,7 @@ async def get_organization_members(
         )
 
     try:
-        members = await auth0_service.get_organization_members(
+        members = await organization_service.get_organization_members(
             db=db,
             organization_id=organization_id,
             requesting_user=auth_context.user,
@@ -530,7 +530,7 @@ async def remove_member_from_organization(
         )
 
     try:
-        success = await auth0_service.remove_member_from_organization(
+        success = await organization_service.remove_member_from_organization(
             db=db,
             organization_id=organization_id,
             user_id=user_id,
@@ -592,8 +592,8 @@ async def leave_organization(
             )
 
     try:
-        # Use the auth0_service to handle leaving (which handles both local and Auth0)
-        success = await auth0_service.handle_user_leaving_organization(
+        # Use the organization_service to handle leaving (which handles both local and Auth0)
+        success = await organization_service.handle_user_leaving_organization(
             db=db,
             organization_id=organization_id,
             leaving_user=auth_context.user,
