@@ -186,7 +186,7 @@ async def delete_white_label(
     but no new OAuth flows can be initiated until a new white label integration is created.
     """
     white_label = await crud.white_label.get(db, id=white_label_id, auth_context=auth_context)
-    if white_label.organization_id != auth_context.user.organization_id:  # type: ignore
+    if white_label.organization_id != auth_context.organization_id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     return await crud.white_label.remove(db, id=white_label_id, auth_context=auth_context)
