@@ -25,7 +25,7 @@ class WhiteLabelBase(BaseModel):
             "Support Team GitHub Integration",
         ],
     )
-    short_name: str = Field(
+    source_short_name: str = Field(
         ...,
         description=(
             "Technical identifier of the source type that this integration supports "
