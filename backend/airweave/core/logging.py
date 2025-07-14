@@ -327,7 +327,6 @@ class LoggerConfigurator:
         if settings.LOCAL_DEVELOPMENT:
             # Use text formatter for local development
             formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-            formatter = JSONFormatter()
         else:
             # Use JSON formatter for all non-local environments
             # (Azure Log Analytics, Prometheus/Grafana)
