@@ -1,4 +1,4 @@
-"""Auth0 service for managing organization synchronization."""
+"""Organization service for managing Auth0 organization synchronization."""
 
 import uuid
 from typing import Dict, List
@@ -11,12 +11,11 @@ from airweave import crud, schemas
 from airweave.core.logging import logger
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.integrations.auth0_management import auth0_management_client
-from airweave.models import Organization, User
-from airweave.schemas.auth import AuthContext
+from airweave.models import Organization, User, UserOrganization
 
 
 class OrganizationService:
-    """Service for Auth0 organization management and synchronization."""
+    """Service for organization management and synchronization with Auth0."""
 
     def _create_org_name(self, org_data: schemas.OrganizationCreate) -> str:
         """Create a unique organization name for Auth0."""
@@ -138,6 +137,10 @@ class OrganizationService:
         if not auth0_id:
             # No Auth0 ID or Auth0 not enabled
             raise ValueError("No Auth0 ID provided")
+            # if create_org:
+            #     return await self._create_user_with_new_org(db, user_data)
+            # else:
+            #     return await self._create_user_without_org(db, user_data)
 
         try:
             # Check if user has existing Auth0 organizations
@@ -213,7 +216,9 @@ class OrganizationService:
     ) -> None:
         """Sync a single Auth0 organization to local database."""
         # Check if local organization exists by Auth0 ID
-        local_org = await crud.organization.get_by_auth0_id(db, auth0_org["id"])
+        query = select(Organization).where(Organization.auth0_org_id == auth0_org["id"])
+        result = await db.execute(query)
+        local_org = result.scalar_one_or_none()
 
         if not local_org:
             # Create local organization
@@ -227,45 +232,30 @@ class OrganizationService:
             logger.info(f"Created local organization for Auth0 org: {auth0_org['id']}")
 
         # Check if user-organization relationship exists
-        try:
-            # Create a temporary auth context for validation (user can access their own orgs)
-            temp_auth_context = AuthContext(
-                user=user, organization_id=str(local_org.id), auth_method="auth0"
-            )
+        query = select(UserOrganization).where(
+            UserOrganization.user_id == user.id, UserOrganization.organization_id == local_org.id
+        )
+        result = await db.execute(query)
+        existing_relationship = result.scalar_one_or_none()
 
-            # Try to get existing membership
-            try:
-                await crud.organization.get_user_membership(
-                    db, local_org.id, user.id, temp_auth_context
-                )
-                # Membership exists, no need to create
-                return
-            except Exception:
-                # Membership doesn't exist, create it
-                pass
-
+        if not existing_relationship:
             # Determine if this should be primary (first org for user)
-            user_orgs = await crud.organization.get_user_organizations_with_roles(
-                db=db, user_id=user.id
-            )
-            is_primary = len(user_orgs) == 0
+            query = select(UserOrganization).where(UserOrganization.user_id == user.id)
+            result = await db.execute(query)
+            user_org_count = len(result.scalars().all())
+            is_primary = user_org_count == 0
 
-            # Create user-organization relationship using CRUD method
-            await crud.organization.add_member(
-                db=db,
-                organization_id=local_org.id,
+            # Create user-organization relationship
+            user_org = UserOrganization(
                 user_id=user.id,
+                organization_id=local_org.id,
                 role="member",  # Default role, could be enhanced based on Auth0 metadata
-                auth_context=temp_auth_context,
                 is_primary=is_primary,
             )
+            db.add(user_org)
             logger.info(
                 f"Created user-organization relationship for user {user.id} and org {local_org.id}"
             )
-
-        except Exception as e:
-            logger.warning(f"Failed to create user-organization relationship: {e}")
-            # Continue processing other organizations
 
     async def _create_user_with_new_org(self, db: AsyncSession, user_data: Dict) -> User:
         """Create user with a new organization."""
@@ -336,13 +326,15 @@ class OrganizationService:
         inviter_user: schemas.User,
     ) -> Dict:
         """Send organization invitation via Auth0."""
-        # Create auth context for validation
-        auth_context = AuthContext(
-            user=inviter_user, organization_id=str(organization_id), auth_method="auth0"
-        )
+        from sqlalchemy import select
 
-        # Get organization using CRUD method (validates access)
-        org = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
+        # Get organization with Auth0 ID
+        query = select(Organization).where(Organization.id == organization_id)
+        result = await db.execute(query)
+        org = result.scalar_one_or_none()
+
+        if not org:
+            raise ValueError("Organization not found")
 
         # Send Auth0 invitation
         invitation = await auth0_management_client.invite_user_to_organization(
@@ -367,13 +359,15 @@ class OrganizationService:
         Raises:
             Exception: If deletion fails
         """
-        # Create auth context for validation
-        auth_context = AuthContext(
-            user=deleting_user, organization_id=str(organization_id), auth_method="auth0"
-        )
+        from sqlalchemy import select
 
-        # Get organization using CRUD method (validates access)
-        org = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
+        # Get organization with Auth0 ID
+        query = select(Organization).where(Organization.id == organization_id)
+        result = await db.execute(query)
+        org = result.scalar_one_or_none()
+
+        if not org:
+            raise ValueError("Organization not found")
 
         logger.info(f"Starting deletion of organization {org.name} (ID: {organization_id})")
 
@@ -388,8 +382,20 @@ class OrganizationService:
                     # Continue with local deletion even if Auth0 deletion fails
                     # This prevents the organization from being stuck in a partially deleted state
 
-            # Delete from local database using existing CRUD method
-            _ = await crud.organization.remove(db=db, id=organization_id)
+            # Delete from local database - need to clean up foreign key references first
+            from sqlalchemy import delete
+
+            # First, delete all user_organization relationships
+            delete_user_org_stmt = delete(UserOrganization).where(
+                UserOrganization.organization_id == organization_id
+            )
+            await db.execute(delete_user_org_stmt)
+            logger.info(f"Deleted user-organization relationships for organization {org.name}")
+
+            # Then delete the organization itself
+            delete_org_stmt = delete(Organization).where(Organization.id == organization_id)
+            await db.execute(delete_org_stmt)
+            await db.commit()
 
             logger.info(f"Successfully deleted local organization: {org.name}")
             return True
@@ -409,13 +415,15 @@ class OrganizationService:
         self, db: AsyncSession, organization_id: UUID, invitation_id: str, remover_user: User
     ) -> bool:
         """Remove a pending invitation."""
-        # Create auth context for validation
-        auth_context = AuthContext(
-            user=remover_user, organization_id=str(organization_id), auth_method="auth0"
-        )
+        from sqlalchemy import select
 
-        # Get organization using CRUD method (validates access)
-        org = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
+        # Get organization with Auth0 ID
+        query = select(Organization).where(Organization.id == organization_id)
+        result = await db.execute(query)
+        org = result.scalar_one_or_none()
+
+        if not org:
+            raise ValueError("Organization not found")
 
         await auth0_management_client.delete_invitation(org.auth0_org_id, invitation_id)
         logger.info(f"Successfully removed invitation {invitation_id} from organization {org.name}")
@@ -425,12 +433,9 @@ class OrganizationService:
         self, db: AsyncSession, organization_id: UUID, user_id: UUID, remover_user: User
     ) -> bool:
         """Remove a member from organization (both local and Auth0)."""
-        # Create auth context for validation
-        auth_context = AuthContext(
-            user=remover_user, organization_id=str(organization_id), auth_method="auth0"
-        )
+        from sqlalchemy import delete, select
 
-        # Get the user to be removed using basic query (no org-specific CRUD needed for users)
+        # Get the user to be removed
         user_query = select(User).where(User.id == user_id)
         user_result = await db.execute(user_query)
         user_to_remove = user_result.scalar_one_or_none()
@@ -438,29 +443,36 @@ class OrganizationService:
         if not user_to_remove:
             raise ValueError("User not found")
 
-        # Get organization using CRUD method (validates access)
-        org = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
+        # Get organization
+        org_query = select(Organization).where(Organization.id == organization_id)
+        org_result = await db.execute(org_query)
+        org = org_result.scalar_one_or_none()
 
-        # Remove from Auth0 first
+        if not org:
+            raise ValueError("Organization not found")
+
+        # Capture values before async operations to avoid greenlet errors
+
+        user_schema = schemas.User.model_validate(user_to_remove)
+        org_schema = schemas.Organization.model_validate(org)
+
         await auth0_management_client.remove_user_from_organization(
-            org.auth0_org_id, user_to_remove.auth0_id
+            org_schema.auth0_org_id, user_schema.auth0_id
         )
-        logger.info(f"Removed user {user_to_remove.email} from Auth0 organization {org.name}")
+        logger.info(f"Removed user {user_schema.email} from Auth0 organization {org_schema.name}")
 
-        # Remove from local database using CRUD method
-        success = await crud.organization.remove_member(
-            db=db,
-            organization_id=organization_id,
-            user_id=user_id,
-            auth_context=auth_context,
+        # Remove from local database
+        delete_stmt = delete(UserOrganization).where(
+            UserOrganization.user_id == user_id,
+            UserOrganization.organization_id == organization_id,
         )
+        await db.execute(delete_stmt)
+        await db.commit()
 
-        if success:
-            logger.info(
-                f"Successfully removed user {user_to_remove.email} from organization {org.name}"
-            )
-
-        return success
+        logger.info(
+            f"Successfully removed user {user_schema.email} from organization {org_schema.name}"
+        )
+        return True
 
     async def handle_user_leaving_organization(
         self, db: AsyncSession, organization_id: UUID, leaving_user: User
@@ -476,49 +488,55 @@ class OrganizationService:
         self, db: AsyncSession, organization_id: UUID, requesting_user: User
     ) -> List[Dict]:
         """Get all members of an organization."""
-        # Create auth context for validation
-        auth_context = AuthContext(
-            user=requesting_user, organization_id=str(organization_id), auth_method="auth0"
+        from sqlalchemy import select
+
+        # Get organization
+        org_query = select(Organization).where(Organization.id == organization_id)
+        org_result = await db.execute(org_query)
+        org = org_result.scalar_one_or_none()
+
+        if not org:
+            raise ValueError("Organization not found")
+
+        # Get local members
+        members_query = (
+            select(User, UserOrganization.role, UserOrganization.is_primary)
+            .join(UserOrganization, User.id == UserOrganization.user_id)
+            .where(UserOrganization.organization_id == organization_id)
         )
+        members_result = await db.execute(members_query)
+        local_members = members_result.all()
 
-        # Get organization members using CRUD method (validates access)
-        members = await crud.organization.get_organization_members(
-            db=db, organization_id=organization_id, auth_context=auth_context
-        )
-
-        # Format members for API response
-        formatted_members = []
-        for user_org in members:
-            # Get user info from the relationship
-            user_query = select(User).where(User.id == user_org.user_id)
-            user_result = await db.execute(user_query)
-            user = user_result.scalar_one()
-
-            formatted_members.append(
+        # Format members
+        members = []
+        for user, role, is_primary in local_members:
+            members.append(
                 {
                     "id": str(user.id),
                     "email": user.email,
                     "name": user.full_name or user.email,
-                    "role": user_org.role,
+                    "role": role,
                     "status": "active",
-                    "is_primary": user_org.is_primary,
+                    "is_primary": is_primary,
                     "auth0_id": user.auth0_id,
                 }
             )
 
-        return formatted_members
+        return members
 
     async def get_pending_invitations(
         self, db: AsyncSession, organization_id: UUID, requesting_user: User
     ) -> List[Dict]:
         """Get pending invitations for an organization."""
-        # Create auth context for validation
-        auth_context = AuthContext(
-            user=requesting_user, organization_id=str(organization_id), auth_method="auth0"
-        )
+        from sqlalchemy import select
 
-        # Get organization using CRUD method (validates access)
-        org = await crud.organization.get(db=db, id=organization_id, auth_context=auth_context)
+        # Get organization
+        org_query = select(Organization).where(Organization.id == organization_id)
+        org_result = await db.execute(org_query)
+        org = org_result.scalar_one_or_none()
+
+        if not org:
+            raise ValueError("Organization not found")
 
         auth0_invitations = await auth0_management_client.get_pending_invitations(org.auth0_org_id)
 
