@@ -217,6 +217,36 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         # Combine the results
         return org_connections + native_connections
 
+    async def get_by_readable_id(
+        self, db: AsyncSession, readable_id: str, auth_context: AuthContext
+    ) -> Optional[Connection]:
+        """Get a connection by its readable_id, with special handling for native connections.
+
+        Args:
+            db: The database session
+            readable_id: The readable_id of the connection to get
+            auth_context: The current authentication context
+
+        Returns:
+            The connection with the given readable_id
+
+        Raises:
+            NotFoundException: If the connection is not found
+            PermissionException: If the user doesn't have access to the connection
+        """
+        query = select(self.model).where(self.model.readable_id == readable_id)
+        result = await db.execute(query)
+        db_obj = result.unique().scalar_one_or_none()
+
+        if not db_obj:
+            return None
+
+        # If it's not a native connection, validate user permissions
+        if not self._is_native_connection(db_obj):
+            await self._validate_organization_access(auth_context, db_obj.organization_id)
+
+        return db_obj
+
     async def remove(
         self,
         db: AsyncSession,

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { apiClient } from "@/lib/api";
+
 import { Copy, Eye, Key, Plus, ExternalLink, FileText, Github } from "lucide-react";
 import { useNavigate, Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -9,10 +9,12 @@ import {
   SourceButton,
   ApiKeyCard,
   ExampleProjectCard,
+  AuthProviderButton,
 } from "@/components/dashboard";
 import { clearStoredErrorDetails } from "@/lib/error-utils";
 import { DialogFlow } from "@/components/shared/DialogFlow";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
+import { useAuthProvidersStore } from "@/lib/stores/authProviders";
 
 // Collection type definition
 interface Collection {
@@ -40,10 +42,7 @@ interface SourceConnection {
   status?: string;
 }
 
-// API Key type
-interface APIKey {
-  decrypted_key: string;
-}
+
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -63,8 +62,8 @@ const Dashboard = () => {
   // Use sources store
   const { sources, isLoading: isLoadingSources, fetchSources } = useSourcesStore();
 
-  const [apiKey, setApiKey] = useState<APIKey | null>(null);
-  const [isLoadingApiKey, setIsLoadingApiKey] = useState(true);
+  // Use auth providers store
+  const { authProviders, isLoading: isLoadingAuthProviders, fetchAuthProviders } = useAuthProvidersStore();
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -96,30 +95,12 @@ const Dashboard = () => {
     };
   }, [fetchCollections, fetchSources]);
 
-  // Fetch API key
+  // Fetch auth providers
   useEffect(() => {
-    const fetchApiKey = async () => {
-      setIsLoadingApiKey(true);
-      try {
-        const response = await apiClient.get("/api-keys");
-        if (response.ok) {
-          const data = await response.json();
-          // Get the first API key if available
-          if (Array.isArray(data) && data.length > 0) {
-            setApiKey(data[0]);
-          }
-        } else {
-          console.error("Failed to load API key:", await response.text());
-        }
-      } catch (err) {
-        console.error("Error fetching API key:", err);
-      } finally {
-        setIsLoadingApiKey(false);
-      }
-    };
-
-    fetchApiKey();
-  }, []);
+    fetchAuthProviders().then(authProviders => {
+      console.log(`🔄 [Dashboard] Auth providers loaded: ${authProviders.length} auth providers available`);
+    });
+  }, [fetchAuthProviders]);
 
   const handleRequestNewKey = () => {
     // Placeholder for requesting a new API key
@@ -129,6 +110,10 @@ const Dashboard = () => {
   const handleSourceClick = (source: Source) => {
     setSelectedSource(source);
     setDialogOpen(true);
+  };
+
+  const handleAuthProviderClick = (authProvider: any) => {
+    alert("hello");
   };
 
   // Handle dialog close
@@ -143,35 +128,6 @@ const Dashboard = () => {
 
   // Top 3 collections
   const topCollections = collections.slice(0, 3);
-
-  // Example projects data
-  const exampleProjects = [
-    {
-      id: 1,
-      title: "Integrate Google Drive",
-      description: "This is an example project",
-    },
-    {
-      id: 2,
-      title: "Informed Langraph Agent",
-      description: "This is an example project",
-    },
-    {
-      id: 3,
-      title: "White label react app",
-      description: "This is an example project",
-    },
-    {
-      id: 4,
-      title: "Custom SQL Integration",
-      description: "This is an example project",
-    },
-    {
-      id: 5,
-      title: "Notion Knowledge Base",
-      description: "This is an example project",
-    },
-  ];
 
   // Log when dialog open state changes
   useEffect(() => {
@@ -280,25 +236,37 @@ const Dashboard = () => {
         <div className="md:col-span-1 space-y-6">
           {/* API Key Card */}
           <ApiKeyCard
-            apiKey={apiKey}
             onRequestNewKey={handleRequestNewKey}
           />
 
-          {/* Example Projects */}
+          {/* Auth Providers */}
           <section>
-            <h2 className="text-xl sm:text-2xl font-semibold mb-1 sm:mb-2">Example projects</h2>
-            <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-5">Use a template to get started</p>
+            <h2 className="text-xl sm:text-2xl font-semibold mb-1 sm:mb-2">Connect Auth Providers</h2>
+            <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-5">Authenticate data sources through third-party applications</p>
 
-            <div className="space-y-3 sm:space-y-4">
-              {exampleProjects.map((project) => (
-                <ExampleProjectCard
-                  key={project.id}
-                  id={project.id}
-                  title={project.title}
-                  description={project.description}
-                  onClick={() => toast.info(`Opening ${project.title} template`)}
-                />
-              ))}
+            <div className="grid grid-cols-1 gap-3 auto-rows-fr">
+              {isLoadingAuthProviders ? (
+                <div className="h-20 flex items-center justify-center">
+                  <div className="animate-pulse flex flex-col items-center">
+                    <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-md mb-2"></div>
+                    <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  </div>
+                </div>
+              ) : authProviders.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  No auth providers found
+                </div>
+              ) : (
+                authProviders.map((authProvider) => (
+                  <AuthProviderButton
+                    key={authProvider.id}
+                    id={authProvider.id}
+                    name={authProvider.name}
+                    shortName={authProvider.short_name}
+                    onClick={() => handleAuthProviderClick(authProvider)}
+                  />
+                ))
+              )}
             </div>
           </section>
         </div>

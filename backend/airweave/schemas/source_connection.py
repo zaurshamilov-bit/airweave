@@ -63,10 +63,10 @@ class SourceConnectionBase(BaseModel):
             "authentication."
         ),
     )
-    auth_provider_short_name: Optional[str] = Field(
+    auth_provider: Optional[str] = Field(
         None,
         description=(
-            "Short name of the auth provider used to create this connection. "
+            "Readable ID of the auth provider used to create this connection. "
             "Present only if the connection was created through an auth provider."
         ),
     )
@@ -144,10 +144,7 @@ class SourceConnectionCreateBase(BaseModel):
         """
         data = self.model_dump(exclude_unset=True)
 
-        # Handle auth provider fields - map to database column names
-        if "auth_provider" in data:
-            data["auth_provider_short_name"] = data.pop("auth_provider")
-
+        # Handle auth provider config conversion (but keep auth_provider as-is for service logic)
         if "auth_provider_config" in data:
             # Convert ConfigValues to dict if needed
             config = data["auth_provider_config"]
@@ -163,7 +160,6 @@ class SourceConnectionCreateBase(BaseModel):
         }
 
         # Everything else is a core attribute for the SourceConnection model
-        # This now includes auth_provider_short_name and auth_provider_config
         core_attrs = data
 
         return core_attrs, auxiliary_attrs
@@ -198,9 +194,9 @@ class SourceConnectionCreate(SourceConnectionCreateBase):
     auth_provider: Optional[str] = Field(
         None,
         description=(
-            "Unique short name of an auth provider to use for authentication instead of providing "
-            "auth_fields directly. When specified, credentials for the source will be obtained and "
-            "refreshed automatically by Airweave interaction with the auth provider. "
+            "Unique readable ID of a connected auth provider to use for authentication instead of "
+            "providing auth_fields directly. When specified, credentials for the source will be "
+            "obtained and refreshed automatically by Airweave interaction with the auth provider. "
             "To see which auth providers are supported and learn more about how to use them, "
             "check [this page](https://docs.airweave.ai/docs/auth-providers)."
         ),
@@ -476,10 +472,10 @@ class SourceConnectionUpdate(BaseModel):
             "with your own branding."
         ),
     )
-    auth_provider_short_name: Optional[str] = Field(
+    auth_provider: Optional[str] = Field(
         None,
         description=(
-            "Updated auth provider short name. "
+            "Updated auth provider readable ID. "
             "Only relevant if the connection uses an auth provider."
         ),
     )
@@ -694,6 +690,10 @@ class SourceConnection(SourceConnectionInDBBase):
         # Map the readable_collection_id to collection if needed
         if hasattr(obj, "readable_collection_id"):
             obj_dict["collection"] = obj.readable_collection_id
+
+        # Map the readable_auth_provider_id to auth_provider if needed
+        if hasattr(obj, "readable_auth_provider_id"):
+            obj_dict["auth_provider"] = obj.readable_auth_provider_id
 
         return cls.model_validate(obj_dict)
 

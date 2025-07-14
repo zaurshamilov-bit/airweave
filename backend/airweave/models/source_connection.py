@@ -34,7 +34,7 @@ class SourceConnection(OrganizationBase, UserMixin):
     config_fields: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Auth provider tracking fields
-    auth_provider_short_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    readable_auth_provider_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     auth_provider_config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Related objects

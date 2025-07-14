@@ -108,6 +108,17 @@ class AuthProviderConnectionCreate(BaseModel):
         max_length=255,
         description="Human-readable name for this auth provider connection",
     )
+    readable_id: Optional[str] = Field(
+        None,
+        description=(
+            "URL-safe unique identifier for the connection. Must contain only "
+            "lowercase letters, numbers, and hyphens. If not provided, it will be automatically "
+            "generated from the connection name with a random suffix for uniqueness "
+            "(e.g., 'composio-connection-ab123')."
+        ),
+        pattern="^[a-z0-9]+(-[a-z0-9]+)*$",
+        examples=["my-composio-connection", "oauth-github-prod"],
+    )
     description: Optional[str] = Field(
         None,
         description="Optional detailed description of what this auth provider connection provides.",
@@ -123,13 +134,6 @@ class AuthProviderConnectionCreate(BaseModel):
             "vary by auth provider type."
         ),
     )
-    config_fields: Optional[ConfigValues] = Field(
-        None,
-        description=(
-            "Auth provider-specific configuration parameters required for data extraction. "
-            "These vary by auth provider type."
-        ),
-    )
 
     class Config:
         """Pydantic configuration."""
@@ -140,7 +144,6 @@ class AuthProviderConnectionCreate(BaseModel):
                 "short_name": "composio",
                 "description": "My Composio Connection",
                 "auth_fields": {"api_key": "comp_1234567890abcdef"},
-                "config_fields": {"environment": "production", "timeout": 30},
             }
         }
 
@@ -150,11 +153,16 @@ class AuthProviderConnection(BaseModel):
 
     id: UUID
     name: str
+    readable_id: str = Field(
+        ...,
+        description=(
+            "URL-safe unique identifier that can be used to reference this connection "
+            "when setting up source connections."
+        ),
+        examples=["composio-connection-ab123", "oauth-github-xy789"],
+    )
     short_name: str
     description: Optional[str] = Field(None, description="Description of the connection")
-    config_fields: Optional[ConfigValues] = Field(
-        None, description="Configuration fields for the connection"
-    )
     status: str = Field(description="Connection status (ACTIVE, INACTIVE, ERROR)")
     created_at: datetime
     modified_at: datetime

@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,8 +10,8 @@ from airweave import crud, schemas
 from airweave.core import credentials
 from airweave.core.exceptions import TokenRefreshError
 from airweave.core.logging import logger
-from airweave.platform.auth.schemas import AuthType
 from airweave.platform.auth.services import oauth2_service
+from airweave.platform.locator import resource_locator
 from airweave.schemas.auth import AuthContext
 
 
@@ -36,13 +36,11 @@ class TokenManager:
         source_short_name: str,
         source_connection: schemas.SourceConnection,
         auth_context: AuthContext,
-        auth_type: AuthType,
-        initial_token: str,
+        initial_credentials: Any,
         white_label: Optional[schemas.WhiteLabel] = None,
         is_direct_injection: bool = False,
         logger_instance=None,
-        auth_provider_short_name: Optional[str] = None,
-        auth_provider_config: Optional[Dict[str, Any]] = None,
+        auth_provider_instance: Optional[Any] = None,
     ):
         """Initialize the token manager.
 
@@ -51,20 +49,17 @@ class TokenManager:
             source_short_name: Short name of the source
             source_connection: Source connection configuration
             auth_context: Authentication context
-            auth_type: The authentication type of the source
-            initial_token: The initial access token
+            initial_credentials: The initial credentials (dict, string token, or auth config object)
             white_label: Optional white label configuration
             is_direct_injection: Whether token was directly injected (no refresh)
             logger_instance: Optional logger instance for contextual logging
-            auth_provider_short_name: Optional auth provider used to create the connection
-            auth_provider_config: Optional auth provider configuration
+            auth_provider_instance: Optional auth provider instance for token refresh
         """
         self.db = db
         self.source_short_name = source_short_name
         self.connection_id = source_connection.id
         self.integration_credential_id = source_connection.integration_credential_id
         self.auth_context = auth_context
-        self.auth_type = auth_type
 
         self.white_label_source_short_name = white_label.source_short_name if white_label else None
         self.white_label_client_id = white_label.client_id if white_label else None
@@ -73,12 +68,17 @@ class TokenManager:
         self.is_direct_injection = is_direct_injection
         self.logger = logger_instance or logger
 
-        # Auth provider information
-        self.auth_provider_short_name = auth_provider_short_name
-        self.auth_provider_config = auth_provider_config
+        # Auth provider instance
+        self.auth_provider_instance = auth_provider_instance
 
-        # Token state
-        self._current_token = initial_token
+        # Extract the token from credentials
+        self._current_token = self._extract_token_from_credentials(initial_credentials)
+        if not self._current_token:
+            raise ValueError(
+                f"No token found in credentials for source '{source_short_name}'. "
+                f"TokenManager requires a token to manage."
+            )
+
         self._last_refresh_time = time.time()
         self._refresh_lock = asyncio.Lock()
 
@@ -91,15 +91,13 @@ class TokenManager:
         if self.is_direct_injection:
             return False
 
-        # If auth provider is used, we can always refresh through it
-        if self.auth_provider_short_name:
+        # If auth provider instance is available, we can always refresh through it
+        if self.auth_provider_instance:
             return True
 
-        # Only these auth types support direct OAuth refresh
-        return self.auth_type in (
-            AuthType.oauth2_with_refresh,
-            AuthType.oauth2_with_refresh_rotating,
-        )
+        # For standard OAuth (without auth provider), we assume refresh is possible
+        # The actual refresh capability will be determined when attempting refresh
+        return True
 
     async def get_valid_token(self) -> str:
         """Get a valid access token, refreshing if necessary.
@@ -164,10 +162,7 @@ class TokenManager:
             TokenRefreshError: If token refresh fails or is not supported
         """
         if not self._can_refresh:
-            raise TokenRefreshError(
-                f"Token refresh not supported for {self.source_short_name} "
-                f"with auth type {self.auth_type}"
-            )
+            raise TokenRefreshError(f"Token refresh not supported for {self.source_short_name}")
 
         async with self._refresh_lock:
             self.logger.warning(
@@ -199,15 +194,15 @@ class TokenManager:
         Raises:
             Exception: If refresh fails
         """
-        # If auth provider was used, refresh through it
-        if self.auth_provider_short_name:
+        # If auth provider instance is available, refresh through it
+        if self.auth_provider_instance:
             return await self._refresh_via_auth_provider()
 
         # Otherwise use standard OAuth refresh
         return await self._refresh_via_oauth()
 
     async def _refresh_via_auth_provider(self) -> str:
-        """Refresh token using auth provider.
+        """Refresh token using auth provider instance.
 
         Returns:
             The new access token
@@ -215,30 +210,34 @@ class TokenManager:
         Raises:
             TokenRefreshError: If refresh fails
         """
-        from airweave.core.auth_provider_service import auth_provider_service
-
         self.logger.info(
-            f"Refreshing token via auth provider '{self.auth_provider_short_name}' "
-            f"for source '{self.source_short_name}'"
+            f"Refreshing token via auth provider instance for source '{self.source_short_name}'"
         )
 
         try:
-            # Get fresh credentials from auth provider
-            fresh_credentials = await auth_provider_service.get_source_credentials(
-                db=self.db,
+            # Get the list of auth config fields required by the source
+            source_model = await crud.source.get_by_short_name(
+                self.db, short_name=self.source_short_name
+            )
+            if not source_model or not source_model.auth_config_class:
+                raise TokenRefreshError(
+                    f"Source '{self.source_short_name}' not found or has no auth config class"
+                )
+
+            # Get the auth config fields
+            auth_config_class = resource_locator.get_auth_config(source_model.auth_config_class)
+            source_auth_config_fields = list(auth_config_class.model_fields.keys())
+
+            # Get fresh credentials from auth provider instance
+            fresh_credentials = await self.auth_provider_instance.get_creds_for_source(
                 source_short_name=self.source_short_name,
-                auth_provider_short_name=self.auth_provider_short_name,
-                auth_provider_config=self.auth_provider_config,
-                auth_context=self.auth_context,
+                source_auth_config_fields=source_auth_config_fields,
             )
 
             # Extract access token
             access_token = fresh_credentials.get("access_token")
             if not access_token:
-                raise TokenRefreshError(
-                    f"No access token in credentials from auth provider "
-                    f"'{self.auth_provider_short_name}'"
-                )
+                raise TokenRefreshError("No access token in credentials from auth provider")
 
             # Update the stored credentials in the database
             if self.integration_credential_id:
@@ -255,10 +254,7 @@ class TokenManager:
             return access_token
 
         except Exception as e:
-            self.logger.error(
-                f"Failed to refresh token via auth provider '{self.auth_provider_short_name}'"
-                f": {str(e)}"
-            )
+            self.logger.error(f"Failed to refresh token via auth provider instance: {str(e)}")
             raise TokenRefreshError(f"Auth provider refresh failed: {str(e)}") from e
 
     async def _refresh_via_oauth(self) -> str:
@@ -307,3 +303,22 @@ class TokenManager:
         )
 
         return oauth2_response.access_token
+
+    def _extract_token_from_credentials(self, credentials: Any) -> Optional[str]:
+        """Extract OAuth access token from credentials.
+
+        This method only handles OAuth tokens, not API keys or other auth types.
+        """
+        # If it's already a string, assume it's the token
+        if isinstance(credentials, str):
+            return credentials
+
+        # If it's a dict, look for access_token (OAuth standard)
+        if isinstance(credentials, dict):
+            return credentials.get("access_token")
+
+        # If it's an object with attributes, try to get access_token
+        if hasattr(credentials, "access_token"):
+            return credentials.access_token
+
+        return None

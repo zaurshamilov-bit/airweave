@@ -238,6 +238,54 @@ class SourceConnectionService:
                 ),
             )
 
+    async def _validate_auth_provider_and_config(
+        self,
+        db: AsyncSession,
+        auth_provider_readable_id: str,
+        auth_provider_config: Optional[Dict[str, Any]],
+        auth_context: AuthContext,
+    ) -> Dict[str, Any]:
+        """Validate auth provider exists and config fields are valid.
+
+        Args:
+            db: The database session
+            auth_provider_readable_id: The readable ID of the auth provider
+            auth_provider_config: The auth provider config to validate (can be ConfigValues or dict)
+            auth_context: The current authentication context
+
+        Returns:
+            The validated auth provider config
+
+        Raises:
+            HTTPException: If auth provider doesn't exist or config is invalid
+        """
+        # Convert ConfigValues to dict if needed
+        auth_provider_config_dict = None
+        if auth_provider_config is not None:
+            if hasattr(auth_provider_config, "model_dump"):
+                auth_provider_config_dict = auth_provider_config.model_dump()
+            else:
+                auth_provider_config_dict = auth_provider_config
+
+        # 1. Check if auth provider connection exists by readable_id
+        auth_provider_connection = await crud.connection.get_by_readable_id(
+            db, readable_id=auth_provider_readable_id, auth_context=auth_context
+        )
+        if not auth_provider_connection:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Auth provider connection with readable_id '{auth_provider_readable_id}' "
+                "not found. To see which auth providers are supported and learn more about how to "
+                "use them, check [this page](https://docs.airweave.ai/docs/auth-providers).",
+            )
+
+        # 2. Validate the auth provider config using the auth provider service method
+        validated_config = await auth_provider_service.validate_auth_provider_config(
+            db, auth_provider_connection.short_name, auth_provider_config_dict
+        )
+
+        return validated_config
+
     async def _get_or_create_collection(
         self,
         uow: Any,
@@ -318,48 +366,21 @@ class SourceConnectionService:
                 )
 
             integration_credential_id = None
-            if core_attrs.get("auth_provider_short_name"):
-                # Extract auth provider config
-                auth_provider_config_dict = None
-                if (
-                    hasattr(source_connection_in, "auth_provider_config")
-                    and source_connection_in.auth_provider_config
-                ):
-                    # Convert ConfigValues to dict if needed
-                    if hasattr(source_connection_in.auth_provider_config, "model_dump"):
-                        auth_provider_config_dict = (
-                            source_connection_in.auth_provider_config.model_dump()
-                        )
-                    else:
-                        auth_provider_config_dict = source_connection_in.auth_provider_config
 
-                # Get credentials from auth provider
-                source_credentials = await auth_provider_service.get_source_credentials(
+            if core_attrs.get("auth_provider"):
+                # Validate auth provider and get validated config
+                validated_auth_provider_config = await self._validate_auth_provider_and_config(
                     db=uow.session,
-                    source_short_name=source_connection_in.short_name,
-                    auth_provider_short_name=core_attrs.get("auth_provider_short_name"),
-                    auth_provider_config=auth_provider_config_dict,
+                    auth_provider_readable_id=core_attrs.get("auth_provider"),
+                    auth_provider_config=core_attrs.get("auth_provider_config"),
                     auth_context=auth_context,
                 )
 
-                # Create the integration credential
-                source = await crud.source.get_by_short_name(
-                    db, short_name=source_connection_in.short_name
-                )
-                integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
-                    name=f"{source.name} - {auth_context.organization_id}",
-                    description=f"Credentials for {source.name} - {auth_context.organization_id}",
-                    integration_short_name=source_connection_in.short_name,
-                    integration_type=IntegrationType.SOURCE,
-                    auth_type=source.auth_type,
-                    encrypted_credentials=credentials.encrypt(source_credentials),
-                    auth_config_class=source.auth_config_class,
-                )
-                integration_credential = await crud.integration_credential.create(
-                    uow.session, obj_in=integration_cred_in, auth_context=auth_context, uow=uow
-                )
-                await uow.session.flush()  # Ensure credential is persisted before using its ID
-                integration_credential_id = integration_credential.id
+                # Update the core_attrs with validated config
+                core_attrs["auth_provider_config"] = validated_auth_provider_config
+
+                # For auth provider connections, we don't create integration credentials
+                # but we will create a connection without credentials
             elif aux_attrs.get("credential_id"):
                 integration_credential = await crud.integration_credential.get(
                     uow.session, id=aux_attrs["credential_id"], auth_context=auth_context
@@ -412,10 +433,11 @@ class SourceConnectionService:
             core_attrs["config_fields"] = config_fields
 
             # Create the connection object for source (system table)
+            # For auth_provider connections, integration_credential_id will be None
             connection_create = schemas.ConnectionCreate(
                 name=source_connection_in.name,
                 integration_type=IntegrationType.SOURCE,
-                integration_credential_id=integration_credential_id,
+                integration_credential_id=integration_credential_id,  # None for auth_provider
                 status=ConnectionStatus.ACTIVE,
                 short_name=source_connection_in.short_name,
             )
@@ -449,20 +471,24 @@ class SourceConnectionService:
             )
 
             # Create the source connection from core attributes
-            # IMPORTANT: We explicitly include auth_provider_short_name and auth_provider_config
+            # IMPORTANT: We explicitly include auth_provider and auth_provider_config
             # so that future token refreshes can use the same auth provider instead of
             # attempting direct OAuth refresh (which would fail with wrong client_id/secret)
+
+            # Remove auth_provider from core_attrs since we need to map it to readable_id
+            core_attrs_for_db = {k: v for k, v in core_attrs.items() if k != "auth_provider"}
+
             source_connection_create = {
-                **core_attrs,
+                **core_attrs_for_db,
                 "connection_id": connection_id,
                 "readable_collection_id": collection.readable_id,
                 "sync_id": sync.id,
                 "white_label_id": core_attrs.get(
                     "white_label_id"
                 ),  # Include white_label_id if provided
-                "auth_provider_short_name": core_attrs.get(
-                    "auth_provider_short_name"
-                ),  # Track which auth provider was used
+                "readable_auth_provider_id": core_attrs.get(
+                    "auth_provider"
+                ),  # Map auth_provider to database column name
                 "auth_provider_config": core_attrs.get(
                     "auth_provider_config"
                 ),  # Store auth provider config for future use

@@ -92,93 +92,6 @@ async def _validate_auth_fields(
             raise HTTPException(status_code=422, detail=f"Invalid auth fields: {str(e)}") from e
 
 
-async def _validate_config_fields(
-    db: AsyncSession, auth_provider_short_name: str, config_fields: Optional[Dict[str, Any]]
-) -> Optional[dict]:
-    """Validate config fields based on auth provider config class.
-
-    Args:
-        db: The database session
-        auth_provider_short_name: The short name of the auth provider
-        config_fields: The config fields to validate
-
-    Returns:
-        The validated config fields as a dict or None if no config class
-
-    Raises:
-        HTTPException: If config fields are invalid
-    """
-    # Get the auth provider info
-    auth_provider = await crud.auth_provider.get_by_short_name(
-        db, short_name=auth_provider_short_name
-    )
-    if not auth_provider:
-        raise HTTPException(
-            status_code=404, detail=f"Auth provider '{auth_provider_short_name}' not found"
-        )
-
-    # Check if auth provider has a config class defined
-    if not hasattr(auth_provider, "config_class") or auth_provider.config_class is None:
-        # No config class, config fields not supported
-        if config_fields:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Auth provider {auth_provider.name} does not support configuration fields.",
-            )
-        return None
-
-    # Config class exists but no config fields provided - check if that's allowed
-    if config_fields is None:
-        try:
-            # Get config class to check if it has required fields
-            config_class = resource_locator.get_config(auth_provider.config_class)
-            # Create an empty instance to see if it accepts no fields
-            config = config_class()
-            return config.model_dump()
-        except Exception:
-            # If it fails with no fields, config is required
-            raise HTTPException(
-                status_code=422,
-                detail=f"Auth provider {auth_provider.name} requires config fields "
-                f"but none were provided.",
-            ) from None
-
-    # Convert ConfigValues to dict if needed
-    if hasattr(config_fields, "model_dump"):
-        config_fields_dict = config_fields.model_dump()
-    else:
-        config_fields_dict = config_fields
-
-    # Both config class and config fields exist, validate them
-    try:
-        config_class = resource_locator.get_config(auth_provider.config_class)
-        config = config_class(**config_fields_dict)
-        return config.model_dump()
-    except Exception as e:
-        logger.error(f"Failed to validate config fields: {e}")
-
-        # Check if it's a Pydantic validation error and format it nicely
-        from pydantic import ValidationError
-
-        if isinstance(e, ValidationError):
-            # Extract the field names and error messages
-            error_messages = []
-            for error in e.errors():
-                field = ".".join(str(loc) for loc in error.get("loc", []))
-                msg = error.get("msg", "")
-                error_messages.append(f"Field '{field}': {msg}")
-
-            error_detail = f"Invalid configuration for {auth_provider.config_class}:\n" + "\n".join(
-                error_messages
-            )
-            raise HTTPException(
-                status_code=422, detail=f"Invalid config fields: {error_detail}"
-            ) from e
-        else:
-            # For other types of errors
-            raise HTTPException(status_code=422, detail=f"Invalid config fields: {str(e)}") from e
-
-
 @router.get("/list", response_model=List[schemas.AuthProvider])
 async def list_auth_providers(
     *,
@@ -270,14 +183,7 @@ async def connect_auth_provider(
                 auth_provider_connection_in.auth_fields,
             )
 
-            # 3. Validate config fields
-            validated_config_fields = await _validate_config_fields(
-                uow.session,
-                auth_provider_connection_in.short_name,
-                auth_provider_connection_in.config_fields,
-            )
-
-            # 4. Create integration credential with encrypted auth credentials
+            # 3. Create integration credential with encrypted auth credentials
             integration_credential_data = schemas.IntegrationCredentialCreateEncrypted(
                 name=f"{auth_provider_connection_in.name} Credentials",
                 integration_short_name=auth_provider_connection_in.short_name,
@@ -296,11 +202,11 @@ async def connect_auth_provider(
             )
             await uow.session.flush()
 
-            # 5. Create connection with description and config fields
+            # 4. Create connection without config fields
             connection_data = schemas.ConnectionCreate(
                 name=auth_provider_connection_in.name,
+                readable_id=auth_provider_connection_in.readable_id,
                 description=f"Auth provider connection for {auth_provider_connection_in.name}",
-                config_fields=validated_config_fields,
                 integration_type=IntegrationType.AUTH_PROVIDER,
                 status=ConnectionStatus.ACTIVE,
                 integration_credential_id=integration_credential.id,
@@ -319,9 +225,9 @@ async def connect_auth_provider(
             return schemas.AuthProviderConnection(
                 id=connection.id,
                 name=connection.name,
+                readable_id=connection.readable_id,
                 short_name=connection.short_name,
                 description=connection.description,
-                config_fields=connection.config_fields,
                 status=connection.status.value,
                 created_at=connection.created_at,
                 modified_at=connection.modified_at,

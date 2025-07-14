@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING, List, Optional
 from uuid import UUID
 
-from sqlalchemy import JSON, CheckConstraint, ForeignKey, String, Text, event
+from sqlalchemy import CheckConstraint, ForeignKey, String, Text, event
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
@@ -32,8 +32,8 @@ class Connection(Base):
     __tablename__ = "connection"
 
     name: Mapped[str] = mapped_column(String, nullable=False)
+    readable_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    config_fields: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     integration_type: Mapped[IntegrationType] = mapped_column(
         SQLAlchemyEnum(IntegrationType), nullable=False
     )

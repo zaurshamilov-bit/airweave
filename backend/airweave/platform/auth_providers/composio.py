@@ -11,7 +11,7 @@ from airweave.platform.decorators import auth_provider
 
 
 @auth_provider(
-    name="Composio Auth Provider",
+    name="Composio",
     short_name="composio",
     auth_type=AuthType.api_key,
     auth_config_class="ComposioAuthConfig",
