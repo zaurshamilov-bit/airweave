@@ -245,16 +245,31 @@ class OrganizationService:
             user_org_count = len(result.scalars().all())
             is_primary = user_org_count == 0
 
+            # Get user's role from Auth0
+            member_roles = await auth0_management_client.get_organization_member_roles(
+                org_id=auth0_org["id"], user_id=user.auth0_id
+            )
+
+            user_role = "member"  # Default role
+            if member_roles:
+                # Prioritize 'admin' role if present, otherwise take the first role name
+                role_names = [role.get("name") for role in member_roles if role.get("name")]
+                if "admin" in role_names:
+                    user_role = "admin"
+                elif role_names:
+                    user_role = role_names[0]
+
             # Create user-organization relationship
             user_org = UserOrganization(
                 user_id=user.id,
                 organization_id=local_org.id,
-                role="member",  # Default role, could be enhanced based on Auth0 metadata
+                role=user_role,
                 is_primary=is_primary,
             )
             db.add(user_org)
             logger.info(
-                f"Created user-organization relationship for user {user.id} and org {local_org.id}"
+                f"Created user-organization relationship for user {user.id} and "
+                f"org {local_org.id} with role {user_role}"
             )
 
     async def _create_user_with_new_org(self, db: AsyncSession, user_data: Dict) -> User:

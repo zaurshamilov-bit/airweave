@@ -157,6 +157,14 @@ class Auth0ManagementClient:
 
     # Invitation Management Methods
 
+    async def get_roles(self) -> List[Dict]:
+        """Get all roles from Auth0."""
+        try:
+            return await self._make_request("GET", "/roles")
+        except Exception as e:
+            logger.error(f"Auth0 API error getting roles: {e}")
+            raise
+
     async def invite_user_to_organization(
         self, org_id: str, email: str, role: str = "member", inviter_user: schemas.User = None
     ) -> Dict:
@@ -168,6 +176,14 @@ class Auth0ManagementClient:
                 else "Airweave Platform"
             )
 
+            # Get all roles and find the ID for the given role name
+            all_roles = await self.get_roles()
+            role_id = next((r["id"] for r in all_roles if r["name"] == role), None)
+
+            if not role_id:
+                logger.error(f"Role '{role}' not found in Auth0. Cannot send invitation.")
+                raise ValueError(f"Role '{role}' not found.")
+
             invitation_data = await self._make_request(
                 "POST",
                 f"/organizations/{org_id}/invitations",
@@ -175,7 +191,8 @@ class Auth0ManagementClient:
                     "inviter": {"name": inviter_name},
                     "invitee": {"email": email},
                     "client_id": settings.AUTH0_CLIENT_ID,
-                    "app_metadata": {"role": role},
+                    "roles": [role_id],  # Use roles for proper assignment
+                    # "app_metadata": {"role": role}, # Deprecated
                 },
                 timeout=self.INVITATION_TIMEOUT,
             )
@@ -209,6 +226,14 @@ class Auth0ManagementClient:
         except Exception as e:
             logger.error(f"Failed to delete invitation from Auth0: {e}")
             raise
+
+    async def get_organization_member_roles(self, org_id: str, user_id: str) -> List[Dict]:
+        """Get roles for a specific member of an organization."""
+        return await self._make_request(
+            "GET",
+            f"/organizations/{org_id}/members/{user_id}/roles",
+            return_empty_list_on_error=True,
+        )
 
     async def get_all_connections(self) -> List[Dict]:
         """Get all connections from Auth0."""
