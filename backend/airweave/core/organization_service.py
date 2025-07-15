@@ -15,7 +15,11 @@ from airweave.models import Organization, User, UserOrganization
 
 
 class OrganizationService:
-    """Service for organization management and synchronization with Auth0."""
+    """Service for organization management and synchronization with Auth0.
+
+    This class is exempt from using the CRUD classes, due to higher degree of
+    complexity in managing organization-related operations.
+    """
 
     def _create_org_name(self, org_data: schemas.OrganizationCreate) -> str:
         """Create a unique organization name for Auth0."""
@@ -137,10 +141,6 @@ class OrganizationService:
         if not auth0_id:
             # No Auth0 ID or Auth0 not enabled
             raise ValueError("No Auth0 ID provided")
-            # if create_org:
-            #     return await self._create_user_with_new_org(db, user_data)
-            # else:
-            #     return await self._create_user_without_org(db, user_data)
 
         try:
             # Check if user has existing Auth0 organizations
@@ -553,16 +553,28 @@ class OrganizationService:
         if not org:
             raise ValueError("Organization not found")
 
+        # Get all roles from Auth0 to create role ID -> role name mapping
+        all_roles = await auth0_management_client.get_roles()
+        role_id_to_name = {role["id"]: role["name"] for role in all_roles}
+
         auth0_invitations = await auth0_management_client.get_pending_invitations(org.auth0_org_id)
 
         # Format invitations
         invitations = []
         for invitation in auth0_invitations:
+            # Extract role from the roles array (Auth0 stores role IDs in roles array)
+            role_ids = invitation.get("roles", [])
+            role_name = "member"  # Default role
+            if role_ids:
+                # Take the first role ID and map it to role name
+                first_role_id = role_ids[0]
+                role_name = role_id_to_name.get(first_role_id, "member")
+
             invitations.append(
                 {
                     "id": invitation.get("id"),
                     "email": invitation.get("invitee", {}).get("email"),
-                    "role": invitation.get("app_metadata", {}).get("role", "member"),
+                    "role": role_name,
                     "invited_at": invitation.get("created_at"),
                     "status": "pending",
                 }

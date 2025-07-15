@@ -229,11 +229,7 @@ class Auth0ManagementClient:
 
     async def get_organization_member_roles(self, org_id: str, user_id: str) -> List[Dict]:
         """Get roles for a specific member of an organization."""
-        return await self._make_request(
-            "GET",
-            f"/organizations/{org_id}/members/{user_id}/roles",
-            return_empty_list_on_error=True,
-        )
+        return await self._make_request("GET", f"/organizations/{org_id}/members/{user_id}/roles")
 
     async def get_all_connections(self) -> List[Dict]:
         """Get all connections from Auth0."""
