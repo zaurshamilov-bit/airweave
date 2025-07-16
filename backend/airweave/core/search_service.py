@@ -9,11 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
+from airweave.platform.destinations._base import BaseDestination
+from airweave.platform.embedding_models._base import BaseEmbeddingModel
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
 from airweave.platform.locator import resource_locator
 from airweave.schemas.auth import AuthContext
-from airweave.schemas.search import ResponseType, SearchStatus
+from airweave.schemas.search import QueryExpansionStrategy, ResponseType, SearchStatus
 
 logger = logging.getLogger(__name__)
 
@@ -112,12 +114,64 @@ class SearchService:
 
         return cleaned_results
 
+    def _merge_search_results(self, all_results: list[dict], max_results: int = 15) -> list[dict]:
+        """Merge and deduplicate search results from multiple query expansions.
+
+        Deduplicates by document ID, keeping the highest score for each unique document.
+        Results are re-sorted by score in descending order.
+
+        Args:
+            all_results (list[dict]): Combined results from multiple search queries
+            max_results (int): Maximum number of results to return
+
+        Returns:
+            list[dict]: Deduplicated and sorted results
+        """
+        if not all_results:
+            return []
+
+        best_results = {}
+
+        for result in all_results:
+            doc_id = None
+            if isinstance(result, dict):
+                doc_id = result.get("id") or result.get("_id")
+                if not doc_id and "payload" in result:
+                    payload = result.get("payload", {})
+                    doc_id = payload.get("entity_id") or payload.get("id") or payload.get("_id")
+
+            if doc_id:
+                # Get current score
+                score = result.get("score", 0)
+
+                # Keep result with highest score
+                if doc_id not in best_results or score > best_results[doc_id].get("score", 0):
+                    best_results[doc_id] = result
+            else:
+                # If we can't find an ID, include the result anyway
+                # Use a unique key based on result position
+                unique_key = f"no_id_{len(best_results)}_{id(result)}"
+                best_results[unique_key] = result
+
+        # Convert back to list and sort by score
+        merged = list(best_results.values())
+        merged.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+        # Optionally limit results to maintain performance
+        if len(merged) > max_results:
+            merged = merged[:max_results]
+
+        logger.info(f"Merged {len(all_results)} results into {len(merged)} unique documents")
+
+        return merged
+
     async def search(
         self,
         db: AsyncSession,
         query: str,
         readable_id: str,
         auth_context: AuthContext,
+        expansion_strategy: QueryExpansionStrategy | None = None,
     ) -> list[dict]:
         """Search across vector database using existing connections.
 
@@ -126,6 +180,8 @@ class SearchService:
             query (str): Search query text
             readable_id (str): Readable ID of the collection to search within
             auth_context (AuthContext): Authentication context
+            expansion_strategy (ExpansionStrategy | None): Query expansion strategy.
+                If None, no expansion is performed.
 
         Returns:
             list[dict]: List of cleaned search results
@@ -134,42 +190,28 @@ class SearchService:
             NotFoundException: If sync or connections not found
         """
         try:
-            collection = await crud.collection.get_by_readable_id(db, readable_id, auth_context)
-            if not collection:
-                raise NotFoundException("Collection not found")
+            # Get collection and validate
+            collection = await self._get_collection(db, readable_id, auth_context)
 
-            # Get the destination model
-            destination_model = await crud.destination.get_by_short_name(db, "qdrant_native")
-            if not destination_model:
-                raise NotFoundException("Destination not found")
-
-            # Initialize destination class
-            destination_class = resource_locator.get_destination(destination_model)
-
-            # Use OpenAI embeddings if API key is available
-            if settings.OPENAI_API_KEY:
-                logger.info(
-                    "Using OpenAI embedding model for search in "
-                    f"collection {readable_id} {collection.id}"
-                )
-                embedding_model = OpenAIText2Vec(api_key=settings.OPENAI_API_KEY)
-            else:
-                logger.info(
-                    "Using local embedding model for search in "
-                    f"collection {readable_id} {collection.id}"
-                )
-                embedding_model = LocalText2Vec()
-
-            vector = await embedding_model.embed(query)
+            # Get destination for vector search
+            destination_class = await self._get_destination_class(db)
             destination = await destination_class.create(collection_id=collection.id)
 
-            # Perform search
-            results = await destination.search(vector)
+            # Get appropriate embedding model
+            embedding_model = self._get_embedding_model(readable_id, collection.id)
 
-            # Clean results before returning
-            cleaned_results = self._clean_search_results(results, for_display=True)
+            # Perform search based on query expansion strategy
+            if expansion_strategy and expansion_strategy != QueryExpansionStrategy.NO_EXPANSION:
+                search_results = await self._search_with_expansion(
+                    query, expansion_strategy, embedding_model, destination
+                )
+            else:
+                search_results = await self._search_single_query(
+                    query, embedding_model, destination
+                )
 
-            return cleaned_results
+            # Clean and return results
+            return self._clean_search_results(search_results, for_display=True)
 
         except NotFoundException:
             # Re-raise NotFoundExceptions as-is
@@ -178,11 +220,82 @@ class SearchService:
             logger.error(f"Vector database connection error: {str(e)}")
             raise ConnectionError(f"Unable to connect to vector database: {str(e)}") from e
         except Exception as e:
-            logger.error(f"Search error: {str(e)}")
+            logger.error(f"Search error: {str(e)}", exc_info=True)
             # Add more context to the error
             if "connection" in str(e).lower():
                 raise ConnectionError(f"Vector database connection failed: {str(e)}") from e
             raise
+
+    async def _get_collection(
+        self, db: AsyncSession, readable_id: str, auth_context: AuthContext
+    ) -> schemas.Collection:
+        """Get collection by readable ID and validate it exists."""
+        collection = await crud.collection.get_by_readable_id(db, readable_id, auth_context)
+        if not collection:
+            raise NotFoundException("Collection not found")
+        return collection
+
+    async def _get_destination_class(self, db: AsyncSession):
+        """Get the destination class for vector database operations."""
+        destination_model = await crud.destination.get_by_short_name(db, "qdrant_native")
+        if not destination_model:
+            raise NotFoundException("Destination not found")
+        return resource_locator.get_destination(destination_model)
+
+    def _get_embedding_model(self, readable_id: str, collection_id: str) -> BaseEmbeddingModel:
+        """Get the appropriate embedding model based on configuration."""
+        if settings.OPENAI_API_KEY:
+            logger.info(
+                f"Using OpenAI embedding model for search in collection {readable_id} {collection_id}"
+            )
+            return OpenAIText2Vec(api_key=settings.OPENAI_API_KEY)
+        else:
+            logger.info(
+                f"Using local embedding model for search in collection {readable_id} {collection_id}"
+            )
+            return LocalText2Vec()
+
+    async def _search_with_expansion(
+        self,
+        query: str,
+        expansion_strategy: QueryExpansionStrategy,
+        embedding_model: BaseEmbeddingModel,
+        destination: BaseDestination,
+    ) -> list[dict]:
+        """Perform search with query expansion."""
+        from airweave.core.query_preprocessor import query_preprocessor
+
+        # Expand the query
+        expanded_queries = await query_preprocessor.expand(query, strategy=expansion_strategy)
+        logger.info(
+            f"Expanded query '{query}' to {len(expanded_queries)} variants "
+            f"using {expansion_strategy.value} strategy"
+        )
+
+        # Embed all expanded queries
+        vectors = await embedding_model.embed_many(expanded_queries)
+
+        # Search with each vector and collect results
+        all_results = []
+        for i, vector in enumerate(vectors):
+            results = await destination.search(vector)
+            # Tag results with which query variant found them (optional metadata)
+            for result in results:
+                result["_query_variant"] = expanded_queries[i]
+            all_results.extend(results)
+
+        # Merge and deduplicate results
+        return self._merge_search_results(all_results)
+
+    async def _search_single_query(
+        self,
+        query: str,
+        embedding_model: BaseEmbeddingModel,
+        destination: BaseDestination,
+    ) -> list[dict]:
+        """Perform search with a single query (no expansion)."""
+        vector = await embedding_model.embed(query)
+        return await destination.search(vector)
 
     async def search_with_completion(
         self,
@@ -191,6 +304,7 @@ class SearchService:
         readable_id: str,
         auth_context: AuthContext,
         response_type: ResponseType = ResponseType.RAW,
+        expansion_strategy: QueryExpansionStrategy | None = None,
     ) -> schemas.SearchResponse:
         """Search and optionally generate AI completion for results.
 
@@ -200,6 +314,7 @@ class SearchService:
             readable_id: Readable ID of the collection to search in
             auth_context: Authentication context
             response_type: Type of response (raw results or AI completion)
+            expansion_strategy: Query expansion strategy enum value. If None, no expansion.
 
         Returns:
             dict: A dictionary containing search results or AI completion
@@ -209,6 +324,7 @@ class SearchService:
             query=query,
             readable_id=readable_id,
             auth_context=auth_context,
+            expansion_strategy=expansion_strategy,
         )
 
         if response_type == ResponseType.RAW:
@@ -228,6 +344,7 @@ class SearchService:
             query=query,
             readable_id=readable_id,
             auth_context=auth_context,
+            expansion_strategy=expansion_strategy,
         )
         context_results = self._clean_search_results(raw_results, for_display=False)
 
@@ -348,6 +465,7 @@ class SearchService:
         query: str,
         readable_id: str,
         auth_context: AuthContext,
+        expansion_strategy: QueryExpansionStrategy | None = None,
     ) -> list[dict]:
         """Get raw search results without cleaning (internal use only).
 
@@ -368,10 +486,26 @@ class SearchService:
         else:
             embedding_model = LocalText2Vec()
 
-        vector = await embedding_model.embed(query)
-        destination = await destination_class.create(collection_id=collection.id)
+        # Expand query if strategy is specified
+        if expansion_strategy and expansion_strategy != QueryExpansionStrategy.NO_EXPANSION:
+            from airweave.core.query_preprocessor import query_preprocessor
 
-        return await destination.search(vector)
+            expanded_queries = await query_preprocessor.expand(query, strategy=expansion_strategy)
+            vectors = await embedding_model.embed_many(expanded_queries)
+
+            all_results = []
+            destination = await destination_class.create(collection_id=collection.id)
+
+            for vector in vectors:
+                results = await destination.search(vector)
+                all_results.extend(results)
+
+            return self._merge_search_results(all_results)
+        else:
+            # Original single-query flow
+            vector = await embedding_model.embed(query)
+            destination = await destination_class.create(collection_id=collection.id)
+            return await destination.search(vector)
 
 
 # Create singleton instance
