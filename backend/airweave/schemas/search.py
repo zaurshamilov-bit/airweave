@@ -19,6 +19,15 @@ class ResponseType(str, Enum):
     COMPLETION = "completion"
 
 
+class QueryExpansionStrategy(str, Enum):
+    """Query expansion strategies for search."""
+
+    AUTO = "auto"  # Automatically select best available strategy (try LLM, then synonym, then none)
+    LLM = "llm"  # Use LLM for semantic query expansion
+    SYNONYM = "synonym"  # Use WordNet synonym query expansion
+    NO_EXPANSION = "no_expansion"  # No query expansion, use original query only
+
+
 class SearchStatus(str, Enum):
     """Status indicators for search operation outcomes."""
 
