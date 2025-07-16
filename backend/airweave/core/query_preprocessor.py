@@ -17,6 +17,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 from airweave.core.config import settings
+from airweave.schemas.search import QueryExpansionStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -57,47 +58,64 @@ class QueryPreprocessor:
             self._wordnet = self._load_wordnet()
         return self._wordnet
 
-    async def expand(self, query: str, strategy: str | None = "auto") -> List[str]:
+    async def expand(
+        self, query: str, strategy: QueryExpansionStrategy | str | None = None
+    ) -> List[str]:
         """Main entry point. Returns list of expanded queries (first item is original query).
 
         Args:
             query (str): The query to expand.
-            strategy (str): The strategy to use for expansion.
-                - "auto": Use LLM for expansion if available, otherwise use synonym expansion.
-                - "llm": Use LLM for expansion.
-                - "synonym": Use synonym expansion.
-                - "identity": Return the original query.
+            strategy (QueryExpansionStrategy | str | None): The strategy to use for expansion.
+                - QueryExpansionStrategy.AUTO or "auto": Use LLM if available, otherwise synonym
+                - QueryExpansionStrategy.LLM or "llm": Use LLM for expansion
+                - QueryExpansionStrategy.SYNONYM or "synonym": Use synonym expansion
+                - QueryExpansionStrategy.NO_EXPANSION or "no_expansion": No expansion,
+                    return original query only
+                - None: Defaults to AUTO
 
         Returns:
             List[str]: A list of queries, with the original query as the first item.
         """
-        strat = self._resolve_strategy(strategy)
-        if strat == "identity":
+        resolved_strategy = self._resolve_strategy(strategy)
+
+        if resolved_strategy == QueryExpansionStrategy.NO_EXPANSION:
             return [query]
-        if strat == "synonym":
+        elif resolved_strategy == QueryExpansionStrategy.SYNONYM:
             return await self._synonym_expand(query)
-        if strat == "llm":
+        elif resolved_strategy == QueryExpansionStrategy.LLM:
             return await self._llm_expand(query)
-        # Fallback
+        # Fallback (shouldn't happen with proper resolution)
         return [query]
 
-    def _resolve_strategy(self, requested: str | None) -> str:
-        """Map 'auto' to llm -> synonym -> identity depending on environment.
+    def _resolve_strategy(
+        self, requested: QueryExpansionStrategy | str | None
+    ) -> QueryExpansionStrategy:
+        """Resolve the expansion strategy to use.
 
         Args:
-            requested (str): The requested strategy.
-                - "auto": Use LLM for expansion if available, otherwise use synonym expansion.
-                - "llm": Use LLM for expansion.
-                - "synonym": Use synonym expansion.
-                - "identity": Return the original query.
+            requested: The requested strategy (enum, string, or None)
 
         Returns:
-            str: The resolved strategy.
+            QueryExpansionStrategy: The resolved strategy enum value
         """
-        if requested in {None, "", "auto"}:
+        # Convert string to enum if needed
+        if isinstance(requested, str):
+            try:
+                requested = QueryExpansionStrategy(requested.lower())
+            except ValueError:
+                logger.warning(f"Invalid expansion strategy '{requested}', defaulting to AUTO")
+                requested = QueryExpansionStrategy.AUTO
+
+        # None means AUTO
+        if requested is None:
+            requested = QueryExpansionStrategy.AUTO
+
+        # Handle AUTO strategy
+        if requested == QueryExpansionStrategy.AUTO:
             if settings.OPENAI_API_KEY:
-                return "llm"
-            return "synonym"
+                return QueryExpansionStrategy.LLM
+            return QueryExpansionStrategy.SYNONYM
+
         return requested
 
     # Synonym / WordNet expansion
