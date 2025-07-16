@@ -1,0 +1,360 @@
+---
+description: When the API is an important element of the code being edited, either directly, when editing Fern or in the Frontend.
+alwaysApply: false
+---
+
+# Airweave API Layer Rules
+
+## Overview
+
+The API layer is the HTTP interface for Airweave, built with FastAPI. It provides RESTful endpoints for both public SDK access and internal frontend communication, with a unified authentication system supporting Auth0 users and API keys.
+
+## Architecture & Structure
+
+### Layer Organization
+```
+api/
+├── v1/
+│   ├── api.py              # Main router aggregation
+│   └── endpoints/          # Individual endpoint modules
+├── deps.py                 # Dependency injection (auth, DB)
+├── router.py              # Custom TrailingSlashRouter
+├── middleware.py          # Request processing middleware
+├── auth.py               # Auth0 integration
+└── examples.py           # OpenAPI response examples
+```
+
+### Endpoint Categories
+
+#### Public API Endpoints (SDK)
+These endpoints are exposed in the public API and documented for external use:
+- **Sources** (`/sources/`): Discover available data connectors
+- **Collections** (`/collections/`): Manage data collections
+- **Source Connections** (`/source-connections/`): Configure and run data syncs
+- **White Labels** (`/white-labels/`): Custom OAuth integrations
+
+#### Internal Frontend Endpoints
+Used exclusively by the Airweave frontend application:
+- **Users** (`/users/`): User profile and organization management
+- **Organizations** (`/organizations/`): Organization CRUD operations
+- **API Keys** (`/api-keys/`): API key management
+- **Sync** (`/sync/`): Sync job monitoring and control
+- **DAG** (`/dag/`): Data transformation pipeline configuration
+- **Entities** (`/entities/`): Entity definition management
+- **Destinations** (`/destinations/`): Vector database configuration
+- **Embedding Models** (`/embedding_models/`): Text vectorization settings
+- **Transformers** (`/transformers/`): Data transformation processors
+- **Connections** (`/connections/`): Legacy connection management
+- **File Retrieval** (`/files/`): File download endpoints (restricted)
+
+## Core Components
+
+### 1. TrailingSlashRouter
+Custom router that handles both trailing and non-trailing slash URLs gracefully:
+```python
+from airweave.api.router import TrailingSlashRouter
+
+router = TrailingSlashRouter()
+
+# Responds to both /endpoint and /endpoint/
+@router.get("/endpoint")
+async def my_endpoint():
+    pass
+```
+
+### 2. Authentication Context (AuthContext)
+Unified authentication system that supports multiple auth methods:
+
+```python
+from airweave.schemas.auth import AuthContext
+from airweave.api import deps
+
+@router.get("/")
+async def my_endpoint(
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+):
+    # auth_context provides:
+    # - organization_id: Current organization UUID
+    # - user: Optional[User] - present for Auth0 auth
+    # - auth_method: "auth0" | "api_key" | "system"
+    # - auth_metadata: Additional auth info
+```
+
+### 3. Dependency Injection
+Key dependencies available via `api/deps.py`:
+
+```python
+# Database session
+db: AsyncSession = Depends(deps.get_db)
+
+# Authentication context (organization-scoped)
+auth_context: AuthContext = Depends(deps.get_auth_context)
+
+# User object (deprecated - use auth_context)
+user: User = Depends(deps.get_user)
+```
+
+### 4. Authentication Flow
+
+#### Auth0 Users
+- Header: `Authorization: Bearer <token>`
+- Provides full user context with organization memberships
+- Organization selection via `X-Organization-ID` header
+
+#### API Keys
+- Header: `X-API-Key: <key>`
+- Scoped to a single organization
+- No user context, but tracks creator email
+
+#### System Auth (Local Dev)
+- Automatically enabled when `AUTH_ENABLED=false`
+- Uses `FIRST_SUPERUSER` email as system user
+
+## Inheritance Hierarchy
+
+### Router Inheritance
+All endpoint modules use `TrailingSlashRouter` which extends FastAPI's `APIRouter`:
+```
+APIRouter (FastAPI)
+    └── TrailingSlashRouter (custom)
+            └── Individual endpoint routers
+```
+
+### No Endpoint Base Classes
+Unlike other layers, API endpoints don't use inheritance. Each endpoint module:
+1. Creates a router instance: `router = TrailingSlashRouter()`
+2. Defines endpoint functions with decorators
+3. Uses dependency injection for common functionality
+
+## Request/Response Patterns
+
+### Standard Response Models
+Always use Pydantic schemas from `airweave.schemas`:
+```python
+@router.get("/", response_model=List[schemas.Collection])
+async def list_collections(...) -> List[schemas.Collection]:
+    return await crud.collection.get_multi(...)
+```
+
+### Error Handling
+Use HTTPException for API errors:
+```python
+from fastapi import HTTPException
+
+if not resource:
+    raise HTTPException(status_code=404, detail="Resource not found")
+```
+
+Custom exceptions are handled by middleware:
+- `NotFoundException` → 404 response
+- `PermissionException` → 403 response
+- `ValidationError` → 422 response with field details
+
+### Pagination
+Standard pagination parameters:
+```python
+skip: int = Query(0, description="Number of items to skip"),
+limit: int = Query(100, description="Maximum items to return", le=1000)
+```
+
+### Path Parameters
+Use descriptive Path parameters:
+```python
+readable_id: str = Path(
+    ...,
+    description="The unique readable identifier (e.g., 'finance-data-ab123')"
+)
+```
+
+## CRUD Integration
+
+API endpoints delegate to CRUD layer for database operations:
+```python
+# ✅ Good - Use CRUD layer
+return await crud.collection.get_multi(
+    db,
+    auth_context=auth_context,
+    skip=skip,
+    limit=limit
+)
+
+# ❌ Bad - Direct database queries in endpoints
+result = await db.execute(select(Collection)...)
+```
+
+## Service Layer Usage
+
+Complex operations use service layers:
+```python
+# Collections use collection_service for complex operations
+collection = await collection_service.create(
+    db,
+    collection_in=collection_in,
+    auth_context=auth_context
+)
+
+# Source connections use source_connection_service
+sync_job = await source_connection_service.run_source_connection(
+    db=db,
+    source_connection_id=sc_id,
+    auth_context=auth_context
+)
+```
+
+## OpenAPI Documentation
+
+### Response Examples
+Use example factories from `api/examples.py`:
+```python
+@router.get(
+    "/",
+    response_model=List[schemas.Collection],
+    responses=create_collection_list_response(
+        ["finance_data"],
+        "Finance data collection",
+    ),
+)
+```
+
+### Endpoint Descriptions
+Include clear descriptions in docstrings:
+```python
+async def create_collection(...):
+    """Create a new collection.
+
+    <br/><br/>
+    The newly created collection is initially empty and does not contain any data
+    until you explicitly add source connections to it.
+    """
+```
+
+## Middleware Stack
+
+Request processing order:
+1. **add_request_id**: Generates unique request ID for tracing
+2. **log_requests**: Logs all HTTP requests with timing
+3. **exception_logging_middleware**: Catches and logs unhandled exceptions
+4. **DynamicCORSMiddleware**: Handles CORS with white-label support
+
+## Security Considerations
+
+### Organization Access Control
+All organization-scoped endpoints verify access:
+```python
+# AuthContext automatically validates organization access
+auth_context: AuthContext = Depends(deps.get_auth_context)
+```
+
+### White Label CORS
+White label OAuth endpoints have special CORS handling:
+- OAuth endpoints always allow OPTIONS requests
+- CORS headers added dynamically based on white label configuration
+
+### Sensitive Data
+- API keys are encrypted at rest
+- Auth fields are hidden by default (use `show_auth_fields=True` explicitly)
+- File retrieval endpoints have organization-based access restrictions
+
+## Best Practices
+
+### 1. Endpoint Structure
+```python
+@router.post("/", response_model=schemas.ResponseModel)
+async def create_resource(
+    resource_in: schemas.ResourceCreate,  # Request body
+    db: AsyncSession = Depends(deps.get_db),  # Database
+    auth_context: AuthContext = Depends(deps.get_auth_context),  # Auth
+) -> schemas.ResponseModel:
+    """Clear description of what endpoint does."""
+    # Validate
+    # Delegate to CRUD/Service
+    # Return response model
+```
+
+### 2. Consistent Naming
+- List: `list_resources()` → GET `/`
+- Create: `create_resource()` → POST `/`
+- Get: `get_resource()` → GET `/{id}`
+- Update: `update_resource()` → PUT `/{id}`
+- Delete: `delete_resource()` → DELETE `/{id}`
+
+### 3. Background Tasks
+For async operations:
+```python
+from fastapi import BackgroundTasks
+
+async def endpoint(
+    background_tasks: BackgroundTasks,
+    ...
+):
+    background_tasks.add_task(
+        sync_service.run,
+        sync, sync_job, sync_dag, collection, source_connection, auth_context
+    )
+```
+
+### 4. Streaming Responses
+For SSE or large responses:
+```python
+from fastapi.responses import StreamingResponse
+
+return StreamingResponse(
+    event_generator(),
+    media_type="text/event-stream",
+)
+```
+
+## Common Patterns
+
+### Collection Search
+```python
+@router.get("/{readable_id}/search", response_model=schemas.SearchResponse)
+async def search_collection(
+    readable_id: str = Path(...),
+    query: str = Query(...),
+    response_type: ResponseType = Query(ResponseType.RAW),
+    ...
+):
+    return await search_service.search_with_completion(...)
+```
+
+### Resource Creation with Relationships
+```python
+# Create resource
+resource = await crud.resource.create(...)
+
+# Create related objects
+if resource_in.related_config:
+    await service.create_related(...)
+
+# Return complete object
+return await crud.resource.get(db, id=resource.id, ...)
+```
+
+### Bulk Operations
+```python
+@router.post("/{id}/refresh_all")
+async def refresh_all(
+    background_tasks: BackgroundTasks,
+    ...
+):
+    # Get all related items
+    items = await service.get_all_related(...)
+
+    # Process each in background
+    for item in items:
+        background_tasks.add_task(process_item, item)
+```
+
+## Testing Considerations
+
+When testing API endpoints:
+1. Mock dependencies using `app.dependency_overrides`
+2. Test both successful and error cases
+3. Verify response models match schemas
+4. Test authentication/authorization
+5. Check CORS headers for white label endpoints
+description:
+globs:
+alwaysApply: false
+---
