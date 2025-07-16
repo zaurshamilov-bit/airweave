@@ -1,6 +1,6 @@
 ---
 description: Description of how the integrations yaml works.
-globs: backend/airweave/platform/auth
+globs: **/yaml/**
 alwaysApply: false
 ---
 # Airweave Integrations Configuration Structure
