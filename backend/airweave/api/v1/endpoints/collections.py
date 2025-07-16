@@ -164,12 +164,15 @@ async def search_collection(
 ) -> schemas.SearchResponse:
     """Search across all data sources within the specified collection."""
     try:
+        from airweave.schemas.search import QueryExpansionStrategy
+
         return await search_service.search_with_completion(
             db,
             readable_id=readable_id,
             query=query,
             auth_context=auth_context,
             response_type=response_type,
+            expansion_strategy=QueryExpansionStrategy.AUTO,
         )
     except Exception as e:
         # Log the error for debugging
