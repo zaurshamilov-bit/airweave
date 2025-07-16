@@ -7,10 +7,12 @@ alwaysApply: true
 
 ## What is Airweave?
 
-Airweave is an open-source platform that makes **any app searchable for your agent** by syncing data from various sources into vector and graph databases with minimal configuration. It serves as a bridge between your data sources and agents, transforming raw data into queryable knowledge.
+Airweave is an open-source platform that makes **any app searchable for your agent** by syncing data from various sources with minimal configuration for agentic search. It serves as a bridge between your data sources and agents, transforming raw data into queryable knowledge.
+
+> There is an adjacent repository called `infra-core` which manages all the infrastructure.
 
 ## Architecture
-- Monorepo: Python FastAPI backend + React/TypeScript frontend
+- Monorepo: Python FastAPI backend + React/TypeScript frontend + Python Temporal workers
 - Data Flow: Sources → Processing → Vector/Graph DBs → Agent Queries
 
 ## Technical Capabilities
@@ -19,7 +21,6 @@ Airweave is an open-source platform that makes **any app searchable for your age
 - Entity extraction and transformation pipeline
 - Sync triggers: manual, scheduled, or API-driven
 - Incremental updates using content hashing
-- Transformer DAG for data processing
 - Scales from local development to production environments
 
 ## Data Sources
@@ -33,9 +34,11 @@ Airweave can extract and process data from:
 ## Technology Implementation
 - Backend: FastAPI with PostgreSQL metadata store
 - Frontend: React/TypeScript with ShadCN components
-- Storage: Weaviate (vectors), Neo4j (graphs)
+- Storage: Qdrant (will add more, DWH-type storage later)
 - Deployment: Docker Compose (dev), Kubernetes (prod)
-- Processing: Async workers with Redis queue (upcoming)
+
+- Processing: Async workers with Temporal
+- Messages: Redis PubSub
 
 ## For Developers
 - Local setup uses Docker Compose
