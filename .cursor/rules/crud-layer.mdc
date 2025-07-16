@@ -1,6 +1,6 @@
 ---
 description: Comprehensive guide for understanding and working with the CRUD layer in Airweave backend
-globs: backend/airweave/crud
+globs: **/crud/**
 alwaysApply: false
 ---
 # Airweave CRUD Layer Architecture
