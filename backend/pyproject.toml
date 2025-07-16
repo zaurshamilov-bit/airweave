@@ -50,6 +50,7 @@ azure-identity = "^1.23.0"
 posthog = "^5.4.0"
 aiolimiter = "^1.1.0"
 pyyaml = "^6.0.1"
+nltk = "^3.9.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
