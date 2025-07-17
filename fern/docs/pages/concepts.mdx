@@ -1,0 +1,42 @@
+---
+title: Concepts
+edit-this-page-url: https://github.com/airweave-ai/airweave/blob/main/fern/docs/pages/concepts.mdx
+slug: concepts
+---
+
+Understanding the core building blocks of Airweave.
+
+## Source
+
+A **Source** is a data integration that knows how to connect to and extract data from external systems. Sources define authentication requirements, configuration options, and the specific entities they can extract.
+
+Examples: Gmail, GitHub, Notion, PostgreSQL, Stripe
+
+## Collection
+
+A **Collection** is a searchable knowledge base composed of one or more source connections. Collections provide a unified search interface across all connected data sources.
+
+- Contains multiple source connections
+- Provides unified search API endpoint
+- Maintains vector embeddings for semantic search
+
+## Source Connection
+
+A **Source Connection** links a specific source to a collection with configured credentials and settings. Each connection represents an authenticated instance of a source within a collection.
+
+## White Labels
+
+**White Labels** enable customization of the Airweave interface for different organizations or use cases. They control branding, available sources, and platform behavior.
+
+- Custom branding and styling
+- Source filtering and permissions
+- Organization-specific configurations
+
+## Entities
+
+**Entities** are the structured data objects extracted from sources and stored in collections. Each source defines its own entity types based on the data it can extract.
+
+- Threads, messages, and attachments from Gmail
+- Repositories, files, and commits from GitHub
+- Pages, databases, and blocks from Notion
+- Tables, rows, and schemas from PostgreSQL

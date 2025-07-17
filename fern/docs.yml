@@ -19,14 +19,18 @@ navigation:
     path: docs/pages/welcome.mdx
   - page: Quickstart
     path: docs/pages/quickstart.mdx
+  - page: Concepts
+    path: docs/pages/concepts.mdx
   - page: MCP Server
     path: docs/pages/mcp-server.mdx
-  - page: Direct Token Injection
-    path: docs/pages/direct-token-injection.mdx
-  - page: White Label
+  - page: White Labels
     path: docs/pages/white-labeling.mdx
   - page: Add New Connector
     path: docs/pages/add-new-source.mdx
+  - section: Advanced Concepts
+    contents:
+    - page: Direct Token Injection
+      path: docs/pages/direct-token-injection.mdx
   - section: Connectors
     contents:
     - page: Asana
@@ -73,36 +77,40 @@ navigation:
   alphabetized: false
   display-errors: true
   layout:
-  - collections:
-    - GET /collections
-    - GET /collections/{readable_id}
-    - GET /collections/{readable_id}/search
-    - PUT /collections/{readable_id}
-    - POST /collections
-    - POST /collections/{readable_id}/refresh_all
-    - DELETE /collections/{readable_id}
-  - source-connections:
-    - GET /source-connections
-    - GET /source-connections/{source_connection_id}
-    - GET /source-connections/{source_connection_id}/jobs
-    - GET /source-connections/{source_connection_id}/jobs/{job_id}
-    - PUT /source-connections/{source_connection_id}
-    - POST /source-connections
-    - POST /source-connections/{source_connection_id}/run
-    - POST /source-connections/{source_connection_id}/jobs/{job_id}/cancel
-    - DELETE /source-connections/{source_connection_id}
-  - sources:
-    - GET /sources/list
-    - GET /sources/detail/{short_name}
-  - white-labels:
-    - GET /white-labels/list
-    - GET /white-labels/{white_label_id}
-    - GET /white-labels/{white_label_id}/source-connections
-    - GET /white-labels/{white_label_id}/oauth2/auth_url
-    - PUT /white-labels/{white_label_id}
-    - POST /white-labels
-    - POST /white-labels/{white_label_id}/oauth2/code
-    - DELETE /white-labels/{white_label_id}
+  - section: Collections
+    contents:
+      - GET /collections
+      - GET /collections/{readable_id}
+      - GET /collections/{readable_id}/search
+      - PUT /collections/{readable_id}
+      - POST /collections
+      - POST /collections/{readable_id}/refresh_all
+      - DELETE /collections/{readable_id}
+  - section: Source Connections
+    contents:
+      - GET /source-connections
+      - GET /source-connections/{source_connection_id}
+      - GET /source-connections/{source_connection_id}/jobs
+      - GET /source-connections/{source_connection_id}/jobs/{job_id}
+      - PUT /source-connections/{source_connection_id}
+      - POST /source-connections
+      - POST /source-connections/{source_connection_id}/run
+      - POST /source-connections/{source_connection_id}/jobs/{job_id}/cancel
+      - DELETE /source-connections/{source_connection_id}
+  - section: Sources
+    contents:
+      - GET /sources/list
+      - GET /sources/detail/{short_name}
+  - section: White Labels
+    contents:
+      - GET /white-labels/list
+      - GET /white-labels/{white_label_id}
+      - GET /white-labels/{white_label_id}/source-connections
+      - GET /white-labels/{white_label_id}/oauth2/auth_url
+      - PUT /white-labels/{white_label_id}
+      - POST /white-labels
+      - POST /white-labels/{white_label_id}/oauth2/code
+      - DELETE /white-labels/{white_label_id}
   snippets:
     python: airweave-sdk
     typescript: '@airweave/sdk'

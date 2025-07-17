@@ -1,7 +1,7 @@
 ---
 title: MCP Server
 edit-this-page-url: https://github.com/airweave-ai/airweave/blob/main/fern/docs/pages/mcp-server.mdx
-subtitle: Serve your Airweave collection over the MCP server so clients like Cursor or Claude can query it.
+subtitle: Serve your Airweave collection over an MCP server so clients like Cursor or Claude can query it.
 slug: mcp-server
 ---
 
@@ -9,8 +9,8 @@ slug: mcp-server
 
 Before you start you’ll need:
 
-• **A collection with data**: at least one source connection must have completed its initial sync. Follow the [Quickstart](https://docs.airweave.ai/quickstart) if you haven’t done this yet.
-• **An API key**: create one in the Airweave dashboard under **API Keys**.
+  - **A collection with data**: at least one source connection must have completed its initial sync. Follow the [Quickstart](https://docs.airweave.ai/quickstart) if you haven’t done this yet.
+  - **An API key**: create one in the Airweave dashboard under **API Keys**.
 
 ### Set-up
 
@@ -44,8 +44,8 @@ Before you start you’ll need:
       Add the following to your Claude Desktop config file and restart Claude Desktop afterwards.
       After a restart the search tool will appear in Claude’s composer.
 
-      • **macOS/Linux**: `~/.claude/claude_desktop_config.json`
-      • **Windows**: `%APPDATA%\claude\claude_desktop_config.json`
+        - **macOS/Linux**: `~/.claude/claude_desktop_config.json`
+        - **Windows**: `%APPDATA%\claude\claude_desktop_config.json`
 
       ```json title="Claude Desktop Configuration"
       {
@@ -100,13 +100,13 @@ Before you start you’ll need:
 
 These environment variables can be set:
 
-• `AIRWEAVE_API_KEY` (Required): Authenticates the MCP server with the Airweave API so it can run searches on your behalf.
-• `AIRWEAVE_COLLECTION` (Required): Readable ID of the collection to query. All `search` calls are scoped to this collection.
-• `AIRWEAVE_BASE_URL` (Optional): Override if you’re running a self-hosted Airweave instance (default: `https://api.airweave.ai`).
+  - `AIRWEAVE_API_KEY` (Required): Authenticates the MCP server with the Airweave API so it can run searches on your behalf.
+  - `AIRWEAVE_COLLECTION` (Required): Readable ID of the collection to query. All `search` calls are scoped to this collection.
+  - `AIRWEAVE_BASE_URL` (Optional): Override if you’re running a self-hosted Airweave instance (default: `https://api.airweave.ai`).
 
 ### Available tools
 
 The MCP server provides two tools:
 
-• **search**: search across all source connections in the collection with optional AI completion. See the [search endpoint](https://docs.airweave.ai/api-reference/collections/search-collection-collections-readable-id-search-get) for more details.
-• **get-config**: View current configuration and connection status to verify everything is working correctly. No parameters required - shows your collection ID, API endpoint, and connection status.
+  - **search**: search across all source connections in the collection with optional AI completion. See the [search endpoint](https://docs.airweave.ai/api-reference/collections/search-collection-collections-readable-id-search-get) for more details.
+  - **get-config**: View current configuration and connection status to verify everything is working correctly. No parameters required - shows your collection ID, API endpoint, and connection status.
