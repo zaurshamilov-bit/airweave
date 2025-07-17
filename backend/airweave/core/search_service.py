@@ -9,13 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
+from airweave.core.logging import ContextualLogger
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
 from airweave.platform.locator import resource_locator
 from airweave.schemas.auth import AuthContext
 from airweave.schemas.search import ResponseType, SearchStatus
-
-logger = logging.getLogger(__name__)
 
 
 class SearchService:
@@ -53,6 +52,7 @@ class SearchService:
     def __init__(self):
         """Initialize the search service with OpenAI client."""
         if not settings.OPENAI_API_KEY:
+            logger = logging.getLogger(__name__)
             logger.warning("OPENAI_API_KEY is not set in environment variables")
             self.openai_client = None
         else:
@@ -118,6 +118,7 @@ class SearchService:
         query: str,
         readable_id: str,
         auth_context: AuthContext,
+        logger: ContextualLogger,
     ) -> list[dict]:
         """Search across vector database using existing connections.
 
@@ -126,6 +127,7 @@ class SearchService:
             query (str): Search query text
             readable_id (str): Readable ID of the collection to search within
             auth_context (AuthContext): Authentication context
+            logger (ContextualLogger): Logger instance
 
         Returns:
             list[dict]: List of cleaned search results
@@ -152,7 +154,7 @@ class SearchService:
                     "Using OpenAI embedding model for search in "
                     f"collection {readable_id} {collection.id}"
                 )
-                embedding_model = OpenAIText2Vec(api_key=settings.OPENAI_API_KEY)
+                embedding_model = OpenAIText2Vec(api_key=settings.OPENAI_API_KEY, logger=logger)
             else:
                 logger.info(
                     "Using local embedding model for search in "
@@ -190,6 +192,7 @@ class SearchService:
         query: str,
         readable_id: str,
         auth_context: AuthContext,
+        logger: ContextualLogger,
         response_type: ResponseType = ResponseType.RAW,
     ) -> schemas.SearchResponse:
         """Search and optionally generate AI completion for results.
@@ -199,6 +202,7 @@ class SearchService:
             query: The search query text
             readable_id: Readable ID of the collection to search in
             auth_context: Authentication context
+            logger: Logger instance
             response_type: Type of response (raw results or AI completion)
 
         Returns:
@@ -209,6 +213,7 @@ class SearchService:
             query=query,
             readable_id=readable_id,
             auth_context=auth_context,
+            logger=logger,
         )
 
         if response_type == ResponseType.RAW:
@@ -348,6 +353,7 @@ class SearchService:
         query: str,
         readable_id: str,
         auth_context: AuthContext,
+        logger: ContextualLogger,
     ) -> list[dict]:
         """Get raw search results without cleaning (internal use only).
 
@@ -364,9 +370,9 @@ class SearchService:
         destination_class = resource_locator.get_destination(destination_model)
 
         if settings.OPENAI_API_KEY:
-            embedding_model = OpenAIText2Vec(api_key=settings.OPENAI_API_KEY)
+            embedding_model = OpenAIText2Vec(api_key=settings.OPENAI_API_KEY, logger=logger)
         else:
-            embedding_model = LocalText2Vec()
+            embedding_model = LocalText2Vec(logger=logger)
 
         vector = await embedding_model.embed(query)
         destination = await destination_class.create(collection_id=collection.id)
