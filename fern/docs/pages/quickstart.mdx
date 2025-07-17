@@ -127,7 +127,7 @@ curl -X POST 'https://api.airweave.ai/source-connections' \
 ```Python title="Python"
 results = airweave.collections.search_collection(
     readable_id="my-first-collection-abc123",
-    query="What are our product features?",
+    query="Find returned payments from user John Doe?",
 )
 
 for result in results.results:
@@ -137,7 +137,7 @@ for result in results.results:
 ```javascript title="Node.js"
 const results = await airweave.collections.searchCollection(
   readable_id: "my-first-collection-abc123",
-  query: { query: "What are our product features?" }
+  query: { query: "Find returned payments from user John Doe?" }
 );
 
 results.results.forEach(result => {

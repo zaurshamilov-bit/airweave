@@ -70,10 +70,10 @@ slug: add-new-source
         ```
 
     **Key points about entities:**
-    • Inherit from `ChunkEntity` for searchable content (documents, posts, issues)
-    • Inherit from `FileEntity` for downloadable files (PDFs, images, attachments)
-    • Use `Field(...)` for required fields, `Field(default=...)` for optional ones
-    • Add source-specific fields that are relevant for search and metadata
+        - Inherit from `ChunkEntity` for searchable content (documents, posts, issues)
+        - Inherit from `FileEntity` for downloadable files (PDFs, images, attachments)
+        - Use `Field(...)` for required fields, `Field(default=...)` for optional ones
+        - Add source-specific fields that are relevant for search and metadata
 
 ### 5. Implement source
 
@@ -137,12 +137,12 @@ slug: add-new-source
         ```
 
     **Key implementation points:**
-    • Import your custom entity classes
-    • Use the `@source()` decorator with your auth and config classes
-    • Implement `create()` classmethod that handles credentials and config
-    • Implement `generate_entities()` that yields your custom entity objects
-    • Handle authentication based on your auth type
-    • Use config options to customize behavior
+        - Import your custom entity classes
+        -  Use the `@source()` decorator with your auth and config classes
+        - Implement `create()` classmethod that handles credentials and config
+        - Implement `generate_entities()` that yields your custom entity objects
+        - Handle authentication based on your auth type
+        - Use config options to customize behavior
 
 ### 6. Test your source
 
