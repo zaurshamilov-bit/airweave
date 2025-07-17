@@ -5,11 +5,10 @@ from typing import List, Optional
 
 from aiolimiter import AsyncLimiter
 from openai import AsyncOpenAI
-from pydantic import Field
 from tiktoken import get_encoding
 
 from airweave.core.config import settings
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import embedding_model
 
@@ -32,17 +31,27 @@ _tpm_limiter: AsyncLimiter | None = None
 class OpenAIText2Vec(BaseEmbeddingModel):
     """Simplified OpenAI text2vec model configuration for embedding using official OpenAI client."""
 
-    model_name: str = "openai-text2vec-simple"
-    api_key: str = Field(..., description="OpenAI API key")
+    logger: ContextualLogger
+    model_name: str = "text-embedding-3-small"
     vector_dimensions: int = 1536
-    enabled: bool = True
-    embedding_model: str = Field(
-        default="text-embedding-3-small", description="OpenAI embedding model name"
-    )
+    embedding_model: str = "text-embedding-3-small"
 
-    def __init__(self, **kwargs):
-        """Initialize the OpenAI Text2Vec model with a shared client."""
-        super().__init__(**kwargs)
+    def __init__(
+        self,
+        api_key: str,
+        logger: ContextualLogger,
+        model_name: Optional[str] = None,
+    ):
+        """Initialize the OpenAI Text2Vec model with a shared client.
+
+        Args:
+            api_key: OpenAI API key
+            model_name: OpenAI model name
+            logger: Logger to use
+        """
+        self.logger = logger
+        self.model_name = model_name or self.model_name
+
         global _openai_semaphore, _tpm_limiter
 
         _openai_semaphore = asyncio.Semaphore(getattr(settings, "OPENAI_MAX_CONCURRENT", 20))
@@ -54,7 +63,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         # Create a single shared client with extended timeout for high concurrency
         # Default is 10 minutes, but we extend it for reliability with 100 concurrent workers
         self._client = AsyncOpenAI(
-            api_key=self.api_key,
+            api_key=api_key,
             timeout=1200.0,  # 20 minutes total timeout (was 10 minutes default)
             max_retries=2,  # Retry on transient errors
         )
@@ -108,11 +117,13 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         context_prefix = f"{entity_context} " if entity_context else ""
 
         if not text.strip():
-            logger.info(f"{context_prefix}Empty text provided for embedding, returning zero vector")
+            self.logger.info(
+                f"{context_prefix}Empty text provided for embedding, returning zero vector"
+            )
             return [0.0] * self.vector_dimensions
 
         used_model = model or self.embedding_model
-        logger.info(
+        self.logger.info(
             f"{context_prefix}Embedding single text with model {used_model} "
             f"(text length: {len(text)})"
         )
@@ -125,7 +136,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
 
             embedding = response.data[0].embedding
             cpu_elapsed = loop.time() - cpu_start
-            logger.info(
+            self.logger.info(
                 f"{context_prefix}Embedding completed in {cpu_elapsed:.2f}s, "
                 f"vector size: {len(embedding)}"
             )
@@ -134,7 +145,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         except Exception as e:
             cpu_elapsed = loop.time() - cpu_start
             error_type = type(e).__name__
-            logger.error(
+            self.logger.error(
                 f"{context_prefix}Embedding failed after {cpu_elapsed:.2f}s "
                 f"with {error_type}: {str(e)}"
             )
@@ -155,10 +166,10 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         context_prefix = f"{entity_context} " if entity_context else ""
 
         if not texts:
-            logger.info(f"📭 OPENAI_EMPTY [{context_prefix}] Empty texts list provided")
+            self.logger.info(f"📭 OPENAI_EMPTY [{context_prefix}] Empty texts list provided")
             return []
 
-        logger.info(
+        self.logger.info(
             f"🤖 OPENAI_START [{context_prefix}] Starting batch embedding for {len(texts)} texts"
         )
 
@@ -167,7 +178,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         filtered_texts, empty_indices = filtered_result
 
         if not filtered_texts:
-            logger.info(f"📭 OPENAI_ALL_EMPTY [{context_prefix}] All texts were empty")
+            self.logger.info(f"📭 OPENAI_ALL_EMPTY [{context_prefix}] All texts were empty")
             return [[0.0] * self.vector_dimensions] * len(texts)
 
         self._log_processing_stats(filtered_texts, empty_indices, context_prefix)
@@ -202,7 +213,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         total_chars = sum(len(text) for text in filtered_texts)
         avg_chars = total_chars / len(filtered_texts) if filtered_texts else 0
 
-        logger.info(
+        self.logger.info(
             f"📊 OPENAI_STATS [{context_prefix}] Processing {len(filtered_texts)} non-empty texts "
             f"(skipped {len(empty_indices)} empty, avg chars: {avg_chars:.0f})"
         )
@@ -250,7 +261,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         if current_batch:
             batches.append(current_batch)
 
-        logger.info(
+        self.logger.info(
             f"📦 OPENAI_BATCHES [{context_prefix}] Created {len(batches)} batches "
             f"from {len(texts)} texts"
         )
@@ -260,7 +271,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
 
         async def process_batch_with_limit(batch, batch_idx):
             async with semaphore:
-                logger.info(
+                self.logger.info(
                     f"🔄 OPENAI_BATCH_START [{context_prefix}] Processing batch "
                     f"{batch_idx + 1}/{len(batches)} ({len(batch)} texts)"
                 )
@@ -280,7 +291,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             embeddings.extend(batch_embeddings)
 
         cpu_elapsed = loop.time() - cpu_start
-        logger.info(
+        self.logger.info(
             f"✅ OPENAI_COMPLETE [{context_prefix}] All {len(batches)} batches completed "
             f"in {cpu_elapsed:.2f}s ({len(embeddings)} vectors returned)"
         )
@@ -296,7 +307,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         try:
             response = await self._rate_limited_embed(batch, model, encoding_format)
             embeddings = [e.embedding for e in response.data]
-            logger.info(
+            self.logger.info(
                 "✅ OPENAI_BATCH_SUCCESS [%s] %d tokens, %.2fs",
                 context_prefix,
                 len(batch),
@@ -306,7 +317,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         except Exception as e:
             # Check if it's a token limit error
             if "maximum context length" in str(e) or "max_tokens_per_request" in str(e):
-                logger.warning(
+                self.logger.warning(
                     f"🚦 OPENAI_TOKEN_LIMIT [{context_prefix}] Hit token limit with batch of "
                     f"{len(batch)} texts, splitting batch"
                 )
@@ -332,7 +343,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             return first_half + second_half
         else:
             # Single text is too long - this shouldn't happen if chunkers work correctly
-            logger.error(
+            self.logger.error(
                 f"❌ OPENAI_CHUNK_TOO_LARGE [{context_prefix}] "
                 f"Single chunk exceeds token limit! This indicates a chunker failure."
             )
@@ -342,19 +353,19 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             text_length = len(text)
             token_count = len(text) // 4  # Rough estimate
 
-            logger.error(
+            self.logger.error(
                 f"🔍 OPENAI_DEBUG [{context_prefix}] Text details: "
                 f"length={text_length} chars, ~{token_count} tokens"
             )
 
             # Log first 1000 chars to see what type of content it is
-            logger.error(
+            self.logger.error(
                 f"📄 OPENAI_CONTENT_PREVIEW [{context_prefix}] First 1000 chars:\n{text[:1000]}..."
             )
 
             # Log last 500 chars to see if there's a pattern
             if text_length > 1500:
-                logger.error(
+                self.logger.error(
                     f"📄 OPENAI_CONTENT_END [{context_prefix}] Last 500 chars:\n...{text[-500:]}"
                 )
 
@@ -378,11 +389,11 @@ class OpenAIText2Vec(BaseEmbeddingModel):
                 result.append(embeddings[embedding_idx])
                 embedding_idx += 1
 
-        logger.info(f"📦 OPENAI_FINAL Final result: {len(result)} vectors")
+        self.logger.info(f"📦 OPENAI_FINAL Final result: {len(result)} vectors")
         return result
 
     async def close(self):
         """Clean up the shared client when done."""
         if self._client:
             await self._client.close()
-            logger.info("OpenAI client closed successfully")
+            self.logger.info("OpenAI client closed successfully")

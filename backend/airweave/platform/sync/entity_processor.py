@@ -359,8 +359,7 @@ class EntityProcessor:
         entity_count = len(processed_entities)
 
         sync_context.logger.info(
-            f"🧮 VECTOR_START [{entity_context}] Computing vectors for {entity_count} entities "
-            f"using {sync_context.embedding_model.model_name}"
+            f"🧮 VECTOR_START [{entity_context}] Computing vectors for {entity_count} entities"
         )
 
         try:
