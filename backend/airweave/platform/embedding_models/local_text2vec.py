@@ -3,10 +3,9 @@
 from typing import List, Optional
 
 import httpx
-from pydantic import Field
 
 from airweave.core.config import settings
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger
 from airweave.platform.decorators import embedding_model
 
 from ._base import BaseEmbeddingModel
@@ -22,10 +21,9 @@ from ._base import BaseEmbeddingModel
 class LocalText2Vec(BaseEmbeddingModel):
     """Local text2vec model configuration for embedding."""
 
-    model_name: str = "local-text2vec-transformers"
-    inference_url: str = Field(default="", description="URL of the inference API")
-    vector_dimensions: int = 384  # MiniLM-L6-v2 dimensions
-    enabled: bool = True
+    def __init__(self, logger: ContextualLogger):
+        """Initialize the local text2vec model."""
+        self.logger = logger
 
     def model_post_init(self, __context) -> None:
         """Post initialization hook to set the inference URL from settings.
@@ -34,7 +32,7 @@ class LocalText2Vec(BaseEmbeddingModel):
         """
         super().model_post_init(__context)
         self.inference_url = settings.TEXT2VEC_INFERENCE_URL
-        logger.info(f"Text2Vec model using inference URL: {self.inference_url}")
+        self.logger.info(f"Text2Vec model using inference URL: {self.inference_url}")
 
     async def embed(
         self,
@@ -110,7 +108,7 @@ class LocalText2Vec(BaseEmbeddingModel):
                         response.raise_for_status()
                         result.append(response.json()["vector"])
                     except Exception as e:
-                        logger.error(f"Error embedding text: {e}")
+                        self.logger.error(f"Error embedding text: {e}")
                         # Return zero vector for failed embedding
                         result.append([0.0] * self.vector_dimensions)
                 else:

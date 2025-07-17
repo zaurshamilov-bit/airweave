@@ -1,7 +1,6 @@
 """Temporal worker for Airweave."""
 
 import asyncio
-import os
 import signal
 from typing import Any
 
@@ -30,46 +29,11 @@ class TemporalWorker:
             ensure_file_entity_models()
 
             client = await temporal_client.get_client()
-
             task_queue = settings.TEMPORAL_TASK_QUEUE
-
             logger.info(f"Starting Temporal worker on task queue: {task_queue}")
 
-            # Configure sandbox to allow debugger modules if debugging
-            disable_sandbox = os.environ.get("TEMPORAL_DISABLE_SANDBOX", "").lower() == "true"
-
-            if disable_sandbox:
-                # Completely disable sandboxing (debugging only!)
-                from temporalio.worker import UnsandboxedWorkflowRunner
-
-                sandbox_config = UnsandboxedWorkflowRunner()
-                logger.warning("⚠️  TEMPORAL SANDBOX DISABLED - Use only for debugging!")
-            elif (
-                settings.DEBUG
-                or getattr(settings, "ALLOW_DEBUGGER", False)
-                or os.environ.get("DEBUG", "").lower() == "true"
-            ):
-                # Allow debugger modules to pass through the sandbox
-                from temporalio.worker.workflow_sandbox import (
-                    SandboxedWorkflowRunner,
-                    SandboxRestrictions,
-                )
-
-                restrictions = SandboxRestrictions.default.with_passthrough_modules(
-                    "_pydevd_bundle",
-                    "pydevd",
-                    "debugpy",
-                )
-                sandbox_config = SandboxedWorkflowRunner(restrictions=restrictions)
-                logger.warning(
-                    "Running with debugger support - workflow sandbox restrictions relaxed"
-                )
-            else:
-                # Default sandbox configuration for production
-                from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner
-
-                sandbox_config = SandboxedWorkflowRunner()
-                logger.info("Using default sandboxed workflow runner")
+            # Get the appropriate sandbox configuration
+            sandbox_config = self._get_sandbox_config()
 
             self.worker = Worker(
                 client,
@@ -95,6 +59,22 @@ class TemporalWorker:
 
         # Always close temporal client to prevent resource leaks
         await temporal_client.close()
+
+    def _get_sandbox_config(self):
+        """Determine the appropriate sandbox configuration."""
+        should_disable = settings.TEMPORAL_DISABLE_SANDBOX
+
+        if should_disable:
+            from temporalio.worker import UnsandboxedWorkflowRunner
+
+            logger.warning("⚠️  TEMPORAL SANDBOX DISABLED - Use only for debugging!")
+            return UnsandboxedWorkflowRunner()
+
+        # Default production sandbox
+        from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner
+
+        logger.info("Using default sandboxed workflow runner")
+        return SandboxedWorkflowRunner()
 
 
 async def main() -> None:
