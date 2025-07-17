@@ -233,6 +233,7 @@ class SearchService:
             query=query,
             readable_id=readable_id,
             auth_context=auth_context,
+            logger=logger,
         )
         context_results = self._clean_search_results(raw_results, for_display=False)
 
