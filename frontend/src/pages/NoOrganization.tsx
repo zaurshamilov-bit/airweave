@@ -1,14 +1,52 @@
 import { useAuth } from '@/lib/auth-context';
+import { useOrganizationStore } from '@/lib/stores/organizations';
+import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertCircle, Mail, Users } from 'lucide-react';
+import { AlertCircle, Mail, Users, Loader2 } from 'lucide-react';
 
 export const NoOrganization = () => {
   const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [isChecking, setIsChecking] = useState(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleSignOut = () => {
-    logout({ logoutParams: { returnTo: window.location.origin } });
+    logout();
   };
+
+  const checkForOrganizations = async () => {
+    try {
+      setIsChecking(true);
+      const organizations = await useOrganizationStore.getState().initializeOrganizations();
+
+      if (organizations.length > 0) {
+        console.log('Organizations found, redirecting to dashboard');
+        navigate('/', { replace: true });
+      }
+    } catch (error) {
+      console.error('Failed to check for organizations:', error);
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  // Set up periodic checking every 3 seconds
+  useEffect(() => {
+    // Initial check
+    checkForOrganizations();
+
+    // Set up interval for periodic checks
+    intervalRef.current = setInterval(checkForOrganizations, 3000);
+
+    // Cleanup interval on unmount
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -22,6 +60,12 @@ export const NoOrganization = () => {
           </CardTitle>
           <CardDescription className="text-center">
             You are not a member of any organization yet.
+            {isChecking && (
+              <div className="flex items-center justify-center mt-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Checking for access...
+              </div>
+            )}
           </CardDescription>
         </CardHeader>
 
@@ -51,6 +95,7 @@ export const NoOrganization = () => {
               variant="outline"
               className="w-full"
               onClick={handleSignOut}
+              disabled={isChecking}
             >
               Sign Out
             </Button>
