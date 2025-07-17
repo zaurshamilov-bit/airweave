@@ -10,6 +10,7 @@ from airweave.api import deps
 from airweave.api.examples import create_collection_list_response, create_job_list_response
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
+from airweave.core.logging import ContextualLogger
 from airweave.core.search_service import ResponseType, search_service
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
@@ -161,8 +162,13 @@ async def search_collection(
     ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
+    logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.SearchResponse:
     """Search across all data sources within the specified collection."""
+    logger.info(
+        f"Searching collection {readable_id} with query: {query} "
+        f"with response_type: {response_type}."
+    )
     try:
         return await search_service.search_with_completion(
             db,
@@ -170,12 +176,9 @@ async def search_collection(
             query=query,
             auth_context=auth_context,
             response_type=response_type,
+            logger=logger,
         )
     except Exception as e:
-        # Log the error for debugging
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.error(f"Search error for collection {readable_id}: {str(e)}")
 
         # Check if it's a connection error
