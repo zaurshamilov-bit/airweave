@@ -31,11 +31,6 @@ The sync module orchestrates data flow from sources to destinations using a high
 - Configures contextual logging with sync metadata
 - Manages OAuth token initialization
 
-**Critical Implementation Details**:
-```python
-# CRITICAL FIX: Pre-loads transformers to avoid 1.5s database lookups per entity
-await sync_context.router.initialize_transformer_cache(db)
-```
 
 ### SyncContext
 **Purpose**: Immutable container holding all resources needed during sync execution

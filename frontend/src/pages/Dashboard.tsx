@@ -9,12 +9,10 @@ import {
   SourceButton,
   ApiKeyCard,
   ExampleProjectCard,
-  AuthProviderButton,
 } from "@/components/dashboard";
 import { clearStoredErrorDetails } from "@/lib/error-utils";
 import { DialogFlow } from "@/components/shared/DialogFlow";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
-import { useAuthProvidersStore } from "@/lib/stores/authProviders";
 
 // Collection type definition
 interface Collection {
@@ -62,9 +60,6 @@ const Dashboard = () => {
   // Use sources store
   const { sources, isLoading: isLoadingSources, fetchSources } = useSourcesStore();
 
-  // Use auth providers store
-  const { authProviders, isLoading: isLoadingAuthProviders, fetchAuthProviders } = useAuthProvidersStore();
-
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedSource, setSelectedSource] = useState<{ id: string; name: string; short_name: string } | null>(null);
@@ -95,12 +90,7 @@ const Dashboard = () => {
     };
   }, [fetchCollections, fetchSources]);
 
-  // Fetch auth providers
-  useEffect(() => {
-    fetchAuthProviders().then(authProviders => {
-      console.log(`🔄 [Dashboard] Auth providers loaded: ${authProviders.length} auth providers available`);
-    });
-  }, [fetchAuthProviders]);
+
 
   const handleRequestNewKey = () => {
     // Placeholder for requesting a new API key
@@ -112,9 +102,7 @@ const Dashboard = () => {
     setDialogOpen(true);
   };
 
-  const handleAuthProviderClick = (authProvider: any) => {
-    alert("hello");
-  };
+
 
   // Handle dialog close
   const handleDialogClose = () => {
@@ -239,36 +227,7 @@ const Dashboard = () => {
             onRequestNewKey={handleRequestNewKey}
           />
 
-          {/* Auth Providers */}
-          <section>
-            <h2 className="text-xl sm:text-2xl font-semibold mb-1 sm:mb-2">Connect Auth Providers</h2>
-            <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-5">Authenticate data sources through third-party applications</p>
 
-            <div className="grid grid-cols-1 gap-3 auto-rows-fr">
-              {isLoadingAuthProviders ? (
-                <div className="h-20 flex items-center justify-center">
-                  <div className="animate-pulse flex flex-col items-center">
-                    <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-md mb-2"></div>
-                    <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                  </div>
-                </div>
-              ) : authProviders.length === 0 ? (
-                <div className="text-center py-6 text-muted-foreground">
-                  No auth providers found
-                </div>
-              ) : (
-                authProviders.map((authProvider) => (
-                  <AuthProviderButton
-                    key={authProvider.id}
-                    id={authProvider.id}
-                    name={authProvider.name}
-                    shortName={authProvider.short_name}
-                    onClick={() => handleAuthProviderClick(authProvider)}
-                  />
-                ))
-              )}
-            </div>
-          </section>
         </div>
       </div>
     </div>
