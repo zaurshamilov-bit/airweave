@@ -240,3 +240,66 @@ async def connect_auth_provider(
             raise HTTPException(
                 status_code=500, detail=f"Failed to create auth provider connection: {str(e)}"
             ) from e
+
+
+@router.delete("/{readable_id}", response_model=schemas.AuthProviderConnection)
+async def delete_auth_provider_connection(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    readable_id: str,
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+) -> schemas.AuthProviderConnection:
+    """Delete an auth provider connection.
+
+    This will cascade delete:
+    - The associated integration credential
+    - All source connections that were created using this auth provider
+    - All connections and credentials associated with those source connections
+
+    Args:
+    -----
+        db: The database session
+        readable_id: The readable ID of the auth provider connection to delete
+        auth_context: The current authentication context
+
+    Returns:
+    --------
+        schemas.AuthProviderConnection: The deleted connection information
+    """
+    # Find the connection by readable_id and integration_type
+    connection = await crud.connection.get_by_readable_id(
+        db, readable_id=readable_id, auth_context=auth_context
+    )
+
+    if not connection:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Auth provider connection not found: {readable_id}",
+        )
+
+    # Verify it's an auth provider connection
+    if connection.integration_type != IntegrationType.AUTH_PROVIDER:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Connection {readable_id} is not an auth provider connection",
+        )
+
+    # Create response before deletion
+    response = schemas.AuthProviderConnection(
+        id=connection.id,
+        name=connection.name,
+        readable_id=connection.readable_id,
+        short_name=connection.short_name,
+        description=connection.description,
+        status=connection.status.value,
+        created_at=connection.created_at,
+        modified_at=connection.modified_at,
+    )
+
+    # Delete the connection - this will cascade to:
+    # 1. integration_credential (via before_delete event in Connection model)
+    # 2. source_connections that use this auth provider (via foreign key CASCADE)
+    # 3. connections and syncs of those source_connections (via before_delete event in SourceConn)
+    await crud.connection.remove(db, id=connection.id, auth_context=auth_context)
+
+    return response

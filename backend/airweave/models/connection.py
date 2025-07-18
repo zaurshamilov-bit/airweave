@@ -89,6 +89,7 @@ class Connection(Base):
 
     source_connection: Mapped[Optional["SourceConnection"]] = relationship(
         "SourceConnection",
+        foreign_keys="[SourceConnection.connection_id]",
         back_populates="connection",
         lazy="noload",
     )
@@ -97,6 +98,19 @@ class Connection(Base):
         "SyncConnection",
         back_populates="connection",
         lazy="noload",
+    )
+
+    # Source connections that use this connection as an auth provider
+    # This enables cascade deletion when an auth provider connection is deleted
+    source_connections_using_auth_provider: Mapped[List["SourceConnection"]] = relationship(
+        "SourceConnection",
+        foreign_keys="[SourceConnection.readable_auth_provider_id]",
+        primaryjoin="and_(SourceConnection.readable_auth_provider_id==Connection.readable_id, "
+        "Connection.integration_type=='AUTH_PROVIDER')",
+        cascade="all, delete-orphan",
+        viewonly=False,
+        lazy="noload",
+        passive_deletes=False,  # Force Python-side cascade
     )
 
     # Add a relationship to dag nodes with cascade delete
