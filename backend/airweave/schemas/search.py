@@ -7,7 +7,7 @@ AI-generated completions.
 """
 
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,10 +22,9 @@ class ResponseType(str, Enum):
 class QueryExpansionStrategy(str, Enum):
     """Query expansion strategies for search."""
 
-    AUTO = "auto"  # Automatically select best available strategy (try LLM, then synonym, then none)
-    LLM = "llm"  # Use LLM for semantic query expansion
-    SYNONYM = "synonym"  # Use WordNet synonym query expansion
-    NO_EXPANSION = "no_expansion"  # No query expansion, use original query only
+    AUTO = "auto"
+    LLM = "llm"
+    NO_EXPANSION = "no_expansion"
 
 
 class SearchStatus(str, Enum):
@@ -34,6 +33,16 @@ class SearchStatus(str, Enum):
     SUCCESS = "success"
     NO_RELEVANT_RESULTS = "no_relevant_results"
     NO_RESULTS = "no_results"
+
+
+class QueryExpansions(BaseModel):
+    """Structured output for LLM-based query expansions."""
+
+    alternatives: List[str] = Field(
+        description="List of alternative phrasings for the search query",
+        min_items=1,
+        max_items=10,
+    )
 
 
 class SearchResponse(BaseModel):

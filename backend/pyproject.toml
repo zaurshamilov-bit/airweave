@@ -35,7 +35,7 @@ oracledb = "^2.5.1"
 aiofiles = "^24.1.0"
 croniter = "^6.0.0"
 qdrant-client = "^1.13.3"
-openai = "^1.10.0"
+openai = "^1.58.1"
 mistralai = "^1.7.0"
 chonkie = {extras = ["code"], version = "^1.0.6"}
 tiktoken = "^0.5.1"
@@ -50,7 +50,6 @@ azure-identity = "^1.23.0"
 posthog = "^5.4.0"
 aiolimiter = "^1.1.0"
 pyyaml = "^6.0.1"
-nltk = "^3.9.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
