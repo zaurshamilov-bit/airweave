@@ -407,3 +407,81 @@ class QdrantDestination(VectorDBDestination):
         except Exception as e:
             logger.error(f"Error searching with Qdrant filter: {e}")
             raise  # Re-raise the exception instead of returning empty list
+
+    async def bulk_search(
+        self,
+        query_vectors: list[list[float]],
+        limit: int = 10,
+        score_threshold: float | None = None,
+        with_payload: bool = True,
+        filter_conditions: list[dict] | None = None,
+    ) -> list[list[dict]]:
+        """Perform batch search for multiple query vectors in a single request.
+
+        Args:
+            query_vectors (list[list[float]]): List of query vectors to search with.
+            limit (int): Maximum number of results per query. Defaults to 10.
+            score_threshold (float | None): Optional minimum score threshold for results.
+            with_payload (bool): Whether to include payload in results. Defaults to True.
+            filter_conditions (list[dict] | None): Optional list of filter conditions,
+                one per query vector. If provided, must have same length as query_vectors.
+
+        Returns:
+            list[list[dict]]: List of search results for each query vector.
+                Each inner list contains results for the corresponding query vector.
+        """
+        await self.ensure_client_readiness()
+
+        # Validate inputs
+        if not query_vectors:
+            return []
+
+        if filter_conditions and len(filter_conditions) != len(query_vectors):
+            raise ValueError(
+                f"Number of filter conditions ({len(filter_conditions)}) must match "
+                f"number of query vectors ({len(query_vectors)})"
+            )
+
+        try:
+            # Build search requests for batch processing
+            search_requests = []
+            for i, query_vector in enumerate(query_vectors):
+                # Create base search request
+                request = rest.SearchRequest(
+                    vector=query_vector,
+                    limit=limit,
+                    with_payload=with_payload,
+                    score_threshold=score_threshold,
+                )
+
+                # Add filter if provided
+                if filter_conditions and filter_conditions[i]:
+                    request.filter = rest.Filter.model_validate(filter_conditions[i])
+
+                search_requests.append(request)
+
+            # Perform batch search
+            batch_results = await self.client.search_batch(
+                collection_name=self.collection_name,
+                requests=search_requests,
+            )
+
+            # Convert results to standard format
+            all_results = []
+            for search_results in batch_results:
+                results = []
+                for result in search_results:
+                    result_dict = {
+                        "id": result.id,
+                        "score": result.score,
+                    }
+                    if with_payload:
+                        result_dict["payload"] = result.payload
+                    results.append(result_dict)
+                all_results.append(results)
+
+            return all_results
+
+        except Exception as e:
+            logger.error(f"Error performing batch search with Qdrant: {e}")
+            raise
