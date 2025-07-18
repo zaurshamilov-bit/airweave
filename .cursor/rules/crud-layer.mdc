@@ -1,0 +1,211 @@
+---
+description: Comprehensive guide for understanding and working with the CRUD layer in Airweave backend
+globs: **/crud/**
+alwaysApply: false
+---
+# Airweave CRUD Layer Architecture
+
+## Overview
+
+The CRUD layer provides a consistent interface for database operations across all models in Airweave. It implements a sophisticated inheritance hierarchy that enforces proper access control, transaction management, and audit tracking.
+
+## Inheritance Hierarchy
+
+### Base Classes
+
+#### 1. CRUDBaseOrganization (_base_organization.py)
+- **Purpose**: For resources scoped to organizations (most common pattern)
+- **Key Features**:
+  - Enforces organization-level access control via `AuthContext`
+  - Tracks user modifications with `created_by_email` and `modified_by_email`
+  - Validates organization access on every operation
+  - Supports both user and API key authentication contexts
+
+#### 2. CRUDBaseUser (_base_user.py)
+- **Purpose**: For pure user-level data (e.g., user profiles)
+- **Key Features**:
+  - Enforces strict user-level access (can only access own data)
+  - No organization scoping
+  - Simpler permission model - user can only CRUD their own resources
+
+#### 3. CRUDPublic (_base_public.py)
+- **Purpose**: For system-wide public resources (e.g., sources, destinations, embedding models)
+- **Key Features**:
+  - No access control - publicly accessible
+  - Often used for system configuration data
+  - Supports filtering by organization for multi-tenant scenarios
+  - Includes `sync()` method for bulk updates
+
+## Core Concepts
+
+### AuthContext
+The `AuthContext` (from `schemas.auth`) is central to the CRUD layer:
+```python
+class AuthContext:
+    organization_id: UUID          # Always present
+    user: Optional[User] = None    # Present for user auth, None for API keys
+    auth_method: str              # "auth0", "api_key", or "system"
+    auth_metadata: Optional[Dict]  # Additional auth-specific data
+```
+
+**Key Properties**:
+- `has_user_context`: True if authenticated via Auth0 (user present)
+- `tracking_email`: Returns user email for audit tracking
+- `is_api_key_auth`: True for API key authentication
+- `is_user_auth`: True for Auth0 user authentication
+
+### Unit of Work Pattern
+The `UnitOfWork` class manages database transactions:
+```python
+# Without UoW - auto-commits
+await crud.create(db, obj_in=data, auth_context=auth)
+
+# With UoW - manual transaction control
+async with UnitOfWork(db) as uow:
+    obj1 = await crud.create(db, obj_in=data1, auth_context=auth, uow=uow)
+    obj2 = await crud.create(db, obj_in=data2, auth_context=auth, uow=uow)
+    # Commits on context exit, rolls back on exception
+```
+
+## Common Patterns
+
+### 1. Standard CRUD Operations
+All base classes provide:
+- `get(db, id, auth_context)` - Get single resource
+- `get_multi(db, auth_context, skip, limit)` - Get multiple resources
+- `create(db, obj_in, auth_context, uow)` - Create resource
+- `update(db, db_obj, obj_in, auth_context, uow)` - Update resource
+- `remove(db, id, auth_context, uow)` - Delete resource
+
+### 2. Access Control Validation
+Organization-scoped resources validate access via:
+```python
+async def _validate_organization_access(auth_context, organization_id):
+    if auth_context.has_user_context:
+        # Check user has access to organization
+    else:
+        # Check API key belongs to organization
+```
+
+### 3. User Tracking
+For organization-scoped resources with `track_user=True`:
+- `created_by_email` and `modified_by_email` are automatically set
+- API key operations set these to `None` (no user context)
+- User operations set these to the authenticated user's email
+
+### 4. Custom Methods
+CRUD classes often extend base functionality:
+```python
+class CRUDSync(CRUDBaseOrganization):
+    async def enrich_sync_with_connections(db, sync):
+        # Custom method to load related data
+
+    async def get(db, id, auth_context, with_connections=True):
+        # Override to add optional data loading
+```
+
+## Implementation Examples
+
+### Simple Public Resource
+```python
+class CRUDEmbeddingModel(CRUDPublic[EmbeddingModel, EmbeddingModelCreate, EmbeddingModelUpdate]):
+    pass
+
+embedding_model = CRUDEmbeddingModel(EmbeddingModel)
+```
+
+### Organization-Scoped Resource
+```python
+class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, CollectionUpdate]):
+    # Inherits all standard CRUD with org-level access control
+    pass
+
+collection = CRUDCollection(Collection)
+```
+
+### Complex Resource with Custom Logic
+```python
+class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
+    async def create(self, db, *, obj_in, auth_context, uow=None):
+        # Generate secure key
+        key = secrets.token_urlsafe(32)
+        encrypted_key = credentials.encrypt({"key": key})
+
+        # Use parent create with custom data
+        return await super().create(
+            db=db,
+            obj_in={"encrypted_key": encrypted_key, ...},
+            auth_context=auth_context,
+            uow=uow
+        )
+```
+
+### Special Cases
+```python
+class CRUDOrganization:
+    # Doesn't inherit from base - organizations ARE the scope
+    # Implements custom validation logic
+    # Handles user-organization relationships
+```
+
+## Best Practices
+
+### 1. Choose the Right Base Class
+- **CRUDBaseOrganization**: Most resources (collections, syncs, connections)
+- **CRUDBaseUser**: User-specific data only
+- **CRUDPublic**: System configuration, no access control needed
+
+### 2. Transaction Management
+- Use `UnitOfWork` for multi-step operations
+- Pass `uow` parameter through nested CRUD calls
+- Let context manager handle commit/rollback
+
+### 3. Access Control
+- Always pass `AuthContext` to CRUD operations
+- Never bypass `_validate_organization_access()`
+- Handle both user and API key contexts
+
+### 4. Custom Methods
+- Override base methods when needed (e.g., `get` with extra options)
+- Add domain-specific methods (e.g., `get_by_short_name`)
+- Keep CRUD classes focused on data access
+
+### 5. Error Handling
+- Raise `NotFoundException` for missing resources
+- Raise `PermissionException` for access violations
+- Let exceptions bubble up for transaction rollback
+
+## Module Exports
+
+The `crud/__init__.py` exports singleton instances:
+```python
+from .crud_collection import collection
+from .crud_sync import sync
+# ... etc
+
+__all__ = ["collection", "sync", ...]
+```
+
+Use these instances in API endpoints and services:
+```python
+from airweave import crud
+
+# In endpoint
+collection = await crud.collection.get(db, id, auth_context)
+```
+
+## Key Invariants
+
+1. **Every operation requires AuthContext** - No exceptions
+2. **Organization resources are isolated** - Cross-org access is prevented
+3. **User tracking is automatic** - When enabled, audit fields are managed
+4. **Transactions are explicit** - Use UoW for multi-step operations
+5. **Access validation is mandatory** - Built into base class methods
+
+## Common Gotchas
+
+1. **Don't forget auth_context** - Required for all operations
+2. **Use uow for related creates** - Ensures atomic transactions
+3. **Check track_user flag** - Determines if UserMixin fields are set
+4. **Organization validation** - Happens automatically in base class
+5. **Custom CRUD methods** - Should still validate access control

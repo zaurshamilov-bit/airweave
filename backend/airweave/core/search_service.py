@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
+from airweave.core.logging import ContextualLogger
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
@@ -16,8 +17,6 @@ from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
 from airweave.platform.locator import resource_locator
 from airweave.schemas.auth import AuthContext
 from airweave.schemas.search import QueryExpansionStrategy, ResponseType, SearchStatus
-
-logger = logging.getLogger(__name__)
 
 
 class SearchService:
@@ -55,6 +54,7 @@ class SearchService:
     def __init__(self):
         """Initialize the search service with OpenAI client."""
         if not settings.OPENAI_API_KEY:
+            logger = logging.getLogger(__name__)
             logger.warning("OPENAI_API_KEY is not set in environment variables")
             self.openai_client = None
         else:
@@ -114,7 +114,9 @@ class SearchService:
 
         return cleaned_results
 
-    def _merge_search_results(self, all_results: list[dict], max_results: int = 15) -> list[dict]:
+    def _merge_search_results(
+        self, all_results: list[dict], max_results: int = 15, logger: ContextualLogger = None
+    ) -> list[dict]:
         """Merge and deduplicate search results from multiple query expansions.
 
         Deduplicates by document ID, keeping the highest score for each unique document.
@@ -123,6 +125,7 @@ class SearchService:
         Args:
             all_results (list[dict]): Combined results from multiple search queries
             max_results (int): Maximum number of results to return
+            logger (ContextualLogger): Logger instance
 
         Returns:
             list[dict]: Deduplicated and sorted results
@@ -171,6 +174,7 @@ class SearchService:
         query: str,
         readable_id: str,
         auth_context: AuthContext,
+        logger: ContextualLogger,
         expansion_strategy: QueryExpansionStrategy | None = None,
     ) -> list[dict]:
         """Search across vector database using existing connections.
@@ -180,6 +184,7 @@ class SearchService:
             query (str): Search query text
             readable_id (str): Readable ID of the collection to search within
             auth_context (AuthContext): Authentication context
+            logger (ContextualLogger): Logger instance
             expansion_strategy (ExpansionStrategy | None): Query expansion strategy.
                 If None, no expansion is performed.
 
@@ -205,6 +210,7 @@ class SearchService:
                 search_results = await self._search_with_expansion(
                     query, expansion_strategy, embedding_model, destination
                 )
+                embedding_model = OpenAIText2Vec(api_key=settings.OPENAI_API_KEY, logger=logger)
             else:
                 search_results = await self._search_single_query(
                     query, embedding_model, destination
@@ -242,18 +248,22 @@ class SearchService:
             raise NotFoundException("Destination not found")
         return resource_locator.get_destination(destination_model)
 
-    def _get_embedding_model(self, readable_id: str, collection_id: str) -> BaseEmbeddingModel:
+    def _get_embedding_model(
+        self, readable_id: str, collection_id: str, logger: ContextualLogger
+    ) -> BaseEmbeddingModel:
         """Get the appropriate embedding model based on configuration."""
         if settings.OPENAI_API_KEY:
             logger.info(
-                f"Using OpenAI embedding model for search in collection {readable_id} {collection_id}"
+                f"Using OpenAI embedding model for search in collection "
+                f"{readable_id} {collection_id}"
             )
-            return OpenAIText2Vec(api_key=settings.OPENAI_API_KEY)
+            return OpenAIText2Vec(api_key=settings.OPENAI_API_KEY, logger=logger)
         else:
             logger.info(
-                f"Using local embedding model for search in collection {readable_id} {collection_id}"
+                f"Using local embedding model for search in collection "
+                f"{readable_id} {collection_id}"
             )
-            return LocalText2Vec()
+            return LocalText2Vec(logger=logger)
 
     async def _search_with_expansion(
         self,
@@ -261,6 +271,7 @@ class SearchService:
         expansion_strategy: QueryExpansionStrategy,
         embedding_model: BaseEmbeddingModel,
         destination: BaseDestination,
+        logger: ContextualLogger,
     ) -> list[dict]:
         """Perform search with query expansion."""
         from airweave.core.query_preprocessor import query_preprocessor
@@ -303,6 +314,7 @@ class SearchService:
         query: str,
         readable_id: str,
         auth_context: AuthContext,
+        logger: ContextualLogger,
         response_type: ResponseType = ResponseType.RAW,
         expansion_strategy: QueryExpansionStrategy | None = None,
     ) -> schemas.SearchResponse:
@@ -313,6 +325,7 @@ class SearchService:
             query: The search query text
             readable_id: Readable ID of the collection to search in
             auth_context: Authentication context
+            logger: Logger instance
             response_type: Type of response (raw results or AI completion)
             expansion_strategy: Query expansion strategy enum value. If None, no expansion.
 
@@ -324,6 +337,7 @@ class SearchService:
             query=query,
             readable_id=readable_id,
             auth_context=auth_context,
+            logger=logger,
             expansion_strategy=expansion_strategy,
         )
 
@@ -344,6 +358,7 @@ class SearchService:
             query=query,
             readable_id=readable_id,
             auth_context=auth_context,
+            logger=logger,
             expansion_strategy=expansion_strategy,
         )
         context_results = self._clean_search_results(raw_results, for_display=False)
@@ -465,6 +480,7 @@ class SearchService:
         query: str,
         readable_id: str,
         auth_context: AuthContext,
+        logger: ContextualLogger,
         expansion_strategy: QueryExpansionStrategy | None = None,
     ) -> list[dict]:
         """Get raw search results without cleaning (internal use only).
@@ -482,9 +498,9 @@ class SearchService:
         destination_class = resource_locator.get_destination(destination_model)
 
         if settings.OPENAI_API_KEY:
-            embedding_model = OpenAIText2Vec(api_key=settings.OPENAI_API_KEY)
+            embedding_model = OpenAIText2Vec(api_key=settings.OPENAI_API_KEY, logger=logger)
         else:
-            embedding_model = LocalText2Vec()
+            embedding_model = LocalText2Vec(logger=logger)
 
         # Expand query if strategy is specified
         if expansion_strategy and expansion_strategy != QueryExpansionStrategy.NO_EXPANSION:

@@ -58,10 +58,7 @@ def fix_security_scheme(openapi_schema: Dict[str, Any]) -> Dict[str, Any]:
     This function thoroughly removes any duplicated authentication parameters
     to avoid the "duplicate parameter" error in generated SDKs.
     """
-    if (
-        "components" in openapi_schema
-        and "securitySchemes" in openapi_schema["components"]
-    ):
+    if "components" in openapi_schema and "securitySchemes" in openapi_schema["components"]:
         # Replace the security scheme to use only apiKey with header
         openapi_schema["components"]["securitySchemes"] = {
             "ApiKeyAuth": {
@@ -93,13 +90,11 @@ def fix_security_scheme(openapi_schema: Dict[str, Any]) -> Dict[str, Any]:
                                 )
                                 # Remove x-api-key (lowercase)
                                 or (
-                                    param.get("name") == "x-api-key"
-                                    and param.get("in") == "header"
+                                    param.get("name") == "x-api-key" and param.get("in") == "header"
                                 )
                                 # Remove X-API-Key (capitalized)
                                 or (
-                                    param.get("name") == "X-API-Key"
-                                    and param.get("in") == "header"
+                                    param.get("name") == "X-API-Key" and param.get("in") == "header"
                                 )
                                 # Remove X-Organization-ID (we don't want this in the public API spec)
                                 or (
@@ -112,6 +107,38 @@ def fix_security_scheme(openapi_schema: Dict[str, Any]) -> Dict[str, Any]:
     # Remove any global security definitions if they exist
     if "security" in openapi_schema:
         openapi_schema["security"] = [{"ApiKeyAuth": []}]
+
+    return openapi_schema
+
+
+def add_tag_display_names(openapi_schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Add display names to tags in the OpenAPI schema."""
+    # Mapping from tag name to display name
+    tag_display_names = {
+        "collections": "Collections",
+        "source-connections": "Source Connections",
+        "sources": "Sources",
+        "white-labels": "White Labels",
+    }
+
+    # Update existing tags with display names
+    if "tags" in openapi_schema:
+        for tag in openapi_schema["tags"]:
+            if tag["name"] in tag_display_names:
+                tag["x-display-name"] = tag_display_names[tag["name"]]
+    else:
+        # Create tags section if it doesn't exist
+        openapi_schema["tags"] = []
+        for tag_name, display_name in tag_display_names.items():
+            openapi_schema["tags"].append(
+                {
+                    "name": tag_name,
+                    "x-display-name": display_name,
+                    "description": API_GROUPS.get(
+                        display_name, f"API endpoints for {display_name}"
+                    ),
+                }
+            )
 
     return openapi_schema
 
@@ -135,6 +162,10 @@ def generate_openapi():
     # Fix the security scheme
     print("Updating security scheme...")
     filtered_schema = fix_security_scheme(filtered_schema)
+
+    # Add display names to tags
+    print("Adding display names to tags...")
+    filtered_schema = add_tag_display_names(filtered_schema)
 
     # Add server configurations
     filtered_schema["servers"] = [

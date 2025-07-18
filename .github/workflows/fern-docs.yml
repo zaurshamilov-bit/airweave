@@ -54,6 +54,15 @@ jobs:
           OPENAI_API_KEY: "sk-docs"
           LOCAL_DEVELOPMENT: "true"
 
+      - name: Verify OpenAPI spec generation
+        run: |
+          if [ ! -f "fern/definition/openapi.json" ]; then
+            echo "❌ Error: OpenAPI spec was not generated at fern/definition/openapi.json"
+            exit 1
+          fi
+          echo "✅ OpenAPI spec generated successfully"
+          echo "File size: $(wc -c < fern/definition/openapi.json) bytes"
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
@@ -62,12 +71,6 @@ jobs:
       - name: Install Fern
         run: npm install -g fern-api
 
-      - name: Update Fern OpenAPI definition
-        run: |
-          mkdir -p fern/definition
-          echo "🌿 Updating Fern OpenAPI definition..."
-          cp fern/definition/openapi.json fern/definition/openapi.json || echo "OpenAPI spec not found"
-
       - name: Generate Docs
         run: |
           cd fern
@@ -75,10 +78,32 @@ jobs:
         env:
           FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
 
+      - name: Verify Fern docs generation
+        run: |
+          if [ ! -d "fern/docs" ]; then
+            echo "❌ Error: Fern docs directory was not created"
+            exit 1
+          fi
+          echo "✅ Fern docs generated successfully"
+          echo "Generated files:"
+          find fern/docs -name "*.md" -o -name "*.mdx" | head -10
+
       - name: Commit changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add fern/docs/pages/connectors/ fern/docs.yml
-          git diff --quiet && git diff --staged --quiet || git commit -m "docs: update documentation [skip ci]"
-          git push
+
+          # Add all generated documentation files
+          git add fern/definition/openapi.json || echo "No openapi.json changes to add"
+          git add fern/docs/pages/connectors/ || echo "No connector docs changes to add"
+          git add fern/docs.yml || echo "No docs.yml changes to add"
+
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "✅ No documentation changes to commit"
+          else
+            echo "📝 Committing documentation updates..."
+            git commit -m "docs: update documentation [skip ci]"
+            git push
+            echo "✅ Documentation changes committed and pushed"
+          fi

@@ -47,12 +47,12 @@ class GmailSource(BaseSource):
         return instance
 
     @retry(
-        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
+        stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=2, max=60), reraise=True
     )
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[dict] = None
     ) -> dict:
-        """Make an authenticated GET request to the Gmail API."""
+        """Make an authenticated GET request to the Gmail API with proper 429 handling."""
         self.logger.info(f"Making authenticated GET request to: {url} with params: {params}")
 
         # Get fresh token (will refresh if needed)
@@ -72,6 +72,13 @@ class GmailSource(BaseSource):
             access_token = await self.get_access_token()
             headers = {"Authorization": f"Bearer {access_token}"}
             response = await client.get(url, headers=headers, params=params)
+
+        # Handle 429 rate limiting errors by respecting Retry-After header
+        if response.status_code == 429:
+            self.logger.warning(
+                f"Got 429 Rate Limited from Gmail API. Headers: {response.headers}. "
+                f"Body: {response.text}."
+            )
 
         response.raise_for_status()
         data = response.json()

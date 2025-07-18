@@ -122,6 +122,7 @@ class Settings(BaseSettings):
     TEMPORAL_NAMESPACE: str = "default"
     TEMPORAL_TASK_QUEUE: str = "airweave-sync-queue"
     TEMPORAL_ENABLED: bool = False
+    TEMPORAL_DISABLE_SANDBOX: bool = False
 
     # Sync configuration
     SYNC_MAX_WORKERS: int = 100

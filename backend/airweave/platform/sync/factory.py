@@ -11,7 +11,7 @@ from airweave import crud, schemas
 from airweave.core import credentials
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
-from airweave.core.logging import LoggerConfigurator, logger
+from airweave.core.logging import ContextualLogger, LoggerConfigurator, logger
 from airweave.platform.auth.services import oauth2_service
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
@@ -142,18 +142,19 @@ class SyncFactory:
         Returns:
             SyncContext object with all required components
         """
-        # Create a contextualized logger with sync job metadata first
+        # Get source connection data first to access white_label_id safely
+        source_connection_data = await cls._get_source_connection_data(db, sync, auth_context)
+
+        # Create a contextualized logger with all job metadata
         logger = LoggerConfigurator.configure_logger(
             "airweave.platform.sync",
             dimensions={
                 "sync_id": str(sync.id),
                 "sync_job_id": str(sync_job.id),
                 "organization_id": str(auth_context.organization_id),
+                "source_connection_id": str(source_connection_data["connection_id"]),
             },
         )
-
-        # Get source connection data first to access white_label_id safely
-        source_connection_data = await cls._get_source_connection_data(db, sync, auth_context)
 
         # Fetch white label if set in sync using pre-fetched white_label_id
         white_label = None
@@ -170,7 +171,7 @@ class SyncFactory:
             access_token=access_token,
             logger=logger,  # Pass the contextual logger
         )
-        embedding_model = cls._get_embedding_model(sync=sync)
+        embedding_model = cls._get_embedding_model(logger=logger)
         destinations = await cls._create_destination_instances(
             db=db,
             sync=sync,
@@ -398,12 +399,11 @@ class SyncFactory:
         auth_context: AuthContext,
         white_label: Optional[schemas.WhiteLabel],
         final_access_token: Optional[str],
-        logger,
+        logger: ContextualLogger,
     ) -> None:
         """Configure source instance with logger and token manager."""
-        # Set logger if provided
-        if logger and hasattr(source, "set_logger"):
-            source.set_logger(logger)
+        # Set contextual logger
+        source.set_logger(logger)
 
         # Create and set token manager for OAuth sources
         if hasattr(source, "set_token_manager") and final_access_token:
@@ -491,27 +491,21 @@ class SyncFactory:
         return credential
 
     @classmethod
-    def _get_embedding_model(cls, sync: schemas.Sync) -> BaseEmbeddingModel:
+    def _get_embedding_model(cls, logger: ContextualLogger) -> BaseEmbeddingModel:
         """Get embedding model instance.
 
         If OpenAI API key is available, it will use OpenAI embeddings instead of local.
 
         Args:
-            sync (schemas.Sync): The sync configuration
+            logger (ContextualLogger): The logger to use
 
         Returns:
             BaseEmbeddingModel: The embedding model to use
         """
-        # Use OpenAI if API key is available
-        from airweave.core.logging import logger
-
         if settings.OPENAI_API_KEY:
-            logger.info(f"Using OpenAI embedding model (text-embedding-3-small) for sync {sync.id}")
-            return OpenAIText2Vec(api_key=settings.OPENAI_API_KEY)
+            return OpenAIText2Vec(api_key=settings.OPENAI_API_KEY, logger=logger)
 
-        # Otherwise use the local model
-        logger.info(f"Using local embedding model (MiniLM-L6-v2) for sync {sync.id}")
-        return LocalText2Vec()
+        return LocalText2Vec(logger=logger)
 
     @classmethod
     async def _create_destination_instances(

@@ -3,24 +3,13 @@
 from abc import abstractmethod
 from typing import List, Optional
 
-from pydantic import BaseModel
 
-
-class BaseEmbeddingModel(BaseModel):
+class BaseEmbeddingModel:
     """Abstract base class for embedding models.
 
     This base class defines a generic interface for embedding models
     that can be used with different vector stores.
     """
-
-    model_name: str
-    vector_dimensions: int
-    enabled: bool = True
-
-    @classmethod
-    def create(cls, **kwargs) -> "BaseEmbeddingModel":
-        """Create an instance of the embedding model."""
-        return cls(**kwargs)
 
     @abstractmethod
     async def embed(

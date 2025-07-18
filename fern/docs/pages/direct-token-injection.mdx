@@ -11,9 +11,9 @@ If you embed Airweave inside your own product you might already manage OAuth 2.0
 In that case, you do not want to have to ask them to click through a second consent screen for Airweave.
 Airweave therefore allows you to provide existing tokens to Airweave directly, so that
 
-• Your service owns token storage and rotation.
-• Airweave consumes the tokens solely for data sync.
-• No additional user interaction required.
+  - Your service owns token storage and rotation.
+  - Airweave consumes the tokens solely for data sync.
+  - No additional user interaction required.
 
 There are two common scenarios:
 
@@ -64,7 +64,7 @@ Skip the OAuth 2.0 flow entirely by sending your own tokens in the `POST /source
 
 > **Note on token refresh**: If you include a `refresh_token`, Airweave *will* refresh the access token as needed. This can invalidate the copy you store, so be prepared to handle token updates.
 
-If you are using this because you prefer to keep Airweave invisible to your users and show your own branding on the consent screen, check out our [white labeling feature](https://docs.airweave.ai/white-labeling).
+If you are using this because you prefer to keep Airweave invisible to your users and show your own branding on the consent screen, check out our [white labeling feature](https://docs.airweave.ai/white-label).
 
 Creating a source connection with direct tokens looks like this:
 

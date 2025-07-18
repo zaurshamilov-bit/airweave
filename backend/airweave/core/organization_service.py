@@ -1,4 +1,4 @@
-"""Auth0 service for managing organization synchronization."""
+"""Organization service for managing Auth0 organization synchronization."""
 
 import uuid
 from typing import Dict, List
@@ -14,8 +14,12 @@ from airweave.integrations.auth0_management import auth0_management_client
 from airweave.models import Organization, User, UserOrganization
 
 
-class Auth0Service:
-    """Service for Auth0 organization management and synchronization."""
+class OrganizationService:
+    """Service for organization management and synchronization with Auth0.
+
+    This class is exempt from using the CRUD classes, due to higher degree of
+    complexity in managing organization-related operations.
+    """
 
     def _create_org_name(self, org_data: schemas.OrganizationCreate) -> str:
         """Create a unique organization name for Auth0."""
@@ -137,10 +141,6 @@ class Auth0Service:
         if not auth0_id:
             # No Auth0 ID or Auth0 not enabled
             raise ValueError("No Auth0 ID provided")
-            # if create_org:
-            #     return await self._create_user_with_new_org(db, user_data)
-            # else:
-            #     return await self._create_user_without_org(db, user_data)
 
         try:
             # Check if user has existing Auth0 organizations
@@ -245,16 +245,31 @@ class Auth0Service:
             user_org_count = len(result.scalars().all())
             is_primary = user_org_count == 0
 
+            # Get user's role from Auth0
+            member_roles = await auth0_management_client.get_organization_member_roles(
+                org_id=auth0_org["id"], user_id=user.auth0_id
+            )
+
+            user_role = "member"  # Default role
+            if member_roles:
+                # Prioritize 'admin' role if present, otherwise take the first role name
+                role_names = [role.get("name") for role in member_roles if role.get("name")]
+                if "admin" in role_names:
+                    user_role = "admin"
+                elif role_names:
+                    user_role = role_names[0]
+
             # Create user-organization relationship
             user_org = UserOrganization(
                 user_id=user.id,
                 organization_id=local_org.id,
-                role="member",  # Default role, could be enhanced based on Auth0 metadata
+                role=user_role,
                 is_primary=is_primary,
             )
             db.add(user_org)
             logger.info(
-                f"Created user-organization relationship for user {user.id} and org {local_org.id}"
+                f"Created user-organization relationship for user {user.id} and "
+                f"org {local_org.id} with role {user_role}"
             )
 
     async def _create_user_with_new_org(self, db: AsyncSession, user_data: Dict) -> User:
@@ -382,10 +397,20 @@ class Auth0Service:
                     # Continue with local deletion even if Auth0 deletion fails
                     # This prevents the organization from being stuck in a partially deleted state
 
-            # Delete from local database using existing CRUD method
-            from airweave import crud
+            # Delete from local database - need to clean up foreign key references first
+            from sqlalchemy import delete
 
-            _ = await crud.organization.remove(db=db, id=organization_id)
+            # First, delete all user_organization relationships
+            delete_user_org_stmt = delete(UserOrganization).where(
+                UserOrganization.organization_id == organization_id
+            )
+            await db.execute(delete_user_org_stmt)
+            logger.info(f"Deleted user-organization relationships for organization {org.name}")
+
+            # Then delete the organization itself
+            delete_org_stmt = delete(Organization).where(Organization.id == organization_id)
+            await db.execute(delete_org_stmt)
+            await db.commit()
 
             logger.info(f"Successfully deleted local organization: {org.name}")
             return True
@@ -441,10 +466,15 @@ class Auth0Service:
         if not org:
             raise ValueError("Organization not found")
 
+        # Capture values before async operations to avoid greenlet errors
+
+        user_schema = schemas.User.model_validate(user_to_remove)
+        org_schema = schemas.Organization.model_validate(org)
+
         await auth0_management_client.remove_user_from_organization(
-            org.auth0_org_id, user_to_remove.auth0_id
+            org_schema.auth0_org_id, user_schema.auth0_id
         )
-        logger.info(f"Removed user {user_to_remove.email} from Auth0 organization {org.name}")
+        logger.info(f"Removed user {user_schema.email} from Auth0 organization {org_schema.name}")
 
         # Remove from local database
         delete_stmt = delete(UserOrganization).where(
@@ -455,7 +485,7 @@ class Auth0Service:
         await db.commit()
 
         logger.info(
-            f"Successfully removed user {user_to_remove.email} from organization {org.name}"
+            f"Successfully removed user {user_schema.email} from organization {org_schema.name}"
         )
         return True
 
@@ -523,16 +553,28 @@ class Auth0Service:
         if not org:
             raise ValueError("Organization not found")
 
+        # Get all roles from Auth0 to create role ID -> role name mapping
+        all_roles = await auth0_management_client.get_roles()
+        role_id_to_name = {role["id"]: role["name"] for role in all_roles}
+
         auth0_invitations = await auth0_management_client.get_pending_invitations(org.auth0_org_id)
 
         # Format invitations
         invitations = []
         for invitation in auth0_invitations:
+            # Extract role from the roles array (Auth0 stores role IDs in roles array)
+            role_ids = invitation.get("roles", [])
+            role_name = "member"  # Default role
+            if role_ids:
+                # Take the first role ID and map it to role name
+                first_role_id = role_ids[0]
+                role_name = role_id_to_name.get(first_role_id, "member")
+
             invitations.append(
                 {
                     "id": invitation.get("id"),
                     "email": invitation.get("invitee", {}).get("email"),
-                    "role": invitation.get("app_metadata", {}).get("role", "member"),
+                    "role": role_name,
                     "invited_at": invitation.get("created_at"),
                     "status": "pending",
                 }
@@ -541,4 +583,4 @@ class Auth0Service:
         return invitations
 
 
-auth0_service = Auth0Service()
+organization_service = OrganizationService()
