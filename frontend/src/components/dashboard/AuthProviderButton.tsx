@@ -16,6 +16,19 @@ export const AuthProviderButton = ({ id, name, shortName, isConnected = false, o
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
 
+    // Log when button is clicked
+    const handleClick = () => {
+        console.log('🔘 [AuthProviderButton] Button clicked:', {
+            id,
+            name,
+            shortName,
+            isConnected
+        });
+        if (onClick) {
+            onClick();
+        }
+    };
+
     // Get color class based on shortName for fallback
     const getColorClass = (shortName: string) => {
         const colors = [
@@ -59,7 +72,7 @@ export const AuthProviderButton = ({ id, name, shortName, isConnected = false, o
                     ? "border-gray-800 hover:border-gray-700 bg-gray-900/50 hover:bg-gray-900"
                     : "border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50"
             )}
-            onClick={onClick}
+            onClick={handleClick}
         >
             <div className="p-2 sm:p-3 md:p-4 flex items-center justify-between">
                 <div className="flex items-center gap-2 sm:gap-3">

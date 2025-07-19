@@ -203,6 +203,57 @@ async def list_auth_provider_connections(
     ]
 
 
+@router.get("/connections/{readable_id}", response_model=schemas.AuthProviderConnection)
+async def get_auth_provider_connection(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    readable_id: str,
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+) -> schemas.AuthProviderConnection:
+    """Get details of a specific auth provider connection.
+
+    Args:
+    -----
+        db: The database session
+        readable_id: The readable ID of the auth provider connection
+        auth_context: The current authentication context
+
+    Returns:
+    --------
+        schemas.AuthProviderConnection: The auth provider connection details
+    """
+    # Find the connection by readable_id
+    connection = await crud.connection.get_by_readable_id(
+        db, readable_id=readable_id, auth_context=auth_context
+    )
+
+    if not connection:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Auth provider connection not found: {readable_id}",
+        )
+
+    # Verify it's an auth provider connection
+    if connection.integration_type != IntegrationType.AUTH_PROVIDER:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Connection {readable_id} is not an auth provider connection",
+        )
+
+    # Return as AuthProviderConnection schema
+    return schemas.AuthProviderConnection(
+        id=connection.id,
+        name=connection.name,
+        readable_id=connection.readable_id,
+        short_name=connection.short_name,
+        description=connection.description,
+        created_by_email=connection.created_by_email,
+        modified_by_email=connection.modified_by_email,
+        created_at=connection.created_at,
+        modified_at=connection.modified_at,
+    )
+
+
 @router.get("/detail/{short_name}", response_model=schemas.AuthProvider)
 async def get_auth_provider(
     *,
@@ -419,9 +470,18 @@ async def _update_auth_credentials(
     uow: UnitOfWork, connection: Any, auth_fields: dict, auth_context: AuthContext
 ) -> None:
     """Update the encrypted credentials for a connection."""
+    # Convert to dict if it's a Pydantic model
+    if hasattr(auth_fields, "model_dump"):
+        auth_fields_dict = auth_fields.model_dump()
+    else:
+        auth_fields_dict = auth_fields
+
+    logger.info(f"[UPDATE AUTH CREDENTIALS] Auth fields to update: {list(auth_fields_dict.keys())}")
+
     validated_auth_fields = await _validate_auth_fields(
         uow.session, connection.short_name, auth_fields
     )
+    logger.info("[UPDATE AUTH CREDENTIALS] Auth fields validated successfully")
 
     if not connection.integration_credential_id:
         raise HTTPException(status_code=500, detail="Connection missing integration credential")
@@ -433,8 +493,10 @@ async def _update_auth_credentials(
     if not integration_credential:
         raise HTTPException(status_code=404, detail="Integration credential not found")
 
-    integration_credential_update = schemas.IntegrationCredentialUpdateEncrypted(
-        encrypted_credentials=credentials.encrypt(validated_auth_fields)
+    encrypted_credentials = credentials.encrypt(validated_auth_fields)
+
+    integration_credential_update = schemas.IntegrationCredentialUpdate(
+        encrypted_credentials=encrypted_credentials
     )
 
     await crud.integration_credential.update(
@@ -445,6 +507,68 @@ async def _update_auth_credentials(
         uow=uow,
     )
     await uow.session.flush()
+
+
+async def _update_connection_fields(
+    uow: UnitOfWork,
+    connection: Any,
+    update_data: schemas.AuthProviderConnectionUpdate,
+    auth_context: AuthContext,
+    auth_fields_updated: bool,
+) -> None:
+    """Update connection fields and ensure timestamps are updated."""
+    connection_update_data = {}
+    if update_data.name is not None:
+        connection_update_data["name"] = update_data.name
+    if update_data.description is not None:
+        connection_update_data["description"] = update_data.description
+
+    # Update connection if we have fields to update
+    if connection_update_data:
+        connection_update = schemas.ConnectionUpdate(**connection_update_data)
+        await crud.connection.update(
+            uow.session,
+            db_obj=connection,
+            obj_in=connection_update,
+            auth_context=auth_context,
+            uow=uow,
+        )
+
+    # Ensure timestamps are updated when auth fields change
+    if auth_fields_updated:
+        from airweave.core.datetime_utils import utc_now_naive
+
+        connection.modified_at = utc_now_naive()
+        if auth_context.has_user_context:
+            connection.modified_by_email = auth_context.tracking_email
+        uow.session.add(connection)
+
+    if connection_update_data or auth_fields_updated:
+        await uow.session.flush()
+        await uow.session.refresh(connection)
+
+
+async def _validate_auth_provider_connection(
+    db: AsyncSession, readable_id: str, auth_context: AuthContext
+) -> Any:
+    """Validate and return auth provider connection."""
+    connection = await crud.connection.get_by_readable_id(
+        db, readable_id=readable_id, auth_context=auth_context
+    )
+
+    if not connection:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Auth provider connection not found: {readable_id}",
+        )
+
+    if connection.integration_type != IntegrationType.AUTH_PROVIDER:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Connection {readable_id} is not an auth provider connection",
+        )
+
+    return connection
 
 
 @router.put("/{readable_id}", response_model=schemas.AuthProviderConnection)
@@ -474,46 +598,22 @@ async def update_auth_provider_connection(
     """
     async with UnitOfWork(db) as uow:
         try:
-            # 1. Find and validate connection
-            connection = await crud.connection.get_by_readable_id(
-                uow.session, readable_id=readable_id, auth_context=auth_context
+            # 1. Validate connection
+            connection = await _validate_auth_provider_connection(
+                uow.session, readable_id, auth_context
             )
 
-            if not connection:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Auth provider connection not found: {readable_id}",
-                )
-
-            if connection.integration_type != IntegrationType.AUTH_PROVIDER:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Connection {readable_id} is not an auth provider connection",
-                )
-
             # 2. Update auth fields if provided
-            if auth_provider_connection_update.auth_fields is not None:
+            auth_fields_updated = auth_provider_connection_update.auth_fields is not None
+            if auth_fields_updated:
                 await _update_auth_credentials(
                     uow, connection, auth_provider_connection_update.auth_fields, auth_context
                 )
 
-            # 3. Update connection fields if provided
-            connection_update_data = {}
-            if auth_provider_connection_update.name is not None:
-                connection_update_data["name"] = auth_provider_connection_update.name
-            if auth_provider_connection_update.description is not None:
-                connection_update_data["description"] = auth_provider_connection_update.description
-
-            if connection_update_data:
-                connection_update = schemas.ConnectionUpdate(**connection_update_data)
-                connection = await crud.connection.update(
-                    uow.session,
-                    db_obj=connection,
-                    obj_in=connection_update,
-                    auth_context=auth_context,
-                    uow=uow,
-                )
-                await uow.session.flush()
+            # 3. Update connection fields
+            await _update_connection_fields(
+                uow, connection, auth_provider_connection_update, auth_context, auth_fields_updated
+            )
 
             # 4. Return updated connection
             return schemas.AuthProviderConnection(
