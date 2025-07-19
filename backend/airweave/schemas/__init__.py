@@ -14,6 +14,7 @@ from .auth_provider import (
     AuthProvider,
     AuthProviderConnection,
     AuthProviderConnectionCreate,
+    AuthProviderConnectionUpdate,
     AuthProviderCreate,
     AuthProviderInDBBase,
     AuthProviderUpdate,

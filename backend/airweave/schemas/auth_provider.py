@@ -163,7 +163,12 @@ class AuthProviderConnection(BaseModel):
     )
     short_name: str
     description: Optional[str] = Field(None, description="Description of the connection")
-    status: str = Field(description="Connection status (ACTIVE, INACTIVE, ERROR)")
+    created_by_email: Optional[str] = Field(
+        None, description="Email of the user who created this connection"
+    )
+    modified_by_email: Optional[str] = Field(
+        None, description="Email of the user who last modified this connection"
+    )
     created_at: datetime
     modified_at: datetime
 
@@ -171,3 +176,36 @@ class AuthProviderConnection(BaseModel):
         """Pydantic configuration."""
 
         from_attributes = True
+
+
+class AuthProviderConnectionUpdate(BaseModel):
+    """Schema for updating an auth provider connection."""
+
+    name: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=255,
+        description="Human-readable name for this auth provider connection",
+    )
+    description: Optional[str] = Field(
+        None,
+        description="Optional detailed description of what this auth provider connection provides.",
+    )
+    auth_fields: Optional[ConfigValues] = Field(
+        None,
+        description=(
+            "Updated authentication credentials for the auth provider. The required fields "
+            "vary by auth provider type. If provided, all existing credentials will be replaced."
+        ),
+    )
+
+    class Config:
+        """Pydantic configuration."""
+
+        json_schema_extra = {
+            "example": {
+                "name": "Updated Composio Connection",
+                "description": "Updated description",
+                "auth_fields": {"api_key": "comp_new_api_key_1234"},
+            }
+        }
