@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { CreateCollectionView } from "./views/CreateCollectionView";
 import { SourceSelectorView } from "./views/SourceSelectorView";
 import { ConfigureSourceView } from "./views/ConfigureSourceView";
+import { ConfigureAuthProviderView } from "./views/ConfigureAuthProviderView";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { redirectWithError, getStoredErrorDetails, clearStoredErrorDetails, CONNECTION_ERROR_STORAGE_KEY } from "@/lib/error-utils";
 import { ConnectionErrorView } from "./views/ConnectionErrorView";
@@ -13,7 +14,8 @@ import { ConnectionErrorView } from "./views/ConnectionErrorView";
 export type DialogFlowMode =
     | "source-button"     // Dashboard SourceButton flow
     | "add-source"        // CollectionDetailView "+ add source" flow
-    | "create-collection"; // DashboardLayout "+ create collection" flow
+    | "create-collection" // DashboardLayout "+ create collection" flow
+    | "auth-provider";    // Auth provider connection flow
 
 interface DialogFlowProps {
     isOpen: boolean;
@@ -24,6 +26,10 @@ interface DialogFlowProps {
     sourceShortName?: string;
     collectionId?: string;
     collectionName?: string;
+    authProviderId?: string;
+    authProviderName?: string;
+    authProviderShortName?: string;
+    authProviderAuthType?: string;
     onComplete?: (result: any) => void;
     dialogId?: string; // Add unique dialog ID prop
     errorData?: any; // Add explicit error data prop for direct error passing
@@ -48,6 +54,10 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
     sourceShortName,
     collectionId,
     collectionName,
+    authProviderId,
+    authProviderName,
+    authProviderShortName,
+    authProviderAuthType,
     onComplete,
     dialogId = "default", // Default ID if none provided
     errorData,
@@ -78,10 +88,14 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
                 sourceShortName,
                 collectionId,
                 collectionName,
+                authProviderId,
+                authProviderName,
+                authProviderShortName,
+                authProviderAuthType,
                 dialogId
             });
         }
-    }, [isOpen, mode, sourceId, sourceName, sourceShortName, collectionId, collectionName, dialogId]);
+    }, [isOpen, mode, sourceId, sourceName, sourceShortName, collectionId, collectionName, authProviderId, authProviderName, authProviderShortName, authProviderAuthType, dialogId]);
 
     // Handle direct error data passed via props
     useEffect(() => {
@@ -248,7 +262,8 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
     const flowSequences = {
         "source-button": ["createCollection", "connectSource"],
         "add-source": ["sourceSelector", "connectSource"],
-        "create-collection": ["sourceSelector", "createCollection", "connectSource"]
+        "create-collection": ["sourceSelector", "createCollection", "connectSource"],
+        "auth-provider": ["configureAuthProvider"]
     };
 
     // Get current flow sequence
@@ -321,6 +336,11 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
                 dialogId,
                 dialogFlowStep: currentStep,
                 dialogMode: mode,
+                // Add auth provider specific data
+                authProviderId,
+                authProviderName,
+                authProviderShortName,
+                authProviderAuthType,
             } as any,
             onError: handleError,
         };
@@ -336,6 +356,8 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
                 return <CreateCollectionView {...commonProps} />;
             case "connectSource":
                 return <ConfigureSourceView {...commonProps} />;
+            case "configureAuthProvider":
+                return <ConfigureAuthProviderView {...commonProps} />;
             default:
                 return (
                     <ConnectionErrorView
@@ -344,7 +366,7 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
                             serviceName: "Dialog Flow",
                             sourceShortName: "dialog",
                             errorMessage: `Unknown view: ${currentView}`,
-                            errorDetails: `Available views: sourceSelector, createCollection, connectSource`
+                            errorDetails: `Available views: sourceSelector, createCollection, connectSource, configureAuthProvider`
                         }}
                     />
                 );
@@ -398,6 +420,10 @@ export const DialogFlow: React.FC<DialogFlowProps> = ({
             sourceShortName,
             collectionId,
             collectionName,
+            authProviderId,
+            authProviderName,
+            authProviderShortName,
+            authProviderAuthType,
             dialogId,
             credentialId: undefined,
             isAuthenticated: false

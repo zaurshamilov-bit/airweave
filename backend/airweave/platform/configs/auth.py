@@ -377,4 +377,7 @@ class TodoistAuthConfig(OAuth2AuthConfig):
 class ComposioAuthConfig(APIKeyAuthConfig):
     """Composio Auth Provider authentication credentials schema."""
 
-    # Inherits api_key from APIKeyAuthConfig
+    api_key: str = Field(
+        title="API Key",
+        description="Your Composio API key.",
+    )

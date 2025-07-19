@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from airweave.platform.auth.schemas import AuthType
+from airweave.platform.configs._base import Fields
 from airweave.schemas.source_connection import ConfigValues
 
 
@@ -92,6 +93,14 @@ class AuthProviderInDBBase(AuthProviderBase):
 
 class AuthProvider(AuthProviderInDBBase):
     """Schema for auth provider response."""
+
+    auth_fields: Optional[Fields] = Field(
+        None,
+        description=(
+            "Dynamically populated field definitions for authentication configuration. "
+            "These describe what credentials are required to connect to this auth provider."
+        ),
+    )
 
     pass
 

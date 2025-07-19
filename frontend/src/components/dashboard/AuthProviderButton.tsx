@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, Check } from "lucide-react";
 import { getAuthProviderIconUrl } from "@/lib/utils/icons";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
@@ -8,10 +8,11 @@ interface AuthProviderButtonProps {
     id: string;
     name: string;
     shortName: string;
+    isConnected?: boolean;
     onClick?: () => void;
 }
 
-export const AuthProviderButton = ({ id, name, shortName, onClick }: AuthProviderButtonProps) => {
+export const AuthProviderButton = ({ id, name, shortName, isConnected = false, onClick }: AuthProviderButtonProps) => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
 
@@ -70,12 +71,20 @@ export const AuthProviderButton = ({ id, name, shortName, onClick }: AuthProvide
                     variant="ghost"
                     className={cn(
                         "h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 rounded-full flex-shrink-0",
-                        isDark
-                            ? "bg-gray-800/80 text-blue-400 hover:bg-blue-600/20 hover:text-blue-300 group-hover:bg-blue-600/30"
-                            : "bg-gray-100/80 text-blue-500 hover:bg-blue-100 hover:text-blue-600 group-hover:bg-blue-100/80"
+                        isConnected
+                            ? isDark
+                                ? "bg-green-900/80 text-green-400 hover:bg-green-800/80 hover:text-green-300 group-hover:bg-green-800"
+                                : "bg-green-100/80 text-green-600 hover:bg-green-200 hover:text-green-700 group-hover:bg-green-200/80"
+                            : isDark
+                                ? "bg-gray-800/80 text-blue-400 hover:bg-blue-600/20 hover:text-blue-300 group-hover:bg-blue-600/30"
+                                : "bg-gray-100/80 text-blue-500 hover:bg-blue-100 hover:text-blue-600 group-hover:bg-blue-100/80"
                     )}
                 >
-                    <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 group-hover:h-4 group-hover:w-4 sm:group-hover:h-4.5 sm:group-hover:w-4.5 md:group-hover:h-5 md:group-hover:w-5 transition-all" />
+                    {isConnected ? (
+                        <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
+                    ) : (
+                        <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4 group-hover:h-4 group-hover:w-4 sm:group-hover:h-4.5 sm:group-hover:w-4.5 md:group-hover:h-5 md:group-hover:w-5 transition-all" />
+                    )}
                 </Button>
             </div>
         </div>

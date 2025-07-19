@@ -1,23 +1,56 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AuthProviderButton } from "@/components/dashboard";
 import { useAuthProvidersStore } from "@/lib/stores/authProviders";
+import { DialogFlow } from "@/components/shared/DialogFlow";
 
 export const AuthProviderTable = () => {
     // Use auth providers store
-    const { authProviders, isLoading: isLoadingAuthProviders, fetchAuthProviders } = useAuthProvidersStore();
+    const {
+        authProviders,
+        authProviderConnections,
+        isLoading: isLoadingAuthProviders,
+        isLoadingConnections,
+        fetchAuthProviders,
+        fetchAuthProviderConnections,
+        isAuthProviderConnected,
+        getConnectionForProvider
+    } = useAuthProvidersStore();
 
-    // Fetch auth providers on component mount
+    // Dialog state
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [selectedAuthProvider, setSelectedAuthProvider] = useState<any>(null);
+
+    // Fetch auth providers and connections on component mount
     useEffect(() => {
-        fetchAuthProviders().then(authProviders => {
-            console.log(`🔄 [AuthProviderTable] Auth providers loaded: ${authProviders.length} auth providers available`);
+        // Fetch both auth providers and connections in parallel
+        Promise.all([
+            fetchAuthProviders(),
+            fetchAuthProviderConnections()
+        ]).then(([providers, connections]) => {
+            console.log(`🔄 [AuthProviderTable] Auth providers loaded: ${providers.length} providers, ${connections.length} connections`);
         });
-    }, [fetchAuthProviders]);
+    }, [fetchAuthProviders, fetchAuthProviderConnections]);
 
     const handleAuthProviderClick = (authProvider: any) => {
-        alert("hello");
+        const isConnected = isAuthProviderConnected(authProvider.short_name);
+        const connection = getConnectionForProvider(authProvider.short_name);
+
+        if (isConnected && connection) {
+            alert(`Auth provider "${authProvider.name}" is already connected as "${connection.name}"`);
+        } else {
+            // Open dialog for connecting to auth provider
+            setSelectedAuthProvider(authProvider);
+            setDialogOpen(true);
+        }
     };
 
-    if (isLoadingAuthProviders) {
+    const handleDialogComplete = (result: any) => {
+        console.log("Auth provider connection completed:", result);
+        setDialogOpen(false);
+        setSelectedAuthProvider(null);
+    };
+
+    if (isLoadingAuthProviders || isLoadingConnections) {
         return (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 auto-rows-fr">
                 {Array.from({ length: 8 }).map((_, index) => (
@@ -45,16 +78,32 @@ export const AuthProviderTable = () => {
     }
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 auto-rows-fr">
-            {authProviders.map((authProvider) => (
-                <AuthProviderButton
-                    key={authProvider.id}
-                    id={authProvider.id}
-                    name={authProvider.name}
-                    shortName={authProvider.short_name}
-                    onClick={() => handleAuthProviderClick(authProvider)}
-                />
-            ))}
-        </div>
+        <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 auto-rows-fr">
+                {authProviders.map((authProvider) => (
+                    <AuthProviderButton
+                        key={authProvider.id}
+                        id={authProvider.id}
+                        name={authProvider.name}
+                        shortName={authProvider.short_name}
+                        isConnected={isAuthProviderConnected(authProvider.short_name)}
+                        onClick={() => handleAuthProviderClick(authProvider)}
+                    />
+                ))}
+            </div>
+
+            {/* Dialog for connecting to auth provider */}
+            <DialogFlow
+                isOpen={dialogOpen}
+                onOpenChange={setDialogOpen}
+                mode="auth-provider"
+                authProviderId={selectedAuthProvider?.id}
+                authProviderName={selectedAuthProvider?.name}
+                authProviderShortName={selectedAuthProvider?.short_name}
+                authProviderAuthType={selectedAuthProvider?.auth_type}
+                onComplete={handleDialogComplete}
+                dialogId="auth-provider-connection"
+            />
+        </>
     );
 };

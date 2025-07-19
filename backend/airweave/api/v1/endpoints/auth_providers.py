@@ -12,6 +12,7 @@ from airweave.core import credentials
 from airweave.core.logging import logger
 from airweave.core.shared_models import ConnectionStatus, IntegrationType
 from airweave.db.unit_of_work import UnitOfWork
+from airweave.platform.configs._base import Fields
 from airweave.platform.locator import resource_locator
 from airweave.schemas.auth import AuthContext
 
@@ -114,7 +115,40 @@ async def list_auth_providers(
         List[schemas.AuthProvider]: List of available auth providers
     """
     auth_providers = await crud.auth_provider.get_multi(db, skip=skip, limit=limit)
-    return auth_providers
+
+    # Populate auth_fields for each auth provider
+    result_providers = []
+    for provider in auth_providers:
+        try:
+            # Skip if no auth config class
+            if not provider.auth_config_class:
+                logger.warning(f"Auth provider {provider.short_name} has no auth_config_class")
+                result_providers.append(provider)
+                continue
+
+            # Get auth fields from config class
+            auth_config_class = resource_locator.get_auth_config(provider.auth_config_class)
+            auth_fields = Fields.from_config_class(auth_config_class)
+
+            # Create provider dict with auth_fields
+            provider_dict = {
+                **{
+                    key: getattr(provider, key)
+                    for key in provider.__dict__
+                    if not key.startswith("_")
+                },
+                "auth_fields": auth_fields,
+            }
+
+            provider_model = schemas.AuthProvider.model_validate(provider_dict)
+            result_providers.append(provider_model)
+
+        except Exception as e:
+            logger.error(f"Error processing auth provider {provider.short_name}: {str(e)}")
+            # Still include the provider without auth_fields
+            result_providers.append(provider)
+
+    return result_providers
 
 
 @router.get("/connections/", response_model=List[schemas.AuthProviderConnection])
@@ -143,13 +177,14 @@ async def list_auth_provider_connections(
         List[schemas.AuthProviderConnection]: List of auth provider connections
     """
     # Get all connections with integration_type = AUTH_PROVIDER for the current organization
-    connections = await crud.connection.get_multi(
+    connections = await crud.connection.get_by_integration_type(
         db,
-        skip=skip,
-        limit=limit,
         integration_type=IntegrationType.AUTH_PROVIDER,
-        organization_id=auth_context.organization_id,
+        auth_context=auth_context,
     )
+
+    # Apply skip and limit manually since get_by_integration_type doesn't support them
+    connections = connections[skip : skip + limit]
 
     # Convert to AuthProviderConnection schema
     return [
@@ -193,6 +228,28 @@ async def get_auth_provider(
             status_code=404,
             detail=f"Auth provider not found: {short_name}",
         )
+
+    # Populate auth_fields if auth_config_class exists
+    if auth_provider.auth_config_class:
+        try:
+            auth_config_class = resource_locator.get_auth_config(auth_provider.auth_config_class)
+            auth_fields = Fields.from_config_class(auth_config_class)
+
+            # Create provider dict with auth_fields
+            provider_dict = {
+                **{
+                    key: getattr(auth_provider, key)
+                    for key in auth_provider.__dict__
+                    if not key.startswith("_")
+                },
+                "auth_fields": auth_fields,
+            }
+
+            return schemas.AuthProvider.model_validate(provider_dict)
+        except Exception as e:
+            logger.error(f"Failed to get auth config for {short_name}: {str(e)}")
+            # Return without auth_fields if there's an error
+
     return auth_provider
 
 
