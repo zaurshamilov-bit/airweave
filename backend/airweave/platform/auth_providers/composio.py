@@ -31,6 +31,7 @@ class ComposioAuthProvider(BaseAuthProvider):
     # Key: Airweave short name, Value: Composio slug
     SLUG_NAME_MAPPING = {
         "google_drive": "googledrive",
+        "google_calendar": "googlecalendar",
         # Add more mappings as needed
     }
 
