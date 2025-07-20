@@ -243,6 +243,7 @@ class SyncFactory:
                 readable_auth_provider_id=readable_auth_provider_id,
                 auth_provider_config=auth_provider_config,
                 auth_context=auth_context,
+                logger=logger,
             )
 
         # Step 2: Get credentials from appropriate source
@@ -254,6 +255,23 @@ class SyncFactory:
             access_token=access_token,
             auth_provider_instance=auth_provider_instance,
         )
+
+        # Step 2.5: Convert credentials to auth config object if needed
+        # When using auth providers, credentials come as a dict, but some sources
+        # expect an auth config object (e.g., Stripe expects StripeAuthConfig)
+        auth_config_class_name = source_connection_data.get("auth_config_class")
+        if auth_config_class_name and isinstance(source_credentials, dict):
+            # Source has an auth config class and credentials are a dict
+            # This happens with auth providers - convert dict to config object
+            try:
+                auth_config_class = resource_locator.get_auth_config(auth_config_class_name)
+                source_credentials = auth_config_class.model_validate(source_credentials)
+                logger.info(
+                    f"Converted auth provider credentials to {auth_config_class_name} object"
+                )
+            except Exception as e:
+                logger.error(f"Failed to convert credentials to auth config object: {e}")
+                raise
 
         # Step 3: Create the source instance with actual credentials
         source = await source_connection_data["source_class"].create(
@@ -368,6 +386,7 @@ class SyncFactory:
         readable_auth_provider_id: str,
         auth_provider_config: Dict[str, Any],
         auth_context: AuthContext,
+        logger=None,
     ) -> Any:
         """Create an auth provider instance from readable_id.
 
@@ -376,6 +395,7 @@ class SyncFactory:
             readable_auth_provider_id: The readable ID of the auth provider connection
             auth_provider_config: Configuration for the auth provider
             auth_context: Authentication context
+            logger: Optional logger to set on the auth provider
 
         Returns:
             An instance of the auth provider
@@ -424,10 +444,23 @@ class SyncFactory:
             config=auth_provider_config,
         )
 
-        logger.info(
-            f"Created auth provider instance: {auth_provider_instance.__class__.__name__} "
-            f"for readable_id: {readable_auth_provider_id}"
-        )
+        # 6. Set logger if provided
+        if logger and hasattr(auth_provider_instance, "set_logger"):
+            auth_provider_instance.set_logger(logger)
+
+        if logger:
+            logger.info(
+                f"Created auth provider instance: {auth_provider_instance.__class__.__name__} "
+                f"for readable_id: {readable_auth_provider_id}"
+            )
+        else:
+            # Use the global logger if no contextual logger is provided
+            from airweave.core.logging import logger as global_logger
+
+            global_logger.info(
+                f"Created auth provider instance: {auth_provider_instance.__class__.__name__} "
+                f"for readable_id: {readable_auth_provider_id}"
+            )
 
         return auth_provider_instance
 
@@ -501,15 +534,19 @@ class SyncFactory:
         """Get credentials from an auth provider instance."""
         source_short_name = source_connection_data["short_name"]
 
-        # Get the list of auth config fields required by the source
-        source_model = source_connection_data["source_model"]
-        if not source_model.auth_config_class:
-            raise NotFoundException(
-                f"Source '{source_short_name}' has no auth config class defined"
-            )
+        # Get the runtime auth fields required by the source (excluding BYOC fields)
+        # Import here to avoid circular imports
+        from airweave.core.auth_provider_service import auth_provider_service
 
-        auth_config_class = resource_locator.get_auth_config(source_model.auth_config_class)
-        source_auth_config_fields = list(auth_config_class.model_fields.keys())
+        # Create a temporary db session for this query
+        from airweave.db.session import get_db_context
+
+        async with get_db_context() as db:
+            source_auth_config_fields = (
+                await auth_provider_service.get_runtime_auth_fields_for_source(
+                    db, source_short_name
+                )
+            )
 
         # Get fresh credentials from auth provider
         fresh_credentials = await auth_provider_instance.get_creds_for_source(

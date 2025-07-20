@@ -11,7 +11,6 @@ from airweave.core import credentials
 from airweave.core.exceptions import TokenRefreshError
 from airweave.core.logging import logger
 from airweave.platform.auth.services import oauth2_service
-from airweave.platform.locator import resource_locator
 from airweave.schemas.auth import AuthContext
 
 
@@ -215,18 +214,14 @@ class TokenManager:
         )
 
         try:
-            # Get the list of auth config fields required by the source
-            source_model = await crud.source.get_by_short_name(
-                self.db, short_name=self.source_short_name
-            )
-            if not source_model or not source_model.auth_config_class:
-                raise TokenRefreshError(
-                    f"Source '{self.source_short_name}' not found or has no auth config class"
-                )
+            # Get the runtime auth fields required by the source (excluding BYOC fields)
+            from airweave.core.auth_provider_service import auth_provider_service
 
-            # Get the auth config fields
-            auth_config_class = resource_locator.get_auth_config(source_model.auth_config_class)
-            source_auth_config_fields = list(auth_config_class.model_fields.keys())
+            source_auth_config_fields = (
+                await auth_provider_service.get_runtime_auth_fields_for_source(
+                    self.db, self.source_short_name
+                )
+            )
 
             # Get fresh credentials from auth provider instance
             fresh_credentials = await self.auth_provider_instance.get_creds_for_source(

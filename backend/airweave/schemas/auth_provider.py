@@ -102,6 +102,15 @@ class AuthProvider(AuthProviderInDBBase):
         ),
     )
 
+    config_fields: Optional[Fields] = Field(
+        None,
+        description=(
+            "Dynamically populated field definitions for auth provider-specific configuration. "
+            "These describe what additional configuration is required when using this auth "
+            "provider to connect to a source (e.g., integration_id and account_id for Composio)."
+        ),
+    )
+
     pass
 
 

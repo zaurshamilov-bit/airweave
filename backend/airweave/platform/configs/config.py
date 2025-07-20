@@ -287,9 +287,9 @@ class ComposioConfig(AuthProviderConfig):
 
     integration_id: str = Field(
         title="Integration ID",
-        description="Integration ID for the Composio connection",
+        description="Integration ID for the Composio connection (nanoid)",
     )
     account_id: str = Field(
         title="Account ID",
-        description="Account ID for the Composio connection",
+        description="Account ID for the Composio connection (nanoid)",
     )

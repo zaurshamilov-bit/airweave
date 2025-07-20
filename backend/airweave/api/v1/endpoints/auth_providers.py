@@ -120,32 +120,40 @@ async def list_auth_providers(
     result_providers = []
     for provider in auth_providers:
         try:
+            provider_dict = {
+                key: getattr(provider, key) for key in provider.__dict__ if not key.startswith("_")
+            }
+
             # Skip if no auth config class
             if not provider.auth_config_class:
                 logger.warning(f"Auth provider {provider.short_name} has no auth_config_class")
                 result_providers.append(provider)
                 continue
 
-            # Get auth fields from config class
+            # Get auth fields from auth config class
             auth_config_class = resource_locator.get_auth_config(provider.auth_config_class)
             auth_fields = Fields.from_config_class(auth_config_class)
+            provider_dict["auth_fields"] = auth_fields
 
-            # Create provider dict with auth_fields
-            provider_dict = {
-                **{
-                    key: getattr(provider, key)
-                    for key in provider.__dict__
-                    if not key.startswith("_")
-                },
-                "auth_fields": auth_fields,
-            }
+            # Get config fields from config class if it exists
+            if provider.config_class:
+                try:
+                    config_class = resource_locator.get_config(provider.config_class)
+                    config_fields = Fields.from_config_class(config_class)
+                    provider_dict["config_fields"] = config_fields
+                except Exception as e:
+                    logger.error(f"Error getting config fields for {provider.short_name}: {str(e)}")
+                    # Still include the provider without config_fields
+                    provider_dict["config_fields"] = None
+            else:
+                provider_dict["config_fields"] = None
 
             provider_model = schemas.AuthProvider.model_validate(provider_dict)
             result_providers.append(provider_model)
 
         except Exception as e:
             logger.error(f"Error processing auth provider {provider.short_name}: {str(e)}")
-            # Still include the provider without auth_fields
+            # Still include the provider without auth_fields or config_fields
             result_providers.append(provider)
 
     return result_providers
@@ -295,6 +303,18 @@ async def get_auth_provider(
                 },
                 "auth_fields": auth_fields,
             }
+
+            # Add config_fields if config_class exists
+            if auth_provider.config_class:
+                try:
+                    config_class = resource_locator.get_config(auth_provider.config_class)
+                    config_fields = Fields.from_config_class(config_class)
+                    provider_dict["config_fields"] = config_fields
+                except Exception as e:
+                    logger.error(f"Error getting config fields for {short_name}: {str(e)}")
+                    provider_dict["config_fields"] = None
+            else:
+                provider_dict["config_fields"] = None
 
             return schemas.AuthProvider.model_validate(provider_dict)
         except Exception as e:
