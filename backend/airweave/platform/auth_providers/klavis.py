@@ -1,1 +1,1 @@
-"""Klaviyo auth provider."""
+"""Klavis auth provider."""
