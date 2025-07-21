@@ -35,7 +35,7 @@ oracledb = "^2.5.1"
 aiofiles = "^24.1.0"
 croniter = "^6.0.0"
 qdrant-client = "^1.13.3"
-openai = "^1.10.0"
+openai = "^1.58.1"
 mistralai = "^1.7.0"
 chonkie = {extras = ["code"], version = "^1.0.6"}
 tiktoken = "^0.5.1"

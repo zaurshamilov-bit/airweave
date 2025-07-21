@@ -11,11 +11,12 @@ from airweave.api.examples import create_collection_list_response, create_job_li
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
 from airweave.core.logging import ContextualLogger
-from airweave.core.search_service import ResponseType, search_service
+from airweave.core.search_service import search_service
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
 from airweave.schemas.auth import AuthContext
+from airweave.schemas.search import QueryExpansionStrategy, ResponseType
 
 router = TrailingSlashRouter()
 
@@ -170,13 +171,14 @@ async def search_collection(
         f"with response_type: {response_type}."
     )
     try:
-        return await search_service.search_with_completion(
+        return await search_service.search(
             db,
             readable_id=readable_id,
             query=query,
             auth_context=auth_context,
             response_type=response_type,
             logger=logger,
+            expansion_strategy=QueryExpansionStrategy.AUTO,
         )
     except Exception as e:
         logger.error(f"Search error for collection {readable_id}: {str(e)}")

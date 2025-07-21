@@ -603,12 +603,11 @@ class SyncFactory:
         auth_context: AuthContext,
         white_label: Optional[schemas.WhiteLabel],
         final_access_token: Optional[str],
-        logger,
+        logger: ContextualLogger,
     ) -> None:
         """Configure source instance with logger and token manager."""
-        # Set logger if provided
-        if logger and hasattr(source, "set_logger"):
-            source.set_logger(logger)
+        # Set contextual logger
+        source.set_logger(logger)
 
         # Create and set token manager for OAuth sources
         if hasattr(source, "set_token_manager") and final_access_token:

@@ -3,6 +3,7 @@
 from typing import List, Optional
 
 import httpx
+from pydantic import Field
 
 from airweave.core.config import settings
 from airweave.core.logging import ContextualLogger
@@ -21,8 +22,27 @@ from ._base import BaseEmbeddingModel
 class LocalText2Vec(BaseEmbeddingModel):
     """Local text2vec model configuration for embedding."""
 
-    def __init__(self, logger: ContextualLogger):
-        """Initialize the local text2vec model."""
+    # Configuration parameters as class attributes
+    vector_dimensions: int = 384  # MiniLM-L6-v2 default dimensions
+    model_name: str = "local-text2vec-transformers"
+    enabled: bool = True
+    inference_url: str = Field(
+        default="", description="URL of the inference API"
+    )  # Updated during initialization
+
+    def __init__(
+        self,
+        logger: Optional[ContextualLogger] = None,
+        **data,  # Pass through to BaseEmbeddingModel/Pydantic, if relevant
+    ):
+        """Initialize the Local Text2Vec embedding model.
+
+        Args:
+            logger: Optional contextual logger for debugging and monitoring
+            **data: Additional keyword arguments passed to the parent BaseEmbeddingModel
+        """
+        # Always call parent __init__ (esp. with Pydantic models!)
+        super().__init__(**data)
         self.logger = logger
 
     def model_post_init(self, __context) -> None:
