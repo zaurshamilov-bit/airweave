@@ -1,22 +1,26 @@
 """API endpoints for collections."""
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import BackgroundTasks, Depends, HTTPException, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
-from airweave.api.examples import create_collection_list_response, create_job_list_response
+from airweave.api.examples import (
+    create_collection_list_response,
+    create_job_list_response,
+    create_search_response,
+)
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
 from airweave.core.logging import ContextualLogger
-from airweave.core.search_service import search_service
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
 from airweave.schemas.auth import AuthContext
-from airweave.schemas.search import QueryExpansionStrategy, ResponseType
+from airweave.schemas.search import QueryExpansionStrategy, ResponseType, SearchRequest
+from airweave.search.search_service import search_service
 
 router = TrailingSlashRouter()
 
@@ -143,7 +147,11 @@ async def delete_collection(
     return await crud.collection.remove(db, id=db_obj.id, auth_context=auth_context)
 
 
-@router.get("/{readable_id}/search", response_model=schemas.SearchResponse)
+@router.get(
+    "/{readable_id}/search",
+    response_model=schemas.SearchResponse,
+    responses=create_search_response("raw_results", "Raw search results with metadata"),
+)
 async def search_collection(
     readable_id: str = Path(
         ..., description="The unique readable identifier of the collection to search"
@@ -161,24 +169,46 @@ async def search_collection(
         ),
         examples=["raw", "completion"],
     ),
+    limit: int = Query(20, ge=1, le=100, description="Maximum number of results to return"),
+    offset: int = Query(0, ge=0, description="Number of results to skip for pagination"),
+    score_threshold: Optional[float] = Query(
+        None, ge=0.0, le=1.0, description="Minimum similarity score threshold"
+    ),
+    expansion_strategy: QueryExpansionStrategy = Query(
+        QueryExpansionStrategy.AUTO,
+        description="Query expansion strategy (auto, llm, or no_expansion)",
+    ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
     logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.SearchResponse:
-    """Search across all data sources within the specified collection."""
+    """Search across all data sources within the specified collection.
+
+    This GET endpoint provides basic search functionality. For advanced filtering
+    and options, use the POST /search endpoint.
+    """
     logger.info(
         f"Searching collection {readable_id} with query: {query} "
-        f"with response_type: {response_type}."
+        f"with response_type: {response_type}, limit: {limit}, offset: {offset}"
     )
+
+    # Create a SearchRequest from the query parameters
+    search_request = SearchRequest(
+        query=query,
+        response_type=response_type,
+        limit=limit,
+        offset=offset,
+        score_threshold=score_threshold,
+        expansion_strategy=expansion_strategy,
+    )
+
     try:
-        return await search_service.search(
+        return await search_service.search_with_request(
             db,
             readable_id=readable_id,
-            query=query,
+            search_request=search_request,
             auth_context=auth_context,
-            response_type=response_type,
             logger=logger,
-            expansion_strategy=QueryExpansionStrategy.AUTO,
         )
     except Exception as e:
         logger.error(f"Search error for collection {readable_id}: {str(e)}")
@@ -198,6 +228,72 @@ async def search_collection(
             raise HTTPException(
                 status_code=404,
                 detail=f"Collection '{readable_id}' not found or you don't have access to it.",
+            ) from e
+        else:
+            # For other errors, return a generic message but with 500 status
+            raise HTTPException(
+                status_code=500, detail=f"An error occurred while searching: {str(e)}"
+            ) from e
+
+
+@router.post(
+    "/{readable_id}/search",
+    response_model=schemas.SearchResponse,
+    responses=create_search_response("completion_response", "Search with AI-generated completion"),
+)
+async def search_collection_advanced(
+    readable_id: str = Path(
+        ..., description="The unique readable identifier of the collection to search"
+    ),
+    search_request: SearchRequest = ...,
+    db: AsyncSession = Depends(deps.get_db),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+    logger: ContextualLogger = Depends(deps.get_logger),
+) -> schemas.SearchResponse:
+    """Advanced search with comprehensive filtering and options.
+
+    This endpoint supports:
+    - Metadata filtering using Qdrant's native filter syntax
+    - Pagination with offset and limit
+    - Score threshold filtering
+    - Query expansion strategies
+    """
+    logger.info(
+        f"Advanced search in collection {readable_id} with query: {search_request.query} "
+        f"and filter: {search_request.filter}"
+    )
+
+    try:
+        return await search_service.search_with_request(
+            db,
+            readable_id=readable_id,
+            search_request=search_request,
+            auth_context=auth_context,
+            logger=logger,
+        )
+    except Exception as e:
+        logger.error(f"Advanced search error for collection {readable_id}: {str(e)}")
+
+        # Check if it's a connection error
+        error_message = str(e).lower()
+        if (
+            "connection" in error_message
+            or "refused" in error_message
+            or "timeout" in error_message
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail="Vector database service is currently unavailable. Please try again later.",
+            ) from e
+        elif "not found" in error_message:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Collection '{readable_id}' not found or you don't have access to it.",
+            ) from e
+        elif "invalid filter" in error_message:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid filter format: {str(e)}",
             ) from e
         else:
             # For other errors, return a generic message but with 500 status

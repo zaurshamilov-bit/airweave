@@ -2,6 +2,7 @@
 
 import json
 import logging
+from typing import Any
 
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,12 @@ from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
 from airweave.platform.locator import resource_locator
 from airweave.schemas.auth import AuthContext
-from airweave.schemas.search import QueryExpansionStrategy, ResponseType, SearchStatus
+from airweave.schemas.search import (
+    QueryExpansionStrategy,
+    ResponseType,
+    SearchRequest,
+    SearchStatus,
+)
 
 
 class SearchService:
@@ -177,6 +183,10 @@ class SearchService:
         auth_context: AuthContext,
         logger: ContextualLogger,
         expansion_strategy: QueryExpansionStrategy | None = None,
+        filter: Any | None = None,  # Add filter parameter
+        limit: int = 10,  # Add limit parameter
+        offset: int = 0,  # Add offset parameter
+        score_threshold: float | None = None,  # Add score threshold
     ) -> list[dict]:
         """Internal method to execute search and return raw results.
 
@@ -190,6 +200,10 @@ class SearchService:
             logger (ContextualLogger): Logger instance
             expansion_strategy (QueryExpansionStrategy | None): Query expansion strategy.
                 If None, no expansion is performed.
+            filter: Qdrant filter for metadata filtering
+            limit: Maximum number of results
+            offset: Number of results to skip
+            score_threshold: Minimum score threshold
 
         Returns:
             list[dict]: Raw search results (not cleaned)
@@ -207,10 +221,26 @@ class SearchService:
         # Perform search based on query expansion strategy
         if expansion_strategy and expansion_strategy != QueryExpansionStrategy.NO_EXPANSION:
             search_results = await self._search_with_expansion(
-                query, expansion_strategy, embedding_model, destination, logger
+                query,
+                expansion_strategy,
+                embedding_model,
+                destination,
+                logger,
+                filter=filter,
+                limit=limit,
+                offset=offset,
+                score_threshold=score_threshold,
             )
         else:
-            search_results = await self._search_single_query(query, embedding_model, destination)
+            search_results = await self._search_single_query(
+                query,
+                embedding_model,
+                destination,
+                filter=filter,
+                limit=limit,
+                offset=offset,
+                score_threshold=score_threshold,
+            )
 
         return search_results
 
@@ -289,6 +319,81 @@ class SearchService:
                 raise ConnectionError(f"Vector database connection failed: {str(e)}") from e
             raise
 
+    async def search_with_request(
+        self,
+        db: AsyncSession,
+        readable_id: str,
+        search_request: SearchRequest,
+        auth_context: AuthContext,
+        logger: ContextualLogger,
+    ) -> schemas.SearchResponse:
+        """Search with comprehensive SearchRequest parameters.
+
+        Args:
+            db: Database session
+            readable_id: Readable ID of the collection to search within
+            search_request: SearchRequest with all parameters
+            auth_context: Authentication context
+            logger: Logger instance
+
+        Returns:
+            SearchResponse: Search results with optional AI completion
+        """
+        try:
+            # Execute the search with all parameters from SearchRequest
+            raw_results = await self._execute_search(
+                db=db,
+                query=search_request.query,
+                readable_id=readable_id,
+                auth_context=auth_context,
+                logger=logger,
+                expansion_strategy=search_request.expansion_strategy,
+                filter=search_request.filter,
+                limit=search_request.limit,
+                offset=search_request.offset,
+                score_threshold=search_request.score_threshold,
+            )
+
+            # Clean results based on include_metadata and with_vectors flags
+            cleaned_results = self._clean_search_results(raw_results)
+
+            # Always remove vectors from results
+            for result in cleaned_results:
+                if isinstance(result, dict) and "payload" in result:
+                    result["payload"].pop("vector", None)
+
+            if search_request.response_type == ResponseType.RAW:
+                return schemas.SearchResponse(
+                    results=cleaned_results,
+                    response_type=search_request.response_type,
+                    status=SearchStatus.SUCCESS,
+                )
+
+            # Check for no results or low-quality results
+            quality_response = self._check_result_quality(cleaned_results)
+            if quality_response:
+                return quality_response
+
+            # Process results and generate completion
+            processed_results = self._process_search_results(cleaned_results)
+
+            completion = await self._generate_ai_completion(search_request.query, cleaned_results)
+
+            return schemas.SearchResponse(
+                results=processed_results,
+                completion=completion,
+                response_type=search_request.response_type,
+                status=SearchStatus.SUCCESS,
+            )
+
+        except NotFoundException:
+            raise
+        except Exception as e:
+            logger.error(f"Search error: {str(e)}", exc_info=True)
+            if "connection" in str(e).lower():
+                raise ConnectionError(f"Vector database connection failed: {str(e)}") from e
+            raise
+
     async def _get_collection(
         self, db: AsyncSession, readable_id: str, auth_context: AuthContext
     ) -> schemas.Collection:
@@ -329,9 +434,13 @@ class SearchService:
         embedding_model: BaseEmbeddingModel,
         destination: BaseDestination,
         logger: ContextualLogger,
+        filter: Any | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        score_threshold: float | None = None,
     ) -> list[dict]:
         """Perform search with query expansion."""
-        from airweave.core.query_preprocessor import query_preprocessor
+        from airweave.search.query_preprocessor import query_preprocessor
 
         # Expand the query
         expanded_queries = await query_preprocessor.expand(query, strategy=expansion_strategy)
@@ -343,26 +452,77 @@ class SearchService:
         # Embed all expanded queries
         vectors = await embedding_model.embed_many(expanded_queries)
 
+        # Convert filter to dict if it's a Qdrant Filter object
+        filter_dict = None
+        if filter:
+            if hasattr(filter, "model_dump"):
+                filter_dict = filter.model_dump(exclude_none=True)
+            else:
+                filter_dict = filter
+
         # Use bulk search for all expanded queries at once
-        batch_results = await destination.bulk_search(vectors)
+        # Create filter conditions list (same filter for all queries)
+        filter_conditions = [filter_dict] * len(vectors) if filter_dict else None
+
+        batch_results = await destination.bulk_search(
+            vectors,
+            limit=limit,
+            score_threshold=score_threshold,
+            with_payload=True,
+            filter_conditions=filter_conditions,
+        )
 
         # Flatten results from all queries
         all_results = []
         for query_results in batch_results:
             all_results.extend(query_results)
 
-        # Merge and deduplicate results
-        return self._merge_search_results(all_results, logger=logger)
+        # Apply offset after merging (since bulk search doesn't support offset)
+        merged_results = self._merge_search_results(
+            all_results, max_results=limit + offset, logger=logger
+        )
+
+        # Apply offset
+        if offset > 0 and offset < len(merged_results):
+            merged_results = merged_results[offset:]
+        elif offset >= len(merged_results):
+            merged_results = []
+
+        # Ensure we don't exceed limit
+        if len(merged_results) > limit:
+            merged_results = merged_results[:limit]
+
+        return merged_results
 
     async def _search_single_query(
         self,
         query: str,
         embedding_model: BaseEmbeddingModel,
         destination: BaseDestination,
+        filter: Any | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        score_threshold: float | None = None,
     ) -> list[dict]:
         """Perform search with a single query (no expansion)."""
         vector = await embedding_model.embed(query)
-        return await destination.search(vector)
+
+        # Convert filter to dict if it's a Qdrant Filter object
+        filter_dict = None
+        if filter:
+            if hasattr(filter, "model_dump"):
+                filter_dict = filter.model_dump(exclude_none=True)
+            else:
+                filter_dict = filter
+
+        return await destination.search(
+            vector,
+            filter=filter_dict,
+            limit=limit,
+            offset=offset,
+            score_threshold=score_threshold,
+            with_payload=True,
+        )
 
     def _check_result_quality(self, results: list[dict]) -> schemas.SearchResponse | None:
         """Check if results are empty or have low quality scores.

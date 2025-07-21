@@ -62,6 +62,20 @@ pip install airweave-sdk jupyter openai python-dotenv
 
 **Perfect for:** Advanced users exploring standardized tool protocols
 
+### 4. Advanced Search with Filters (`04_advanced_search_with_filters.ipynb`)
+
+**What you'll learn:**
+- ✅ Master metadata filtering with Qdrant filters
+- ✅ Handle case-sensitivity in source filters
+- ✅ Implement date range and complex queries
+- ✅ Use pagination and score thresholds effectively
+- ✅ Compare query expansion strategies
+- ✅ Build real-world search dashboards with visualizations
+
+**Time to complete:** ~25 minutes
+
+**Perfect for:** Power users needing precise search control and developers building search-powered applications
+
 ## 🏃‍♂️ Running the Examples
 
 1. **Start Jupyter Notebook:**
