@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { ThemeProvider } from '@/lib/theme-provider';
 import { Routes, Route } from 'react-router-dom';
-import { Toaster } from '@/components/ui/toaster';
+import { Toaster } from 'sonner';
 
 import DashboardLayout from '@/components/DashboardLayout';
 import Dashboard from '@/pages/Dashboard';
@@ -61,7 +61,12 @@ function App() {
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
-      <Toaster />
+      <Toaster
+        richColors
+        position="top-right"
+        expand={false}
+        closeButton
+      />
     </ThemeProvider>
   );
 }

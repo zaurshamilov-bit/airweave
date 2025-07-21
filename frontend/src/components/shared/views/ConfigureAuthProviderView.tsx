@@ -383,6 +383,7 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                     authProviderConnectionId: connection.readable_id,
                     authProviderName: authProviderName,  // Use the original auth provider name, not connection name
                     authProviderShortName: connection.short_name,
+                    isNewConnection: true  // Flag to indicate this is a new connection
                 });
 
                 // Refresh connections after navigation - testing without delay

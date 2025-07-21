@@ -111,7 +111,7 @@ class AuthProviderService:
 
         BASE_ERROR_MESSAGE = (
             "For more information about auth provider configuration, "
-            "check [this page](https://docs.airweave.ai/docs/auth-providers)."
+            "check [this page](https://docs.airweave.ai/auth-providers)."
         )
 
         # Check if auth provider has a config class defined - it MUST be defined

@@ -32,6 +32,9 @@ class ComposioAuthProvider(BaseAuthProvider):
     SLUG_NAME_MAPPING = {
         "google_drive": "googledrive",
         "google_calendar": "googlecalendar",
+        "outlook_mail": "outlook",
+        "outlook_calendar": "outlook",
+        "onedrive": "one_drive",
         # Add more mappings as needed
     }
 
