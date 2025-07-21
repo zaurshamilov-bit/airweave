@@ -35,12 +35,7 @@ class LocalText2Vec(BaseEmbeddingModel):
         logger: Optional[ContextualLogger] = None,
         **data,  # Pass through to BaseEmbeddingModel/Pydantic, if relevant
     ):
-        """Initialize the Local Text2Vec embedding model.
-
-        Args:
-            logger: Optional contextual logger for debugging and monitoring
-            **data: Additional keyword arguments passed to the parent BaseEmbeddingModel
-        """
+        """Initialize the local text2vec model."""
         # Always call parent __init__ (esp. with Pydantic models!)
         super().__init__(**data)
         self.logger = logger
