@@ -1,3 +1,5 @@
+# flake8: noqa: E501
+
 """Reusable API response examples for consistent documentation."""
 
 # SourceConnectionJob examples for different states
@@ -198,6 +200,140 @@ WHITE_LABEL_EXAMPLES = {
     },
 }
 
+# Search response examples for different scenarios
+SEARCH_RESPONSE_EXAMPLES = {
+    "raw_results": {
+        "results": [
+            {
+                "id": "f30bf505-cc33-4c74-920c-524eab49334c",
+                "score": 0.92,
+                "payload": {
+                    "entity_id": "1207573546742333",
+                    "breadcrumbs": [],
+                    "source_name": "Asana",
+                    "url": None,
+                    "chunk_index": None,
+                    "md_title": None,
+                    "md_content": "Implement user authentication - Build secure login system with JWT tokens",
+                    "md_type": "text",
+                    "metadata": {
+                        "project_name": "Q4 Development Sprint",
+                        "assignee": "john.doe@company.com",
+                        "due_date": "2024-01-20",
+                        "priority": "high",
+                        "tags": ["authentication", "security", "backend"],
+                    },
+                    "md_position": 0,
+                    "md_parent_title": "Authentication Module",
+                    "md_parent_url": None,
+                },
+            },
+            {
+                "id": "fb6c49f7-2f9a-4000-ad50-96d1047a8f10",
+                "score": 0.87,
+                "payload": {
+                    "entity_id": "1207921130902216",
+                    "breadcrumbs": [],
+                    "source_name": "Asana",
+                    "url": None,
+                    "chunk_index": None,
+                    "md_title": None,
+                    "md_content": "Review and update API authentication documentation",
+                    "md_type": "text",
+                    "metadata": {
+                        "project_name": "Documentation Updates",
+                        "assignee": "sarah.smith@company.com",
+                        "status": "in_progress",
+                        "last_modified": "2024-01-18T14:30:00Z",
+                    },
+                    "md_position": 0,
+                    "md_parent_title": "API Documentation",
+                    "md_parent_url": None,
+                },
+            },
+        ],
+        "response_type": "raw",
+        "status": "success",
+    },
+    "completion_response": {
+        "results": [
+            {
+                "id": "stripe_cust_1234567890",
+                "score": 0.94,
+                "payload": {
+                    "entity_id": "cust_1234567890",
+                    "source_name": "Stripe",
+                    "title": "Customer Payment Record",
+                    "content": "Monthly subscription payment of $99.00 processed successfully for customer John Doe (john@company.com). Payment method: Visa ending in 4242.",
+                    "metadata": {
+                        "date": "2024-01-15T10:30:00Z",
+                        "type": "payment",
+                        "amount": 99.00,
+                        "currency": "USD",
+                        "customer_email": "john@company.com",
+                    },
+                },
+            },
+            {
+                "id": "zendesk_ticket_789",
+                "score": 0.89,
+                "payload": {
+                    "entity_id": "ticket_789",
+                    "source_name": "Zendesk",
+                    "title": "Billing Question - Subscription Upgrade",
+                    "content": "Customer inquiry about upgrading from Basic to Pro plan. Customer mentioned they need advanced analytics features.",
+                    "metadata": {
+                        "date": "2024-01-14T14:22:00Z",
+                        "type": "support_ticket",
+                        "status": "resolved",
+                        "priority": "medium",
+                        "agent": "support@company.com",
+                    },
+                },
+            },
+        ],
+        "completion": "Based on your recent data:\n\n## Payment Processing\nCustomer John Doe successfully processed a **$99 monthly subscription payment** on January 15th using a Visa card ending in 4242.\n\n## Customer Support Activity\nThere was a related support ticket from January 14th where a customer inquired about **upgrading from Basic to Pro plan** for advanced analytics features. This ticket has been resolved.\n\n### Summary\nThis shows strong customer engagement with your premium offerings, with successful payment processing and interest in higher-tier features.",
+        "response_type": "completion",
+        "status": "success",
+    },
+    "no_results": {"results": [], "response_type": "raw", "status": "no_results"},
+    "filtered_search": {
+        "results": [
+            {
+                "id": "6973c318-d065-4fb8-bdd6-2e18bc3ee86a",
+                "score": 0.91,
+                "payload": {
+                    "entity_id": "1207756551982870",
+                    "breadcrumbs": [
+                        {"entity_id": "1204858079189506", "name": "neena.io", "type": "workspace"},
+                        {
+                            "entity_id": "1207324698039595",
+                            "name": "Neena Core Planning",
+                            "type": "project",
+                        },
+                    ],
+                    "source_name": "Asana",
+                    "url": None,
+                    "chunk_index": None,
+                    "name": "Implement Learnability POC",
+                    "project_gid": "1207324698039595",
+                    "section_gid": "1207324698039599",
+                    "actual_time_minutes": None,
+                    "approval_status": None,
+                    "assignee": None,
+                    "assignee_status": None,
+                    "completed": False,
+                    "completed_at": None,
+                    "created_at": "2024-01-10T09:15:00Z",
+                    "custom_fields": {"priority": "high", "sprint": "Q1-2024"},
+                },
+            }
+        ],
+        "response_type": "raw",
+        "status": "success",
+    },
+}
+
 
 # Helper functions to generate response examples
 def create_single_job_response(status: str, summary: str):
@@ -336,6 +472,25 @@ def create_white_label_list_response(white_label_types: list, summary: str):
                                 WHITE_LABEL_EXAMPLES[white_label_type]
                                 for white_label_type in white_label_types
                             ],
+                        }
+                    }
+                }
+            },
+        }
+    }
+
+
+def create_search_response(response_type: str, summary: str):
+    """Create a search response example."""
+    return {
+        "200": {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        f"{response_type}_search": {
+                            "summary": summary,
+                            "value": SEARCH_RESPONSE_EXAMPLES[response_type],
                         }
                     }
                 }

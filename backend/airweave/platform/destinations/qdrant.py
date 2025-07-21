@@ -371,12 +371,24 @@ class QdrantDestination(VectorDBDestination):
             # Fallback to a different approach if needed
             raise
 
-    async def search(self, query_vector: list[float]) -> list[dict]:
-        """Search for a sync_id in the destination.
+    async def search(
+        self,
+        query_vector: list[float],
+        filter: dict | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        score_threshold: float | None = None,
+        with_payload: bool = True,
+    ) -> list[dict]:
+        """Search for entities in the destination.
 
         Args:
             query_vector (list[float]): The query vector to search with.
-            sync_id (UUID): The sync_id to search for.
+            filter (dict | None): Optional filter conditions as a dictionary.
+            limit (int): Maximum number of results to return.
+            offset (int): Number of results to skip.
+            score_threshold (float | None): Optional minimum score threshold.
+            with_payload (bool): Whether to include payload in results.
 
         Returns:
             list[dict]: The search results.
@@ -384,13 +396,28 @@ class QdrantDestination(VectorDBDestination):
         await self.ensure_client_readiness()
 
         try:
+            # Build search parameters
+            search_params = {
+                "collection_name": self.collection_name,
+                "query_vector": query_vector,
+                "limit": limit,
+                "with_payload": with_payload,
+            }
+
+            # Add optional parameters
+            if offset and offset > 0:
+                search_params["offset"] = offset
+
+            if score_threshold is not None:
+                search_params["score_threshold"] = score_threshold
+
+            if filter:
+                # Convert dict filter to Qdrant filter
+                qdrant_filter = rest.Filter.model_validate(filter)
+                search_params["query_filter"] = qdrant_filter
+
             # Perform search
-            search_results = await self.client.search(
-                collection_name=self.collection_name,
-                query_vector=query_vector,
-                limit=10,
-                with_payload=True,
-            )
+            search_results = await self.client.search(**search_params)
 
             # Convert results to a standard format
             results = []
@@ -399,7 +426,7 @@ class QdrantDestination(VectorDBDestination):
                     {
                         "id": result.id,
                         "score": result.score,
-                        "payload": result.payload,
+                        "payload": result.payload if with_payload else None,
                     }
                 )
 

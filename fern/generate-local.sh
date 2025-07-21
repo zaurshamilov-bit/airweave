@@ -47,7 +47,7 @@ if [ -z "$FERN_TOKEN" ]; then
 fi
 
 echo "🚀 Running Fern generators..."
-fern generate --group public --log-level debug --version v0.1.46
+fern generate --group public --log-level debug --version v0.1.50
 
 echo "✅ Done! Generated files:"
 ls -la definition/

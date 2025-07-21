@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { apiClient, API_CONFIG } from '@/lib/api';
-import { Copy, Check, Braces, SearchCode, TerminalSquare, Clock, AlertCircle, ChevronDown, ChevronRight, Terminal, Code, Layers } from 'lucide-react';
+import { Copy, Check, Braces, SearchCode, TerminalSquare, Clock, AlertCircle, ChevronDown, ChevronRight, Terminal, Code, Layers, Book } from 'lucide-react';
 import { useTheme } from '@/lib/theme-provider';
 import { cn } from '@/lib/utils';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -284,7 +284,7 @@ airweave-mcp-search`;
         <div className="text-xs flex items-center gap-2">
             <span className={isDark ? "text-gray-400" : "text-gray-500"}>→</span>
             <a
-                href="https://docs.airweave.ai/api-reference/collections/search-collection"
+                href="https://docs.airweave.ai/api-reference/collections/search-collection-advanced-collections-readable-id-search-post?explorer=true"
                 target="_blank"
                 rel="noopener noreferrer"
                 className={cn(
@@ -325,7 +325,23 @@ airweave-mcp-search`;
                 {/* Header with collection name */}
                 <div className="flex justify-between items-center mb-4">
                     <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-medium text-foreground">Query your collection</h2>
+                        <h2 className="text-xl font-medium text-foreground">
+                            Query your collection
+                            <a
+                                href="https://docs.airweave.ai/search"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={cn(
+                                    "inline-flex items-center gap-1 ml-2 text-xs align-super transition-all",
+                                    isDark
+                                        ? "text-blue-400 hover:text-blue-300"
+                                        : "text-blue-600 hover:text-blue-700"
+                                )}
+                            >
+                                <Book className="h-3 w-3" />
+                                Read docs
+                            </a>
+                        </h2>
                     </div>
                 </div>
 

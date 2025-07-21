@@ -14,6 +14,11 @@
         "summary": "Read Source",
         "description": "Get detailed information about a specific data source connector.",
         "operationId": "read_source_sources_detail__short_name__get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "short_name",
@@ -25,38 +30,6 @@
               "title": "Short Name"
             },
             "description": "Technical identifier of the source type (e.g., 'github', 'stripe', 'slack')"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -132,40 +105,12 @@
         "summary": "Read Sources",
         "description": "List all available data source connectors.\n\n<br/><br/>\nReturns the complete catalog of source types that Airweave can connect to.",
         "operationId": "read_sources_sources_list_get",
-        "parameters": [
+        "security": [
           {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
+            "ApiKeyAuth": []
           }
         ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -245,6 +190,11 @@
         "summary": "List Collections",
         "description": "List all collections that belong to your organization.",
         "operationId": "list_collections_collections_get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "skip",
@@ -271,38 +221,6 @@
               "title": "Limit"
             },
             "description": "Maximum number of collections to return (1-1000)"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -357,40 +275,12 @@
         "summary": "Create Collection",
         "description": "Create a new collection.\n\n<br/><br/>\nThe newly created collection is initially empty and does not contain any data\nuntil you explicitly add source connections to it.",
         "operationId": "create_collection_collections_post",
-        "parameters": [
+        "security": [
           {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
+            "ApiKeyAuth": []
           }
         ],
+        "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -433,6 +323,11 @@
         "summary": "Get Collection",
         "description": "Retrieve a specific collection by its readable ID.",
         "operationId": "get_collection_collections__readable_id__get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -444,38 +339,6 @@
               "title": "Readable Id"
             },
             "description": "The unique readable identifier of the collection (e.g., 'finance-data-ab123')"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -508,6 +371,11 @@
         "summary": "Update Collection",
         "description": "Update a collection's properties.\n\n<br/><br/>\nModifies the display name of an existing collection.\nNote that the readable ID cannot be changed after creation to maintain stable\nAPI endpoints and preserve any existing integrations or bookmarks.",
         "operationId": "update_collection_collections__readable_id__put",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -519,38 +387,6 @@
               "title": "Readable Id"
             },
             "description": "The unique readable identifier of the collection to update"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "requestBody": {
@@ -593,6 +429,11 @@
         "summary": "Delete Collection",
         "description": "Delete a collection and optionally its associated data.\n\n<br/><br/>\nPermanently removes a collection from your organization. By default, this only\ndeletes the collection metadata while preserving the actual data in the\ndestination systems.<br/><br/>All source connections within this collection\nwill also be deleted as part of the cleanup process.",
         "operationId": "delete_collection_collections__readable_id__delete",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -616,38 +457,6 @@
               "title": "Delete Data"
             },
             "description": "Whether to also delete all associated data from destination systems"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -680,8 +489,13 @@
           "collections"
         ],
         "summary": "Search Collection",
-        "description": "Search across all data sources within the specified collection.",
+        "description": "Search across all data sources within the specified collection.\n\nThis GET endpoint provides basic search functionality. For advanced filtering\nand options, use the POST /search endpoint.",
         "operationId": "search_collection_collections__readable_id__search_get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -726,36 +540,62 @@
             "description": "Format of the response: 'raw' returns search results, 'completion' returns AI-generated answers"
           },
           {
-            "name": "X-API-Key",
-            "in": "header",
+            "name": "limit",
+            "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Maximum number of results to return",
+              "default": 20,
+              "title": "Limit"
+            },
+            "description": "Maximum number of results to return"
           },
           {
-            "name": "X-Organization-ID",
-            "in": "header",
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of results to skip for pagination",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Number of results to skip for pagination"
+          },
+          {
+            "name": "score_threshold",
+            "in": "query",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "number",
+                  "maximum": 1.0,
+                  "minimum": 0.0
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "X-Organization-Id"
-            }
+              "description": "Minimum similarity score threshold",
+              "title": "Score Threshold"
+            },
+            "description": "Minimum similarity score threshold"
+          },
+          {
+            "name": "expansion_strategy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/QueryExpansionStrategy",
+              "description": "Query expansion strategy (auto, llm, or no_expansion)",
+              "default": "auto"
+            },
+            "description": "Query expansion strategy (auto, llm, or no_expansion)"
           }
         ],
         "responses": {
@@ -765,6 +605,164 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SearchResponse"
+                },
+                "examples": {
+                  "raw_results_search": {
+                    "summary": "Raw search results with metadata",
+                    "value": {
+                      "results": [
+                        {
+                          "id": "f30bf505-cc33-4c74-920c-524eab49334c",
+                          "score": 0.92,
+                          "payload": {
+                            "entity_id": "1207573546742333",
+                            "breadcrumbs": [],
+                            "source_name": "Asana",
+                            "md_content": "Implement user authentication - Build secure login system with JWT tokens",
+                            "md_type": "text",
+                            "metadata": {
+                              "project_name": "Q4 Development Sprint",
+                              "assignee": "john.doe@company.com",
+                              "due_date": "2024-01-20",
+                              "priority": "high",
+                              "tags": [
+                                "authentication",
+                                "security",
+                                "backend"
+                              ]
+                            },
+                            "md_position": 0,
+                            "md_parent_title": "Authentication Module"
+                          }
+                        },
+                        {
+                          "id": "fb6c49f7-2f9a-4000-ad50-96d1047a8f10",
+                          "score": 0.87,
+                          "payload": {
+                            "entity_id": "1207921130902216",
+                            "breadcrumbs": [],
+                            "source_name": "Asana",
+                            "md_content": "Review and update API authentication documentation",
+                            "md_type": "text",
+                            "metadata": {
+                              "project_name": "Documentation Updates",
+                              "assignee": "sarah.smith@company.com",
+                              "status": "in_progress",
+                              "last_modified": "2024-01-18T14:30:00Z"
+                            },
+                            "md_position": 0,
+                            "md_parent_title": "API Documentation"
+                          }
+                        }
+                      ],
+                      "response_type": "raw",
+                      "status": "success"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "collections"
+        ],
+        "summary": "Search Collection Advanced",
+        "description": "Advanced search with comprehensive filtering and options.\n\nThis endpoint supports:\n- Metadata filtering using Qdrant's native filter syntax\n- Pagination with offset and limit\n- Score threshold filtering\n- Query expansion strategies\n- Result summarization\n- Control over included metadata and vectors\n\nExample request body:\n```json\n{\n    \"query\": \"customer payment issues\",\n    \"filter\": {\n        \"must\": [\n            {\"key\": \"source\", \"match\": {\"value\": \"stripe\"}},\n            {\"key\": \"created_at\", \"range\": {\"gte\": \"2024-01-01T00:00:00Z\"}}\n        ]\n    },\n    \"limit\": 50,\n    \"score_threshold\": 0.7,\n    \"response_type\": \"completion\"\n}\n```",
+        "operationId": "search_collection_advanced_collections__readable_id__search_post",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "readable_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The unique readable identifier of the collection to search",
+              "title": "Readable Id"
+            },
+            "description": "The unique readable identifier of the collection to search"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                },
+                "examples": {
+                  "completion_response_search": {
+                    "summary": "Search with AI-generated completion",
+                    "value": {
+                      "results": [
+                        {
+                          "id": "stripe_cust_1234567890",
+                          "score": 0.94,
+                          "payload": {
+                            "entity_id": "cust_1234567890",
+                            "source_name": "Stripe",
+                            "title": "Customer Payment Record",
+                            "content": "Monthly subscription payment of $99.00 processed successfully for customer John Doe (john@company.com). Payment method: Visa ending in 4242.",
+                            "metadata": {
+                              "date": "2024-01-15T10:30:00Z",
+                              "type": "payment",
+                              "amount": 99.0,
+                              "currency": "USD",
+                              "customer_email": "john@company.com"
+                            }
+                          }
+                        },
+                        {
+                          "id": "zendesk_ticket_789",
+                          "score": 0.89,
+                          "payload": {
+                            "entity_id": "ticket_789",
+                            "source_name": "Zendesk",
+                            "title": "Billing Question - Subscription Upgrade",
+                            "content": "Customer inquiry about upgrading from Basic to Pro plan. Customer mentioned they need advanced analytics features.",
+                            "metadata": {
+                              "date": "2024-01-14T14:22:00Z",
+                              "type": "support_ticket",
+                              "status": "resolved",
+                              "priority": "medium",
+                              "agent": "support@company.com"
+                            }
+                          }
+                        }
+                      ],
+                      "completion": "Based on your recent data:\n\n## Payment Processing\nCustomer John Doe successfully processed a **$99 monthly subscription payment** on January 15th using a Visa card ending in 4242.\n\n## Customer Support Activity\nThere was a related support ticket from January 14th where a customer inquired about **upgrading from Basic to Pro plan** for advanced analytics features. This ticket has been resolved.\n\n### Summary\nThis shows strong customer engagement with your premium offerings, with successful payment processing and interest in higher-tier features.",
+                      "response_type": "completion",
+                      "status": "success"
+                    }
+                  }
                 }
               }
             }
@@ -790,6 +788,11 @@
         "summary": "Refresh All Source Connections",
         "description": "Trigger data synchronization for all source connections in the collection.\n\n<br/><br/>The sync jobs run asynchronously in the background, so this endpoint\nreturns immediately with job details that you can use to track progress. You can\nmonitor the status of individual data synchronization using the source connection\nendpoints.",
         "operationId": "refresh_all_source_connections_collections__readable_id__refresh_all_post",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -801,38 +804,6 @@
               "title": "Readable Id"
             },
             "description": "The unique readable identifier of the collection to refresh"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -902,6 +873,11 @@
         "summary": "List Source Connections",
         "description": "List source connections across your organization.\n\n<br/><br/>\nBy default, returns ALL source connections from every collection in your\norganization. Use the 'collection' parameter to filter results to a specific\ncollection. This is useful for getting an overview of all your data sources\nor managing connections within a particular collection.",
         "operationId": "list_source_connections_source_connections_get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "collection",
@@ -946,38 +922,6 @@
               "title": "Limit"
             },
             "description": "Maximum number of source connections to return (1-1000)"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1032,40 +976,12 @@
         "summary": "Create Source Connection",
         "description": "Create a new source connection to sync data into your collection.\n\n<br/><br/>\n\n**This endpoint only works for sources that do not use OAuth2.0.**\nSources that do use OAuth2.0 like Google Drive, Slack, or HubSpot must be\nconnected through the UI where you can complete the OAuth consent flow.<br/><br/>\n\nCredentials for a source have to be provided using the `auth_fields` field.\nCurrently, it is not automatically checked if the provided credentials are valid.\nIf they are not valid, the data synchronization will fail.<br/><br/>\n\nCheck the documentation of a specific source (for example\n[Github](https://docs.airweave.ai/docs/connectors/github)) to see what kind\nof authentication is used.",
         "operationId": "create_source_connection_source_connections_post",
-        "parameters": [
+        "security": [
           {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
+            "ApiKeyAuth": []
           }
         ],
+        "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -1108,6 +1024,11 @@
         "summary": "Get Source Connection",
         "description": "Retrieve a specific source connection by its ID.",
         "operationId": "get_source_connection_source_connections__source_connection_id__get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1132,38 +1053,6 @@
               "title": "Show Auth Fields"
             },
             "description": "Whether to reveal authentication credentials."
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1196,6 +1085,11 @@
         "summary": "Update Source Connection",
         "description": "Update a source connection's properties.\n\n<br/><br/>\n\nModify the configuration of an existing source connection including its name,\nauthentication credentials, configuration fields, sync schedule, or source-specific settings.",
         "operationId": "update_source_connection_source_connections__source_connection_id__put",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1208,38 +1102,6 @@
               "title": "Source Connection Id"
             },
             "description": "The unique identifier of the source connection to update"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "requestBody": {
@@ -1282,6 +1144,11 @@
         "summary": "Delete Source Connection",
         "description": "Delete a source connection.\n\n<br/><br/>\n\nPermanently removes the source connection configuration and credentials.\nBy default, previously synced data remains in your destination systems for continuity.\nUse delete_data=true to also remove all associated data from destination systems.",
         "operationId": "delete_source_connection_source_connections__source_connection_id__delete",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1306,38 +1173,6 @@
               "title": "Delete Data"
             },
             "description": "Whether to also delete all synced data from destination systems"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1372,6 +1207,11 @@
         "summary": "Run Source Connection",
         "description": "Manually trigger a data sync for this source connection.\n\n<br/><br/>\nStarts an immediate synchronization job that extracts fresh data from your source,\ntransforms it according to your configuration, and updates the destination systems.\nThe job runs asynchronously and endpoint returns immediately with tracking information.",
         "operationId": "run_source_connection_source_connections__source_connection_id__run_post",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1384,38 +1224,6 @@
               "title": "Source Connection Id"
             },
             "description": "The unique identifier of the source connection to sync"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "requestBody": {
@@ -1488,6 +1296,11 @@
         "summary": "List Source Connection Jobs",
         "description": "List all sync jobs for a source connection.\n\n<br/><br/>\nReturns the complete history of data synchronization jobs including successful syncs,\nfailed attempts, and currently running operations.",
         "operationId": "list_source_connection_jobs_source_connections__source_connection_id__jobs_get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1500,38 +1313,6 @@
               "title": "Source Connection Id"
             },
             "description": "The unique identifier of the source connection"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1601,6 +1382,11 @@
         "summary": "Get Source Connection Job",
         "description": "Get detailed information about a specific sync job.",
         "operationId": "get_source_connection_job_source_connections__source_connection_id__jobs__job_id__get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1625,38 +1411,6 @@
               "title": "Job Id"
             },
             "description": "The unique identifier of the sync job"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1720,6 +1474,11 @@
         "summary": "Cancel Source Connection Job",
         "description": "Cancel a running sync job.\n\n<br/><br/>\nSends a cancellation signal to stop an in-progress data synchronization.\nThe job will complete its current operation and then terminate gracefully.\nOnly jobs in 'created', 'pending', or 'in_progress' states can be cancelled.",
         "operationId": "cancel_source_connection_job_source_connections__source_connection_id__jobs__job_id__cancel_post",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1744,38 +1503,6 @@
               "title": "Job Id"
             },
             "description": "The unique identifier of the sync job to cancel"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1838,40 +1565,12 @@
         "summary": "List White Labels",
         "description": "List all white label integrations for your organization.\n\n<br/><br/>\nReturns all custom OAuth integrations configured with your own branding and\ncredentials. These integrations allow you to present OAuth consent screens with\nyour company name instead of Airweave.<br/><br/>**White label integrations only\nwork with OAuth2.0 sources** like Slack, Google Drive, or HubSpot that require\nOAuth consent flows.",
         "operationId": "list_white_labels_white_labels_list_get",
-        "parameters": [
+        "security": [
           {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
+            "ApiKeyAuth": []
           }
         ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1929,40 +1628,12 @@
         "summary": "Create White Label",
         "description": "Create a new white label integration.\n\n<br/><br/>\n**This only works for sources that use OAuth2.0 authentication** like Slack,\nGoogle Drive, GitHub, or HubSpot.<br/><br/>Sets up a custom OAuth integration\nusing your own OAuth application credentials and branding. Once created,\ncustomers will see your company name during OAuth consent flows instead of\nAirweave. This requires you to have already configured your own OAuth\napplication with the target service provider.",
         "operationId": "create_white_label_white_labels_post",
-        "parameters": [
+        "security": [
           {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
+            "ApiKeyAuth": []
           }
         ],
+        "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -2005,6 +1676,11 @@
         "summary": "Get White Label",
         "description": "Retrieve a specific white label integration by its ID.",
         "operationId": "get_white_label_white_labels__white_label_id__get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -2017,38 +1693,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -2081,6 +1725,11 @@
         "summary": "Update White Label",
         "description": "Update a white label integration's configuration.",
         "operationId": "update_white_label_white_labels__white_label_id__put",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -2093,38 +1742,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration to update"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "requestBody": {
@@ -2167,6 +1784,11 @@
         "summary": "Delete White Label",
         "description": "Delete a white label integration.\n\n<br/><br/>\nPermanently removes the white label configuration and OAuth credentials.\nExisting source connections created through this integration will continue to work,\nbut no new OAuth flows can be initiated until a new white label integration is created.",
         "operationId": "delete_white_label_white_labels__white_label_id__delete",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -2179,38 +1801,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration to delete"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -2257,38 +1847,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -2330,6 +1888,11 @@
         "summary": "List White Label Source Connections",
         "description": "List all source connections created through a specific white label integration.\n\n<br/><br/>\nReturns source connections that were established using this white label's OAuth flow.",
         "operationId": "list_white_label_source_connections_white_labels__white_label_id__source_connections_get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -2342,38 +1905,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -2443,38 +1974,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "requestBody": {
@@ -3347,6 +2846,82 @@
         "title": "DagNodeCreate",
         "description": "Schema for creating a DAG node."
       },
+      "DatetimeRange": {
+        "properties": {
+          "lt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lt",
+            "description": "point.key &lt; range.lt"
+          },
+          "gt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gt",
+            "description": "point.key &gt; range.gt"
+          },
+          "gte": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gte",
+            "description": "point.key &gt;= range.gte"
+          },
+          "lte": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lte",
+            "description": "point.key &lt;= range.lte"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DatetimeRange",
+        "description": "Range filter request"
+      },
       "Destination": {
         "properties": {
           "name": {
@@ -4055,6 +3630,126 @@
         "title": "EntityType",
         "description": "Type of entity."
       },
+      "FieldCondition": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Payload key"
+          },
+          "match": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchValue"
+              },
+              {
+                "$ref": "#/components/schemas/MatchText"
+              },
+              {
+                "$ref": "#/components/schemas/MatchAny"
+              },
+              {
+                "$ref": "#/components/schemas/MatchExcept"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match",
+            "description": "Check if point has field with a given value"
+          },
+          "range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Range"
+              },
+              {
+                "$ref": "#/components/schemas/DatetimeRange"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range",
+            "description": "Check if points value lies in a given range"
+          },
+          "geo_bounding_box": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeoBoundingBox"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Check if points geolocation lies in a given area"
+          },
+          "geo_radius": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeoRadius"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Check if geo point is within a given radius"
+          },
+          "geo_polygon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeoPolygon"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Check if geo point is within a given polygon"
+          },
+          "values_count": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ValuesCount"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Check number of values of the field"
+          },
+          "is_empty": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Empty",
+            "description": "Check that the field is empty, alternative syntax for `is_empty: \\&quot;field_name\\&quot;`"
+          },
+          "is_null": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Null",
+            "description": "Check that the field is null, alternative syntax for `is_null: \\&quot;field_name\\&quot;`"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "FieldCondition",
+        "description": "All possible payload filtering conditions"
+      },
       "Fields": {
         "properties": {
           "fields": {
@@ -4072,6 +3767,310 @@
         "title": "Fields",
         "description": "Fields model."
       },
+      "Filter": {
+        "properties": {
+          "should": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FieldCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IsEmptyCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IsNullCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HasIdCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HasVectorCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NestedCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Filter"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "$ref": "#/components/schemas/FieldCondition"
+              },
+              {
+                "$ref": "#/components/schemas/IsEmptyCondition"
+              },
+              {
+                "$ref": "#/components/schemas/IsNullCondition"
+              },
+              {
+                "$ref": "#/components/schemas/HasIdCondition"
+              },
+              {
+                "$ref": "#/components/schemas/HasVectorCondition"
+              },
+              {
+                "$ref": "#/components/schemas/NestedCondition"
+              },
+              {
+                "$ref": "#/components/schemas/Filter"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Should",
+            "description": "At least one of those conditions should match"
+          },
+          "min_should": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MinShould"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "At least minimum amount of given conditions should match"
+          },
+          "must": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FieldCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IsEmptyCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IsNullCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HasIdCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HasVectorCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NestedCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Filter"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "$ref": "#/components/schemas/FieldCondition"
+              },
+              {
+                "$ref": "#/components/schemas/IsEmptyCondition"
+              },
+              {
+                "$ref": "#/components/schemas/IsNullCondition"
+              },
+              {
+                "$ref": "#/components/schemas/HasIdCondition"
+              },
+              {
+                "$ref": "#/components/schemas/HasVectorCondition"
+              },
+              {
+                "$ref": "#/components/schemas/NestedCondition"
+              },
+              {
+                "$ref": "#/components/schemas/Filter"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Must",
+            "description": "All conditions must match"
+          },
+          "must_not": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FieldCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IsEmptyCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IsNullCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HasIdCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HasVectorCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NestedCondition"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Filter"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "$ref": "#/components/schemas/FieldCondition"
+              },
+              {
+                "$ref": "#/components/schemas/IsEmptyCondition"
+              },
+              {
+                "$ref": "#/components/schemas/IsNullCondition"
+              },
+              {
+                "$ref": "#/components/schemas/HasIdCondition"
+              },
+              {
+                "$ref": "#/components/schemas/HasVectorCondition"
+              },
+              {
+                "$ref": "#/components/schemas/NestedCondition"
+              },
+              {
+                "$ref": "#/components/schemas/Filter"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Must Not",
+            "description": "All conditions must NOT match"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Filter"
+      },
+      "GeoBoundingBox": {
+        "properties": {
+          "top_left": {
+            "$ref": "#/components/schemas/GeoPoint",
+            "description": "Geo filter request  Matches coordinates inside the rectangle, described by coordinates of lop-left and bottom-right edges"
+          },
+          "bottom_right": {
+            "$ref": "#/components/schemas/GeoPoint",
+            "description": "Geo filter request  Matches coordinates inside the rectangle, described by coordinates of lop-left and bottom-right edges"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "top_left",
+          "bottom_right"
+        ],
+        "title": "GeoBoundingBox",
+        "description": "Geo filter request  Matches coordinates inside the rectangle, described by coordinates of lop-left and bottom-right edges"
+      },
+      "GeoLineString": {
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/GeoPoint"
+            },
+            "type": "array",
+            "title": "Points",
+            "description": "Ordered sequence of GeoPoints representing the line"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "points"
+        ],
+        "title": "GeoLineString",
+        "description": "Ordered sequence of GeoPoints representing the line"
+      },
+      "GeoPoint": {
+        "properties": {
+          "lon": {
+            "type": "number",
+            "title": "Lon",
+            "description": "Geo point payload schema"
+          },
+          "lat": {
+            "type": "number",
+            "title": "Lat",
+            "description": "Geo point payload schema"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lon",
+          "lat"
+        ],
+        "title": "GeoPoint",
+        "description": "Geo point payload schema"
+      },
+      "GeoPolygon": {
+        "properties": {
+          "exterior": {
+            "$ref": "#/components/schemas/GeoLineString",
+            "description": "Geo filter request  Matches coordinates inside the polygon, defined by `exterior` and `interiors`"
+          },
+          "interiors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GeoLineString"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interiors",
+            "description": "Interior lines (if present) bound holes within the surface each GeoLineString must consist of a minimum of 4 points, and the first and last points must be the same."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "exterior"
+        ],
+        "title": "GeoPolygon",
+        "description": "Geo filter request  Matches coordinates inside the polygon, defined by `exterior` and `interiors`"
+      },
+      "GeoRadius": {
+        "properties": {
+          "center": {
+            "$ref": "#/components/schemas/GeoPoint",
+            "description": "Geo filter request  Matches coordinates inside the circle of `radius` and center with coordinates `center`"
+          },
+          "radius": {
+            "type": "number",
+            "title": "Radius",
+            "description": "Radius of the area in meters"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "center",
+          "radius"
+        ],
+        "title": "GeoRadius",
+        "description": "Geo filter request  Matches coordinates inside the circle of `radius` and center with coordinates `center`"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -4084,6 +4083,48 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HasIdCondition": {
+        "properties": {
+          "has_id": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Has Id",
+            "description": "ID-based filtering condition"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "has_id"
+        ],
+        "title": "HasIdCondition",
+        "description": "ID-based filtering condition"
+      },
+      "HasVectorCondition": {
+        "properties": {
+          "has_vector": {
+            "type": "string",
+            "title": "Has Vector",
+            "description": "Filter points which have specific vector assigned"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "has_vector"
+        ],
+        "title": "HasVectorCondition",
+        "description": "Filter points which have specific vector assigned"
       },
       "IntegrationCredentialInDB": {
         "properties": {
@@ -4276,6 +4317,136 @@
         "title": "InvitationResponse",
         "description": "Schema for invitation responses."
       },
+      "IsEmptyCondition": {
+        "properties": {
+          "is_empty": {
+            "$ref": "#/components/schemas/PayloadField",
+            "description": "Select points with empty payload for a specified field"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "is_empty"
+        ],
+        "title": "IsEmptyCondition",
+        "description": "Select points with empty payload for a specified field"
+      },
+      "IsNullCondition": {
+        "properties": {
+          "is_null": {
+            "$ref": "#/components/schemas/PayloadField",
+            "description": "Select points with null payload for a specified field"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "is_null"
+        ],
+        "title": "IsNullCondition",
+        "description": "Select points with null payload for a specified field"
+      },
+      "MatchAny": {
+        "properties": {
+          "any": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Any",
+            "description": "Exact match on any of the given values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "any"
+        ],
+        "title": "MatchAny",
+        "description": "Exact match on any of the given values"
+      },
+      "MatchExcept": {
+        "properties": {
+          "except": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Except",
+            "description": "Should have at least one value not matching the any given values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "except"
+        ],
+        "title": "MatchExcept",
+        "description": "Should have at least one value not matching the any given values"
+      },
+      "MatchText": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Full-text match of the strings."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "MatchText",
+        "description": "Full-text match of the strings."
+      },
+      "MatchValue": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Value",
+            "description": "Exact match of the given value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "value"
+        ],
+        "title": "MatchValue",
+        "description": "Exact match of the given value"
+      },
       "MemberResponse": {
         "properties": {
           "id": {
@@ -4325,6 +4496,87 @@
         ],
         "title": "MemberResponse",
         "description": "Schema for organization member responses."
+      },
+      "MinShould": {
+        "properties": {
+          "conditions": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/FieldCondition"
+                },
+                {
+                  "$ref": "#/components/schemas/IsEmptyCondition"
+                },
+                {
+                  "$ref": "#/components/schemas/IsNullCondition"
+                },
+                {
+                  "$ref": "#/components/schemas/HasIdCondition"
+                },
+                {
+                  "$ref": "#/components/schemas/HasVectorCondition"
+                },
+                {
+                  "$ref": "#/components/schemas/NestedCondition"
+                },
+                {
+                  "$ref": "#/components/schemas/Filter"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Conditions",
+            "description": ""
+          },
+          "min_count": {
+            "type": "integer",
+            "title": "Min Count",
+            "description": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "conditions",
+          "min_count"
+        ],
+        "title": "MinShould"
+      },
+      "Nested": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Select points with payload for a specified nested field"
+          },
+          "filter": {
+            "$ref": "#/components/schemas/Filter",
+            "description": "Select points with payload for a specified nested field"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "filter"
+        ],
+        "title": "Nested",
+        "description": "Select points with payload for a specified nested field"
+      },
+      "NestedCondition": {
+        "properties": {
+          "nested": {
+            "$ref": "#/components/schemas/Nested",
+            "description": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nested"
+        ],
+        "title": "NestedCondition"
       },
       "NodeType": {
         "type": "string",
@@ -4511,6 +4763,88 @@
         "title": "OrganizationWithRole",
         "description": "Organization schema with user's role information."
       },
+      "PayloadField": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Payload field name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "PayloadField",
+        "description": "Payload field"
+      },
+      "QueryExpansionStrategy": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "llm",
+          "no_expansion"
+        ],
+        "title": "QueryExpansionStrategy",
+        "description": "Query expansion strategies for search."
+      },
+      "Range": {
+        "properties": {
+          "lt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lt",
+            "description": "point.key &lt; range.lt"
+          },
+          "gt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gt",
+            "description": "point.key &gt; range.gt"
+          },
+          "gte": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gte",
+            "description": "point.key &gt;= range.gte"
+          },
+          "lte": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lte",
+            "description": "point.key &lt;= range.lte"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Range",
+        "description": "Range filter request"
+      },
       "ResponseType": {
         "type": "string",
         "enum": [
@@ -4519,6 +4853,129 @@
         ],
         "title": "ResponseType",
         "description": "Response format options for search results."
+      },
+      "SearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Query",
+            "description": "The search query text",
+            "examples": [
+              "customer payment issues",
+              "Q4 revenue trends",
+              "support tickets about billing"
+            ]
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Filter"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Qdrant native filter for metadata-based filtering"
+          },
+          "offset": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offset",
+            "description": "Number of results to skip",
+            "default": 0
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit",
+            "description": "Maximum number of results to return",
+            "default": 20
+          },
+          "score_threshold": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score Threshold",
+            "description": "Minimum similarity score threshold"
+          },
+          "summarize": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summarize",
+            "description": "Whether to summarize results",
+            "default": false
+          },
+          "response_type": {
+            "$ref": "#/components/schemas/ResponseType",
+            "description": "Type of response (raw or completion)",
+            "default": "raw"
+          },
+          "expansion_strategy": {
+            "$ref": "#/components/schemas/QueryExpansionStrategy",
+            "description": "Query expansion strategy. Enhances recall by expanding the query with synonyms, related terms, and other variations, but increases latency.",
+            "default": "auto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "SearchRequest",
+        "description": "Comprehensive search request encapsulating all search parameters.",
+        "examples": [
+          {
+            "filter": {
+              "must": [
+                {
+                  "key": "source_name",
+                  "match": {
+                    "value": "Stripe"
+                  }
+                },
+                {
+                  "key": "created_at",
+                  "range": {
+                    "gte": "2024-01-01T00:00:00Z"
+                  }
+                }
+              ]
+            },
+            "limit": 50,
+            "query": "customer payment issues",
+            "response_type": "completion",
+            "score_threshold": 0.7
+          }
+        ]
       },
       "SearchResponse": {
         "properties": {
@@ -7202,6 +7659,62 @@
         ],
         "title": "ValidationError"
       },
+      "ValuesCount": {
+        "properties": {
+          "lt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lt",
+            "description": "point.key.length() &lt; values_count.lt"
+          },
+          "gt": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gt",
+            "description": "point.key.length() &gt; values_count.gt"
+          },
+          "gte": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gte",
+            "description": "point.key.length() &gt;= values_count.gte"
+          },
+          "lte": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lte",
+            "description": "point.key.length() &lt;= values_count.lte"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ValuesCount",
+        "description": "Values count filter request"
+      },
       "WhiteLabel": {
         "properties": {
           "name": {
@@ -7525,6 +8038,14 @@
             "redirect_url": "https://v2.yourapp.com/auth/slack/callback"
           }
         ]
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "API key for authentication"
       }
     }
   },

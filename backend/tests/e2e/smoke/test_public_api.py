@@ -84,7 +84,7 @@ def show_backend_logs(lines: int = 50) -> None:
             ["docker", "logs", "--tail", str(lines), "airweave-backend"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
 
         if result.returncode == 0:
@@ -162,15 +162,17 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
 
     # Set environment variables to suppress Azure credential warnings
     env = os.environ.copy()
-    env.update({
-        'AZURE_CLIENT_ID': '',
-        'AZURE_CLIENT_SECRET': '',
-        'AZURE_TENANT_ID': '',
-        'AZURE_USERNAME': '',
-        'AZURE_PASSWORD': '',
-        'MSI_ENDPOINT': '',  # Disable managed identity
-        'IMDS_ENDPOINT': '',  # Disable IMDS
-    })
+    env.update(
+        {
+            "AZURE_CLIENT_ID": "",
+            "AZURE_CLIENT_SECRET": "",
+            "AZURE_TENANT_ID": "",
+            "AZURE_USERNAME": "",
+            "AZURE_PASSWORD": "",
+            "MSI_ENDPOINT": "",  # Disable managed identity
+            "IMDS_ENDPOINT": "",  # Disable IMDS
+        }
+    )
 
     try:
         # Run start.sh script with automated input
@@ -194,7 +196,7 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
         services_started = False
         for line in process.stdout:
             print(f"  {line.strip()}")
-            if "Services started!" in line:
+            if "All services started successfully!" in line:
                 services_started = True
                 break
             if "Error:" in line or "error:" in line:

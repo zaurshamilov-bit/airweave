@@ -1,0 +1,348 @@
+---
+globs: **/search/**,**/collections.py
+alwaysApply: false
+---
+# Airweave Search Module Rules
+
+## How Search Actually Works
+
+### Entry Points (collections.py)
+```python
+# GET endpoint - basic search
+@router.get("/{readable_id}/search")
+async def search_collection(
+    query: str,
+    response_type: ResponseType = "raw",
+    limit: int = 20,
+    offset: int = 0,
+    score_threshold: float = None,
+    expansion_strategy: QueryExpansionStrategy = "auto"
+)
+
+# POST endpoint - advanced search with filters
+@router.post("/{readable_id}/search")
+async def search_collection_advanced(
+    search_request: SearchRequest  # Full Qdrant filter support
+)
+```
+
+### Request Flow
+1. **Endpoint** → Creates/receives `SearchRequest`
+2. **SearchService.search_with_request()** → Main orchestrator
+3. **_execute_search()** → Core search logic
+4. **Qdrant destination** → Actual vector search
+5. **Response cleaning** → Remove vectors, format results
+
+### Key Implementation Details
+
+#### SearchRequest Schema
+```python
+class SearchRequest(BaseModel):
+    query: str
+    filter: Optional[Filter] = None  # qdrant_client.http.models.Filter
+    limit: int = Field(20, ge=1, le=100)
+    offset: int = Field(0, ge=0)
+    score_threshold: Optional[float] = Field(None, ge=0.0, le=1.0)
+    response_type: ResponseType = ResponseType.RAW
+    expansion_strategy: QueryExpansionStrategy = QueryExpansionStrategy.AUTO
+```
+
+#### Filter Conversion Flow
+```python
+# In search_service._search_single_query():
+if filter:
+    if hasattr(filter, "model_dump"):
+        filter_dict = filter.model_dump(exclude_none=True)
+    else:
+        filter_dict = filter
+
+# Pass to Qdrant destination
+await destination.search(
+    vector,
+    filter=filter_dict,  # Must be dict, not Filter object
+    limit=limit,
+    offset=offset,
+    score_threshold=score_threshold,
+    with_payload=True
+)
+```
+
+#### Result Cleaning (_clean_search_results)
+Always removes:
+- `id` field from root
+- `vector` from payload
+- `download_url`, `local_path`, `file_uuid`, `checksum`
+
+Parses JSON strings in:
+- `metadata`, `sync_metadata`, `auth_fields`, `config_fields`
+
+#### Query Expansion
+- **AUTO**: Uses LLM if OPENAI_API_KEY set, else NO_EXPANSION
+- **LLM**: Generates up to 4 alternative queries via GPT-4o-mini
+- **NO_EXPANSION**: Single query only
+- Bulk search for all variants, then merge by highest score
+
+#### Error Handling in Endpoints
+```python
+# Connection errors → 503
+if "connection" in error_message.lower():
+    raise HTTPException(503, "Vector database service unavailable")
+
+# Not found → 404
+elif "not found" in error_message:
+    raise HTTPException(404, f"Collection '{readable_id}' not found")
+
+# Invalid filter → 422
+elif "invalid filter" in error_message:
+    raise HTTPException(422, f"Invalid filter format: {str(e)}")
+
+# Others → 500
+else:
+    raise HTTPException(500, f"An error occurred: {str(e)}")
+```
+
+## Critical Gotchas
+
+### 1. Filter Must Be Dict for Qdrant
+```python
+# WRONG - passing Filter object directly
+await destination.search(filter=search_request.filter)
+
+# RIGHT - convert to dict first
+filter_dict = filter.model_dump(exclude_none=True) if filter else None
+await destination.search(filter=filter_dict)
+```
+
+### 2. Offset Handling with Query expansion
+Query expansion has no guarantees with offset.
+
+### 3. OpenAI Dependency
+- No OPENAI_API_KEY = No completions, limited to raw results
+- Query expansion falls back to NO_EXPANSION
+- Check `self.openai_client` before using
+
+### 4. Collection Validation
+Always goes through `crud.collection.get_by_readable_id()` with auth_context.
+Raises `NotFoundException` if not found or no access.
+
+### 5. Embedding Model Selection
+```python
+if settings.OPENAI_API_KEY:
+    return OpenAIText2Vec(api_key=settings.OPENAI_API_KEY)
+else:
+    return LocalText2Vec()  # Fallback model
+```
+
+## Response Structure
+```python
+SearchResponse(
+    results=[{
+        "score": 0.85,
+        "payload": {
+            "source_name": "GitHub",  # CASE-SENSITIVE!
+            "entity_id": "...",
+            "created_at": "2024-01-01T00:00:00Z",
+            "md_content": "...",
+            "metadata": {...}  # Parsed from JSON string
+        }
+    }],
+    completion="AI-generated answer...",  # Only if response_type="completion"
+    response_type="raw|completion",
+    status="success|no_results|no_relevant_results"
+)
+```
+
+## Testing Search
+```bash
+# Basic search
+curl -X GET "http://localhost:8001/api/v1/collections/{id}/search?query=test"
+
+# With filters
+curl -X POST "http://localhost:8001/api/v1/collections/{id}/search" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "test",
+    "filter": {
+      "must": [{
+        "key": "source_name",
+        "match": {"value": "GitHub"}
+      }]
+    }
+  }'
+```
+
+- [ ] Both GET and POST endpoints
+- [ ] Vectors removed from response
+
+# Airweave Search Module Rules
+
+## How Search Actually Works
+
+### Entry Points (collections.py)
+```python
+# GET endpoint - basic search
+@router.get("/{readable_id}/search")
+async def search_collection(
+    query: str,
+    response_type: ResponseType = "raw",
+    limit: int = 20,
+    offset: int = 0,
+    score_threshold: float = None,
+    expansion_strategy: QueryExpansionStrategy = "auto"
+)
+
+# POST endpoint - advanced search with filters
+@router.post("/{readable_id}/search")
+async def search_collection_advanced(
+    search_request: SearchRequest  # Full Qdrant filter support
+)
+```
+
+### Request Flow
+1. **Endpoint** → Creates/receives `SearchRequest`
+2. **SearchService.search_with_request()** → Main orchestrator
+3. **_execute_search()** → Core search logic
+4. **Qdrant destination** → Actual vector search
+5. **Response cleaning** → Remove vectors, format results
+
+### Key Implementation Details
+
+#### SearchRequest Schema
+```python
+class SearchRequest(BaseModel):
+    query: str
+    filter: Optional[Filter] = None  # qdrant_client.http.models.Filter
+    limit: int = Field(20, ge=1, le=100)
+    offset: int = Field(0, ge=0)
+    score_threshold: Optional[float] = Field(None, ge=0.0, le=1.0)
+    response_type: ResponseType = ResponseType.RAW
+    expansion_strategy: QueryExpansionStrategy = QueryExpansionStrategy.AUTO
+```
+
+#### Filter Conversion Flow
+```python
+# In search_service._search_single_query():
+if filter:
+    if hasattr(filter, "model_dump"):
+        filter_dict = filter.model_dump(exclude_none=True)
+    else:
+        filter_dict = filter
+
+# Pass to Qdrant destination
+await destination.search(
+    vector,
+    filter=filter_dict,  # Must be dict, not Filter object
+    limit=limit,
+    offset=offset,
+    score_threshold=score_threshold,
+    with_payload=True
+)
+```
+
+#### Result Cleaning (_clean_search_results)
+Always removes:
+- `id` field from root
+- `vector` from payload
+- `download_url`, `local_path`, `file_uuid`, `checksum`
+
+Parses JSON strings in:
+- `metadata`, `sync_metadata`, `auth_fields`, `config_fields`
+
+#### Query Expansion
+- **AUTO**: Uses LLM if OPENAI_API_KEY set, else NO_EXPANSION
+- **LLM**: Generates up to 4 alternative queries via GPT-4o-mini
+- **NO_EXPANSION**: Single query only
+- Bulk search for all variants, then merge by highest score
+
+#### Error Handling in Endpoints
+```python
+# Connection errors → 503
+if "connection" in error_message.lower():
+    raise HTTPException(503, "Vector database service unavailable")
+
+# Not found → 404
+elif "not found" in error_message:
+    raise HTTPException(404, f"Collection '{readable_id}' not found")
+
+# Invalid filter → 422
+elif "invalid filter" in error_message:
+    raise HTTPException(422, f"Invalid filter format: {str(e)}")
+
+# Others → 500
+else:
+    raise HTTPException(500, f"An error occurred: {str(e)}")
+```
+
+## Critical Gotchas
+
+### 1. Filter Must Be Dict for Qdrant
+```python
+# WRONG - passing Filter object directly
+await destination.search(filter=search_request.filter)
+
+# RIGHT - convert to dict first
+filter_dict = filter.model_dump(exclude_none=True) if filter else None
+await destination.search(filter=filter_dict)
+```
+
+### 2. Offset Handling in Bulk Search
+Query expansion uses `destination.bulk_search()` which doesn't support offset.
+Solution: Fetch extra results, merge, then apply offset manually.
+
+### 3. OpenAI Dependency
+- No OPENAI_API_KEY = No completions, limited to raw results
+- Query expansion falls back to NO_EXPANSION
+- Check `self.openai_client` before using
+
+### 4. Collection Validation
+Always goes through `crud.collection.get_by_readable_id()` with auth_context.
+Raises `NotFoundException` if not found or no access.
+
+### 5. Embedding Model Selection
+```python
+if settings.OPENAI_API_KEY:
+    return OpenAIText2Vec(api_key=settings.OPENAI_API_KEY)
+else:
+    return LocalText2Vec()  # Fallback model
+```
+
+## Response Structure
+```python
+SearchResponse(
+    results=[{
+        "score": 0.85,
+        "payload": {
+            "source_name": "GitHub",  # CASE-SENSITIVE!
+            "entity_id": "...",
+            "created_at": "2024-01-01T00:00:00Z",
+            "md_content": "...",
+            "metadata": {...}  # Parsed from JSON string
+        }
+    }],
+    completion="AI-generated answer...",  # Only if response_type="completion"
+    response_type="raw|completion",
+    status="success|no_results|no_relevant_results"
+)
+```
+
+## Testing Search
+```bash
+# Basic search
+curl -X GET "http://localhost:8001/api/v1/collections/{id}/search?query=test"
+
+# With filters
+curl -X POST "http://localhost:8001/api/v1/collections/{id}/search" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "test",
+    "filter": {
+      "must": [{
+        "key": "source_name",
+        "match": {"value": "GitHub"}
+      }]
+    }
+  }'
+```
+
+- [ ] Both GET and POST endpoints
+- [ ] Vectors removed from response
