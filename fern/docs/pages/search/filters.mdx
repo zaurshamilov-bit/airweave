@@ -246,7 +246,7 @@ Filter(
 # Find items with empty tags array
 Filter(
     must=[
-        IsEmptyCondition(is_empty={"key": "tags"})
+        IsEmptyCondition(key="tags")
     ]
 )
 ```
