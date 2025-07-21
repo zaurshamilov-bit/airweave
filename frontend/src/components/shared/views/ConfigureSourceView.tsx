@@ -470,7 +470,7 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
                     sync_immediately: true
                 };
 
-                console.log(`📝 Source connection data (auth provider):`, sourceConnectionData);
+                // console.log('Source connection data (auth provider):', sourceConnectionData);
 
                 // Use public endpoint for auth provider connections
                 sourceConnectionResponse = await apiClient.post('/source-connections', sourceConnectionData);
