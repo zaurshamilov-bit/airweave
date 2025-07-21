@@ -45,7 +45,7 @@ def generate_readable_id(name: str) -> str:
 
     # Add random alphanumeric suffix
     suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-    readable_id = f"{readable_id}-{suffix}"
+    readable_id = f"{(readable_id + '-') if readable_id else ''}{suffix}"
 
     return readable_id
 
