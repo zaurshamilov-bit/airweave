@@ -10,6 +10,7 @@ from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
+from qdrant_client.http.models import Filter as QdrantFilter
 
 
 class ResponseType(str, Enum):
@@ -43,6 +44,69 @@ class QueryExpansions(BaseModel):
         min_items=1,
         max_items=10,
     )
+
+
+class SearchRequest(BaseModel):
+    """Comprehensive search request encapsulating all search parameters."""
+
+    # Core search parameters
+    query: str = Field(
+        ...,
+        description="The search query text",
+        min_length=1,
+        max_length=1000,
+        examples=["customer payment issues", "Q4 revenue trends", "support tickets about billing"],
+    )
+
+    # Qdrant native filter support
+    filter: Optional[QdrantFilter] = Field(
+        None, description="Qdrant native filter for metadata-based filtering"
+    )
+
+    # Pagination
+    offset: Optional[int] = Field(0, ge=0, description="Number of results to skip")
+
+    limit: Optional[int] = Field(
+        20, ge=1, le=100, description="Maximum number of results to return"
+    )
+
+    # Search quality parameters
+    score_threshold: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Minimum similarity score threshold"
+    )
+
+    # Result options
+    summarize: Optional[bool] = Field(False, description="Whether to summarize results")
+
+    # Response configuration
+    response_type: ResponseType = Field(
+        ResponseType.RAW, description="Type of response (raw or completion)"
+    )
+
+    expansion_strategy: QueryExpansionStrategy = Field(
+        QueryExpansionStrategy.AUTO,
+        description="Query expansion strategy. Enhances recall by expanding the query with "
+        "synonyms, related terms, and other variations, but increases latency.",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "query": "customer payment issues",
+                    "filter": {
+                        "must": [
+                            {"key": "source_name", "match": {"value": "Stripe"}},
+                            {"key": "created_at", "range": {"gte": "2024-01-01T00:00:00Z"}},
+                        ]
+                    },
+                    "limit": 50,
+                    "score_threshold": 0.7,
+                    "response_type": "completion",
+                }
+            ]
+        }
+    }
 
 
 class SearchResponse(BaseModel):

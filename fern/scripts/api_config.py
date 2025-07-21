@@ -8,7 +8,7 @@ INCLUDED_ENDPOINTS = {
     # Collections
     "/collections/": {"get": True, "post": True},
     "/collections/{readable_id}/": {"get": True, "put": True, "delete": True},
-    "/collections/{readable_id}/search/": {"get": True},
+    "/collections/{readable_id}/search/": {"get": True, "post": True},
     "/collections/{readable_id}/refresh_all/": {"post": True},
     # Source Connections
     "/source-connections/": {"get": True, "post": True},

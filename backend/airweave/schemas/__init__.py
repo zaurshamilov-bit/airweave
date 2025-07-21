@@ -79,7 +79,7 @@ from .organization import (
     OrganizationUpdate,
     OrganizationWithRole,
 )
-from .search import SearchResponse
+from .search import SearchRequest, SearchResponse
 from .source import (
     Source,
     SourceCreate,

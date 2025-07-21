@@ -36,9 +36,9 @@ Airweave can extract and process data from:
 - Frontend: React/TypeScript with ShadCN components
 - Storage: Qdrant (will add more, DWH-type storage later)
 - Deployment: Docker Compose (dev), Kubernetes (prod)
-
 - Processing: Async workers with Temporal
 - Messages: Redis PubSub
+- Documentation: Fern
 
 ## For Developers
 - Local setup uses Docker Compose

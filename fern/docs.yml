@@ -21,6 +21,14 @@ navigation:
     path: docs/pages/quickstart.mdx
   - page: Concepts
     path: docs/pages/concepts.mdx
+  - section: Search
+    contents:
+    - page: Search Concepts
+      path: docs/pages/search/concepts.mdx
+    - page: Using Filters
+      path: docs/pages/search/filters.mdx
+    - page: Examples
+      path: docs/pages/search/examples.mdx
   - page: MCP Server
     path: docs/pages/mcp-server.mdx
   - page: Auth Providers
@@ -84,6 +92,7 @@ navigation:
     - GET /collections
     - GET /collections/{readable_id}
     - GET /collections/{readable_id}/search
+    - POST /collections/{readable_id}/search
     - PUT /collections/{readable_id}
     - POST /collections
     - POST /collections/{readable_id}/refresh_all
