@@ -274,7 +274,7 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
 
         const requiredFields = authProviderDetails.config_fields.fields.filter((field: any) => field.required);
         console.log('  - Required fields:', requiredFields);
-        console.log('  - Current authProviderConfigValues:', authProviderConfigValues);
+        // console.log('  - Current authProviderConfigValues:', authProviderConfigValues);
 
         const result = requiredFields.some((field: any) => {
             const value = authProviderConfigValues[field.name];
