@@ -685,6 +685,7 @@ class EntityProcessor:
                 db=db,
                 db_obj=db_entity,
                 obj_in=schemas.EntityUpdate(hash=parent_hash),
+                auth_context=sync_context.auth_context,
             )
 
         db_elapsed = asyncio.get_event_loop().time() - db_start

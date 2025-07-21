@@ -11,7 +11,7 @@ from typing import Any, AsyncGenerator, ClassVar, Dict, List, Optional, Set, Tup
 from urllib.parse import urlparse
 
 import httpx
-from httpx import ReadTimeout, TimeoutException
+from httpx import HTTPStatusError, ReadTimeout, TimeoutException
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from airweave.core.logging import logger
@@ -46,10 +46,10 @@ class NotionSource(BaseSource):
     """
 
     # Rate limiting constants
-    TIMEOUT_SECONDS = 30.0
-    RATE_LIMIT_REQUESTS = 3  # Maximum requests per second
+    TIMEOUT_SECONDS = 60.0  # Increased from 30.0
+    RATE_LIMIT_REQUESTS = 2  # Reduced from 3 to be more conservative
     RATE_LIMIT_PERIOD = 1.0  # Time period in seconds
-    MAX_RETRIES = 3
+    MAX_RETRIES = 5  # Increased from 3
 
     # Class-level shared rate limiter
     _shared_rate_limiter: ClassVar[Optional[asyncio.Semaphore]] = None
@@ -145,10 +145,19 @@ class NotionSource(BaseSource):
 
             self._request_times.append(current_time)
 
+    def _should_retry_request(self, exception: Exception) -> bool:
+        """Determine if a request should be retried based on the exception."""
+        if isinstance(exception, (TimeoutException, ReadTimeout)):
+            return True
+        if isinstance(exception, HTTPStatusError):
+            # Retry on 429 (rate limit) and 502/503/504 (server errors)
+            return exception.response.status_code in {429, 502, 503, 504}
+        return False
+
     @retry(
-        retry=retry_if_exception_type((TimeoutException, ReadTimeout)),
+        retry=retry_if_exception_type((TimeoutException, ReadTimeout, HTTPStatusError)),
         stop=stop_after_attempt(MAX_RETRIES),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
+        wait=wait_exponential(multiplier=2, min=10, max=60),
         reraise=True,
     )
     async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> dict:
@@ -179,9 +188,9 @@ class NotionSource(BaseSource):
             raise
 
     @retry(
-        retry=retry_if_exception_type((TimeoutException, ReadTimeout)),
+        retry=retry_if_exception_type((TimeoutException, ReadTimeout, HTTPStatusError)),
         stop=stop_after_attempt(MAX_RETRIES),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
+        wait=wait_exponential(multiplier=2, min=10, max=60),
         reraise=True,
     )
     async def _post_with_auth(self, client: httpx.AsyncClient, url: str, json_data: dict) -> dict:
@@ -342,6 +351,22 @@ class NotionSource(BaseSource):
                             )
                             continue
 
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 404:
+                        self.logger.warning(
+                            f"Child database {database_id} not found (404). "
+                            f"This is expected if the user doesn't have access to this database. "
+                            f"Skipping."
+                        )
+                        self._processed_databases.add(
+                            database_id
+                        )  # Mark as processed to avoid retrying
+                        continue
+                    else:
+                        self.logger.error(
+                            f"HTTP error processing child database {database_id}: {str(e)}"
+                        )
+                        continue
                 except Exception as e:
                     self.logger.error(f"Error processing child database {database_id}: {str(e)}")
                     continue
