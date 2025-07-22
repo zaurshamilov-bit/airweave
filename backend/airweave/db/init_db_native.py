@@ -27,6 +27,7 @@ async def init_db_with_native_connections(db: AsyncSession) -> None:
         "qdrant_native": {
             "id": NATIVE_QDRANT_UUID,
             "name": "Native Qdrant",
+            "readable_id": "native-qdrant",
             "integration_type": IntegrationType.DESTINATION,
             "short_name": "qdrant_native",
             "status": ConnectionStatus.ACTIVE,
@@ -34,6 +35,7 @@ async def init_db_with_native_connections(db: AsyncSession) -> None:
         "neo4j_native": {
             "id": NATIVE_NEO4J_UUID,
             "name": "Native Neo4j",
+            "readable_id": "native-neo4j",
             "integration_type": IntegrationType.DESTINATION,
             "short_name": "neo4j_native",
             "status": ConnectionStatus.ACTIVE,
@@ -41,6 +43,7 @@ async def init_db_with_native_connections(db: AsyncSession) -> None:
         "local_text2vec": {
             "id": NATIVE_TEXT2VEC_UUID,
             "name": "Local Text2Vec",
+            "readable_id": "local-text2vec",
             "integration_type": IntegrationType.EMBEDDING_MODEL,
             "short_name": "local_text2vec",
             "status": ConnectionStatus.ACTIVE,
@@ -60,6 +63,7 @@ async def init_db_with_native_connections(db: AsyncSession) -> None:
             connection = Connection(
                 id=connection_data["id"],
                 name=connection_data["name"],
+                readable_id=connection_data["readable_id"],
                 integration_type=connection_data["integration_type"],
                 short_name=connection_data["short_name"],
                 status=connection_data["status"],
