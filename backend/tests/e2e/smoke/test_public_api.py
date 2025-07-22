@@ -115,17 +115,51 @@ def show_backend_logs(lines: int = 50) -> None:
         )
 
         if result.returncode == 0:
+            has_output = False
             if result.stdout:
                 print("STDOUT:")
                 print(result.stdout)
+                has_output = True
             if result.stderr:
                 print("STDERR:")
                 print(result.stderr)
+                has_output = True
+
+            if not has_output:
+                print("(No log output available)")
         else:
             print(f"Failed to get logs from {backend_container}: {result.stderr}")
 
-            # If container doesn't exist, check all containers
-            print("\n🔍 Checking all container logs for backend-related containers:")
+            # Check container status specifically
+            print(f"\n🔍 Checking status of {backend_container}:")
+            inspect_result = subprocess.run(
+                ["docker", "inspect", backend_container, "--format", "{{.State.Status}} - Exit Code: {{.State.ExitCode}} - Error: {{.State.Error}}"],
+                capture_output=True,
+                text=True
+            )
+            if inspect_result.returncode == 0:
+                print(f"Container state: {inspect_result.stdout.strip()}")
+
+            # Try to get logs anyway, even if container is in error state
+            print(f"\n📋 Attempting to force get logs from {backend_container}:")
+            force_logs = subprocess.run(
+                ["docker", "logs", backend_container],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if force_logs.stdout or force_logs.stderr:
+                if force_logs.stdout:
+                    print("STDOUT:")
+                    print(force_logs.stdout)
+                if force_logs.stderr:
+                    print("STDERR:")
+                    print(force_logs.stderr)
+            else:
+                print("(No logs available from container)")
+
+            # Check all containers
+            print("\n🔍 All container statuses:")
             all_ps = subprocess.run(["docker", "ps", "-a", "--format", "table {{.Names}}\t{{.Status}}\t{{.Image}}"],
                                   capture_output=True, text=True)
             if all_ps.returncode == 0:
@@ -275,8 +309,39 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
                 break
 
             # Check for various error indicators
-            if any(err in line.lower() for err in ["error:", "failed", "exception", "cannot", "unable"]):
+            if any(err in line.lower() for err in ["error:", "failed", "exception", "cannot", "unable", "unhealthy"]):
                 print(f"⚠️  Potential error detected: {line.strip()}")
+
+                # If backend container failed, immediately try to get its logs
+                if "airweave-backend" in line and any(err in line.lower() for err in ["error", "unhealthy", "failed"]):
+                    print("\n🚨 Backend container error detected - getting logs immediately:")
+                    show_backend_logs(lines=100)
+
+                    # Also check container inspect for more details
+                    print("\n🔍 Backend container detailed status:")
+                    try:
+                        inspect_result = subprocess.run(
+                            ["docker", "inspect", "airweave-backend"],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        if inspect_result.returncode == 0:
+                            import json
+                            container_data = json.loads(inspect_result.stdout)[0]
+                            state = container_data.get("State", {})
+                            print(f"  Status: {state.get('Status', 'unknown')}")
+                            print(f"  Running: {state.get('Running', False)}")
+                            print(f"  Exit Code: {state.get('ExitCode', 'N/A')}")
+                            print(f"  Error: {state.get('Error', 'None')}")
+                            print(f"  Health Status: {state.get('Health', {}).get('Status', 'N/A')}")
+
+                            # Show last health check log if available
+                            health_log = state.get('Health', {}).get('Log', [])
+                            if health_log:
+                                print(f"  Last health check: {health_log[-1].get('Output', 'N/A')}")
+                    except Exception as e:
+                        print(f"  Could not inspect container: {e}")
 
             # In CI, also check Docker status periodically
             if is_ci and "Starting" in line:
@@ -299,10 +364,34 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
 
         if return_code != 0:
             print(f"✗ start.sh exited with code {return_code}")
+
+            # Try to get backend logs before failing
+            print("\n📋 Attempting to get backend logs after startup failure:")
+            show_backend_logs(lines=50)
+
+            # Also show all container statuses
+            print("\n📊 Container statuses after failure:")
+            try:
+                ps_result = subprocess.run(
+                    ["docker", "ps", "-a", "--format", "table {{.Names}}\t{{.Status}}\t{{.Image}}"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if ps_result.returncode == 0:
+                    print(ps_result.stdout)
+            except Exception as e:
+                print(f"Could not check container status: {e}")
+
             return False
 
         if not services_started:
             print("✗ Services did not start successfully")
+
+            # Try to get backend logs
+            print("\n📋 Attempting to get backend logs after incomplete startup:")
+            show_backend_logs(lines=50)
+
             return False
 
         print("✓ Services started and should be healthy")
@@ -311,9 +400,19 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
     except subprocess.TimeoutExpired:
         print("✗ start.sh script timed out (Docker may be slow)")
         process.kill()
+
+        # Try to get logs on timeout too
+        print("\n📋 Attempting to get backend logs after timeout:")
+        show_backend_logs(lines=50)
+
         return False
     except Exception as e:
         print(f"✗ Failed to start local services: {e}")
+
+        # Try to get logs on any error
+        print("\n📋 Attempting to get backend logs after error:")
+        show_backend_logs(lines=50)
+
         return False
 
 
