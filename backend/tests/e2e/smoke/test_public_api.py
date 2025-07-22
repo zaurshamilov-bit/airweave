@@ -79,9 +79,36 @@ def show_backend_logs(lines: int = 50) -> None:
         print(f"📋 Showing last {lines} lines of backend logs:")
         print("=" * 80)
 
+        # First check what containers are running
+        ps_result = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if ps_result.returncode == 0:
+            containers = ps_result.stdout.strip().split('\n')
+            backend_container = None
+
+            # Look for backend container (might have different names)
+            for container in containers:
+                if 'backend' in container.lower() and 'airweave' in container.lower():
+                    backend_container = container
+                    break
+
+            if not backend_container:
+                # Fallback to default name
+                backend_container = "airweave-backend"
+                print(f"⚠️  Backend container not found in running containers, trying default name: {backend_container}")
+                print(f"   Running containers: {', '.join(containers) if containers[0] else 'none'}")
+        else:
+            backend_container = "airweave-backend"
+            print("⚠️  Could not list containers, using default name")
+
         # Get logs from the backend container
         result = subprocess.run(
-            ["docker", "logs", "--tail", str(lines), "airweave-backend"],
+            ["docker", "logs", "--tail", str(lines), backend_container],
             capture_output=True,
             text=True,
             timeout=10,
@@ -95,7 +122,14 @@ def show_backend_logs(lines: int = 50) -> None:
                 print("STDERR:")
                 print(result.stderr)
         else:
-            print(f"Failed to get logs: {result.stderr}")
+            print(f"Failed to get logs from {backend_container}: {result.stderr}")
+
+            # If container doesn't exist, check all containers
+            print("\n🔍 Checking all container logs for backend-related containers:")
+            all_ps = subprocess.run(["docker", "ps", "-a", "--format", "table {{.Names}}\t{{.Status}}\t{{.Image}}"],
+                                  capture_output=True, text=True)
+            if all_ps.returncode == 0:
+                print(all_ps.stdout)
 
     except subprocess.TimeoutExpired:
         print("⚠️  Timeout getting backend logs")
@@ -105,21 +139,47 @@ def show_backend_logs(lines: int = 50) -> None:
         print("=" * 80)
 
 
-def wait_for_health(url: str, timeout: int = 300) -> bool:
-    """Wait for service to be healthy."""
+def wait_for_health(url: str, timeout: int = 300, show_logs_interval: int = 30) -> bool:
+    """Wait for service to be healthy.
+
+    Args:
+        url: The URL to check health
+        timeout: Maximum time to wait in seconds
+        show_logs_interval: Show backend logs every N seconds while waiting
+    """
     print(f"Waiting for {url} to be healthy (timeout: {timeout}s)...")
     start_time = time.time()
     last_error = None
     error_count = 0
+    last_log_time = 0
+
+    # Check if we're in CI environment
+    is_ci = os.environ.get('GITHUB_ACTIONS') == 'true' or os.environ.get('CI') == 'true'
+    if is_ci:
+        print("🔍 Running in CI environment - will show logs more frequently")
+        show_logs_interval = 15  # Show logs more frequently in CI
 
     while time.time() - start_time < timeout:
+        elapsed = time.time() - start_time
+
+        # Show logs periodically while waiting
+        if elapsed - last_log_time >= show_logs_interval:
+            print(f"\n📋 Health check still waiting after {elapsed:.0f}s - checking backend logs:")
+            show_backend_logs(lines=20)
+            last_log_time = elapsed
+            print(f"Continuing health check...")
+
         try:
             response = requests.get(f"{url}/health", timeout=5)
             if response.status_code == 200:
-                print("✓ Service is healthy")
+                print("\n✓ Service is healthy")
                 return True
             else:
                 last_error = f"HTTP {response.status_code}: {response.text}"
+                error_count += 1
+                # Log HTTP errors more frequently in CI
+                if is_ci and error_count % 5 == 1:
+                    print(f"\n⚠️  Health check HTTP error (#{error_count}): {last_error}")
         except requests.exceptions.RequestException as e:
             last_error = str(e)
             error_count += 1
@@ -134,6 +194,11 @@ def wait_for_health(url: str, timeout: int = 300) -> bool:
     print(f"\n✗ Service health check timed out after {elapsed:.1f}s")
     if last_error:
         print(f"  Last error: {last_error}")
+
+    # Show final logs on timeout
+    print("\n📋 Final backend logs after timeout:")
+    show_backend_logs(lines=50)
+
     return False
 
 
@@ -194,13 +259,40 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
 
         # Monitor output
         services_started = False
+        is_ci = os.environ.get('GITHUB_ACTIONS') == 'true' or os.environ.get('CI') == 'true'
+
+        # In CI, show more detailed output
+        if is_ci:
+            print("📋 Detailed startup output (CI mode):")
+
         for line in process.stdout:
+            # Always print the line
             print(f"  {line.strip()}")
+
+            # Check for success
             if "All services started successfully!" in line:
                 services_started = True
                 break
-            if "Error:" in line or "error:" in line:
-                print(f"✗ Error detected: {line.strip()}")
+
+            # Check for various error indicators
+            if any(err in line.lower() for err in ["error:", "failed", "exception", "cannot", "unable"]):
+                print(f"⚠️  Potential error detected: {line.strip()}")
+
+            # In CI, also check Docker status periodically
+            if is_ci and "Starting" in line:
+                try:
+                    # Show docker ps to see container status
+                    docker_ps = subprocess.run(
+                        ["docker", "ps", "--format", "table {{.Names}}\t{{.Status}}"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if docker_ps.returncode == 0:
+                        print("\n📊 Current container status:")
+                        print(docker_ps.stdout)
+                except Exception as e:
+                    print(f"Could not check docker status: {e}")
 
         # Wait for process to complete (but with longer timeout since Docker health checks take time)
         return_code = process.wait(timeout=180)  # 3 minutes for Docker to pull images and start
@@ -238,6 +330,22 @@ def get_api_url(env: str) -> str:
 def setup_environment(env: str, openai_api_key: Optional[str] = None) -> Optional[str]:
     """Setup environment and return API URL if successful."""
     api_url = get_api_url(env)
+
+    # Debug info for CI
+    is_ci = os.environ.get('GITHUB_ACTIONS') == 'true' or os.environ.get('CI') == 'true'
+    if is_ci:
+        print("\n🔍 CI Environment Debug Info:")
+        print(f"  - Running in GitHub Actions: {os.environ.get('GITHUB_ACTIONS', 'false')}")
+        print(f"  - CI flag: {os.environ.get('CI', 'false')}")
+        print(f"  - Current directory: {os.getcwd()}")
+        print(f"  - Docker version check:")
+        try:
+            docker_version = subprocess.run(["docker", "--version"], capture_output=True, text=True)
+            print(f"    {docker_version.stdout.strip()}")
+            docker_compose_version = subprocess.run(["docker", "compose", "version"], capture_output=True, text=True)
+            print(f"    {docker_compose_version.stdout.strip()}")
+        except Exception as e:
+            print(f"    Error checking Docker: {e}")
 
     if env == "local":
         # Start local services (they should be healthy when this completes)
