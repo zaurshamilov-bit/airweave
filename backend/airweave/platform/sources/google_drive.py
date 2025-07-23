@@ -205,6 +205,9 @@ class GoogleDriveSource(BaseSource):
         if drive_id:
             params["driveId"] = drive_id
 
+        total_files_from_api = 0  # Track total files returned by API
+        page_count = 0
+
         while url:
             try:
                 data = await self._get_with_auth(client, url, params=params)
@@ -213,6 +216,16 @@ class GoogleDriveSource(BaseSource):
                 break
 
             files_in_page = data.get("files", [])
+            page_count += 1
+            files_count = len(files_in_page)
+            total_files_from_api += files_count
+
+            # Log how many files the API returned in this page
+            self.logger.info(
+                f"\n\nGoogle Drive API returned {files_count} files in page {page_count} "
+                f"({context})\n\n"
+            )
+
             for file_obj in files_in_page:
                 yield file_obj
 
@@ -222,6 +235,12 @@ class GoogleDriveSource(BaseSource):
                 break
             params["pageToken"] = next_page_token
             url = "https://www.googleapis.com/drive/v3/files"
+
+        # Log total count when done
+        self.logger.info(
+            f"\n\nGoogle Drive API returned {total_files_from_api} total files across "
+            f"{page_count} pages ({context})\n\n"
+        )
 
     def _build_file_entity(self, file_obj: Dict) -> Optional[GoogleDriveFileEntity]:
         """Helper to build a GoogleDriveFileEntity from a file API response object.
