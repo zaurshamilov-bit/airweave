@@ -286,6 +286,13 @@ class FileManager:
                     response.raise_for_status()
                     async for chunk in response.aiter_bytes():
                         yield chunk
+            except httpx.HTTPStatusError as e:
+                # Log the specific HTTP error with more details
+                status_code = e.response.status_code if hasattr(e, "response") else "Unknown"
+                logger.error(
+                    f"HTTP {status_code} error streaming file from {url[:100]}...: {str(e)}"
+                )
+                raise
             except Exception as e:
                 logger.error(f"Error streaming file: {str(e)}")
                 raise

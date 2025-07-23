@@ -3,6 +3,7 @@
 from abc import abstractmethod
 from typing import Any, AsyncGenerator, ClassVar, Dict, Optional
 
+import httpx
 from pydantic import BaseModel
 
 from airweave.core.logging import logger
@@ -139,9 +140,32 @@ class BaseSource:
                 )
 
             return processed_entity
+        except httpx.HTTPStatusError as e:
+            # Handle specific HTTP errors gracefully
+            status_code = e.response.status_code if hasattr(e, "response") else None
+            error_msg = f"HTTP {status_code}: {str(e)}" if status_code else str(e)
+
+            self.logger.error(f"HTTP error downloading file {file_entity.name}: {error_msg}")
+
+            # Mark entity as skipped instead of failing
+            file_entity.should_skip = True
+            if not hasattr(file_entity, "metadata") or file_entity.metadata is None:
+                file_entity.metadata = {}
+            file_entity.metadata["error"] = error_msg
+            file_entity.metadata["http_status"] = status_code
+
+            return file_entity
         except Exception as e:
-            self.logger.error(f"Error processing file {file_entity.name}: {e}")
-            return None
+            # Log other errors but don't let them stop the sync
+            self.logger.error(f"Error processing file {file_entity.name}: {str(e)}")
+
+            # Mark entity as skipped
+            file_entity.should_skip = True
+            if not hasattr(file_entity, "metadata") or file_entity.metadata is None:
+                file_entity.metadata = {}
+            file_entity.metadata["error"] = str(e)
+
+            return file_entity
 
     async def process_file_entity_with_content(
         self, file_entity, content_stream, metadata: Optional[Dict[str, Any]] = None

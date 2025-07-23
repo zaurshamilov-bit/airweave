@@ -327,7 +327,10 @@ class GoogleDriveSource(BaseSource):
                     if file_entity.download_url:
                         # Note: process_file_entity now uses the token manager automatically
                         processed_entity = await self.process_file_entity(file_entity=file_entity)
-                        yield processed_entity
+
+                        # Yield the entity even if skipped - the entity processor will handle it
+                        if processed_entity:
+                            yield processed_entity
                 except Exception as e:
                     error_context = f"in drive {drive_id}" if drive_id else "in MY DRIVE"
                     self.logger.error(
