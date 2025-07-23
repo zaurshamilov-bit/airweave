@@ -16,9 +16,9 @@ We currently support [Composio](https://composio.dev/) with [Klavis](https://www
 ### 2. Locate the necessary configuration
 
 When creating source connections through an auth provider, Airweave needs specific identifiers to retrieve the correct credentials from the third-party service.
-Each auth provider has its own way of organizing connections, for instance, Composio uses a combination of `integration_id` and `account_id` since multiple accounts can connect to one integration and vice versa.
+Each auth provider has its own way of organizing connections, for instance, Composio uses a combination of `auth_config_id` and `account_id` since multiple accounts can connect to one integration and vice versa.
 
-You can find these identifiers in your auth provider's dashboard. For Composio, visit your [integrations page](https://app.composio.dev/integrations) and select an integration to view its connected accounts and their IDs.
+You can find these identifiers in your auth provider's dashboard. For Composio, visit your [Auth Configs page](https://platform.composio.dev/airweave/default/auth-configs) and select an integration to view its connected accounts and their IDs.
 Different auth providers require different configuration fields, refer to [our configuration definitions](https://github.com/airweave-ai/airweave/blob/main/backend/airweave/platform/configs/config.py) to see what's needed for each provider.
 
 ### 3. Create source connections using your auth provider
@@ -39,7 +39,7 @@ source_connection = airweave.source_connections.create_source_connection(
     short_name="asana",
     auth_provider="my-composio-connection-abc123",
     auth_provider_config={
-        "integration_id": INTEGRATION_ID,
+        "auth_config_id": AUTH_CONFIG_ID,
         "account_id": ACCOUNT_ID
     },
 )
@@ -59,7 +59,7 @@ const sourceConnection = await airweave.sourceConnections.createSourceConnection
   shortName: "asana",
   auth_provider: "my-composio-connection-abc123",
   auth_provider_config: {
-    integrationId: INTEGRATION_ID,
+    authConfigId: AUTH_CONFIG_ID,
     accountId: ACCOUNT_ID
   },
 });
@@ -75,7 +75,7 @@ curl -X 'POST' 'https://app.airweave.ai/auth-providers' \
   "short_name": "asana",
   "auth_provider": "my-composio-connection-abc123",
   "auth_provider_config": {
-    "integration_id": "INTEGRATION_ID",
+    "auth_config_id": "AUTH_CONFIG_ID",
     "account_id": "ACCOUNT_ID"
   }
 }'

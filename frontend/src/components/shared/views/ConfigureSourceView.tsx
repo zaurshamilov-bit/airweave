@@ -52,6 +52,11 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
     const [authProviderConfigValues, setAuthProviderConfigValues] = useState<Record<string, any>>({});
     const [loadingAuthProviderDetails, setLoadingAuthProviderDetails] = useState(false);
 
+    // Add this new state to store the credential ID
+    const [credentialId, setCredentialId] = useState<string | null>(
+        viewData.credentialId || null
+    );
+
     // Sources that are temporarily blocked from using auth providers
     // This should match the backend list in source_connections.py
     const SOURCES_BLOCKED_FROM_AUTH_PROVIDERS = [
@@ -477,18 +482,20 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
 
             } else {
                 // Regular Authentication Path (existing logic)
-                // Ensure we have a valid credential ID from the OAuth process
-                if (!viewData.credentialId) {
+                // Check both local state and viewData for credential ID
+                const effectiveCredentialId = credentialId || viewData.credentialId;
+
+                if (!effectiveCredentialId) {
                     throw new Error("Missing credential ID. Authentication may not have completed properly.");
                 }
 
-                console.log(`🔌 Creating source connection with credential: ${viewData.credentialId}`);
+                console.log(`🔌 Creating source connection with credential: ${effectiveCredentialId}`);
 
                 const sourceConnectionData = {
                     name: viewData.connectionName || connectionName || `${sourceName} Connection`,
                     short_name: sourceShortName,
                     collection: collectionId,
-                    credential_id: viewData.credentialId,
+                    credential_id: effectiveCredentialId,
                     config_fields: configValues,
                     sync_immediately: true
                 };
@@ -646,6 +653,9 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
             // Only set authenticated state for non-OAuth flows or if we got a credentialId
             if (result.success) {
                 if (result.credentialId) {
+                    // Store the credential ID in local state
+                    setCredentialId(result.credentialId);
+
                     // For non-OAuth flows, we update the auth state through onNext
                     onNext?.({
                         credentialId: result.credentialId,
@@ -719,6 +729,15 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
         }
     }, [viewData.connectionName]);
 
+    // Add this helper function after the other helper functions (around line 260)
+    const hasAuthFieldErrors = (): boolean => {
+        if (!sourceDetails?.auth_fields?.fields) return false;
+
+        return sourceDetails.auth_fields.fields
+            .filter(field => field.name && !isTokenField(field.name))
+            .some(field => errors[field.name]);
+    };
+
     // Render the auth fields step
     const renderAuthStep = () => {
         // Check if there are any visible auth fields
@@ -778,7 +797,7 @@ export const ConfigureSourceView: React.FC<ConfigureSourceViewProps> = ({
                 </div>
 
                 {/* Validation error message if validation has been attempted */}
-                {validationAttempted && hasEmptyRequiredAuthFields() && (
+                {validationAttempted && hasAuthFieldErrors() && (
                     <div className="mb-4 p-3 bg-red-500/10 rounded border border-red-500/20">
                         <p className="text-sm text-red-600">
                             <span className="font-medium">Error:</span> Please fill in all fields before proceeding.

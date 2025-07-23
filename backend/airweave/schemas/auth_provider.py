@@ -107,7 +107,7 @@ class AuthProvider(AuthProviderInDBBase):
         description=(
             "Dynamically populated field definitions for auth provider-specific configuration. "
             "These describe what additional configuration is required when using this auth "
-            "provider to connect to a source (e.g., integration_id and account_id for Composio)."
+            "provider to connect to a source (e.g., auth_config_id and account_id for Composio)."
         ),
     )
 

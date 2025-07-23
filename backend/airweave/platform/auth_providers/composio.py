@@ -53,7 +53,7 @@ class ComposioAuthProvider(BaseAuthProvider):
         """
         instance = cls()
         instance.api_key = credentials["api_key"]
-        instance.integration_id = config["integration_id"]
+        instance.auth_config_id = config["auth_config_id"]
         instance.account_id = config["account_id"]
         return instance
 
@@ -137,7 +137,7 @@ class ComposioAuthProvider(BaseAuthProvider):
 
         self.logger.info(f"📋 [Composio] Required auth fields: {source_auth_config_fields}")
         self.logger.info(
-            f"🔑 [Composio] Using integration_id='{self.integration_id}', "
+            f"🔑 [Composio] Using auth_config_id='{self.auth_config_id}', "
             f"account_id='{self.account_id}'"
         )
 
@@ -222,7 +222,7 @@ class ComposioAuthProvider(BaseAuthProvider):
             acc_id = account.get("id")
             int_id = account.get("auth_config", {}).get("id")
             self.logger.info(
-                f"\n  📌 Account {i + 1}: account_id='{acc_id}', integration_id='{int_id}'\n"
+                f"\n  📌 Account {i + 1}: account_id='{acc_id}', auth_config_id='{int_id}'\n"
             )
 
         return source_connected_accounts
@@ -246,18 +246,18 @@ class ComposioAuthProvider(BaseAuthProvider):
 
         for connected_account in source_connected_accounts:
             account_id = connected_account.get("id")
-            integration_id = connected_account.get("auth_config", {}).get("id")
+            auth_config_id = connected_account.get("auth_config", {}).get("id")
 
             self.logger.debug(
-                f"🔍 [Composio] Checking account: integration_id='{integration_id}' "
-                f"(looking for '{self.integration_id}'), account_id='{account_id}' "
+                f"🔍 [Composio] Checking account: auth_config_id='{auth_config_id}' "
+                f"(looking for '{self.auth_config_id}'), account_id='{account_id}' "
                 f"(looking for '{self.account_id}')"
             )
 
-            if integration_id == self.integration_id and account_id == self.account_id:
+            if auth_config_id == self.auth_config_id and account_id == self.account_id:
                 self.logger.info(
                     f"\n✅ [Composio] Found matching connection! "
-                    f"integration_id='{integration_id}', account_id='{account_id}'\n"
+                    f"auth_config_id='{auth_config_id}', account_id='{account_id}'\n"
                 )
                 source_creds_dict = connected_account.get("state", {}).get("val")
 
@@ -278,12 +278,12 @@ class ComposioAuthProvider(BaseAuthProvider):
         if not source_creds_dict:
             self.logger.error(
                 f"\n❌ [Composio] No matching connection found with "
-                f"integration_id='{self.integration_id}' and account_id='{self.account_id}'\n"
+                f"auth_config_id='{self.auth_config_id}' and account_id='{self.account_id}'\n"
             )
             raise HTTPException(
                 status_code=404,
-                detail=f"No matching connection in Composio with integration_id="
-                f"'{self.integration_id}' and account_id='{self.account_id}' "
+                detail=f"No matching connection in Composio with auth_config_id="
+                f"'{self.auth_config_id}' and account_id='{self.account_id}' "
                 f"for source '{source_short_name}'.",
             )
 

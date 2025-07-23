@@ -287,11 +287,11 @@ class AuthProviderConfig(BaseConfig):
 class ComposioConfig(AuthProviderConfig):
     """Composio Auth Provider configuration schema."""
 
-    integration_id: str = Field(
-        title="Integration ID",
-        description="Integration ID for the Composio connection (nanoid)",
+    auth_config_id: str = Field(
+        title="Auth Config ID",
+        description="Auth Config ID for the Composio connection",
     )
     account_id: str = Field(
         title="Account ID",
-        description="Account ID for the Composio connection (nanoid)",
+        description="Account ID for the Composio connection",
     )

@@ -162,6 +162,27 @@ export const AuthProviderTable = () => {
         }
     };
 
+    // Define coming soon providers
+    const comingSoonProviders = [
+        {
+            id: 'coming-soon-klavis',
+            name: 'Klavis',
+            short_name: 'klavis',
+            isComingSoon: true
+        },
+        {
+            id: 'coming-soon-pipedream',
+            name: 'Pipedream',
+            short_name: 'pipedream',
+            isComingSoon: true
+        }
+    ];
+
+    // Combine real providers with coming soon providers
+    const allProviders = useMemo(() => {
+        return [...authProviders, ...comingSoonProviders];
+    }, [authProviders]);
+
     // Memoize dialog key to prevent remounts
     const dialogKey = useMemo(() => {
         // Only use auth provider short name as key since connection ID isn't available when creating new
@@ -177,12 +198,12 @@ export const AuthProviderTable = () => {
                     <div className="col-span-full flex justify-center py-8">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
                     </div>
-                ) : authProviders.length === 0 ? (
+                ) : allProviders.length === 0 ? (
                     <div className="col-span-full text-center py-8 text-gray-500">
                         No auth providers available
                     </div>
                 ) : (
-                    authProviders.map(provider => {
+                    allProviders.map(provider => {
                         const connection = authProviderConnections.find(
                             conn => conn.short_name === provider.short_name
                         );
@@ -194,6 +215,7 @@ export const AuthProviderTable = () => {
                                 name={provider.name}
                                 shortName={provider.short_name}
                                 isConnected={!!connection}
+                                isComingSoon={'isComingSoon' in provider ? provider.isComingSoon : false}
                                 onClick={() => handleAuthProviderClick(provider)}
                             />
                         );

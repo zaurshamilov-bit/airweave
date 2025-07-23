@@ -56,7 +56,18 @@ export function getTransformerIconUrl(shortName: string, theme?: string): string
 }
 
 export function getAuthProviderIconUrl(shortName: string, theme?: string): string {
+  // Special cases for providers with specific file formats
+  const specialCases: { [key: string]: string } = {
+    'klavis': 'klavis.png',
+    'pipedream': 'pipedream.jpeg'
+  };
+
   try {
+    // Check for special cases first
+    if (specialCases[shortName]) {
+      return new URL(`/src/components/icons/auth_providers/${specialCases[shortName]}`, import.meta.url).href;
+    }
+
     // Use -light version for dark theme, -dark version for light theme
     if (theme === "dark") {
       return new URL(`/src/components/icons/auth_providers/${shortName}-light.svg`, import.meta.url).href;
