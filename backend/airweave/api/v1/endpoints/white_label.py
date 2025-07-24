@@ -23,11 +23,11 @@ from airweave.api.examples import (
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import ContextualLogger, logger
-from airweave.core.oauth2_service import oauth2_service
 from airweave.core.shared_models import ActionType
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.db.session import get_db_context
+from airweave.platform.auth.services import oauth2_service
 from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
