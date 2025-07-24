@@ -115,7 +115,6 @@ from .transformer import Transformer, TransformerCreate, TransformerUpdate
 from .usage import (
     Usage,
     UsageCreate,
-    UsageIncrement,
     UsageInDBBase,
     UsageUpdate,
 )
