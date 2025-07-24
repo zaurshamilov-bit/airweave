@@ -23,6 +23,7 @@ import { protectedPaths, publicPaths } from '@/constants/paths';
 import { AuthCallback } from '@/pages/AuthCallback';
 import { OrganizationSettingsUnified } from '@/pages/organization/OrganizationSettingsUnified';
 import NoOrganization from '@/pages/NoOrganization';
+import Onboarding from '@/pages/Onboarding';
 
 function App() {
   // Initialize collections event listeners when the app loads
@@ -39,6 +40,7 @@ function App() {
         <Route path={publicPaths.callback} element={<Callback />} />
         <Route path={publicPaths.semanticMcp} element={<SemanticMcp />} />
         <Route path={publicPaths.noOrganization} element={<NoOrganization />} />
+        <Route path={publicPaths.onboarding} element={<Onboarding />} />
 
         {/* Auth callback routes - OUTSIDE of DashboardLayout */}
         <Route path="/auth/callback/:short_name" element={<AuthCallback />} />

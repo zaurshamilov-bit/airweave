@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useOrganizationStore } from '@/lib/stores/organizations';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuSub,
@@ -16,7 +16,6 @@ import {
   CreditCard, Clock
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { CreateOrganizationModal } from '@/components/organization';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
 
@@ -83,6 +82,7 @@ interface BillingInfo {
 export function UserProfileDropdown() {
   const { user, logout } = useAuth();
   const { resolvedTheme } = useTheme();
+  const navigate = useNavigate();
   const isDark = resolvedTheme === 'dark';
 
   const {
@@ -93,7 +93,6 @@ export function UserProfileDropdown() {
   } = useOrganizationStore();
 
   const [firstName, setFirstName] = useState<string>('');
-  const [showCreateOrgModal, setShowCreateOrgModal] = useState(false);
   const [isLoadingOrgs, setIsLoadingOrgs] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [billingInfo, setBillingInfo] = useState<BillingInfo | null>(null);
@@ -192,19 +191,7 @@ export function UserProfileDropdown() {
 
   const handleCreateOrganization = () => {
     setDropdownOpen(false);
-    setShowCreateOrgModal(true);
-  };
-
-  const handleCreateOrgSuccess = (newOrganization: any) => {
-    console.log('Organization created successfully:', newOrganization);
-    setShowCreateOrgModal(false);
-  };
-
-  const handleCreateOrgModalChange = (open: boolean) => {
-    setShowCreateOrgModal(open);
-    if (!open) {
-      setDropdownOpen(false);
-    }
+    navigate('/onboarding');
   };
 
   const getRoleIcon = (role: string) => {
@@ -431,13 +418,6 @@ export function UserProfileDropdown() {
           </MenuItemWithIcon>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Create Organization Modal */}
-      <CreateOrganizationModal
-        open={showCreateOrgModal}
-        onOpenChange={handleCreateOrgModalChange}
-        onSuccess={handleCreateOrgSuccess}
-      />
     </>
   );
 }

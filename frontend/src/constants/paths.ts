@@ -17,4 +17,5 @@ export const publicPaths = {
     callback: "/callback",
     semanticMcp: "/semantic-mcp",
     noOrganization: "/no-organization",
+    onboarding: "/onboarding",
 }
