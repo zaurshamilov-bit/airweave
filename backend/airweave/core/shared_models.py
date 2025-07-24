@@ -54,3 +54,32 @@ class CollectionStatus(str, Enum):
     PARTIAL_ERROR = "PARTIAL ERROR"
     NEEDS_SOURCE = "NEEDS SOURCE"
     ERROR = "ERROR"
+
+
+class ActionType(str, Enum):
+    """Action type enum."""
+
+    SYNCS = "syncs"
+    ENTITIES = "entities"
+    QUERIES = "queries"
+    COLLECTIONS = "collections"
+    SOURCE_CONNECTIONS = "source_connections"
+
+
+class SubscriptionType(str, Enum):
+    """Subscription type enum for different pricing tiers."""
+
+    FREE = "free"
+    BASIC = "basic"
+    PRO = "pro"
+    TEAM = "team"
+    ENTERPRISE = "enterprise"
+
+
+class PaymentStatus(str, Enum):
+    """Payment status enum for subscription billing."""
+
+    CURRENT = "current"  # Payments are up to date
+    GRACE_PERIOD = "grace_period"  # In grace period, service still active
+    LATE = "late"  # Payment overdue, service may be restricted
+    PAID = "paid"  # Recently paid/settled

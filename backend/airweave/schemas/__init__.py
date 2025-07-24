@@ -116,6 +116,7 @@ from .usage import (
     Usage,
     UsageCreate,
     UsageInDBBase,
+    UsageLimit,
     UsageUpdate,
 )
 from .user import (

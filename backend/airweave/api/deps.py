@@ -10,6 +10,7 @@ from airweave import crud, schemas
 from airweave.api.auth import auth0
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
+from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import ContextualLogger, logger
 from airweave.db.session import get_db
 from airweave.schemas.auth import AuthContext
@@ -166,6 +167,25 @@ async def get_logger(
 ) -> ContextualLogger:
     """Get a logger with the current authentication context."""
     return logger.from_auth_context(auth_context)
+
+
+async def get_guard_rail_service(
+    auth_context: AuthContext = Depends(get_auth_context),
+) -> GuardRailService:
+    """Get a GuardRailService instance for the current organization.
+
+    This dependency creates a GuardRailService instance that can be used to check
+    if actions are allowed based on the organization's usage limits and payment status.
+
+    Args:
+    ----
+        auth_context (AuthContext): The authentication context containing organization_id.
+
+    Returns:
+    -------
+        GuardRailService: An instance configured for the current organization.
+    """
+    return GuardRailService(organization_id=auth_context.organization_id)
 
 
 async def get_user(

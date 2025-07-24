@@ -143,3 +143,47 @@ class Usage(UsageInDBBase):
             ]
         },
     }
+
+
+class UsageLimit(BaseModel):
+    """Schema for defining usage limits per subscription tier."""
+
+    max_syncs: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Maximum number of syncs allowed. None means unlimited.",
+    )
+    max_entities: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Maximum number of entities allowed. None means unlimited.",
+    )
+    max_queries: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Maximum number of queries allowed. None means unlimited.",
+    )
+    max_collections: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Maximum number of collections allowed. None means unlimited.",
+    )
+    max_source_connections: Optional[int] = Field(
+        None,
+        ge=0,
+        description="Maximum number of source connections allowed. None means unlimited.",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "max_syncs": 10,
+                    "max_entities": 50000,
+                    "max_queries": 1000,
+                    "max_collections": 5,
+                    "max_source_connections": 20,
+                },
+            ]
+        }
+    }
