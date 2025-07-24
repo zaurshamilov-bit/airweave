@@ -16,6 +16,7 @@ from .crud_source_connection import source_connection
 from .crud_sync import sync
 from .crud_sync_job import sync_job
 from .crud_transformer import transformer
+from .crud_usage import usage
 from .crud_user import user
 from .crud_white_label import white_label
 
@@ -37,6 +38,7 @@ __all__ = [
     "sync_dag",
     "sync_job",
     "transformer",
+    "usage",
     "user",
     "white_label",
 ]

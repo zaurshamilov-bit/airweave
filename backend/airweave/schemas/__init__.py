@@ -112,6 +112,13 @@ from .sync_job import (
     SyncJobUpdate,
 )
 from .transformer import Transformer, TransformerCreate, TransformerUpdate
+from .usage import (
+    Usage,
+    UsageCreate,
+    UsageIncrement,
+    UsageInDBBase,
+    UsageUpdate,
+)
 from .user import (
     User,
     UserCreate,

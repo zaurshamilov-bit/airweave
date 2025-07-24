@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from airweave.models._base import Base
 
 if TYPE_CHECKING:
+    from airweave.models.usage import Usage
     from airweave.models.user_organization import UserOrganization
 
 
@@ -23,6 +24,14 @@ class Organization(Base):
     # Many-to-many relationship with users
     user_organizations: Mapped[List["UserOrganization"]] = relationship(
         "UserOrganization",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+        lazy="noload",
+    )
+
+    # Relationship with usage
+    usage: Mapped[List["Usage"]] = relationship(
+        "Usage",
         back_populates="organization",
         cascade="all, delete-orphan",
         lazy="noload",
