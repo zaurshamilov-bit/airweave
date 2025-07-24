@@ -70,6 +70,42 @@ class TokenRefreshError(Exception):
         super().__init__(self.message)
 
 
+class ExternalServiceError(Exception):
+    """Exception raised when an external service fails."""
+
+    def __init__(self, service_name: str, message: Optional[str] = "External service failed"):
+        """Create a new ExternalServiceError instance.
+
+        Args:
+        ----
+            service_name (str): The name of the external service.
+            message (str, optional): The error message. Has default message.
+
+        """
+        self.service_name = service_name
+        self.message = message
+        super().__init__(f"{service_name}: {message}")
+
+
+class InvalidStateError(Exception):
+    """Exception raised when an object is in an invalid state.
+
+    Used when multiple services are involved and the state of one service is invalid,
+    in relation to the other services.
+    """
+
+    def __init__(self, message: Optional[str] = "Object is in an invalid state"):
+        """Create a new InvalidStateError instance.
+
+        Args:
+        ----
+            message (str, optional): The error message. Has default message.
+
+        """
+        self.message = message
+        super().__init__(self.message)
+
+
 def unpack_validation_error(exc: ValidationError) -> dict:
     """Unpack a Pydantic validation error into a dictionary.
 

@@ -2,6 +2,7 @@
 
 from .api_key import APIKey
 from .auth_provider import AuthProvider
+from .billing_event import BillingEvent
 from .collection import Collection
 from .connection import Connection
 from .dag import DagEdge, DagNode, SyncDag
@@ -12,6 +13,7 @@ from .entity_definition import EntityDefinition
 from .entity_relation import EntityRelation
 from .integration_credential import IntegrationCredential
 from .organization import Organization
+from .organization_billing import OrganizationBilling
 from .source import Source
 from .source_connection import SourceConnection
 from .sync import Sync
@@ -36,6 +38,8 @@ __all__ = [
     "EntityRelation",
     "IntegrationCredential",
     "Organization",
+    "OrganizationBilling",
+    "BillingEvent",
     "Source",
     "SourceConnection",
     "Sync",

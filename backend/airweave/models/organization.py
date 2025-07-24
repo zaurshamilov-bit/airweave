@@ -1,6 +1,6 @@
 """Organization models."""
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from airweave.models._base import Base
 
 if TYPE_CHECKING:
+    from airweave.models.organization_billing import OrganizationBilling
     from airweave.models.user_organization import UserOrganization
 
 
@@ -26,4 +27,13 @@ class Organization(Base):
         back_populates="organization",
         cascade="all, delete-orphan",
         lazy="noload",
+    )
+
+    # One-to-one relationship with billing (optional for OSS compatibility)
+    billing: Mapped[Optional["OrganizationBilling"]] = relationship(
+        "OrganizationBilling",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+        lazy="noload",
+        uselist=False,  # One-to-one
     )

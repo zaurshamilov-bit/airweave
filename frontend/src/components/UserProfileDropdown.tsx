@@ -12,7 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   ExternalLink, MoreVertical, Building2, Settings,
-  UserPlus, Crown, Shield, Users, Plus, LogOut, Check
+  UserPlus, Crown, Shield, Users, Plus, LogOut, Check,
+  CreditCard, Clock
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { CreateOrganizationModal } from '@/components/organization';
@@ -73,6 +74,12 @@ const InternalMenuLink = ({ to, icon, children }: { to: string; icon: React.Reac
 // Consistent separator component
 const MenuSeparator = () => <div className="h-px bg-border/10 my-1" />;
 
+interface BillingInfo {
+  plan: string;
+  status: string;
+  trial_ends_at?: string;
+}
+
 export function UserProfileDropdown() {
   const { user, logout } = useAuth();
   const { resolvedTheme } = useTheme();
@@ -89,6 +96,8 @@ export function UserProfileDropdown() {
   const [showCreateOrgModal, setShowCreateOrgModal] = useState(false);
   const [isLoadingOrgs, setIsLoadingOrgs] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [billingInfo, setBillingInfo] = useState<BillingInfo | null>(null);
+  const [isLoadingBilling, setIsLoadingBilling] = useState(false);
 
   useEffect(() => {
     if (user?.name) {
@@ -114,6 +123,29 @@ export function UserProfileDropdown() {
 
     loadOrganizations();
   }, [user, fetchUserOrganizations]);
+
+  // Fetch billing info when organization changes
+  useEffect(() => {
+    const fetchBillingInfo = async () => {
+      if (currentOrganization) {
+        try {
+          setIsLoadingBilling(true);
+          const response = await apiClient.get('/billing/subscription');
+          if (response.ok) {
+            const data = await response.json();
+            setBillingInfo(data);
+          }
+        } catch (error) {
+          console.error('Failed to fetch billing info:', error);
+          setBillingInfo(null);
+        } finally {
+          setIsLoadingBilling(false);
+        }
+      }
+    };
+
+    fetchBillingInfo();
+  }, [currentOrganization]);
 
   // Refetch organizations when dropdown opens to ensure fresh data
   useEffect(() => {
@@ -183,6 +215,33 @@ export function UserProfileDropdown() {
     }
   };
 
+  const getPlanBadge = () => {
+    if (!billingInfo || isLoadingBilling) return null;
+
+    const planDisplayName = {
+      trial: 'Trial',
+      developer: 'Developer',
+      startup: 'Startup',
+      enterprise: 'Enterprise'
+    }[billingInfo.plan] || billingInfo.plan;
+
+    if (billingInfo.plan === 'trial' && billingInfo.trial_ends_at) {
+      const daysLeft = Math.ceil((new Date(billingInfo.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      return (
+        <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
+          <Clock className="w-3 h-3 mr-1" />
+          {daysLeft}d left
+        </Badge>
+      );
+    }
+
+    return (
+      <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5">
+        {planDisplayName}
+      </Badge>
+    );
+  };
+
   const closeDropdown = () => setDropdownOpen(false);
 
   return (
@@ -224,9 +283,12 @@ export function UserProfileDropdown() {
         >
           {/* User Info Section */}
           <div className="px-2 py-1.5 border-b border-border/10 bg-muted/20">
-            <p className="text-sm text-muted-foreground font-medium truncate">
-              {user?.email}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground font-medium truncate">
+                {user?.email}
+              </p>
+              {getPlanBadge()}
+            </div>
           </div>
 
           {/* Organization Switcher */}
@@ -329,6 +391,16 @@ export function UserProfileDropdown() {
               >
                 Organization Settings
               </InternalMenuLink>
+
+              {/* Billing Link */}
+              {billingInfo && billingInfo.plan === 'trial' && (
+                <InternalMenuLink
+                  to="/organization/settings?tab=billing"
+                  icon={<CreditCard className="h-4 w-4" />}
+                >
+                  Upgrade Plan
+                </InternalMenuLink>
+              )}
             </>
           )}
 
