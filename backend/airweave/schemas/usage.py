@@ -1,6 +1,6 @@
 """Usage schemas for tracking organization subscription limits."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
@@ -10,6 +10,14 @@ from pydantic import BaseModel, Field
 class UsageBase(BaseModel):
     """Base schema for usage tracking."""
 
+    start_period: date = Field(
+        ...,
+        description="Start date of the billing period.",
+    )
+    end_period: date = Field(
+        ...,
+        description="End date of the billing period.",
+    )
     syncs: int = Field(
         0,
         ge=0,
@@ -45,17 +53,18 @@ class UsageBase(BaseModel):
 class UsageCreate(UsageBase):
     """Schema for creating usage records.
 
-    Typically, usage records are created automatically when an organization
-    is created, with all counters initialized to 0.
+    Usage records track resource consumption per billing period.
+    A new record is typically created at the start of each billing month.
     """
 
-    # All fields inherit from UsageBase with default values of 0
+    # All fields inherit from UsageBase, start_period and end_period are required
 
 
 class UsageUpdate(BaseModel):
     """Schema for updating usage counters.
 
     All fields are optional, allowing partial updates of specific counters.
+    Note: start_period and end_period cannot be updated after creation.
     """
 
     syncs: Optional[int] = Field(
@@ -112,7 +121,7 @@ class UsageInDBBase(UsageBase):
 
 
 class Usage(UsageInDBBase):
-    """Complete usage representation with computed fields."""
+    """Complete usage representation for a billing period."""
 
     model_config = {
         "from_attributes": True,
@@ -121,6 +130,8 @@ class Usage(UsageInDBBase):
                 {
                     "id": "550e8400-e29b-41d4-a716-446655440000",
                     "organization_id": "org12345-6789-abcd-ef01-234567890abc",
+                    "start_period": "2024-01-01",
+                    "end_period": "2024-01-31",
                     "syncs": 5,
                     "entities": 10000,
                     "queries": 250,

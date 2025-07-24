@@ -3,7 +3,7 @@
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave.crud._base_organization import CRUDBaseOrganization
@@ -14,13 +14,13 @@ from airweave.schemas.usage import UsageCreate, UsageUpdate
 class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
     """CRUD operations for Usage model."""
 
-    async def get_by_organization_id(
+    async def get_most_recent_by_organization_id(
         self,
         db: AsyncSession,
         *,
         organization_id: UUID,
     ) -> Optional[Usage]:
-        """Get usage record by organization ID.
+        """Get the most recent usage record by organization ID.
 
         Args:
         ----
@@ -29,9 +29,15 @@ class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
 
         Returns:
         -------
-            Optional[Usage]: The usage record for the organization, or None if not found
+            Optional[Usage]: The most recent usage record for the organization based on end_period,
+            or None if not found
         """
-        query = select(self.model).where(self.model.organization_id == organization_id)
+        query = (
+            select(self.model)
+            .where(self.model.organization_id == organization_id)
+            .order_by(desc(self.model.end_period))
+            .limit(1)
+        )
         result = await db.execute(query)
         return result.unique().scalar_one_or_none()
 
