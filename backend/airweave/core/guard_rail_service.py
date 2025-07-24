@@ -110,7 +110,9 @@ class GuardRailService:
         total_usage = current_value + pending
 
         # Get the limit for this action type
-        limit = getattr(self.usage_limit, action_type.value, None) if self.usage_limit else None
+        # Map action type to the corresponding max_ field in UsageLimit
+        limit_field = f"max_{action_type.value}"
+        limit = getattr(self.usage_limit, limit_field, None) if self.usage_limit else None
 
         # If no limit (None), it's unlimited - always allowed
         if limit is None:
@@ -229,7 +231,7 @@ class GuardRailService:
         #     subscription_type = billing_record.subscription_type
 
         # Mock subscription type for now
-        subscription_type = SubscriptionType.PRO  # This would come from the billing table
+        subscription_type = SubscriptionType.FREE  # This would come from the billing table
 
         # Define limits based on subscription tier
         if subscription_type == SubscriptionType.FREE:
