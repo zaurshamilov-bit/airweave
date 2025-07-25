@@ -11,7 +11,7 @@ from airweave.api.router import TrailingSlashRouter
 from airweave.core.billing_service import billing_service
 from airweave.core.config import settings
 from airweave.core.logging import logger
-from airweave.core.webhook_handler import WebhookHandler
+from airweave.core.stripe_webhook_handler import StripeWebhookHandler
 from airweave.integrations.stripe_client import stripe_client
 from airweave.schemas.auth import AuthContext
 
@@ -291,7 +291,7 @@ async def stripe_webhook(
 
     # Process event
     try:
-        webhook_handler = WebhookHandler(db)
+        webhook_handler = StripeWebhookHandler(db)
         await webhook_handler.handle_event(event)
 
         return Response(status_code=200)

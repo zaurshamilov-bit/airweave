@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2,
@@ -133,11 +133,41 @@ export const Onboarding = () => {
     plan => plan.value === formData.subscriptionPlan
   )?.teamMemberLimit || 2;
 
+  // Handle ESC key to go back to dashboard on first step
+  useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && currentStep === 1) {
+        navigate('/');
+      }
+    };
+
+    window.addEventListener('keydown', handleEscapeKey);
+    return () => window.removeEventListener('keydown', handleEscapeKey);
+  }, [currentStep, navigate]);
+
   const updateFormData = (field: keyof OnboardingData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleNext = () => {
+    // Special validation for organization name on step 1
+    if (currentStep === 1) {
+      const orgName = formData.organizationName.trim();
+
+      // Check minimum length
+      if (orgName.length < 4) {
+        toast.error('Organization name must be at least 4 characters long');
+        return;
+      }
+
+      // Check alphanumeric only (allowing spaces)
+      const alphanumericRegex = /^[a-zA-Z0-9\s]+$/;
+      if (!alphanumericRegex.test(orgName)) {
+        toast.error('Organization name can only contain letters, numbers, and spaces');
+        return;
+      }
+    }
+
     if (currentStep < totalSteps && isStepValid()) {
       setIsTransitioning(true);
       setTimeout(() => {
@@ -218,6 +248,25 @@ export const Onboarding = () => {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && isStepValid()) {
       e.preventDefault();
+
+      // Special validation for organization name on step 1
+      if (currentStep === 1) {
+        const orgName = formData.organizationName.trim();
+
+        // Check minimum length
+        if (orgName.length < 4) {
+          toast.error('Organization name must be at least 4 characters long');
+          return;
+        }
+
+        // Check alphanumeric only (allowing spaces)
+        const alphanumericRegex = /^[a-zA-Z0-9\s]+$/;
+        if (!alphanumericRegex.test(orgName)) {
+          toast.error('Organization name can only contain letters, numbers, and spaces');
+          return;
+        }
+      }
+
       if (currentStep < totalSteps) {
         handleNext();
       } else {
@@ -269,9 +318,9 @@ export const Onboarding = () => {
       return;
     }
 
-    // Check team member limit
-    if (teamMembers.length >= currentPlanLimit - 1) { // -1 for the owner
-      setEmailError(`Your ${formData.subscriptionPlan} plan allows up to ${currentPlanLimit} team members (including you)`);
+    // Check team member limit - the limit includes the owner
+    if (teamMembers.length >= currentPlanLimit - 1) {
+      setEmailError(`You've reached the maximum team size for the ${formData.subscriptionPlan} plan`);
       return;
     }
 
@@ -301,7 +350,22 @@ export const Onboarding = () => {
   };
 
   const handleAddTeamMember = () => {
-    if (!inviteEmail || emailError) return;
+    // First validate the email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(inviteEmail)) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+
+    // Then check for other validation errors
+    if (emailError) return;
+
+    // Double-check the limit before adding
+    if (teamMembers.length >= currentPlanLimit - 1) {
+      setEmailError(`Maximum team size reached for ${formData.subscriptionPlan} plan`);
+      toast.error('Cannot add more team members - plan limit reached');
+      return;
+    }
 
     const newMember: TeamMember = {
       email: inviteEmail,
@@ -344,7 +408,7 @@ export const Onboarding = () => {
     }
   };
 
-  const isValidEmail = inviteEmail && !emailError;
+  const isValidEmail = inviteEmail && !emailError && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail);
 
   const renderStep = () => {
     switch (currentStep) {
@@ -509,38 +573,34 @@ export const Onboarding = () => {
                   key={plan.value}
                   onClick={() => handleSelection('subscriptionPlan', plan.value)}
                   className={cn(
-                    "relative p-6 pt-8 rounded-lg border text-left transition-all",
+                    "relative p-6 rounded-lg border text-left transition-all",
                     "hover:border-primary/50",
                     formData.subscriptionPlan === plan.value
                       ? "border-primary bg-primary/5"
                       : "border-border"
                   )}
                 >
-                  {plan.recommended && (
-                    <div className="absolute top-3 right-6">
-                      <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full">
-                        Recommended
-                      </span>
-                    </div>
-                  )}
-
-                  {plan.hasTrial && (
-                    <div className="absolute top-3 left-6">
-                      <span className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">
-                        14-day free trial
-                      </span>
-                    </div>
-                  )}
-
                   <div className="flex items-start justify-between mb-4">
                     <div>
-                      <h3 className="font-medium text-lg mb-1">{plan.label}</h3>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-medium text-lg">{plan.label}</h3>
+                        {plan.hasTrial && (
+                           <span className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">
+                              14-day free trial
+                           </span>
+                        )}
+                      </div>
                       <p className="text-sm text-muted-foreground">{plan.description}</p>
                     </div>
                     <div className="text-right">
                       <div className="text-2xl font-light">{plan.price}</div>
                       {plan.period && (
                         <div className="text-xs text-muted-foreground">{plan.period}</div>
+                      )}
+                      {plan.recommended && (
+                        <div className="text-xs text-primary mt-1">
+                          Recommended
+                        </div>
                       )}
                     </div>
                   </div>
@@ -592,8 +652,10 @@ export const Onboarding = () => {
                         "w-full h-8 px-3 text-sm bg-transparent border rounded-md",
                         "focus:outline-none focus:ring-0 focus:border-border",
                         "placeholder:text-muted-foreground/60 transition-colors",
-                        emailError && inviteEmail && "border-destructive/50"
+                        emailError && inviteEmail && "border-destructive/50",
+                        teamMembers.length >= currentPlanLimit - 1 && "opacity-50 cursor-not-allowed"
                       )}
+                      disabled={teamMembers.length >= currentPlanLimit - 1}
                     />
                     {emailError && inviteEmail && (
                       <p className="text-xs text-destructive/80 mt-1">{emailError}</p>
@@ -604,18 +666,20 @@ export const Onboarding = () => {
                     onChange={(e) => setInviteRole(e.target.value as 'member' | 'admin')}
                     className={cn(
                       "w-32 h-8 px-3 text-sm bg-transparent border rounded-md",
-                      "focus:outline-none focus:ring-0 focus:border-border transition-colors"
+                      "focus:outline-none focus:ring-0 focus:border-border transition-colors",
+                      teamMembers.length >= currentPlanLimit - 1 && "opacity-50 cursor-not-allowed"
                     )}
+                    disabled={teamMembers.length >= currentPlanLimit - 1}
                   >
                     <option value="member">Member</option>
                     <option value="admin">Admin</option>
                   </select>
                   <button
                     onClick={handleAddTeamMember}
-                    disabled={!isValidEmail}
+                    disabled={!isValidEmail || teamMembers.length >= currentPlanLimit - 1}
                     className={cn(
                       "h-8 px-4 text-sm rounded-md transition-all",
-                      isValidEmail
+                      isValidEmail && teamMembers.length < currentPlanLimit - 1
                         ? "bg-primary text-primary-foreground hover:bg-primary/90"
                         : "bg-muted text-muted-foreground cursor-not-allowed"
                     )}
@@ -626,40 +690,40 @@ export const Onboarding = () => {
               </div>
 
               {/* Team members list */}
-              {teamMembers.length > 0 && (
-                <div className="space-y-4 mt-6">
-                  <div>
-                    <h3 className="text-sm font-medium text-foreground">Team members to invite</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {teamMembers.length} of {currentPlanLimit - 1} team members added
-                    </p>
-                  </div>
-
-                  <div className="border border-border rounded-lg divide-y divide-border">
-                    {teamMembers.map((member, index) => (
-                      <div key={index} className="flex items-center justify-between py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="text-sm">{member.email}</div>
-                          <span className={cn(
-                            "text-xs px-2 py-0.5 rounded-full",
-                            member.role === 'admin'
-                              ? "bg-primary/10 text-primary"
-                              : "bg-muted text-muted-foreground"
-                          )}>
-                            {member.role}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => handleRemoveTeamMember(member.email)}
-                          className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+            {teamMembers.length > 0 && (
+              <div className="space-y-4 mt-6">
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">Team members to invite</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {teamMembers.length} of {currentPlanLimit - 1} team members added
+                  </p>
                 </div>
-              )}
+
+                <div className="border border-border rounded-lg divide-y divide-border">
+                  {teamMembers.map((member, index) => (
+                    <div key={index} className="flex items-center justify-between py-3 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className="text-sm">{member.email}</div>
+                        <span className={cn(
+                          "text-xs px-2 py-0.5 rounded-full",
+                          member.role === 'admin'
+                            ? "bg-primary/10 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        )}>
+                          {member.role}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveTeamMember(member.email)}
+                        className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
               <p className="text-xs text-muted-foreground">
                 You can always invite more team members later from your organization settings

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +48,7 @@ interface SubscriptionInfo {
   };
   is_oss: boolean;
   has_active_subscription: boolean;
+  grace_period_ends_at?: string;
 }
 
 interface BillingSettingsProps {
@@ -54,6 +56,7 @@ interface BillingSettingsProps {
 }
 
 export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
@@ -65,6 +68,16 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
   useEffect(() => {
     fetchSubscription();
   }, [organizationId]);
+
+  useEffect(() => {
+    // Check for success param from checkout
+    if (searchParams.get('success') === 'true') {
+      toast.success('Payment method added successfully! Your subscription is now active.');
+      // Remove the success param from URL
+      searchParams.delete('success');
+      setSearchParams(searchParams);
+    }
+  }, []); // Only run once on mount
 
   const fetchSubscription = async () => {
     try {
@@ -222,6 +235,12 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
           <XCircle className="w-3 h-3 mr-1" />
           Canceled
         </Badge>;
+
+      case 'trial_expired':
+        return <Badge variant="destructive">
+          <AlertCircle className="w-3 h-3 mr-1" />
+          Trial Expired
+        </Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
@@ -276,6 +295,95 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
   const hasActiveSubscription = subscription.has_active_subscription;
   const canCancel = hasActiveSubscription && !subscription.cancel_at_period_end;
   const canReactivate = subscription.cancel_at_period_end && subscription.current_period_end;
+
+  // Check if this is initial setup (grace period without subscription)
+  const isInitialSetup = !hasActiveSubscription && subscription.status === 'trialing';
+  const needsSetup = isInitialSetup || subscription.status === 'trial_expired';
+
+  // If this is initial setup or expired trial, show setup prompt
+  if (needsSetup) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Billing Setup Required</CardTitle>
+                <CardDescription>
+                  Complete your billing setup to activate your subscription
+                </CardDescription>
+              </div>
+              {getStatusBadge(subscription.status)}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Please complete your billing setup to start using this organization.
+              </AlertDescription>
+            </Alert>
+
+            <div className="rounded-lg border p-4">
+              <h3 className="mb-3 font-semibold">
+                {subscription.plan === 'startup' ? 'Startup' : 'Developer'} Plan Selected
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Database className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Source Connections</p>
+                      <p className="text-xs text-muted-foreground">
+                        {subscription.limits.source_connections === -1 ? 'Unlimited' : subscription.limits.source_connections}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Entities/Month</p>
+                      <p className="text-xs text-muted-foreground">
+                        {subscription.limits.entities_per_month === -1 ? 'Unlimited' : subscription.limits.entities_per_month.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Sync Frequency</p>
+                      <p className="text-xs text-muted-foreground">
+                        Every {subscription.limits.sync_frequency_minutes} minutes
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Team Members</p>
+                      <p className="text-xs text-muted-foreground">
+                        {subscription.limits.team_members === -1 ? 'Unlimited' : subscription.limits.team_members}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Button
+              onClick={() => window.location.href = '/billing/setup'}
+              size="lg"
+              className="w-full"
+            >
+              Complete Billing Setup
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -24,10 +24,10 @@ export default function BillingSetup() {
     try {
       const info = await fetchBillingInfo();
 
-      // If they have an active subscription and payment method, redirect to portal
+      // If they have an active subscription and payment method, redirect to settings
       if (info && info.has_active_subscription && info.payment_method_added && info.status === 'active') {
         toast.info('You already have an active subscription');
-        navigate('/billing/portal');
+        navigate('/organization/settings?tab=billing');
       }
     } catch (error) {
       console.error('Failed to check billing status:', error);
@@ -44,9 +44,9 @@ export default function BillingSetup() {
 
     setIsLoading(true);
     try {
-      const response = await apiClient.post('/billing/checkout', {
-        plan: 'developer', // Default to developer plan
-        success_url: `${window.location.origin}/billing/success`,
+      const response = await apiClient.post('/billing/checkout-session', {
+        plan: billingInfo?.plan || 'developer', // Use their selected plan or default to developer
+        success_url: `${window.location.origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${window.location.origin}/billing/setup`
       });
 
@@ -66,12 +66,7 @@ export default function BillingSetup() {
   };
 
   const handleManageSubscription = () => {
-    navigate('/billing/portal');
-  };
-
-  const handleSkipForNow = () => {
-    // Allow them to skip but they'll be reminded
-    navigate('/');
+    navigate('/organization/settings?tab=billing');
   };
 
   if (isCheckingStatus) {
@@ -82,16 +77,10 @@ export default function BillingSetup() {
     );
   }
 
-  const daysLeft = billingInfo?.grace_period_ends_at
-    ? Math.ceil(
-        (new Date(billingInfo.grace_period_ends_at).getTime() - new Date().getTime()) /
-        (1000 * 60 * 60 * 24)
-      )
-    : 0;
-
-  const isGracePeriodExpired = daysLeft <= 0 && billingInfo?.in_grace_period;
-  const hasInactiveSubscription = billingInfo?.status === 'canceled' || billingInfo?.status === 'trial_expired';
+  const hasActiveSubscription = billingInfo?.has_active_subscription;
   const needsPaymentMethod = billingInfo?.requires_payment_method && !billingInfo?.payment_method_added;
+  const isInitialSetup = !hasActiveSubscription;
+  const selectedPlan = billingInfo?.plan || 'developer';
 
   return (
     <div className="container mx-auto flex h-screen items-center justify-center">
@@ -101,34 +90,16 @@ export default function BillingSetup() {
             <CreditCard className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-2xl">
-            {hasInactiveSubscription ? 'Reactivate Your Subscription' : 'Complete Your Setup'}
+            {isInitialSetup ? 'Complete Your Setup' : 'Update Payment Method'}
           </CardTitle>
           <CardDescription>
-            {hasInactiveSubscription
-              ? 'Your subscription has ended. Reactivate to continue using Airweave.'
-              : 'Add a payment method to continue using Airweave after your trial'}
+            {isInitialSetup
+              ? 'Add a payment method to activate your subscription'
+              : 'Update your payment method to continue using Airweave.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Status Alerts */}
-          {billingInfo?.in_grace_period && !isGracePeriodExpired && (
-            <Alert className="border-warning">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                You have {daysLeft} days left to add a payment method.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {isGracePeriodExpired && (
-            <Alert className="border-destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Your grace period has expired. Add a payment method to continue.
-              </AlertDescription>
-            </Alert>
-          )}
-
           {billingInfo?.status === 'past_due' && (
             <Alert className="border-destructive">
               <AlertCircle className="h-4 w-4" />
@@ -140,34 +111,63 @@ export default function BillingSetup() {
 
           {/* Plan Benefits */}
           <div className="rounded-lg border p-4">
-            <h3 className="mb-3 font-semibold">Developer Plan Includes:</h3>
+            <h3 className="mb-3 font-semibold">
+              {selectedPlan === 'startup' ? 'Startup' : 'Developer'} Plan
+            </h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li className="flex items-start gap-2">
-                <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                <span>14-day free trial, then $49/month</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                <span>Up to 10 source connections</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                <span>100,000 entities per month</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                <span>Hourly sync frequency</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                <span>Up to 5 team members</span>
-              </li>
+              {selectedPlan === 'startup' ? (
+                <>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
+                    <span>$299/month</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
+                    <span>Up to 50 source connections</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
+                    <span>1,000,000 entities per month</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
+                    <span>15-minute sync frequency</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
+                    <span>Up to 20 team members</span>
+                  </li>
+                </>
+              ) : (
+                <>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
+                    <span>14-day free trial, then $89/month</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
+                    <span>Up to 10 source connections</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
+                    <span>100,000 entities per month</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
+                    <span>Hourly sync frequency</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
+                    <span>Up to 5 team members</span>
+                  </li>
+                </>
+              )}
             </ul>
           </div>
 
           {/* Actions */}
           <div className="space-y-3">
-            {billingInfo?.has_active_subscription && billingInfo?.status === 'past_due' ? (
+            {hasActiveSubscription && billingInfo?.status === 'past_due' ? (
               <Button
                 onClick={handleManageSubscription}
                 disabled={isLoading}
@@ -188,31 +188,22 @@ export default function BillingSetup() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Setting up payment...
                   </>
-                ) : hasInactiveSubscription ? (
-                  'Reactivate Subscription'
+                ) : isInitialSetup ? (
+                  'Complete Setup'
                 ) : (
-                  'Add Payment Method'
+                  'Update Payment Method'
                 )}
-              </Button>
-            )}
-
-            {!isGracePeriodExpired && !hasInactiveSubscription && needsPaymentMethod && (
-              <Button
-                onClick={handleSkipForNow}
-                variant="ghost"
-                className="w-full"
-                disabled={isLoading}
-              >
-                Skip for now
               </Button>
             )}
           </div>
 
           {/* Additional Info */}
           <p className="text-center text-xs text-muted-foreground">
-            {hasInactiveSubscription
-              ? 'Your subscription will resume with the same plan and pricing.'
-              : "You won't be charged during your 14-day trial. Cancel anytime."}
+            {selectedPlan === 'developer' && isInitialSetup
+              ? "You won't be charged during your 14-day trial. Cancel anytime."
+              : selectedPlan === 'startup' && isInitialSetup
+              ? "Your subscription will start immediately."
+              : "Update your payment method to continue your subscription."}
           </p>
         </CardContent>
       </Card>

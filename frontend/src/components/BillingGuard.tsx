@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useOrganizationStore } from '@/lib/stores/organizations';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ interface BillingGuardProps {
 
 export const BillingGuard = ({ children, requiresActiveBilling = true }: BillingGuardProps) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentOrganization, billingInfo, fetchBillingInfo, billingLoading } = useOrganizationStore();
   const [isChecking, setIsChecking] = useState(true);
 
@@ -33,6 +34,16 @@ export const BillingGuard = ({ children, requiresActiveBilling = true }: Billing
     }
   };
 
+  // Redirect to billing setup immediately after checking
+  useEffect(() => {
+    if (!isChecking && !billingLoading && billingInfo && !billingInfo.is_oss) {
+      // If no active subscription and not on a billing page, redirect to setup
+      if (!billingInfo.has_active_subscription && !location.pathname.startsWith('/billing')) {
+        navigate('/billing/setup');
+      }
+    }
+  }, [isChecking, billingLoading, billingInfo, location.pathname, navigate]);
+
   if (isChecking || billingLoading) {
     return <div className="flex items-center justify-center p-8">Loading billing status...</div>;
   }
@@ -42,6 +53,28 @@ export const BillingGuard = ({ children, requiresActiveBilling = true }: Billing
     return <>{children}</>;
   }
 
+  // For organizations without active subscriptions, always require billing setup
+  if (!billingInfo.has_active_subscription) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 space-y-6">
+        <div className="text-center max-w-md">
+          <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <h2 className="text-2xl font-semibold mb-2">Complete Your Setup</h2>
+          <p className="text-muted-foreground mb-6">
+            Please complete your billing setup to start using this organization's resources.
+          </p>
+          <Button
+            onClick={() => navigate('/billing/setup')}
+            size="lg"
+          >
+            Complete Setup
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Grace period logic only applies to existing subscriptions with payment issues
   const needsPaymentMethod = billingInfo.requires_payment_method;
   const isGracePeriodExpired = billingInfo.grace_period_ends_at &&
     new Date(billingInfo.grace_period_ends_at) <= new Date() &&
@@ -78,12 +111,16 @@ export const BillingGuard = ({ children, requiresActiveBilling = true }: Billing
     );
   }
 
-  // Show a warning banner if payment is needed but not critical yet
-  const showWarning = needsPaymentMethod && !isGracePeriodExpired && billingInfo.in_grace_period;
+  // Show a warning banner if payment is needed but not critical yet (only for existing subscriptions)
+  const showWarning = needsPaymentMethod && !isGracePeriodExpired && billingInfo.in_grace_period && billingInfo.has_active_subscription;
+
+  // Don't show warning on billing setup page or organization settings billing tab
+  const isBillingPage = location.pathname === '/billing/setup' ||
+    (location.pathname === '/organization/settings' && location.search.includes('tab=billing'));
 
   return (
     <>
-      {showWarning && (
+      {showWarning && !isBillingPage && (
         <Alert className="mb-4 border-warning">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Payment Method Required</AlertTitle>

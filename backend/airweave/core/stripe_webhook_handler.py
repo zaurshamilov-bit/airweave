@@ -8,7 +8,7 @@ from airweave.core.billing_service import billing_service
 from airweave.core.logging import logger
 
 
-class WebhookHandler:
+class StripeWebhookHandler:
     """Handle Stripe webhook events with idempotency and error recovery."""
 
     def __init__(self, db: AsyncSession):

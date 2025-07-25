@@ -1,6 +1,6 @@
 """Billing service for managing subscriptions and payments."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
 
@@ -78,16 +78,21 @@ class BillingService:
         if existing:
             raise InvalidStateError("Billing record already exists for organization")
 
-        # Set grace period to 7 days from now for payment method setup
-        grace_period_end = datetime.now(timezone.utc) + timedelta(days=7)
-        grace_period_end = grace_period_end.replace(hour=23, minute=59, second=59, microsecond=0)
+        # Get plan from organization metadata if available
+        selected_plan = BillingPlan.DEVELOPER  # Default
+        if hasattr(organization, "org_metadata") and organization.org_metadata:
+            onboarding_data = organization.org_metadata.get("onboarding", {})
+            plan_from_metadata = onboarding_data.get("subscriptionPlan", "developer")
+            # Convert to BillingPlan enum
+            if plan_from_metadata in ["developer", "startup", "enterprise"]:
+                selected_plan = BillingPlan(plan_from_metadata)
 
         billing_create = OrganizationBillingCreate(
             stripe_customer_id=stripe_customer_id,
-            billing_plan=BillingPlan.DEVELOPER,
-            billing_status=BillingStatus.GRACE_PERIOD,
+            billing_plan=selected_plan,
+            billing_status=BillingStatus.TRIALING,  # New orgs start in trialing state
             billing_email=billing_email,
-            grace_period_ends_at=grace_period_end,
+            # No grace period for new organizations - they need to complete setup
         )
 
         billing = await crud.organization_billing.create(
@@ -279,11 +284,10 @@ class BillingService:
                 and len(getattr(subscription.items, "data", [])) == 0
             ) or not is_upgrade:
                 # Cancel the current subscription
+                state = "trial upgrade" if subscription.status == "trialing" else "downgrade"
                 logger.info(
                     f"Canceling subscription {billing_model.stripe_subscription_id} to "
-                    f"create new one for {
-                        'trial upgrade' if subscription.status == 'trialing' else 'downgrade'
-                    }"
+                    f"create new one for {state}"
                 )
                 await stripe_client.cancel_subscription(
                     subscription_id=billing_model.stripe_subscription_id,
@@ -841,11 +845,13 @@ class BillingService:
             and billing_model.stripe_subscription_id is not None
         )
 
-        # Check if in grace period
+        # Check if in grace period (only for existing subscriptions with payment failures)
         in_grace_period = (
             billing_model.grace_period_ends_at is not None
             and billing_model.grace_period_ends_at > datetime.now(timezone.utc)
             and not billing_model.payment_method_added
+            and billing_model.stripe_subscription_id
+            is not None  # Grace period only applies to existing subscriptions
         )
 
         # Check if grace period expired
@@ -853,10 +859,18 @@ class BillingService:
             billing_model.grace_period_ends_at is not None
             and billing_model.grace_period_ends_at <= datetime.now(timezone.utc)
             and not billing_model.payment_method_added
+            and billing_model.stripe_subscription_id
+            is not None  # Grace period only applies to existing subscriptions
+        )
+
+        # For new organizations without subscriptions, they always need to complete setup
+        needs_initial_setup = (
+            not billing_model.stripe_subscription_id
+            and billing_model.billing_status == BillingStatus.TRIALING
         )
 
         # Determine if payment method is required now
-        requires_payment_method = in_grace_period or grace_period_expired
+        requires_payment_method = needs_initial_setup or in_grace_period or grace_period_expired
 
         # Update status if grace period expired
         if grace_period_expired and billing_model.billing_status != BillingStatus.TRIAL_EXPIRED:
