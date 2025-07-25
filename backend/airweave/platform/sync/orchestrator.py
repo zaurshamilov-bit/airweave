@@ -5,6 +5,7 @@ from typing import Optional
 
 from airweave import schemas
 from airweave.core.datetime_utils import utc_now_naive
+from airweave.core.exceptions import PaymentRequiredException, UsageLimitExceededException
 from airweave.core.guard_rail_service import ActionType
 from airweave.core.shared_models import SyncJobStatus
 from airweave.core.sync_job_service import sync_job_service
@@ -87,11 +88,7 @@ class SyncOrchestrator:
         )
 
     async def _process_entities(self) -> None:
-        """Process entities with pull-based concurrency control.
-
-        Only pulls an entity from the stream when a worker is available,
-        ensuring natural backpressure throughout the pipeline.
-        """
+        """Process entities with explicit stream lifecycle management."""
         source_node = self.sync_context.dag.get_source_node()
 
         self.sync_context.logger.info(
@@ -99,54 +96,72 @@ class SyncOrchestrator:
             f"(buffer: {self.stream_buffer_size}, max workers: {self.worker_pool.max_workers})"
         )
 
+        stream = None
         stream_error: Optional[Exception] = None
         pending_tasks: set[asyncio.Task] = set()
 
         try:
-            async with AsyncSourceStream(
+            # Create stream outside the async with to have explicit control
+            stream = AsyncSourceStream(
                 self.sync_context.source.generate_entities(),
                 queue_size=self.stream_buffer_size,
                 logger=self.sync_context.logger,
-            ) as stream:
-                async for entity in stream.get_entities():
-                    # check if processing is allowed with guard rail
+            )
+            await stream.start()
+
+            async for entity in stream.get_entities():
+                try:
+                    # Check guard rail
                     await self.sync_context.guard_rail.is_allowed(ActionType.ENTITIES)
-
-                    # Handle skipped entities without using a worker
-                    if getattr(entity, "should_skip", False):
-                        self.sync_context.logger.debug(f"Skipping entity: {entity.entity_id}")
-                        await self.sync_context.progress.increment("skipped")
-                        continue
-
-                    # Submit entity processing to worker pool
-                    # This creates a task that runs concurrently with others
-                    task = await self.worker_pool.submit(
-                        self.entity_processor.process,
-                        entity=entity,
-                        source_node=source_node,
-                        sync_context=self.sync_context,
+                except (UsageLimitExceededException, PaymentRequiredException) as guard_error:
+                    self.sync_context.logger.error(
+                        f"Guard rail check failed: {type(guard_error).__name__}: {str(guard_error)}"
                     )
-                    pending_tasks.add(task)
+                    stream_error = guard_error
+                    break  # Exit the loop cleanly instead of raising
 
-                    # Clean up completed tasks periodically to avoid memory buildup
-                    if len(pending_tasks) >= self.worker_pool.max_workers:
-                        pending_tasks = await self._handle_completed_tasks(pending_tasks)
+                # Handle skipped entities without using a worker
+                if getattr(entity, "should_skip", False):
+                    self.sync_context.logger.debug(f"Skipping entity: {entity.entity_id}")
+                    await self.sync_context.progress.increment("skipped")
+                    continue
 
-                    # Note: Entity usage increment moved to EntityProcessor
-                    # where it knows if entity was actually processed (insert/update) vs kept
+                # Submit entity processing to worker pool
+                task = await self.worker_pool.submit(
+                    self.entity_processor.process,
+                    entity=entity,
+                    source_node=source_node,
+                    sync_context=self.sync_context,
+                )
+                pending_tasks.add(task)
+
+                # Clean up completed tasks periodically
+                if len(pending_tasks) >= self.worker_pool.max_workers:
+                    pending_tasks = await self._handle_completed_tasks(pending_tasks)
 
         except Exception as e:
             stream_error = e
             self.sync_context.logger.error(f"Error during entity streaming: {get_error_message(e)}")
-            # Cancel all pending tasks
-            for task in pending_tasks:
-                task.cancel()
-            raise
 
         finally:
-            # Wait for all remaining tasks to complete
+            # Always clean up the stream first
+            if stream:
+                await stream.stop()
+
+            # Then handle pending tasks
+            if stream_error:
+                # Cancel all pending tasks if there was an error
+                self.sync_context.logger.info(f"Cancelling {len(pending_tasks)} pending tasks...")
+                for task in pending_tasks:
+                    task.cancel()
+
+            # Wait for all tasks to complete
             await self._wait_for_remaining_tasks(pending_tasks)
             await self.sync_context.progress.finalize(is_complete=(stream_error is None))
+
+            # Re-raise the error after cleanup
+            if stream_error:
+                raise stream_error
 
     async def _handle_completed_tasks(self, pending_tasks: set[asyncio.Task]) -> set[asyncio.Task]:
         """Handle completed tasks and check for exceptions.

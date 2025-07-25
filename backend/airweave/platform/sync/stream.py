@@ -111,30 +111,81 @@ class AsyncSourceStream(Generic[T]):
                     pass
 
     async def get_entities(self) -> AsyncGenerator[T, None]:
-        """Get entities one at a time from the queue.
-
-        Yields entities as they become available, allowing consumer to process
-        at its own pace.
-        """
+        """Get entities with timeout to prevent cleanup deadlock."""
         if not self.producer_task:
             await self.start()
 
+        try:
+            while True:
+                item = await self._get_next_item()
+
+                if item is None:
+                    # End of stream
+                    self._check_producer_exception()
+                    break
+
+                yield item
+
+                # Check for producer errors after yielding
+                self._check_producer_exception()
+
+        except GeneratorExit:
+            self.logger.debug("Generator cleanup initiated - stopping stream")
+            raise
+        finally:
+            await self._drain_queue()
+
+    async def _get_next_item(self) -> Optional[T]:
+        """Get next item from queue with timeout handling.
+
+        Returns:
+            The next item, or None if stream is complete
+        """
         while True:
-            # Get next item from queue, if available
-            item = await self.queue.get()
+            try:
+                # Try to get with timeout
+                item = await asyncio.wait_for(self.queue.get(), timeout=0.5)
+                self.queue.task_done()
+                return item
+
+            except asyncio.TimeoutError:
+                # Check if we should stop waiting
+                if await self._should_stop_waiting():
+                    return None
+                # Otherwise continue waiting
+                continue
+
+    async def _should_stop_waiting(self) -> bool:
+        """Check if we should stop waiting for items.
+
+        Returns:
+            True if we should stop, False to continue waiting
+        """
+        if not self.producer_done.is_set():
+            # Producer still running
+            return False
+
+        # Producer is done, check for remaining items
+        try:
+            item = self.queue.get_nowait()
             self.queue.task_done()
+            # Put it back since we're just checking
+            await self.queue.put(item)
+            return False  # Still have items
+        except asyncio.QueueEmpty:
+            return True  # Queue empty and producer done
 
-            # None is our sentinel value for end of stream
-            if item is None:
-                # Check if the producer failed before yielding any items
-                if self.producer_exception:
-                    self.logger.error("Producer failed with error before yielding any items")
-                    raise self.producer_exception
-                break
+    def _check_producer_exception(self) -> None:
+        """Check and raise any producer exception."""
+        if self.producer_exception:
+            self.logger.error("Producer encountered an error")
+            raise self.producer_exception
 
-            yield item
-
-            # Check if producer had an error after yielding the item
-            if self.producer_exception:
-                self.logger.error("Producer encountered an error, stopping consumer")
-                raise self.producer_exception
+    async def _drain_queue(self) -> None:
+        """Drain any remaining items to prevent producer deadlock."""
+        try:
+            while not self.queue.empty():
+                self.queue.get_nowait()
+                self.queue.task_done()
+        except Exception:
+            pass  # Best effort cleanup

@@ -48,7 +48,7 @@ class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
         *,
         organization_id: UUID,
         increments: Dict[ActionType, int],
-    ) -> None:
+    ) -> Optional[Usage]:
         """Atomically increment usage counters for the most recent period.
 
         This method uses raw SQL to ensure atomic updates that add to existing
@@ -59,6 +59,10 @@ class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
             db: Database session
             organization_id: The organization ID to increment usage for
             increments: Dictionary mapping ActionType to increment amount
+
+        Returns:
+        -------
+            Optional[Usage]: The updated usage record after increment, or None if no record exists
         """
         # Build the atomic UPDATE query
         update_parts = []
@@ -85,7 +89,16 @@ class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
             """)
 
             await db.execute(query, params)
-            # Note: Commit should be handled by the caller/UnitOfWork
+
+            # Commit the transaction
+            await db.commit()
+
+            # Fetch and return the updated record
+            return await self.get_most_recent_by_organization_id(
+                db, organization_id=organization_id
+            )
+
+        return None
 
 
 # Create singleton instance with track_user=False since Usage doesn't have UserMixin
