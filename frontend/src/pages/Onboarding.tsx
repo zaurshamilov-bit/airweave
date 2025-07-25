@@ -1,17 +1,13 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2,
   Users,
-  Briefcase,
-  CreditCard,
-  Mail,
   ChevronRight,
   ChevronLeft,
   Check,
   Sparkles,
   Rocket,
-  Building,
   X,
   Code2,
   Database,
@@ -19,11 +15,14 @@ import {
   Shield,
   Cpu,
   Globe,
-  Plus,
   Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
+import { apiClient } from '@/lib/api';
+import { toast } from 'sonner';
+import { useOrganizationStore } from '@/lib/stores/organizations';
+import { useAuth } from '@/lib/auth-context';
 
 interface OnboardingData {
   organizationName: string;
@@ -63,32 +62,18 @@ const ORGANIZATION_TYPES = [
   { value: 'data_platform', label: 'Data Platform', icon: Database, description: 'Data infrastructure & analytics' },
   { value: 'dev_tools', label: 'Developer Tools', icon: Code2, description: 'Tools for developers' },
   { value: 'fintech', label: 'Fintech', icon: Shield, description: 'Financial technology' },
-  { value: 'other', label: 'Other', icon: Globe, description: 'Insurance, Healthcare,' },
+  { value: 'other', label: 'Other', icon: Globe, description: 'Other industries' },
 ];
 
 const SUBSCRIPTION_PLANS = [
-  {
-    value: 'trial',
-    label: 'Start with Trial',
-    price: 'Free',
-    period: '14 days',
-    description: 'Perfect for testing',
-    features: [
-      '3 source connections',
-      '10K entities/month',
-      'Daily sync',
-      '2 team members',
-    ],
-    teamMemberLimit: 2,
-    recommended: false,
-  },
   {
     value: 'developer',
     label: 'Developer',
     price: '$89',
     period: 'per month',
-    description: 'For small teams',
+    description: 'Perfect for small teams',
     features: [
+      '14-day free trial',
       '10 source connections',
       '100K entities/month',
       'Hourly sync',
@@ -96,6 +81,7 @@ const SUBSCRIPTION_PLANS = [
     ],
     teamMemberLimit: 5,
     recommended: true,
+    hasTrial: true,
   },
   {
     value: 'startup',
@@ -108,23 +94,28 @@ const SUBSCRIPTION_PLANS = [
       '1M entities/month',
       '15-min sync',
       '20 team members',
+      'Priority support',
     ],
     teamMemberLimit: 20,
     recommended: false,
+    hasTrial: false,
   },
 ];
 
 export const Onboarding = () => {
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
+  const { setCurrentOrganization } = useOrganizationStore();
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [formData, setFormData] = useState<OnboardingData>({
     organizationName: '',
     organizationSize: '',
     userRole: '',
     organizationType: '',
-    subscriptionPlan: 'trial',
+    subscriptionPlan: 'developer', // Default to developer plan
     teamEmails: [],
   });
 
@@ -166,15 +157,61 @@ export const Onboarding = () => {
     }
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     // Update formData with team emails
     const emails = teamMembers.map(member => member.email);
-    updateFormData('teamEmails', emails);
 
-    // TODO: Wire this to backend
-    console.log('Onboarding complete:', { ...formData, teamEmails: emails });
-    // For now, just navigate to dashboard
-    navigate('/');
+    setIsCreating(true);
+
+    try {
+      // Step 1: Create organization with metadata
+      const org_metadata = {
+        onboarding: {
+          organizationSize: formData.organizationSize,
+          userRole: formData.userRole,
+          organizationType: formData.organizationType,
+          subscriptionPlan: formData.subscriptionPlan,
+          teamInvites: teamMembers, // Store full team member info with roles
+          completedAt: new Date().toISOString(),
+        }
+      };
+
+      const createOrgResponse = await apiClient.post('/organizations', {
+        name: formData.organizationName,
+        description: `${formData.organizationType} company with ${formData.organizationSize} people`,
+        org_metadata,
+      });
+
+      if (!createOrgResponse.ok) {
+        throw new Error('Failed to create organization');
+      }
+
+      const organization = await createOrgResponse.json();
+
+      // Step 2: Update organization context
+      setCurrentOrganization(organization);
+
+      // Step 3: Create checkout session for the selected plan
+      const checkoutResponse = await apiClient.post('/billing/checkout-session', {
+        plan: formData.subscriptionPlan,
+        success_url: `${window.location.origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${window.location.origin}/billing/cancel`,
+      });
+
+      if (!checkoutResponse.ok) {
+        throw new Error('Failed to create billing session');
+      }
+
+      const { checkout_url } = await checkoutResponse.json();
+
+      // Step 4: Redirect to Stripe checkout
+      window.location.href = checkout_url;
+
+    } catch (error) {
+      console.error('Onboarding error:', error);
+      toast.error('Failed to complete setup. Please try again.');
+      setIsCreating(false);
+    }
   };
 
   // Handle Enter key for progression
@@ -217,6 +254,12 @@ export const Onboarding = () => {
       return;
     }
 
+    // Check if email is the current user's email
+    if (user?.email && email.toLowerCase() === user.email.toLowerCase()) {
+      setEmailError("You don't need to invite yourself - you'll be the owner");
+      return;
+    }
+
     // Check if email already exists in team members
     const existingMember = teamMembers.find(member =>
       member.email.toLowerCase() === email.toLowerCase()
@@ -233,7 +276,7 @@ export const Onboarding = () => {
     }
 
     setEmailError('');
-  }, [teamMembers, currentPlanLimit, formData.subscriptionPlan]);
+  }, [teamMembers, currentPlanLimit, formData.subscriptionPlan, user?.email]);
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const email = e.target.value;
@@ -466,7 +509,7 @@ export const Onboarding = () => {
                   key={plan.value}
                   onClick={() => handleSelection('subscriptionPlan', plan.value)}
                   className={cn(
-                    "relative p-6 rounded-lg border text-left transition-all",
+                    "relative p-6 pt-8 rounded-lg border text-left transition-all",
                     "hover:border-primary/50",
                     formData.subscriptionPlan === plan.value
                       ? "border-primary bg-primary/5"
@@ -474,9 +517,17 @@ export const Onboarding = () => {
                   )}
                 >
                   {plan.recommended && (
-                    <div className="absolute -top-2 right-6">
+                    <div className="absolute top-3 right-6">
                       <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full">
                         Recommended
+                      </span>
+                    </div>
+                  )}
+
+                  {plan.hasTrial && (
+                    <div className="absolute top-3 left-6">
+                      <span className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">
+                        14-day free trial
                       </span>
                     </div>
                   )}
@@ -714,16 +765,22 @@ export const Onboarding = () => {
           ) : (
             <button
               onClick={handleComplete}
-              disabled={!isStepValid()}
+              disabled={!isStepValid() || isCreating}
               className={cn(
                 "flex items-center space-x-2 px-4 py-2 rounded-lg transition-all",
-                isStepValid()
+                isStepValid() && !isCreating
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-muted text-muted-foreground cursor-not-allowed"
               )}
             >
-              <span>Complete Setup</span>
-              <Check className="w-4 h-4" />
+              {isCreating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <span>Complete Setup</span>
+                  <Check className="w-4 h-4" />
+                </>
+              )}
             </button>
           )}
         </div>

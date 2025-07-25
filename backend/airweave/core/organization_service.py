@@ -15,6 +15,7 @@ from airweave.core.logging import logger
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.integrations.auth0_management import auth0_management_client
 from airweave.models import Organization, User, UserOrganization
+from airweave.schemas.auth import AuthContext
 
 if settings.STRIPE_ENABLED:
     from airweave.core.billing_service import billing_service
@@ -188,12 +189,21 @@ class OrganizationService:
                 )
                 local_org_schema = schemas.Organization.model_validate(local_org)
 
+                # Create system auth context for billing record creation
+                system_auth = AuthContext(
+                    organization_id=local_org_schema.id,
+                    user=None,
+                    auth_method="system",
+                    auth_metadata={"source": "organization_creation"},
+                )
+
                 # Create billing record
                 _ = await billing_service.create_billing_record_with_transaction(
                     db=db,
                     organization=local_org_schema,
                     stripe_customer_id=stripe_customer.id,
                     billing_email=owner_user.email,
+                    auth_context=system_auth,
                     uow=uow,
                 )
 
@@ -524,7 +534,16 @@ class OrganizationService:
             # Delete billing record if Stripe is enabled
             if settings.STRIPE_ENABLED:
                 try:
-                    await billing_service.delete_billing_record(db, organization_id)
+                    org_billing = await crud.organization_billing.get_by_organization(
+                        db, organization_id=organization_id
+                    )
+                    if not org_billing:
+                        logger.warning(f"No billing record found for organization {org.name}")
+                    else:
+                        await stripe_client.cancel_subscription(
+                            subscription_id=org_billing.stripe_subscription_id,
+                            cancel_at_period_end=False,
+                        )
                     logger.info(f"Successfully deleted billing record for organization: {org.name}")
                 except Exception as e:
                     logger.warning(

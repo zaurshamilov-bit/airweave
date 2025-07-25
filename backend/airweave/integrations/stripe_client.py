@@ -74,6 +74,8 @@ class StripeClient:
         success_url: str,
         cancel_url: str,
         metadata: Optional[Dict[str, str]] = None,
+        trial_end: Optional[int] = None,
+        trial_period_days: Optional[int] = None,
     ) -> stripe.checkout.Session:
         """Create a checkout session for subscription.
 
@@ -83,6 +85,8 @@ class StripeClient:
             success_url: URL to redirect on success
             cancel_url: URL to redirect on cancel
             metadata: Additional metadata
+            trial_end: Unix timestamp for when trial should end (for existing trials)
+            trial_period_days: Number of days for the trial period (for new trials)
 
         Returns:
             Stripe Checkout Session
@@ -91,29 +95,37 @@ class StripeClient:
             ExternalServiceError: If session creation fails
         """
         try:
-            return stripe.checkout.Session.create(
-                customer=customer_id,
-                payment_method_types=["card"],
-                line_items=[
+            session_params = {
+                "customer": customer_id,
+                "payment_method_types": ["card"],
+                "line_items": [
                     {
                         "price": price_id,
                         "quantity": 1,
                     }
                 ],
-                mode="subscription",
-                success_url=success_url,
-                cancel_url=cancel_url,
-                metadata=metadata or {},
-                allow_promotion_codes=True,
-                billing_address_collection="required",
-                customer_update={
+                "mode": "subscription",
+                "success_url": success_url,
+                "cancel_url": cancel_url,
+                "metadata": metadata or {},
+                "allow_promotion_codes": True,
+                "billing_address_collection": "required",
+                "customer_update": {
                     "address": "auto",
                     "name": "auto",
                 },
-                subscription_data={
+                "subscription_data": {
                     "metadata": metadata or {},
                 },
-            )
+            }
+
+            # Add trial_end to subscription_data if provided
+            if trial_end:
+                session_params["subscription_data"]["trial_end"] = trial_end
+            elif trial_period_days:
+                session_params["subscription_data"]["trial_period_days"] = trial_period_days
+
+            return stripe.checkout.Session.create(**session_params)
         except StripeError as e:
             logger.error(f"Failed to create checkout session: {e}")
             raise ExternalServiceError(
@@ -199,6 +211,7 @@ class StripeClient:
         price_id: Optional[str] = None,
         proration_behavior: str = "create_prorations",
         cancel_at_period_end: Optional[bool] = None,
+        trial_end: Optional[str] = None,
     ) -> stripe.Subscription:
         """Update a subscription with new plan or settings.
 
@@ -207,6 +220,7 @@ class StripeClient:
             price_id: New price ID for plan change
             proration_behavior: How to handle proration
             cancel_at_period_end: Update cancellation status
+            trial_end: When to end the trial ("now" to end immediately)
 
         Returns:
             Updated Stripe Subscription
@@ -221,11 +235,29 @@ class StripeClient:
             if cancel_at_period_end is not None:
                 update_params["cancel_at_period_end"] = cancel_at_period_end
 
+            # End trial if specified
+            if trial_end is not None:
+                update_params["trial_end"] = trial_end
+
             # Update plan if new price specified
             if price_id:
-                # Get current subscription to find the item ID
-                subscription = stripe.Subscription.retrieve(subscription_id)
-                if subscription.items and subscription.items.data:
+                # Get current subscription to find the item ID - expand items
+                # Note: Trialing subscriptions may not have items until the trial ends
+                subscription = stripe.Subscription.retrieve(subscription_id, expand=["items"])
+
+                # Log what we got for debugging
+                logger.info(
+                    f"Subscription {subscription_id} status: {subscription.status}, "
+                    f"cancel_at_period_end: {subscription.cancel_at_period_end}, "
+                    f"items count: {len(getattr(subscription.items, 'data', []))}"
+                )
+
+                # Check if subscription has items
+                if (
+                    hasattr(subscription, "items")
+                    and hasattr(subscription.items, "data")
+                    and len(subscription.items.data) > 0
+                ):
                     # Update the first item with new price
                     update_params["items"] = [
                         {
@@ -234,6 +266,13 @@ class StripeClient:
                         }
                     ]
                     update_params["proration_behavior"] = proration_behavior
+
+                else:
+                    raise ExternalServiceError(
+                        f"No subscription items found to update for subscription {subscription_id}."
+                        f" Status: {subscription.status}, "
+                        f"Cancel at period end: {subscription.cancel_at_period_end}"
+                    )
 
             return stripe.Subscription.modify(subscription_id, **update_params)
 

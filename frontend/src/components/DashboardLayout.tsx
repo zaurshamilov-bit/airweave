@@ -34,6 +34,7 @@ import { DialogFlow } from '@/components/shared';
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 import { useOrganizationStore } from "@/lib/stores/organizations";
 import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
+import { BillingGuard } from "@/components/BillingGuard";
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
@@ -414,6 +415,7 @@ const DashboardLayout = () => {
                 </div>
               </header>
 
+              <BillingGuard>
               <div className={cn(
                 "h-[calc(100%-4rem)]",
                 isNonScrollable ? "overflow-hidden" : "pb-8"
@@ -432,6 +434,7 @@ const DashboardLayout = () => {
                   <Outlet />
                 )}
               </div>
+              </BillingGuard>
             </div>
           </div>
         </div>

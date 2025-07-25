@@ -18,4 +18,6 @@ export const publicPaths = {
     semanticMcp: "/semantic-mcp",
     noOrganization: "/no-organization",
     onboarding: "/onboarding",
+    billingSuccess: "/billing/success",
+    billingCancel: "/billing/cancel",
 }

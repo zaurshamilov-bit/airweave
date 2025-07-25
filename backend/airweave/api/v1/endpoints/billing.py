@@ -136,11 +136,12 @@ async def cancel_subscription(
 ) -> schemas.MessageResponse:
     """Cancel the current subscription.
 
-    By default, cancels at the end of the current billing period.
-    Set immediate=true to cancel immediately.
+    The subscription will be canceled at the end of the current billing period,
+    allowing continued access until then. For immediate cancellation, delete
+    the organization instead.
 
     Args:
-        request: Cancellation request
+        request: Cancellation request (empty body)
         db: Database session
         auth_context: Authentication context
 
@@ -154,11 +155,7 @@ async def cancel_subscription(
         raise HTTPException(status_code=400, detail="Billing is not enabled for this instance")
 
     try:
-        message = await billing_service.cancel_subscription(
-            db=db,
-            organization_id=auth_context.organization_id,
-            immediate=request.immediate,
-        )
+        message = await billing_service.cancel_subscription(db, auth_context)
 
         return schemas.MessageResponse(message=message)
 
@@ -193,7 +190,7 @@ async def reactivate_subscription(
     try:
         message = await billing_service.reactivate_subscription(
             db=db,
-            organization_id=auth_context.organization_id,
+            auth_context=auth_context,
         )
 
         return schemas.MessageResponse(message=message)

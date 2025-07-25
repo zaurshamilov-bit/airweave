@@ -1,7 +1,7 @@
 """Organization schemas."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -18,7 +18,9 @@ class OrganizationBase(BaseModel):
 class OrganizationCreate(OrganizationBase):
     """Organization creation schema."""
 
-    pass
+    org_metadata: Optional[Dict[str, Any]] = Field(
+        None, description="Additional organization metadata"
+    )
 
 
 class OrganizationUpdate(BaseModel):
@@ -26,6 +28,7 @@ class OrganizationUpdate(BaseModel):
 
     name: str
     description: Optional[str] = None
+    org_metadata: Optional[Dict[str, Any]] = None
 
 
 class OrganizationInDBBase(OrganizationBase):
@@ -36,6 +39,7 @@ class OrganizationInDBBase(OrganizationBase):
     id: UUID
     created_at: datetime
     modified_at: datetime
+    org_metadata: Optional[Dict[str, Any]] = None
 
 
 class Organization(OrganizationInDBBase):
@@ -59,3 +63,4 @@ class OrganizationWithRole(BaseModel):
     role: str  # owner, admin, member
     is_primary: bool
     auth0_org_id: Optional[str] = None
+    org_metadata: Optional[Dict[str, Any]] = None

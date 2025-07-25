@@ -61,7 +61,6 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
   const [isCancelLoading, setIsCancelLoading] = useState(false);
   const [isReactivateLoading, setIsReactivateLoading] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const [cancelImmediate, setCancelImmediate] = useState(false);
 
   useEffect(() => {
     fetchSubscription();
@@ -94,9 +93,21 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
         const response = await apiClient.post('/billing/update-plan', { plan });
 
         if (response.ok) {
-          const { message } = await response.json();
-          toast.success(message);
-          await fetchSubscription(); // Refresh subscription info
+          const data = await response.json();
+          // Check if we got a checkout URL (for trial upgrades)
+          if (data.message && data.message.includes('checkout at:')) {
+            // Extract URL from message
+            const urlMatch = data.message.match(/checkout at: (.+)$/);
+            if (urlMatch && urlMatch[1]) {
+              window.location.href = urlMatch[1];
+            } else {
+              throw new Error('Failed to get checkout URL');
+            }
+          } else {
+            // Normal update succeeded
+            toast.success(data.message);
+            await fetchSubscription(); // Refresh subscription info
+          }
         } else {
           const error = await response.json();
           throw new Error(error.detail || 'Failed to update plan');
@@ -149,7 +160,7 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
     try {
       setIsCancelLoading(true);
       const response = await apiClient.post('/billing/cancel', {
-        immediate: cancelImmediate
+        immediate: false // Always cancel at period end
       });
 
       if (response.ok) {
@@ -178,11 +189,12 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
         toast.success(message);
         await fetchSubscription(); // Refresh subscription info
       } else {
-        throw new Error('Failed to reactivate subscription');
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to reactivate subscription');
       }
     } catch (error) {
       console.error('Error reactivating subscription:', error);
-      toast.error('Failed to reactivate subscription');
+      toast.error(error instanceof Error ? error.message : 'Failed to reactivate subscription');
     } finally {
       setIsReactivateLoading(false);
     }
@@ -263,7 +275,7 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
   const isOnTrial = subscription.plan === 'trial';
   const hasActiveSubscription = subscription.has_active_subscription;
   const canCancel = hasActiveSubscription && !subscription.cancel_at_period_end;
-  const canReactivate = hasActiveSubscription && subscription.cancel_at_period_end;
+  const canReactivate = subscription.cancel_at_period_end && subscription.current_period_end;
 
   return (
     <div className="space-y-6">
@@ -286,23 +298,23 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
               <h3 className="text-2xl font-semibold">
                 {getPlanDisplayName(subscription.plan)}
               </h3>
-              {subscription.trial_ends_at && (
+              {subscription.status === 'trialing' && subscription.trial_ends_at && (
                 <p className="text-sm text-muted-foreground mt-1">
                   <Calendar className="inline w-3 h-3 mr-1" />
                   Trial ends {format(new Date(subscription.trial_ends_at), 'MMM d, yyyy')}
                 </p>
               )}
-              {subscription.current_period_end && !isOnTrial && (
+              {subscription.status === 'canceled' && subscription.current_period_end && (
                 <p className="text-sm text-muted-foreground mt-1">
                   <Calendar className="inline w-3 h-3 mr-1" />
-                  {subscription.cancel_at_period_end ? 'Subscription ends' : 'Renews'} {format(new Date(subscription.current_period_end), 'MMM d, yyyy')}
+                  Access until {format(new Date(subscription.current_period_end), 'MMM d, yyyy')}
                 </p>
               )}
-              {subscription.cancel_at_period_end && (
+              {subscription.cancel_at_period_end && subscription.current_period_end && (
                 <Alert className="mt-2">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    Your subscription is set to cancel at the end of the current billing period.
+                    Your subscription is set to cancel on {format(new Date(subscription.current_period_end), 'MMM d, yyyy')}.
                   </AlertDescription>
                 </Alert>
               )}
@@ -322,7 +334,7 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
                 </Button>
               )}
 
-              {hasActiveSubscription && (
+              {(hasActiveSubscription || subscription.cancel_at_period_end) && (
                 <Button
                   onClick={handleManageBilling}
                   variant="outline"
@@ -517,6 +529,16 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
         </div>
       )}
 
+      {/* Message when subscription is set to cancel */}
+      {subscription.cancel_at_period_end && (subscription.plan === 'developer' || subscription.plan === 'startup') && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Your subscription is set to cancel. Please reactivate your subscription before making any plan changes.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Downgrade Option for Startup Plan */}
       {subscription.plan === 'startup' && !subscription.cancel_at_period_end && (
         <Card>
@@ -545,7 +567,7 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Downgrade will take effect at the end of your current billing period
+              You'll be redirected to complete the downgrade process
             </p>
           </CardContent>
         </Card>
@@ -556,7 +578,8 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
         <Card className="bg-muted/50">
           <CardContent className="p-4">
             <p className="text-sm text-muted-foreground">
-              Access the Stripe customer portal to update payment methods, download invoices, and manage your billing information.
+              Access the Stripe customer portal to update payment methods, download invoices, and view your billing history.
+              To cancel your subscription, use the cancel button above. Your access will continue until the end of your billing period.
             </p>
           </CardContent>
         </Card>
@@ -568,25 +591,14 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Subscription</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel your subscription? You can choose to cancel immediately or at the end of your current billing period.
+              Are you sure you want to cancel your subscription? Your subscription will remain active until the end of your current billing period.
+              {subscription.current_period_end && (
+                <p className="mt-2 font-medium">
+                  You will have access until {format(new Date(subscription.current_period_end), 'MMMM d, yyyy')}
+                </p>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="space-y-4 py-4">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={cancelImmediate}
-                onChange={(e) => setCancelImmediate(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              <span className="text-sm">Cancel immediately (lose access now)</span>
-            </label>
-            {!cancelImmediate && subscription.current_period_end && (
-              <p className="text-sm text-muted-foreground">
-                Your subscription will remain active until {format(new Date(subscription.current_period_end), 'MMMM d, yyyy')}
-              </p>
-            )}
-          </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep Subscription</AlertDialogCancel>
             <AlertDialogAction

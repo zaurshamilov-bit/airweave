@@ -24,7 +24,9 @@ class BillingStatus(str, Enum):
     PAST_DUE = "past_due"
     CANCELED = "canceled"
     PAUSED = "paused"
+    TRIALING = "trialing"
     TRIAL_EXPIRED = "trial_expired"
+    GRACE_PERIOD = "grace_period"
 
 
 class PaymentStatus(str, Enum):
@@ -50,6 +52,7 @@ class OrganizationBillingCreate(OrganizationBillingBase):
 
     stripe_customer_id: str = Field(..., description="Stripe customer ID")
     trial_ends_at: Optional[datetime] = Field(None, description="Trial end date")
+    grace_period_ends_at: Optional[datetime] = Field(None, description="Grace period end date")
 
 
 class OrganizationBillingUpdate(BaseModel):
@@ -61,11 +64,14 @@ class OrganizationBillingUpdate(BaseModel):
     stripe_subscription_id: Optional[str] = None
     payment_method_id: Optional[str] = None
     trial_ends_at: Optional[datetime] = None
+    grace_period_ends_at: Optional[datetime] = None
+    payment_method_added: Optional[bool] = None
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
     cancel_at_period_end: Optional[bool] = None
     last_payment_status: Optional[PaymentStatus] = None
     last_payment_at: Optional[datetime] = None
+    billing_metadata: Optional[Dict[str, Any]] = None
 
 
 class OrganizationBillingInDBBase(OrganizationBillingBase):
@@ -78,12 +84,15 @@ class OrganizationBillingInDBBase(OrganizationBillingBase):
     stripe_customer_id: str
     stripe_subscription_id: Optional[str] = None
     trial_ends_at: Optional[datetime] = None
+    grace_period_ends_at: Optional[datetime] = None
+    payment_method_added: bool = False
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
     cancel_at_period_end: bool = False
     payment_method_id: Optional[str] = None
     last_payment_status: Optional[str] = None
     last_payment_at: Optional[datetime] = None
+    billing_metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     modified_at: datetime
 
@@ -109,6 +118,7 @@ class SubscriptionInfo(BaseModel):
     plan: str = Field(..., description="Current billing plan")
     status: str = Field(..., description="Subscription status")
     trial_ends_at: Optional[datetime] = Field(None, description="Trial end date")
+    grace_period_ends_at: Optional[datetime] = Field(None, description="Grace period end date")
     current_period_end: Optional[datetime] = Field(None, description="Current billing period end")
     cancel_at_period_end: bool = Field(
         False, description="Whether subscription will cancel at period end"
@@ -117,6 +127,12 @@ class SubscriptionInfo(BaseModel):
     is_oss: bool = Field(False, description="Whether using OSS version")
     has_active_subscription: bool = Field(
         False, description="Whether has active Stripe subscription"
+    )
+    in_trial: bool = Field(False, description="Whether currently in trial period")
+    in_grace_period: bool = Field(False, description="Whether currently in grace period")
+    payment_method_added: bool = Field(False, description="Whether payment method is added")
+    requires_payment_method: bool = Field(
+        False, description="Whether payment method is required now"
     )
 
 
@@ -148,9 +164,13 @@ class CustomerPortalResponse(BaseModel):
 
 
 class CancelSubscriptionRequest(BaseModel):
-    """Request to cancel subscription."""
+    """Request to cancel subscription.
 
-    immediate: bool = Field(False, description="Cancel immediately vs at period end")
+    Subscription will be canceled at the end of the current billing period.
+    For immediate cancellation, delete the organization instead.
+    """
+
+    # No fields needed - always cancels at period end
 
 
 class UpdatePlanRequest(BaseModel):

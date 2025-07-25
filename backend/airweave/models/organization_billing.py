@@ -2,65 +2,73 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.models._base import Base
+from airweave.schemas.organization_billing import BillingPlan, BillingStatus, PaymentStatus
 
 if TYPE_CHECKING:
     from airweave.models.organization import Organization
 
 
 class OrganizationBilling(Base):
-    """Organization billing information for Stripe integration."""
+    """Organization billing model."""
 
     __tablename__ = "organization_billing"
 
-    # Foreign key to organization (one-to-one relationship)
-    organization_id: Mapped[UUID] = mapped_column(
-        ForeignKey("organization.id", ondelete="CASCADE"), nullable=False, unique=True
+    # Foreign key to organization
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organization.id", ondelete="CASCADE"), unique=True
     )
 
-    stripe_customer_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(
-        String(255), unique=True, nullable=True
+    # Stripe IDs
+    stripe_customer_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    # Billing plan and status
+    billing_plan: Mapped[BillingPlan] = mapped_column(
+        Enum(BillingPlan), default=BillingPlan.TRIAL, nullable=False
+    )
+    billing_status: Mapped[BillingStatus] = mapped_column(
+        Enum(BillingStatus), default=BillingStatus.ACTIVE, nullable=False
     )
 
-    billing_plan: Mapped[str] = mapped_column(
-        String(50),
-        default="trial",
-        nullable=False,  # trial, developer, startup, enterprise
-    )
-    billing_status: Mapped[str] = mapped_column(
-        String(50),
-        default="active",  # active, past_due, canceled, paused, trial_expired
-        nullable=False,
-    )
-
+    # Trial tracking - now only used for tracking Stripe's trial
     trial_ends_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
+    # Grace period tracking for when payment method is not set
+    grace_period_ends_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    payment_method_added: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Subscription period tracking
     current_period_start: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     current_period_end: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    billing_email: Mapped[str] = mapped_column(String(255), nullable=False)
-    payment_method_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # Billing contact
+    billing_email: Mapped[str] = mapped_column(String, nullable=False)
 
-    last_payment_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Payment information
+    payment_method_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    last_payment_status: Mapped[Optional[PaymentStatus]] = mapped_column(
+        Enum(PaymentStatus), nullable=True
+    )
     last_payment_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
-    # Relationship to organization
-    organization: Mapped["Organization"] = relationship(
-        "Organization", back_populates="billing", lazy="noload"
-    )
+    # Metadata for additional billing info
+    billing_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True, default={})
+
+    # Relationship back to organization
+    organization: Mapped["Organization"] = relationship("Organization", back_populates="billing")
