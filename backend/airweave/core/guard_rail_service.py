@@ -6,6 +6,7 @@ from typing import Optional
 from uuid import UUID
 
 from airweave import crud
+from airweave.core.config import settings
 from airweave.core.exceptions import PaymentRequiredException, UsageLimitExceededException
 from airweave.core.logging import ContextualLogger
 from airweave.core.logging import logger as default_logger
@@ -88,6 +89,13 @@ class GuardRailService:
         """
         # Use lock to ensure thread-safe access to usage data
         async with self._lock:
+            # Bypass all checks for local development
+            if settings.LOCAL_DEVELOPMENT:
+                self.logger.debug(
+                    f"Local development mode allows action {action_type.value} without restrictions"
+                )
+                return True
+
             # First check payment status
             payment_status = await self._get_payment_status()
             restricted_actions = self.PAYMENT_STATUS_RESTRICTIONS.get(payment_status, set())
