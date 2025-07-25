@@ -5,6 +5,7 @@ from typing import Optional
 
 from airweave import schemas
 from airweave.core.datetime_utils import utc_now_naive
+from airweave.core.guard_rail_service import ActionType
 from airweave.core.shared_models import SyncJobStatus
 from airweave.core.sync_job_service import sync_job_service
 from airweave.platform.sync.context import SyncContext
@@ -61,6 +62,15 @@ class SyncOrchestrator:
         except Exception as e:
             await self._handle_sync_failure(e)
             raise
+        finally:
+            # Always flush guard rail usage to prevent data loss
+            try:
+                self.sync_context.logger.info("Flushing guard rail usage data...")
+                await self.sync_context.guard_rail.flush_all()
+            except Exception as flush_error:
+                self.sync_context.logger.error(
+                    f"Failed to flush guard rail usage: {flush_error}", exc_info=True
+                )
 
     async def _start_sync(self) -> None:
         """Initialize sync job and update status to in-progress."""
@@ -99,6 +109,9 @@ class SyncOrchestrator:
                 logger=self.sync_context.logger,
             ) as stream:
                 async for entity in stream.get_entities():
+                    # check if processing is allowed with guard rail
+                    await self.sync_context.guard_rail.is_allowed(ActionType.ENTITIES)
+
                     # Handle skipped entities without using a worker
                     if getattr(entity, "should_skip", False):
                         self.sync_context.logger.debug(f"Skipping entity: {entity.entity_id}")
@@ -118,6 +131,9 @@ class SyncOrchestrator:
                     # Clean up completed tasks periodically to avoid memory buildup
                     if len(pending_tasks) >= self.worker_pool.max_workers:
                         pending_tasks = await self._handle_completed_tasks(pending_tasks)
+
+                    # Note: Entity usage increment moved to EntityProcessor
+                    # where it knows if entity was actually processed (insert/update) vs kept
 
         except Exception as e:
             stream_error = e

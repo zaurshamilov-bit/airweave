@@ -29,6 +29,7 @@ import { protectedPaths } from "@/constants/paths";
 import { useSyncStateStore } from "@/stores/syncStateStore";
 import { syncStorageService } from "@/services/syncStorageService";
 import { deriveSyncStatus, getSyncStatusColorClass } from "@/utils/syncStatus";
+import { redirectWithError } from "@/lib/error-utils";
 
 // DeleteCollectionDialog component
 interface DeleteCollectionDialogProps {
@@ -457,9 +458,11 @@ const Collections = () => {
     const handleRefreshAllSources = async () => {
         if (!collection?.readable_id) return;
 
+        let response: Response | undefined;
+
         setIsRefreshingAll(true);
         try {
-            const response = await apiClient.post(`/collections/${collection.readable_id}/refresh_all`);
+            response = await apiClient.post(`/collections/${collection.readable_id}/refresh_all`);
 
             if (response.ok) {
                 const jobs = await response.json();
@@ -491,11 +494,43 @@ const Collections = () => {
             }
         } catch (error) {
             console.error("Error refreshing sources:", error);
-            toast({
-                title: "Error",
-                description: "Failed to refresh all sources",
-                variant: "destructive"
+
+            let errorMessage = "Failed to refresh all sources";
+            let errorDetails = "";
+
+            // Try to parse error response
+            if (error instanceof Error) {
+                errorMessage = error.message;
+                errorDetails = error.stack || "";
+            }
+
+            // If the error came from an API response, try to get more details
+            try {
+                if (response && !response.ok) {
+                    const errorData = await response.json();
+                    if (errorData.detail) {
+                        errorMessage = errorData.detail;
+                    } else if (errorData.message) {
+                        errorMessage = errorData.message;
+                    } else if (typeof errorData === 'string') {
+                        errorMessage = errorData;
+                    }
+                }
+            } catch (parseError) {
+                console.error("Could not parse error response:", parseError);
+            }
+
+            // Use redirectWithError to show the error in a dialog
+            redirectWithError(navigate, {
+                serviceName: collection?.name || "Collection",
+                sourceShortName: "collection",
+                errorMessage: errorMessage,
+                errorDetails: errorDetails,
+                canRetry: true,
+                dialogId: `refresh-all-${collection?.readable_id}`,
+                timestamp: Date.now()
             });
+
             setIsRefreshingAll(false);
         }
     };

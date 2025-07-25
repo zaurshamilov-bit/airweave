@@ -11,7 +11,8 @@ from airweave import crud, schemas
 from airweave.core import credentials
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
-from airweave.core.logging import ContextualLogger, LoggerConfigurator, logger
+from airweave.core.guard_rail_service import GuardRailService
+from airweave.core.logging import ContextualLogger, logger
 from airweave.platform.auth.services import oauth2_service
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
@@ -145,15 +146,11 @@ class SyncFactory:
         # Get source connection data first to access white_label_id safely
         source_connection_data = await cls._get_source_connection_data(db, sync, auth_context)
 
-        # Create a contextualized logger with all job metadata
-        logger = LoggerConfigurator.configure_logger(
-            "airweave.platform.sync",
-            dimensions={
-                "sync_id": str(sync.id),
-                "sync_job_id": str(sync_job.id),
-                "organization_id": str(auth_context.organization_id),
-                "source_connection_id": str(source_connection_data["connection_id"]),
-            },
+        # Create a contextualized logger starting from auth_context and add sync-specific context
+        contextual_logger = logger.from_auth_context(auth_context).with_context(
+            sync_id=str(sync.id),
+            sync_job_id=str(sync_job.id),
+            source_connection_id=str(source_connection_data["connection_id"]),
         )
 
         # Fetch white label if set in sync using pre-fetched white_label_id
@@ -169,9 +166,9 @@ class SyncFactory:
             auth_context=auth_context,
             white_label=white_label,
             access_token=access_token,
-            logger=logger,  # Pass the contextual logger
+            logger=contextual_logger,  # Pass the contextual logger
         )
-        embedding_model = cls._get_embedding_model(logger=logger)
+        embedding_model = cls._get_embedding_model(logger=contextual_logger)
         destinations = await cls._create_destination_instances(
             db=db,
             sync=sync,
@@ -183,6 +180,12 @@ class SyncFactory:
 
         progress = SyncProgress(sync_job.id)
         router = SyncDAGRouter(dag, entity_map)
+
+        # Create GuardRailService with contextual logger
+        guard_rail = GuardRailService(
+            organization_id=auth_context.organization_id,
+            logger=contextual_logger.with_context(component="guardrail"),
+        )
 
         return SyncContext(
             source=source,
@@ -198,7 +201,8 @@ class SyncFactory:
             router=router,
             entity_map=entity_map,
             auth_context=auth_context,
-            logger=logger,
+            guard_rail=guard_rail,
+            logger=contextual_logger,
             white_label=white_label,
         )
 

@@ -76,7 +76,7 @@ async def get_optimized_semantic_chunker(
 
     async with _cache_lock:
         if cache_key not in _semantic_chunker_cache:
-            logger.info(
+            logger.debug(
                 f"🧠 CHUNKER_CACHE_MISS [{entity_context}] Creating new semantic chunker for cache"
             )
 
@@ -93,9 +93,9 @@ async def get_optimized_semantic_chunker(
             # Create in thread pool
             chunker = await run_in_thread_pool(_create_semantic_chunker)
             _semantic_chunker_cache[cache_key] = chunker
-            logger.info(f"🧠 CHUNKER_CACHE_ADD [{entity_context}] Added chunker to cache")
+            logger.debug(f"🧠 CHUNKER_CACHE_ADD [{entity_context}] Added chunker to cache")
         else:
-            logger.info(f"🧠 CHUNKER_CACHE_HIT [{entity_context}] Using cached semantic chunker")
+            logger.debug(f"🧠 CHUNKER_CACHE_HIT [{entity_context}] Using cached semantic chunker")
 
     return _semantic_chunker_cache[cache_key]
 
@@ -110,18 +110,18 @@ async def _process_file_content(file: FileEntity, entity_context: str) -> str:
     extension = extension.lower()
 
     if extension == ".md":
-        logger.info(f"📑 CHUNKER_READ_MD [{entity_context}] Reading markdown file directly")
+        logger.debug(f"📑 CHUNKER_READ_MD [{entity_context}] Reading markdown file directly")
         async with aiofiles.open(file.local_path, "r", encoding="utf-8") as f:
             content = await f.read()
-        logger.info(f"📖 CHUNKER_READ_DONE [{entity_context}] Read {len(content)} characters")
+        logger.debug(f"📖 CHUNKER_READ_DONE [{entity_context}] Read {len(content)} characters")
         return content
     else:
-        logger.info(f"🔄 CHUNKER_CONVERT [{entity_context}] Converting file to markdown")
+        logger.debug(f"🔄 CHUNKER_CONVERT [{entity_context}] Converting file to markdown")
         result = await document_converter.convert(file.local_path)
         if not result or not result.text_content:
             logger.warning(f"🚫 CHUNKER_CONVERT_EMPTY [{entity_context}] No content extracted")
             return ""
-        logger.info(
+        logger.debug(
             f"✅ CHUNKER_CONVERT_DONE [{entity_context}] "
             f"Converted to {len(result.text_content)} characters"
         )
@@ -132,7 +132,7 @@ async def _chunk_text_content(text_content: str, entity_context: str) -> list[st
     """Chunk text content using recursive and semantic chunkers with optimization."""
     # Use optimized chunking if flag is set
     if USE_OPTIMIZED_CHUNKING:
-        logger.info(
+        logger.debug(
             f"🚀 CHUNKER_OPTIMIZED_MODE [{entity_context}] Using optimized token-based chunking"
         )
         from airweave.platform.transformers.optimized_file_chunker import _chunk_text_optimized
@@ -159,12 +159,12 @@ async def _chunk_text_content(text_content: str, entity_context: str) -> list[st
 
 async def _perform_recursive_chunking(text_content: str, entity_context: str) -> list:
     """Perform initial recursive chunking."""
-    logger.info(f"🔧 CHUNKER_RECURSIVE_START [{entity_context}] Starting recursive chunking")
+    logger.debug(f"🔧 CHUNKER_RECURSIVE_START [{entity_context}] Starting recursive chunking")
 
     recursive_chunker = get_recursive_chunker()
     initial_chunks = await run_in_thread_pool(recursive_chunker.chunk, text_content)
 
-    logger.info(
+    logger.debug(
         f"📝 CHUNKER_RECURSIVE_DONE [{entity_context}] Created {len(initial_chunks)} initial chunks"
     )
     return initial_chunks
@@ -190,7 +190,7 @@ async def _process_large_chunks_semantically(
     """Process large chunks using semantic chunking."""
     large_chunk_count = len(large_chunks_data)
 
-    logger.info(
+    logger.debug(
         f"🧠 CHUNKER_LARGE_CHUNKS [{entity_context}] "
         f"Found {large_chunk_count} large chunks that need semantic chunking"
     )
@@ -207,7 +207,7 @@ async def _process_large_chunks_semantically(
             return await _process_single_large_chunk(chunk_data, semantic_chunker, entity_context)
 
     # Process all chunks in parallel
-    logger.info(
+    logger.debug(
         f"🔄 CHUNKER_PARALLEL_START [{entity_context}] Processing {large_chunk_count} large chunks "
         f"in parallel (max concurrent: {max_concurrent})"
     )
@@ -215,7 +215,7 @@ async def _process_large_chunks_semantically(
     tasks = [process_with_limit(chunk_data) for chunk_data in large_chunks_data]
     results = await asyncio.gather(*tasks)
 
-    logger.info(
+    logger.debug(
         f"🔄 CHUNKER_SEMANTIC_SUMMARY [{entity_context}] Applied semantic chunking to "
         f"{large_chunk_count} large chunks in parallel"
     )
@@ -229,7 +229,7 @@ async def _process_single_large_chunk(
     """Process a single large chunk using semantic chunking."""
     idx, chunk = chunk_data
 
-    logger.info(
+    logger.debug(
         f"✂️  CHUNKER_SEMANTIC_SPLIT [{entity_context}] Processing large chunk {idx + 1} "
         f"({chunk.token_count} tokens)"
     )
@@ -243,7 +243,7 @@ async def _process_single_large_chunk(
 
     chunk_elapsed = asyncio.get_event_loop().time() - chunk_start
 
-    logger.info(
+    logger.debug(
         f"📦 CHUNKER_SEMANTIC_RESULT [{entity_context}] Large chunk {idx + 1} split into "
         f"{len(semantic_chunks)} semantic chunks in {chunk_elapsed:.3f}s"
     )
@@ -312,7 +312,7 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
     """
     entity_context = f"Entity({file.entity_id})"
 
-    logger.info(
+    logger.debug(
         f"📄 CHUNKER_START [{entity_context}] Starting file chunking for: {file.name} "
         f"(type: {type(file).__name__})"
     )
@@ -324,7 +324,7 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
 
     try:
         # Process file content
-        logger.info(f"🔍 CHUNKER_PROCESS [{entity_context}] Processing file content")
+        logger.debug(f"🔍 CHUNKER_PROCESS [{entity_context}] Processing file content")
         start_time = asyncio.get_event_loop().time()
 
         text_content = await _process_file_content(file, entity_context)
@@ -336,25 +336,25 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
             return []
 
         content_length = len(text_content)
-        logger.info(
+        logger.debug(
             f"📊 CHUNKER_CONTENT [{entity_context}] Processed {content_length} characters "
             f"in {process_elapsed:.2f}s"
         )
 
         # Chunk the content
-        logger.info(f"✂️  CHUNKER_SPLIT_START [{entity_context}] Starting text chunking")
+        logger.debug(f"✂️  CHUNKER_SPLIT_START [{entity_context}] Starting text chunking")
         chunk_start = asyncio.get_event_loop().time()
 
         final_chunk_texts = await _chunk_text_content(text_content, entity_context)
 
         chunk_elapsed = asyncio.get_event_loop().time() - chunk_start
-        logger.info(
+        logger.debug(
             f"📦 CHUNKER_SPLIT_DONE [{entity_context}] Created {len(final_chunk_texts)} chunks "
             f"in {chunk_elapsed:.2f}s"
         )
 
         # Create entities
-        logger.info(
+        logger.debug(
             f"🏗️  CHUNKER_ENTITIES_START [{entity_context}] Creating parent and chunk entities"
         )
 
@@ -407,7 +407,7 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
             produced_entities.append(chunk)
 
         total_elapsed = asyncio.get_event_loop().time() - start_time
-        logger.info(
+        logger.debug(
             f"✅ CHUNKER_COMPLETE [{entity_context}] Chunking completed in {total_elapsed:.2f}s "
             f"(1 parent + {len(final_chunk_texts)} chunks)"
         )
@@ -422,12 +422,12 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
                 await storage_manager.mark_entity_processed(
                     file.sync_id, file.entity_id, len(final_chunk_texts)
                 )
-                logger.info(
+                logger.debug(
                     f"📝 CHUNKER_MARKED_PROCESSED [{entity_context}] "
                     f"Marked entity as fully processed with {len(final_chunk_texts)} chunks"
                 )
             else:
-                logger.info(
+                logger.debug(
                     f"🏥 CHUNKER_CTTI_SKIP_MARK [{entity_context}] "
                     f"Skipping mark_processed for CTTI entity (uses global deduplication)"
                 )
@@ -443,7 +443,7 @@ async def file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
             from airweave.platform.storage import storage_manager
 
             await storage_manager.cleanup_temp_file(file.local_path)
-            logger.info(
+            logger.debug(
                 f"🧹 CHUNKER_CLEANUP [{entity_context}] Cleaned up temp file: {file.local_path}"
             )
 

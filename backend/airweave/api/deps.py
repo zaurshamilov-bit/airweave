@@ -171,6 +171,7 @@ async def get_logger(
 
 async def get_guard_rail_service(
     auth_context: AuthContext = Depends(get_auth_context),
+    contextual_logger: ContextualLogger = Depends(get_logger),
 ) -> GuardRailService:
     """Get a GuardRailService instance for the current organization.
 
@@ -180,12 +181,16 @@ async def get_guard_rail_service(
     Args:
     ----
         auth_context (AuthContext): The authentication context containing organization_id.
+        contextual_logger (ContextualLogger): Logger with authentication context.
 
     Returns:
     -------
         GuardRailService: An instance configured for the current organization.
     """
-    return GuardRailService(organization_id=auth_context.organization_id)
+    return GuardRailService(
+        organization_id=auth_context.organization_id,
+        logger=contextual_logger.with_context(component="guardrail"),
+    )
 
 
 async def get_user(

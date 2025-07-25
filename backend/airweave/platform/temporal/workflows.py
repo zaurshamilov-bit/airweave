@@ -24,7 +24,7 @@ class RunSourceConnectionWorkflow:
         sync_dag_dict: Dict[str, Any],
         collection_dict: Dict[str, Any],
         source_connection_dict: Dict[str, Any],
-        user_dict: Dict[str, Any],
+        auth_context_dict: Dict[str, Any],
         access_token: Optional[str] = None,
     ) -> None:
         """Run the source connection sync workflow.
@@ -35,7 +35,7 @@ class RunSourceConnectionWorkflow:
             sync_dag_dict: The sync DAG as dict
             collection_dict: The collection as dict
             source_connection_dict: The source connection as dict
-            user_dict: The current user as dict
+            auth_context_dict: The authentication context as dict
             access_token: Optional access token
         """
         # Import inside the workflow to avoid issues
@@ -57,7 +57,7 @@ class RunSourceConnectionWorkflow:
                     sync_dag_dict,
                     collection_dict,
                     source_connection_dict,
-                    user_dict,
+                    auth_context_dict,
                     access_token,
                 ],
                 start_to_close_timeout=timedelta(days=7),
@@ -81,7 +81,7 @@ class RunSourceConnectionWorkflow:
                     args=[
                         sync_job_id,
                         "cancelled",  # Use Python enum value
-                        user_dict,
+                        auth_context_dict,
                         error_message,
                         workflow.now()
                         .replace(tzinfo=None)
@@ -115,7 +115,7 @@ class RunSourceConnectionWorkflow:
                         args=[
                             sync_job_id,
                             "cancelled",  # Use Python enum value for cancellation
-                            user_dict,
+                            auth_context_dict,
                             error_message,
                             workflow.now()
                             .replace(tzinfo=None)
@@ -151,7 +151,7 @@ class RunSourceConnectionWorkflow:
                     args=[
                         sync_job_id,
                         "failed",
-                        user_dict,
+                        auth_context_dict,
                         error_message,  # Now contains the actual error
                         workflow.now().replace(tzinfo=None).isoformat(),
                     ],
@@ -177,7 +177,7 @@ class RunSourceConnectionWorkflow:
                     args=[
                         sync_job_id,
                         "failed",  # Use Python enum value
-                        user_dict,
+                        auth_context_dict,
                         error_message,
                         workflow.now()
                         .replace(tzinfo=None)

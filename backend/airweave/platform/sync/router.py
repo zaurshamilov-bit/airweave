@@ -41,7 +41,7 @@ class SyncDAGRouter:
 
     async def initialize_transformer_cache(self, db: AsyncSession) -> None:
         """Pre-load all transformers to eliminate database lookups during processing."""
-        logger.info("🔧 ROUTER_CACHE_INIT Initializing transformer cache")
+        logger.debug("🔧 ROUTER_CACHE_INIT Initializing transformer cache")
         cache_start = asyncio.get_event_loop().time()
 
         # Get all transformer IDs used in the DAG
@@ -55,10 +55,10 @@ class SyncDAGRouter:
             transformer = await crud.transformer.get(db, id=transformer_id)
             if transformer:
                 self._transformer_cache[transformer_id] = transformer
-                logger.info(f"🔧 ROUTER_CACHE_ADD Cached transformer: {transformer.method_name}")
+                logger.debug(f"🔧 ROUTER_CACHE_ADD Cached transformer: {transformer.method_name}")
 
         cache_elapsed = asyncio.get_event_loop().time() - cache_start
-        logger.info(
+        logger.debug(
             f"✅ ROUTER_CACHE_READY Transformer cache initialized in {cache_elapsed:.3f}s "
             f"({len(self._transformer_cache)} transformers cached)"
         )
@@ -128,17 +128,17 @@ class SyncDAGRouter:
         Raises:
             ValueError: If no matching entity definition is found
         """
-        logger.info(f"🔍 ROUTER_LOOKUP_DEF Looking up definition for {entity_type.__name__}")
+        logger.debug(f"🔍 ROUTER_LOOKUP_DEF Looking up definition for {entity_type.__name__}")
 
         # First try direct lookup
         if entity_type in self.entity_map:
-            logger.info(f"✅ ROUTER_DIRECT_MATCH Found direct match for {entity_type.__name__}")
+            logger.debug(f"✅ ROUTER_DIRECT_MATCH Found direct match for {entity_type.__name__}")
             return self.entity_map[entity_type]
 
         # Handle PolymorphicEntity subclasses
         if hasattr(entity_type, "__mro__") and issubclass(entity_type, PolymorphicEntity):
             RESERVED_TABLE_ENTITY_ID = UUID("11111111-1111-1111-1111-111111111111")
-            logger.info(
+            logger.debug(
                 f"🏷️  ROUTER_POLYMORPHIC Using reserved ID for "
                 f"PolymorphicEntity {entity_type.__name__}"
             )
@@ -148,24 +148,24 @@ class SyncDAGRouter:
         entity_name = entity_type.__name__
         entity_module = entity_type.__module__
 
-        logger.info(f"🔍 ROUTER_DYNAMIC_LOOKUP Searching for dynamic class pattern: {entity_name}")
+        logger.debug(f"🔍 ROUTER_DYNAMIC_LOOKUP Searching for dynamic class pattern: {entity_name}")
 
         base_name = None
         if entity_name.endswith("Parent"):
             base_name = entity_name.replace("Parent", "Entity")
-            logger.info(
+            logger.debug(
                 f"🔍 ROUTER_PARENT_PATTERN Detected Parent class, looking for base: {base_name}"
             )
         elif entity_name.endswith("Chunk"):
             base_name = entity_name.replace("Chunk", "Entity")
-            logger.info(
+            logger.debug(
                 f"🔍 ROUTER_CHUNK_PATTERN Detected Chunk class, looking for base: {base_name}"
             )
 
         if base_name:
             for cls, definition_id in self.entity_map.items():
                 if cls.__name__ == base_name and cls.__module__ == entity_module:
-                    logger.info(
+                    logger.debug(
                         f"✅ ROUTER_BASE_MATCH Found base class {base_name} for {entity_name}"
                     )
                     # Cache the result for future lookups
@@ -181,7 +181,7 @@ class SyncDAGRouter:
         entity_type = type(entity)
         router_start = asyncio.get_event_loop().time()
 
-        logger.info(
+        logger.debug(
             f"🔀 ROUTER_START [{entity_context}] Routing entity of type {entity_type.__name__} "
             f"from producer {producer_id}"
         )
@@ -225,7 +225,7 @@ class SyncDAGRouter:
         self, entity: BaseEntity, entity_context: str, router_start: float
     ) -> list[BaseEntity]:
         """Handle CodeFileEntity processing with chunking and optional summarization."""
-        logger.info(
+        logger.debug(
             f"💻 ROUTER_CODE_FILE [{entity_context}] Detected CodeFileEntity, applying code chunker"
         )
         chunk_start = asyncio.get_event_loop().time()
@@ -233,7 +233,7 @@ class SyncDAGRouter:
         transformed_entities = await code_file_chunker(entity)
 
         chunk_elapsed = asyncio.get_event_loop().time() - chunk_start
-        logger.info(
+        logger.debug(
             f"💻 ROUTER_CODE_CHUNK_DONE [{entity_context}] "
             f"Code chunking complete in {chunk_elapsed:.3f}s "
             f"({len(transformed_entities)} chunks created)"
@@ -245,7 +245,7 @@ class SyncDAGRouter:
             )
 
         total_elapsed = asyncio.get_event_loop().time() - router_start
-        logger.info(
+        logger.debug(
             f"✅ ROUTER_CODE_COMPLETE [{entity_context}] "
             f"Code processing complete in {total_elapsed:.3f}s"
         )
@@ -255,15 +255,15 @@ class SyncDAGRouter:
         self, transformed_entities: list[BaseEntity], entity_context: str
     ) -> list[BaseEntity]:
         """Apply code summarization to transformed entities."""
-        logger.info(f"📝 ROUTER_CODE_SUMMARY_START [{entity_context}] Applying code summarizer")
+        logger.debug(f"📝 ROUTER_CODE_SUMMARY_START [{entity_context}] Applying code summarizer")
         summary_start = asyncio.get_event_loop().time()
 
         for i, transformed_entity in enumerate(transformed_entities):
-            logger.info(f"📝 ROUTER_CODE_SUMMARY_{i} [{entity_context}] Summarizing chunk {i + 1}")
+            logger.debug(f"📝 ROUTER_CODE_SUMMARY_{i} [{entity_context}] Summarizing chunk {i + 1}")
             transformed_entity = await code_file_summarizer(transformed_entity)
 
         summary_elapsed = asyncio.get_event_loop().time() - summary_start
-        logger.info(
+        logger.debug(
             f"📝 ROUTER_CODE_SUMMARY_DONE [{entity_context}] Summarization complete "
             f"in {summary_elapsed:.3f}s"
         )
@@ -274,7 +274,7 @@ class SyncDAGRouter:
     ) -> list[BaseEntity]:
         """Handle regular FileEntity processing."""
         entity_type = type(entity)
-        logger.info(
+        logger.debug(
             f"📄 ROUTER_FILE [{entity_context}] Detected FileEntity "
             f"(type: {entity_type.__name__}), applying file chunker"
         )
@@ -286,21 +286,23 @@ class SyncDAGRouter:
                 optimized_file_chunker,
             )
 
-            logger.info(f"🚀 ROUTER_FILE_OPTIMIZED [{entity_context}] Using optimized file chunker")
+            logger.debug(
+                f"🚀 ROUTER_FILE_OPTIMIZED [{entity_context}] Using optimized file chunker"
+            )
             transformed_entities = await optimized_file_chunker(entity)
         except ImportError:
-            logger.info(f"📄 ROUTER_FILE_DEFAULT [{entity_context}] Using default file chunker")
+            logger.debug(f"📄 ROUTER_FILE_DEFAULT [{entity_context}] Using default file chunker")
             transformed_entities = await file_chunker(entity)
 
         chunk_elapsed = asyncio.get_event_loop().time() - chunk_start
-        logger.info(
+        logger.debug(
             f"📄 ROUTER_FILE_CHUNK_DONE [{entity_context}] "
             f"File chunking complete in {chunk_elapsed:.3f}s "
             f"({len(transformed_entities)} entities created)"
         )
 
         total_elapsed = asyncio.get_event_loop().time() - router_start
-        logger.info(
+        logger.debug(
             f"✅ ROUTER_FILE_COMPLETE [{entity_context}] "
             f"File processing complete in {total_elapsed:.3f}s"
         )
@@ -310,7 +312,7 @@ class SyncDAGRouter:
         self, entity: BaseEntity, entity_context: str, router_start: float
     ) -> list[BaseEntity]:
         """Handle ChunkEntity field processing."""
-        logger.info(
+        logger.debug(
             f"🔧 ROUTER_CHUNK_FIELD [{entity_context}] Detected ChunkEntity, applying field chunker"
         )
         field_start = asyncio.get_event_loop().time()
@@ -320,18 +322,18 @@ class SyncDAGRouter:
         field_elapsed = asyncio.get_event_loop().time() - field_start
 
         if len(chunked_entities) > 1:
-            logger.info(
+            logger.debug(
                 f"🔧 ROUTER_CHUNK_FIELD_SPLIT [{entity_context}] "
                 f"Entity split into {len(chunked_entities)} parts in {field_elapsed:.3f}s"
             )
             total_elapsed = asyncio.get_event_loop().time() - router_start
-            logger.info(
+            logger.debug(
                 f"✅ ROUTER_CHUNK_COMPLETE [{entity_context}] "
                 f"Field chunking complete in {total_elapsed:.3f}s"
             )
             return chunked_entities
         else:
-            logger.info(f"🔧 ROUTER_CHUNK_FIELD_KEEP [{entity_context}] No field chunking needed")
+            logger.debug(f"🔧 ROUTER_CHUNK_FIELD_KEEP [{entity_context}] No field chunking needed")
             # Continue with normal DAG routing since no chunking occurred
             return [entity]
 
@@ -344,11 +346,11 @@ class SyncDAGRouter:
         router_start: float,
     ) -> list[BaseEntity]:
         """Handle normal DAG routing for entities."""
-        logger.info(f"🗺️  ROUTER_DAG_START [{entity_context}] Starting normal DAG routing")
+        logger.debug(f"🗺️  ROUTER_DAG_START [{entity_context}] Starting normal DAG routing")
 
         try:
             entity_definition_id = self._get_entity_definition_id(entity_type)
-            logger.info(
+            logger.debug(
                 f"🆔 ROUTER_ENTITY_DEF [{entity_context}] "
                 f"Found entity definition ID: {entity_definition_id}"
             )
@@ -362,11 +364,11 @@ class SyncDAGRouter:
         route_key = (producer_id, entity_definition_id)
 
         if route_key not in self.route:
-            logger.info(
+            logger.debug(
                 f"🛑 ROUTER_NO_ROUTE [{entity_context}] No route found, treating as destination"
             )
             total_elapsed = asyncio.get_event_loop().time() - router_start
-            logger.info(
+            logger.debug(
                 f"✅ ROUTER_DESTINATION [{entity_context}] "
                 f"Routing to destination in {total_elapsed:.3f}s"
             )
@@ -375,11 +377,11 @@ class SyncDAGRouter:
         consumer_id = self.route[route_key]
 
         if consumer_id is None:
-            logger.info(
+            logger.debug(
                 f"🏁 ROUTER_TERMINAL [{entity_context}] Terminal route, sending to destination"
             )
             total_elapsed = asyncio.get_event_loop().time() - router_start
-            logger.info(
+            logger.debug(
                 f"✅ ROUTER_TERMINAL_COMPLETE [{entity_context}] "
                 f"Terminal routing complete in {total_elapsed:.3f}s"
             )
@@ -387,7 +389,7 @@ class SyncDAGRouter:
 
         # Get the consumer node and apply transformer
         consumer = self.dag.get_node(consumer_id)
-        logger.info(
+        logger.debug(
             f"🔄 ROUTER_TRANSFORM [{entity_context}] Applying transformer from node {consumer_id} "
             f"(type: {consumer.type})"
         )
@@ -396,7 +398,7 @@ class SyncDAGRouter:
         transformed_entities = await self._apply_transformer(consumer, entity)
         transform_elapsed = asyncio.get_event_loop().time() - transform_start
 
-        logger.info(
+        logger.debug(
             f"🔄 ROUTER_TRANSFORM_DONE [{entity_context}] "
             f"Transformation complete in {transform_elapsed:.3f}s "
             f"({len(transformed_entities)} entities produced)"
@@ -415,7 +417,7 @@ class SyncDAGRouter:
         router_start: float,
     ) -> list[BaseEntity]:
         """Route transformed entities recursively."""
-        logger.info(
+        logger.debug(
             f"🔁 ROUTER_RECURSIVE [{entity_context}] "
             f"Routing {len(transformed_entities)} transformed entities"
         )
@@ -423,7 +425,7 @@ class SyncDAGRouter:
 
         result_entities = []
         for i, transformed_entity in enumerate(transformed_entities):
-            logger.info(
+            logger.debug(
                 f"🔁 ROUTER_RECURSIVE_{i} [{entity_context}] Routing transformed entity {i + 1}"
             )
             sub_entities = await self.process_entity(consumer_id, transformed_entity)
@@ -432,12 +434,12 @@ class SyncDAGRouter:
         recursive_elapsed = asyncio.get_event_loop().time() - recursive_start
         total_elapsed = asyncio.get_event_loop().time() - router_start
 
-        logger.info(
+        logger.debug(
             f"🔁 ROUTER_RECURSIVE_DONE [{entity_context}] "
             f"Recursive routing complete in {recursive_elapsed:.3f}s "
             f"({len(result_entities)} final entities)"
         )
-        logger.info(
+        logger.debug(
             f"✅ ROUTER_COMPLETE [{entity_context}] All routing complete in {total_elapsed:.3f}s"
         )
 
@@ -452,7 +454,7 @@ class SyncDAGRouter:
         entity_context = f"Entity({entity.entity_id})"
 
         if consumer.transformer_id:
-            logger.info(
+            logger.debug(
                 f"🔧 ROUTER_TRANSFORMER_LOOKUP [{entity_context}] "
                 f"Looking up transformer {consumer.transformer_id}"
             )
@@ -475,20 +477,20 @@ class SyncDAGRouter:
                         self._transformer_cache[consumer.transformer_id] = transformer
 
             lookup_elapsed = asyncio.get_event_loop().time() - lookup_start
-            logger.info(
+            logger.debug(
                 f"🔧 ROUTER_TRANSFORMER_FOUND [{entity_context}] "
                 f"Transformer found in {lookup_elapsed:.3f}s "
                 f"(cached: {consumer.transformer_id in self._transformer_cache})"
             )
 
-            logger.info(f"⚙️  ROUTER_TRANSFORMER_APPLY [{entity_context}] Applying transformer")
+            logger.debug(f"⚙️  ROUTER_TRANSFORMER_APPLY [{entity_context}] Applying transformer")
             apply_start = asyncio.get_event_loop().time()
 
             transformer_callable = resource_locator.get_transformer(transformer)
             result = await transformer_callable(entity)
 
             apply_elapsed = asyncio.get_event_loop().time() - apply_start
-            logger.info(
+            logger.debug(
                 f"⚙️  ROUTER_TRANSFORMER_DONE [{entity_context}] "
                 f"Transformer applied in {apply_elapsed:.3f}s "
                 f"(produced {len(result)} entities)"

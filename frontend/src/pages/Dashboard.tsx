@@ -10,7 +10,7 @@ import {
   ApiKeyCard,
   ExampleProjectCard,
 } from "@/components/dashboard";
-import { clearStoredErrorDetails } from "@/lib/error-utils";
+import { clearStoredErrorDetails, getStoredErrorDetails } from "@/lib/error-utils";
 import { DialogFlow } from "@/components/shared/DialogFlow";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 
@@ -66,6 +66,24 @@ const Dashboard = () => {
 
   // Error state for connection errors
   const [connectionError, setConnectionError] = useState<any>(null);
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+
+  // Check for connection errors on mount
+  useEffect(() => {
+    const connectionStatus = searchParams.get('connected');
+    if (connectionStatus === 'error') {
+      const errorDetails = getStoredErrorDetails();
+      if (errorDetails) {
+        console.log("🔔 [Dashboard] Found stored error details:", errorDetails);
+        setConnectionError(errorDetails);
+        setErrorDialogOpen(true);
+
+        // Clean up URL
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      }
+    }
+  }, [searchParams]);
 
   // Initialize Zustand store subscribers
   useEffect(() => {
@@ -114,6 +132,13 @@ const Dashboard = () => {
     fetchCollections();
   };
 
+  // Handle error dialog close
+  const handleErrorDialogClose = () => {
+    setErrorDialogOpen(false);
+    setConnectionError(null);
+    clearStoredErrorDetails();
+  };
+
   // Top 3 collections
   const topCollections = collections.slice(0, 3);
 
@@ -143,6 +168,18 @@ const Dashboard = () => {
           fetchCollections(false);
         }}
       />
+
+      {/* Error Dialog - for displaying errors from other pages */}
+      {connectionError && (
+        <DialogFlow
+          isOpen={errorDialogOpen}
+          onOpenChange={setErrorDialogOpen}
+          mode="source-button"
+          dialogId="dashboard-error-dialog"
+          errorData={connectionError}
+          onComplete={handleErrorDialogClose}
+        />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Main content (left column) */}

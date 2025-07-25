@@ -29,6 +29,8 @@ import { useSyncStateStore, SyncProgressUpdate } from "@/stores/syncStateStore";
 import { syncStorageService } from "@/services/syncStorageService";
 import { deriveSyncStatus, getSyncStatusColorClass, getSyncStatusDisplayText } from "@/utils/syncStatus";
 import { utcNow, parseBackendTimestamp, calculateRuntime, formatRuntime } from "@/utils/dateTime";
+import { useNavigate } from "react-router-dom";
+import { redirectWithError } from "@/lib/error-utils";
 
 const nodeTypes = {
     sourceNode: SourceNode,
@@ -390,6 +392,7 @@ const SourceConnectionDetailView = ({
 }: SourceConnectionDetailViewProps) => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
+    const navigate = useNavigate();
 
     // Sync state store
     const { subscribe, getProgressForSource, hasActiveSubscription, restoreProgressFromStorage } = useSyncStateStore();
@@ -618,10 +621,12 @@ const SourceConnectionDetailView = ({
             return;
         }
 
+        let response: Response | undefined;
+
         try {
             setIsInitiatingSyncJob(true);
             console.log("Starting sync job...");
-            const response = await apiClient.post(`/source-connections/${sourceConnection.id}/run`);
+            response = await apiClient.post(`/source-connections/${sourceConnection.id}/run`);
 
             if (!response.ok) {
                 throw new Error("Failed to start sync job");
@@ -662,10 +667,41 @@ const SourceConnectionDetailView = ({
 
         } catch (error) {
             console.error("Error running sync:", error);
-            toast({
-                title: "Error",
-                description: "Failed to start sync job",
-                variant: "destructive"
+
+            let errorMessage = "Failed to start sync job";
+            let errorDetails = "";
+
+            // Try to parse error response
+            if (error instanceof Error) {
+                errorMessage = error.message;
+                errorDetails = error.stack || "";
+            }
+
+            // If the error came from an API response, try to get more details
+            try {
+                if (response && !response.ok) {
+                    const errorData = await response.json();
+                    if (errorData.detail) {
+                        errorMessage = errorData.detail;
+                    } else if (errorData.message) {
+                        errorMessage = errorData.message;
+                    } else if (typeof errorData === 'string') {
+                        errorMessage = errorData;
+                    }
+                }
+            } catch (parseError) {
+                console.error("Could not parse error response:", parseError);
+            }
+
+            // Use redirectWithError to show the error in a dialog
+            redirectWithError(navigate, {
+                serviceName: sourceConnection?.name || "Sync Job",
+                sourceShortName: sourceConnection?.short_name || "sync",
+                errorMessage: errorMessage,
+                errorDetails: errorDetails,
+                canRetry: true,
+                dialogId: `sync-${sourceConnectionId}`,
+                timestamp: Date.now()
             });
         } finally {
             setIsInitiatingSyncJob(false);

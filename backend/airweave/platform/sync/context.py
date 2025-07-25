@@ -4,6 +4,7 @@ from typing import Optional
 from uuid import UUID
 
 from airweave import schemas
+from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import ContextualLogger
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
@@ -29,6 +30,7 @@ class SyncContext:
     - router - the DAG router
     - collection - the collection that the sync is for
     - source connection - the source connection that the sync is for
+    - guard rail - the guard rail service
     - white label (optional)
     - logger - contextual logger with sync job metadata
     """
@@ -46,6 +48,7 @@ class SyncContext:
     source_connection: schemas.Connection
     entity_map: dict[type[BaseEntity], UUID]
     auth_context: AuthContext
+    guard_rail: GuardRailService
     logger: ContextualLogger
 
     white_label: Optional[schemas.WhiteLabel] = None
@@ -65,6 +68,7 @@ class SyncContext:
         source_connection: schemas.Connection,
         entity_map: dict[type[BaseEntity], UUID],
         auth_context: AuthContext,
+        guard_rail: GuardRailService,
         logger: ContextualLogger,
         white_label: Optional[schemas.WhiteLabel] = None,
     ):
@@ -82,5 +86,6 @@ class SyncContext:
         self.source_connection = source_connection
         self.entity_map = entity_map
         self.auth_context = auth_context
+        self.guard_rail = guard_rail
         self.white_label = white_label
         self.logger = logger

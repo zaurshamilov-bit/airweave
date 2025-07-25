@@ -32,7 +32,7 @@ class AsyncWorkerPool:
         """
         task_id = f"task_{len(self.pending_tasks) + 1}"
 
-        logger.info(
+        logger.debug(
             f"🔄 WORKER_SUBMIT [{task_id}] Submitting task to worker pool "
             f"(pending: {len(self.pending_tasks)}/{self.max_workers})"
         )
@@ -51,13 +51,13 @@ class AsyncWorkerPool:
         """
         thread_id = threading.get_ident()
 
-        logger.info(
+        logger.debug(
             f"⏳ WORKER_WAIT [{task_id}] Waiting for semaphore "
             f"(thread: {thread_id}, available: {self.semaphore._value})"
         )
 
         async with self.semaphore:
-            logger.info(
+            logger.debug(
                 f"🚀 WORKER_START [{task_id}] Acquired semaphore, starting execution "
                 f"(thread: {thread_id})"
             )
@@ -67,7 +67,7 @@ class AsyncWorkerPool:
                 result = await coro(*args, **kwargs)
                 elapsed = asyncio.get_event_loop().time() - start_time
 
-                logger.info(
+                logger.debug(
                     f"✅ WORKER_COMPLETE [{task_id}] Task completed successfully "
                     f"in {elapsed:.2f}s (thread: {thread_id})"
                 )
@@ -93,4 +93,4 @@ class AsyncWorkerPool:
                 f"💥 WORKER_EXCEPTION [{task_id}] Task completed with exception: {task.exception()}"
             )
         else:
-            logger.info(f"🏁 WORKER_CLEANUP [{task_id}] Task cleaned up successfully")
+            logger.debug(f"🏁 WORKER_CLEANUP [{task_id}] Task cleaned up successfully")

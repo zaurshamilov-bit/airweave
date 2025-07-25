@@ -67,7 +67,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             timeout=1200.0,  # 20 minutes total timeout (was 10 minutes default)
             max_retries=2,  # Retry on transient errors
         )
-        logger.info("Created shared OpenAI client with 20 minute timeout")
+        logger.debug("Created shared OpenAI client with 20 minute timeout")
 
     @staticmethod
     def _count_tokens(txt: str) -> int:  # ~1 µs – negligible
@@ -117,13 +117,13 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         context_prefix = f"{entity_context} " if entity_context else ""
 
         if not text.strip():
-            self.logger.info(
+            self.logger.debug(
                 f"{context_prefix}Empty text provided for embedding, returning zero vector"
             )
             return [0.0] * self.vector_dimensions
 
         used_model = model or self.embedding_model
-        self.logger.info(
+        self.logger.debug(
             f"{context_prefix}Embedding single text with model {used_model} "
             f"(text length: {len(text)})"
         )
@@ -136,7 +136,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
 
             embedding = response.data[0].embedding
             cpu_elapsed = loop.time() - cpu_start
-            self.logger.info(
+            self.logger.debug(
                 f"{context_prefix}Embedding completed in {cpu_elapsed:.2f}s, "
                 f"vector size: {len(embedding)}"
             )
@@ -166,10 +166,10 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         context_prefix = f"{entity_context} " if entity_context else ""
 
         if not texts:
-            self.logger.info(f"📭 OPENAI_EMPTY [{context_prefix}] Empty texts list provided")
+            self.logger.debug(f"📭 OPENAI_EMPTY [{context_prefix}] Empty texts list provided")
             return []
 
-        self.logger.info(
+        self.logger.debug(
             f"🤖 OPENAI_START [{context_prefix}] Starting batch embedding for {len(texts)} texts"
         )
 
@@ -178,7 +178,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         filtered_texts, empty_indices = filtered_result
 
         if not filtered_texts:
-            self.logger.info(f"📭 OPENAI_ALL_EMPTY [{context_prefix}] All texts were empty")
+            self.logger.debug(f"📭 OPENAI_ALL_EMPTY [{context_prefix}] All texts were empty")
             return [[0.0] * self.vector_dimensions] * len(texts)
 
         self._log_processing_stats(filtered_texts, empty_indices, context_prefix)
@@ -213,7 +213,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         total_chars = sum(len(text) for text in filtered_texts)
         avg_chars = total_chars / len(filtered_texts) if filtered_texts else 0
 
-        self.logger.info(
+        self.logger.debug(
             f"📊 OPENAI_STATS [{context_prefix}] Processing {len(filtered_texts)} non-empty texts "
             f"(skipped {len(empty_indices)} empty, avg chars: {avg_chars:.0f})"
         )
@@ -261,7 +261,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         if current_batch:
             batches.append(current_batch)
 
-        self.logger.info(
+        self.logger.debug(
             f"📦 OPENAI_BATCHES [{context_prefix}] Created {len(batches)} batches "
             f"from {len(texts)} texts"
         )
@@ -271,7 +271,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
 
         async def process_batch_with_limit(batch, batch_idx):
             async with semaphore:
-                self.logger.info(
+                self.logger.debug(
                     f"🔄 OPENAI_BATCH_START [{context_prefix}] Processing batch "
                     f"{batch_idx + 1}/{len(batches)} ({len(batch)} texts)"
                 )
@@ -291,7 +291,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             embeddings.extend(batch_embeddings)
 
         cpu_elapsed = loop.time() - cpu_start
-        self.logger.info(
+        self.logger.debug(
             f"✅ OPENAI_COMPLETE [{context_prefix}] All {len(batches)} batches completed "
             f"in {cpu_elapsed:.2f}s ({len(embeddings)} vectors returned)"
         )
@@ -307,7 +307,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         try:
             response = await self._rate_limited_embed(batch, model, encoding_format)
             embeddings = [e.embedding for e in response.data]
-            self.logger.info(
+            self.logger.debug(
                 "✅ OPENAI_BATCH_SUCCESS [%s] %d tokens, %.2fs",
                 context_prefix,
                 len(batch),
@@ -389,11 +389,11 @@ class OpenAIText2Vec(BaseEmbeddingModel):
                 result.append(embeddings[embedding_idx])
                 embedding_idx += 1
 
-        self.logger.info(f"📦 OPENAI_FINAL Final result: {len(result)} vectors")
+        self.logger.debug(f"📦 OPENAI_FINAL Final result: {len(result)} vectors")
         return result
 
     async def close(self):
         """Clean up the shared client when done."""
         if self._client:
             await self._client.close()
-            self.logger.info("OpenAI client closed successfully")
+            self.logger.debug("OpenAI client closed successfully")
