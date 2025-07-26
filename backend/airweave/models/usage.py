@@ -1,14 +1,15 @@
 """Usage model for tracking organization subscription usage."""
 
-from datetime import date
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+from uuid import UUID
 
-from sqlalchemy import Date, Index, Integer
+from sqlalchemy import ForeignKey, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.models._base import OrganizationBase
 
 if TYPE_CHECKING:
+    from airweave.models.billing_period import BillingPeriod
     from airweave.models.organization import Organization
 
 
@@ -17,9 +18,12 @@ class Usage(OrganizationBase):
 
     __tablename__ = "usage"
 
-    # Billing period fields
-    start_period: Mapped[date] = mapped_column(Date, nullable=False)
-    end_period: Mapped[date] = mapped_column(Date, nullable=False)
+    # Link to billing period (unique constraint ensures one usage per period)
+    billing_period_id: Mapped[Optional[UUID]] = mapped_column(
+        ForeignKey("billing_period.id", ondelete="CASCADE"),
+        nullable=True,  # Nullable initially for migration
+        unique=True,
+    )
 
     # Usage counters with server defaults
     syncs: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
@@ -28,9 +32,15 @@ class Usage(OrganizationBase):
     collections: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     source_connections: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
-    # Relationship to organization
+    # Relationships
     organization: Mapped["Organization"] = relationship(
         "Organization",
+        back_populates="usage",
+        lazy="noload",
+    )
+
+    billing_period: Mapped[Optional["BillingPeriod"]] = relationship(
+        "BillingPeriod",
         back_populates="usage",
         lazy="noload",
     )
@@ -38,6 +48,6 @@ class Usage(OrganizationBase):
     __table_args__ = (
         # Index for efficient lookup by organization
         Index("ix_usage_organization_id", "organization_id"),
-        # Composite index for efficient querying of most recent period
-        Index("ix_usage_organization_id_end_period", "organization_id", "end_period"),
+        # Index for efficient lookup by billing period
+        Index("ix_usage_billing_period_id", "billing_period_id"),
     )

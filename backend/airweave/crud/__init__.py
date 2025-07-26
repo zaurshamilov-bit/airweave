@@ -2,6 +2,7 @@
 
 from .crud_api_key import api_key
 from .crud_auth_provider import auth_provider
+from .crud_billing_period import billing_period
 from .crud_collection import collection
 from .crud_connection import connection
 from .crud_dag import sync_dag
@@ -25,6 +26,7 @@ __all__ = [
     # Existing CRUD instances
     "api_key",
     "auth_provider",
+    "billing_period",
     "collection",
     "connection",
     "destination",

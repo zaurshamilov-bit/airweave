@@ -3,11 +3,10 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.models._base import Base
-from airweave.schemas.organization_billing import BillingPlan, BillingStatus, PaymentStatus
 
 if TYPE_CHECKING:
     from airweave.models.organization import Organization
@@ -28,12 +27,8 @@ class OrganizationBilling(Base):
     stripe_subscription_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Billing plan and status
-    billing_plan: Mapped[BillingPlan] = mapped_column(
-        Enum(BillingPlan), default=BillingPlan.TRIAL, nullable=False
-    )
-    billing_status: Mapped[BillingStatus] = mapped_column(
-        Enum(BillingStatus), default=BillingStatus.ACTIVE, nullable=False
-    )
+    billing_plan: Mapped[str] = mapped_column(String(50), default="TRIAL", nullable=False)
+    billing_status: Mapped[str] = mapped_column(String(50), default="ACTIVE", nullable=False)
 
     # Trial tracking - now only used for tracking Stripe's trial
     trial_ends_at: Mapped[Optional[datetime]] = mapped_column(
@@ -55,14 +50,18 @@ class OrganizationBilling(Base):
     )
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Pending plan change tracking (for downgrades)
+    pending_plan_change: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    pending_plan_change_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Billing contact
     billing_email: Mapped[str] = mapped_column(String, nullable=False)
 
     # Payment information
     payment_method_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    last_payment_status: Mapped[Optional[PaymentStatus]] = mapped_column(
-        Enum(PaymentStatus), nullable=True
-    )
+    last_payment_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     last_payment_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

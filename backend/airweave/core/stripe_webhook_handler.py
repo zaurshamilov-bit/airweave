@@ -80,7 +80,9 @@ class StripeWebhookHandler:
         if "items" in previous_attributes:
             logger.info(f"Subscription {subscription.id} plan changed")
 
-        await billing_service.handle_subscription_updated(self.db, subscription)
+        await billing_service.handle_subscription_updated(
+            self.db, subscription, previous_attributes
+        )
 
     async def _handle_subscription_deleted(self, event: stripe.Event) -> None:
         """Handle subscription cancellation/deletion.

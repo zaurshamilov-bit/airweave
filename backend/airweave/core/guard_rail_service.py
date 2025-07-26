@@ -261,13 +261,15 @@ class GuardRailService:
         """Get usage from the database using crud_usage.
 
         Returns:
-            The most recent usage record for the organization, or None if not found
+            The current usage record for the organization's active billing period,
+            or None if not found.
         """
         self.logger.debug(
             f"Fetching current usage from database for organization {self.organization_id}"
         )
         async with get_db_context() as db:
-            usage_record = await crud.usage.get_most_recent_by_organization_id(
+            # Get usage for current billing period
+            usage_record = await crud.usage.get_current_usage(
                 db, organization_id=self.organization_id
             )
             if usage_record:
@@ -280,7 +282,7 @@ class GuardRailService:
                 )
                 return usage
             else:
-                self.logger.info("No usage record found, treating as fresh organization")
+                self.logger.info("No usage record found for current billing period")
                 return None
 
     async def _get_payment_status(self) -> PaymentStatus:

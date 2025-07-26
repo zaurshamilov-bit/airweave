@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from airweave.models._base import Base
 
 if TYPE_CHECKING:
+    from airweave.models.billing_period import BillingPeriod
     from airweave.models.organization_billing import OrganizationBilling
     from airweave.models.usage import Usage
     from airweave.models.user_organization import UserOrganization
@@ -48,4 +49,13 @@ class Organization(Base):
         cascade="all, delete-orphan",
         lazy="noload",
         uselist=False,  # One-to-one
+    )
+
+    # Relationship with billing periods
+    billing_periods: Mapped[List["BillingPeriod"]] = relationship(
+        "BillingPeriod",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+        lazy="noload",
+        order_by="desc(BillingPeriod.period_start)",  # Most recent first
     )

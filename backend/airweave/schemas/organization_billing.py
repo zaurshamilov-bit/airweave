@@ -69,6 +69,8 @@ class OrganizationBillingUpdate(BaseModel):
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
     cancel_at_period_end: Optional[bool] = None
+    pending_plan_change: Optional[BillingPlan] = None
+    pending_plan_change_at: Optional[datetime] = None
     last_payment_status: Optional[PaymentStatus] = None
     last_payment_at: Optional[datetime] = None
     billing_metadata: Optional[Dict[str, Any]] = None

@@ -1,6 +1,6 @@
 """Usage schemas for tracking organization subscription limits."""
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -10,13 +10,13 @@ from pydantic import BaseModel, Field
 class UsageBase(BaseModel):
     """Base schema for usage tracking."""
 
-    start_period: date = Field(
+    organization_id: UUID = Field(
         ...,
-        description="Start date of the billing period.",
+        description="Organization this usage belongs to.",
     )
-    end_period: date = Field(
-        ...,
-        description="End date of the billing period.",
+    billing_period_id: Optional[UUID] = Field(
+        None,
+        description="Billing period this usage belongs to.",
     )
     syncs: int = Field(
         0,
@@ -50,21 +50,21 @@ class UsageBase(BaseModel):
         from_attributes = True
 
 
-class UsageCreate(UsageBase):
+class UsageCreate(BaseModel):
     """Schema for creating usage records.
 
     Usage records track resource consumption per billing period.
-    A new record is typically created at the start of each billing month.
     """
 
-    # All fields inherit from UsageBase, start_period and end_period are required
+    organization_id: UUID = Field(..., description="Organization ID")
+    billing_period_id: UUID = Field(..., description="Billing period ID")
+    # All counters default to 0 in the base schema
 
 
 class UsageUpdate(BaseModel):
     """Schema for updating usage counters.
 
     All fields are optional, allowing partial updates of specific counters.
-    Note: start_period and end_period cannot be updated after creation.
     """
 
     syncs: Optional[int] = Field(
@@ -101,10 +101,6 @@ class UsageInDBBase(UsageBase):
         ...,
         description="Unique identifier for the usage record.",
     )
-    organization_id: UUID = Field(
-        ...,
-        description="Organization this usage record belongs to.",
-    )
     created_at: datetime = Field(
         ...,
         description="Timestamp when the usage record was created.",
@@ -130,8 +126,7 @@ class Usage(UsageInDBBase):
                 {
                     "id": "550e8400-e29b-41d4-a716-446655440000",
                     "organization_id": "org12345-6789-abcd-ef01-234567890abc",
-                    "start_period": "2024-01-01",
-                    "end_period": "2024-01-31",
+                    "billing_period_id": "period123-4567-89ab-cdef-0123456789ab",
                     "syncs": 5,
                     "entities": 10000,
                     "queries": 250,
