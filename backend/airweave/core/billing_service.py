@@ -327,7 +327,7 @@ class BillingService:
     async def _handle_plan_downgrade(
         self,
         db: AsyncSession,
-        billing_model: Any,
+        billing_model: schemas.OrganizationBilling,
         organization_id: UUID,
         new_plan: str,
         new_price_id: str,

@@ -268,11 +268,16 @@ class StripeClient:
                     update_params["proration_behavior"] = proration_behavior
 
                 else:
-                    raise ExternalServiceError(
-                        f"No subscription items found to update for subscription {subscription_id}."
-                        f" Status: {subscription.status}, "
-                        f"Cancel at period end: {subscription.cancel_at_period_end}"
+                    # No items - add the price as a new item
+                    logger.info(
+                        f"No items found on subscription {subscription_id}, adding new item"
                     )
+                    update_params["items"] = [
+                        {
+                            "price": price_id,
+                        }
+                    ]
+                    update_params["proration_behavior"] = proration_behavior
 
             return stripe.Subscription.modify(subscription_id, **update_params)
 

@@ -693,7 +693,7 @@ export const Onboarding = () => {
             {teamMembers.length > 0 && (
               <div className="space-y-4 mt-6">
                 <div>
-                  <h3 className="text-sm font-medium text-foreground">Team members to invite</h3>
+                  <h3 className="text-sm font-medium text-foreground pt-2">Team members to invite</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {teamMembers.length} of {currentPlanLimit - 1} team members added
                   </p>
@@ -701,7 +701,7 @@ export const Onboarding = () => {
 
                 <div className="border border-border rounded-lg divide-y divide-border">
                   {teamMembers.map((member, index) => (
-                    <div key={index} className="flex items-center justify-between py-3 px-4">
+                    <div key={index} className="flex items-center justify-between py-2 px-4">
                       <div className="flex items-center gap-3">
                         <div className="text-sm">{member.email}</div>
                         <span className={cn(
@@ -725,9 +725,6 @@ export const Onboarding = () => {
               </div>
             )}
 
-              <p className="text-xs text-muted-foreground">
-                You can always invite more team members later from your organization settings
-              </p>
             </div>
           </div>
         );
@@ -831,14 +828,17 @@ export const Onboarding = () => {
               onClick={handleComplete}
               disabled={!isStepValid() || isCreating}
               className={cn(
-                "flex items-center space-x-2 px-4 py-2 rounded-lg transition-all",
+                "flex items-center space-x-2 px-3 py-1.5 rounded-lg transition-all",
                 isStepValid() && !isCreating
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-muted text-muted-foreground cursor-not-allowed"
               )}
             >
               {isCreating ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <>
+                  <span>Complete Setup</span>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                </>
               ) : (
                 <>
                   <span>Complete Setup</span>
