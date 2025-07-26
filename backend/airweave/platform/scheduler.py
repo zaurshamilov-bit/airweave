@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
-from airweave.core.datetime_utils import utc_now, utc_now_naive
+from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus, SyncStatus
 from airweave.core.source_connection_service import source_connection_service
@@ -76,7 +76,7 @@ class PlatformScheduler:
                 return
 
             logger.debug(f"Found {len(syncs)} syncs with cron schedules")
-            now = utc_now()
+            now = utc_now_naive()  # Changed from utc_now() to utc_now_naive()
 
             # Process each sync
             for sync in syncs:
@@ -86,19 +86,21 @@ class PlatformScheduler:
 
                     # Get the last run time (or use epoch if never run)
                     last_run_time = (
-                        ensure_utc(latest_job.created_at)
+                        latest_job.created_at  # Remove ensure_utc - already naive from DB
                         if latest_job
-                        else datetime.fromtimestamp(0, tz=timezone.utc)
+                        else datetime.fromtimestamp(0, tz=timezone.utc).replace(
+                            tzinfo=None
+                        )  # Make it naive
                     )
 
                     # Calculate the next run time
                     cron = croniter(sync.cron_schedule, last_run_time)
-                    next_run = ensure_utc(cron.get_next(datetime))
+                    next_run = cron.get_next(datetime)  # Remove ensure_utc - keep it naive
 
                     # If next run is in the past, calculate from now
                     if next_run < now:
                         cron = croniter(sync.cron_schedule, now)
-                        next_run = ensure_utc(cron.get_next(datetime))
+                        next_run = cron.get_next(datetime)  # Remove ensure_utc - keep it naive
 
                     # Update the sync
                     auth_context = AuthContext(
@@ -281,16 +283,16 @@ class PlatformScheduler:
 
         # Get the last run time (or use epoch if never run)
         last_run_time = (
-            ensure_utc(latest_job.created_at)
+            latest_job.created_at  # Remove ensure_utc - already naive from DB
             if latest_job
-            else datetime.fromtimestamp(0, tz=timezone.utc)
+            else datetime.fromtimestamp(0, tz=timezone.utc).replace(tzinfo=None)  # Make it naive
         )
         logger.debug(f"Last run time for sync {sync.id}: {last_run_time.isoformat()}")
 
         # Calculate the next run time
-        now = utc_now()  # Changed from utc_now_naive() to utc_now() for timezone consistency
+        now = utc_now_naive()  # Changed from utc_now() to utc_now_naive() for consistency
         cron = croniter(sync.cron_schedule, last_run_time)
-        next_run = ensure_utc(cron.get_next(datetime))
+        next_run = cron.get_next(datetime)  # Remove ensure_utc - keep it naive
         logger.debug(
             f"Calculated next run for sync {sync.id} at {next_run.isoformat()} "
             f"(cron: {sync.cron_schedule})"
@@ -299,7 +301,8 @@ class PlatformScheduler:
         # If next_scheduled_run is None or different from what we calculated, update it
         if (
             sync.next_scheduled_run is None
-            or abs((ensure_utc(sync.next_scheduled_run) - next_run).total_seconds()) > 1
+            or abs((sync.next_scheduled_run - next_run).total_seconds())
+            > 1  # Remove ensure_utc - already naive
         ):
             logger.debug(
                 f"Updating next_scheduled_run for sync {sync.id} from "
