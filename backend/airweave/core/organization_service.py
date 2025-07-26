@@ -8,10 +8,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+
+# Import billing dependencies only if Stripe is enabled
+from airweave.core.config import settings
 from airweave.core.logging import logger
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.integrations.auth0_management import auth0_management_client
 from airweave.models import Organization, User, UserOrganization
+from airweave.schemas.auth import AuthContext
+
+if settings.STRIPE_ENABLED:
+    from airweave.core.billing_service import billing_service
+    from airweave.integrations.stripe_client import stripe_client
 
 
 class OrganizationService:
@@ -42,6 +50,13 @@ class OrganizationService:
         Raises:
             Exception: If organization creation fails
         """
+        # Use the new method if Stripe is enabled
+        if settings.STRIPE_ENABLED:
+            return await self.create_organization_with_full_integration(
+                db=db, org_data=org_data, owner_user=owner_user
+            )
+
+        # Original implementation for non-Stripe environments
         auth0_org_data = None
 
         logger.info(f"Creating Auth0 organization for: {org_data.name}")
@@ -55,27 +70,7 @@ class OrganizationService:
         await auth0_management_client.add_user_to_organization(auth0_org_id, owner_user.auth0_id)
 
         # Enable default connections for the new organization
-        # Define the connections to be enabled by default
-        default_connection_names = [
-            "Username-Password-Authentication",
-            "google-oauth2",
-            "github",
-        ]
-
-        # Get all available connections from Auth0
-        all_connections = await auth0_management_client.get_all_connections()
-
-        # Find the connection IDs for our default connections
-        connections_to_enable = [
-            conn["id"] for conn in all_connections if conn["name"] in default_connection_names
-        ]
-
-        # Enable each connection for the new organization
-        for conn_id in connections_to_enable:
-            await auth0_management_client.add_enabled_connection_to_organization(
-                auth0_org_id, conn_id
-            )
-            logger.info(f"Enabled connection {conn_id} for organization {auth0_org_id}")
+        await self._setup_auth0_connections(auth0_org_id)
 
         logger.info(f"Successfully created Auth0 organization: {auth0_org_id}")
 
@@ -122,6 +117,145 @@ class OrganizationService:
                 if auth0_org_data:
                     await auth0_management_client.delete_organization(auth0_org_id)
                 raise
+
+    async def create_organization_with_full_integration(
+        self, db: AsyncSession, org_data: schemas.OrganizationCreate, owner_user: User
+    ) -> schemas.Organization:
+        """Create organization with Auth0 and Stripe integration in a single transaction.
+
+        This method ensures atomicity across all external services:
+        1. Creates Auth0 organization
+        2. Creates Stripe customer
+        3. Creates local organization with billing
+
+        On any failure, all changes are rolled back.
+
+        Args:
+            db: Database session
+            org_data: Organization creation data
+            owner_user: User who will own the organization
+
+        Returns:
+            Created organization with billing info
+
+        Raises:
+            Exception: If any step fails, all changes are rolled back
+        """
+        auth0_org_data = None
+        stripe_customer = None
+
+        try:
+            # Step 1: Create Auth0 organization
+            logger.info(f"Creating Auth0 organization for: {org_data.name}")
+            auth0_org_data = await auth0_management_client.create_organization(
+                name=self._create_org_name(org_data),
+                display_name=org_data.name,
+            )
+            auth0_org_id = auth0_org_data["id"]
+
+            # Add user to Auth0 organization
+            await auth0_management_client.add_user_to_organization(
+                auth0_org_id, owner_user.auth0_id
+            )
+
+            # Enable default connections
+            await self._setup_auth0_connections(auth0_org_id)
+
+            # Step 2: Create Stripe customer
+            logger.info(f"Creating Stripe customer for: {org_data.name}")
+            stripe_customer = await stripe_client.create_customer(
+                email=owner_user.email,
+                name=org_data.name,
+                metadata={
+                    "auth0_org_id": auth0_org_id,
+                    "owner_user_id": str(owner_user.id),
+                    "organization_name": org_data.name,
+                },
+            )
+            logger.info(f"Created Stripe customer: {stripe_customer.id}")
+
+            # Step 3: Create local organization with both integrations
+            async with UnitOfWork(db) as uow:
+                # Prepare organization data
+                org_dict = org_data.model_dump()
+                org_dict["auth0_org_id"] = auth0_org_id
+
+                # Create organization with owner
+                local_org = await crud.organization.create_with_owner(
+                    db=db,
+                    obj_in=schemas.OrganizationCreate(**org_dict),
+                    owner_user=owner_user,
+                    uow=uow,
+                )
+                local_org_schema = schemas.Organization.model_validate(local_org)
+
+                # Create system auth context for billing record creation
+                system_auth = AuthContext(
+                    organization_id=local_org_schema.id,
+                    user=None,
+                    auth_method="system",
+                    auth_metadata={"source": "organization_creation"},
+                )
+
+                # Create billing record
+                _ = await billing_service.create_billing_record_with_transaction(
+                    db=db,
+                    organization=local_org_schema,
+                    stripe_customer_id=stripe_customer.id,
+                    billing_email=owner_user.email,
+                    auth_context=system_auth,
+                    uow=uow,
+                )
+
+                # Commit the transaction
+                await uow.commit()
+
+                logger.info(
+                    f"Successfully created organization with all integrations: "
+                    f"{local_org_schema.id}"
+                )
+                return local_org_schema
+
+        except Exception as e:
+            # Rollback everything on failure
+            logger.error(f"Failed to create organization: {e}")
+
+            # Cleanup Auth0
+            if auth0_org_data:
+                try:
+                    await auth0_management_client.delete_organization(auth0_org_id)
+                    logger.info(f"Rolled back Auth0 organization: {auth0_org_id}")
+                except Exception as cleanup_error:
+                    logger.error(f"Failed to cleanup Auth0 organization: {cleanup_error}")
+
+            # Cleanup Stripe
+            if stripe_customer:
+                try:
+                    await stripe_client.delete_customer(stripe_customer.id)
+                    logger.info(f"Rolled back Stripe customer: {stripe_customer.id}")
+                except Exception as cleanup_error:
+                    logger.error(f"Failed to cleanup Stripe customer: {cleanup_error}")
+
+            raise
+
+    async def _setup_auth0_connections(self, auth0_org_id: str) -> None:
+        """Setup default Auth0 connections for organization."""
+        default_connection_names = [
+            "Username-Password-Authentication",
+            "google-oauth2",
+            "github",
+        ]
+
+        all_connections = await auth0_management_client.get_all_connections()
+        connections_to_enable = [
+            conn["id"] for conn in all_connections if conn["name"] in default_connection_names
+        ]
+
+        for conn_id in connections_to_enable:
+            await auth0_management_client.add_enabled_connection_to_organization(
+                auth0_org_id, conn_id
+            )
+            logger.info(f"Enabled connection {conn_id} for organization {auth0_org_id}")
 
     async def handle_new_user_signup(
         self, db: AsyncSession, user_data: Dict, create_org: bool = False
@@ -396,6 +530,26 @@ class OrganizationService:
                     logger.warning(f"Failed to delete Auth0 organization {org.auth0_org_id}: {e}")
                     # Continue with local deletion even if Auth0 deletion fails
                     # This prevents the organization from being stuck in a partially deleted state
+
+            # Delete billing record if Stripe is enabled
+            if settings.STRIPE_ENABLED:
+                try:
+                    org_billing = await crud.organization_billing.get_by_organization(
+                        db, organization_id=organization_id
+                    )
+                    if not org_billing:
+                        logger.warning(f"No billing record found for organization {org.name}")
+                    else:
+                        await stripe_client.cancel_subscription(
+                            subscription_id=org_billing.stripe_subscription_id,
+                            cancel_at_period_end=False,
+                        )
+                    logger.info(f"Successfully deleted billing record for organization: {org.name}")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to delete billing record for organization {org.name}: {e}"
+                    )
+                    # Continue with deletion even if billing cleanup fails
 
             # Delete from local database - need to clean up foreign key references first
             from sqlalchemy import delete

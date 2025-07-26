@@ -34,6 +34,7 @@ import { DialogFlow } from '@/components/shared';
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 import { useOrganizationStore } from "@/lib/stores/organizations";
 import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
+import { BillingGuard } from "@/components/BillingGuard";
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
@@ -414,24 +415,48 @@ const DashboardLayout = () => {
                 </div>
               </header>
 
-              <div className={cn(
-                "h-[calc(100%-4rem)]",
-                isNonScrollable ? "overflow-hidden" : "pb-8"
-              )}>
-                {location.pathname === "/api-keys" ? (
-                  <div className="container pb-8 pt-8">
-                    <div className="flex items-center gap-2 mb-8">
-                      <Key className="h-8 w-8 text-primary" />
-                      <h1 className="text-3xl font-bold">API Keys</h1>
+              {location.pathname.startsWith('/billing') ? (
+                // Don't wrap billing pages with BillingGuard to avoid infinite loops
+                <div className={cn(
+                  "h-[calc(100%-4rem)]",
+                  isNonScrollable ? "overflow-hidden" : "pb-8"
+                )}>
+                  {location.pathname === "/api-keys" ? (
+                    <div className="container pb-8 pt-8">
+                      <div className="flex items-center gap-2 mb-8">
+                        <Key className="h-6 w-6" />
+                        <h1 className="text-2xl font-semibold">API Keys</h1>
+                      </div>
+                      <div className="max-w-4xl">
+                        <APIKeysSettings />
+                      </div>
                     </div>
-                    <div className="max-w-4xl">
-                      <APIKeysSettings />
-                    </div>
+                  ) : (
+                    <Outlet />
+                  )}
+                </div>
+              ) : (
+                <BillingGuard>
+                  <div className={cn(
+                    "h-[calc(100%-4rem)]",
+                    isNonScrollable ? "overflow-hidden" : "pb-8"
+                  )}>
+                    {location.pathname === "/api-keys" ? (
+                      <div className="container pb-8 pt-8">
+                        <div className="flex items-center gap-2 mb-8">
+                          <Key className="h-6 w-6" />
+                          <h1 className="text-2xl font-semibold">API Keys</h1>
+                        </div>
+                        <div className="max-w-4xl">
+                          <APIKeysSettings />
+                        </div>
+                      </div>
+                    ) : (
+                      <Outlet />
+                    )}
                   </div>
-                ) : (
-                  <Outlet />
-                )}
-              </div>
+                </BillingGuard>
+              )}
             </div>
           </div>
         </div>

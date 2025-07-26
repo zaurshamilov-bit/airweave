@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertCircle, Mail, Users, Loader2 } from 'lucide-react';
+import { AlertCircle, Mail, Users, Loader2, Plus } from 'lucide-react';
 
 export const NoOrganization = () => {
   const { logout } = useAuth();
@@ -14,6 +14,10 @@ export const NoOrganization = () => {
 
   const handleSignOut = () => {
     logout();
+  };
+
+  const handleCreateOrganization = () => {
+    navigate('/onboarding');
   };
 
   const checkForOrganizations = async () => {
@@ -70,6 +74,25 @@ export const NoOrganization = () => {
         </CardHeader>
 
         <CardContent className="space-y-4">
+          <Button
+            onClick={handleCreateOrganization}
+            className="w-full"
+            size="lg"
+            disabled={isChecking}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create New Organization
+          </Button>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Or</span>
+            </div>
+          </div>
+
           <div className="flex items-start space-x-3 rounded-lg border p-4">
             <Users className="h-5 w-5 mt-0.5 text-muted-foreground" />
             <div className="flex-1 space-y-1">

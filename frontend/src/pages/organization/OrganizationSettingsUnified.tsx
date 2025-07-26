@@ -5,17 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
-  Plus, Crown, Shield, Users, Check, Copy, Star
+  Plus, Crown, Shield, Users, Check, Copy, Star, CreditCard
 } from 'lucide-react';
 import { CreateOrganizationModal } from '@/components/organization';
 import { APIKeysSettings } from '@/components/settings/APIKeysSettings';
 import { MembersSettings } from '@/components/settings/MembersSettings';
+import { BillingSettings } from '@/components/settings/BillingSettings';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 import { OrganizationSettings } from '@/components/settings/OrganizationSettings';
 
-type TabType = 'settings' | 'api-keys' | 'members';
+type TabType = 'settings' | 'api-keys' | 'members' | 'billing';
 
 export const OrganizationSettingsUnified = () => {
   const [searchParams] = useSearchParams();
@@ -46,6 +47,17 @@ export const OrganizationSettingsUnified = () => {
     const tabFromUrl = searchParams.get('tab') as TabType || 'settings';
     setActiveTab(tabFromUrl);
   }, [searchParams]);
+
+  // Check for billing success parameter
+  useEffect(() => {
+    if (searchParams.get('success') === 'true' && activeTab === 'billing') {
+      toast.success('Subscription activated successfully!');
+      // Remove the success parameter from URL
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete('success');
+      navigate(`/organization/settings?${newSearchParams.toString()}`, { replace: true });
+    }
+  }, [searchParams, activeTab, navigate]);
 
   const handleCreateOrgSuccess = (newOrganization: any) => {
     console.log('New organization created from settings:', newOrganization);
@@ -156,9 +168,10 @@ export const OrganizationSettingsUnified = () => {
   }
 
   const tabs = [
-    { id: 'settings' as TabType, label: 'Settings' },
-    { id: 'api-keys' as TabType, label: 'API Keys' },
-    { id: 'members' as TabType, label: 'Members' }
+    { id: 'settings' as TabType, label: 'Settings', icon: null },
+    { id: 'api-keys' as TabType, label: 'API Keys', icon: null },
+    { id: 'members' as TabType, label: 'Members', icon: null },
+    { id: 'billing' as TabType, label: 'Billing', icon: <CreditCard className="h-3.5 w-3.5" /> }
   ];
 
   return (
@@ -220,6 +233,7 @@ export const OrganizationSettingsUnified = () => {
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
+                  {tab.icon}
                   {tab.label}
                 </button>
               );
@@ -253,6 +267,13 @@ export const OrganizationSettingsUnified = () => {
             {activeTab === 'members' && (
               <MembersSettings
                 currentOrganization={currentOrganization}
+              />
+            )}
+
+            {/* Billing Tab */}
+            {activeTab === 'billing' && (
+              <BillingSettings
+                organizationId={currentOrganization.id}
               />
             )}
           </div>

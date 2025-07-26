@@ -1,5 +1,5 @@
 ---
-description: Useful if trying to understand backend or editing something in the backend.
+globs: **/backend/**
 alwaysApply: false
 ---
 # Airweave Backend Architecture
@@ -19,7 +19,7 @@ alwaysApply: false
 ### Data Access Layer
 - **CRUD Modules** (`crud/`): Database operations for each entity
 - **Unit of Work**: Transaction management with atomic operations
-- **Database Session**: Async SQLAlchemy session management
+- **Database Session**: Async SQLAlchemy session management. This extra care must be applied with lazy objects and sessions.
 
 ### Domain Layer
 - **Models** (`models/`): Database models (SQLAlchemy ORM)

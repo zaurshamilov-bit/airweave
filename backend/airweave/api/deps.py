@@ -224,6 +224,8 @@ async def get_user(
         user, _, _ = await _authenticate_system_user(db)
     # Auth0 auth
     else:
+        if not auth0_user:
+            raise HTTPException(status_code=401, detail="User email not found in Auth0")
         user, _, _ = await _authenticate_auth0_user(db, auth0_user)
 
     if not user:

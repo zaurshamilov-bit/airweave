@@ -124,6 +124,13 @@ class Settings(BaseSettings):
     TEMPORAL_ENABLED: bool = False
     TEMPORAL_DISABLE_SANDBOX: bool = False
 
+    # Stripe billing settings
+    STRIPE_ENABLED: bool = False
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_DEVELOPER_PRICE_ID: str = ""
+    STRIPE_STARTUP_PRICE_ID: str = ""
+
     # Sync configuration
     SYNC_MAX_WORKERS: int = 100
     SYNC_THREAD_POOL_SIZE: int = 100
