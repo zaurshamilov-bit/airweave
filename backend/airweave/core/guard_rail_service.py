@@ -98,6 +98,7 @@ class GuardRailService:
         self.usage: Optional[Usage] = None
         self.usage_limit: Optional[UsageLimit] = None
         self.usage_fetched_at: Optional[datetime] = None
+        self._has_billing: Optional[bool] = None  # Cache whether org has billing
         # Track pending increments in memory
         self.pending_increments = {
             ActionType.SYNCS: 0,
@@ -108,6 +109,29 @@ class GuardRailService:
         }
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
+
+    async def _check_has_billing(self) -> bool:
+        """Check if the organization has billing enabled.
+
+        Returns:
+            True if organization has billing records, False for legacy organizations
+        """
+        if self._has_billing is not None:
+            return self._has_billing
+
+        async with get_db_context() as db:
+            # Check if organization has billing record
+            billing_record = await crud.organization_billing.get_by_organization(
+                db, organization_id=self.organization_id
+            )
+            self._has_billing = billing_record is not None
+
+            if not self._has_billing:
+                self.logger.info(
+                    f"Organization {self.organization_id} is a legacy organization without billing"
+                )
+
+        return self._has_billing
 
     async def is_allowed(self, action_type: ActionType) -> bool:
         """Check if the action is allowed.
@@ -128,6 +152,15 @@ class GuardRailService:
             if settings.LOCAL_DEVELOPMENT:
                 self.logger.debug(
                     f"Local development mode allows action {action_type.value} without restrictions"
+                )
+                return True
+
+            # Check if organization has billing - legacy orgs are exempt
+            has_billing = await self._check_has_billing()
+            if not has_billing:
+                self.logger.debug(
+                    f"Legacy organization {self.organization_id} - allowing "
+                    f"action {action_type.value} without billing checks"
                 )
                 return True
 
@@ -202,6 +235,14 @@ class GuardRailService:
         """
         # Use lock to ensure thread-safe increment and flush
         async with self._lock:
+            # Skip incrementing for legacy organizations
+            has_billing = await self._check_has_billing()
+            if not has_billing:
+                self.logger.debug(
+                    f"Skipping usage increment for legacy organization {self.organization_id}"
+                )
+                return
+
             # Add to pending increments
             self.pending_increments[action_type] = (
                 self.pending_increments.get(action_type, 0) + amount
@@ -225,6 +266,14 @@ class GuardRailService:
         Args:
             action_type: If specified, only flush this action type. Otherwise flush all.
         """
+        # Skip flushing for legacy organizations
+        has_billing = await self._check_has_billing()
+        if not has_billing:
+            self.logger.debug(
+                f"Skipping usage flush for legacy organization {self.organization_id}"
+            )
+            return
+
         self.logger.info(
             f"\n\nFlushing usage to database for {action_type or 'all action types'}\n\n"
         )
@@ -326,8 +375,8 @@ class GuardRailService:
         Returns:
             BillingPeriodStatus based on the current billing period
 
-        Raises:
-            InvalidStateError: If no billing period exists or status is missing
+        Note:
+            This method assumes billing exists - should only be called after checking _has_billing
         """
         async with get_db_context() as db:
             # Get current billing period
@@ -336,20 +385,21 @@ class GuardRailService:
             )
 
             if not current_period:
-                from airweave.core.exceptions import InvalidStateError
-
-                raise InvalidStateError(
-                    f"No active billing period found for organization {self.organization_id}. "
-                    "Cannot determine billing status."
+                # For organizations with billing but no active period, default to ACTIVE
+                # This can happen during transitions or initial setup
+                self.logger.warning(
+                    f"Organization {self.organization_id} has billing but no active period. "
+                    "Defaulting to ACTIVE status."
                 )
+                return BillingPeriodStatus.ACTIVE
 
             if not current_period.status:
-                from airweave.core.exceptions import InvalidStateError
-
-                raise InvalidStateError(
-                    f"Billing period {current_period.id} has no status set. "
-                    "This indicates a data integrity issue."
+                # This should not happen, but handle gracefully
+                self.logger.error(
+                    f"Billing period {current_period.id} has no status. "
+                    "Defaulting to ACTIVE status."
                 )
+                return BillingPeriodStatus.ACTIVE
 
             self.logger.info(
                 f"\n\nRetrieved billing period for organization {self.organization_id}: "
@@ -366,8 +416,8 @@ class GuardRailService:
         Returns:
             UsageLimit based on organization's subscription tier
 
-        Raises:
-            InvalidStateError: If no billing period exists for the organization
+        Note:
+            This method assumes billing exists - should only be called after checking _has_billing
         """
         async with get_db_context() as db:
             # Get current billing period
@@ -376,20 +426,20 @@ class GuardRailService:
             )
 
             if not current_period or not current_period.plan:
-                from airweave.core.exceptions import InvalidStateError
-
-                raise InvalidStateError(
+                # Default to developer limits if no period found
+                self.logger.warning(
                     f"No active billing period found for organization {self.organization_id}. "
-                    "Please ensure billing is properly configured."
+                    "Using developer plan limits as default."
                 )
-
-            plan = current_period.plan
-            self.logger.info(
-                f"\n\nRetrieved billing period for limits calculation: "
-                f"plan={plan}, status={current_period.status}, "
-                f"period_id={current_period.id}, "
-                f"organization_id={self.organization_id}\n\n"
-            )
+                plan = BillingPlan.DEVELOPER
+            else:
+                plan = current_period.plan
+                self.logger.info(
+                    f"\n\nRetrieved billing period for limits calculation: "
+                    f"plan={plan}, status={current_period.status}, "
+                    f"period_id={current_period.id}, "
+                    f"organization_id={self.organization_id}\n\n"
+                )
 
         # Get limits for the plan
         limits = self.PLAN_LIMITS.get(plan, self.PLAN_LIMITS[BillingPlan.DEVELOPER])

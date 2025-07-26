@@ -16,6 +16,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from airweave.core.config import settings
 from airweave.core.exceptions import (
+    InvalidStateError,
     NotFoundException,
     PaymentRequiredException,
     PermissionException,
@@ -326,6 +327,22 @@ async def usage_limit_exceeded_exception_handler(
     ----
         request (Request): The incoming request that triggered the exception.
         exc (UsageLimitExceededException): The exception object that was raised.
+
+    Returns:
+    -------
+        JSONResponse: A 400 Bad Request status response that details the error message.
+
+    """
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+async def invalid_state_exception_handler(request: Request, exc: InvalidStateError) -> JSONResponse:
+    """Exception handler for InvalidStateError.
+
+    Args:
+    ----
+        request (Request): The incoming request that triggered the exception.
+        exc (InvalidStateError): The exception object that was raised.
 
     Returns:
     -------

@@ -16,6 +16,7 @@ from airweave.api.middleware import (
     DynamicCORSMiddleware,
     add_request_id,
     exception_logging_middleware,
+    invalid_state_exception_handler,
     log_requests,
     not_found_exception_handler,
     payment_required_exception_handler,
@@ -27,6 +28,7 @@ from airweave.api.router import TrailingSlashRouter
 from airweave.api.v1.api import api_router
 from airweave.core.config import settings
 from airweave.core.exceptions import (
+    InvalidStateError,
     NotFoundException,
     PaymentRequiredException,
     PermissionException,
@@ -87,6 +89,7 @@ app.exception_handler(PermissionException)(permission_exception_handler)
 app.exception_handler(NotFoundException)(not_found_exception_handler)
 app.exception_handler(PaymentRequiredException)(payment_required_exception_handler)
 app.exception_handler(UsageLimitExceededException)(usage_limit_exceeded_exception_handler)
+app.exception_handler(InvalidStateError)(invalid_state_exception_handler)
 
 # Default CORS origins - white labels and environment variables can extend this
 CORS_ORIGINS = [
