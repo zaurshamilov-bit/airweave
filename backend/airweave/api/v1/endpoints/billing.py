@@ -10,7 +10,7 @@ from airweave.api import deps
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.billing_service import billing_service
 from airweave.core.config import settings
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger, logger
 from airweave.core.stripe_webhook_handler import StripeWebhookHandler
 from airweave.integrations.stripe_client import stripe_client
 from airweave.schemas.auth import AuthContext
@@ -23,6 +23,7 @@ async def create_checkout_session(
     request: schemas.CheckoutSessionRequest,
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
+    contextual_logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.CheckoutSessionResponse:
     """Create a Stripe checkout session for subscription.
 
@@ -32,6 +33,7 @@ async def create_checkout_session(
         request: Checkout session request with plan and URLs
         db: Database session
         auth_context: Authentication context
+        contextual_logger: Contextual logger
 
     Returns:
         Checkout session URL to redirect user to
@@ -50,12 +52,13 @@ async def create_checkout_session(
             plan=request.plan,
             success_url=request.success_url,
             cancel_url=request.cancel_url,
+            contextual_logger=contextual_logger,
         )
 
         return schemas.CheckoutSessionResponse(checkout_url=checkout_url)
 
     except Exception as e:
-        logger.error(f"Failed to create checkout session: {e}")
+        contextual_logger.error(f"Failed to create checkout session: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
@@ -64,6 +67,7 @@ async def create_portal_session(
     request: schemas.CustomerPortalRequest,
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
+    contextual_logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.CustomerPortalResponse:
     """Create a Stripe customer portal session.
 
@@ -77,7 +81,7 @@ async def create_portal_session(
         request: Portal session request with return URL
         db: Database session
         auth_context: Authentication context
-
+        contextual_logger: Contextual logger
     Returns:
         Portal session URL to redirect user to
 
@@ -92,12 +96,13 @@ async def create_portal_session(
             db=db,
             organization_id=auth_context.organization_id,
             return_url=request.return_url,
+            contextual_logger=contextual_logger,
         )
 
         return schemas.CustomerPortalResponse(portal_url=portal_url)
 
     except Exception as e:
-        logger.error(f"Failed to create portal session: {e}")
+        contextual_logger.error(f"Failed to create portal session: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
@@ -105,6 +110,7 @@ async def create_portal_session(
 async def get_subscription(
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
+    contextual_logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.SubscriptionInfo:
     """Get current subscription information.
 
@@ -118,6 +124,7 @@ async def get_subscription(
         db: Database session
         auth_context: Authentication context
 
+        contextual_logger: Contextual logger
     Returns:
         Subscription information
     """
@@ -133,6 +140,7 @@ async def cancel_subscription(
     request: schemas.CancelSubscriptionRequest,
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
+    contextual_logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.MessageResponse:
     """Cancel the current subscription.
 
@@ -145,6 +153,7 @@ async def cancel_subscription(
         db: Database session
         auth_context: Authentication context
 
+        contextual_logger: Contextual logger
     Returns:
         Success message
 
@@ -155,12 +164,14 @@ async def cancel_subscription(
         raise HTTPException(status_code=400, detail="Billing is not enabled for this instance")
 
     try:
-        message = await billing_service.cancel_subscription(db, auth_context)
+        message = await billing_service.cancel_subscription(
+            db, auth_context, contextual_logger=contextual_logger
+        )
 
         return schemas.MessageResponse(message=message)
 
     except Exception as e:
-        logger.error(f"Failed to cancel subscription: {e}")
+        contextual_logger.error(f"Failed to cancel subscription: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
@@ -168,6 +179,7 @@ async def cancel_subscription(
 async def reactivate_subscription(
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
+    contextual_logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.MessageResponse:
     """Reactivate a subscription that's set to cancel.
 
@@ -178,6 +190,7 @@ async def reactivate_subscription(
         db: Database session
         auth_context: Authentication context
 
+        contextual_logger: Contextual logger
     Returns:
         Success message
 
@@ -191,12 +204,13 @@ async def reactivate_subscription(
         message = await billing_service.reactivate_subscription(
             db=db,
             auth_context=auth_context,
+            contextual_logger=contextual_logger,
         )
 
         return schemas.MessageResponse(message=message)
 
     except Exception as e:
-        logger.error(f"Failed to reactivate subscription: {e}")
+        contextual_logger.error(f"Failed to reactivate subscription: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
@@ -204,6 +218,7 @@ async def reactivate_subscription(
 async def cancel_pending_plan_change(
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
+    contextual_logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.MessageResponse:
     """Cancel a scheduled plan change (downgrade).
 
@@ -211,6 +226,7 @@ async def cancel_pending_plan_change(
         db: Database session
         auth_context: Authentication context
 
+        contextual_logger: Contextual logger
     Returns:
         Success message
     """
@@ -218,10 +234,12 @@ async def cancel_pending_plan_change(
         raise HTTPException(status_code=400, detail="Billing is not enabled")
 
     try:
-        message = await billing_service.cancel_pending_plan_change(db, auth_context.organization_id)
+        message = await billing_service.cancel_pending_plan_change(
+            db, auth_context.organization_id, contextual_logger=contextual_logger
+        )
         return schemas.MessageResponse(message=message)
     except Exception as e:
-        logger.error(f"Failed to cancel plan change: {e}")
+        contextual_logger.error(f"Failed to cancel plan change: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
@@ -230,6 +248,7 @@ async def update_subscription_plan(
     request: schemas.UpdatePlanRequest,
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
+    contextual_logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.MessageResponse:
     """Update subscription to a different plan.
 
@@ -241,6 +260,7 @@ async def update_subscription_plan(
         db: Database session
         auth_context: Authentication context
 
+        contextual_logger: Contextual logger
     Returns:
         Success message or redirect URL
 
@@ -255,12 +275,13 @@ async def update_subscription_plan(
             db=db,
             organization_id=auth_context.organization_id,
             new_plan=request.plan,
+            contextual_logger=contextual_logger,
         )
 
         return schemas.MessageResponse(message=message)
 
     except Exception as e:
-        logger.error(f"Failed to update subscription plan: {e}")
+        contextual_logger.error(f"Failed to update subscription plan: {e}")
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
@@ -290,6 +311,9 @@ async def stripe_webhook(
     Returns:
         200 OK on success, 400 on error
     """
+    # Create a contextual logger for webhook processing
+    webhook_logger = logger.with_context(auth_method="stripe_webhook", endpoint="billing_webhook")
+
     if not settings.STRIPE_ENABLED:
         return Response(status_code=200)
 
@@ -297,21 +321,21 @@ async def stripe_webhook(
     try:
         payload = await request.body()
     except Exception as e:
-        logger.error(f"Failed to get request body: {e}")
+        webhook_logger.error(f"Failed to get request body: {e}")
         return Response(status_code=400)
 
     # Verify signature
     if not stripe_signature:
-        logger.error("Missing Stripe signature header")
+        webhook_logger.error("Missing Stripe signature header")
         return Response(status_code=400)
 
     try:
         event = stripe_client.construct_webhook_event(payload, stripe_signature)
     except ValueError as e:
-        logger.error(f"Invalid webhook payload: {e}")
+        webhook_logger.error(f"Invalid webhook payload: {e}")
         return Response(status_code=400)
     except Exception as e:  # stripe.error.SignatureVerificationError
-        logger.error(f"Invalid webhook signature: {e}")
+        webhook_logger.error(f"Invalid webhook signature: {e}")
         return Response(status_code=400)
 
     # Process event
@@ -322,5 +346,5 @@ async def stripe_webhook(
         return Response(status_code=200)
 
     except Exception as e:
-        logger.error(f"Failed to process webhook event {event.type}: {e}")
+        webhook_logger.error(f"Failed to process webhook event {event.type}: {e}")
         return Response(status_code=500)

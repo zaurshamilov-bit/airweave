@@ -1,6 +1,6 @@
 """Billing service for managing subscriptions and payments."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Optional
 from uuid import UUID
 
@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.core.config import settings
 from airweave.core.exceptions import InvalidStateError, NotFoundException
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger, logger
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.integrations.stripe_client import stripe_client
 from airweave.models import Organization
@@ -63,6 +63,7 @@ class BillingService:
         billing_email: str,
         auth_context: AuthContext,
         uow: UnitOfWork,
+        contextual_logger: Optional[ContextualLogger] = None,
     ) -> schemas.OrganizationBilling:
         """Create initial billing record within a transaction.
 
@@ -73,10 +74,13 @@ class BillingService:
             billing_email: Billing contact email
             auth_context: Authentication context
             uow: Unit of work for transaction management
+            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Created OrganizationBilling record
         """
+        log = contextual_logger or logger
+
         # Check if billing already exists
         existing = await crud.organization_billing.get_by_organization(
             db, organization_id=organization.id
@@ -110,6 +114,10 @@ class BillingService:
 
         # Get local billing record
         await db.flush()
+
+        log.info(
+            f"Created billing record for organization {organization.id} with plan {selected_plan}"
+        )
 
         return schemas.OrganizationBilling.model_validate(billing, from_attributes=True)
 
@@ -156,7 +164,13 @@ class BillingService:
         )
 
     async def start_subscription_checkout(
-        self, db: AsyncSession, organization_id: UUID, plan: str, success_url: str, cancel_url: str
+        self,
+        db: AsyncSession,
+        organization_id: UUID,
+        plan: str,
+        success_url: str,
+        cancel_url: str,
+        contextual_logger: Optional[ContextualLogger] = None,
     ) -> str:
         """Start subscription checkout flow.
 
@@ -166,6 +180,7 @@ class BillingService:
             plan: Plan name (developer, startup)
             success_url: URL to redirect on success
             cancel_url: URL to redirect on cancel
+            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Checkout session URL
@@ -174,6 +189,8 @@ class BillingService:
             NotFoundException: If billing record not found
             InvalidStateError: If invalid plan or state
         """
+        log = contextual_logger or logger
+
         # Get billing record
         billing_model = await crud.organization_billing.get_by_organization(
             db, organization_id=organization_id
@@ -192,16 +209,20 @@ class BillingService:
             current_plan = billing_model.billing_plan
             if current_plan != plan:
                 # This is a plan change, use update_subscription instead
-                logger.info(
+                log.info(
                     f"Redirecting to subscription update for plan change from {current_plan} "
                     f"to {plan} (existing subscription: {billing_model.stripe_subscription_id})"
                 )
-                return await self.update_subscription_plan(db, organization_id, plan)
+                return await self.update_subscription_plan(
+                    db, organization_id, plan, contextual_logger
+                )
             else:
                 # Same plan - check if it's canceled and needs reactivation
                 if billing_model.cancel_at_period_end:
-                    logger.info(f"Reactivating canceled {plan} subscription")
-                    return await self.update_subscription_plan(db, organization_id, plan)
+                    log.info(f"Reactivating canceled {plan} subscription")
+                    return await self.update_subscription_plan(
+                        db, organization_id, plan, contextual_logger
+                    )
                 else:
                     raise InvalidStateError(
                         f"Organization already has an active {plan} subscription"
@@ -282,13 +303,17 @@ class BillingService:
             new_plan == "startup"
             and current_plan == BillingPlan.DEVELOPER
             and billing_model.trial_ends_at
-            and billing_model.trial_ends_at > datetime.now(timezone.utc)
+            and billing_model.trial_ends_at > datetime.utcnow()
         )
 
         return is_upgrade, is_trial_to_startup
 
     async def _handle_trial_subscription_upgrade(
-        self, billing_model: schemas.OrganizationBilling, organization_id: UUID, new_plan: str
+        self,
+        billing_model: Any,
+        organization_id: UUID,
+        new_plan: str,
+        contextual_logger: Optional[ContextualLogger] = None,
     ) -> str:
         """Handle upgrading from a trial subscription with no items.
 
@@ -296,13 +321,24 @@ class BillingService:
             billing_model: Organization billing model
             organization_id: Organization ID
             new_plan: New plan name
+            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Checkout session URL
         """
-        logger.info(
+        log = contextual_logger or logger
+
+        log.info(
             f"Creating session for trial upgrade from {billing_model.stripe_subscription_id} "
             f"to {new_plan} plan"
+        )
+        log.info(
+            f"Canceling trial subscription {billing_model.stripe_subscription_id} to "
+            f"create new one for trial upgrade"
+        )
+        await stripe_client.cancel_subscription(
+            subscription_id=billing_model.stripe_subscription_id,
+            cancel_at_period_end=False,  # Cancel immediately
         )
 
         price_id = stripe_client.get_price_id_for_plan(new_plan)
@@ -402,9 +438,11 @@ class BillingService:
         Returns:
             Success message
         """
+        log = logger  # TODO: Accept contextual logger parameter
+
         # Reactivate if canceled
         if billing_model.cancel_at_period_end:
-            logger.info(
+            log.info(
                 f"Reactivate canceled subscription before plan change for org {organization_id}"
             )
             await stripe_client.update_subscription(
@@ -448,7 +486,11 @@ class BillingService:
         return f"Successfully upgraded to {new_plan} plan"
 
     async def update_subscription_plan(
-        self, db: AsyncSession, organization_id: UUID, new_plan: str
+        self,
+        db: AsyncSession,
+        organization_id: UUID,
+        new_plan: str,
+        contextual_logger: Optional[ContextualLogger] = None,
     ) -> str:
         """Update subscription to a different plan (upgrade/downgrade).
 
@@ -459,6 +501,7 @@ class BillingService:
             db: Database session
             organization_id: Organization ID
             new_plan: Target plan name
+            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Success message or checkout URL if payment update needed
@@ -467,6 +510,8 @@ class BillingService:
             NotFoundException: If billing record not found
             InvalidStateError: If subscription update not allowed
         """
+        log = contextual_logger or logger
+
         billing_model = await crud.organization_billing.get_by_organization(
             db, organization_id=organization_id
         )
@@ -492,7 +537,7 @@ class BillingService:
                 and len(getattr(subscription.items, "data", [])) == 0
             ):
                 return await self._handle_trial_subscription_upgrade(
-                    billing_model, organization_id, new_plan
+                    billing_model, organization_id, new_plan, contextual_logger
                 )
 
             # For downgrades, schedule the change for end of period
@@ -511,15 +556,21 @@ class BillingService:
                 is_trial_to_startup,
             )
         except Exception as e:
-            logger.error(f"Failed to update subscription plan: {e}")
+            log.error(f"Failed to update subscription plan: {e}")
             raise InvalidStateError(f"Failed to update subscription plan: {str(e)}") from e
 
-    async def cancel_subscription(self, db: AsyncSession, auth_context: AuthContext) -> str:
+    async def cancel_subscription(
+        self,
+        db: AsyncSession,
+        auth_context: AuthContext,
+        contextual_logger: Optional[ContextualLogger] = None,
+    ) -> str:
         """Cancel a subscription.
 
         Args:
             db: Database session
             auth_context: Authentication context
+            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Success message
@@ -527,6 +578,8 @@ class BillingService:
         Raises:
             NotFoundException: If no active subscription
         """
+        log = contextual_logger or logger
+
         billing_model = await crud.organization_billing.get_by_organization(
             db, organization_id=auth_context.organization_id
         )
@@ -562,15 +615,21 @@ class BillingService:
             return "Subscription will be canceled at the end of the current billing period"
 
         except Exception as e:
-            logger.error(f"Failed to cancel subscription: {e}")
+            log.error(f"Failed to cancel subscription: {e}")
             raise InvalidStateError(f"Failed to cancel subscription: {str(e)}") from e
 
-    async def reactivate_subscription(self, db: AsyncSession, auth_context: AuthContext) -> str:
+    async def reactivate_subscription(
+        self,
+        db: AsyncSession,
+        auth_context: AuthContext,
+        contextual_logger: Optional[ContextualLogger] = None,
+    ) -> str:
         """Reactivate a subscription that's set to cancel at period end.
 
         Args:
             db: Database session
             auth_context: Authentication context
+            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Success message
@@ -579,6 +638,8 @@ class BillingService:
             NotFoundException: If no subscription found
             InvalidStateError: If subscription not set to cancel
         """
+        log = contextual_logger or logger
+
         billing_model = await crud.organization_billing.get_by_organization(
             db, organization_id=auth_context.organization_id
         )
@@ -606,15 +667,21 @@ class BillingService:
             return "Subscription reactivated successfully"
 
         except Exception as e:
-            logger.error(f"Failed to reactivate subscription: {e}")
+            log.error(f"Failed to reactivate subscription: {e}")
             raise InvalidStateError(f"Failed to reactivate subscription: {str(e)}") from e
 
-    async def cancel_pending_plan_change(self, db: AsyncSession, organization_id: UUID) -> str:
+    async def cancel_pending_plan_change(
+        self,
+        db: AsyncSession,
+        organization_id: UUID,
+        contextual_logger: Optional[ContextualLogger] = None,
+    ) -> str:
         """Cancel a scheduled plan change (downgrade).
 
         Args:
             db: Database session
             organization_id: Organization ID
+            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Success message
@@ -667,7 +734,11 @@ class BillingService:
         return "Scheduled plan change has been canceled"
 
     async def create_customer_portal_session(
-        self, db: AsyncSession, organization_id: UUID, return_url: str
+        self,
+        db: AsyncSession,
+        organization_id: UUID,
+        return_url: str,
+        contextual_logger: Optional[ContextualLogger] = None,
     ) -> str:
         """Create customer portal session for billing management.
 
@@ -675,6 +746,7 @@ class BillingService:
             db: Database session
             organization_id: Organization ID
             return_url: URL to return to
+            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Portal session URL
@@ -698,17 +770,21 @@ class BillingService:
         self,
         db: AsyncSession,
         subscription: stripe.Subscription,
+        contextual_logger: Optional[ContextualLogger] = None,
     ) -> None:
         """Handle subscription created webhook event.
 
         Args:
             db: Database session
             subscription: Stripe subscription object
+            contextual_logger: Optional contextual logger with organization context
         """
+        log = contextual_logger or logger
+
         # Get organization ID from metadata
         org_id = subscription.metadata.get("organization_id")
         if not org_id:
-            logger.error(f"No organization_id in subscription {subscription.id} metadata")
+            log.error(f"No organization_id in subscription {subscription.id} metadata")
             return
 
         # Get billing record using CRUD
@@ -716,7 +792,7 @@ class BillingService:
             db, organization_id=UUID(org_id)
         )
         if not billing_model:
-            logger.error(f"No billing record for organization {org_id}")
+            log.error(f"No billing record for organization {org_id}")
             return
 
         # Check if this is a trial upgrade
@@ -725,7 +801,7 @@ class BillingService:
 
         # If this is a trial upgrade, cancel the old subscription
         if is_trial_upgrade and previous_subscription_id:
-            logger.info(
+            log.info(
                 f"Canceling previous trial subscription {previous_subscription_id} "
                 f"after successful upgrade to {subscription.id}"
             )
@@ -735,9 +811,7 @@ class BillingService:
                     cancel_at_period_end=False,  # Cancel immediately
                 )
             except Exception as e:
-                logger.error(
-                    f"Failed to cancel previous subscription {previous_subscription_id}: {e}"
-                )
+                log.error(f"Failed to cancel previous subscription {previous_subscription_id}: {e}")
                 # Continue processing even if cancellation fails
 
         # Determine plan from metadata or price
@@ -747,7 +821,7 @@ class BillingService:
         has_trial = subscription.trial_end is not None
         trial_ends_at = None
         if has_trial:
-            trial_ends_at = datetime.fromtimestamp(subscription.trial_end, tz=timezone.utc)
+            trial_ends_at = datetime.utcfromtimestamp(subscription.trial_end)
 
         # Create system auth context for update
         system_auth = AuthContext(
@@ -762,12 +836,8 @@ class BillingService:
             stripe_subscription_id=subscription.id,
             billing_plan=BillingPlan(plan),
             billing_status=BillingStatus.ACTIVE,
-            current_period_start=datetime.fromtimestamp(
-                subscription.current_period_start, tz=timezone.utc
-            ),
-            current_period_end=datetime.fromtimestamp(
-                subscription.current_period_end, tz=timezone.utc
-            ),
+            current_period_start=datetime.utcfromtimestamp(subscription.current_period_start),
+            current_period_end=datetime.utcfromtimestamp(subscription.current_period_end),
             trial_ends_at=trial_ends_at,
             grace_period_ends_at=None,  # Clear grace period
             payment_method_added=True,
@@ -788,8 +858,8 @@ class BillingService:
         await self.create_billing_period(
             db=db,
             organization_id=UUID(org_id),
-            period_start=datetime.fromtimestamp(subscription.current_period_start, tz=timezone.utc),
-            period_end=datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc),
+            period_start=datetime.utcfromtimestamp(subscription.current_period_start),
+            period_end=datetime.utcfromtimestamp(subscription.current_period_end),
             plan=BillingPlan(plan),
             transition=(
                 BillingTransition.INITIAL_SIGNUP
@@ -798,9 +868,10 @@ class BillingService:
             ),
             stripe_subscription_id=subscription.id,
             status=BillingPeriodStatus.TRIAL if has_trial else BillingPeriodStatus.ACTIVE,
+            contextual_logger=log,
         )
 
-        logger.info(
+        log.info(
             f"Subscription created for org {org_id}: {plan} "
             f"(trial: {has_trial}, upgrade: {is_trial_upgrade})"
         )
@@ -865,8 +936,8 @@ class BillingService:
         await self.create_billing_period(
             db=db,
             organization_id=org_id,
-            period_start=datetime.fromtimestamp(subscription.current_period_start, tz=timezone.utc),
-            period_end=datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc),
+            period_start=datetime.utcfromtimestamp(subscription.current_period_start),
+            period_end=datetime.utcfromtimestamp(subscription.current_period_end),
             plan=BillingPlan(effective_plan),
             transition=transition,
             stripe_subscription_id=subscription.id,
@@ -894,7 +965,7 @@ class BillingService:
             db=db,
             organization_id=org_id,
             period_start=datetime.utcnow(),
-            period_end=datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc),
+            period_end=datetime.utcfromtimestamp(subscription.current_period_end),
             plan=BillingPlan(new_plan),
             transition=BillingTransition.UPGRADE,
             stripe_subscription_id=subscription.id,
@@ -937,7 +1008,7 @@ class BillingService:
             db=db,
             organization_id=org_id,
             period_start=datetime.utcnow(),
-            period_end=datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc),
+            period_end=datetime.utcfromtimestamp(subscription.current_period_end),
             plan=BillingPlan(new_plan),
             transition=BillingTransition.TRIAL_CONVERSION,
             stripe_subscription_id=subscription.id,
@@ -949,6 +1020,7 @@ class BillingService:
         db: AsyncSession,
         subscription: stripe.Subscription,
         previous_attributes: Optional[dict] = None,
+        contextual_logger: Optional[ContextualLogger] = None,
     ) -> None:
         """Handle subscription updated webhook event.
 
@@ -956,14 +1028,17 @@ class BillingService:
             db: Database session
             subscription: Stripe subscription object
             previous_attributes: Previous values that changed
+            contextual_logger: Optional contextual logger with organization context
         """
+        log = contextual_logger or logger
+
         # Find billing by subscription ID
         billing_model = await crud.organization_billing.get_by_stripe_subscription(
             db, stripe_subscription_id=subscription.id
         )
 
         if not billing_model:
-            logger.error(f"No billing record for subscription {subscription.id}")
+            log.error(f"No billing record for subscription {subscription.id}")
             return
 
         # Store organization_id before any DB operations to avoid lazy loading issues
@@ -1006,12 +1081,8 @@ class BillingService:
         update_data = OrganizationBillingUpdate(
             billing_status=BillingStatus(subscription.status),
             cancel_at_period_end=subscription.cancel_at_period_end,
-            current_period_start=datetime.fromtimestamp(
-                subscription.current_period_start, tz=timezone.utc
-            ),
-            current_period_end=datetime.fromtimestamp(
-                subscription.current_period_end, tz=timezone.utc
-            ),
+            current_period_start=datetime.utcfromtimestamp(subscription.current_period_start),
+            current_period_end=datetime.utcfromtimestamp(subscription.current_period_end),
         )
 
         # Update plan if changed
@@ -1023,7 +1094,7 @@ class BillingService:
             update_data.pending_plan_change = None
             update_data.pending_plan_change_at = None
             if is_canceled_plan_change:
-                logger.info(f"Cleared canceled plan change for org {org_id}")
+                log.info(f"Cleared canceled plan change for org {org_id}")
 
         # Handle trial end updates
         if hasattr(subscription, "trial_end"):
@@ -1035,9 +1106,7 @@ class BillingService:
                         db, org_id, subscription, new_plan, system_auth
                     )
             else:
-                update_data.trial_ends_at = datetime.fromtimestamp(
-                    subscription.trial_end, tz=timezone.utc
-                )
+                update_data.trial_ends_at = datetime.utcfromtimestamp(subscription.trial_end)
 
         # Update billing record
         await crud.organization_billing.update(
@@ -1047,12 +1116,13 @@ class BillingService:
             auth_context=system_auth,
         )
 
-        logger.info(f"Subscription updated for org {org_id}")
+        log.info(f"Subscription updated for org {org_id}")
 
     async def handle_subscription_deleted(
         self,
         db: AsyncSession,
         subscription: Any,  # stripe.Subscription
+        contextual_logger: Optional[ContextualLogger] = None,
     ) -> None:
         """Handle subscription deleted/canceled webhook event.
 
@@ -1065,14 +1135,17 @@ class BillingService:
         Args:
             db: Database session
             subscription: Stripe subscription object
+            contextual_logger: Optional contextual logger with organization context
         """
+        log = contextual_logger or logger
+
         # Find billing by subscription ID using CRUD
         billing_model = await crud.organization_billing.get_by_stripe_subscription(
             db, stripe_subscription_id=subscription.id
         )
 
         if not billing_model:
-            logger.error(f"No billing record for subscription {subscription.id}")
+            log.error(f"No billing record for subscription {subscription.id}")
             return
 
         # Store organization_id before any DB operations to avoid lazy loading issues
@@ -1096,7 +1169,7 @@ class BillingService:
                 cancel_at_period_end=True,
                 # Keep current status - subscription is still active
             )
-            logger.info(f"Subscription scheduled to cancel at period end for org {org_id}")
+            log.info(f"Subscription scheduled to cancel at period end for org {org_id}")
         else:
             # Subscription is actually deleted/ended
             # Complete the final billing period
@@ -1110,14 +1183,14 @@ class BillingService:
                     obj_in={"status": BillingPeriodStatus.COMPLETED},
                     auth_context=system_auth,
                 )
-                logger.info(f"Completed final billing period {current_period.id} for org {org_id}")
+                log.info(f"Completed final billing period {current_period.id} for org {org_id}")
 
             update_data = OrganizationBillingUpdate(
                 billing_status=BillingStatus.CANCELED,
                 stripe_subscription_id=None,
                 cancel_at_period_end=False,
             )
-            logger.info(f"Subscription fully canceled for org {org_id}")
+            log.info(f"Subscription fully canceled for org {org_id}")
 
         await crud.organization_billing.update(
             db,
@@ -1130,13 +1203,17 @@ class BillingService:
         self,
         db: AsyncSession,
         invoice: stripe.Invoice,
+        contextual_logger: Optional[ContextualLogger] = None,
     ) -> None:
         """Handle successful payment webhook event.
 
         Args:
             db: Database session
             invoice: Stripe invoice object
+            contextual_logger: Optional contextual logger with organization context
         """
+        log = contextual_logger or logger
+
         if not invoice.subscription:
             return  # One-time payment, ignore
 
@@ -1145,7 +1222,7 @@ class BillingService:
             db, stripe_customer_id=invoice.customer
         )
         if not billing_model:
-            logger.error(f"No billing record for customer {invoice.customer}")
+            log.error(f"No billing record for customer {invoice.customer}")
             return
 
         # Store organization_id before any DB operations to avoid lazy loading issues
@@ -1162,7 +1239,7 @@ class BillingService:
         # Update payment info using CRUD
         update_data = OrganizationBillingUpdate(
             last_payment_status="succeeded",
-            last_payment_at=datetime.now(timezone.utc),
+            last_payment_at=datetime.utcnow(),  # Use utcnow() for timezone-naive
         )
 
         # If was past_due, update to active
@@ -1176,15 +1253,23 @@ class BillingService:
             auth_context=system_auth,
         )
 
-        logger.info(f"Payment succeeded for org {org_id}")
+        log.info(f"Payment succeeded for org {org_id}")
 
-    async def handle_payment_failed(self, db: AsyncSession, invoice: stripe.Invoice) -> None:
+    async def handle_payment_failed(
+        self,
+        db: AsyncSession,
+        invoice: stripe.Invoice,
+        contextual_logger: Optional[ContextualLogger] = None,
+    ) -> None:
         """Handle failed payment webhook event.
 
         Args:
             db: Database session
             invoice: Stripe invoice object
+            contextual_logger: Optional contextual logger with organization context
         """
+        log = contextual_logger or logger
+
         if not invoice.subscription:
             return  # One-time payment, ignore
 
@@ -1193,7 +1278,7 @@ class BillingService:
             db, stripe_customer_id=invoice.customer
         )
         if not billing_model:
-            logger.error(f"No billing record for customer {invoice.customer}")
+            log.error(f"No billing record for customer {invoice.customer}")
             return
 
         # Store organization_id before any DB operations to avoid lazy loading issues
@@ -1264,7 +1349,7 @@ class BillingService:
             auth_context=system_auth,
         )
 
-        logger.warning(f"Payment failed for org {org_id}")
+        log.warning(f"Payment failed for org {org_id}")
 
     async def get_subscription_info(
         self, db: AsyncSession, organization_id: UUID
@@ -1299,14 +1384,14 @@ class BillingService:
         # Check if in trial (Stripe-managed trial)
         in_trial = (
             billing_model.trial_ends_at is not None
-            and billing_model.trial_ends_at > datetime.now(timezone.utc)
+            and billing_model.trial_ends_at > datetime.utcnow()
             and billing_model.stripe_subscription_id is not None
         )
 
         # Check if in grace period (only for existing subscriptions with payment failures)
         in_grace_period = (
             billing_model.grace_period_ends_at is not None
-            and billing_model.grace_period_ends_at > datetime.now(timezone.utc)
+            and billing_model.grace_period_ends_at > datetime.utcnow()
             and not billing_model.payment_method_added
             and billing_model.stripe_subscription_id
             is not None  # Grace period only applies to existing subscriptions
@@ -1315,7 +1400,7 @@ class BillingService:
         # Check if grace period expired
         grace_period_expired = (
             billing_model.grace_period_ends_at is not None
-            and billing_model.grace_period_ends_at <= datetime.now(timezone.utc)
+            and billing_model.grace_period_ends_at <= datetime.utcnow()
             and not billing_model.payment_method_added
             and billing_model.stripe_subscription_id
             is not None  # Grace period only applies to existing subscriptions
@@ -1381,6 +1466,7 @@ class BillingService:
         stripe_subscription_id: Optional[str] = None,
         previous_period_id: Optional[UUID] = None,
         status: Optional[BillingPeriodStatus] = None,
+        contextual_logger: Optional[ContextualLogger] = None,
     ) -> schemas.BillingPeriod:
         """Create a new billing period and associated usage record.
 
@@ -1394,10 +1480,13 @@ class BillingService:
             stripe_subscription_id: Optional Stripe subscription ID
             previous_period_id: Optional previous period ID
             status: Optional status (defaults to ACTIVE)
+            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Created billing period
         """
+        log = contextual_logger or logger
+
         # Get any currently active periods
         active_periods = await crud.billing_period.get_by_organization(
             db, organization_id=organization_id, limit=10
@@ -1430,7 +1519,7 @@ class BillingService:
                 if not previous_period_id and period.status == BillingPeriodStatus.ACTIVE:
                     previous_period_id = period.id
 
-                logger.info(
+                log.info(
                     f"Completed period {period.id} with adjusted end time {period_start} "
                     f"to ensure continuity with new period"
                 )
@@ -1488,7 +1577,7 @@ class BillingService:
 
             await crud.usage.create(db, obj_in=usage_create, auth_context=system_auth, uow=uow)
 
-        logger.info(
+        log.info(
             f"Created billing period for org {organization_id}: "
             f"{period_start} to {period_end}, plan={plan}, transition={transition}"
         )
@@ -1512,7 +1601,12 @@ class BillingService:
             schemas.BillingPeriod.model_validate(period, from_attributes=True) if period else None
         )
 
-    async def handle_trial_expired(self, db: AsyncSession, organization_id: UUID) -> None:
+    async def handle_trial_expired(
+        self,
+        db: AsyncSession,
+        organization_id: UUID,
+        contextual_logger: Optional[ContextualLogger] = None,
+    ) -> None:
         """Handle trial expiration for an organization.
 
         This should be called when a trial period ends without an active subscription.
@@ -1521,18 +1615,21 @@ class BillingService:
         Args:
             db: Database session
             organization_id: Organization ID
+            contextual_logger: Optional contextual logger with auth context
         """
+        log = contextual_logger or logger
+
         billing_model = await crud.organization_billing.get_by_organization(
             db, organization_id=organization_id
         )
         if not billing_model:
-            logger.error(f"No billing record for organization {organization_id}")
+            log.error(f"No billing record for organization {organization_id}")
             return
 
         # Only process if actually in trial without subscription
         if (
             billing_model.trial_ends_at
-            and billing_model.trial_ends_at <= datetime.now(timezone.utc)
+            and billing_model.trial_ends_at <= datetime.utcnow()
             and not billing_model.stripe_subscription_id
         ):
             # Create system auth context for update
@@ -1555,7 +1652,7 @@ class BillingService:
                 auth_context=system_auth,
             )
 
-            logger.info(f"Trial expired for organization {organization_id}")
+            log.info(f"Trial expired for organization {organization_id}")
 
 
 # Singleton instance
