@@ -200,6 +200,31 @@ async def reactivate_subscription(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@router.post("/cancel-plan-change", response_model=schemas.MessageResponse)
+async def cancel_pending_plan_change(
+    db: AsyncSession = Depends(deps.get_db),
+    auth_context: AuthContext = Depends(deps.get_auth_context),
+) -> schemas.MessageResponse:
+    """Cancel a scheduled plan change (downgrade).
+
+    Args:
+        db: Database session
+        auth_context: Authentication context
+
+    Returns:
+        Success message
+    """
+    if not settings.STRIPE_ENABLED:
+        raise HTTPException(status_code=400, detail="Billing is not enabled")
+
+    try:
+        message = await billing_service.cancel_pending_plan_change(db, auth_context.organization_id)
+        return schemas.MessageResponse(message=message)
+    except Exception as e:
+        logger.error(f"Failed to cancel plan change: {e}")
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @router.post("/update-plan", response_model=schemas.MessageResponse)
 async def update_subscription_plan(
     request: schemas.UpdatePlanRequest,

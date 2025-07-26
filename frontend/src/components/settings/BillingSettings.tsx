@@ -49,6 +49,8 @@ interface SubscriptionInfo {
   is_oss: boolean;
   has_active_subscription: boolean;
   grace_period_ends_at?: string;
+  pending_plan_change?: string;
+  pending_plan_change_at?: string;
 }
 
 interface BillingSettingsProps {
@@ -210,6 +212,27 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
       toast.error(error instanceof Error ? error.message : 'Failed to reactivate subscription');
     } finally {
       setIsReactivateLoading(false);
+    }
+  };
+
+  const handleCancelPlanChange = async () => {
+    try {
+      setIsCancelLoading(true);
+      const response = await apiClient.post('/billing/cancel-plan-change');
+
+      if (response.ok) {
+        const { message } = await response.json();
+        toast.success(message);
+        await fetchSubscription(); // Refresh subscription info
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to cancel plan change');
+      }
+    } catch (error) {
+      console.error('Error canceling plan change:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel plan change');
+    } finally {
+      setIsCancelLoading(false);
     }
   };
 
@@ -418,14 +441,45 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
                   Access until {format(new Date(subscription.current_period_end), 'MMM d, yyyy')}
                 </p>
               )}
-              {subscription.cancel_at_period_end && subscription.current_period_end && (
-                <Alert className="mt-2">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Your subscription is set to cancel on {format(new Date(subscription.current_period_end), 'MMM d, yyyy')}.
-                  </AlertDescription>
-                </Alert>
+              {subscription.pending_plan_change && subscription.pending_plan_change_at && (
+                <div className="mt-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 flex-shrink-0 text-yellow-600" />
+                    <div className="flex-1">
+                      <p className="font-semibold text-yellow-700">Plan Change Scheduled</p>
+                      <p className="text-sm text-yellow-600">
+                        Your plan will change to{' '}
+                        <strong>{getPlanDisplayName(subscription.pending_plan_change)}</strong> on{' '}
+                        {format(new Date(subscription.pending_plan_change_at), 'MMM d, yyyy')}.
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-yellow-700 hover:bg-yellow-500/20"
+                      onClick={handleCancelPlanChange}
+                      disabled={isCancelLoading}
+                    >
+                      {isCancelLoading ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <XCircle className="w-4 h-4" />
+                      )}
+                      <span className="sr-only">Cancel plan change</span>
+                    </Button>
+                  </div>
+                </div>
               )}
+              {subscription.cancel_at_period_end &&
+                subscription.current_period_end &&
+                !subscription.pending_plan_change && (
+                  <Alert className="mt-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Your subscription is set to cancel on {format(new Date(subscription.current_period_end), 'MMM d, yyyy')}.
+                    </AlertDescription>
+                  </Alert>
+                )}
             </div>
 
             <div className="flex gap-2">
@@ -648,7 +702,7 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
       )}
 
       {/* Downgrade Option for Startup Plan */}
-      {subscription.plan === 'startup' && !subscription.cancel_at_period_end && (
+      {subscription.plan === 'startup' && !subscription.cancel_at_period_end && !subscription.pending_plan_change && (
         <Card>
           <CardHeader>
             <CardTitle>Change Plan</CardTitle>
@@ -675,7 +729,7 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              You'll be redirected to complete the downgrade process
+              Change will take effect at the end of your current billing period
             </p>
           </CardContent>
         </Card>

@@ -229,55 +229,43 @@ class StripeClient:
             ExternalServiceError: If update fails
         """
         try:
-            update_params = {}
+            # Get current subscription to find the item ID
+            subscription = await self.get_subscription(subscription_id)
+            subscription_item_id = (
+                subscription.items.data[0].id if subscription.items.data else None
+            )
 
-            # Update cancellation status if specified
+            update_params = {
+                "proration_behavior": proration_behavior,
+            }
+
+            # If a new price ID is provided, this is a plan change
+            if price_id:
+                if not subscription_item_id:
+                    raise ExternalServiceError(
+                        f"Subscription {subscription_id} has no items to update."
+                    )
+                update_params["items"] = [
+                    {
+                        "id": subscription_item_id,
+                        "price": price_id,
+                    }
+                ]
+            # If no price ID, but cancel or trial status is changing, this is a status update
+            elif cancel_at_period_end is not None or trial_end is not None:
+                pass  # No item changes needed, just status update
+            else:
+                raise ExternalServiceError(
+                    f"No valid update parameters provided for subscription {subscription_id}"
+                )
+
+            # Add cancel_at_period_end if specified
             if cancel_at_period_end is not None:
                 update_params["cancel_at_period_end"] = cancel_at_period_end
 
-            # End trial if specified
+            # Add trial_end if specified
             if trial_end is not None:
                 update_params["trial_end"] = trial_end
-
-            # Update plan if new price specified
-            if price_id:
-                # Get current subscription to find the item ID - expand items
-                # Note: Trialing subscriptions may not have items until the trial ends
-                subscription = stripe.Subscription.retrieve(subscription_id, expand=["items"])
-
-                # Log what we got for debugging
-                logger.info(
-                    f"Subscription {subscription_id} status: {subscription.status}, "
-                    f"cancel_at_period_end: {subscription.cancel_at_period_end}, "
-                    f"items count: {len(getattr(subscription.items, 'data', []))}"
-                )
-
-                # Check if subscription has items
-                if (
-                    hasattr(subscription, "items")
-                    and hasattr(subscription.items, "data")
-                    and len(subscription.items.data) > 0
-                ):
-                    # Update the first item with new price
-                    update_params["items"] = [
-                        {
-                            "id": subscription.items.data[0].id,
-                            "price": price_id,
-                        }
-                    ]
-                    update_params["proration_behavior"] = proration_behavior
-
-                else:
-                    # No items - add the price as a new item
-                    logger.info(
-                        f"No items found on subscription {subscription_id}, adding new item"
-                    )
-                    update_params["items"] = [
-                        {
-                            "price": price_id,
-                        }
-                    ]
-                    update_params["proration_behavior"] = proration_behavior
 
             return stripe.Subscription.modify(subscription_id, **update_params)
 

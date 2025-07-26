@@ -365,9 +365,14 @@ class BillingService:
             pending_plan_change_at=billing_model.current_period_end,
         )
 
+        # Get the billing model from the database to avoid issues with detached instances
+        db_billing_model = await crud.organization_billing.get(
+            db, id=billing_model.id, auth_context=system_auth
+        )
+
         await crud.organization_billing.update(
             db,
-            db_obj=billing_model,
+            db_obj=db_billing_model,
             obj_in=update_data,
             auth_context=system_auth,
         )
@@ -492,21 +497,23 @@ class BillingService:
                     billing_model, organization_id, new_plan
                 )
 
-            # Handle downgrade
+            # For downgrades, schedule the change for end of period
             if not is_upgrade:
                 return await self._handle_plan_downgrade(
                     db, billing_model, organization_id, new_plan, new_price_id
                 )
 
-            # Handle upgrade
+            # For upgrades, proceed with immediate update
             return await self._handle_plan_upgrade(
-                db, billing_model, organization_id, new_plan, new_price_id, is_trial_to_startup
+                db,
+                billing_model,
+                organization_id,
+                new_plan,
+                new_price_id,
+                is_trial_to_startup,
             )
-
         except Exception as e:
-            logger.error(
-                f"Failed to update subscription plan from {current_plan} to {new_plan}: {e}"
-            )
+            logger.error(f"Failed to update subscription plan: {e}")
             raise InvalidStateError(f"Failed to update subscription plan: {str(e)}") from e
 
     async def cancel_subscription(self, db: AsyncSession, auth_context: AuthContext) -> str:
@@ -530,7 +537,7 @@ class BillingService:
 
         try:
             # Cancel in Stripe - schedule cancellation at period end
-            _ = await stripe_client.cancel_subscription(
+            await stripe_client.update_subscription(
                 subscription_id=billing_model.stripe_subscription_id,
                 cancel_at_period_end=True,
             )
@@ -603,6 +610,63 @@ class BillingService:
         except Exception as e:
             logger.error(f"Failed to reactivate subscription: {e}")
             raise InvalidStateError(f"Failed to reactivate subscription: {str(e)}") from e
+
+    async def cancel_pending_plan_change(self, db: AsyncSession, organization_id: UUID) -> str:
+        """Cancel a scheduled plan change (downgrade).
+
+        Args:
+            db: Database session
+            organization_id: Organization ID
+
+        Returns:
+            Success message
+        """
+        billing_model = await crud.organization_billing.get_by_organization(
+            db, organization_id=organization_id
+        )
+
+        if not billing_model or not billing_model.pending_plan_change:
+            raise InvalidStateError("No pending plan change found")
+
+        # Get current subscription from Stripe
+        await stripe_client.get_subscription(billing_model.stripe_subscription_id)
+
+        # Revert the plan change in Stripe by setting the price back
+        # to the original plan
+        current_price_id = stripe_client.get_price_id_for_plan(billing_model.billing_plan)
+
+        await stripe_client.update_subscription(
+            subscription_id=billing_model.stripe_subscription_id,
+            price_id=current_price_id,
+            proration_behavior="none",
+        )
+
+        # Clear the pending change in our database
+        system_auth = AuthContext(
+            organization_id=organization_id,
+            user=None,
+            auth_method="system",
+            auth_metadata={"source": "billing_service"},
+        )
+
+        update_data = OrganizationBillingUpdate(
+            pending_plan_change=None,
+            pending_plan_change_at=None,
+        )
+
+        # Get the billing model from the database to avoid issues with detached instances
+        db_billing_model = await crud.organization_billing.get(
+            db, id=billing_model.id, auth_context=system_auth
+        )
+
+        await crud.organization_billing.update(
+            db,
+            db_obj=db_billing_model,
+            obj_in=update_data,
+            auth_context=system_auth,
+        )
+
+        return "Scheduled plan change has been canceled"
 
     async def create_customer_portal_session(
         self, db: AsyncSession, organization_id: UUID, return_url: str
@@ -1266,6 +1330,8 @@ class BillingService:
             in_grace_period=in_grace_period,
             payment_method_added=billing_model.payment_method_added,
             requires_payment_method=requires_payment_method,
+            pending_plan_change=billing_model.pending_plan_change,
+            pending_plan_change_at=billing_model.pending_plan_change_at,
         )
 
     async def create_billing_period(

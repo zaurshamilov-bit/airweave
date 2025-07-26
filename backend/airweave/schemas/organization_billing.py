@@ -136,6 +136,13 @@ class SubscriptionInfo(BaseModel):
     requires_payment_method: bool = Field(
         False, description="Whether payment method is required now"
     )
+    # Add pending plan change info
+    pending_plan_change: Optional[str] = Field(
+        None, description="Plan that will take effect at period end"
+    )
+    pending_plan_change_at: Optional[datetime] = Field(
+        None, description="When the pending plan change takes effect"
+    )
 
 
 # Request/Response schemas for API endpoints
