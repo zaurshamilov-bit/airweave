@@ -231,9 +231,10 @@ class StripeClient:
         try:
             # Get current subscription to find the item ID
             subscription = await self.get_subscription(subscription_id)
-            subscription_item_id = (
-                subscription.items.data[0].id if subscription.items.data else None
-            )
+
+            # Use dictionary-style access to avoid collision with `dict.items()`
+            items_data = subscription.get("items", {}).get("data")
+            subscription_item_id = items_data[0]["id"] if items_data else None
 
             update_params = {
                 "proration_behavior": proration_behavior,

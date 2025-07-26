@@ -441,38 +441,39 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
                   Access until {format(new Date(subscription.current_period_end), 'MMM d, yyyy')}
                 </p>
               )}
-              {subscription.pending_plan_change && subscription.pending_plan_change_at && (
-                <div className="mt-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="h-5 w-5 flex-shrink-0 text-yellow-600" />
-                    <div className="flex-1">
-                      <p className="font-semibold text-yellow-700">Plan Change Scheduled</p>
-                      <p className="text-sm text-yellow-600">
-                        Your plan will change to{' '}
-                        <strong>{getPlanDisplayName(subscription.pending_plan_change)}</strong> on{' '}
-                        {format(new Date(subscription.pending_plan_change_at), 'MMM d, yyyy')}.
-                      </p>
+              {subscription.pending_plan_change &&
+                subscription.pending_plan_change_at &&
+                !subscription.cancel_at_period_end && (
+                  <div className="mt-2 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 flex-shrink-0 text-yellow-600" />
+                      <div className="flex-1">
+                        <p className="font-semibold text-yellow-700">Plan Change Scheduled</p>
+                        <p className="text-sm text-yellow-600">
+                          Your plan will change to{' '}
+                          <strong>{getPlanDisplayName(subscription.pending_plan_change)}</strong> on{' '}
+                          {format(new Date(subscription.pending_plan_change_at), 'MMM d, yyyy')}.
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-yellow-700 hover:bg-yellow-500/20"
+                        onClick={handleCancelPlanChange}
+                        disabled={isCancelLoading}
+                      >
+                        {isCancelLoading ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <XCircle className="w-4 h-4" />
+                        )}
+                        <span className="sr-only">Cancel plan change</span>
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-yellow-700 hover:bg-yellow-500/20"
-                      onClick={handleCancelPlanChange}
-                      disabled={isCancelLoading}
-                    >
-                      {isCancelLoading ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <XCircle className="w-4 h-4" />
-                      )}
-                      <span className="sr-only">Cancel plan change</span>
-                    </Button>
                   </div>
-                </div>
-              )}
+                )}
               {subscription.cancel_at_period_end &&
-                subscription.current_period_end &&
-                !subscription.pending_plan_change && (
+                subscription.current_period_end && (
                   <Alert className="mt-2">
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
