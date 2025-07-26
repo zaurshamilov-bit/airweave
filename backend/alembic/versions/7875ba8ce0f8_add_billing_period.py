@@ -59,9 +59,6 @@ def upgrade():
     op.drop_index(op.f("idx_billing_events_org"), table_name="billing_event")
     op.drop_index(op.f("idx_billing_events_type"), table_name="billing_event")
     op.drop_table("billing_event")
-    op.drop_index(op.f("ix_usage_organization_id"), table_name="usage")
-    op.drop_index(op.f("ix_usage_organization_id_end_period"), table_name="usage")
-    op.drop_table("usage")
     op.add_column(
         "organization_billing",
         sa.Column("pending_plan_change", sa.String(length=50), nullable=True),
@@ -139,60 +136,7 @@ def downgrade():
     )
     op.drop_column("organization_billing", "pending_plan_change_at")
     op.drop_column("organization_billing", "pending_plan_change")
-    op.create_table(
-        "usage",
-        sa.Column("id", sa.UUID(), autoincrement=False, nullable=False),
-        sa.Column("organization_id", sa.UUID(), autoincrement=False, nullable=False),
-        sa.Column("start_period", sa.DATE(), autoincrement=False, nullable=False),
-        sa.Column("end_period", sa.DATE(), autoincrement=False, nullable=False),
-        sa.Column(
-            "syncs", sa.INTEGER(), server_default=sa.text("0"), autoincrement=False, nullable=False
-        ),
-        sa.Column(
-            "entities",
-            sa.INTEGER(),
-            server_default=sa.text("0"),
-            autoincrement=False,
-            nullable=False,
-        ),
-        sa.Column(
-            "queries",
-            sa.INTEGER(),
-            server_default=sa.text("0"),
-            autoincrement=False,
-            nullable=False,
-        ),
-        sa.Column(
-            "collections",
-            sa.INTEGER(),
-            server_default=sa.text("0"),
-            autoincrement=False,
-            nullable=False,
-        ),
-        sa.Column(
-            "source_connections",
-            sa.INTEGER(),
-            server_default=sa.text("0"),
-            autoincrement=False,
-            nullable=False,
-        ),
-        sa.Column("created_at", postgresql.TIMESTAMP(), autoincrement=False, nullable=False),
-        sa.Column("modified_at", postgresql.TIMESTAMP(), autoincrement=False, nullable=False),
-        sa.ForeignKeyConstraint(
-            ["organization_id"],
-            ["organization.id"],
-            name=op.f("usage_organization_id_fkey"),
-            ondelete="CASCADE",
-        ),
-        sa.PrimaryKeyConstraint("id", name=op.f("usage_pkey")),
-    )
-    op.create_index(
-        op.f("ix_usage_organization_id_end_period"),
-        "usage",
-        ["organization_id", "end_period"],
-        unique=False,
-    )
-    op.create_index(op.f("ix_usage_organization_id"), "usage", ["organization_id"], unique=False)
+
     op.create_table(
         "billing_event",
         sa.Column("id", sa.UUID(), autoincrement=False, nullable=False),
