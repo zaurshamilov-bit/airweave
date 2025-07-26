@@ -10,8 +10,10 @@ from airweave.core.config import settings
 from airweave.core.exceptions import PaymentRequiredException, UsageLimitExceededException
 from airweave.core.logging import ContextualLogger
 from airweave.core.logging import logger as default_logger
-from airweave.core.shared_models import ActionType, PaymentStatus, SubscriptionType
+from airweave.core.shared_models import ActionType
 from airweave.db.session import get_db_context
+from airweave.schemas.billing_period import BillingPeriodStatus
+from airweave.schemas.organization_billing import BillingPlan
 from airweave.schemas.usage import Usage, UsageLimit
 
 # NOTE: usage is always got from the database and we never directly update the usage in memory
@@ -32,21 +34,54 @@ class GuardRailService:
     # Cache TTL - refresh usage data after this duration
     USAGE_CACHE_TTL = timedelta(seconds=30)  # Refresh every 30 seconds
 
-    # Payment status restrictions - which actions are blocked for each payment status
-    PAYMENT_STATUS_RESTRICTIONS = {
-        PaymentStatus.CURRENT: set(),  # No restrictions
-        PaymentStatus.PAID: set(),  # No restrictions (recently paid)
-        PaymentStatus.GRACE_PERIOD: {
+    # Billing status restrictions - which actions are blocked for each billing status
+    BILLING_STATUS_RESTRICTIONS = {
+        BillingPeriodStatus.ACTIVE: set(),  # No restrictions
+        BillingPeriodStatus.TRIAL: set(),  # No restrictions during trial
+        BillingPeriodStatus.GRACE: {
             # During grace period, block resource creation but allow queries
             ActionType.COLLECTIONS,
             ActionType.SOURCE_CONNECTIONS,
         },
-        PaymentStatus.LATE: {
-            # When late, only allow queries - block all resource creation/modification
+        BillingPeriodStatus.ENDED_UNPAID: {
+            # When unpaid, only allow queries - block all resource creation/modification
             ActionType.SYNCS,
             ActionType.ENTITIES,
             ActionType.COLLECTIONS,
             ActionType.SOURCE_CONNECTIONS,
+        },
+        BillingPeriodStatus.COMPLETED: {
+            # Completed periods should not be current, but if they are, block everything
+            ActionType.SYNCS,
+            ActionType.ENTITIES,
+            ActionType.COLLECTIONS,
+            ActionType.SOURCE_CONNECTIONS,
+            ActionType.QUERIES,
+        },
+    }
+
+    # Plan limits configuration (matching BillingService)
+    PLAN_LIMITS = {
+        BillingPlan.DEVELOPER: {
+            "max_syncs": 10,
+            "max_entities": 100000,
+            "max_queries": 1000,
+            "max_collections": 5,
+            "max_source_connections": 10,
+        },
+        BillingPlan.STARTUP: {
+            "max_syncs": 50,
+            "max_entities": 1000000,
+            "max_queries": 10000,
+            "max_collections": 20,
+            "max_source_connections": 50,
+        },
+        BillingPlan.ENTERPRISE: {
+            "max_syncs": None,  # Unlimited
+            "max_entities": None,
+            "max_queries": None,
+            "max_collections": None,
+            "max_source_connections": None,
         },
     }
 
@@ -84,7 +119,7 @@ class GuardRailService:
             True if the action is allowed
 
         Raises:
-            PaymentRequiredException: If action is blocked due to payment status
+            PaymentRequiredException: If action is blocked due to billing status
             UsageLimitExceededException: If action would exceed usage limits
         """
         # Use lock to ensure thread-safe access to usage data
@@ -96,19 +131,19 @@ class GuardRailService:
                 )
                 return True
 
-            # First check payment status
-            payment_status = await self._get_payment_status()
-            restricted_actions = self.PAYMENT_STATUS_RESTRICTIONS.get(payment_status, set())
+            # First check billing status
+            billing_status = await self._get_billing_status()
+            restricted_actions = self.BILLING_STATUS_RESTRICTIONS.get(billing_status, set())
 
-            # If action is restricted due to payment status, raise exception
+            # If action is restricted due to billing status, raise exception
             if action_type in restricted_actions:
                 self.logger.warning(
                     f"Action {action_type.value} blocked due to "
-                    f"payment status: {payment_status.value}"
+                    f"billing status: {billing_status.value}"
                 )
                 raise PaymentRequiredException(
                     action_type=action_type.value,
-                    payment_status=payment_status.value,
+                    payment_status=billing_status.value,
                 )
 
             # Check if we need to refresh usage (TTL expired or never fetched)
@@ -276,7 +311,7 @@ class GuardRailService:
                 # Convert SQLAlchemy model to Pydantic schema
                 usage = Usage.model_validate(usage_record)
                 self.logger.info(
-                    f"Retrieved current usage: syncs={usage.syncs}, entities={usage.entities}, "
+                    f"\n\nRetrieved current usage: syncs={usage.syncs}, entities={usage.entities}, "
                     f"queries={usage.queries}, collections={usage.collections}, "
                     f"source_connections={usage.source_connections}\n\n"
                 )
@@ -285,86 +320,93 @@ class GuardRailService:
                 self.logger.info("No usage record found for current billing period")
                 return None
 
-    async def _get_payment_status(self) -> PaymentStatus:
-        """Get payment status using the stripe service.
+    async def _get_billing_status(self) -> BillingPeriodStatus:
+        """Get billing status from the current billing period.
 
         Returns:
-            PaymentStatus based on Stripe subscription/payment data
-        """
-        # TODO: Replace with actual Stripe service integration
-        # Mock implementation - return a mocked payment status
-        # In real implementation:
-        # async with AsyncSessionLocal() as db:
-        #     billing_record = await crud.billing.get_by_organization_id(
-        #         db, organization_id=self.organization_id
-        #     )
-        #     stripe_subscription = await stripe_service.get_subscription(
-        #         billing_record.stripe_subscription_id
-        #     )
-        #     return stripe_service.get_payment_status(stripe_subscription)
+            BillingPeriodStatus based on the current billing period
 
-        # For now, return mock status
-        return PaymentStatus.CURRENT
+        Raises:
+            InvalidStateError: If no billing period exists or status is missing
+        """
+        async with get_db_context() as db:
+            # Get current billing period
+            current_period = await crud.billing_period.get_current_period(
+                db, organization_id=self.organization_id
+            )
+
+            if not current_period:
+                from airweave.core.exceptions import InvalidStateError
+
+                raise InvalidStateError(
+                    f"No active billing period found for organization {self.organization_id}. "
+                    "Cannot determine billing status."
+                )
+
+            if not current_period.status:
+                from airweave.core.exceptions import InvalidStateError
+
+                raise InvalidStateError(
+                    f"Billing period {current_period.id} has no status set. "
+                    "This indicates a data integrity issue."
+                )
+
+            self.logger.info(
+                f"\n\nRetrieved billing period for organization {self.organization_id}: "
+                f"status={current_period.status}, plan={current_period.plan}, "
+                f"period_id={current_period.id}, "
+                f"period={current_period.period_start} to {current_period.period_end}\n\n"
+            )
+
+            return current_period.status
 
     async def _infer_usage_limit(self) -> UsageLimit:
-        """Infer usage limit based on billing table in db.
+        """Infer usage limit based on current billing period's plan.
 
         Returns:
             UsageLimit based on organization's subscription tier
+
+        Raises:
+            InvalidStateError: If no billing period exists for the organization
         """
-        # TODO: Replace with actual database query when billing table exists
-        # Mock implementation - fetch subscription type from billing table
-        # For now, we'll simulate getting a subscription type
+        async with get_db_context() as db:
+            # Get current billing period
+            current_period = await crud.billing_period.get_current_period(
+                db, organization_id=self.organization_id
+            )
 
-        # In real implementation:
-        # async with AsyncSessionLocal() as db:
-        #     billing_record = await crud.billing.get_by_organization_id(
-        #         db, organization_id=self.organization_id
-        #     )
-        #     subscription_type = billing_record.subscription_type
+            if not current_period or not current_period.plan:
+                from airweave.core.exceptions import InvalidStateError
 
-        # Mock subscription type for now
-        subscription_type = SubscriptionType.FREE  # This would come from the billing table
+                raise InvalidStateError(
+                    f"No active billing period found for organization {self.organization_id}. "
+                    "Please ensure billing is properly configured."
+                )
 
-        # Define limits based on subscription tier
-        if subscription_type == SubscriptionType.FREE:
-            return UsageLimit(
-                max_syncs=6,
-                max_entities=400,
-                max_queries=5,
-                max_collections=1,
-                max_source_connections=3,
+            plan = current_period.plan
+            self.logger.info(
+                f"\n\nRetrieved billing period for limits calculation: "
+                f"plan={plan}, status={current_period.status}, "
+                f"period_id={current_period.id}, "
+                f"organization_id={self.organization_id}\n\n"
             )
-        elif subscription_type == SubscriptionType.BASIC:
-            return UsageLimit(
-                max_syncs=10,
-                max_entities=10000,
-                max_queries=1000,
-                max_collections=5,
-                max_source_connections=5,
-            )
-        elif subscription_type == SubscriptionType.PRO:
-            return UsageLimit(
-                max_syncs=50,
-                max_entities=100000,
-                max_queries=10000,
-                max_collections=20,
-                max_source_connections=25,
-            )
-        elif subscription_type == SubscriptionType.TEAM:
-            return UsageLimit(
-                max_syncs=200,
-                max_entities=1000000,
-                max_queries=50000,
-                max_collections=100,
-                max_source_connections=100,
-            )
-        else:
-            # Enterprise - return unlimited
-            return UsageLimit(
-                max_syncs=None,  # Unlimited
-                max_entities=None,
-                max_queries=None,
-                max_collections=None,
-                max_source_connections=None,
-            )
+
+        # Get limits for the plan
+        limits = self.PLAN_LIMITS.get(plan, self.PLAN_LIMITS[BillingPlan.DEVELOPER])
+
+        self.logger.debug(
+            f"Applied limits for {plan} plan: "
+            f"syncs={limits.get('max_syncs')}, "
+            f"entities={limits.get('max_entities')}, "
+            f"queries={limits.get('max_queries')}, "
+            f"collections={limits.get('max_collections')}, "
+            f"source_connections={limits.get('max_source_connections')}"
+        )
+
+        return UsageLimit(
+            max_syncs=limits.get("max_syncs"),
+            max_entities=limits.get("max_entities"),
+            max_queries=limits.get("max_queries"),
+            max_collections=limits.get("max_collections"),
+            max_source_connections=limits.get("max_source_connections"),
+        )

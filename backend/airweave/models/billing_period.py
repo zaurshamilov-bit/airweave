@@ -26,8 +26,8 @@ class BillingPeriod(Base):
     )
 
     # Period boundaries (inclusive start, exclusive end)
-    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
 
     # Billing details at time of period
     plan: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -40,7 +40,7 @@ class BillingPeriod(Base):
     # Payment tracking
     amount_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True)
-    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False), nullable=True)
 
     # State transition metadata
     created_from: Mapped[str] = mapped_column(String(50), nullable=False)

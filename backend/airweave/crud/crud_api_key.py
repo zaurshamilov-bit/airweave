@@ -1,7 +1,7 @@
 """CRUD operations for the APIKey model."""
 
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Optional
 from uuid import UUID
 
@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave.core import credentials
+from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.exceptions import NotFoundException, PermissionException
 from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.db.unit_of_work import UnitOfWork
@@ -44,7 +45,7 @@ class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
         encrypted_key = credentials.encrypt({"key": key})
 
         expiration_date = obj_in.expiration_date or (
-            datetime.now(timezone.utc) + timedelta(days=180)  # Default to 180 days
+            utc_now_naive() + timedelta(days=180)  # Default to 180 days
         )
 
         # Create a dictionary with the data instead of using the schema
@@ -133,7 +134,7 @@ class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
                 decrypted_data = credentials.decrypt(api_key.encrypted_key)
                 if decrypted_data["key"] == key:
                     # Check expiration
-                    if api_key.expiration_date < datetime.now(timezone.utc):
+                    if api_key.expiration_date < utc_now_naive():
                         raise PermissionException("API key has expired")
                     return api_key
             except Exception:

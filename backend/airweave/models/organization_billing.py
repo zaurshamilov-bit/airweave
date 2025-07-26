@@ -32,28 +32,28 @@ class OrganizationBilling(Base):
 
     # Trial tracking - now only used for tracking Stripe's trial
     trial_ends_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=False), nullable=True
     )
 
     # Grace period tracking for when payment method is not set
     grace_period_ends_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=False), nullable=True
     )
     payment_method_added: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Subscription period tracking
     current_period_start: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=False), nullable=True
     )
     current_period_end: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=False), nullable=True
     )
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Pending plan change tracking (for downgrades)
     pending_plan_change: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     pending_plan_change_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=False), nullable=True
     )
 
     # Billing contact
@@ -63,7 +63,7 @@ class OrganizationBilling(Base):
     payment_method_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     last_payment_status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     last_payment_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=False), nullable=True
     )
 
     # Metadata for additional billing info

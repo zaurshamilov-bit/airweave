@@ -3,7 +3,7 @@
 from typing import Dict, Optional
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import and_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave.core.shared_models import ActionType
@@ -49,18 +49,67 @@ class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
         Returns:
             Current usage record or None if no active period
         """
-        from airweave import crud
+        from datetime import datetime
 
-        # Get current billing period
-        current_period = await crud.billing_period.get_current_period(
-            db, organization_id=organization_id
+        from airweave.core.logging import logger
+        from airweave.models.billing_period import BillingPeriod
+        from airweave.schemas.billing_period import BillingPeriodStatus
+
+        now = datetime.utcnow()
+        logger.info(
+            f"[get_current_usage] Looking for usage record for org {organization_id} at {now}"
         )
 
-        if not current_period:
-            return None
+        # First, let's check what billing periods exist for debugging
+        debug_query = select(BillingPeriod).where(BillingPeriod.organization_id == organization_id)
+        debug_result = await db.execute(debug_query)
+        all_periods = debug_result.scalars().all()
 
-        # Get usage for this period
-        return await self.get_by_billing_period(db, billing_period_id=current_period.id)
+        logger.info(f"[get_current_usage] Found {len(all_periods)} billing periods for org:")
+        for period in all_periods:
+            logger.info(
+                f"  - Period {period.id}: status={period.status}, "
+                f"start={period.period_start}, end={period.period_end}, "
+                f"is_current={(period.period_start <= now <= period.period_end)}"
+            )
+
+        # Single query with join
+        query = (
+            select(self.model)
+            .join(BillingPeriod, self.model.billing_period_id == BillingPeriod.id)
+            .where(
+                and_(
+                    BillingPeriod.organization_id == organization_id,
+                    BillingPeriod.period_start <= now,
+                    BillingPeriod.period_end > now,
+                    BillingPeriod.status.in_(
+                        [
+                            BillingPeriodStatus.ACTIVE,
+                            BillingPeriodStatus.TRIAL,
+                            BillingPeriodStatus.GRACE,
+                        ]
+                    ),
+                )
+            )
+        )
+
+        result = await db.execute(query)
+        usage_record = result.scalar_one_or_none()
+
+        if usage_record:
+            logger.info(
+                f"[get_current_usage] Found usage record {usage_record.id} "
+                f"for billing_period_id={usage_record.billing_period_id}"
+            )
+        else:
+            logger.warning(
+                "[get_current_usage] No usage record found for current billing period. "
+                "This could mean: 1) No active billing period at current time, "
+                "2) Billing period exists but no usage record, "
+                "3) Billing period has wrong status"
+            )
+
+        return usage_record
 
     async def increment_usage(
         self,
@@ -82,14 +131,34 @@ class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
         Returns:
             The updated usage record after increment, or None if no active period
         """
+        from airweave.core.logging import logger
+
+        logger.info(
+            f"[increment_usage] Called for org {organization_id} with increments: {increments}"
+        )
+
         # Get current usage record
         current_usage = await self.get_current_usage(db, organization_id=organization_id)
         if not current_usage:
+            logger.error(
+                f"[increment_usage] No current usage record found for org {organization_id}. "
+                f"Cannot increment usage without an active billing period with usage record."
+            )
             return None
+
+        # Store the ID before any operations that might invalidate the object
+        usage_id = current_usage.id
+
+        logger.info(
+            f"[increment_usage] Found usage record {usage_id}, "
+            f"current values: syncs={current_usage.syncs}, entities={current_usage.entities}, "
+            f"queries={current_usage.queries}, collections={current_usage.collections}, "
+            f"source_connections={current_usage.source_connections}"
+        )
 
         # Build the atomic UPDATE query
         update_parts = []
-        params = {"usage_id": current_usage.id}
+        params = {"usage_id": usage_id}
 
         for action_type, increment in increments.items():
             if increment > 0:
@@ -105,16 +174,45 @@ class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
                 SET {", ".join(update_parts)},
                     modified_at = NOW()
                 WHERE id = :usage_id
+                RETURNING id, organization_id, syncs, entities, queries, collections,
+                        source_connections, billing_period_id, created_at, modified_at
             """
             )
 
-            await db.execute(query, params)
+            logger.info(f"[increment_usage] Executing SQL update with params: {params}")
+            result = await db.execute(query, params)
 
             # Commit the transaction
             await db.commit()
+            logger.info("[increment_usage] SQL update committed successfully")
 
-            # Fetch and return the updated record
-            return await self.get(db, id=current_usage.id)
+            # Get the updated row from the RETURNING clause
+            updated_row = result.first()
+            if updated_row:
+                # Create a new Usage object from the returned data
+                updated = Usage(
+                    id=updated_row.id,
+                    organization_id=updated_row.organization_id,
+                    syncs=updated_row.syncs,
+                    entities=updated_row.entities,
+                    queries=updated_row.queries,
+                    collections=updated_row.collections,
+                    source_connections=updated_row.source_connections,
+                    billing_period_id=updated_row.billing_period_id,
+                    created_at=updated_row.created_at,
+                    modified_at=updated_row.modified_at,
+                )
+
+                logger.info(
+                    f"[increment_usage] Updated values: syncs={updated.syncs}, "
+                    f"entities={updated.entities}, queries={updated.queries}, "
+                    f"collections={updated.collections}, "
+                    f"source_connections={updated.source_connections}"
+                )
+                return updated
+            else:
+                logger.error("[increment_usage] No row returned from UPDATE query")
+                return None
 
         return current_usage
 
