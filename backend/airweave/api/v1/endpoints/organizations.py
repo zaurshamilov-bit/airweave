@@ -41,7 +41,7 @@ async def create_organization(
     """
     # Create the organization with Auth0 integration
     try:
-        organization = await organization_service.create_organization_with_auth0(
+        organization = await organization_service.create_organization_with_integrations(
             db=db, org_data=organization_data, owner_user=user
         )
 

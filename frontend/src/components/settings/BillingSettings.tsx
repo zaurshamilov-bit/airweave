@@ -456,18 +456,20 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
                         </p>
                       </div>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="text-yellow-700 hover:bg-yellow-500/20"
+                        className="text-yellow-700 hover:bg-yellow-500/20 border-yellow-500/30"
                         onClick={handleCancelPlanChange}
                         disabled={isCancelLoading}
                       >
                         {isCancelLoading ? (
                           <RefreshCw className="w-4 h-4 animate-spin" />
                         ) : (
-                          <XCircle className="w-4 h-4" />
+                          <>
+                            <XCircle className="w-4 h-4 mr-1" />
+                            Cancel downgrade
+                          </>
                         )}
-                        <span className="sr-only">Cancel plan change</span>
                       </Button>
                     </div>
                   </div>

@@ -959,6 +959,13 @@ class BillingService:
         # Check if this is a renewal
         is_renewal = previous_attributes and "current_period_end" in previous_attributes
 
+        # Check if this is a canceled plan change (plan matches current but we have pending change)
+        is_canceled_plan_change = (
+            billing_model.pending_plan_change
+            and new_plan == billing_model.billing_plan
+            and not is_renewal
+        )
+
         # Handle renewal
         if is_renewal:
             await self._handle_subscription_renewal(
@@ -985,10 +992,12 @@ class BillingService:
         if plan_changed:
             update_data.billing_plan = BillingPlan(new_plan)
 
-        # Clear pending plan change if renewal with pending change
-        if is_renewal and billing_model.pending_plan_change:
+        # Clear pending plan change if renewal with pending change OR if plan change was canceled
+        if (is_renewal and billing_model.pending_plan_change) or is_canceled_plan_change:
             update_data.pending_plan_change = None
             update_data.pending_plan_change_at = None
+            if is_canceled_plan_change:
+                logger.info(f"Cleared canceled plan change for org {org_id}")
 
         # Handle trial end updates
         if hasattr(subscription, "trial_end"):
