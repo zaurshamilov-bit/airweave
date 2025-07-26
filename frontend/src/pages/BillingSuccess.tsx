@@ -5,15 +5,19 @@ import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
 import { useOrganizationStore } from '@/lib/stores/organizations';
 import { useAuth0 } from '@auth0/auth0-react';
+import { useTheme } from '@/lib/theme-provider';
 
 export const BillingSuccess = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { resolvedTheme } = useTheme();
   const { fetchUserOrganizations, currentOrganization } = useOrganizationStore();
   const { isAuthenticated, isLoading: authLoading } = useAuth0();
   const [isProcessing, setIsProcessing] = useState(true);
   const [invitesSent, setInvitesSent] = useState(false);
   const [hasProcessed, setHasProcessed] = useState(false);
+
+  const isDark = resolvedTheme === 'dark';
 
   useEffect(() => {
     const processSuccess = async () => {
@@ -81,37 +85,55 @@ export const BillingSuccess = () => {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md text-center space-y-8">
-        {isProcessing ? (
-          <>
-            <Loader2 className="w-16 h-16 mx-auto animate-spin text-primary" />
-            <div className="space-y-2">
-              <h1 className="text-2xl font-semibold">Setting up your account...</h1>
-              <p className="text-muted-foreground">
-                This will just take a moment
-              </p>
-            </div>
-          </>
-        ) : (
-          <>
-            <CheckCircle className="w-16 h-16 mx-auto text-green-500" />
-            <div className="space-y-2">
-              <h1 className="text-2xl font-semibold">Welcome to Airweave!</h1>
-              <p className="text-muted-foreground">
-                Your subscription is active and your trial has begun
-              </p>
-              {invitesSent && (
-                <p className="text-sm text-muted-foreground flex items-center justify-center gap-2 mt-4">
-                  <Users className="w-4 h-4" />
-                  Team invitations have been sent
+      <div className="w-full max-w-md">
+        {/* Logo header */}
+        <div className="mb-12 text-center">
+          <img
+            src={isDark ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg"}
+            alt="Airweave"
+            className="h-8 w-auto mx-auto mb-2"
+            style={{ maxWidth: '180px' }}
+          />
+          <p className="text-xs text-muted-foreground">
+            Let agents search any app
+          </p>
+        </div>
+
+        {/* Content */}
+        <div className="text-center space-y-8">
+          {isProcessing ? (
+            <>
+              <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary/60" />
+              <div className="space-y-2">
+                <h1 className="text-2xl font-normal">Setting up your account</h1>
+                <p className="text-muted-foreground">
+                  This will just take a moment
                 </p>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Redirecting to your dashboard...
-            </p>
-          </>
-        )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 mx-auto rounded-full bg-green-50 dark:bg-green-950/20 flex items-center justify-center">
+                <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-500" />
+              </div>
+              <div className="space-y-3">
+                <h1 className="text-2xl font-normal">Welcome to Airweave!</h1>
+                <p className="text-muted-foreground">
+                  Your subscription is active and your trial has begun
+                </p>
+                {invitesSent && (
+                  <div className="flex items-center justify-center gap-2 mt-6 text-sm text-muted-foreground">
+                    <Users className="w-4 h-4" />
+                    <span>Team invitations have been sent</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground/70">
+                Redirecting to your dashboard...
+              </p>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -22,7 +22,6 @@ import Callback from '@/pages/Callback';
 import { protectedPaths, publicPaths } from '@/constants/paths';
 import { AuthCallback } from '@/pages/AuthCallback';
 import { OrganizationSettingsUnified } from '@/pages/organization/OrganizationSettingsUnified';
-import NoOrganization from '@/pages/NoOrganization';
 import Onboarding from '@/pages/Onboarding';
 import BillingSuccess from '@/pages/BillingSuccess';
 import BillingCancel from '@/pages/BillingCancel';
@@ -43,7 +42,6 @@ function App() {
         <Route path={publicPaths.login} element={<Login />} />
         <Route path={publicPaths.callback} element={<Callback />} />
         <Route path={publicPaths.semanticMcp} element={<SemanticMcp />} />
-        <Route path={publicPaths.noOrganization} element={<NoOrganization />} />
         <Route path={publicPaths.onboarding} element={<Onboarding />} />
         <Route path={publicPaths.billingSuccess} element={<BillingSuccess />} />
         <Route path={publicPaths.billingCancel} element={<BillingCancel />} />

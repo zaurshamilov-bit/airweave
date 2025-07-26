@@ -44,20 +44,20 @@ export const AuthGuard = ({ children }: AuthGuardProps) => {
             setCanRenderChildren(true);
           } else {
             // User has no orgs, redirect them
-            navigate(publicPaths.noOrganization, { replace: true });
+            navigate(publicPaths.onboarding, { replace: true });
           }
         })
         .catch(error => {
           console.error('AuthGuard: Failed to initialize organizations, redirecting.', error);
-          navigate(publicPaths.noOrganization, { replace: true });
+          navigate(publicPaths.onboarding, { replace: true });
         });
     }
   }, [isAuthenticated, authLoading, navigate, location.pathname]);
 
   // Show a loading spinner during the initial auth check or org fetch
   if (!canRenderChildren && (authLoading || (isAuthenticated && !initializationAttempted.current))) {
-     // A special check to prevent a flash of the loader on the no-org page
-    if (location.pathname === publicPaths.noOrganization) {
+     // A special check to prevent a flash of the loader on the onboarding page
+    if (location.pathname === publicPaths.onboarding) {
       return null;
     }
     return (

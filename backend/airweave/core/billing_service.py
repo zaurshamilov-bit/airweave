@@ -288,7 +288,7 @@ class BillingService:
         return is_upgrade, is_trial_to_startup
 
     async def _handle_trial_subscription_upgrade(
-        self, billing_model: Any, organization_id: UUID, new_plan: str
+        self, billing_model: schemas.OrganizationBilling, organization_id: UUID, new_plan: str
     ) -> str:
         """Handle upgrading from a trial subscription with no items.
 
@@ -301,12 +301,8 @@ class BillingService:
             Checkout session URL
         """
         logger.info(
-            f"Canceling trial subscription {billing_model.stripe_subscription_id} to "
-            f"create new one for trial upgrade"
-        )
-        await stripe_client.cancel_subscription(
-            subscription_id=billing_model.stripe_subscription_id,
-            cancel_at_period_end=False,  # Cancel immediately
+            f"Creating session for trial upgrade from {billing_model.stripe_subscription_id} "
+            f"to {new_plan} plan"
         )
 
         price_id = stripe_client.get_price_id_for_plan(new_plan)
@@ -318,6 +314,8 @@ class BillingService:
             metadata={
                 "organization_id": str(organization_id),
                 "plan": new_plan,
+                "upgrade_from_trial": "true",
+                "previous_subscription_id": billing_model.stripe_subscription_id,
             },
             trial_period_days=None,  # No trial for the new subscription
         )
@@ -721,6 +719,27 @@ class BillingService:
             logger.error(f"No billing record for organization {org_id}")
             return
 
+        # Check if this is a trial upgrade
+        is_trial_upgrade = subscription.metadata.get("upgrade_from_trial") == "true"
+        previous_subscription_id = subscription.metadata.get("previous_subscription_id")
+
+        # If this is a trial upgrade, cancel the old subscription
+        if is_trial_upgrade and previous_subscription_id:
+            logger.info(
+                f"Canceling previous trial subscription {previous_subscription_id} "
+                f"after successful upgrade to {subscription.id}"
+            )
+            try:
+                await stripe_client.cancel_subscription(
+                    subscription_id=previous_subscription_id,
+                    cancel_at_period_end=False,  # Cancel immediately
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to cancel previous subscription {previous_subscription_id}: {e}"
+                )
+                # Continue processing even if cancellation fails
+
         # Determine plan from metadata or price
         plan = subscription.metadata.get("plan", "developer")
 
@@ -772,12 +791,19 @@ class BillingService:
             period_start=datetime.fromtimestamp(subscription.current_period_start, tz=timezone.utc),
             period_end=datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc),
             plan=BillingPlan(plan),
-            transition=BillingTransition.INITIAL_SIGNUP,
+            transition=(
+                BillingTransition.INITIAL_SIGNUP
+                if not is_trial_upgrade
+                else BillingTransition.UPGRADE
+            ),
             stripe_subscription_id=subscription.id,
             status=BillingPeriodStatus.TRIAL if has_trial else BillingPeriodStatus.ACTIVE,
         )
 
-        logger.info(f"Subscription created for org {org_id}: {plan} (trial: {has_trial})")
+        logger.info(
+            f"Subscription created for org {org_id}: {plan} "
+            f"(trial: {has_trial}, upgrade: {is_trial_upgrade})"
+        )
 
     def _extract_plan_from_subscription(
         self, subscription: stripe.Subscription, current_plan: BillingPlan
@@ -1330,6 +1356,7 @@ class BillingService:
             status=billing_model.billing_status,
             trial_ends_at=billing_model.trial_ends_at,
             grace_period_ends_at=billing_model.grace_period_ends_at,
+            current_period_start=billing_model.current_period_start,
             current_period_end=billing_model.current_period_end,
             cancel_at_period_end=billing_model.cancel_at_period_end,
             limits=self.PLAN_LIMITS.get(billing_model.billing_plan, {}),

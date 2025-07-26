@@ -121,6 +121,9 @@ class SubscriptionInfo(BaseModel):
     status: str = Field(..., description="Subscription status")
     trial_ends_at: Optional[datetime] = Field(None, description="Trial end date")
     grace_period_ends_at: Optional[datetime] = Field(None, description="Grace period end date")
+    current_period_start: Optional[datetime] = Field(
+        None, description="Current billing period start"
+    )
     current_period_end: Optional[datetime] = Field(None, description="Current billing period end")
     cancel_at_period_end: bool = Field(
         False, description="Whether subscription will cancel at period end"

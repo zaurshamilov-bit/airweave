@@ -2,17 +2,19 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useOrganizationStore } from '@/lib/stores/organizations';
 import { apiClient } from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, CreditCard, AlertCircle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { Loader2, CreditCard, AlertCircle, Check, ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useTheme } from '@/lib/theme-provider';
 
 export default function BillingSetup() {
   const navigate = useNavigate();
+  const { resolvedTheme } = useTheme();
   const { currentOrganization, billingInfo, fetchBillingInfo } = useOrganizationStore();
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
+
+  const isDark = resolvedTheme === 'dark';
 
   useEffect(() => {
     // Check current billing status
@@ -71,8 +73,8 @@ export default function BillingSetup() {
 
   if (isCheckingStatus) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary/60" />
       </div>
     );
   }
@@ -83,117 +85,150 @@ export default function BillingSetup() {
   const selectedPlan = billingInfo?.plan || 'developer';
 
   return (
-    <div className="container mx-auto flex h-screen items-center justify-center">
-      <Card className="w-full max-w-lg">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <CreditCard className="h-6 w-6 text-primary" />
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-xl">
+        {/* Header with logo */}
+        <div className="mb-12 text-center">
+          <img
+            src={isDark ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg"}
+            alt="Airweave"
+            className="h-8 w-auto mx-auto mb-2"
+            style={{ maxWidth: '180px' }}
+          />
+          <p className="text-xs text-muted-foreground">
+            Let agents search any app
+          </p>
+        </div>
+
+        {/* Main content */}
+        <div className="space-y-8">
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl font-normal">
+              {isInitialSetup ? 'Complete Your Setup' : 'Update Payment Method'}
+            </h1>
+            <p className="text-muted-foreground">
+              {isInitialSetup
+                ? 'Add a payment method to activate your subscription'
+                : 'Update your payment method to continue using Airweave'}
+            </p>
           </div>
-          <CardTitle className="text-2xl">
-            {isInitialSetup ? 'Complete Your Setup' : 'Update Payment Method'}
-          </CardTitle>
-          <CardDescription>
-            {isInitialSetup
-              ? 'Add a payment method to activate your subscription'
-              : 'Update your payment method to continue using Airweave.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Status Alerts */}
+
+          {/* Status Alert */}
           {billingInfo?.status === 'past_due' && (
-            <Alert className="border-destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Your last payment failed. Please update your payment method.
-              </AlertDescription>
-            </Alert>
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-4">
+              <div className="flex gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-amber-800 dark:text-amber-200">
+                  <p className="font-medium mb-1">Payment failed</p>
+                  <p>Your last payment failed. Please update your payment method to continue.</p>
+                </div>
+              </div>
+            </div>
           )}
 
-          {/* Plan Benefits */}
-          <div className="rounded-lg border p-4">
-            <h3 className="mb-3 font-semibold">
-              {selectedPlan === 'startup' ? 'Startup' : 'Developer'} Plan
-            </h3>
-            <ul className="space-y-2 text-sm text-muted-foreground">
+          {/* Plan Details */}
+          <div className="border border-border/50 rounded-lg p-6 space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-normal">
+                {selectedPlan === 'startup' ? 'Startup' : 'Developer'} Plan
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {selectedPlan === 'startup'
+                  ? 'For growing teams with higher demands'
+                  : 'Perfect for small teams and projects'}
+              </p>
+            </div>
+
+            <div className="space-y-3">
               {selectedPlan === 'startup' ? (
                 <>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                    <span>$299/month</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                    <span>Up to 50 source connections</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                    <span>1,000,000 entities per month</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                    <span>15-minute sync frequency</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                    <span>Up to 20 team members</span>
-                  </li>
+                  <div className="flex items-center gap-3">
+                    <Check className="h-4 w-4 text-primary/70 flex-shrink-0" />
+                    <span className="text-sm">$299 per month</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Check className="h-4 w-4 text-primary/70 flex-shrink-0" />
+                    <span className="text-sm">50 source connections</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Check className="h-4 w-4 text-primary/70 flex-shrink-0" />
+                    <span className="text-sm">1M entities per month</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Check className="h-4 w-4 text-primary/70 flex-shrink-0" />
+                    <span className="text-sm">15-minute sync frequency</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Check className="h-4 w-4 text-primary/70 flex-shrink-0" />
+                    <span className="text-sm">Up to 20 team members</span>
+                  </div>
                 </>
               ) : (
                 <>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                    <span>14-day free trial, then $89/month</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                    <span>Up to 10 source connections</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                    <span>100,000 entities per month</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                    <span>Hourly sync frequency</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle className="mt-0.5 h-4 w-4 text-green-600" />
-                    <span>Up to 5 team members</span>
-                  </li>
+                  <div className="flex items-center gap-3">
+                    <Check className="h-4 w-4 text-primary/70 flex-shrink-0" />
+                    <span className="text-sm">14-day free trial, then $89/month</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Check className="h-4 w-4 text-primary/70 flex-shrink-0" />
+                    <span className="text-sm">10 source connections</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Check className="h-4 w-4 text-primary/70 flex-shrink-0" />
+                    <span className="text-sm">100K entities per month</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Check className="h-4 w-4 text-primary/70 flex-shrink-0" />
+                    <span className="text-sm">Hourly sync frequency</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Check className="h-4 w-4 text-primary/70 flex-shrink-0" />
+                    <span className="text-sm">Up to 5 team members</span>
+                  </div>
                 </>
               )}
-            </ul>
+            </div>
           </div>
 
-          {/* Actions */}
-          <div className="space-y-3">
+          {/* Action Button */}
+          <div className="pt-4">
             {hasActiveSubscription && billingInfo?.status === 'past_due' ? (
-              <Button
+              <button
                 onClick={handleManageSubscription}
                 disabled={isLoading}
-                className="w-full"
-                size="lg"
+                className={cn(
+                  "w-full flex items-center justify-center space-x-2 px-6 py-3 rounded-lg transition-all",
+                  "bg-primary text-primary-foreground hover:bg-primary/90",
+                  isLoading && "opacity-50 cursor-not-allowed"
+                )}
               >
-                Update Payment Method
-              </Button>
+                <span>Update Payment Method</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
             ) : (
-              <Button
+              <div className="w-full flex justify-center">
+              <button
                 onClick={handleSetupPayment}
                 disabled={isLoading}
-                className="w-full"
-                size="lg"
+                className={cn(
+                  "flex items-center justify-center space-x-2 px-6 py-3 rounded-lg transition-all",
+                  "bg-primary text-primary-foreground hover:bg-primary/90",
+                  isLoading && "opacity-50 cursor-not-allowed"
+                )}
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Setting up payment...
+                    <span>Setting up payment</span>
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   </>
-                ) : isInitialSetup ? (
-                  'Complete Setup'
                 ) : (
-                  'Update Payment Method'
-                )}
-              </Button>
+                  <>
+                    <span>{isInitialSetup ? 'Complete Setup' : 'Update Payment Method'}</span>
+                    <ChevronRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
             )}
           </div>
 
@@ -205,8 +240,8 @@ export default function BillingSetup() {
               ? "Your subscription will start immediately."
               : "Update your payment method to continue your subscription."}
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

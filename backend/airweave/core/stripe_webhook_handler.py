@@ -28,6 +28,7 @@ class StripeWebhookHandler:
             "invoice.payment_failed": self._handle_payment_failed,
             "customer.subscription.trial_will_end": self._handle_trial_ending,
             "invoice.upcoming": self._handle_invoice_upcoming,
+            "checkout.session.completed": self._handle_checkout_completed,
         }
 
     async def handle_event(self, event: stripe.Event) -> None:
@@ -154,3 +155,24 @@ class StripeWebhookHandler:
             )
 
             # TODO: Send email notification if needed
+
+    async def _handle_checkout_completed(self, event: stripe.Event) -> None:
+        """Handle checkout session completed event.
+
+        This is particularly important for trial upgrades to ensure
+        the old subscription is properly handled.
+
+        Args:
+            event: Stripe event with checkout session object
+        """
+        session = event.data.object
+
+        # Log checkout completion
+        logger.info(
+            f"Checkout session completed: {session.id}, "
+            f"Customer: {session.customer}, "
+            f"Subscription: {session.subscription}"
+        )
+
+        # The subscription.created webhook will handle the actual upgrade
+        # This event just helps us track the checkout completion

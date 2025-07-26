@@ -110,6 +110,7 @@ export const Onboarding = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [hasOrganizations, setHasOrganizations] = useState(false);
   const [formData, setFormData] = useState<OnboardingData>({
     organizationName: '',
     organizationSize: '',
@@ -133,17 +134,50 @@ export const Onboarding = () => {
     plan => plan.value === formData.subscriptionPlan
   )?.teamMemberLimit || 2;
 
+  // Check if user already has organizations
+  useEffect(() => {
+    const checkExistingOrgs = async () => {
+      try {
+        const organizations = await useOrganizationStore.getState().initializeOrganizations();
+        if (organizations.length > 0) {
+          setHasOrganizations(true);
+          // User already has organizations, redirect to dashboard
+          navigate('/', { replace: true });
+        }
+      } catch (error) {
+        console.error('Failed to check organizations:', error);
+        // Continue with onboarding if check fails
+      }
+    };
+
+    checkExistingOrgs();
+  }, [navigate]);
+
   // Handle ESC key to go back to dashboard on first step
   useEffect(() => {
     const handleEscapeKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && currentStep === 1) {
+      // Only allow ESC if user has organizations
+      if (e.key === 'Escape' && currentStep === 1 && hasOrganizations) {
         navigate('/');
       }
     };
 
     window.addEventListener('keydown', handleEscapeKey);
     return () => window.removeEventListener('keydown', handleEscapeKey);
-  }, [currentStep, navigate]);
+  }, [currentStep, navigate, hasOrganizations]);
+
+  // Prevent browser refresh/navigation when user has no organizations
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasOrganizations) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasOrganizations]);
 
   const updateFormData = (field: keyof OnboardingData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -665,7 +699,7 @@ export const Onboarding = () => {
                     value={inviteRole}
                     onChange={(e) => setInviteRole(e.target.value as 'member' | 'admin')}
                     className={cn(
-                      "w-32 h-8 px-3 text-sm bg-transparent border rounded-md",
+                      "w-24 h-8 px-2 text-sm bg-transparent border rounded-md",
                       "focus:outline-none focus:ring-0 focus:border-border transition-colors",
                       teamMembers.length >= currentPlanLimit - 1 && "opacity-50 cursor-not-allowed"
                     )}
@@ -776,12 +810,14 @@ export const Onboarding = () => {
               Step {currentStep} of {totalSteps}
             </span>
 
-            <button
-              onClick={() => navigate('/')}
-              className="p-2 rounded-lg hover:bg-muted/50 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            {hasOrganizations && (
+              <button
+                onClick={() => navigate('/')}
+                className="p-2 rounded-lg hover:bg-muted/50 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -828,7 +864,7 @@ export const Onboarding = () => {
               onClick={handleComplete}
               disabled={!isStepValid() || isCreating}
               className={cn(
-                "flex items-center space-x-2 px-3 py-1.5 rounded-lg transition-all",
+                "flex items-center space-x-2 px-4 py-2 rounded-lg transition-all",
                 isStepValid() && !isCreating
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-muted text-muted-foreground cursor-not-allowed"

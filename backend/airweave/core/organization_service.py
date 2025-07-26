@@ -15,6 +15,7 @@ from airweave.core.logging import logger
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.integrations.auth0_management import auth0_management_client
 from airweave.models import Organization, User, UserOrganization
+from airweave.schemas.api_key import APIKeyCreate
 from airweave.schemas.auth import AuthContext
 
 if settings.STRIPE_ENABLED:
@@ -141,6 +142,28 @@ class OrganizationService:
                     modified_at=local_org.modified_at,
                     id=local_org.id,
                 )
+
+                # Create API key for the organization
+                logger.info(f"Creating API key for organization {local_org.id}")
+
+                # Create system auth context for API key creation
+                api_key_auth = AuthContext(
+                    organization_id=local_org.id,
+                    user=owner_user,  # Set the owner as the creator
+                    auth_method="system",
+                    auth_metadata={"source": "organization_creation"},
+                )
+
+                # Create API key with default expiration (180 days)
+                api_key_create = APIKeyCreate()
+                await crud.api_key.create(
+                    db=db,
+                    obj_in=api_key_create,
+                    auth_context=api_key_auth,
+                    uow=uow,
+                )
+
+                logger.info(f"Successfully created API key for organization {local_org.id}")
 
                 # Commit the transaction
                 await uow.commit()
