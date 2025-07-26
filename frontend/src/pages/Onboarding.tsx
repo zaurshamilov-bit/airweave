@@ -141,30 +141,32 @@ export const Onboarding = () => {
         const organizations = await useOrganizationStore.getState().initializeOrganizations();
         if (organizations.length > 0) {
           setHasOrganizations(true);
-          // User already has organizations, redirect to dashboard
-          navigate('/', { replace: true });
+          // DO NOT REDIRECT - users with orgs can create additional organizations
+        } else {
+          setHasOrganizations(false);
         }
       } catch (error) {
         console.error('Failed to check organizations:', error);
-        // Continue with onboarding if check fails
+        // Assume no orgs if check fails
+        setHasOrganizations(false);
       }
     };
 
     checkExistingOrgs();
-  }, [navigate]);
+  }, []);
 
   // Handle ESC key to go back to dashboard on first step
   useEffect(() => {
     const handleEscapeKey = (e: KeyboardEvent) => {
       // Only allow ESC if user has organizations
-      if (e.key === 'Escape' && currentStep === 1 && hasOrganizations) {
+      if (e.key === 'Escape' && hasOrganizations) {
         navigate('/');
       }
     };
 
     window.addEventListener('keydown', handleEscapeKey);
     return () => window.removeEventListener('keydown', handleEscapeKey);
-  }, [currentStep, navigate, hasOrganizations]);
+  }, [navigate, hasOrganizations]);
 
   // Prevent browser refresh/navigation when user has no organizations
   useEffect(() => {
