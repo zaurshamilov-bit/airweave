@@ -19,7 +19,7 @@ from airweave.models.integration_credential import IntegrationType
 from airweave.platform.auth.schemas import AuthType, OAuth2TokenResponse
 from airweave.platform.auth.services import oauth2_service
 from airweave.platform.auth.settings import integration_settings
-from airweave.platform.configs.auth import OAuth2AuthConfig
+from airweave.platform.configs.auth import OAuth2AuthConfig, OAuth2BYOCAuthConfig
 from airweave.platform.locator import resource_locator
 from airweave.schemas.auth import AuthContext
 
@@ -39,7 +39,7 @@ class SourceConnectionService:
     - Running sync jobs for source connections
     """
 
-    async def _is_oauth_source(self, db: AsyncSession, source_short_name: str) -> bool:
+    async def _is_non_byoc_oauth_source(self, db: AsyncSession, source_short_name: str) -> bool:
         """Check if a source uses OAuth authentication.
 
         Args:
@@ -59,7 +59,9 @@ class SourceConnectionService:
             auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
 
             # Check if it's OAuth-based by checking inheritance
-            return issubclass(auth_config_class, OAuth2AuthConfig)
+            return issubclass(auth_config_class, OAuth2AuthConfig) and not issubclass(
+                auth_config_class, OAuth2BYOCAuthConfig
+            )
         except Exception:
             # If we can't load the class, assume it's not OAuth
             return False
@@ -225,7 +227,7 @@ class SourceConnectionService:
         self, db: AsyncSession, source: Any, source_connection_in: Any, aux_attrs: Dict[str, Any]
     ) -> None:
         """Validate OAuth sources cannot be created with auth_fields through API."""
-        if aux_attrs.get("auth_fields") and await self._is_oauth_source(
+        if aux_attrs.get("auth_fields") and await self._is_non_byoc_oauth_source(
             db, source_connection_in.short_name
         ):
             raise HTTPException(
