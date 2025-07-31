@@ -83,6 +83,11 @@ class PipedreamAuthProvider(BaseAuthProvider):
         Returns:
             A Pipedream auth provider instance
         """
+        if credentials is None:
+            raise ValueError("credentials parameter is required")
+        if config is None:
+            raise ValueError("config parameter is required")
+
         instance = cls()
         instance.client_id = credentials["client_id"]
         instance.client_secret = credentials["client_secret"]
