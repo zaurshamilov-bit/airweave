@@ -21,6 +21,7 @@ from airweave.platform.entities._base import BaseEntity
 from airweave.platform.locator import resource_locator
 from airweave.platform.sources._base import BaseSource
 from airweave.platform.sync.context import SyncContext
+from airweave.platform.sync.cursor import SyncCursor
 from airweave.platform.sync.entity_processor import EntityProcessor
 from airweave.platform.sync.orchestrator import SyncOrchestrator
 from airweave.platform.sync.pubsub import SyncProgress
@@ -183,6 +184,7 @@ class SyncFactory:
 
         progress = SyncProgress(sync_job.id)
         router = SyncDAGRouter(dag, entity_map)
+        cursor = SyncCursor(sync.id)
 
         return SyncContext(
             source=source,
@@ -195,6 +197,7 @@ class SyncFactory:
             collection=collection,
             source_connection=source_connection,
             progress=progress,
+            cursor=cursor,
             router=router,
             entity_map=entity_map,
             auth_context=auth_context,
