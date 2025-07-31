@@ -381,3 +381,20 @@ class ComposioAuthConfig(APIKeyAuthConfig):
         title="API Key",
         description="Your Composio API key.",
     )
+
+
+class PipedreamAuthConfig(AuthConfig):
+    """Pipedream Auth Provider authentication credentials schema.
+
+    Pipedream uses OAuth2 client credentials flow for API authentication.
+    The access tokens expire after 3600 seconds (1 hour).
+    """
+
+    client_id: str = Field(
+        title="Client ID",
+        description="Your Pipedream OAuth client ID.",
+    )
+    client_secret: str = Field(
+        title="Client Secret",
+        description="Your Pipedream OAuth client secret.",
+    )
