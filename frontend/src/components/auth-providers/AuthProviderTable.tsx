@@ -169,12 +169,6 @@ export const AuthProviderTable = () => {
             name: 'Klavis',
             short_name: 'klavis',
             isComingSoon: true
-        },
-        {
-            id: 'coming-soon-pipedream',
-            name: 'Pipedream',
-            short_name: 'pipedream',
-            isComingSoon: true
         }
     ];
 

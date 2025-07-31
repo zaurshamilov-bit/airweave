@@ -11,14 +11,20 @@ slug: auth-providers
 To connect an auth provider, visit the [Auth Providers page](https://app.airweave.ai/auth-providers) and select the service you want to integrate with Airweave.
 Once you provide your auth provider's API key, Airweave establishes a secure connection that allows it to access your users' existing data source credentials.
 Successfully connected auth providers display a green checkmark, confirming that Airweave can now leverage those connections for your users.
-We currently support [Composio](https://composio.dev/) with [Klavis](https://www.klavis.ai/) and [Pipedream](https://pipedream.com/) coming soon.
+We currently support [Composio](https://composio.dev/) and [Pipedream](https://pipedream.com/) with [Klavis](https://www.klavis.ai/) coming soon.
 
 ### 2. Locate the necessary configuration
 
 When creating source connections through an auth provider, Airweave needs specific identifiers to retrieve the correct credentials from the third-party service.
-Each auth provider has its own way of organizing connections, for instance, Composio uses a combination of `auth_config_id` and `account_id` since multiple accounts can connect to one integration and vice versa.
+Each auth provider has its own way of organizing connections:
 
-You can find these identifiers in your auth provider's dashboard. For Composio, visit your [Auth Configs page](https://platform.composio.dev/airweave/default/auth-configs) and select an integration to view its connected accounts and their IDs.
+- **Composio**: Uses a combination of `auth_config_id` and `account_id` since multiple accounts can connect to one integration and vice versa.
+- **Pipedream**: Requires `project_id`, `account_id`, and optionally `environment` and `external_user_id`. **Important**: Pipedream only exposes credentials for accounts created with custom OAuth clients, not their default OAuth clients.
+
+You can find these identifiers in your auth provider's dashboard:
+- For Composio, visit your [Auth Configs page](https://platform.composio.dev/airweave/default/auth-configs) and select an integration to view its connected accounts and their IDs.
+- For Pipedream, find your project ID in the URL when viewing your project, and account IDs in the accounts list when you call the API with `include_credentials=true`.
+
 Different auth providers require different configuration fields, refer to [our configuration definitions](https://github.com/airweave-ai/airweave/blob/main/backend/airweave/platform/configs/config.py) to see what's needed for each provider.
 
 ### 3. Create source connections using your auth provider
@@ -77,6 +83,65 @@ curl -X 'POST' 'https://app.airweave.ai/auth-providers' \
   "auth_provider_config": {
     "auth_config_id": "AUTH_CONFIG_ID",
     "account_id": "ACCOUNT_ID"
+  }
+}'
+```
+</CodeBlocks>
+
+And here's an example creating a Notion connection through Pipedream:
+
+<CodeBlocks>
+```Python title="Python"
+from airweave import AirweaveSDK
+
+client = AirweaveSDK(api_key="YOUR_API_KEY")
+
+source_connection = airweave.source_connections.create_source_connection(
+    name="My Notion connection",
+    short_name="notion",
+    auth_provider="my-pipedream-connection-xyz789",
+    auth_provider_config={
+        "project_id": "proj_JPsD74a",
+        "account_id": "apn_gyha5Ky",
+        "environment": "production"
+    },
+)
+
+print(f"Status: {source_connection.status}")
+```
+
+```javascript title="Node.js"
+import { AirweaveSDKClient } from "@airweave/sdk";
+
+const client = new AirweaveSDKClient({
+  apiKey: "YOUR_API_KEY"
+});
+
+const sourceConnection = await airweave.sourceConnections.createSourceConnection({
+  name: "My Notion connection",
+  shortName: "notion",
+  auth_provider: "my-pipedream-connection-xyz789",
+  auth_provider_config: {
+    projectId: "proj_JPsD74a",
+    accountId: "apn_gyha5Ky",
+    environment: "production"
+  },
+});
+```
+
+```bash title="cURL"
+curl -X 'POST' 'https://app.airweave.ai/source-connections' \
+  -H 'accept: application/json' \
+  -H 'X-API-Key: API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "name": "My Notion connection",
+  "short_name": "notion",
+  "auth_provider": "my-pipedream-connection-xyz789",
+  "auth_provider_config": {
+    "project_id": "proj_JPsD74a",
+    "account_id": "apn_gyha5Ky",
+    "environment": "production"
   }
 }'
 ```
