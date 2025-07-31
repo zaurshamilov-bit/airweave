@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING, Optional
 from sqlalchemy import JSON, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from airweave.models._base import OrganizationBase, UserMixin
+from airweave.models._base import OrganizationBase
 
 if TYPE_CHECKING:
     from airweave.models.sync import Sync
 
 
-class SyncCursor(OrganizationBase, UserMixin):
+class SyncCursor(OrganizationBase):
     """Sync cursor model for storing incremental sync state.
 
     This model stores cursor information that allows a sync to resume

@@ -119,4 +119,4 @@ class CRUDSyncCursor(
 
 
 # Create singleton instance
-sync_cursor = CRUDSyncCursor(models.SyncCursor)
+sync_cursor = CRUDSyncCursor(models.SyncCursor, track_user=False)
