@@ -104,6 +104,12 @@ from .sync import (
     SyncWithoutConnections,
     SyncWithSourceConnection,
 )
+from .sync_cursor import (
+    SyncCursor,
+    SyncCursorBase,
+    SyncCursorCreate,
+    SyncCursorUpdate,
+)
 from .sync_job import (
     SourceConnectionJob,
     SyncJob,
