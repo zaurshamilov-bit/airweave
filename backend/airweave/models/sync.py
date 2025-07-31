@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from airweave.models.entity import Entity
     from airweave.models.source_connection import SourceConnection
     from airweave.models.sync_connection import SyncConnection
+    from airweave.models.sync_cursor import SyncCursor
     from airweave.models.sync_job import SyncJob
 
 
@@ -69,4 +70,14 @@ class Sync(OrganizationBase, UserMixin):
         lazy="noload",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+
+    # Add relationship to SyncCursor (one-to-one)
+    sync_cursor: Mapped[Optional["SyncCursor"]] = relationship(
+        "SyncCursor",
+        back_populates="sync",
+        lazy="noload",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,  # Ensures one-to-one relationship
     )
