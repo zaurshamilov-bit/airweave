@@ -34,5 +34,7 @@
   },
   "files.watcherExclude": {
     "**/fern/**": true
-  }
+  },
+  "python.languageServer": "None",
+  "cursorpyright.analysis.extraPaths": ["${workspaceFolder}/backend"]
 }

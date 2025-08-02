@@ -155,10 +155,64 @@ class GitHubSource(BaseSource):
         ext = Path(file_path).suffix.lower()
         return get_language_for_extension(ext)
 
+    def _get_cursor_data(self) -> Dict[str, Any]:
+        """Get cursor data from sync context.
+
+        Returns:
+            Cursor data dictionary, empty dict if no cursor exists
+        """
+        if hasattr(self, "sync_context") and hasattr(self.sync_context, "cursor"):
+            return getattr(self.sync_context.cursor, "cursor_data", {})
+        return {}
+
+    def _update_cursor_data(self, updated_at: str, repo_name: str):
+        """Update cursor data with repository updated_at timestamp.
+
+        Args:
+            updated_at: Repository updated_at timestamp
+            repo_name: Repository name
+        """
+        if hasattr(self, "sync_context") and hasattr(self.sync_context, "cursor"):
+            self.sync_context.cursor.cursor_data.update(
+                {
+                    "last_repository_updated_at": updated_at,
+                    "repo_name": repo_name,
+                    "branch": getattr(self, "branch", None),
+                }
+            )
+            self.logger.debug(f"Updated cursor data: {self.sync_context.cursor.cursor_data}")
+
+    def _check_repository_updates(
+        self, repo_name: str, last_updated_at: str, current_updated_at: str
+    ) -> bool:
+        """Check if repository has been updated since last sync.
+
+        Args:
+            repo_name: Repository name
+            last_updated_at: Last sync timestamp
+            current_updated_at: Current repository updated_at
+
+        Returns:
+            True if repository has updates, False otherwise
+        """
+        if last_updated_at:
+            self.logger.info(
+                f"Repository {repo_name} updated_at: {last_updated_at} -> {current_updated_at}"
+            )
+            has_updates = current_updated_at > last_updated_at
+            if has_updates:
+                self.logger.info(f"Repository {repo_name} has updates since last sync")
+            else:
+                self.logger.info(f"Repository {repo_name} has no updates since last sync")
+            return has_updates
+        else:
+            self.logger.info(f"First sync for repository {repo_name}")
+            return True
+
     async def _get_repository_info(
         self, client: httpx.AsyncClient, repo_name: str
     ) -> GitHubRepositoryEntity:
-        """Get repository information.
+        """Get repository information with cursor support.
 
         Args:
             client: HTTP client
@@ -169,6 +223,17 @@ class GitHubSource(BaseSource):
         """
         url = f"{self.BASE_URL}/repos/{repo_name}"
         repo_data = await self._get_with_auth(client, url)
+
+        # Check for cursor data and repository updates
+        cursor_data = self._get_cursor_data()
+        last_updated_at = cursor_data.get("last_repository_updated_at")
+        current_updated_at = repo_data["updated_at"]
+
+        # Check for updates and log status
+        self._check_repository_updates(repo_name, last_updated_at, current_updated_at)
+
+        # Update cursor with current repository updated_at
+        self._update_cursor_data(current_updated_at, repo_name)
 
         return GitHubRepositoryEntity(
             entity_id=str(repo_data["id"]),
@@ -407,7 +472,7 @@ class GitHubSource(BaseSource):
             self.logger.error(f"Error processing file {item_path}: {str(e)}")
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
-        """Generate entities from GitHub repository.
+        """Generate entities from GitHub repository with incremental support.
 
         Yields:
             Repository, directory, and file entities
@@ -415,9 +480,14 @@ class GitHubSource(BaseSource):
         if not hasattr(self, "repo_name") or not self.repo_name:
             raise ValueError("Repository name must be specified")
 
+        # Get cursor data for incremental sync
+        cursor_data = self._get_cursor_data()
+        last_updated_at = cursor_data.get("last_repository_updated_at")
+
         async with httpx.AsyncClient() as client:
             repo_url = f"{self.BASE_URL}/repos/{self.repo_name}"
             repo_data = await self._get_with_auth(client, repo_url)
+            current_updated_at = repo_data["updated_at"]
 
             # Use specified branch if available, otherwise use default branch
             branch = (
@@ -440,7 +510,20 @@ class GitHubSource(BaseSource):
                         f"Available branches: {available_branches}"
                     )
 
-            self.logger.info(f"Using branch: {branch} for repo {self.repo_name}")
+            # Check if we should perform incremental sync
+            should_sync = True
+            if last_updated_at and current_updated_at <= last_updated_at:
+                self.logger.info(
+                    f"Repository {self.repo_name} has no updates since last sync, skipping file",
+                    "traversal",
+                )
+                should_sync = False
 
-            async for entity in self._traverse_repository(client, self.repo_name, branch):
-                yield entity
+            if should_sync:
+                self.logger.info(f"Using branch: {branch} for repo {self.repo_name}")
+                async for entity in self._traverse_repository(client, self.repo_name, branch):
+                    yield entity
+            else:
+                # Still yield repository entity for cursor update, but skip file traversal
+                repo_entity = await self._get_repository_info(client, self.repo_name)
+                yield repo_entity

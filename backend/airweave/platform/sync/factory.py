@@ -187,7 +187,9 @@ class SyncFactory:
         router = SyncDAGRouter(dag, entity_map)
 
         # Load existing cursor data from database
-        cursor_data = await sync_cursor_service.get_cursor_data(db, sync.id, auth_context)
+        cursor_data = await sync_cursor_service.get_cursor_data(
+            db=db, sync_id=sync.id, auth_context=auth_context
+        )
         cursor = SyncCursor(sync.id)
         cursor.cursor_data = cursor_data
 
