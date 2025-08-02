@@ -5,6 +5,7 @@ and triggers them when they are due.
 """
 
 import asyncio
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -101,7 +102,12 @@ class PlatformScheduler:
                         next_run = ensure_utc(cron.get_next(datetime))
 
                     # Update the sync
-                    ctx = ApiContext(organization_id=sync.organization_id, auth_method="system")
+                    ctx = ApiContext(
+                        request_id=str(uuid.uuid4()),
+                        organization_id=sync.organization_id,
+                        auth_method="system",
+                        logger=logger,
+                    )
                     db_sync = await crud.sync.get(db, id=sync.id, ctx=ctx, with_connections=False)
                     if not db_sync:
                         raise ValueError(f"Could not find sync {sync.id} in database")
@@ -256,7 +262,12 @@ class PlatformScheduler:
         # Get the latest job for this sync
         logger.debug(f"Getting latest job for sync {sync.id}")
         latest_job = await crud.sync_job.get_latest_by_sync_id(db, sync_id=sync.id)
-        ctx = ApiContext(organization_id=sync.organization_id, auth_method="system")
+        ctx = ApiContext(
+            request_id=str(uuid.uuid4()),
+            organization_id=sync.organization_id,
+            auth_method="system",
+            logger=logger,
+        )
 
         if latest_job:
             logger.debug(
@@ -344,7 +355,12 @@ class PlatformScheduler:
         try:
             logger.debug(f"Triggering sync {sync.id} ({sync.name})")
 
-            ctx = ApiContext(organization_id=sync.organization_id, auth_method="system")
+            ctx = ApiContext(
+                request_id=str(uuid.uuid4()),
+                organization_id=sync.organization_id,
+                auth_method="system",
+                logger=logger,
+            )
 
             # Create a new sync job with unit of work
             logger.debug(f"Creating new sync job for sync {sync.id}")
