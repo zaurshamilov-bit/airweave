@@ -5,12 +5,12 @@ from typing import Any, Dict, Optional
 from uuid import UUID
 
 from airweave import crud, schemas
+from airweave.api.context import ApiContext
 from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus
 from airweave.db.session import get_db_context
 from airweave.platform.sync.pubsub import SyncProgressUpdate
-from airweave.schemas.auth import AuthContext
 
 
 def map_python_enum_to_database(status: SyncJobStatus) -> str:
@@ -92,7 +92,7 @@ class SyncJobService:
         self,
         sync_job_id: UUID,
         status: SyncJobStatus,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         stats: Optional[SyncProgressUpdate] = None,
         error: Optional[str] = None,
         started_at: Optional[datetime] = None,
@@ -102,9 +102,7 @@ class SyncJobService:
         """Update sync job status with provided details."""
         try:
             async with get_db_context() as db:
-                db_sync_job = await crud.sync_job.get(
-                    db=db, id=sync_job_id, auth_context=auth_context
-                )
+                db_sync_job = await crud.sync_job.get(db=db, id=sync_job_id, ctx=ctx)
 
                 if not db_sync_job:
                     logger.error(f"Sync job {sync_job_id} not found")
@@ -138,7 +136,7 @@ class SyncJobService:
                         db=db,
                         db_obj=db_sync_job,
                         obj_in=schemas.SyncJobUpdate(**update_data),
-                        auth_context=auth_context,
+                        ctx=ctx,
                     )
 
                 await db.commit()

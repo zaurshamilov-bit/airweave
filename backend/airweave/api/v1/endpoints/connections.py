@@ -8,10 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import schemas
 from airweave.api import deps
+from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.connection_service import connection_service
 from airweave.models.integration_credential import IntegrationType
-from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
@@ -20,7 +20,7 @@ router = TrailingSlashRouter()
 async def get_connection(
     connection_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.Connection:
     """Get a specific connection.
 
@@ -28,13 +28,13 @@ async def get_connection(
     -----
         connection_id: The ID of the connection to get.
         db: The database session.
-        auth_context: The current authentication context.
+        ctx: The current authentication context.
 
     Returns:
     -------
         schemas.Connection: The connection.
     """
-    return await connection_service.get_connection(db, connection_id, auth_context)
+    return await connection_service.get_connection(db, connection_id, ctx)
 
 
 @router.get(
@@ -43,20 +43,20 @@ async def get_connection(
 )
 async def list_all_connected_integrations(
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> list[schemas.Connection]:
     """Get all active connections for the current user across all integration types.
 
     Args:
     -----
         db: The database session.
-        auth_context: The current authentication context.
+        ctx: The current authentication context.
 
     Returns:
     -------
         list[schemas.Connection]: The list of connections.
     """
-    return await connection_service.get_all_connections(db, auth_context)
+    return await connection_service.get_all_connections(db, ctx)
 
 
 @router.get(
@@ -66,7 +66,7 @@ async def list_all_connected_integrations(
 async def list_connected_integrations(
     integration_type: IntegrationType,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> list[schemas.Connection]:
     """Get all integrations of specified type connected to the current organization.
 
@@ -74,20 +74,20 @@ async def list_connected_integrations(
     -----
         integration_type (IntegrationType): The type of integration to get connections for.
         db (AsyncSession): The database session.
-        auth_context (AuthContext): The current authentication context.
+        ctx (ApiContext): The current authentication context.
 
     Returns:
     -------
         list[schemas.Connection]: The list of connections.
     """
-    return await connection_service.get_connections_by_type(db, integration_type, auth_context)
+    return await connection_service.get_connections_by_type(db, integration_type, ctx)
 
 
 @router.get("/credentials/{connection_id}", response_model=dict)
 async def get_connection_credentials(
     connection_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> dict:
     """Get the credentials for a connection.
 
@@ -95,13 +95,13 @@ async def get_connection_credentials(
     -----
         connection_id (UUID): The ID of the connection to get credentials for
         db (AsyncSession): The database session
-        auth_context (AuthContext): The current authentication context
+        ctx (ApiContext): The current authentication context
 
     Returns:
     -------
         decrypted_credentials (dict): The credentials for the connection
     """
-    return await connection_service.get_connection_credentials(db, connection_id, auth_context)
+    return await connection_service.get_connection_credentials(db, connection_id, ctx)
 
 
 @router.delete("/delete/source/{connection_id}", response_model=schemas.Connection)
@@ -109,7 +109,7 @@ async def delete_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
     connection_id: UUID,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.Connection:
     """Delete a connection.
 
@@ -119,13 +119,13 @@ async def delete_connection(
     -----
         db (AsyncSession): The database session
         connection_id (UUID): The ID of the connection to delete
-        auth_context (AuthContext): The current authentication context
+        ctx (ApiContext): The current authentication context
 
     Returns:
     --------
         connection (schemas.Connection): The deleted connection
     """
-    return await connection_service.delete_connection(db, connection_id, auth_context)
+    return await connection_service.delete_connection(db, connection_id, ctx)
 
 
 @router.put("/disconnect/source/{connection_id}", response_model=schemas.Connection)
@@ -133,7 +133,7 @@ async def disconnect_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
     connection_id: UUID,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.Connection:
     """Disconnect from a source connection.
 
@@ -141,13 +141,13 @@ async def disconnect_source_connection(
     -----
         db (AsyncSession): The database session
         connection_id (UUID): The ID of the connection to disconnect
-        auth_context (AuthContext): The current authentication context
+        ctx (ApiContext): The current authentication context
 
     Returns:
     --------
         connection (schemas.Connection): The disconnected connection
     """
-    connection = await connection_service.disconnect_source(db, connection_id, auth_context)
+    connection = await connection_service.disconnect_source(db, connection_id, ctx)
     # Ensure we return something that is compatible with the response_model
     return connection
 
@@ -161,7 +161,7 @@ async def connect_slack_with_token(
     db: AsyncSession = Depends(deps.get_db),
     token: str = Body(...),
     name: Optional[str] = Body(None),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.Connection:
     """Connect to Slack using a direct API token (for local development only).
 
@@ -170,14 +170,14 @@ async def connect_slack_with_token(
         db: The database session.
         token: The Slack API token.
         name: The name of the connection.
-        auth_context: The current authentication context.
+        ctx: The current authentication context.
 
     Returns:
     -------
         schemas.Connection: The connection.
     """
     return await connection_service.connect_with_direct_token(
-        db, "slack", token, name, auth_context, validate_token=True
+        db, "slack", token, name, ctx, validate_token=True
     )
 
 
@@ -190,7 +190,7 @@ async def create_integration_credential(
     integration_type: IntegrationType,
     short_name: str,
     credential_in: schemas.IntegrationCredentialRawCreate = Body(...),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.IntegrationCredentialInDB:
     """Create integration credentials with validation.
 
@@ -203,7 +203,7 @@ async def create_integration_credential(
         integration_type: Type of integration (SOURCE, DESTINATION, etc.)
         short_name: Short name of the integration
         credential_in: The credential data with auth_fields
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
         The created integration credential
@@ -212,5 +212,5 @@ async def create_integration_credential(
         HTTPException: If validation fails
     """
     return await connection_service.create_integration_credential(
-        db, integration_type, short_name, credential_in, auth_context
+        db, integration_type, short_name, credential_in, ctx
     )

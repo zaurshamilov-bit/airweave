@@ -250,7 +250,7 @@ async def create_integration_credential(service_name: str, credential_json: str)
                 )
 
                 credential = await crud.integration_credential.create(
-                    uow.session, obj_in=credential_in, auth_context=auth_context, uow=uow
+                    uow.session, obj_in=credential_in, ctx=ctx, uow=uow
                 )
 
                 await uow.session.flush()

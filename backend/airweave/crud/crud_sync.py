@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, models, schemas
+from airweave.api.context import ApiContext
 from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.exceptions import NotFoundException
 from airweave.core.shared_models import IntegrationType, SyncStatus
@@ -15,7 +16,6 @@ from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.connection import Connection
 from airweave.models.sync import Sync
 from airweave.models.sync_connection import SyncConnection
-from airweave.schemas.auth import AuthContext
 from airweave.schemas.sync import SyncCreate, SyncUpdate
 
 
@@ -26,7 +26,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         self,
         db: AsyncSession,
         id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         with_connections: bool = True,
     ) -> models.Sync | schemas.Sync:
         """Get the sync by ID.
@@ -40,13 +40,13 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         Args:
             db (AsyncSession): The database session
             id (UUID): The ID of the sync
-            auth_context (AuthContext): The authentication context
+            ctx (ApiContext): The API context
             with_connections (bool): Whether to include connections in the sync
         Returns:
             models.Sync: The sync without any connections
         """
         # Get the sync without any connections
-        sync = await super().get(db, id=id, auth_context=auth_context)
+        sync = await super().get(db, id=id, ctx=ctx)
 
         if not sync:
             raise NotFoundException("Sync not found")
@@ -56,13 +56,13 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             sync = await self.enrich_sync_with_connections(db, sync=sync)
 
         # Validate user permissions
-        await self._validate_organization_access(auth_context, sync.organization_id)
+        await self._validate_organization_access(ctx, sync.organization_id)
         return sync
 
     async def get_multi(
         self,
         db: AsyncSession,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         *,
         skip: int = 0,
         limit: int = 100,
@@ -73,7 +73,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         Args:
         ----
             db (AsyncSession): The database session
-            auth_context (AuthContext): The authentication context
+            ctx (ApiContext): The API context
             skip (int): The number of syncs to skip
             limit (int): The number of syncs to return
             with_connections (bool): Whether to include connections in the syncs
@@ -83,7 +83,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             list[schemas.Sync]: The syncs
         """
         # Get all syncs for the user using the base class method
-        syncs = await super().get_multi(db, auth_context, skip=skip, limit=limit)
+        syncs = await super().get_multi(db, ctx, skip=skip, limit=limit)
 
         # Enrich the syncs with their connections if requested
         if with_connections:
@@ -198,13 +198,13 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             db (AsyncSession): The database session
 
         Returns:
-            list[Sync | schemas.Sync]: The syncs, enriched if auth_context is provided
+            list[Sync | schemas.Sync]: The syncs, enriched if ctx is provided
         """
         stmt = select(Sync)
         result = await db.execute(stmt)
         syncs = result.scalars().unique().all()
 
-        # Enrich syncs if auth_context is provided
+        # Enrich syncs if ctx is provided
         return await self.enricher_for_all(db, syncs)
 
     async def get_all_with_schedule(self, db: AsyncSession) -> list[schemas.SyncWithoutConnections]:
@@ -225,14 +225,14 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         return [schemas.SyncWithoutConnections.model_validate(sync) for sync in syncs]
 
     async def get_all_for_white_label(
-        self, db: AsyncSession, white_label_id: UUID, auth_context: AuthContext
+        self, db: AsyncSession, white_label_id: UUID, ctx: ApiContext
     ) -> list[schemas.Sync]:
         """Get sync by white label ID.
 
         Args:
             db (AsyncSession): The database session
             white_label_id (UUID): The ID of the white label
-            auth_context (AuthContext): The authentication context
+            ctx (ApiContext): The API context
 
         Returns:
             list[schemas.Sync]: The enriched syncs
@@ -243,20 +243,20 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
 
         # Validate permissions for each sync
         for sync in syncs:
-            await self._validate_organization_access(auth_context, sync.organization_id)
+            await self._validate_organization_access(ctx, sync.organization_id)
 
         # Enrich all syncs in a single efficient query
         return await self.enricher_for_all(db, syncs)
 
     async def get_all_for_source_connection(
-        self, db: AsyncSession, source_connection_id: UUID, auth_context: AuthContext
+        self, db: AsyncSession, source_connection_id: UUID, ctx: ApiContext
     ) -> list[schemas.Sync]:
         """Get all syncs for a source connection.
 
         Args:
             db (AsyncSession): The database session
             source_connection_id (UUID): The ID of the source connection
-            auth_context (AuthContext): The authentication context
+            ctx (ApiContext): The API context
         Returns:
             list[schemas.Sync]: The enriched syncs
         """
@@ -267,27 +267,27 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             .join(Connection, SyncConnection.connection_id == Connection.id)
             .where(SyncConnection.connection_id == source_connection_id)
             .where(Connection.integration_type == IntegrationType.SOURCE)
-            .where(Sync.organization_id == auth_context.organization_id)
+            .where(Sync.organization_id == ctx.organization_id)
         )
         result = await db.execute(stmt)
         syncs = result.scalars().unique().all()
 
         # Validate permissions for each sync
         for sync in syncs:
-            await self._validate_organization_access(auth_context, sync.organization_id)
+            await self._validate_organization_access(ctx, sync.organization_id)
 
         # Enrich all syncs in a single efficient query
         return await self.enricher_for_all(db, syncs)
 
     async def get_all_for_destination_connection(
-        self, db: AsyncSession, destination_connection_id: UUID, auth_context: AuthContext
+        self, db: AsyncSession, destination_connection_id: UUID, ctx: ApiContext
     ) -> list[schemas.Sync]:
         """Get all syncs for a destination connection.
 
         Args:
             db (AsyncSession): The database session
             destination_connection_id (UUID): The ID of the destination connection
-            auth_context (AuthContext): The authentication context
+            ctx (ApiContext): The API context
 
         Returns:
             list[schemas.Sync]: The enriched syncs
@@ -299,32 +299,32 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             .join(Connection, SyncConnection.connection_id == Connection.id)
             .where(SyncConnection.connection_id == destination_connection_id)
             .where(Connection.integration_type == IntegrationType.DESTINATION)
-            .where(Sync.organization_id == auth_context.organization_id)
+            .where(Sync.organization_id == ctx.organization_id)
         )
         result = await db.execute(stmt)
         syncs = result.scalars().unique().all()
 
         # Validate permissions for each sync
         for sync in syncs:
-            await self._validate_organization_access(auth_context, sync.organization_id)
+            await self._validate_organization_access(ctx, sync.organization_id)
 
         # Enrich all syncs in a single efficient query
         return await self.enricher_for_all(db, syncs)
 
     async def get_all_syncs_join_with_source_connection(
-        self, db: AsyncSession, auth_context: AuthContext
+        self, db: AsyncSession, ctx: ApiContext
     ) -> list[schemas.SyncWithSourceConnection]:
         """Get all syncs join with source connection.
 
         Args:
             db (AsyncSession): The database session
-            auth_context (AuthContext): The authentication context
+            ctx (ApiContext): The API context
 
         Returns:
             list[schemas.SyncWithSourceConnection]: The syncs with their source connections
         """
         # First, get all syncs for the user
-        syncs = await super().get_multi(db, auth_context)
+        syncs = await super().get_multi(db, ctx)
 
         # Enrich all syncs efficiently
         enriched_syncs = await self.enricher_for_all(db, syncs)
@@ -334,7 +334,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             select(Sync, Connection, SyncConnection)
             .join(SyncConnection, Sync.id == SyncConnection.sync_id)
             .join(Connection, SyncConnection.connection_id == Connection.id)
-            .where(Sync.organization_id == auth_context.organization_id)
+            .where(Sync.organization_id == ctx.organization_id)
             .where(Connection.integration_type == IntegrationType.SOURCE)
         )
         result = await db.execute(stmt)
@@ -362,7 +362,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         db: AsyncSession,
         *,
         obj_in: SyncCreate,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         uow: Optional[UnitOfWork] = None,
     ) -> schemas.Sync:
         """Create a sync.
@@ -376,7 +376,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         Args:
             db (AsyncSession): The database session
             obj_in (SyncCreate): The sync to create
-            auth_context (AuthContext): The authentication context
+            ctx (ApiContext): The API context
             uow (UnitOfWork, optional): The unit of work
         Returns:
             schemas.Sync: The model validated schema of the created sync
@@ -395,11 +395,11 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             source_connection_id,
             destination_connection_ids,
             embedding_model_connection_id,
-            auth_context,
+            ctx,
         )
 
         # Write the sync object to db
-        sync = await super().create(db, obj_in=obj_in_dict, auth_context=auth_context, uow=uow)
+        sync = await super().create(db, obj_in=obj_in_dict, ctx=ctx, uow=uow)
 
         # Flush the session to ensure sync.id is available
         if uow:
@@ -436,14 +436,14 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         return schemas.Sync.model_validate(sync_dict)
 
     async def remove_all_for_connection(
-        self, db: AsyncSession, connection_id: UUID, auth_context: AuthContext, uow: UnitOfWork
+        self, db: AsyncSession, connection_id: UUID, ctx: ApiContext, uow: UnitOfWork
     ) -> list[Sync]:
         """Remove all syncs for a connection.
 
         Args:
             db (AsyncSession): The database session
             connection_id (UUID): The ID of the connection
-            auth_context (AuthContext): The authentication context
+            ctx (ApiContext): The API context
             uow (UnitOfWork): The unit of work
         Returns:
             list[Sync]: The removed syncs
@@ -453,14 +453,14 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             select(Sync)
             .join(SyncConnection, Sync.id == SyncConnection.sync_id)
             .where(SyncConnection.connection_id == connection_id)
-            .where(Sync.organization_id == auth_context.organization_id)
+            .where(Sync.organization_id == ctx.organization_id)
         )
         result = await db.execute(stmt)
         syncs = result.scalars().unique().all()
 
         removed_syncs = []
         for sync in syncs:
-            removed_sync = await self.remove(db, id=sync.id, auth_context=auth_context, uow=uow)
+            removed_sync = await self.remove(db, id=sync.id, ctx=ctx, uow=uow)
             removed_syncs.append(removed_sync)
 
         return removed_syncs
@@ -471,7 +471,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         source_connection_id: UUID,
         destination_connection_ids: list[UUID],
         embedding_model_connection_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> None:
         """Validate the connections.
 
@@ -480,12 +480,10 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             source_connection_id (UUID): The ID of the source connection
             destination_connection_ids (list[UUID]): The IDs of the destination connections
             embedding_model_connection_id (UUID): The ID of the embedding model connection
-            auth_context (AuthContext): The authentication context
+            ctx (ApiContext): The API context
         """
         # Validate the source connection and that it is a source
-        source_connection = await crud.connection.get(
-            db, id=source_connection_id, auth_context=auth_context
-        )
+        source_connection = await crud.connection.get(db, id=source_connection_id, ctx=ctx)
         if not source_connection:
             raise NotFoundException("Source connection not found")
         if source_connection.integration_type != IntegrationType.SOURCE:
@@ -494,7 +492,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         # Validate the destination connections and that they are destinations
         for destination_connection_id in destination_connection_ids:
             destination_connection = await crud.connection.get(
-                db, id=destination_connection_id, auth_context=auth_context
+                db, id=destination_connection_id, ctx=ctx
             )
             if not destination_connection:
                 raise NotFoundException("Destination connection not found")
@@ -504,7 +502,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
 
         # Validate the embedding model connection and that it is an embedding model
         embedding_model_connection = await crud.connection.get(
-            db, id=embedding_model_connection_id, auth_context=auth_context
+            db, id=embedding_model_connection_id, ctx=ctx
         )
         if not embedding_model_connection:
             raise NotFoundException("Embedding model connection not found")
@@ -516,7 +514,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         db: AsyncSession,
         *,
         id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         uow: Optional[UnitOfWork] = None,
     ) -> schemas.Sync:
         """Remove a sync.
@@ -526,14 +524,14 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         Args:
             db (AsyncSession): The database session
             id (UUID): The ID of the sync
-            auth_context (AuthContext): The authentication context
+            ctx (ApiContext): The API context
             uow (UnitOfWork, optional): The unit of work
 
         Returns:
             schemas.Sync: The model validated schema of the removed sync
         """
         # First, fetch the sync with its connections before deletion
-        enriched_sync = await self.get(db, id=id, auth_context=auth_context)
+        enriched_sync = await self.get(db, id=id, ctx=ctx)
 
         # Delete the sync_connection records first to avoid foreign key constraint violations
         delete_stmt = delete(SyncConnection).where(SyncConnection.sync_id == id)
@@ -543,7 +541,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         await db.flush()
 
         # Then remove using the base method
-        removed_sync = await super().remove(db, id=id, auth_context=auth_context, uow=uow)
+        removed_sync = await super().remove(db, id=id, ctx=ctx, uow=uow)
 
         # The connections are already deleted, so we need to create the response
         # from the previously enriched sync
@@ -565,7 +563,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
         *,
         db_obj: models.Sync,
         obj_in: Union[SyncUpdate, dict[str, Any]],
-        auth_context: AuthContext,
+        ctx: ApiContext,
         uow: Optional[UnitOfWork] = None,
     ) -> models.Sync:
         """Update a sync.
@@ -577,7 +575,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
             db: The database session
             db_obj: The sync object to update
             obj_in: The update data
-            auth_context: The authentication context
+            ctx: The API context
             uow: Optional unit of work
 
         Returns:
@@ -611,9 +609,7 @@ class CRUDSync(CRUDBaseOrganization[Sync, SyncCreate, SyncUpdate]):
                 obj_in["next_scheduled_run"] = None
 
         # Call the parent class update method
-        return await super().update(
-            db=db, db_obj=db_obj, obj_in=obj_in, auth_context=auth_context, uow=uow
-        )
+        return await super().update(db=db, db_obj=db_obj, obj_in=obj_in, ctx=ctx, uow=uow)
 
 
 sync = CRUDSync(Sync)

@@ -4,6 +4,7 @@ from typing import Optional
 from uuid import UUID
 
 from airweave import schemas
+from airweave.api.context import ApiContext
 from airweave.core.logging import ContextualLogger
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
@@ -11,7 +12,6 @@ from airweave.platform.entities._base import BaseEntity
 from airweave.platform.sources._base import BaseSource
 from airweave.platform.sync.pubsub import SyncProgress
 from airweave.platform.sync.router import SyncDAGRouter
-from airweave.schemas.auth import AuthContext
 
 
 class SyncContext:
@@ -45,7 +45,7 @@ class SyncContext:
     collection: schemas.Collection
     source_connection: schemas.Connection
     entity_map: dict[type[BaseEntity], UUID]
-    auth_context: AuthContext
+    ctx: ApiContext
     logger: ContextualLogger
 
     white_label: Optional[schemas.WhiteLabel] = None
@@ -64,7 +64,7 @@ class SyncContext:
         collection: schemas.Collection,
         source_connection: schemas.Connection,
         entity_map: dict[type[BaseEntity], UUID],
-        auth_context: AuthContext,
+        ctx: ApiContext,
         logger: ContextualLogger,
         white_label: Optional[schemas.WhiteLabel] = None,
     ):
@@ -81,6 +81,6 @@ class SyncContext:
         self.collection = collection
         self.source_connection = source_connection
         self.entity_map = entity_map
-        self.auth_context = auth_context
+        self.ctx = ctx
         self.white_label = white_label
         self.logger = logger

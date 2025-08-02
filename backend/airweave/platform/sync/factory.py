@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.api.context import ApiContext
 from airweave.core import credentials
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
@@ -28,7 +29,6 @@ from airweave.platform.sync.pubsub import SyncProgress
 from airweave.platform.sync.router import SyncDAGRouter
 from airweave.platform.sync.token_manager import TokenManager
 from airweave.platform.sync.worker_pool import AsyncWorkerPool
-from airweave.schemas.auth import AuthContext
 
 
 class SyncFactory:
@@ -43,7 +43,7 @@ class SyncFactory:
         dag: schemas.SyncDag,
         collection: schemas.Collection,
         source_connection: schemas.SourceConnection,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         access_token: Optional[str] = None,
         max_workers: int = None,
     ) -> SyncOrchestrator:
@@ -59,7 +59,7 @@ class SyncFactory:
             dag: The DAG for the sync
             collection: The collection to sync to
             source_connection: The source connection
-            auth_context: The authentication context
+            ctx: The API context
             access_token: Optional token to use instead of stored credentials
             max_workers: Maximum number of concurrent workers (default: from settings)
 
@@ -84,7 +84,7 @@ class SyncFactory:
             dag=dag,
             collection=collection,
             source_connection=source_connection,
-            auth_context=auth_context,
+            ctx=ctx,
             access_token=access_token,
         )
         logger.debug(f"Sync context created in {time.time() - context_start:.2f}s")
@@ -125,7 +125,7 @@ class SyncFactory:
         dag: schemas.SyncDag,
         collection: schemas.Collection,
         source_connection: schemas.SourceConnection,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         access_token: Optional[str] = None,
     ) -> SyncContext:
         """Create a sync context.
@@ -137,14 +137,14 @@ class SyncFactory:
             dag: The DAG for the sync
             collection: The collection to sync to
             source_connection: The source connection
-            auth_context: The authentication context
+            ctx: The API context
             access_token: Optional token to use instead of stored credentials
 
         Returns:
             SyncContext object with all required components
         """
         # Get source connection data first to access white_label_id safely
-        source_connection_data = await cls._get_source_connection_data(db, sync, auth_context)
+        source_connection_data = await cls._get_source_connection_data(db, sync, ctx)
 
         # Create a contextualized logger with all job metadata
         logger = LoggerConfigurator.configure_logger(
@@ -152,7 +152,7 @@ class SyncFactory:
             dimensions={
                 "sync_id": str(sync.id),
                 "sync_job_id": str(sync_job.id),
-                "organization_id": str(auth_context.organization_id),
+                "organization_id": str(ctx.organization_id),
                 "source_connection_id": str(source_connection_data["connection_id"]),
                 "collection_readable_id": str(collection.readable_id),
             },
@@ -162,13 +162,13 @@ class SyncFactory:
         white_label = None
         if source_connection_data["white_label_id"]:
             white_label = await crud.white_label.get(
-                db, id=source_connection_data["white_label_id"], auth_context=auth_context
+                db, id=source_connection_data["white_label_id"], ctx=ctx
             )
 
         source = await cls._create_source_instance_with_data(
             db=db,
             source_connection_data=source_connection_data,
-            auth_context=auth_context,
+            ctx=ctx,
             white_label=white_label,
             access_token=access_token,
             logger=logger,  # Pass the contextual logger
@@ -178,7 +178,7 @@ class SyncFactory:
             db=db,
             sync=sync,
             collection=collection,
-            auth_context=auth_context,
+            ctx=ctx,
             logger=logger,
         )
         transformers = await cls._get_transformer_callables(db=db, sync=sync)
@@ -202,7 +202,7 @@ class SyncFactory:
             progress=progress,
             router=router,
             entity_map=entity_map,
-            auth_context=auth_context,
+            ctx=ctx,
             logger=logger,
             white_label=white_label,
         )
@@ -213,16 +213,16 @@ class SyncFactory:
         db: AsyncSession,
         sync: schemas.Sync,
         logger: ContextualLogger,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         white_label: Optional[schemas.WhiteLabel] = None,
         access_token: Optional[str] = None,
     ) -> BaseSource:
         """Create and configure the source instance based on authentication type."""
         # Get source connection and model
-        source_connection_data = await cls._get_source_connection_data(db, sync, auth_context)
+        source_connection_data = await cls._get_source_connection_data(db, sync, ctx)
 
         return await cls._create_source_instance_with_data(
-            db, source_connection_data, auth_context, white_label, access_token, logger
+            db, source_connection_data, ctx, white_label, access_token, logger
         )
 
     @classmethod
@@ -230,7 +230,7 @@ class SyncFactory:
         cls,
         db: AsyncSession,
         source_connection_data: dict,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         logger: ContextualLogger,
         white_label: Optional[schemas.WhiteLabel] = None,
         access_token: Optional[str] = None,
@@ -247,7 +247,7 @@ class SyncFactory:
                 db=db,
                 readable_auth_provider_id=readable_auth_provider_id,
                 auth_provider_config=auth_provider_config,
-                auth_context=auth_context,
+                ctx=ctx,
                 logger=logger,
             )
 
@@ -255,7 +255,7 @@ class SyncFactory:
         source_credentials = await cls._get_source_credentials(
             db=db,
             source_connection_data=source_connection_data,
-            auth_context=auth_context,
+            ctx=ctx,
             white_label=white_label,
             access_token=access_token,
             auth_provider_instance=auth_provider_instance,
@@ -296,7 +296,7 @@ class SyncFactory:
                 source=source,
                 source_connection_data=source_connection_data,
                 source_credentials=source_credentials,
-                auth_context=auth_context,
+                ctx=ctx,
                 white_label=white_label,
                 logger=logger,
                 auth_provider_instance=auth_provider_instance,
@@ -313,20 +313,18 @@ class SyncFactory:
 
     @classmethod
     async def _get_source_connection_data(
-        cls, db: AsyncSession, sync: schemas.Sync, auth_context: AuthContext
+        cls, db: AsyncSession, sync: schemas.Sync, ctx: ApiContext
     ) -> dict:
         """Get source connection and model data."""
         # 1. Get SourceConnection first (has most of our data)
         source_connection_obj = await crud.source_connection.get_by_sync_id(
-            db, sync_id=sync.id, auth_context=auth_context
+            db, sync_id=sync.id, ctx=ctx
         )
         if not source_connection_obj:
             raise NotFoundException("Source connection record not found")
 
         # 2. Get Connection only to access integration_credential_id
-        connection = await crud.connection.get(
-            db, source_connection_obj.connection_id, auth_context
-        )
+        connection = await crud.connection.get(db, source_connection_obj.connection_id, ctx)
         if not connection:
             raise NotFoundException("Connection not found")
 
@@ -390,7 +388,7 @@ class SyncFactory:
         db: AsyncSession,
         readable_auth_provider_id: str,
         auth_provider_config: Dict[str, Any],
-        auth_context: AuthContext,
+        ctx: ApiContext,
         logger: ContextualLogger,
     ) -> Any:
         """Create an auth provider instance from readable_id.
@@ -399,7 +397,7 @@ class SyncFactory:
             db: Database session
             readable_auth_provider_id: The readable ID of the auth provider connection
             auth_provider_config: Configuration for the auth provider
-            auth_context: Authentication context
+            ctx: The API context
             logger: Optional logger to set on the auth provider
 
         Returns:
@@ -410,7 +408,7 @@ class SyncFactory:
         """
         # 1. Get the auth provider connection by readable_id
         auth_provider_connection = await crud.connection.get_by_readable_id(
-            db, readable_id=readable_auth_provider_id, auth_context=auth_context
+            db, readable_id=readable_auth_provider_id, ctx=ctx
         )
         if not auth_provider_connection:
             raise NotFoundException(
@@ -425,7 +423,7 @@ class SyncFactory:
             )
 
         credential = await crud.integration_credential.get(
-            db, auth_provider_connection.integration_credential_id, auth_context
+            db, auth_provider_connection.integration_credential_id, ctx
         )
         if not credential:
             raise NotFoundException("Auth provider integration credential not found")
@@ -465,7 +463,7 @@ class SyncFactory:
         cls,
         db: AsyncSession,
         source_connection_data: dict,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         white_label: Optional[schemas.WhiteLabel],
         access_token: Optional[str],
         auth_provider_instance: Optional[Any] = None,
@@ -501,9 +499,7 @@ class SyncFactory:
         if not integration_credential_id:
             raise NotFoundException("Source connection has no integration credential")
 
-        credential = await cls._get_integration_credential(
-            db, integration_credential_id, auth_context
-        )
+        credential = await cls._get_integration_credential(db, integration_credential_id, ctx)
         decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
 
         # Check if we need to handle auth config (e.g., OAuth refresh)
@@ -513,7 +509,7 @@ class SyncFactory:
                 db=db,
                 source_connection_data=source_connection_data,
                 decrypted_credential=decrypted_credential,
-                auth_context=auth_context,
+                ctx=ctx,
                 connection_id=source_connection_data["connection_id"],
                 white_label=white_label,
             )
@@ -562,7 +558,7 @@ class SyncFactory:
         db: AsyncSession,
         source_connection_data: dict,
         decrypted_credential: dict,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         connection_id: UUID,
         white_label: Optional[schemas.WhiteLabel],
     ) -> any:
@@ -580,7 +576,7 @@ class SyncFactory:
             oauth2_response = await oauth2_service.refresh_access_token(
                 db,
                 short_name,
-                auth_context,
+                ctx,
                 connection_id,
                 decrypted_credential,
                 white_label,
@@ -596,7 +592,7 @@ class SyncFactory:
         db: AsyncSession,
         source: BaseSource,
         source_connection_data: dict,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         white_label: Optional[schemas.WhiteLabel],
         final_access_token: Optional[str],
         logger: ContextualLogger,
@@ -611,7 +607,7 @@ class SyncFactory:
                 db,
                 source,
                 source_connection_data,
-                auth_context,
+                ctx,
                 white_label,
                 final_access_token,
                 logger,
@@ -624,7 +620,7 @@ class SyncFactory:
         source: BaseSource,
         source_connection_data: dict,
         source_credentials: any,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         white_label: Optional[schemas.WhiteLabel],
         logger: ContextualLogger,
         auth_provider_instance: Optional[BaseAuthProvider] = None,
@@ -667,7 +663,7 @@ class SyncFactory:
                 db=db,
                 source_short_name=short_name,
                 source_connection=minimal_source_connection,
-                auth_context=auth_context,
+                ctx=ctx,
                 initial_credentials=source_credentials,
                 white_label=white_label,
                 is_direct_injection=False,  # TokenManager will determine this internally
@@ -691,12 +687,10 @@ class SyncFactory:
         cls,
         db: AsyncSession,
         integration_credential_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> schemas.IntegrationCredential:
         """Get integration credential."""
-        credential = await crud.integration_credential.get(
-            db, integration_credential_id, auth_context
-        )
+        credential = await crud.integration_credential.get(db, integration_credential_id, ctx)
         if not credential:
             raise NotFoundException("Source integration credential not found")
         return credential
@@ -724,7 +718,7 @@ class SyncFactory:
         db: AsyncSession,
         sync: schemas.Sync,
         collection: schemas.Collection,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         logger: ContextualLogger,
     ) -> list[BaseDestination]:
         """Create destination instances.
@@ -734,7 +728,7 @@ class SyncFactory:
             db (AsyncSession): The database session
             sync (schemas.Sync): The sync object
             collection (schemas.Collection): The collection object
-            auth_context (AuthContext): The authentication context
+            ctx (ApiContext): The API context
             logger (ContextualLogger): The contextual logger with sync metadata
 
         Returns:
@@ -743,14 +737,12 @@ class SyncFactory:
         """
         destination_connection_id = sync.destination_connection_ids[0]
 
-        destination_connection = await crud.connection.get(
-            db, destination_connection_id, auth_context
-        )
+        destination_connection = await crud.connection.get(db, destination_connection_id, ctx)
         if not destination_connection:
             raise NotFoundException(
                 (
                     f"Destination connection not found for organization "
-                    f"{auth_context.organization_id}"
+                    f"{ctx.organization_id}"
                     f" and connection id {destination_connection_id}"
                 )
             )

@@ -48,7 +48,7 @@ class TestSyncServiceIntegration:
         complete_uow,
         mock_sync_dag,
         mock_collection,
-        mock_source_connection
+        mock_source_connection,
     ):
         """Test the full flow of creating and running a sync."""
         # Arrange
@@ -59,7 +59,10 @@ class TestSyncServiceIntegration:
             patch("airweave.crud.sync.create") as mock_create_sync,
             patch("airweave.core.dag_service.dag_service.create_initial_dag") as mock_create_dag,
             patch("airweave.core.sync_service.get_db_context") as mock_get_db_context,
-            patch("airweave.platform.sync.factory.SyncFactory.create_orchestrator", new_callable=AsyncMock) as mock_create_orchestrator,
+            patch(
+                "airweave.platform.sync.factory.SyncFactory.create_orchestrator",
+                new_callable=AsyncMock,
+            ) as mock_create_orchestrator,
         ):
             # Setup mocks for create
             mock_sync = MagicMock(spec=schemas.Sync)
@@ -111,7 +114,7 @@ class TestSyncServiceIntegration:
             created_sync = await service.create(
                 db=mock_db,
                 sync=sync_create,
-                auth_context=mock_user,
+                ctx=mock_user,
                 uow=complete_uow,
             )
 
@@ -122,7 +125,7 @@ class TestSyncServiceIntegration:
                 dag=mock_sync_dag,
                 collection=mock_collection,
                 source_connection=mock_source_connection,
-                auth_context=mock_user,
+                ctx=mock_user,
             )
 
             # Assert - Verify the flow
@@ -130,7 +133,7 @@ class TestSyncServiceIntegration:
             mock_create_sync.assert_called_once()
             complete_uow.session.flush.assert_called_once()
             mock_create_dag.assert_called_once_with(
-                db=mock_db, sync_id=sync_id, auth_context=mock_user, uow=complete_uow
+                db=mock_db, sync_id=sync_id, ctx=mock_user, uow=complete_uow
             )
 
             # Run assertions
@@ -142,8 +145,8 @@ class TestSyncServiceIntegration:
                 dag=mock_sync_dag,
                 collection=mock_collection,
                 source_connection=mock_source_connection,
-                auth_context=mock_user,
-                access_token=None
+                ctx=mock_user,
+                access_token=None,
             )
             mock_orchestrator.run.assert_called_once()
 
@@ -160,7 +163,7 @@ class TestSyncServiceIntegration:
         mock_sync_job,
         mock_sync_dag,
         mock_collection,
-        mock_source_connection
+        mock_source_connection,
     ):
         """Test error recovery during a sync run."""
         # Arrange - simulate an error during sync
@@ -169,9 +172,14 @@ class TestSyncServiceIntegration:
         # Mock required components
         with (
             patch("airweave.core.sync_service.get_db_context") as mock_get_db_context,
-            patch("airweave.platform.sync.factory.SyncFactory.create_orchestrator", new_callable=AsyncMock) as mock_create_orchestrator,
+            patch(
+                "airweave.platform.sync.factory.SyncFactory.create_orchestrator",
+                new_callable=AsyncMock,
+            ) as mock_create_orchestrator,
             patch("airweave.core.sync_service.logger.error") as mock_logger_error,
-            patch("airweave.core.sync_service.sync_job_service.update_status", new_callable=AsyncMock) as mock_update_status,
+            patch(
+                "airweave.core.sync_service.sync_job_service.update_status", new_callable=AsyncMock
+            ) as mock_update_status,
         ):
             mock_db_context = AsyncMock()
             mock_db_context.__aenter__.return_value = mock_db
@@ -191,7 +199,7 @@ class TestSyncServiceIntegration:
                     dag=mock_sync_dag,
                     collection=mock_collection,
                     source_connection=mock_source_connection,
-                    auth_context=mock_user,
+                    ctx=mock_user,
                 )
 
             # Verify the exception was logged and re-raised

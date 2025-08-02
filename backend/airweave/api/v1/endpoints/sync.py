@@ -11,11 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
+from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.logging import logger
 from airweave.core.sync_service import sync_service
 from airweave.platform.sync.pubsub import sync_pubsub
-from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
@@ -27,7 +27,7 @@ async def list_syncs(
     skip: int = 0,
     limit: int = 100,
     with_source_connection: bool = False,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> list[schemas.Sync] | list[schemas.SyncWithSourceConnection]:
     """List all syncs for the current user.
 
@@ -37,7 +37,7 @@ async def list_syncs(
         skip: The number of syncs to skip
         limit: The number of syncs to return
         with_source_connection: Whether to include the source connection in the response
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
     --------
@@ -45,7 +45,7 @@ async def list_syncs(
     """
     return await sync_service.list_syncs(
         db=db,
-        auth_context=auth_context,
+        ctx=ctx,
         skip=skip,
         limit=limit,
         with_source_connection=with_source_connection,
@@ -59,7 +59,7 @@ async def list_all_jobs(
     skip: int = 0,
     limit: int = 100,
     status: Optional[List[str]] = Query(None, description="Filter by job status"),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> list[schemas.SyncJob]:
     """List all jobs across all syncs.
 
@@ -69,15 +69,13 @@ async def list_all_jobs(
         skip: The number of jobs to skip
         limit: The number of jobs to return
         status: Filter by job status
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
     --------
         list[schemas.SyncJob]: A list of all sync jobs
     """
-    return await sync_service.list_sync_jobs(
-        db=db, auth_context=auth_context, skip=skip, limit=limit, status=status
-    )
+    return await sync_service.list_sync_jobs(db=db, ctx=ctx, skip=skip, limit=limit, status=status)
 
 
 @router.get("/{sync_id}", response_model=schemas.Sync)
@@ -85,7 +83,7 @@ async def get_sync(
     *,
     db: AsyncSession = Depends(deps.get_db),
     sync_id: UUID,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.Sync:
     """Get a specific sync by ID.
 
@@ -93,13 +91,13 @@ async def get_sync(
     -----
         db: The database session
         sync_id: The ID of the sync to get
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
     --------
         sync (schemas.Sync): The sync
     """
-    return await sync_service.get_sync(db=db, sync_id=sync_id, auth_context=auth_context)
+    return await sync_service.get_sync(db=db, sync_id=sync_id, ctx=ctx)
 
 
 @router.post("/", response_model=schemas.Sync)
@@ -107,7 +105,7 @@ async def create_sync(
     *,
     db: AsyncSession = Depends(deps.get_db),
     sync_in: schemas.SyncCreate = Body(...),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
     background_tasks: BackgroundTasks,
 ) -> schemas.Sync:
     """Create a new sync configuration.
@@ -116,7 +114,7 @@ async def create_sync(
     -----
         db: The database session
         sync_in: The sync to create
-        auth_context: The current authentication context
+        ctx: The current authentication context
         background_tasks: The background tasks
 
     Returns:
@@ -124,14 +122,12 @@ async def create_sync(
         sync (schemas.Sync): The created sync
     """
     # Create the sync and sync job - kinda, not really, we'll do that in the background
-    sync, sync_job = await sync_service.create_and_run_sync(
-        db=db, sync_in=sync_in, auth_context=auth_context
-    )
+    sync, sync_job = await sync_service.create_and_run_sync(db=db, sync_in=sync_in, ctx=ctx)
     source_connection = await crud.source_connection.get(
-        db=db, id=sync_in.source_connection_id, auth_context=auth_context
+        db=db, id=sync_in.source_connection_id, ctx=ctx
     )
     collection = await crud.collection.get_by_readable_id(
-        db=db, readable_id=source_connection.readable_collection_id, auth_context=auth_context
+        db=db, readable_id=source_connection.readable_collection_id, ctx=ctx
     )
     collection = schemas.Collection.model_validate(collection, from_attributes=True)
 
@@ -141,11 +137,9 @@ async def create_sync(
 
     # If job was created and should run immediately, start it in background
     if sync_job and sync_in.run_immediately:
-        sync_dag = await sync_service.get_sync_dag(
-            db=db, sync_id=sync.id, auth_context=auth_context
-        )
+        sync_dag = await sync_service.get_sync_dag(db=db, sync_id=sync.id, ctx=ctx)
         background_tasks.add_task(
-            sync_service.run, sync, sync_job, sync_dag, collection, source_connection, auth_context
+            sync_service.run, sync, sync_job, sync_dag, collection, source_connection, ctx
         )
 
     return sync
@@ -157,7 +151,7 @@ async def delete_sync(
     db: AsyncSession = Depends(deps.get_db),
     sync_id: UUID,
     delete_data: bool = False,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.Sync:
     """Delete a sync configuration and optionally its associated data.
 
@@ -166,15 +160,13 @@ async def delete_sync(
         db: The database session
         sync_id: The ID of the sync to delete
         delete_data: Whether to delete the data associated with the sync
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
     --------
         sync (schemas.Sync): The deleted sync
     """
-    return await sync_service.delete_sync(
-        db=db, sync_id=sync_id, auth_context=auth_context, delete_data=delete_data
-    )
+    return await sync_service.delete_sync(db=db, sync_id=sync_id, ctx=ctx, delete_data=delete_data)
 
 
 @router.post("/{sync_id}/run", response_model=schemas.SyncJob)
@@ -182,7 +174,7 @@ async def run_sync(
     *,
     db: AsyncSession = Depends(deps.get_db),
     sync_id: UUID,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
     background_tasks: BackgroundTasks,
 ) -> schemas.SyncJob:
     """Trigger a sync run.
@@ -191,7 +183,7 @@ async def run_sync(
     -----
         db: The database session
         sync_id: The ID of the sync to run
-        auth_context: The current authentication context
+        ctx: The current authentication context
         background_tasks: The background tasks
 
     Returns:
@@ -199,12 +191,10 @@ async def run_sync(
         sync_job (schemas.SyncJob): The sync job
     """
     # Trigger the sync run - kinda, not really, we'll do that in the background
-    sync, sync_job, sync_dag = await sync_service.trigger_sync_run(
-        db=db, sync_id=sync_id, auth_context=auth_context
-    )
+    sync, sync_job, sync_dag = await sync_service.trigger_sync_run(db=db, sync_id=sync_id, ctx=ctx)
 
     # Start the sync job in the background - this is where the sync actually runs
-    background_tasks.add_task(sync_service.run, sync, sync_job, sync_dag, auth_context)
+    background_tasks.add_task(sync_service.run, sync, sync_job, sync_dag, ctx)
 
     return sync_job
 
@@ -214,7 +204,7 @@ async def list_sync_jobs(
     *,
     db: AsyncSession = Depends(deps.get_db),
     sync_id: UUID,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> list[schemas.SyncJob]:
     """List all jobs for a specific sync.
 
@@ -222,13 +212,13 @@ async def list_sync_jobs(
     -----
         db: The database session
         sync_id: The ID of the sync to list jobs for
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
     --------
         list[schemas.SyncJob]: A list of sync jobs
     """
-    return await sync_service.list_sync_jobs(db=db, auth_context=auth_context, sync_id=sync_id)
+    return await sync_service.list_sync_jobs(db=db, ctx=ctx, sync_id=sync_id)
 
 
 @router.get("/{sync_id}/job/{job_id}", response_model=schemas.SyncJob)
@@ -237,7 +227,7 @@ async def get_sync_job(
     db: AsyncSession = Depends(deps.get_db),
     sync_id: UUID,
     job_id: UUID,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SyncJob:
     """Get details of a specific sync job.
 
@@ -246,38 +236,36 @@ async def get_sync_job(
         db: The database session
         sync_id: The ID of the sync to list jobs for
         job_id: The ID of the job to get
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
     --------
         sync_job (schemas.SyncJob): The sync job
     """
-    return await sync_service.get_sync_job(
-        db=db, job_id=job_id, auth_context=auth_context, sync_id=sync_id
-    )
+    return await sync_service.get_sync_job(db=db, job_id=job_id, ctx=ctx, sync_id=sync_id)
 
 
 @router.get("/job/{job_id}/subscribe")
 async def subscribe_sync_job(
     job_id: UUID,
-    auth_context: AuthContext = Depends(deps.get_auth_context),  # Standard dependency injection
+    ctx: ApiContext = Depends(deps.get_context),  # Standard dependency injection
 ) -> StreamingResponse:
     """Server-Sent Events (SSE) endpoint to subscribe to a sync job's progress.
 
     Args:
     -----
         job_id: The ID of the job to subscribe to
-        auth_context: The authentication context
+        ctx: The API context
         db: The database session
 
     Returns:
     --------
         StreamingResponse: The streaming response
     """
-    logger.info(f"SSE sync subscription authenticated for user: {auth_context}, job: {job_id}")
+    logger.info(f"SSE sync subscription authenticated for user: {ctx}, job: {job_id}")
 
     # Track active SSE connections
-    connection_id = f"{auth_context}:{job_id}:{asyncio.get_event_loop().time()}"
+    connection_id = f"{ctx}:{job_id}:{asyncio.get_event_loop().time()}"
 
     # Get a new pubsub instance subscribed to this job
     pubsub = await sync_pubsub.subscribe(job_id)
@@ -334,10 +322,10 @@ async def subscribe_sync_job(
 async def get_sync_dag(
     sync_id: UUID,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SyncDag:
     """Get the DAG for a specific sync."""
-    return await sync_service.get_sync_dag(db=db, sync_id=sync_id, auth_context=auth_context)
+    return await sync_service.get_sync_dag(db=db, sync_id=sync_id, ctx=ctx)
 
 
 @router.patch("/{sync_id}", response_model=schemas.Sync)
@@ -346,7 +334,7 @@ async def update_sync(
     db: AsyncSession = Depends(deps.get_db),
     sync_id: UUID,
     sync_update: schemas.SyncUpdate = Body(...),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.Sync:
     """Update a sync configuration.
 
@@ -355,12 +343,10 @@ async def update_sync(
         db: The database session
         sync_id: The ID of the sync to update
         sync_update: The sync update data
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
     --------
         sync (schemas.Sync): The updated sync
     """
-    return await sync_service.update_sync(
-        db=db, sync_id=sync_id, sync_update=sync_update, auth_context=auth_context
-    )
+    return await sync_service.update_sync(db=db, sync_id=sync_id, sync_update=sync_update, ctx=ctx)

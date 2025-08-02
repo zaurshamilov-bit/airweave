@@ -7,12 +7,12 @@ import pytest
 
 from airweave.api.v1.endpoints.api_keys import create_api_key, read_api_key
 from airweave.schemas import APIKey, APIKeyCreate, User
-from airweave.schemas.auth import AuthContext
+from airweave.api.context import ApiContext
 
 
 @pytest.fixture
 def mock_user():
-    """Create a mock AuthContext for testing."""
+    """Create a mock ApiContext for testing."""
     user = User(
         id=UUID("12345678-1234-5678-1234-567812345678"),
         email="test@example.com",
@@ -20,10 +20,8 @@ def mock_user():
         is_active=True,
         organization_id=UUID("87654321-8765-4321-8765-432187654321"),
     )
-    return AuthContext(
-        organization_id=UUID("87654321-8765-4321-8765-432187654321"),
-        user=user,
-        auth_method="auth0"
+    return ApiContext(
+        organization_id=UUID("87654321-8765-4321-8765-432187654321"), user=user, auth_method="auth0"
     )
 
 
@@ -70,14 +68,18 @@ async def test_create_api_key(mock_user, mock_api_key_create, mock_api_key):
     mock_db_api_key.modified_by_email = mock_api_key.modified_by_email
 
     # Mock the CRUD and decryption functions
-    with patch("airweave.crud.api_key.create", return_value=mock_db_api_key) as mock_create, \
-         patch("airweave.core.credentials.decrypt", return_value={"key": mock_api_key.decrypted_key}):
+    with (
+        patch("airweave.crud.api_key.create", return_value=mock_db_api_key) as mock_create,
+        patch(
+            "airweave.core.credentials.decrypt", return_value={"key": mock_api_key.decrypted_key}
+        ),
+    ):
 
         # Call the function
         result = await create_api_key(
             db=mock_db,
             api_key_in=mock_api_key_create,
-            auth_context=mock_user,
+            ctx=mock_user,
         )
 
         # Check the result
@@ -103,21 +105,25 @@ async def test_read_api_key(mock_user, mock_api_key):
     mock_db_api_key.modified_by_email = mock_api_key.modified_by_email
 
     # Mock the CRUD and decryption functions
-    with patch("airweave.crud.api_key.get", return_value=mock_db_api_key) as mock_get, \
-         patch("airweave.core.credentials.decrypt", return_value={"key": mock_api_key.decrypted_key}):
+    with (
+        patch("airweave.crud.api_key.get", return_value=mock_db_api_key) as mock_get,
+        patch(
+            "airweave.core.credentials.decrypt", return_value={"key": mock_api_key.decrypted_key}
+        ),
+    ):
 
         # Call the function
         result = await read_api_key(
             db=mock_db,
             id=UUID("11111111-2222-3333-4444-555555555555"),
-            auth_context=mock_user,
+            ctx=mock_user,
         )
 
         # Check that the crud function was called with the right arguments
         mock_get.assert_called_once_with(
             db=mock_db,
             id=UUID("11111111-2222-3333-4444-555555555555"),
-            auth_context=mock_user,
+            ctx=mock_user,
         )
 
         # Check the result

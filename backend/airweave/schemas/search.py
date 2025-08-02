@@ -67,7 +67,7 @@ class SearchRequest(BaseModel):
     offset: Optional[int] = Field(0, ge=0, description="Number of results to skip")
 
     limit: Optional[int] = Field(
-        20, ge=1, le=100, description="Maximum number of results to return"
+        20, ge=1, le=1000, description="Maximum number of results to return"
     )
 
     # Search quality parameters
