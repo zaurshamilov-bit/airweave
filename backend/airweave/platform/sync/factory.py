@@ -12,6 +12,7 @@ from airweave.core import credentials
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import ContextualLogger, LoggerConfigurator, logger
+from airweave.core.sync_cursor_service import sync_cursor_service
 from airweave.platform.auth.services import oauth2_service
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
@@ -184,7 +185,11 @@ class SyncFactory:
 
         progress = SyncProgress(sync_job.id)
         router = SyncDAGRouter(dag, entity_map)
+
+        # Load existing cursor data from database
+        cursor_data = await sync_cursor_service.get_cursor_data(db, sync.id, auth_context)
         cursor = SyncCursor(sync.id)
+        cursor.cursor_data = cursor_data
 
         return SyncContext(
             source=source,
