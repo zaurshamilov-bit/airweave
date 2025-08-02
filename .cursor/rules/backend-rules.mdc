@@ -77,3 +77,4 @@ If necessary (like editing ), refer [sync-architecture.mdc](mdc:.cursor/rules/sy
 - RESTful endpoints in `api/v1/ndpoints/` -> the version is not part of the endpoint. It's just host.com/{endpoint}!
 - Consistent response structures
 - One router per resource type
+- Logger injected via `ctx` dependency for contextual logging

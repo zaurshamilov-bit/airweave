@@ -33,28 +33,30 @@ from airweave.api.router import TrailingSlashRouter
 router = TrailingSlashRouter()  # Handles /endpoint and /endpoint/
 ```
 
-### 2. Authentication Context (deps.py)
-The `get_auth_context` dependency provides unified authentication handling:
+### 2. API Context (deps.py)
+The `get_context` dependency provides unified authentication and request context handling:
 
 ```python
 @router.get("/")
 async def my_endpoint(
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ):
-    # Provides: organization_id, user, auth_method, auth_metadata
+    # Provides: organization_id, user, auth_method, auth_metadata, logger
 ```
 
-**AuthContext Resolution Flow:**
+**ApiContext Resolution Flow:**
 1. Check auth method: system (dev), Auth0, or API key
 2. Resolve organization ID from header or defaults
 3. Validate organization access
-4. Return unified `AuthContext` object
+4. Create contextual logger with request metadata
+5. Return unified `ApiContext` object with injected logger
 
 **Key Features:**
 - Supports multiple auth methods simultaneously
 - Organization context via `X-Organization-ID` header
 - Automatic access validation
-- Contextual logging with `get_logger` dependency
+- Pre-configured contextual logger injected via dependency injection
+- Request tracking with unique request IDs
 
 ### 3. Authentication Methods
 
@@ -101,7 +103,7 @@ async def my_endpoint(
 async def create_resource(
     resource_in: schemas.ResourceCreate,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.ResponseModel:
     """Clear description."""
     # Validate → Delegate to CRUD/Service → Return schema
@@ -125,7 +127,7 @@ raise HTTPException(status_code=404, detail="Resource not found")
 ### CRUD Integration
 ```python
 # ✅ Always delegate to CRUD layer
-return await crud.collection.get_multi(db, auth_context=auth_context)
+return await crud.collection.get_multi(db, ctx=ctx)
 
 # ❌ Never query directly in endpoints
 ```
@@ -134,12 +136,12 @@ return await crud.collection.get_multi(db, auth_context=auth_context)
 Complex operations use service layers:
 ```python
 collection = await collection_service.create(
-    db, collection_in=collection_in, auth_context=auth_context
+    db, collection_in=collection_in, ctx=ctx
 )
 ```
 
 ## Security
-- Organization access validated via AuthContext
+- Organization access validated via ApiContext
 - API keys encrypted at rest
 - Auth fields hidden by default
 - White label CORS handling for OAuth
@@ -152,7 +154,7 @@ collection = await collection_service.create(
 4. Delegate database operations to CRUD layer
 5. Handle streaming with `StreamingResponse` for SSE
 6. Add background tasks for async operations
-7. Use contextual logger from `get_logger` dependency
+7. Use contextual logger from `ctx.logger` (injected via DI)
 
 # Return complete object
 return await crud.resource.get(db, id=resource.id, ...)
@@ -190,28 +192,30 @@ from airweave.api.router import TrailingSlashRouter
 router = TrailingSlashRouter()  # Handles /endpoint and /endpoint/
 ```
 
-### 2. Authentication Context (deps.py)
-The `get_auth_context` dependency provides unified authentication handling:
+### 2. API Context (deps.py)
+The `get_context` dependency provides unified authentication and request context handling:
 
 ```python
 @router.get("/")
 async def my_endpoint(
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ):
-    # Provides: organization_id, user, auth_method, auth_metadata
+    # Provides: organization_id, user, auth_method, auth_metadata, logger
 ```
 
-**AuthContext Resolution Flow:**
+**ApiContext Resolution Flow:**
 1. Check auth method: system (dev), Auth0, or API key
 2. Resolve organization ID from header or defaults
 3. Validate organization access
-4. Return unified `AuthContext` object
+4. Create contextual logger with request metadata
+5. Return unified `ApiContext` object with injected logger
 
 **Key Features:**
 - Supports multiple auth methods simultaneously
 - Organization context via `X-Organization-ID` header
 - Automatic access validation
-- Contextual logging with `get_logger` dependency
+- Pre-configured contextual logger injected via dependency injection
+- Request tracking with unique request IDs
 
 ### 3. Authentication Methods
 
@@ -258,7 +262,7 @@ async def my_endpoint(
 async def create_resource(
     resource_in: schemas.ResourceCreate,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.ResponseModel:
     """Clear description."""
     # Validate → Delegate to CRUD/Service → Return schema
@@ -282,7 +286,7 @@ raise HTTPException(status_code=404, detail="Resource not found")
 ### CRUD Integration
 ```python
 # ✅ Always delegate to CRUD layer
-return await crud.collection.get_multi(db, auth_context=auth_context)
+return await crud.collection.get_multi(db, ctx=ctx)
 
 # ❌ Never query directly in endpoints
 ```
@@ -291,12 +295,12 @@ return await crud.collection.get_multi(db, auth_context=auth_context)
 Complex operations use service layers:
 ```python
 collection = await collection_service.create(
-    db, collection_in=collection_in, auth_context=auth_context
+    db, collection_in=collection_in, ctx=ctx
 )
 ```
 
 ## Security
-- Organization access validated via AuthContext
+- Organization access validated via ApiContext
 - API keys encrypted at rest
 - Auth fields hidden by default
 - White label CORS handling for OAuth
@@ -309,7 +313,7 @@ collection = await collection_service.create(
 4. Delegate database operations to CRUD layer
 5. Handle streaming with `StreamingResponse` for SSE
 6. Add background tasks for async operations
-7. Use contextual logger from `get_logger` dependency
+7. Use contextual logger from `ctx.logger` (injected via DI)
 
 # Return complete object
 return await crud.resource.get(db, id=resource.id, ...)
