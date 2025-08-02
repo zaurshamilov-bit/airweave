@@ -31,8 +31,14 @@ navigation:
       path: docs/pages/search/examples.mdx
   - page: MCP Server
     path: docs/pages/mcp-server.mdx
-  - page: Auth Providers
-    path: docs/pages/auth-providers.mdx
+  - section: Auth Providers
+    contents:
+    - page: Overview
+      path: docs/pages/auth-providers/overview.mdx
+    - page: Composio
+      path: docs/pages/auth-providers/composio.mdx
+    - page: Pipedream
+      path: docs/pages/auth-providers/pipedream.mdx
   - page: White Labels
     path: docs/pages/white-labeling.mdx
   - page: Add New Connector
