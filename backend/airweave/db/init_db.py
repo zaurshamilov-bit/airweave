@@ -2,7 +2,6 @@
 
 import datetime
 import uuid
-from venv import logger
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
