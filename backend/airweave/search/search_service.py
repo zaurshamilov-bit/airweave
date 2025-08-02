@@ -1,22 +1,20 @@
 """Search service for vector database integrations."""
 
 import json
-import logging
 from typing import Any
 
 from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.api.context import ApiContext
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
-from airweave.core.logging import ContextualLogger
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
 from airweave.platform.locator import resource_locator
-from airweave.schemas.auth import AuthContext
 from airweave.schemas.search import (
     QueryExpansionStrategy,
     ResponseType,
@@ -60,8 +58,6 @@ class SearchService:
     def __init__(self):
         """Initialize the search service with OpenAI client."""
         if not settings.OPENAI_API_KEY:
-            logger = logging.getLogger(__name__)
-            logger.warning("OPENAI_API_KEY is not set in environment variables")
             self.openai_client = None
         else:
             self.openai_client = AsyncOpenAI(
@@ -121,7 +117,7 @@ class SearchService:
         return cleaned_results
 
     def _merge_search_results(
-        self, all_results: list[dict], logger: ContextualLogger, max_results: int = 15
+        self, all_results: list[dict], ctx: ApiContext, max_results: int = 15
     ) -> list[dict]:
         """Merge and deduplicate search results from multiple query expansions.
 
@@ -130,8 +126,8 @@ class SearchService:
 
         Args:
             all_results (list[dict]): Combined results from multiple search queries
+            ctx (ApiContext): The API context
             max_results (int): Maximum number of results to return
-            logger (ContextualLogger): Logger instance
 
         Returns:
             list[dict]: Deduplicated and sorted results
@@ -170,7 +166,7 @@ class SearchService:
         if len(merged) > max_results:
             merged = merged[:max_results]
 
-        logger.info(f"Merged {len(all_results)} results into {len(merged)} unique documents")
+        ctx.logger.info(f"Merged {len(all_results)} results into {len(merged)} unique documents")
 
         return merged
 
@@ -179,8 +175,7 @@ class SearchService:
         db: AsyncSession,
         query: str,
         readable_id: str,
-        auth_context: AuthContext,
-        logger: ContextualLogger,
+        ctx: ApiContext,
         expansion_strategy: QueryExpansionStrategy | None = None,
         filter: Any | None = None,  # Add filter parameter
         limit: int = 10,  # Add limit parameter
@@ -195,8 +190,7 @@ class SearchService:
             db (AsyncSession): Database session
             query (str): Search query text
             readable_id (str): Readable ID of the collection to search within
-            auth_context (AuthContext): Authentication context
-            logger (ContextualLogger): Logger instance
+            ctx (ApiContext): The API context
             expansion_strategy (QueryExpansionStrategy | None): Query expansion strategy.
                 If None, no expansion is performed.
             filter: Qdrant filter for metadata filtering
@@ -208,14 +202,14 @@ class SearchService:
             list[dict]: Raw search results (not cleaned)
         """
         # Get collection and validate
-        collection = await self._get_collection(db, readable_id, auth_context)
+        collection = await self._get_collection(db, readable_id, ctx)
 
         # Get destination for vector search
         destination_class = await self._get_destination_class(db)
         destination = await destination_class.create(collection_id=collection.id)
 
         # Get appropriate embedding model
-        embedding_model = self._get_embedding_model(readable_id, collection.id, logger)
+        embedding_model = self._get_embedding_model(readable_id, collection.id, ctx)
 
         # Perform search based on query expansion strategy
         if expansion_strategy and expansion_strategy != QueryExpansionStrategy.NO_EXPANSION:
@@ -224,7 +218,7 @@ class SearchService:
                 expansion_strategy,
                 embedding_model,
                 destination,
-                logger,
+                ctx.logger,
                 filter=filter,
                 limit=limit,
                 offset=offset,
@@ -248,8 +242,7 @@ class SearchService:
         db: AsyncSession,
         query: str,
         readable_id: str,
-        auth_context: AuthContext,
-        logger: ContextualLogger,
+        ctx: ApiContext,
         response_type: ResponseType = ResponseType.RAW,
         expansion_strategy: QueryExpansionStrategy | None = None,
     ) -> schemas.SearchResponse:
@@ -259,8 +252,7 @@ class SearchService:
             db: Database session
             query: Search query text
             readable_id: Readable ID of the collection to search within
-            auth_context: Authentication context
-            logger: Logger instance
+            ctx: The API context
             response_type: Type of response (raw results or AI completion)
             expansion_strategy: Query expansion strategy. If None, no expansion.
 
@@ -277,8 +269,7 @@ class SearchService:
                 db=db,
                 query=query,
                 readable_id=readable_id,
-                auth_context=auth_context,
-                logger=logger,
+                ctx=ctx,
                 expansion_strategy=expansion_strategy,
             )
 
@@ -312,7 +303,7 @@ class SearchService:
             # Re-raise NotFoundExceptions as-is, will be handled by the middleware
             raise
         except Exception as e:
-            logger.error(f"Search error: {str(e)}", exc_info=True)
+            ctx.logger.error(f"Search error: {str(e)}", exc_info=True)
             # Add more context to the error
             if "connection" in str(e).lower():
                 raise ConnectionError(f"Vector database connection failed: {str(e)}") from e
@@ -323,8 +314,7 @@ class SearchService:
         db: AsyncSession,
         readable_id: str,
         search_request: SearchRequest,
-        auth_context: AuthContext,
-        logger: ContextualLogger,
+        ctx: ApiContext,
     ) -> schemas.SearchResponse:
         """Search with comprehensive SearchRequest parameters.
 
@@ -332,8 +322,7 @@ class SearchService:
             db: Database session
             readable_id: Readable ID of the collection to search within
             search_request: SearchRequest with all parameters
-            auth_context: Authentication context
-            logger: Logger instance
+            ctx: The API context
 
         Returns:
             SearchResponse: Search results with optional AI completion
@@ -344,8 +333,7 @@ class SearchService:
                 db=db,
                 query=search_request.query,
                 readable_id=readable_id,
-                auth_context=auth_context,
-                logger=logger,
+                ctx=ctx,
                 expansion_strategy=search_request.expansion_strategy,
                 filter=search_request.filter,
                 limit=search_request.limit,
@@ -388,16 +376,16 @@ class SearchService:
         except NotFoundException:
             raise
         except Exception as e:
-            logger.error(f"Search error: {str(e)}", exc_info=True)
+            ctx.logger.error(f"Search error: {str(e)}", exc_info=True)
             if "connection" in str(e).lower():
                 raise ConnectionError(f"Vector database connection failed: {str(e)}") from e
             raise
 
     async def _get_collection(
-        self, db: AsyncSession, readable_id: str, auth_context: AuthContext
+        self, db: AsyncSession, readable_id: str, ctx: ApiContext
     ) -> schemas.Collection:
         """Get collection by readable ID and validate it exists."""
-        collection = await crud.collection.get_by_readable_id(db, readable_id, auth_context)
+        collection = await crud.collection.get_by_readable_id(db, readable_id, ctx)
         if not collection:
             raise NotFoundException("Collection not found")
         return collection
@@ -410,21 +398,21 @@ class SearchService:
         return resource_locator.get_destination(destination_model)
 
     def _get_embedding_model(
-        self, readable_id: str, collection_id: str, logger: ContextualLogger
+        self, readable_id: str, collection_id: str, ctx: ApiContext
     ) -> BaseEmbeddingModel:
         """Get the appropriate embedding model based on configuration."""
         if settings.OPENAI_API_KEY:
-            logger.info(
+            ctx.logger.info(
                 f"Using OpenAI embedding model for search in collection "
                 f"{readable_id} {collection_id}"
             )
-            return OpenAIText2Vec(api_key=settings.OPENAI_API_KEY, logger=logger)
+            return OpenAIText2Vec(api_key=settings.OPENAI_API_KEY, logger=ctx.logger)
         else:
-            logger.info(
+            ctx.logger.info(
                 f"Using local embedding model for search in collection "
                 f"{readable_id} {collection_id}"
             )
-            return LocalText2Vec(logger=logger)
+            return LocalText2Vec(logger=ctx.logger)
 
     async def _search_with_expansion(
         self,
@@ -432,7 +420,7 @@ class SearchService:
         expansion_strategy: QueryExpansionStrategy,
         embedding_model: BaseEmbeddingModel,
         destination: BaseDestination,
-        logger: ContextualLogger,
+        ctx: ApiContext,
         filter: Any | None = None,
         limit: int = 10,
         offset: int = 0,
@@ -443,7 +431,7 @@ class SearchService:
 
         # Expand the query
         expanded_queries = await query_preprocessor.expand(query, strategy=expansion_strategy)
-        logger.info(
+        ctx.logger.info(
             f"Expanded query '{query}' to {len(expanded_queries)} variants "
             f"using {expansion_strategy.value} strategy"
         )
@@ -478,7 +466,7 @@ class SearchService:
 
         # Apply offset after merging (since bulk search doesn't support offset)
         merged_results = self._merge_search_results(
-            all_results, max_results=limit + offset, logger=logger
+            all_results, max_results=limit + offset, ctx=ctx
         )
 
         # Apply offset

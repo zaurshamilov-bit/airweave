@@ -7,11 +7,11 @@ from sqlalchemy import desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from airweave.api.context import ApiContext
 from airweave.core.exceptions import NotFoundException, PermissionException
 from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.connection import Connection, IntegrationType
-from airweave.schemas.auth import AuthContext
 from airweave.schemas.connection import ConnectionCreate, ConnectionUpdate
 
 
@@ -42,16 +42,14 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
             and connection.modified_by_email is None
         )
 
-    async def get(
-        self, db: AsyncSession, id: UUID, auth_context: AuthContext
-    ) -> Optional[Connection]:
+    async def get(self, db: AsyncSession, id: UUID, ctx: ApiContext) -> Optional[Connection]:
         """Get a single connection by ID, with special handling for native connections.
 
         Args:
         ----
             db (AsyncSession): The database session.
             id (UUID): The UUID of the connection to get.
-            auth_context (AuthContext): The current authentication context.
+            ctx (ApiContext): The current authentication context.
 
         Returns:
         -------
@@ -67,12 +65,12 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
 
         # If it's not a native connection, validate user permissions
         if not self._is_native_connection(db_obj):
-            await self._validate_organization_access(auth_context, db_obj.organization_id)
+            await self._validate_organization_access(ctx, db_obj.organization_id)
 
         return db_obj
 
     async def get_multi(
-        self, db: AsyncSession, auth_context: AuthContext, *, skip: int = 0, limit: int = 100
+        self, db: AsyncSession, ctx: ApiContext, *, skip: int = 0, limit: int = 100
     ) -> list[Connection]:
         """Get all connections for a user, including native connections.
 
@@ -81,7 +79,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         Args:
         ----
             db (AsyncSession): The database session.
-            auth_context (AuthContext): The current authentication context.
+            ctx (ApiContext): The current authentication context.
             skip (int): The number of objects to skip.
             limit (int): The number of objects to return.
 
@@ -94,7 +92,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         user_query = (
             select(self.model)
             .where(
-                self.model.organization_id == auth_context.organization_id,
+                self.model.organization_id == ctx.organization_id,
             )
             .order_by(desc(self.model.created_at))
             .offset(skip)
@@ -120,7 +118,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         return user_connections + native_connections
 
     async def get_by_integration_type(
-        self, db: AsyncSession, integration_type: IntegrationType, auth_context: AuthContext
+        self, db: AsyncSession, integration_type: IntegrationType, ctx: ApiContext
     ) -> list[Connection]:
         """Get all active connections for a specific integration type, including native connections.
 
@@ -130,7 +128,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         Args:
             db: The database session
             integration_type: The integration type to filter by
-            auth_context: The current authentication context
+            ctx: The current authentication context
 
         Returns:
             A list of Connection objects including both organization connections and native ones
@@ -141,7 +139,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
             .options(selectinload(Connection.integration_credential))
             .where(
                 Connection.integration_type == integration_type,
-                Connection.organization_id == auth_context.organization_id,
+                Connection.organization_id == ctx.organization_id,
             )
         )
         org_result = await db.execute(org_query)
@@ -169,7 +167,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         return org_connections + native_connections
 
     async def get_all_by_short_name(
-        self, db: AsyncSession, short_name: str, auth_context: AuthContext
+        self, db: AsyncSession, short_name: str, ctx: ApiContext
     ) -> list[Connection]:
         """Get all connections for a specific short name, with proper organization filtering.
 
@@ -179,7 +177,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         Args:
             db: The database session
             short_name: The short name to filter by
-            auth_context: The current authentication context
+            ctx: The current authentication context
 
         Returns:
             A list of Connection objects including both organization connections and native ones
@@ -190,7 +188,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
             .options(selectinload(Connection.integration_credential))
             .where(
                 Connection.short_name == short_name,
-                Connection.organization_id == auth_context.organization_id,
+                Connection.organization_id == ctx.organization_id,
             )
         )
         org_result = await db.execute(org_query)
@@ -218,14 +216,14 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         return org_connections + native_connections
 
     async def get_by_readable_id(
-        self, db: AsyncSession, readable_id: str, auth_context: AuthContext
+        self, db: AsyncSession, readable_id: str, ctx: ApiContext
     ) -> Optional[Connection]:
         """Get a connection by its readable_id, with special handling for native connections.
 
         Args:
             db: The database session
             readable_id: The readable_id of the connection to get
-            auth_context: The current authentication context
+            ctx: The current authentication context
 
         Returns:
             The connection with the given readable_id
@@ -243,7 +241,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
 
         # If it's not a native connection, validate user permissions
         if not self._is_native_connection(db_obj):
-            await self._validate_organization_access(auth_context, db_obj.organization_id)
+            await self._validate_organization_access(ctx, db_obj.organization_id)
 
         return db_obj
 
@@ -252,7 +250,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         db: AsyncSession,
         *,
         id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         uow: Optional[UnitOfWork] = None,
     ) -> Optional[Connection]:
         """Delete a connection, with special handling for native connections.
@@ -263,7 +261,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         ----
             db (AsyncSession): The database session.
             id (UUID): The UUID of the connection to delete.
-            auth_context (AuthContext): The current authentication context.
+            ctx (ApiContext): The current authentication context.
             uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
@@ -289,7 +287,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
             )
 
         # For regular connections, validate user permissions
-        await self._validate_organization_access(auth_context, db_obj.organization_id)
+        await self._validate_organization_access(ctx, db_obj.organization_id)
 
         await db.delete(db_obj)
 
@@ -304,7 +302,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         *,
         db_obj: Connection,
         obj_in: Union[ConnectionUpdate, dict[str, Any]],
-        auth_context: AuthContext,
+        ctx: ApiContext,
         uow: Optional[UnitOfWork] = None,
     ) -> Connection:
         """Update a connection, with special handling for native connections.
@@ -316,7 +314,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
             db (AsyncSession): The database session.
             db_obj (Connection): The connection to update.
             obj_in (Union[ConnectionUpdate, dict[str, Any]]): The new connection data.
-            auth_context (AuthContext): The current authentication context.
+            ctx (ApiContext): The current authentication context.
             uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
@@ -335,9 +333,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
             )
 
         # For regular connections, proceed with the normal update
-        return await super().update(
-            db=db, db_obj=db_obj, obj_in=obj_in, auth_context=auth_context, uow=uow
-        )
+        return await super().update(db=db, db_obj=db_obj, obj_in=obj_in, ctx=ctx, uow=uow)
 
 
 connection = CRUDConnection(Connection)

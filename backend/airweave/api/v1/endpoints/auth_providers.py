@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
+from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
 from airweave.core import credentials
 from airweave.core.logging import logger
@@ -14,7 +15,6 @@ from airweave.core.shared_models import ConnectionStatus, IntegrationType
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.platform.configs._base import Fields
 from airweave.platform.locator import resource_locator
-from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
@@ -97,7 +97,7 @@ async def _validate_auth_fields(
 async def list_auth_providers(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
     skip: int = 0,
     limit: int = 100,
 ) -> List[schemas.AuthProvider]:
@@ -106,7 +106,7 @@ async def list_auth_providers(
     Args:
     -----
         db: The database session
-        auth_context: The current authentication context
+        ctx: The current authentication context
         skip: Number of auth providers to skip
         limit: Maximum number of auth providers to return
 
@@ -126,7 +126,7 @@ async def list_auth_providers(
 
             # Skip if no auth config class
             if not provider.auth_config_class:
-                logger.warning(f"Auth provider {provider.short_name} has no auth_config_class")
+                ctx.logger.warning(f"Auth provider {provider.short_name} has no auth_config_class")
                 result_providers.append(provider)
                 continue
 
@@ -142,7 +142,9 @@ async def list_auth_providers(
                     config_fields = Fields.from_config_class(config_class)
                     provider_dict["config_fields"] = config_fields
                 except Exception as e:
-                    logger.error(f"Error getting config fields for {provider.short_name}: {str(e)}")
+                    ctx.logger.error(
+                        f"Error getting config fields for {provider.short_name}: {str(e)}"
+                    )
                     # Still include the provider without config_fields
                     provider_dict["config_fields"] = None
             else:
@@ -163,7 +165,7 @@ async def list_auth_providers(
 async def list_auth_provider_connections(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
     skip: int = 0,
     limit: int = 100,
 ) -> List[schemas.AuthProviderConnection]:
@@ -176,7 +178,7 @@ async def list_auth_provider_connections(
     Args:
     -----
         db: The database session
-        auth_context: The current authentication context
+        ctx: The current authentication context
         skip: Number of connections to skip
         limit: Maximum number of connections to return
 
@@ -188,7 +190,7 @@ async def list_auth_provider_connections(
     connections = await crud.connection.get_by_integration_type(
         db,
         integration_type=IntegrationType.AUTH_PROVIDER,
-        auth_context=auth_context,
+        ctx=ctx,
     )
 
     # Apply skip and limit manually since get_by_integration_type doesn't support them
@@ -216,7 +218,7 @@ async def get_auth_provider_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
     readable_id: str,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.AuthProviderConnection:
     """Get details of a specific auth provider connection.
 
@@ -224,16 +226,14 @@ async def get_auth_provider_connection(
     -----
         db: The database session
         readable_id: The readable ID of the auth provider connection
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
     --------
         schemas.AuthProviderConnection: The auth provider connection details
     """
     # Find the connection by readable_id
-    connection = await crud.connection.get_by_readable_id(
-        db, readable_id=readable_id, auth_context=auth_context
-    )
+    connection = await crud.connection.get_by_readable_id(db, readable_id=readable_id, ctx=ctx)
 
     if not connection:
         raise HTTPException(
@@ -267,7 +267,7 @@ async def get_auth_provider(
     *,
     db: AsyncSession = Depends(deps.get_db),
     short_name: str,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.AuthProvider:
     """Get details of a specific auth provider.
 
@@ -275,7 +275,7 @@ async def get_auth_provider(
     -----
         db: The database session
         short_name: The short name of the auth provider
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
     --------
@@ -329,14 +329,14 @@ async def connect_auth_provider(
     *,
     db: AsyncSession = Depends(deps.get_db),
     auth_provider_connection_in: schemas.AuthProviderConnectionCreate,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.AuthProviderConnection:
     """Create a new auth provider connection with credentials.
 
     Args:
     -----
         db: The database session
-        auth_context: The current authentication context
+        ctx: The current authentication context
         auth_provider_connection_in: The auth provider connection data
 
     Returns:
@@ -376,7 +376,7 @@ async def connect_auth_provider(
             integration_credential = await crud.integration_credential.create(
                 uow.session,
                 obj_in=integration_credential_data,
-                auth_context=auth_context,
+                ctx=ctx,
                 uow=uow,
             )
             await uow.session.flush()
@@ -395,7 +395,7 @@ async def connect_auth_provider(
             connection = await crud.connection.create(
                 uow.session,
                 obj_in=connection_data,
-                auth_context=auth_context,
+                ctx=ctx,
                 uow=uow,
             )
             await uow.session.flush()
@@ -427,7 +427,7 @@ async def delete_auth_provider_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
     readable_id: str,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.AuthProviderConnection:
     """Delete an auth provider connection.
 
@@ -440,16 +440,14 @@ async def delete_auth_provider_connection(
     -----
         db: The database session
         readable_id: The readable ID of the auth provider connection to delete
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
     --------
         schemas.AuthProviderConnection: The deleted connection information
     """
     # Find the connection by readable_id and integration_type
-    connection = await crud.connection.get_by_readable_id(
-        db, readable_id=readable_id, auth_context=auth_context
-    )
+    connection = await crud.connection.get_by_readable_id(db, readable_id=readable_id, ctx=ctx)
 
     if not connection:
         raise HTTPException(
@@ -481,13 +479,13 @@ async def delete_auth_provider_connection(
     # 1. integration_credential (via before_delete event in Connection model)
     # 2. source_connections that use this auth provider (via foreign key CASCADE)
     # 3. connections and syncs of those source_connections (via before_delete event in SourceConn)
-    await crud.connection.remove(db, id=connection.id, auth_context=auth_context)
+    await crud.connection.remove(db, id=connection.id, ctx=ctx)
 
     return response
 
 
 async def _update_auth_credentials(
-    uow: UnitOfWork, connection: Any, auth_fields: dict, auth_context: AuthContext
+    uow: UnitOfWork, connection: Any, auth_fields: dict, ctx: ApiContext
 ) -> None:
     """Update the encrypted credentials for a connection."""
     # Convert to dict if it's a Pydantic model
@@ -507,7 +505,7 @@ async def _update_auth_credentials(
         raise HTTPException(status_code=500, detail="Connection missing integration credential")
 
     integration_credential = await crud.integration_credential.get(
-        uow.session, id=connection.integration_credential_id, auth_context=auth_context
+        uow.session, id=connection.integration_credential_id, ctx=ctx
     )
 
     if not integration_credential:
@@ -523,7 +521,7 @@ async def _update_auth_credentials(
         uow.session,
         db_obj=integration_credential,
         obj_in=integration_credential_update,
-        auth_context=auth_context,
+        ctx=ctx,
         uow=uow,
     )
     await uow.session.flush()
@@ -533,7 +531,7 @@ async def _update_connection_fields(
     uow: UnitOfWork,
     connection: Any,
     update_data: schemas.AuthProviderConnectionUpdate,
-    auth_context: AuthContext,
+    ctx: ApiContext,
     auth_fields_updated: bool,
 ) -> None:
     """Update connection fields and ensure timestamps are updated."""
@@ -550,7 +548,7 @@ async def _update_connection_fields(
             uow.session,
             db_obj=connection,
             obj_in=connection_update,
-            auth_context=auth_context,
+            ctx=ctx,
             uow=uow,
         )
 
@@ -559,8 +557,8 @@ async def _update_connection_fields(
         from airweave.core.datetime_utils import utc_now_naive
 
         connection.modified_at = utc_now_naive()
-        if auth_context.has_user_context:
-            connection.modified_by_email = auth_context.tracking_email
+        if ctx.has_user_context:
+            connection.modified_by_email = ctx.tracking_email
         uow.session.add(connection)
 
     if connection_update_data or auth_fields_updated:
@@ -569,12 +567,10 @@ async def _update_connection_fields(
 
 
 async def _validate_auth_provider_connection(
-    db: AsyncSession, readable_id: str, auth_context: AuthContext
+    db: AsyncSession, readable_id: str, ctx: ApiContext
 ) -> Any:
     """Validate and return auth provider connection."""
-    connection = await crud.connection.get_by_readable_id(
-        db, readable_id=readable_id, auth_context=auth_context
-    )
+    connection = await crud.connection.get_by_readable_id(db, readable_id=readable_id, ctx=ctx)
 
     if not connection:
         raise HTTPException(
@@ -597,7 +593,7 @@ async def update_auth_provider_connection(
     db: AsyncSession = Depends(deps.get_db),
     readable_id: str,
     auth_provider_connection_update: schemas.AuthProviderConnectionUpdate,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.AuthProviderConnection:
     """Update an existing auth provider connection.
 
@@ -610,7 +606,7 @@ async def update_auth_provider_connection(
         db: The database session
         readable_id: The readable ID of the auth provider connection to update
         auth_provider_connection_update: The fields to update
-        auth_context: The current authentication context
+        ctx: The current authentication context
 
     Returns:
     --------
@@ -619,20 +615,18 @@ async def update_auth_provider_connection(
     async with UnitOfWork(db) as uow:
         try:
             # 1. Validate connection
-            connection = await _validate_auth_provider_connection(
-                uow.session, readable_id, auth_context
-            )
+            connection = await _validate_auth_provider_connection(uow.session, readable_id, ctx)
 
             # 2. Update auth fields if provided
             auth_fields_updated = auth_provider_connection_update.auth_fields is not None
             if auth_fields_updated:
                 await _update_auth_credentials(
-                    uow, connection, auth_provider_connection_update.auth_fields, auth_context
+                    uow, connection, auth_provider_connection_update.auth_fields, ctx
                 )
 
             # 3. Update connection fields
             await _update_connection_fields(
-                uow, connection, auth_provider_connection_update, auth_context, auth_fields_updated
+                uow, connection, auth_provider_connection_update, ctx, auth_fields_updated
             )
 
             # 4. Return updated connection

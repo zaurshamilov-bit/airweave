@@ -6,10 +6,10 @@ from venv import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.api.context import ApiContext
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
 from airweave.db.init_db_native import init_db_with_native_connections
-from airweave.schemas.auth import AuthContext
 
 
 async def init_db(db: AsyncSession) -> None:
@@ -39,7 +39,5 @@ async def init_db(db: AsyncSession) -> None:
                 description="Superuser API Key",
                 expires_at=datetime.datetime.now() + datetime.timedelta(days=365),
             ),
-            auth_context=AuthContext(
-                user=user, organization_id=organization.id, auth_method="system"
-            ),
+            ctx=ApiContext(user=user, organization_id=organization.id, auth_method="system"),
         )

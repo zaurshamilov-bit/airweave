@@ -14,6 +14,11 @@
         "summary": "Read Source",
         "description": "Get detailed information about a specific data source connector.",
         "operationId": "read_source_sources_detail__short_name__get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "short_name",
@@ -25,38 +30,6 @@
               "title": "Short Name"
             },
             "description": "Technical identifier of the source type (e.g., 'github', 'stripe', 'slack')"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -132,40 +105,12 @@
         "summary": "Read Sources",
         "description": "List all available data source connectors.\n\n<br/><br/>\nReturns the complete catalog of source types that Airweave can connect to.",
         "operationId": "read_sources_sources_list_get",
-        "parameters": [
+        "security": [
           {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
+            "ApiKeyAuth": []
           }
         ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -245,6 +190,11 @@
         "summary": "List Collections",
         "description": "List all collections that belong to your organization.",
         "operationId": "list_collections_collections_get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "skip",
@@ -271,38 +221,6 @@
               "title": "Limit"
             },
             "description": "Maximum number of collections to return (1-1000)"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -357,40 +275,12 @@
         "summary": "Create Collection",
         "description": "Create a new collection.\n\n<br/><br/>\nThe newly created collection is initially empty and does not contain any data\nuntil you explicitly add source connections to it.",
         "operationId": "create_collection_collections_post",
-        "parameters": [
+        "security": [
           {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
+            "ApiKeyAuth": []
           }
         ],
+        "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -433,6 +323,11 @@
         "summary": "Get Collection",
         "description": "Retrieve a specific collection by its readable ID.",
         "operationId": "get_collection_collections__readable_id__get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -444,38 +339,6 @@
               "title": "Readable Id"
             },
             "description": "The unique readable identifier of the collection (e.g., 'finance-data-ab123')"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -508,6 +371,11 @@
         "summary": "Update Collection",
         "description": "Update a collection's properties.\n\n<br/><br/>\nModifies the display name of an existing collection.\nNote that the readable ID cannot be changed after creation to maintain stable\nAPI endpoints and preserve any existing integrations or bookmarks.",
         "operationId": "update_collection_collections__readable_id__put",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -519,38 +387,6 @@
               "title": "Readable Id"
             },
             "description": "The unique readable identifier of the collection to update"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "requestBody": {
@@ -593,6 +429,11 @@
         "summary": "Delete Collection",
         "description": "Delete a collection and optionally its associated data.\n\n<br/><br/>\nPermanently removes a collection from your organization. By default, this only\ndeletes the collection metadata while preserving the actual data in the\ndestination systems.<br/><br/>All source connections within this collection\nwill also be deleted as part of the cleanup process.",
         "operationId": "delete_collection_collections__readable_id__delete",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -616,38 +457,6 @@
               "title": "Delete Data"
             },
             "description": "Whether to also delete all associated data from destination systems"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -682,6 +491,11 @@
         "summary": "Search Collection",
         "description": "Search across all data sources within the specified collection.\n\nThis GET endpoint provides basic search functionality. For advanced filtering\nand options, use the POST /search endpoint.",
         "operationId": "search_collection_collections__readable_id__search_get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -731,7 +545,7 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 100,
+              "maximum": 1000,
               "minimum": 1,
               "description": "Maximum number of results to return",
               "default": 20,
@@ -782,38 +596,6 @@
               "default": "auto"
             },
             "description": "Query expansion strategy (auto, llm, or no_expansion)"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -900,6 +682,11 @@
         "summary": "Search Collection Advanced",
         "description": "Advanced search with comprehensive filtering and options.\n\nThis endpoint supports:\n- Metadata filtering using Qdrant's native filter syntax\n- Pagination with offset and limit\n- Score threshold filtering\n- Query expansion strategies",
         "operationId": "search_collection_advanced_collections__readable_id__search_post",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -911,38 +698,6 @@
               "title": "Readable Id"
             },
             "description": "The unique readable identifier of the collection to search"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "requestBody": {
@@ -1033,6 +788,11 @@
         "summary": "Refresh All Source Connections",
         "description": "Trigger data synchronization for all source connections in the collection.\n\n<br/><br/>The sync jobs run asynchronously in the background, so this endpoint\nreturns immediately with job details that you can use to track progress. You can\nmonitor the status of individual data synchronization using the source connection\nendpoints.",
         "operationId": "refresh_all_source_connections_collections__readable_id__refresh_all_post",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -1044,38 +804,6 @@
               "title": "Readable Id"
             },
             "description": "The unique readable identifier of the collection to refresh"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1145,6 +873,11 @@
         "summary": "List Source Connections",
         "description": "List source connections across your organization.\n\n<br/><br/>\nBy default, returns ALL source connections from every collection in your\norganization. Use the 'collection' parameter to filter results to a specific\ncollection. This is useful for getting an overview of all your data sources\nor managing connections within a particular collection.",
         "operationId": "list_source_connections_source_connections_get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "collection",
@@ -1189,38 +922,6 @@
               "title": "Limit"
             },
             "description": "Maximum number of source connections to return (1-1000)"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1275,40 +976,12 @@
         "summary": "Create Source Connection",
         "description": "Create a new source connection to sync data into your collection.\n\n<br/><br/>\n\n**This endpoint only works for sources that do not use OAuth2.0.**\nSources that do use OAuth2.0 like Google Drive, Slack, or HubSpot must be\nconnected through the UI where you can complete the OAuth consent flow.<br/><br/>\n\nCredentials for a source have to be provided using the `auth_fields` field.\nCurrently, it is not automatically checked if the provided credentials are valid.\nIf they are not valid, the data synchronization will fail.<br/><br/>\n\nCheck the documentation of a specific source (for example\n[Github](https://docs.airweave.ai/docs/connectors/github)) to see what kind\nof authentication is used.",
         "operationId": "create_source_connection_source_connections_post",
-        "parameters": [
+        "security": [
           {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
+            "ApiKeyAuth": []
           }
         ],
+        "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -1351,6 +1024,11 @@
         "summary": "Get Source Connection",
         "description": "Retrieve a specific source connection by its ID.",
         "operationId": "get_source_connection_source_connections__source_connection_id__get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1375,38 +1053,6 @@
               "title": "Show Auth Fields"
             },
             "description": "Whether to reveal authentication credentials."
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1439,6 +1085,11 @@
         "summary": "Update Source Connection",
         "description": "Update a source connection's properties.\n\n<br/><br/>\n\nModify the configuration of an existing source connection including its name,\nauthentication credentials, configuration fields, sync schedule, or source-specific settings.",
         "operationId": "update_source_connection_source_connections__source_connection_id__put",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1451,38 +1102,6 @@
               "title": "Source Connection Id"
             },
             "description": "The unique identifier of the source connection to update"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "requestBody": {
@@ -1525,6 +1144,11 @@
         "summary": "Delete Source Connection",
         "description": "Delete a source connection.\n\n<br/><br/>\n\nPermanently removes the source connection configuration and credentials.\nBy default, previously synced data remains in your destination systems for continuity.\nUse delete_data=true to also remove all associated data from destination systems.",
         "operationId": "delete_source_connection_source_connections__source_connection_id__delete",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1549,38 +1173,6 @@
               "title": "Delete Data"
             },
             "description": "Whether to also delete all synced data from destination systems"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1615,6 +1207,11 @@
         "summary": "Run Source Connection",
         "description": "Manually trigger a data sync for this source connection.\n\n<br/><br/>\nStarts an immediate synchronization job that extracts fresh data from your source,\ntransforms it according to your configuration, and updates the destination systems.\nThe job runs asynchronously and endpoint returns immediately with tracking information.",
         "operationId": "run_source_connection_source_connections__source_connection_id__run_post",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1627,38 +1224,6 @@
               "title": "Source Connection Id"
             },
             "description": "The unique identifier of the source connection to sync"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "requestBody": {
@@ -1731,6 +1296,11 @@
         "summary": "List Source Connection Jobs",
         "description": "List all sync jobs for a source connection.\n\n<br/><br/>\nReturns the complete history of data synchronization jobs including successful syncs,\nfailed attempts, and currently running operations.",
         "operationId": "list_source_connection_jobs_source_connections__source_connection_id__jobs_get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1743,38 +1313,6 @@
               "title": "Source Connection Id"
             },
             "description": "The unique identifier of the source connection"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1844,6 +1382,11 @@
         "summary": "Get Source Connection Job",
         "description": "Get detailed information about a specific sync job.",
         "operationId": "get_source_connection_job_source_connections__source_connection_id__jobs__job_id__get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1868,38 +1411,6 @@
               "title": "Job Id"
             },
             "description": "The unique identifier of the sync job"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -1963,6 +1474,11 @@
         "summary": "Cancel Source Connection Job",
         "description": "Cancel a running sync job.\n\n<br/><br/>\nSends a cancellation signal to stop an in-progress data synchronization.\nThe job will complete its current operation and then terminate gracefully.\nOnly jobs in 'created', 'pending', or 'in_progress' states can be cancelled.",
         "operationId": "cancel_source_connection_job_source_connections__source_connection_id__jobs__job_id__cancel_post",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1987,38 +1503,6 @@
               "title": "Job Id"
             },
             "description": "The unique identifier of the sync job to cancel"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -2081,40 +1565,12 @@
         "summary": "List White Labels",
         "description": "List all white label integrations for your organization.\n\n<br/><br/>\nReturns all custom OAuth integrations configured with your own branding and\ncredentials. These integrations allow you to present OAuth consent screens with\nyour company name instead of Airweave.<br/><br/>**White label integrations only\nwork with OAuth2.0 sources** like Slack, Google Drive, or HubSpot that require\nOAuth consent flows.",
         "operationId": "list_white_labels_white_labels_list_get",
-        "parameters": [
+        "security": [
           {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
+            "ApiKeyAuth": []
           }
         ],
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2172,40 +1628,12 @@
         "summary": "Create White Label",
         "description": "Create a new white label integration.\n\n<br/><br/>\n**This only works for sources that use OAuth2.0 authentication** like Slack,\nGoogle Drive, GitHub, or HubSpot.<br/><br/>Sets up a custom OAuth integration\nusing your own OAuth application credentials and branding. Once created,\ncustomers will see your company name during OAuth consent flows instead of\nAirweave. This requires you to have already configured your own OAuth\napplication with the target service provider.",
         "operationId": "create_white_label_white_labels_post",
-        "parameters": [
+        "security": [
           {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
+            "ApiKeyAuth": []
           }
         ],
+        "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -2248,6 +1676,11 @@
         "summary": "Get White Label",
         "description": "Retrieve a specific white label integration by its ID.",
         "operationId": "get_white_label_white_labels__white_label_id__get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -2260,38 +1693,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -2324,6 +1725,11 @@
         "summary": "Update White Label",
         "description": "Update a white label integration's configuration.",
         "operationId": "update_white_label_white_labels__white_label_id__put",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -2336,38 +1742,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration to update"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "requestBody": {
@@ -2410,6 +1784,11 @@
         "summary": "Delete White Label",
         "description": "Delete a white label integration.\n\n<br/><br/>\nPermanently removes the white label configuration and OAuth credentials.\nExisting source connections created through this integration will continue to work,\nbut no new OAuth flows can be initiated until a new white label integration is created.",
         "operationId": "delete_white_label_white_labels__white_label_id__delete",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -2422,38 +1801,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration to delete"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -2488,6 +1835,11 @@
         "summary": "Get White Label Oauth2 Auth Url",
         "description": "Generate a branded OAuth2 authorization URL for customer authentication.\n\n<br/><br/>\nCreates the OAuth consent URL that customers should be redirected to for\nauthentication. The OAuth consent screen will display your company name and\nbranding instead of Airweave.",
         "operationId": "get_white_label_oauth2_auth_url_white_labels__white_label_id__oauth2_auth_url_get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -2500,38 +1852,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -2573,6 +1893,11 @@
         "summary": "List White Label Source Connections",
         "description": "List all source connections created through a specific white label integration.\n\n<br/><br/>\nReturns source connections that were established using this white label's OAuth flow.",
         "operationId": "list_white_label_source_connections_white_labels__white_label_id__source_connections_get",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -2585,38 +1910,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "responses": {
@@ -2673,7 +1966,12 @@
         ],
         "summary": "Exchange White Label Oauth2 Code",
         "description": "Complete the OAuth flow and create a source connection.\n\n<br/><br/>\n**This is the core endpoint that converts OAuth authorization codes into working\nsource connections.**<br/><br/>The OAuth credentials are obtained automatically\nfrom the authorization code - you do not need to provide auth_fields. The white\nlabel integration is automatically linked to the created source connection for\ntracking and branding purposes.",
-        "operationId": "exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options",
+        "operationId": "exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -2686,38 +1984,6 @@
               "title": "White Label Id"
             },
             "description": "The unique identifier of the white label integration"
-          },
-          {
-            "name": "X-API-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Api-Key"
-            }
-          },
-          {
-            "name": "X-Organization-ID",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Organization-Id"
-            }
           }
         ],
         "requestBody": {
@@ -2725,7 +1991,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options"
+                "$ref": "#/components/schemas/Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post"
               }
             }
           }
@@ -3269,7 +2535,7 @@
         "type": "object",
         "title": "Body_create_credentials_from_authorization_code_source_connections__source_short_name__code_to_token_credentials_post"
       },
-      "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options": {
+      "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post": {
         "properties": {
           "code": {
             "type": "string",
@@ -3295,7 +2561,7 @@
         "required": [
           "code"
         ],
-        "title": "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options"
+        "title": "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post"
       },
       "Body_run_source_connection_source_connections__source_connection_id__run_post": {
         "properties": {
@@ -6001,7 +5267,7 @@
             "anyOf": [
               {
                 "type": "integer",
-                "maximum": 100.0,
+                "maximum": 1000.0,
                 "minimum": 1.0
               },
               {
@@ -9218,6 +8484,14 @@
             "redirect_url": "https://v2.yourapp.com/auth/slack/callback"
           }
         ]
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "API key for authentication"
       }
     }
   },

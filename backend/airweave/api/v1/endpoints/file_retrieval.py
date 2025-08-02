@@ -9,16 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud
 from airweave.api import deps
+from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.logging import logger
 from airweave.platform.storage import storage_manager
-from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
 
 async def verify_picnic_health_access(
-    auth_context: AuthContext,
+    ctx: ApiContext,
     db: AsyncSession,
 ) -> None:
     """Verify that the request is from Picnic Health organization.
@@ -30,20 +30,18 @@ async def verify_picnic_health_access(
     PICNIC_HEALTH_ORG_ID = "9878d9b4-0fb9-4401-b2b3-15420da4eda3"
 
     # Check if the request is from Picnic Health organization by ID
-    if str(auth_context.organization_id) != PICNIC_HEALTH_ORG_ID:
+    if str(ctx.organization_id) != PICNIC_HEALTH_ORG_ID:
         # Get the organization details for logging
-        organization = await crud.organization.get(
-            db=db, id=auth_context.organization_id, auth_context=auth_context
-        )
+        organization = await crud.organization.get(db=db, id=ctx.organization_id, ctx=ctx)
 
         logger.warning(
             f"File access denied for organization: "
             f"{organization.name if organization else 'Unknown'} "
-            f"(ID: {auth_context.organization_id})",
+            f"(ID: {ctx.organization_id})",
             extra={
-                "organization_id": auth_context.organization_id,
+                "organization_id": ctx.organization_id,
                 "organization_name": organization.name if organization else None,
-                "auth_method": auth_context.auth_method,
+                "auth_method": ctx.auth_method,
                 "expected_org_id": PICNIC_HEALTH_ORG_ID,
             },
         )
@@ -56,14 +54,14 @@ async def verify_picnic_health_access(
 async def download_file(
     *,
     entity_id: str,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
     db: AsyncSession = Depends(deps.get_db),
 ) -> FileResponse:
     """Download a file by entity ID.
 
     Args:
         entity_id: The entity ID
-        auth_context: The current authentication context
+        ctx: The current authentication context
         db: Database session
 
     Returns:
@@ -73,7 +71,7 @@ async def download_file(
         HTTPException: If file not found or invalid entity ID
     """
     # Verify Picnic Health access
-    await verify_picnic_health_access(auth_context, db)
+    await verify_picnic_health_access(ctx, db)
 
     try:
         # Download to temp file
@@ -107,14 +105,14 @@ async def download_file(
 async def get_file_content(
     *,
     entity_id: str,
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
     db: AsyncSession = Depends(deps.get_db),
 ) -> dict:
     """Get file content as JSON response.
 
     Args:
         entity_id: The entity ID
-        auth_context: The current authentication context
+        ctx: The current authentication context
         db: Database session
 
     Returns:
@@ -124,7 +122,7 @@ async def get_file_content(
         HTTPException: If file not found or invalid entity ID
     """
     # Verify Picnic Health access
-    await verify_picnic_health_access(auth_context, db)
+    await verify_picnic_health_access(ctx, db)
 
     try:
         content = await storage_manager.get_ctti_file_content(entity_id)
@@ -157,14 +155,14 @@ async def get_file_content(
 async def download_files_batch(
     *,
     entity_ids: List[str],
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
     db: AsyncSession = Depends(deps.get_db),
 ) -> StreamingResponse:
     """Download multiple files as a ZIP archive.
 
     Args:
         entity_ids: List of entity IDs to download
-        auth_context: The current authentication context
+        ctx: The current authentication context
         db: Database session
 
     Returns:
@@ -174,7 +172,7 @@ async def download_files_batch(
         HTTPException: If no valid files found
     """
     # Verify Picnic Health access
-    await verify_picnic_health_access(auth_context, db)
+    await verify_picnic_health_access(ctx, db)
 
     if not entity_ids:
         raise HTTPException(status_code=400, detail="No entity IDs provided")
@@ -241,21 +239,21 @@ async def download_files_batch(
 async def check_files_exist(
     *,
     entity_ids: List[str] = Query(..., description="List of entity IDs to check"),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
     db: AsyncSession = Depends(deps.get_db),
 ) -> dict:
     """Check which files exist in storage.
 
     Args:
         entity_ids: List of entity IDs to check
-        auth_context: The current authentication context
+        ctx: The current authentication context
         db: Database session
 
     Returns:
         dict: Dictionary with entity_ids as keys and existence status as values
     """
     # Verify Picnic Health access
-    await verify_picnic_health_access(auth_context, db)
+    await verify_picnic_health_access(ctx, db)
 
     if not entity_ids:
         raise HTTPException(status_code=400, detail="No entity IDs provided")

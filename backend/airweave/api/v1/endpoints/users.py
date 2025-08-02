@@ -13,12 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.api import deps
 from airweave.api.auth import auth0
+from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import logger
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.schemas import OrganizationWithRole, User
-from airweave.schemas.auth import AuthContext
 
 router = TrailingSlashRouter()
 
@@ -176,7 +176,7 @@ async def create_or_update_user(
             _ = await crud.api_key.create(
                 db,
                 obj_in=schemas.APIKeyCreate(name="Default API Key"),
-                auth_context=AuthContext(
+                ctx=ApiContext(
                     user=user, organization_id=str(organization.id), auth_method="auth0"
                 ),
                 uow=uow,
