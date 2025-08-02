@@ -123,7 +123,7 @@ class SearchService:
         return cleaned_results
 
     def _merge_search_results(
-        self, all_results: list[dict], max_results: int = 15, logger: ContextualLogger = None
+        self, all_results: list[dict], logger: ContextualLogger, max_results: int = 15
     ) -> list[dict]:
         """Merge and deduplicate search results from multiple query expansions.
 
@@ -172,8 +172,7 @@ class SearchService:
         if len(merged) > max_results:
             merged = merged[:max_results]
 
-        if logger:
-            logger.info(f"Merged {len(all_results)} results into {len(merged)} unique documents")
+        logger.info(f"Merged {len(all_results)} results into {len(merged)} unique documents")
 
         return merged
 

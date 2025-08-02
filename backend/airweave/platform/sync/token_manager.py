@@ -131,7 +131,7 @@ class TokenManager:
                 return self._current_token
 
             # Perform the refresh
-            self.logger.info(
+            self.logger.debug(
                 f"Refreshing token for {self.source_short_name} "
                 f"(last refresh: {time_since_refresh:.0f}s ago)"
             )
@@ -141,7 +141,7 @@ class TokenManager:
                 self._current_token = new_token
                 self._last_refresh_time = current_time
 
-                self.logger.info(f"Successfully refreshed token for {self.source_short_name}")
+                self.logger.debug(f"Successfully refreshed token for {self.source_short_name}")
                 return new_token
 
             except Exception as e:
@@ -173,7 +173,7 @@ class TokenManager:
                 self._current_token = new_token
                 self._last_refresh_time = time.time()
 
-                self.logger.info(
+                self.logger.debug(
                     f"Successfully refreshed token for {self.source_short_name} after 401"
                 )
                 return new_token
@@ -209,7 +209,7 @@ class TokenManager:
         Raises:
             TokenRefreshError: If refresh fails
         """
-        self.logger.info(
+        self.logger.debug(
             f"Refreshing token via auth provider instance for source '{self.source_short_name}'"
         )
 
