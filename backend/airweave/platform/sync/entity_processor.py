@@ -3,7 +3,7 @@
 import asyncio
 from typing import Dict, List, Optional, Set
 
-from airweave import crud, schemas
+from airweave import crud, models, schemas
 from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import logger
 from airweave.db.session import get_db_context
@@ -216,7 +216,7 @@ class EntityProcessor:
 
     async def _determine_action(
         self, entity: BaseEntity, sync_context: SyncContext
-    ) -> tuple[schemas.Entity, DestinationAction]:
+    ) -> tuple[Optional[models.Entity], DestinationAction]:
         """Determine what action to take for an entity.
 
         Creates a temporary database session for the lookup.
@@ -317,7 +317,7 @@ class EntityProcessor:
         self,
         parent_entity: BaseEntity,
         processed_entities: List[BaseEntity],
-        db_entity: schemas.Entity,
+        db_entity: Optional[models.Entity],
         action: DestinationAction,
         sync_context: SyncContext,
     ) -> None:
@@ -592,7 +592,7 @@ class EntityProcessor:
         self,
         parent_entity: BaseEntity,
         processed_entities: List[BaseEntity],
-        db_entity: Optional[schemas.Entity],
+        db_entity: Optional[models.Entity],
         sync_context: SyncContext,
     ) -> None:
         """Handle INSERT action."""
@@ -658,7 +658,7 @@ class EntityProcessor:
         self,
         parent_entity: BaseEntity,
         processed_entities: List[BaseEntity],
-        db_entity: schemas.Entity,
+        db_entity: models.Entity,
         sync_context: SyncContext,
     ) -> None:
         """Handle UPDATE action."""
@@ -681,12 +681,24 @@ class EntityProcessor:
 
         # Create a new database session just for this update
         async with get_db_context() as db:
-            await crud.entity.update(
-                db=db,
-                db_obj=db_entity,
-                obj_in=schemas.EntityUpdate(hash=parent_hash),
-                auth_context=sync_context.auth_context,
-            )
+            # Re-query the entity in the new session to avoid session issues
+            try:
+                fresh_db_entity = await crud.entity.get_by_entity_and_sync_id(
+                    db=db, entity_id=parent_entity.entity_id, sync_id=sync_context.sync.id
+                )
+                await crud.entity.update(
+                    db=db,
+                    db_obj=fresh_db_entity,
+                    obj_in=schemas.EntityUpdate(hash=parent_hash),
+                    auth_context=sync_context.auth_context,
+                )
+            except NotFoundException:
+                logger.warning(
+                    f"📭 UPDATE_ENTITY_NOT_FOUND [{entity_context}] "
+                    f"Entity no longer exists in database"
+                )
+                await sync_context.progress.increment("skipped", 1)
+                return
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
         parent_entity.db_entity_id = db_entity.id
