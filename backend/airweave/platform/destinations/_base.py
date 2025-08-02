@@ -1,11 +1,13 @@
 """Base destination classes."""
 
 import json
+import logging
 from abc import ABC, abstractmethod
-from typing import ClassVar, List
+from typing import ClassVar, List, Optional
 from uuid import UUID
 
 from airweave import schemas
+from airweave.core.logging import logger as default_logger
 from airweave.platform.entities._base import ChunkEntity
 
 
@@ -14,6 +16,24 @@ class BaseDestination(ABC):
 
     # Class variables for integration metadata
     _labels: ClassVar[List[str]] = []
+
+    def __init__(self):
+        """Initialize the base destination."""
+        self._logger: Optional[logging.Logger] = (
+            None  # Store contextual logger as instance variable
+        )
+
+    @property
+    def logger(self):
+        """Get the logger for this destination, falling back to default if not set."""
+        if self._logger is not None:
+            return self._logger
+        # Fall back to default logger
+        return default_logger
+
+    def set_logger(self, logger: logging.Logger) -> None:
+        """Set a contextual logger for this destination."""
+        self._logger = logger
 
     @abstractmethod
     async def create(self, collection_id: UUID) -> "BaseDestination":

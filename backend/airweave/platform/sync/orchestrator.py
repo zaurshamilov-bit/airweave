@@ -40,7 +40,7 @@ class SyncOrchestrator:
 
         # Queue size provides buffering for bursty sources
         # Workers pull from this queue when ready
-        self.stream_buffer_size = 100
+        self.stream_buffer_size = 1000
 
     async def run(self) -> schemas.Sync:
         """Execute the synchronization process.
@@ -64,10 +64,7 @@ class SyncOrchestrator:
 
     async def _start_sync(self) -> None:
         """Initialize sync job and update status to in-progress."""
-        self.sync_context.logger.info(
-            f"Starting sync job {self.sync_context.sync_job.id} for sync "
-            f"{self.sync_context.sync.id}"
-        )
+        self.sync_context.logger.info("Starting sync job")
 
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
@@ -157,7 +154,7 @@ class SyncOrchestrator:
             pending_tasks: Set of pending tasks to wait for
         """
         if pending_tasks:
-            self.sync_context.logger.info(
+            self.sync_context.logger.debug(
                 f"Waiting for {len(pending_tasks)} remaining tasks to complete"
             )
             done, _ = await asyncio.wait(pending_tasks)
