@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
-from airweave.api.context import ApiContext
 from airweave.api.examples import create_single_source_response, create_source_list_response
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.exceptions import NotFoundException
@@ -29,7 +28,7 @@ async def read_source(
         ...,
         description="Technical identifier of the source type (e.g., 'github', 'stripe', 'slack')",
     ),
-    ctx: ApiContext = Depends(deps.get_context),
+    ctx: schemas.ApiContext = Depends(deps.get_context),
 ) -> schemas.Source:
     """Get detailed information about a specific data source connector."""
     try:
@@ -105,7 +104,7 @@ async def read_source(
 async def read_sources(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    ctx: ApiContext = Depends(deps.get_context),
+    ctx: schemas.ApiContext = Depends(deps.get_context),
 ) -> list[schemas.Source]:
     """List all available data source connectors.
 

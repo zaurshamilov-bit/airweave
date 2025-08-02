@@ -33,7 +33,7 @@ async def read_embedding_model(
         schemas.EmbeddingModel: The embedding model object.
 
     """
-    embedding_model = await crud.embedding_model.get_by_short_name(db, short_name)
+    embedding_model = await crud.embedding_model.get_by_short_name(db, short_name, ctx=ctx)
     if not embedding_model:
         raise HTTPException(status_code=404, detail="Embedding model not found")
     if embedding_model.auth_config_class:
@@ -60,4 +60,4 @@ async def read_embedding_models(
         list[schemas.EmbeddingModel]: The list of embedding models.
 
     """
-    return await crud.embedding_model.get_all(db)
+    return await crud.embedding_model.get_all(db, ctx=ctx)

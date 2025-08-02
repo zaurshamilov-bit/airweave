@@ -869,6 +869,7 @@ class SourceConnectionService:
             source_connection
         )
 
+        await crud.source_connection.remove(db=db, id=source_connection_id, ctx=ctx)
         # Always delete data from Qdrant when deleting a source connection
         if source_connection.sync_id and source_connection.readable_collection_id:
             try:
