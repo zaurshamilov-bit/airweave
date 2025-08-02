@@ -28,8 +28,7 @@ class BaseEmbeddingModel:
         # Fall back to default logger
         return default_logger
 
-    @logger.setter
-    def logger(self, logger: logging.Logger) -> None:
+    def set_logger(self, logger: logging.Logger) -> None:
         """Set a contextual logger for this embedding model."""
         self._logger = logger
 

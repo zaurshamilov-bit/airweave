@@ -7,8 +7,6 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models as rest
 
 from airweave.core.config import settings
-from airweave.core.logging import ContextualLogger
-from airweave.core.logging import logger as default_logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import QdrantAuthConfig
 from airweave.platform.decorators import destination
