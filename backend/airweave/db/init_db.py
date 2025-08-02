@@ -1,6 +1,7 @@
 """Initialize the database with the first superuser."""
 
 import datetime
+import uuid
 from venv import logger
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,5 +40,11 @@ async def init_db(db: AsyncSession) -> None:
                 description="Superuser API Key",
                 expires_at=datetime.datetime.now() + datetime.timedelta(days=365),
             ),
-            ctx=ApiContext(user=user, organization_id=organization.id, auth_method="system"),
+            ctx=ApiContext(
+                request_id=str(uuid.uuid4()),
+                user=user,
+                organization_id=organization.id,
+                auth_method="system",
+                logger=logger,
+            ),
         )
