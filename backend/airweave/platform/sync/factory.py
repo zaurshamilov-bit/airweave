@@ -190,10 +190,10 @@ class SyncFactory:
         cursor_data = await sync_cursor_service.get_cursor_data(
             db=db, sync_id=sync.id, auth_context=auth_context
         )
-        cursor = SyncCursor(sync.id)
-        cursor.cursor_data = cursor_data
+        cursor = SyncCursor(sync_id=sync.id, cursor_data=cursor_data)
 
-        return SyncContext(
+        # Create sync context
+        sync_context = SyncContext(
             source=source,
             destinations=destinations,
             embedding_model=embedding_model,
@@ -211,6 +211,11 @@ class SyncFactory:
             logger=logger,
             white_label=white_label,
         )
+
+        # Set cursor on source so it can access cursor data
+        source.set_cursor(cursor)
+
+        return sync_context
 
     @classmethod
     async def _create_source_instance(

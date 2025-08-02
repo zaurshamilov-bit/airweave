@@ -9,15 +9,7 @@ class SyncCursor:
     This class is used to track the progress of a sync.
     """
 
-    def __init__(self, sync_id: UUID):
+    def __init__(self, sync_id: UUID, cursor_data: dict | None = None):
         """Initialize a sync cursor with the given sync ID."""
         self.sync_id = sync_id
-        self.cursor = 0
-
-    def set_cursor(self, cursor: int):
-        """Set the cursor position to the given value."""
-        self.cursor = cursor
-
-    def get_cursor(self) -> int:
-        """Get the current cursor position."""
-        return self.cursor
+        self.cursor_data = cursor_data or {}
