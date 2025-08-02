@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
+from airweave.api.context import ApiContext
 from airweave.api.examples import create_single_source_response, create_source_list_response
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.exceptions import NotFoundException
@@ -29,7 +30,7 @@ async def read_source(
         ...,
         description="Technical identifier of the source type (e.g., 'github', 'stripe', 'slack')",
     ),
-    ctx: schemas.ApiContext = Depends(deps.get_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.Source:
     """Get detailed information about a specific data source connector."""
     try:
@@ -105,19 +106,19 @@ async def read_source(
 async def read_sources(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    ctx: schemas.ApiContext = Depends(deps.get_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> list[schemas.Source]:
     """List all available data source connectors.
 
     <br/><br/>
     Returns the complete catalog of source types that Airweave can connect to.
     """
-    logger.info("Starting read_sources endpoint")
+    ctx.logger.info("Starting read_sources endpoint")
     try:
         sources = await crud.source.get_all(db)
-        logger.info(f"Retrieved {len(sources)} sources from database")
+        ctx.logger.info(f"Retrieved {len(sources)} sources from database")
     except Exception as e:
-        logger.error(f"Failed to retrieve sources: {str(e)}")
+        ctx.logger.error(f"Failed to retrieve sources: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to retrieve sources") from e
 
     # Initialize auth_fields for each source
