@@ -2,7 +2,6 @@
 
 import datetime
 import uuid
-from venv import logger
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +9,7 @@ from airweave import crud, schemas
 from airweave.api.context import ApiContext
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
+from airweave.core.logging import logger
 from airweave.db.init_db_native import init_db_with_native_connections
 
 

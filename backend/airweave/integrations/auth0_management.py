@@ -1,12 +1,35 @@
 """Auth0 Management API client for organization management."""
 
+import asyncio
+import logging
 from typing import Dict, List, Optional
 
 import httpx
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from airweave import schemas
 from airweave.core.config import settings
 from airweave.core.logging import logger
+
+
+class Auth0RateLimitError(Exception):
+    """Custom exception for Auth0 rate limit errors."""
+
+    def __init__(self, message: str, retry_after: Optional[int] = None):
+        """Initialize Auth0 rate limit error.
+
+        Args:
+            message: Error message
+            retry_after: Number of seconds to wait before retrying
+        """
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 class Auth0ManagementClient:
@@ -15,6 +38,9 @@ class Auth0ManagementClient:
     # Constants
     DEFAULT_TIMEOUT = 20.0
     INVITATION_TIMEOUT = 10.0
+    MAX_RETRIES = 5
+    MIN_RETRY_WAIT = 1  # seconds
+    MAX_RETRY_WAIT = 60  # seconds
 
     def __init__(self):
         """Initialize the Auth0 Management Client."""
@@ -24,6 +50,12 @@ class Auth0ManagementClient:
         self.audience = f"https://{self.domain}/api/v2/"
         self.base_url = f"https://{self.domain}/api/v2"
 
+    @retry(
+        retry=retry_if_exception_type((httpx.HTTPStatusError, Auth0RateLimitError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        before_sleep=before_sleep_log(logger, logging.INFO),
+    )
     async def _get_management_token(self) -> str:
         """Get Auth0 Management API access token."""
         try:
@@ -38,15 +70,48 @@ class Auth0ManagementClient:
                     },
                     timeout=self.DEFAULT_TIMEOUT,
                 )
+
+                # Check for rate limit
+                if response.status_code == 429:
+                    retry_after = self._get_retry_after(response)
+                    error_msg = "Auth0 token endpoint rate limit exceeded"
+                    if retry_after:
+                        logger.warning(f"{error_msg}. Retry after {retry_after} seconds.")
+                        await asyncio.sleep(retry_after)
+                    raise Auth0RateLimitError(error_msg, retry_after)
+
                 response.raise_for_status()
                 data = response.json()
                 token = data["access_token"]
                 logger.info("Successfully obtained Auth0 Management API token")
                 return token
+        except (httpx.HTTPStatusError, Auth0RateLimitError):
+            # Re-raise for retry decorator
+            raise
         except Exception as e:
             logger.error(f"Failed to get Auth0 Management API token: {e}")
             raise
 
+    def _get_retry_after(self, response: httpx.Response) -> Optional[int]:
+        """Extract retry-after header value from response."""
+        retry_after = response.headers.get("retry-after")
+        if retry_after:
+            try:
+                return int(retry_after)
+            except ValueError:
+                logger.warning(f"Invalid retry-after header value: {retry_after}")
+        return None
+
+    @retry(
+        retry=retry_if_exception_type(Auth0RateLimitError),
+        stop=stop_after_attempt(5),  # MAX_RETRIES
+        wait=wait_exponential(
+            multiplier=1,
+            min=1,  # MIN_RETRY_WAIT
+            max=60,  # MAX_RETRY_WAIT
+        ),
+        before_sleep=before_sleep_log(logger, logging.INFO),
+    )
     async def _make_request(
         self,
         method: str,
@@ -80,6 +145,17 @@ class Auth0ManagementClient:
                     json=json_data,
                     timeout=timeout,
                 )
+
+                # Check for rate limit before raising for status
+                if response.status_code == 429:
+                    retry_after = self._get_retry_after(response)
+                    error_msg = f"Auth0 API rate limit exceeded for {method} {endpoint}"
+                    if retry_after:
+                        logger.warning(f"{error_msg}. Retry after {retry_after} seconds.")
+                        # If we have a retry-after header, wait that amount before retrying
+                        await asyncio.sleep(retry_after)
+                    raise Auth0RateLimitError(error_msg, retry_after)
+
                 response.raise_for_status()
 
                 if not response.content:
@@ -87,6 +163,9 @@ class Auth0ManagementClient:
 
                 return response.json()
 
+        except Auth0RateLimitError:
+            # Re-raise rate limit errors for retry decorator
+            raise
         except Exception as e:
             if return_empty_list_on_error:
                 logger.error(f"Auth0 API request failed for {method} {endpoint}: {e}")
