@@ -17,6 +17,7 @@ from airweave.platform.entities._base import Breadcrumb, ChunkEntity
 from airweave.platform.entities.github import (
     GitHubCodeFileEntity,
     GitHubDirectoryEntity,
+    GitHubFileDeletionEntity,
     GitHubRepositoryEntity,
 )
 from airweave.platform.sources._base import BaseSource
@@ -341,9 +342,20 @@ class GitHubSource(BaseSource):
 
                 processed_files.add(file_path)
 
-                # Skip deleted files
+                # Handle deleted files
                 if file_info["status"] == "removed":
-                    self.logger.debug(f"Skipping deleted file: {file_path}")
+                    self.logger.info(f"Processing deleted file: {file_path}")
+                    # Create a special deletion entity
+                    deletion_entity = GitHubFileDeletionEntity(
+                        entity_id=f"{repo_name}/{file_path}",
+                        source_name="github",
+                        file_path=file_path,
+                        repo_name=repo,
+                        repo_owner=owner,
+                        deletion_status="removed",
+                        sync_metadata={"github_status": "removed"},
+                    )
+                    yield deletion_entity
                     continue
 
                 # Process the changed file
