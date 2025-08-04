@@ -148,7 +148,7 @@ export function SyncSchedule({ value, onChange }: SyncScheduleProps) {
 
   return (
     <Card className="bg-background border-none">
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 p-4">
         {/* Main options as clickable cards */}
         <div className="grid grid-cols-3 gap-4">
           <div
@@ -197,14 +197,10 @@ export function SyncSchedule({ value, onChange }: SyncScheduleProps) {
             onClick={() => handleTypeChange("incremental")}
           >
             <div className="flex items-center justify-center h-12 w-12 rounded-full bg-background border mb-3 mx-auto">
-              <ZapIcon className="h-6 w-6 text-muted-foreground" />
+              <ZapIcon className="h-6 w-6 text-primary" />
             </div>
-            <h3 className="text-center font-medium mb-1 text-muted-foreground">
-              Continuous sync
-            </h3>
-            <p className="text-center text-sm text-muted-foreground">
-              Within-minute updates
-            </p>
+            <h3 className="text-center font-medium mb-1 ">Continuous sync</h3>
+            <p className="text-center text-sm ">Within-minute updates</p>
           </div>
         </div>
 
