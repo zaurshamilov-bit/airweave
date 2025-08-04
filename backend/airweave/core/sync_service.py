@@ -12,6 +12,7 @@ from airweave.core.exceptions import (
     CollectionNotFoundException,
     InvalidScheduleOperationException,
     MinuteLevelScheduleException,
+    NotFoundException,
     ScheduleNotExistsException,
     ScheduleOperationException,
     SyncDagNotFoundException,
@@ -492,17 +493,24 @@ class SyncService:
         if not sync:
             raise SyncNotFoundException(f"Sync {sync_id} not found")
 
+        # Get the source connection separately
+        source_connection = await crud.source_connection.get_by_sync_id(
+            db=db, sync_id=sync_id, auth_context=auth_context
+        )
+        if not source_connection:
+            raise NotFoundException(f"Source connection for sync {sync_id} not found")
+
         # Get required related data
         dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, auth_context=auth_context)
         if not dag:
             raise SyncDagNotFoundException(f"Sync DAG for sync {sync_id} not found")
 
-        collection = await crud.collection.get(
-            db=db, id=sync.source_connection.readable_collection_id, auth_context=auth_context
+        collection = await crud.collection.get_by_readable_id(
+            db=db, readable_id=source_connection.readable_collection_id, auth_context=auth_context
         )
         if not collection:
             raise CollectionNotFoundException(
-                f"Collection {sync.source_connection.readable_collection_id} not found"
+                f"Collection {source_connection.readable_collection_id} not found"
             )
 
         # Create a sync job for the schedule
@@ -512,11 +520,13 @@ class SyncService:
         )
 
         # Convert to dict format for Temporal
-        sync_dict = sync.model_dump()
-        sync_job_dict = sync_job.model_dump()
-        dag_dict = dag.model_dump()
-        collection_dict = collection.model_dump()
-        source_connection_dict = sync.source_connection.model_dump()
+        sync_dict = schemas.Sync.model_validate(sync).model_dump()
+        sync_job_dict = schemas.SyncJob.model_validate(sync_job).model_dump()
+        dag_dict = schemas.SyncDag.model_validate(dag).model_dump()
+        collection_dict = schemas.Collection.model_validate(collection).model_dump()
+        source_connection_dict = schemas.SourceConnection.model_validate(
+            source_connection
+        ).model_dump()
         user_dict = {"email": auth_context.email}
 
         try:
@@ -763,7 +773,7 @@ class SyncService:
         if not sync:
             raise SyncNotFoundException("Sync not found")
 
-        return await temporal_schedule_service.get_sync_schedule_info(sync_id, db)
+        return await temporal_schedule_service.get_sync_schedule_info(sync_id, db, auth_context)
 
 
 sync_service = SyncService()

@@ -253,17 +253,20 @@ class TemporalScheduleService:
             "last_run_time": desc.schedule.state.last_run_time,
         }
 
-    async def get_sync_schedule_info(self, sync_id: UUID, db: AsyncSession) -> Optional[dict]:
+    async def get_sync_schedule_info(
+        self, sync_id: UUID, db: AsyncSession, auth_context
+    ) -> Optional[dict]:
         """Get schedule information for a specific sync.
 
         Args:
             sync_id: The sync ID
             db: Database session
+            auth_context: Authentication context
 
         Returns:
             Schedule information if exists, None otherwise
         """
-        sync = await sync_crud.get(db=db, id=sync_id)
+        sync = await sync_crud.get(db=db, id=sync_id, auth_context=auth_context)
         if not sync or not sync.temporal_schedule_id:
             return None
 
