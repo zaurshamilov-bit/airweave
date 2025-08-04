@@ -96,6 +96,8 @@ from .source_connection import (
     SourceConnectionUpdate,
 )
 from .sync import (
+    MinuteLevelScheduleConfig,
+    ScheduleResponse,
     Sync,
     SyncBase,
     SyncCreate,

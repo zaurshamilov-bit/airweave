@@ -1,15 +1,14 @@
 """Temporal schedule service for managing minute-level sync schedules."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from temporalio.client import Client
-from temporalio.common import ScheduleSpec
+from temporalio.client import Client, ScheduleSpec
 
 from airweave.core.logging import logger
-from airweave.crud.crud_sync import sync_crud
+from airweave.crud.crud_sync import sync as sync_crud
 from airweave.platform.temporal.client import temporal_client
 from airweave.platform.temporal.workflows import RunSourceConnectionWorkflow
 
@@ -66,7 +65,7 @@ class TemporalScheduleService:
         schedule_spec = ScheduleSpec(
             cron_expressions=[cron_expression],
             # Start immediately
-            start_at=datetime.utcnow(),
+            start_at=datetime.now(timezone.utc),
             # No end time (runs indefinitely)
             end_at=None,
             # Jitter to avoid thundering herd
@@ -134,7 +133,7 @@ class TemporalScheduleService:
         await handle.update(
             ScheduleSpec(
                 cron_expressions=[cron_expression],
-                start_at=datetime.utcnow(),
+                start_at=datetime.now(timezone.utc),
                 end_at=None,
                 jitter=timedelta(seconds=10),
             )
