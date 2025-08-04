@@ -1,7 +1,7 @@
 """Usage schemas for tracking organization subscription limits."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -178,6 +178,43 @@ class UsageLimit(BaseModel):
                     "max_queries": 1000,
                     "max_collections": 5,
                     "max_source_connections": 20,
+                },
+            ]
+        }
+    }
+
+
+class ActionCheckResponse(BaseModel):
+    """Response schema for action permission checks."""
+
+    allowed: bool = Field(
+        ...,
+        description="Whether the action is allowed for the organization",
+    )
+
+    action: str = Field(
+        ...,
+        description="The action type that was checked",
+    )
+
+    reason: Optional[Literal["payment_required", "usage_limit_exceeded"]] = Field(
+        None,
+        description="Reason why the action is not allowed (if applicable)",
+    )
+
+    details: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Additional details about why the action is not allowed",
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "allowed": True,
+                    "action": "queries",
+                    "reason": None,
+                    "details": None,
                 },
             ]
         }

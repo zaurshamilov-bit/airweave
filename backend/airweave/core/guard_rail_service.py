@@ -133,11 +133,12 @@ class GuardRailService:
 
         return self._has_billing
 
-    async def is_allowed(self, action_type: ActionType) -> bool:
+    async def is_allowed(self, action_type: ActionType, amount: int = 1) -> bool:
         """Check if the action is allowed.
 
         Args:
             action_type: The type of action to check
+            amount: Number of units to check (default 1)
 
         Returns:
             True if the action is allowed
@@ -209,10 +210,11 @@ class GuardRailService:
                 self.logger.debug(f"Action {action_type.value} has unlimited usage")
                 return True
 
-            # Check if we're under the limit
-            if total_usage >= limit:
+            # Check if we have enough quota for the requested amount
+            if total_usage + amount > limit:
                 self.logger.warning(
-                    f"Usage limit exceeded for {action_type.value}: {total_usage}/{limit}"
+                    f"Usage limit exceeded for {action_type.value}: "
+                    f"current={total_usage}, requested={amount}, limit={limit}"
                 )
                 raise UsageLimitExceededException(
                     action_type=action_type.value,
@@ -221,7 +223,8 @@ class GuardRailService:
                 )
 
             self.logger.info(
-                f"\n\nUsage check: {action_type.value} usage={total_usage}, limit={limit}\n\n"
+                f"\n\nUsage check: {action_type.value} usage={total_usage}, "
+                f"requested={amount}, limit={limit}\n\n"
             )
 
             return True

@@ -375,10 +375,9 @@ async def refresh_all_source_connections(
     # Check if we're allowed to process entities
     await guard_rail.is_allowed(ActionType.ENTITIES)
 
-    # Check if we're allowed to create X number of syncs
+    # Check if we're allowed to create N syncs at once
     num_syncs = len(source_connections)
-    for _ in range(num_syncs):
-        await guard_rail.is_allowed(ActionType.SYNCS)
+    await guard_rail.is_allowed(ActionType.SYNCS, amount=num_syncs)
 
     # Create a sync job for each source connection and run it in the background
     sync_jobs = []

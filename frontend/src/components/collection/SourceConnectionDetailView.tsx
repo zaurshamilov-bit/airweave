@@ -31,6 +31,25 @@ import { deriveSyncStatus, getSyncStatusColorClass, getSyncStatusDisplayText } f
 import { utcNow, parseBackendTimestamp, calculateRuntime, formatRuntime } from "@/utils/dateTime";
 import { useNavigate } from "react-router-dom";
 import { redirectWithError } from "@/lib/error-utils";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+// Define action check response interface
+interface ActionCheckResponse {
+    allowed: boolean;
+    action: string;
+    reason?: 'payment_required' | 'usage_limit_exceeded' | null;
+    details?: {
+        message: string;
+        current_usage?: number;
+        limit?: number;
+        payment_status?: string;
+    } | null;
+}
 
 const nodeTypes = {
     sourceNode: SourceNode,
@@ -110,7 +129,12 @@ const SyncDagCard = ({
     isDark,
     syncJob,
     onCancelSync,
-    isCancelling
+    isCancelling,
+    entitiesAllowed,
+    syncsAllowed,
+    entitiesCheckDetails,
+    syncsCheckDetails,
+    isCheckingUsage
 }: {
     sourceConnection: SourceConnection;
     entityDict: Record<string, number>;
@@ -137,6 +161,11 @@ const SyncDagCard = ({
     syncJob: SourceConnectionJob | null;
     onCancelSync: () => void;
     isCancelling: boolean;
+    entitiesAllowed: boolean;
+    syncsAllowed: boolean;
+    entitiesCheckDetails: ActionCheckResponse | null;
+    syncsCheckDetails: ActionCheckResponse | null;
+    isCheckingUsage: boolean;
 }) => {
     const isSyncRunning = syncJob?.status === 'in_progress' || syncJob?.status === 'pending';
 
@@ -160,25 +189,66 @@ const SyncDagCard = ({
 
                             <div className="flex gap-2">
                                 {/* Run Sync Button - Always visible */}
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className={cn(
-                                        "h-8 gap-1.5 font-normal",
-                                        (isSyncRunning || isInitiatingSyncJob)
-                                            ? isDark
-                                                ? "bg-gray-800/50 border-gray-700/50 text-gray-400 cursor-not-allowed"
-                                                : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
-                                            : isDark
-                                                ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
-                                                : "bg-white border-gray-200 text-gray-800 hover:bg-gray-50"
-                                    )}
-                                    onClick={onRunSync}
-                                    disabled={isSyncRunning || isInitiatingSyncJob}
-                                >
-                                    <Play className="h-3.5 w-3.5" />
-                                    {isSyncRunning ? 'Running...' : isInitiatingSyncJob ? 'Starting...' : 'Run Sync'}
-                                </Button>
+                                <TooltipProvider delayDuration={100}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span tabIndex={0}>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className={cn(
+                                                        "h-8 gap-1.5 font-normal",
+                                                        (isSyncRunning || isInitiatingSyncJob || !entitiesAllowed || !syncsAllowed || isCheckingUsage)
+                                                            ? isDark
+                                                                ? "bg-gray-800/50 border-gray-700/50 text-gray-400 cursor-not-allowed"
+                                                                : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
+                                                            : isDark
+                                                                ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
+                                                                : "bg-white border-gray-200 text-gray-800 hover:bg-gray-50"
+                                                    )}
+                                                    onClick={onRunSync}
+                                                    disabled={isSyncRunning || isInitiatingSyncJob || !entitiesAllowed || !syncsAllowed || isCheckingUsage}
+                                                >
+                                                    <Play className="h-3.5 w-3.5" />
+                                                    {isSyncRunning ? 'Running...' : isInitiatingSyncJob ? 'Starting...' : 'Run Sync'}
+                                                </Button>
+                                            </span>
+                                        </TooltipTrigger>
+                                        {(!entitiesAllowed || !syncsAllowed) && (
+                                            <TooltipContent className="max-w-xs">
+                                                <p className="text-xs">
+                                                    {!entitiesAllowed && entitiesCheckDetails?.reason === 'usage_limit_exceeded' ? (
+                                                        <>
+                                                            Entity processing limit reached.{' '}
+                                                            <a
+                                                                href="/organization/settings?tab=billing"
+                                                                className="underline"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                Upgrade your plan
+                                                            </a>
+                                                            {' '}to run syncs.
+                                                        </>
+                                                    ) : !syncsAllowed && syncsCheckDetails?.reason === 'usage_limit_exceeded' ? (
+                                                        <>
+                                                            Sync limit reached.{' '}
+                                                            <a
+                                                                href="/organization/settings?tab=billing"
+                                                                className="underline"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                Upgrade your plan
+                                                            </a>
+                                                            {' '}for more syncs.
+                                                        </>
+                                                    ) : (
+                                                        'Unable to run sync at this time.'
+                                                    )}
+                                                </p>
+                                            </TooltipContent>
+                                        )}
+                                    </Tooltip>
+                                </TooltipProvider>
 
                                 {/* Cancel Sync Button - Always visible */}
                                 <Button
@@ -442,6 +512,13 @@ const SourceConnectionDetailView = ({
     });
     const [nextRunTime, setNextRunTime] = useState<string | null>(null);
 
+    // Add state for usage limits
+    const [entitiesAllowed, setEntitiesAllowed] = useState(true);
+    const [entitiesCheckDetails, setEntitiesCheckDetails] = useState<ActionCheckResponse | null>(null);
+    const [syncsAllowed, setSyncsAllowed] = useState(true);
+    const [syncsCheckDetails, setSyncsCheckDetails] = useState<ActionCheckResponse | null>(null);
+    const [isCheckingUsage, setIsCheckingUsage] = useState(true);
+
     const flowContainerRef = useRef<HTMLDivElement>(null);
 
     // Sync job data processed for UI display
@@ -468,7 +545,35 @@ const SourceConnectionDetailView = ({
         );
     }, [liveProgress, syncJob?.status, hasActiveSubscription, sourceConnectionId]);
 
+    // Check if actions are allowed based on usage limits
+    const checkUsageActions = useCallback(async () => {
+        try {
+            // Check both entities and syncs in parallel
+            const [entitiesResponse, syncsResponse] = await Promise.all([
+                apiClient.get('/usage/check-action?action=entities'),
+                apiClient.get('/usage/check-action?action=syncs')
+            ]);
 
+            if (entitiesResponse.ok) {
+                const data: ActionCheckResponse = await entitiesResponse.json();
+                setEntitiesAllowed(data.allowed);
+                setEntitiesCheckDetails(data);
+            }
+
+            if (syncsResponse.ok) {
+                const data: ActionCheckResponse = await syncsResponse.json();
+                setSyncsAllowed(data.allowed);
+                setSyncsCheckDetails(data);
+            }
+        } catch (error) {
+            console.error('Failed to check usage actions:', error);
+            // Default to allowed on error to not block users
+            setEntitiesAllowed(true);
+            setSyncsAllowed(true);
+        } finally {
+            setIsCheckingUsage(false);
+        }
+    }, []);
 
     // API CALL 1: Fetch Source Connection details (from /source-connections/{id})
     const fetchSourceConnection = async () => {
@@ -662,6 +767,9 @@ const SourceConnectionDetailView = ({
                 title: "Success",
                 description: "Sync job started successfully",
             });
+
+            // Re-check usage limits after starting sync
+            await checkUsageActions();
 
             // Don't reload data immediately - we'll get live updates via SSE
 
@@ -1038,6 +1146,11 @@ const SourceConnectionDetailView = ({
         loadAllData();
     }, [sourceConnectionId]);
 
+    // Check usage limits on mount
+    useEffect(() => {
+        checkUsageActions();
+    }, [checkUsageActions]);
+
     // Restore saved progress when sync job data is loaded
     useEffect(() => {
         // Handle case where job completed while page was closed
@@ -1237,11 +1350,13 @@ const SourceConnectionDetailView = ({
             const timer = setTimeout(() => {
                 console.log('🔄 Reloading data after sync completion');
                 loadAllData();
+                // Re-check usage limits after sync completes
+                checkUsageActions();
             }, 3000);
 
             return () => clearTimeout(timer);
         }
-    }, [liveProgress?.is_complete, liveProgress?.is_failed]);
+    }, [liveProgress?.is_complete, liveProgress?.is_failed, checkUsageActions]);
 
     // Clear cancelling state when we see the status change to cancelled
     useEffect(() => {
@@ -1249,8 +1364,10 @@ const SourceConnectionDetailView = ({
             setIsCancelling(false);
             // Reload data to get the final state
             loadAllData();
+            // Re-check usage limits after cancellation
+            checkUsageActions();
         }
-    }, [derivedSyncStatus, isCancelling]);
+    }, [derivedSyncStatus, isCancelling, checkUsageActions]);
 
     // Live runtime calculation for running jobs
     useEffect(() => {
@@ -1410,14 +1527,59 @@ const SourceConnectionDetailView = ({
                                         </div>
                                     </div>
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 w-6 p-0"
-                                    onClick={() => setShowScheduleDialog(true)}
-                                >
-                                    <Pencil className="h-3 w-3" />
-                                </Button>
+                                <TooltipProvider delayDuration={100}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span tabIndex={0}>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className={cn(
+                                                        "h-6 w-6 p-0",
+                                                        (!entitiesAllowed || !syncsAllowed || isCheckingUsage) && "opacity-50 cursor-not-allowed"
+                                                    )}
+                                                    onClick={() => setShowScheduleDialog(true)}
+                                                    disabled={!entitiesAllowed || !syncsAllowed || isCheckingUsage}
+                                                >
+                                                    <Pencil className="h-3 w-3" />
+                                                </Button>
+                                            </span>
+                                        </TooltipTrigger>
+                                        {(!entitiesAllowed || !syncsAllowed) && (
+                                            <TooltipContent className="max-w-xs">
+                                                <p className="text-xs">
+                                                    {!entitiesAllowed && entitiesCheckDetails?.reason === 'usage_limit_exceeded' ? (
+                                                        <>
+                                                            Entity processing limit reached.{' '}
+                                                            <a
+                                                                href="/organization/settings?tab=billing"
+                                                                className="underline"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                Upgrade your plan
+                                                            </a>
+                                                            {' '}to schedule syncs.
+                                                        </>
+                                                    ) : !syncsAllowed && syncsCheckDetails?.reason === 'usage_limit_exceeded' ? (
+                                                        <>
+                                                            Sync limit reached.{' '}
+                                                            <a
+                                                                href="/organization/settings?tab=billing"
+                                                                className="underline"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                Upgrade your plan
+                                                            </a>
+                                                            {' '}to schedule syncs.
+                                                        </>
+                                                    ) : (
+                                                        'Unable to schedule syncs at this time.'
+                                                    )}
+                                                </p>
+                                            </TooltipContent>
+                                        )}
+                                    </Tooltip>
+                                </TooltipProvider>
                             </div>
                         </div>
 
@@ -1441,6 +1603,11 @@ const SourceConnectionDetailView = ({
                             syncJob={syncJob}
                             onCancelSync={handleCancelSync}
                             isCancelling={isCancelling}
+                            entitiesAllowed={entitiesAllowed}
+                            syncsAllowed={syncsAllowed}
+                            entitiesCheckDetails={entitiesCheckDetails}
+                            syncsCheckDetails={syncsCheckDetails}
+                            isCheckingUsage={isCheckingUsage}
                         />
                     </div>
                 )}
