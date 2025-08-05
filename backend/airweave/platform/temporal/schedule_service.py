@@ -13,6 +13,7 @@ from temporalio.client import (
     ScheduleState,
 )
 
+from airweave.core.config import settings
 from airweave.core.logging import logger
 from airweave.crud.crud_sync import sync as sync_crud
 from airweave.platform.temporal.client import temporal_client
@@ -142,7 +143,7 @@ class TemporalScheduleService:
                         access_token,
                     ],
                     id=f"minute-sync-workflow-{sync_id}",
-                    task_queue="airweave-task-queue",
+                    task_queue=settings.TEMPORAL_TASK_QUEUE,
                 ),
                 spec=schedule_spec,
                 state=ScheduleState(
