@@ -30,7 +30,7 @@ async def create_transformer(
     ctx: ApiContext = Depends(deps.get_context),
 ):
     """Create a new transformer."""
-    return await transformer.create(db, obj_in=transformer_in, ctx=ctx)
+    return await transformer.create(db, obj_in=transformer_in)
 
 
 @router.put("/{transformer_id}", response_model=Transformer)
@@ -42,4 +42,4 @@ async def update_transformer(
 ):
     """Update a transformer."""
     db_obj = await transformer.get(db, id=transformer_id)
-    return await transformer.update(db, db_obj=db_obj, obj_in=transformer_in, ctx=ctx)
+    return await transformer.update(db, db_obj=db_obj, obj_in=transformer_in)

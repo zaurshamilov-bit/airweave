@@ -52,8 +52,8 @@ class Auth0ManagementClient:
 
     @retry(
         retry=retry_if_exception_type((httpx.HTTPStatusError, Auth0RateLimitError)),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=10),
+        stop=stop_after_attempt(MAX_RETRIES),
+        wait=wait_exponential(multiplier=1, min=MIN_RETRY_WAIT, max=MAX_RETRY_WAIT),
         before_sleep=before_sleep_log(logger, logging.INFO),
     )
     async def _get_management_token(self) -> str:
@@ -104,11 +104,11 @@ class Auth0ManagementClient:
 
     @retry(
         retry=retry_if_exception_type(Auth0RateLimitError),
-        stop=stop_after_attempt(5),  # MAX_RETRIES
+        stop=stop_after_attempt(MAX_RETRIES),
         wait=wait_exponential(
             multiplier=1,
-            min=1,  # MIN_RETRY_WAIT
-            max=60,  # MAX_RETRY_WAIT
+            min=MIN_RETRY_WAIT,
+            max=MAX_RETRY_WAIT,
         ),
         before_sleep=before_sleep_log(logger, logging.INFO),
     )

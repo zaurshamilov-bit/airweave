@@ -9,7 +9,6 @@ from airweave.api.context import ApiContext
 from airweave.api.examples import create_single_source_response, create_source_list_response
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.exceptions import NotFoundException
-from airweave.core.logging import logger
 from airweave.platform.configs._base import Fields
 from airweave.platform.locator import resource_locator
 
@@ -57,7 +56,7 @@ async def read_source(
             auth_config_class = resource_locator.get_auth_config(source.auth_config_class)
             auth_fields = Fields.from_config_class(auth_config_class)
         except Exception as e:
-            logger.error(f"Failed to get auth config for {short_name}: {str(e)}")
+            ctx.logger.error(f"Failed to get auth config for {short_name}: {str(e)}")
             raise HTTPException(
                 status_code=500, detail=f"Invalid auth configuration for source {short_name}"
             ) from e
@@ -67,7 +66,7 @@ async def read_source(
             config_class = resource_locator.get_config(source.config_class)
             config_fields = Fields.from_config_class(config_class)
         except Exception as e:
-            logger.error(f"Failed to get config for {short_name}: {str(e)}")
+            ctx.logger.error(f"Failed to get config for {short_name}: {str(e)}")
             raise HTTPException(
                 status_code=500, detail=f"Invalid configuration for source {short_name}"
             ) from e
@@ -90,7 +89,7 @@ async def read_source(
         # Re-raise HTTP exceptions as is
         raise
     except Exception as e:
-        logger.exception(f"Error retrieving source {short_name}: {str(e)}")
+        ctx.logger.exception(f"Error retrieving source {short_name}: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to retrieve source details for {short_name}"
         ) from e
@@ -164,14 +163,14 @@ async def read_sources(
 
         except Exception as e:
             # Log the error but continue processing other sources
-            logger.exception(f"Error processing source {source.short_name}: {str(e)}")
+            ctx.logger.exception(f"Error processing source {source.short_name}: {str(e)}")
             invalid_sources.append(f"{source.short_name} (error: {str(e)})")
 
     # Log any invalid sources
     if invalid_sources:
-        logger.warning(
+        ctx.logger.warning(
             f"Skipped {len(invalid_sources)} invalid sources: {', '.join(invalid_sources)}"
         )
 
-    logger.info(f"Returning {len(result_sources)} valid sources")
+    ctx.logger.info(f"Returning {len(result_sources)} valid sources")
     return result_sources
