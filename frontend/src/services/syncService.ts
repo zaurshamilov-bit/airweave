@@ -20,12 +20,9 @@ export interface SyncScheduleConfig {
 }
 
 export interface ScheduleResponse {
-  id: string;
-  sync_id: string;
-  cron_expression: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  schedule_id: string;
+  status: string;
+  message: string;
 }
 
 export interface MinuteLevelScheduleConfig {

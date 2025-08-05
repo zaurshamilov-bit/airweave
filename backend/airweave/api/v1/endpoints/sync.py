@@ -372,9 +372,7 @@ async def create_minute_level_schedule(
     *,
     db: AsyncSession = Depends(deps.get_db),
     sync_id: UUID,
-    cron_expression: str = Body(
-        ..., embed=True, description="Cron expression for minute-level sync (e.g., '*/1 * * * *')"
-    ),
+    config: schemas.MinuteLevelScheduleConfig = Body(...),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.ScheduleResponse:
     """Create a minute-level schedule for incremental sync.
@@ -383,7 +381,7 @@ async def create_minute_level_schedule(
     -----
         db: The database session
         sync_id: The ID of the sync to schedule
-        cron_expression: Cron expression for the schedule (e.g., "*/1 * * * *")
+        config: The minute-level schedule configuration
         auth_context: The current authentication context
 
     Returns:
@@ -391,7 +389,7 @@ async def create_minute_level_schedule(
         schemas.ScheduleResponse: The schedule response with status and message
     """
     return await sync_service.create_minute_level_schedule(
-        db=db, sync_id=sync_id, cron_expression=cron_expression, auth_context=auth_context
+        db=db, sync_id=sync_id, cron_expression=config.cron_expression, auth_context=auth_context
     )
 
 
@@ -400,9 +398,7 @@ async def update_minute_level_schedule(
     *,
     db: AsyncSession = Depends(deps.get_db),
     sync_id: UUID,
-    cron_expression: str = Body(
-        ..., embed=True, description="New cron expression for minute-level sync"
-    ),
+    config: schemas.MinuteLevelScheduleConfig = Body(...),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.ScheduleResponse:
     """Update an existing minute-level schedule.
@@ -411,7 +407,7 @@ async def update_minute_level_schedule(
     -----
         db: The database session
         sync_id: The ID of the sync
-        cron_expression: New cron expression for the schedule
+        config: The minute-level schedule configuration
         auth_context: The current authentication context
 
     Returns:
@@ -419,7 +415,7 @@ async def update_minute_level_schedule(
         schemas.ScheduleResponse: The schedule response with status and message
     """
     return await sync_service.update_minute_level_schedule(
-        db=db, sync_id=sync_id, cron_expression=cron_expression, auth_context=auth_context
+        db=db, sync_id=sync_id, cron_expression=config.cron_expression, auth_context=auth_context
     )
 
 
