@@ -22,7 +22,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import SourceConnectionDetailView from "@/components/collection/SourceConnectionDetailView";
-import { emitCollectionEvent, COLLECTION_DELETED } from "@/lib/events";
+import { emitCollectionEvent, onCollectionEvent, COLLECTION_DELETED, SOURCE_CONNECTION_UPDATED } from "@/lib/events";
 import { QueryToolAndLiveDoc } from '@/components/collection/QueryToolAndLiveDoc';
 import { DialogFlow } from '@/components/shared';
 import { protectedPaths } from "@/constants/paths";
@@ -318,7 +318,7 @@ const Collections = () => {
         }
 
         try {
-            const response = await apiClient.patch(`/collections/${readable_id}`, { name: newName });
+            const response = await apiClient.put(`/collections/${readable_id}`, null, { name: newName });
             if (!response.ok) throw new Error("Failed to update collection name");
 
             // Update local state after successful API call
@@ -437,6 +437,26 @@ const Collections = () => {
             cleanup();
         };
     }, [cleanup]);
+
+    // Listen for source connection updates
+    useEffect(() => {
+        const unsubscribe = onCollectionEvent(SOURCE_CONNECTION_UPDATED, (data) => {
+            console.log("Source connection updated:", data);
+
+            // Always refresh the list from server to ensure consistency
+            if (collection?.readable_id) {
+                fetchSourceConnections(collection.readable_id);
+            }
+
+            // If the deleted connection was selected, clear the selection
+            // The fetchSourceConnections will auto-select the first connection if any remain
+            if (data.deleted && selectedConnection?.id === data.id) {
+                setSelectedConnection(null);
+            }
+        });
+
+        return unsubscribe;
+    }, [collection?.readable_id, selectedConnection?.id]);
 
     // Add right before the source connections section in render
     useEffect(() => {
@@ -809,10 +829,12 @@ const Collections = () => {
                                 </div>
                             </div>
                         ) : (
-                            <SourceConnectionDetailView
-                                key={selectedConnection.id}
-                                sourceConnectionId={selectedConnection.id}
-                            />
+                            <div className="mt-10">
+                                <SourceConnectionDetailView
+                                    key={selectedConnection.id}
+                                    sourceConnectionId={selectedConnection.id}
+                                />
+                            </div>
                         )
                     )}
 

@@ -559,7 +559,7 @@ airweave-mcp-search`;
                                 </div>
 
                                 <div className={cn(
-                                    "p-4 prose max-w-none overflow-auto max-h-[400px]",
+                                    "p-4 prose max-w-none overflow-auto max-h-[438px]",
                                     isDark
                                         ? "prose-invert bg-gradient-to-b from-gray-900/70 to-gray-900/50 text-gray-200"
                                         : "bg-gradient-to-b from-white to-gray-50/80 prose-gray text-gray-800"
@@ -641,7 +641,7 @@ airweave-mcp-search`;
                                     )}
                                 </div>
                                 <div className={cn(
-                                    "overflow-auto max-h-[400px] bg-gradient-to-b",
+                                    "overflow-auto max-h-[438px] bg-gradient-to-b",
                                     isDark ? "from-gray-900/80 to-gray-900/60" : "from-white to-gray-50/80"
                                 )}>
                                     {isLoading ? (
