@@ -51,7 +51,7 @@ class PdfConverter(DocumentConverter):
                 return DocumentConverterResult(title=title, text_content=md_content)
             except Exception as e:
                 logger.error(f"Error converting PDF with Mistral OCR: {str(e)}")
-                logger.info("Falling back to PyPDF2")
+                logger.warning("Falling back to PyPDF2")
 
         # Fall back to PyPDF2
         try:
@@ -77,12 +77,12 @@ class PdfConverter(DocumentConverter):
         Raises:
             Exception: If Mistral OCR conversion fails
         """
-        logger.info(f"Using Mistral OCR to process PDF: {local_path}")
+        logger.debug(f"Using Mistral OCR to process PDF: {local_path}")
 
         # Check file size
         file_size = os.path.getsize(local_path)
         if file_size > MAX_MISTRAL_FILE_SIZE:
-            logger.info(
+            logger.debug(
                 f"PDF size ({file_size} bytes) exceeds Mistral's 50MB limit, splitting by page"
             )
             return await self._process_large_pdf(local_path)
@@ -197,8 +197,8 @@ class PdfConverter(DocumentConverter):
         # Calculate pages per batch to stay under 50MB limit (with 10% buffer)
         pages_per_batch = max(1, int((MAX_MISTRAL_FILE_SIZE * 0.9) / avg_page_size))
 
-        logger.info(f"PDF has {num_pages} pages, avg {avg_page_size / 1024 / 1024:.2f}MB per page")
-        logger.info(f"Processing in batches of {pages_per_batch} pages")
+        logger.debug(f"PDF has {num_pages} pages, avg {avg_page_size / 1024 / 1024:.2f}MB per page")
+        logger.debug(f"Processing in batches of {pages_per_batch} pages")
 
         return num_pages, pages_per_batch
 
@@ -230,12 +230,12 @@ class PdfConverter(DocumentConverter):
             # Process the batch
             try:
                 batch_md, _ = await self._process_single_pdf(temp_batch_path)
-                logger.info(f"Processed batch {batch_num} (pages {start_idx + 1}-{end_idx})")
+                logger.debug(f"Processed batch {batch_num} (pages {start_idx + 1}-{end_idx})")
                 return batch_md + "\n\n"
             except Exception as e:
                 logger.error(f"Error processing batch {batch_num}: {str(e)}")
                 # Fall back to processing pages individually
-                logger.info(
+                logger.debug(
                     f"Falling back to processing pages {start_idx + 1}-{end_idx} individually"
                 )
                 return await self._process_individual_pages(reader, start_idx, end_idx, temp_dir)
@@ -258,7 +258,7 @@ class PdfConverter(DocumentConverter):
             try:
                 page_md, _ = await self._process_single_pdf(temp_page_path)
                 pages_md += page_md + "\n\n"
-                logger.info(f"Processed page {i + 1}/{num_pages}")
+                logger.debug(f"Processed page {i + 1}/{num_pages}")
             except Exception as e:
                 logger.error(f"Error processing page {i + 1}: {str(e)}")
 

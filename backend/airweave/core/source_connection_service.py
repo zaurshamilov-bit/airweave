@@ -1171,6 +1171,7 @@ class SourceConnectionService:
 
             # Exchange the authorization code for a token
             token_response = await self._exchange_authorization_code_for_token(
+                ctx,
                 source_short_name=source_short_name,
                 code=code,
                 client_id=client_id,
@@ -1232,6 +1233,7 @@ class SourceConnectionService:
 
     async def _exchange_authorization_code_for_token(
         self,
+        ctx: ApiContext,
         source_short_name: str,
         code: str,
         client_id: Optional[str] = None,
@@ -1240,6 +1242,7 @@ class SourceConnectionService:
         """Exchange an OAuth2 authorization code for a token.
 
         Args:
+            ctx: The API context
             source_short_name: The short name of the source
             code: The authorization code to exchange
             client_id: Optional client ID to override the default
@@ -1253,6 +1256,7 @@ class SourceConnectionService:
         """
         try:
             return await oauth2_service.exchange_authorization_code_for_token(
+                ctx=ctx,
                 source_short_name=source_short_name,
                 code=code,
                 client_id=client_id,

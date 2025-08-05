@@ -238,7 +238,7 @@ class SyncDAGRouter:
         )
         chunk_start = asyncio.get_event_loop().time()
 
-        transformed_entities = await code_file_chunker(entity)
+        transformed_entities = await code_file_chunker(entity, self.logger)
 
         chunk_elapsed = asyncio.get_event_loop().time() - chunk_start
         self.logger.debug(
@@ -272,7 +272,7 @@ class SyncDAGRouter:
             self.logger.debug(
                 f"📝 ROUTER_CODE_SUMMARY_{i} [{entity_context}] Summarizing chunk {i + 1}"
             )
-            transformed_entity = await code_file_summarizer(transformed_entity)
+            transformed_entity = await code_file_summarizer(transformed_entity, self.logger)
 
         summary_elapsed = asyncio.get_event_loop().time() - summary_start
         self.logger.debug(
@@ -301,12 +301,12 @@ class SyncDAGRouter:
             self.logger.debug(
                 f"🚀 ROUTER_FILE_OPTIMIZED [{entity_context}] Using optimized file chunker"
             )
-            transformed_entities = await optimized_file_chunker(entity)
+            transformed_entities = await optimized_file_chunker(entity, self.logger)
         except ImportError:
             self.logger.debug(
                 f"📄 ROUTER_FILE_DEFAULT [{entity_context}] Using default file chunker"
             )
-            transformed_entities = await file_chunker(entity)
+            transformed_entities = await file_chunker(entity, self.logger)
 
         chunk_elapsed = asyncio.get_event_loop().time() - chunk_start
         self.logger.debug(
@@ -331,7 +331,7 @@ class SyncDAGRouter:
         )
         field_start = asyncio.get_event_loop().time()
 
-        chunked_entities = await entity_chunker(entity)
+        chunked_entities = await entity_chunker(entity, self.logger)
 
         field_elapsed = asyncio.get_event_loop().time() - field_start
 
@@ -505,7 +505,7 @@ class SyncDAGRouter:
             apply_start = asyncio.get_event_loop().time()
 
             transformer_callable = resource_locator.get_transformer(transformer)
-            result = await transformer_callable(entity)
+            result = await transformer_callable(entity, self.logger)
 
             apply_elapsed = asyncio.get_event_loop().time() - apply_start
             self.logger.debug(

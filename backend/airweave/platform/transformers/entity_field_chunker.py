@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Tuple
 
 from chonkie import RecursiveChunker, RecursiveLevel, RecursiveRules, TokenChunker
 
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger
 from airweave.platform.decorators import transformer
 from airweave.platform.entities._base import BaseEntity
 from airweave.platform.sync.async_helpers import run_in_thread_pool
@@ -148,7 +148,7 @@ def find_field_to_chunk(entity_dict: Dict, field_sizes: Dict[str, int]) -> Tuple
     return largest_field, largest_field_size
 
 
-def _clean_text_for_chunking(text: str) -> str:
+def _clean_text_for_chunking(text: str, logger: ContextualLogger) -> str:
     """Clean text by removing problematic Unicode characters."""
     zero_width_chars = [
         "\u200b",  # Zero-width space
@@ -194,7 +194,7 @@ def _create_truncated_chunk(chunk, target_chunk_size: int):
     return SimpleChunk(truncated_text)
 
 
-def _validate_chunks(chunk_result, target_chunk_size: int) -> List[Any]:
+def _validate_chunks(chunk_result, target_chunk_size: int, logger: ContextualLogger) -> List[Any]:
     """Post-process chunks to ensure none are too large."""
     validated_chunks = []
     for chunk in chunk_result:
@@ -212,7 +212,7 @@ def _validate_chunks(chunk_result, target_chunk_size: int) -> List[Any]:
 
 
 async def chunk_text_optimized(
-    text: str, target_chunk_size: int, field_name: str, entity_id: str
+    text: str, target_chunk_size: int, field_name: str, entity_id: str, logger: ContextualLogger
 ) -> List[Any]:
     """Chunk text using optimized token-based approach without embeddings.
 
@@ -221,6 +221,7 @@ async def chunk_text_optimized(
         target_chunk_size: Target size for each chunk
         field_name: Name of the field being chunked
         entity_id: Entity ID for logging
+        logger: The logger to use
 
     Returns:
         List of chunks
@@ -229,7 +230,7 @@ async def chunk_text_optimized(
     cleaned_text = _clean_text_for_chunking(text)
     text_size = count_tokens(cleaned_text)
 
-    logger.info(
+    logger.debug(
         f"Starting optimized chunking for field '{field_name}' in entity {entity_id} "
         f"(size: {text_size} tokens after cleaning, target chunk size: {target_chunk_size})"
     )
@@ -252,7 +253,7 @@ async def chunk_text_optimized(
 
     if chunk_result is None:
         # Fallback to simple token chunking
-        logger.info(
+        logger.debug(
             f"Using token chunker as fallback for field '{field_name}' in entity {entity_id}"
         )
         token_chunker = get_token_chunker(target_chunk_size)
@@ -263,9 +264,9 @@ async def chunk_text_optimized(
         chunk_result = await run_in_thread_pool(_chunk_tokens, cleaned_text)
 
     # Post-process chunks to ensure none are too large
-    validated_chunks = _validate_chunks(chunk_result, target_chunk_size)
+    validated_chunks = _validate_chunks(chunk_result, target_chunk_size, logger)
 
-    logger.info(
+    logger.debug(
         f"Chunking complete: {len(chunk_result)} original chunks → "
         f"{len(validated_chunks)} validated chunks"
     )
@@ -274,7 +275,7 @@ async def chunk_text_optimized(
 
 
 @transformer(name="Entity Chunker")
-async def entity_chunker(entity: BaseEntity) -> List[BaseEntity]:
+async def entity_chunker(entity: BaseEntity, logger: ContextualLogger) -> List[BaseEntity]:
     """Chunk large text fields in an entity using optimized token-based chunking.
 
     This transformer ensures the stringified entity stays under the embedding model's
@@ -286,6 +287,7 @@ async def entity_chunker(entity: BaseEntity) -> List[BaseEntity]:
 
     Args:
         entity: The BaseEntity to process
+        logger: The logger to use
 
     Returns:
         List[BaseEntity]: Multiple copies of the entity with chunks of the large field

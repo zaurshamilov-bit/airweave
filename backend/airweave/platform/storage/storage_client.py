@@ -10,36 +10,42 @@ from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 
 from airweave.core.config import settings
-from airweave.core.logging import LoggerConfigurator
-
-logger = LoggerConfigurator.configure_logger(__name__, dimensions={"component": "storage_client"})
+from airweave.core.logging import ContextualLogger, logger
 
 
 class StorageBackend(ABC):
     """Abstract base class for storage backends."""
 
     @abstractmethod
-    async def list_containers(self) -> List[str]:
+    async def list_containers(self, logger: ContextualLogger) -> List[str]:
         """List all containers/directories."""
         pass
 
     @abstractmethod
-    async def upload_file(self, container_name: str, blob_name: str, data: BinaryIO) -> bool:
+    async def upload_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str, data: BinaryIO
+    ) -> bool:
         """Upload a file to storage."""
         pass
 
     @abstractmethod
-    async def download_file(self, container_name: str, blob_name: str) -> Optional[bytes]:
+    async def download_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> Optional[bytes]:
         """Download a file from storage."""
         pass
 
     @abstractmethod
-    async def delete_file(self, container_name: str, blob_name: str) -> bool:
+    async def delete_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> bool:
         """Delete a file from storage."""
         pass
 
     @abstractmethod
-    async def file_exists(self, container_name: str, blob_name: str) -> bool:
+    async def file_exists(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> bool:
         """Check if a file exists."""
         pass
 
@@ -55,7 +61,7 @@ class AzureStorageBackend(StorageBackend):
         """
         self.client = blob_service_client
 
-    async def list_containers(self) -> List[str]:
+    async def list_containers(self, logger: ContextualLogger) -> List[str]:
         """List all containers in the storage account.
 
         Returns:
@@ -66,16 +72,19 @@ class AzureStorageBackend(StorageBackend):
         """
         try:
             containers = [c.name for c in self.client.list_containers()]
-            logger.with_context(containers=containers).info(f"Listed {len(containers)} containers")
+            logger.with_context(containers=containers).debug(f"Listed {len(containers)} containers")
             return containers
         except Exception as e:
-            logger.error(f"Failed to list containers: {e}")
+            logger.with_context(containers=containers).error(f"Failed to list containers: {e}")
             raise
 
-    async def upload_file(self, container_name: str, blob_name: str, data: BinaryIO) -> bool:
+    async def upload_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str, data: BinaryIO
+    ) -> bool:
         """Upload a file to Azure Blob Storage.
 
         Args:
+            logger: The logger to use
             container_name: Name of the container
             blob_name: Name of the blob
             data: File data to upload
@@ -102,10 +111,13 @@ class AzureStorageBackend(StorageBackend):
             ).error(f"Failed to upload blob: {e}")
             raise
 
-    async def download_file(self, container_name: str, blob_name: str) -> Optional[bytes]:
+    async def download_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> Optional[bytes]:
         """Download a file from Azure Blob Storage.
 
         Args:
+            logger: The logger to use
             container_name: Name of the container
             blob_name: Name of the blob
 
@@ -135,10 +147,13 @@ class AzureStorageBackend(StorageBackend):
             ).error(f"Failed to download blob: {e}")
             raise
 
-    async def delete_file(self, container_name: str, blob_name: str) -> bool:
+    async def delete_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> bool:
         """Delete a file from Azure Blob Storage.
 
         Args:
+            logger: The logger to use
             container_name: Name of the container
             blob_name: Name of the blob
 
@@ -167,10 +182,13 @@ class AzureStorageBackend(StorageBackend):
             ).error(f"Failed to delete blob: {e}")
             raise
 
-    async def file_exists(self, container_name: str, blob_name: str) -> bool:
+    async def file_exists(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> bool:
         """Check if a file exists in Azure Blob Storage.
 
         Args:
+            logger: The logger to use
             container_name: Name of the container
             blob_name: Name of the blob
 
@@ -201,7 +219,7 @@ class LocalStorageBackend(StorageBackend):
         self.base_path = base_path
         self.base_path.mkdir(parents=True, exist_ok=True)
 
-    async def list_containers(self) -> List[str]:
+    async def list_containers(self, logger: ContextualLogger) -> List[str]:
         """List all directories in local storage.
 
         Returns:
@@ -217,10 +235,13 @@ class LocalStorageBackend(StorageBackend):
             logger.error(f"Failed to list local directories: {e}")
             raise
 
-    async def upload_file(self, container_name: str, blob_name: str, data: BinaryIO) -> bool:
+    async def upload_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str, data: BinaryIO
+    ) -> bool:
         """Save a file to local storage.
 
         Args:
+            logger: The logger to use
             container_name: Name of the directory
             blob_name: Name of the file
             data: File data to save
@@ -255,10 +276,13 @@ class LocalStorageBackend(StorageBackend):
             ).error(f"Failed to save file locally: {e}")
             raise
 
-    async def download_file(self, container_name: str, blob_name: str) -> Optional[bytes]:
+    async def download_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> Optional[bytes]:
         """Read a file from local storage.
 
         Args:
+            logger: The logger to use
             container_name: Name of the directory
             blob_name: Name of the file
 
@@ -271,7 +295,7 @@ class LocalStorageBackend(StorageBackend):
             file_path = self.base_path / container_name / safe_blob_name
 
             if not file_path.exists():
-                logger.with_context(container=container_name, file=blob_name).warning(
+                logger.with_context(container=container_name, file=blob_name).debug(
                     "File not found"
                 )
                 return None
@@ -292,10 +316,13 @@ class LocalStorageBackend(StorageBackend):
             ).error(f"Failed to read local file: {e}")
             raise
 
-    async def delete_file(self, container_name: str, blob_name: str) -> bool:
+    async def delete_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> bool:
         """Delete a file from local storage.
 
         Args:
+            logger: The logger to use
             container_name: Name of the directory
             blob_name: Name of the file
 
@@ -308,7 +335,7 @@ class LocalStorageBackend(StorageBackend):
             file_path = self.base_path / container_name / safe_blob_name
 
             if not file_path.exists():
-                logger.with_context(container=container_name, file=blob_name).warning(
+                logger.with_context(container=container_name, file=blob_name).debug(
                     "File not found"
                 )
                 return False
@@ -317,7 +344,7 @@ class LocalStorageBackend(StorageBackend):
             logger.with_context(
                 container=container_name,
                 file=blob_name,
-            ).info("Deleted file from local storage")
+            ).debug("Deleted file from local storage")
             return True
         except Exception as e:
             logger.with_context(
@@ -326,10 +353,13 @@ class LocalStorageBackend(StorageBackend):
             ).error(f"Failed to delete local file: {e}")
             raise
 
-    async def file_exists(self, container_name: str, blob_name: str) -> bool:
+    async def file_exists(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> bool:
         """Check if a file exists in local storage.
 
         Args:
+            logger: The logger to use
             container_name: Name of the directory
             blob_name: Name of the file
 
@@ -378,7 +408,7 @@ class StorageClient:
         """
         # Check if we should skip Azure and use local storage directly
         if os.getenv("SKIP_AZURE_STORAGE", "false").lower() == "true":
-            logger.info("SKIP_AZURE_STORAGE is set, using local disk storage")
+            logger.debug("SKIP_AZURE_STORAGE is set, using local disk storage")
             local_path = Path("./local_storage")
             self._ensure_default_containers(local_path)
             return LocalStorageBackend(local_path)
@@ -507,22 +537,30 @@ class StorageClient:
         return isinstance(self.backend, LocalStorageBackend)
 
     # Delegate all storage operations to the backend
-    async def list_containers(self) -> List[str]:
+    async def list_containers(self, logger: ContextualLogger) -> List[str]:
         """List all containers/directories."""
-        return await self.backend.list_containers()
+        return await self.backend.list_containers(logger)
 
-    async def upload_file(self, container_name: str, blob_name: str, data: BinaryIO) -> bool:
+    async def upload_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str, data: BinaryIO
+    ) -> bool:
         """Upload a file to storage."""
-        return await self.backend.upload_file(container_name, blob_name, data)
+        return await self.backend.upload_file(logger, container_name, blob_name, data)
 
-    async def download_file(self, container_name: str, blob_name: str) -> Optional[bytes]:
+    async def download_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> Optional[bytes]:
         """Download a file from storage."""
-        return await self.backend.download_file(container_name, blob_name)
+        return await self.backend.download_file(logger, container_name, blob_name)
 
-    async def delete_file(self, container_name: str, blob_name: str) -> bool:
+    async def delete_file(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> bool:
         """Delete a file from storage."""
-        return await self.backend.delete_file(container_name, blob_name)
+        return await self.backend.delete_file(logger, container_name, blob_name)
 
-    async def file_exists(self, container_name: str, blob_name: str) -> bool:
+    async def file_exists(
+        self, logger: ContextualLogger, container_name: str, blob_name: str
+    ) -> bool:
         """Check if a file exists."""
-        return await self.backend.file_exists(container_name, blob_name)
+        return await self.backend.file_exists(logger, container_name, blob_name)

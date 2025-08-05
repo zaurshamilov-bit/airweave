@@ -11,7 +11,7 @@ import aiofiles
 from firecrawl import AsyncFirecrawlApp
 
 from airweave.core.config import settings
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger
 from airweave.platform.decorators import transformer
 from airweave.platform.entities._base import WebEntity
 from airweave.platform.entities.web import WebFileEntity
@@ -29,7 +29,7 @@ _ctti_semaphore = None
 _ctti_semaphore_lock = asyncio.Lock()
 
 
-async def get_httpx_client():
+async def get_httpx_client(logger: ContextualLogger):
     """Get or create shared httpx client with proper connection pooling."""
     global _httpx_client
 
@@ -61,7 +61,7 @@ async def get_httpx_client():
             follow_redirects=True,  # Handle redirects automatically
         )
 
-        logger.info(
+        logger.debug(
             f"🌐 HTTPX_CLIENT_INIT Created shared httpx client "
             f"(max_connections={max_connections}, keepalive={keepalive_connections})"
         )
@@ -69,7 +69,7 @@ async def get_httpx_client():
     return _httpx_client
 
 
-async def cleanup_httpx_client():
+async def cleanup_httpx_client(logger: ContextualLogger):
     """Clean up the httpx client when done."""
     global _httpx_client
     if _httpx_client:
@@ -85,21 +85,21 @@ async def cleanup_httpx_client():
                 logger.error(f"Error closing httpx client: {e}")
         finally:
             _httpx_client = None
-        logger.info("🌐 HTTPX_CLIENT_CLEANUP Closed httpx client")
+        logger.debug("🌐 HTTPX_CLIENT_CLEANUP Closed httpx client")
 
 
-async def ensure_temp_dir():
+async def ensure_temp_dir(logger: ContextualLogger):
     """Ensure the temp directory exists (create once)."""
     global _temp_dir_created
     if not _temp_dir_created:
         base_temp_dir = "/tmp/airweave"
         await run_in_thread_pool(os.makedirs, base_temp_dir, exist_ok=True)
         _temp_dir_created = True
-        logger.info(f"📁 WEB_TEMP_DIR Created temp directory: {base_temp_dir}")
+        logger.debug(f"📁 WEB_TEMP_DIR Created temp directory: {base_temp_dir}")
     return "/tmp/airweave"
 
 
-async def get_firecrawl_client():
+async def get_firecrawl_client(logger: ContextualLogger):
     """Get or create the shared Firecrawl client instance with connection pooling."""
     global _shared_firecrawl_client, _client_semaphore
 
@@ -117,7 +117,7 @@ async def get_firecrawl_client():
             _client_semaphore._initial_value = max_concurrent_requests
 
             # Get the shared httpx client
-            httpx_client = await get_httpx_client()
+            httpx_client = await get_httpx_client(logger)
 
             # Initialize client with our custom httpx client if supported
             try:
@@ -132,7 +132,7 @@ async def get_firecrawl_client():
                     api_key=firecrawl_api_key,
                 )
 
-            logger.info(
+            logger.debug(
                 f"🔗 WEB_CLIENT_INIT Initialized Firecrawl client "
                 f"(max_concurrent={max_concurrent_requests})"
             )
@@ -140,7 +140,7 @@ async def get_firecrawl_client():
     return _shared_firecrawl_client, _client_semaphore
 
 
-async def get_ctti_semaphore():
+async def get_ctti_semaphore(logger: ContextualLogger):
     """Get or create a special semaphore for CTTI entities with lower concurrency."""
     global _ctti_semaphore
 
@@ -150,7 +150,7 @@ async def get_ctti_semaphore():
             max_ctti_concurrent = getattr(settings, "CTTI_MAX_CONCURRENT", 3)  # Default to 3
             _ctti_semaphore = asyncio.Semaphore(max_ctti_concurrent)
             _ctti_semaphore._initial_value = max_ctti_concurrent
-            logger.info(
+            logger.debug(
                 f"🏥 CTTI_SEMAPHORE_INIT Created CTTI-specific semaphore "
                 f"(max_concurrent={max_ctti_concurrent})"
             )
@@ -158,7 +158,9 @@ async def get_ctti_semaphore():
     return _ctti_semaphore
 
 
-async def _retry_with_backoff(func, *args, max_retries=3, entity_context="", **kwargs):
+async def _retry_with_backoff(
+    func, *args, max_retries=3, entity_context="", logger: ContextualLogger, **kwargs
+):
     """Retry a function with exponential backoff and improved error handling."""
     last_exception = None
     context_prefix = f"{entity_context} " if entity_context else ""
@@ -170,7 +172,7 @@ async def _retry_with_backoff(func, *args, max_retries=3, entity_context="", **k
             elapsed = asyncio.get_event_loop().time() - start_time
 
             if attempt > 0:  # Only log success after retry
-                logger.info(
+                logger.debug(
                     f"✅ WEB_SUCCESS [{context_prefix}] "
                     f"Completed in {elapsed:.2f}s on attempt {attempt + 1}"
                 )
@@ -256,7 +258,7 @@ async def _retry_with_backoff(func, *args, max_retries=3, entity_context="", **k
 
 
 @transformer(name="Web Fetcher")
-async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
+async def web_fetcher(web_entity: WebEntity, logger: ContextualLogger) -> List[WebFileEntity]:
     """Fetch web content using Firecrawl and convert to FileEntity.
 
     This transformer:
@@ -272,6 +274,7 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
 
     Args:
         web_entity: The WebEntity containing the URL to fetch
+        logger: The contextual logger for logging
 
     Returns:
         List[WebFileEntity]: A list containing the single FileEntity with the web
@@ -279,7 +282,7 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
     """
     entity_context = f"Entity({web_entity.entity_id})"
 
-    logger.info(f"🌐 WEB_START [{entity_context}] Starting web fetch for URL: {web_entity.url}")
+    logger.debug(f"🌐 WEB_START [{entity_context}] Starting web fetch for URL: {web_entity.url}")
 
     # Import storage manager here to avoid circular imports
     from airweave.platform.storage import storage_manager
@@ -288,17 +291,17 @@ async def web_fetcher(web_entity: WebEntity) -> List[WebFileEntity]:
     is_ctti = storage_manager._is_ctti_entity(web_entity)
 
     if is_ctti:
-        logger.info(
+        logger.debug(
             f"🏥 WEB_CTTI [{entity_context}] Detected CTTI entity, using global deduplication"
         )
 
     try:
         # Use retry logic with connection limiting
-        scrape_result = await _scrape_web_content(web_entity, entity_context)
+        scrape_result = await _scrape_web_content(web_entity, entity_context, logger)
 
         # Create and store file entity
         file_entity = await _create_and_store_file_entity(
-            web_entity, scrape_result, is_ctti, entity_context
+            web_entity, scrape_result, is_ctti, entity_context, logger
         )
 
         return [file_entity]
@@ -323,20 +326,22 @@ async def _is_entity_already_processed(
     return False
 
 
-async def _get_ctti_cached_content(web_entity: WebEntity, entity_context: str):
+async def _get_ctti_cached_content(
+    web_entity: WebEntity, entity_context: str, logger: ContextualLogger
+):
     """Check for and retrieve CTTI content from global storage."""
     from airweave.platform.storage import storage_manager
 
     existing_content = await storage_manager.get_ctti_file_content(web_entity.entity_id)
 
     if existing_content:
-        logger.info(
+        logger.debug(
             f"📥 WEB_CTTI_CACHED [{entity_context}] Retrieved CTTI content from global storage "
             f"({len(existing_content)} characters)"
         )
         return _create_mock_scrape_result(existing_content, web_entity)
 
-    logger.info(
+    logger.debug(
         f"🌐 WEB_CTTI_NOT_CACHED [{entity_context}] CTTI content not found in storage, "
         f"will scrape from web"
     )
@@ -367,9 +372,11 @@ def _create_mock_scrape_result(markdown_content: str, web_entity: WebEntity):
     return MockScrapeResult(markdown_content)
 
 
-async def _scrape_with_firecrawl_internal(web_entity: WebEntity, entity_context: str):
+async def _scrape_with_firecrawl_internal(
+    web_entity: WebEntity, entity_context: str, logger: ContextualLogger
+):
     """Internal function to handle the actual scraping with connection limiting."""
-    app, semaphore = await get_firecrawl_client()
+    app, semaphore = await get_firecrawl_client(logger)
 
     # Check if this is a CTTI entity and use special semaphore
     from airweave.platform.storage import storage_manager
@@ -378,60 +385,64 @@ async def _scrape_with_firecrawl_internal(web_entity: WebEntity, entity_context:
 
     if is_ctti:
         # Use CTTI-specific semaphore with lower concurrency
-        ctti_semaphore = await get_ctti_semaphore()
+        ctti_semaphore = await get_ctti_semaphore(logger)
 
         # Check if we need to wait for a CTTI slot
         if ctti_semaphore._value == 0:
-            logger.info(
+            logger.debug(
                 f"⏳ WEB_CTTI_QUEUE [{entity_context}] Waiting for CTTI connection slot "
                 f"(all {getattr(ctti_semaphore, '_initial_value', 3)} slots in use)"
             )
 
         # Use CTTI semaphore to limit concurrent connections to ClinicalTrials.gov
         async with ctti_semaphore:
-            logger.info(
+            logger.debug(
                 f"🏥 WEB_CTTI_SLOT [{entity_context}] Acquired CTTI connection slot "
                 f"(active: {ctti_semaphore._initial_value - ctti_semaphore._value}"
                 f"/{ctti_semaphore._initial_value})"
             )
-            return await _perform_firecrawl_scrape(web_entity, entity_context)
+            return await _perform_firecrawl_scrape(web_entity, entity_context, logger)
     else:
         # Use regular semaphore for non-CTTI entities
         # Check if we need to wait for a slot
         if semaphore._value == 0:
-            logger.info(
+            logger.debug(
                 f"⏳ WEB_QUEUE [{entity_context}] Waiting for connection slot "
                 f"(all {getattr(semaphore, '_initial_value', 10)} slots in use)"
             )
 
         # Use semaphore to limit concurrent connections
         async with semaphore:
-            return await _perform_firecrawl_scrape(web_entity, entity_context)
+            return await _perform_firecrawl_scrape(web_entity, entity_context, logger)
 
 
-async def _perform_firecrawl_scrape(web_entity: WebEntity, entity_context: str):
+async def _perform_firecrawl_scrape(
+    web_entity: WebEntity, entity_context: str, logger: ContextualLogger
+):
     """Perform the actual Firecrawl scrape with timeout handling."""
-    app, _ = await get_firecrawl_client()
+    app, _ = await get_firecrawl_client(logger)
 
     # Log the current semaphore state
-    _, semaphore = await get_firecrawl_client()
+    _, semaphore = await get_firecrawl_client(logger)
     available_slots = semaphore._value
     total_slots = getattr(semaphore, "_initial_value", 10)
     queue_size = total_slots - available_slots
 
-    logger.info(
+    logger.debug(
         f"🔗 WEB_CONNECT [{entity_context}] Acquired connection slot "
         f"(active: {queue_size}/{total_slots}, available: {available_slots})"
     )
 
-    logger.info(f"📥 WEB_SCRAPE [{entity_context}] Scraping URL: {web_entity.url}")
+    logger.debug(f"📥 WEB_SCRAPE [{entity_context}] Scraping URL: {web_entity.url}")
     scrape_start = asyncio.get_event_loop().time()
 
     # Start with shorter timeout, retry with longer if needed
     # Increased timeouts for slow CTTI pages that can take 40-80 seconds
     timeouts = [60.0, 90.0, 120.0]  # Was [10.0, 20.0, 30.0]
 
-    scrape_result = await _try_scrape_with_timeouts(app, web_entity, timeouts, entity_context)
+    scrape_result = await _try_scrape_with_timeouts(
+        app, web_entity, timeouts, entity_context, logger
+    )
 
     scrape_elapsed = asyncio.get_event_loop().time() - scrape_start
 
@@ -440,7 +451,7 @@ async def _perform_firecrawl_scrape(web_entity: WebEntity, entity_context: str):
         raise ValueError(f"No content extracted from URL: {web_entity.url}")
 
     content_length = len(scrape_result.markdown)
-    logger.info(
+    logger.debug(
         f"📄 WEB_CONTENT [{entity_context}] Received {content_length} characters "
         f"in {scrape_elapsed:.2f}s"
     )
@@ -449,7 +460,7 @@ async def _perform_firecrawl_scrape(web_entity: WebEntity, entity_context: str):
 
 
 async def _try_scrape_with_timeouts(
-    app, web_entity: WebEntity, timeouts: list, entity_context: str
+    app, web_entity: WebEntity, timeouts: list, entity_context: str, logger: ContextualLogger
 ):
     """Try scraping with progressively longer timeouts."""
     # Check if this is a CTTI entity for special timeout handling
@@ -461,7 +472,7 @@ async def _try_scrape_with_timeouts(
     if is_ctti:
         # Much longer timeouts for slow CTTI pages
         timeouts = [120.0, 180.0, 240.0]  # 2, 3, 4 minutes
-        logger.info(
+        logger.debug(
             f"🏥 WEB_CTTI_TIMEOUTS [{entity_context}] Using extended timeouts for CTTI: {timeouts}"
         )
 
@@ -485,7 +496,7 @@ async def _try_scrape_with_timeouts(
             )
 
 
-async def _scrape_web_content(web_entity: WebEntity, entity_context: str):
+async def _scrape_web_content(web_entity: WebEntity, entity_context: str, logger: ContextualLogger):
     """Scrape web content using Firecrawl or retrieve from storage for CTTI entities."""
     # Import storage manager here to avoid circular imports
     from airweave.platform.storage import storage_manager
@@ -494,21 +505,29 @@ async def _scrape_web_content(web_entity: WebEntity, entity_context: str):
     is_ctti = storage_manager._is_ctti_entity(web_entity)
 
     if is_ctti:
-        cached_result = await _get_ctti_cached_content(web_entity, entity_context)
+        cached_result = await _get_ctti_cached_content(web_entity, entity_context, logger)
         if cached_result:
             return cached_result
 
     return await _retry_with_backoff(
-        _scrape_with_firecrawl_internal, web_entity, entity_context, entity_context=entity_context
+        _scrape_with_firecrawl_internal,
+        web_entity,
+        entity_context,
+        entity_context=entity_context,
+        logger=logger,
     )
 
 
 async def _create_and_store_file_entity(
-    web_entity: WebEntity, scrape_result, is_ctti: bool, entity_context: str
+    web_entity: WebEntity,
+    scrape_result,
+    is_ctti: bool,
+    entity_context: str,
+    logger: ContextualLogger,
 ) -> WebFileEntity:
     """Create file entity from scraped content and store it."""
     # Streamlined file processing
-    logger.info(f"💾 WEB_FILE_START [{entity_context}] Creating temporary file")
+    logger.debug(f"💾 WEB_FILE_START [{entity_context}] Creating temporary file")
 
     # Get markdown content and metadata
     markdown_content = scrape_result.markdown
@@ -559,9 +578,9 @@ async def _create_and_store_file_entity(
     )
 
     # Store in persistent storage
-    await _store_file_entity(file_entity, temp_file_path, is_ctti, entity_context)
+    await _store_file_entity(file_entity, temp_file_path, is_ctti, entity_context, logger)
 
-    logger.info(
+    logger.debug(
         f"✅ WEB_COMPLETE [{entity_context}] Successfully created FileEntity ({file_size} bytes)"
     )
 
@@ -627,7 +646,11 @@ def _create_web_file_entity(
 
 
 async def _store_file_entity(
-    file_entity: WebFileEntity, temp_file_path: str, is_ctti: bool, entity_context: str
+    file_entity: WebFileEntity,
+    temp_file_path: str,
+    is_ctti: bool,
+    entity_context: str,
+    logger: ContextualLogger,
 ) -> None:
     """Store file entity in persistent storage."""
     from airweave.platform.storage import storage_manager
@@ -635,7 +658,7 @@ async def _store_file_entity(
     if is_ctti:
         # Check if CTTI file already exists in global storage
         if await storage_manager.check_ctti_file_exists(file_entity.entity_id):
-            logger.info(
+            logger.debug(
                 f"💾 WEB_CTTI_EXISTS [{entity_context}] "
                 f"CTTI file already exists in global storage, skipping upload"
             )
@@ -652,13 +675,13 @@ async def _store_file_entity(
             with open(temp_file_path, "rb") as f:
                 file_entity = await storage_manager.store_ctti_file(file_entity, f)
 
-            logger.info(
+            logger.debug(
                 f"💾 WEB_CTTI_STORED [{entity_context}] "
                 f"Stored CTTI file globally: {file_entity.storage_blob_name}"
             )
     else:
         # Non-CTTI: Use standard sync-based storage
         # (file will be uploaded by file_manager when needed)
-        logger.info(
+        logger.debug(
             f"💾 WEB_FILE_CREATED [{entity_context}] Created local file at {temp_file_path}"
         )
