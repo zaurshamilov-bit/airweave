@@ -75,7 +75,7 @@ class AzureStorageBackend(StorageBackend):
             logger.with_context(containers=containers).debug(f"Listed {len(containers)} containers")
             return containers
         except Exception as e:
-            logger.error(f"Failed to list containers: {e}")
+            logger.with_context(containers=containers).error(f"Failed to list containers: {e}")
             raise
 
     async def upload_file(
