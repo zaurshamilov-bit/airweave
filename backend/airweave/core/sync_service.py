@@ -520,6 +520,12 @@ class SyncService:
         )
 
         # Convert to dict format for Temporal
+        # Only refresh SQLAlchemy models (not Pydantic schemas)
+        await db.refresh(dag)
+        await db.refresh(sync_job)
+        await db.refresh(collection)
+        await db.refresh(source_connection)
+
         sync_dict = schemas.Sync.model_validate(sync).model_dump()
         sync_job_dict = schemas.SyncJob.model_validate(sync_job).model_dump()
         dag_dict = schemas.SyncDag.model_validate(dag).model_dump()
@@ -527,7 +533,7 @@ class SyncService:
         source_connection_dict = schemas.SourceConnection.model_validate(
             source_connection
         ).model_dump()
-        user_dict = {"email": auth_context.email}
+        user_dict = {"email": auth_context.user.email}
 
         try:
             # Create the Temporal schedule
@@ -585,7 +591,7 @@ class SyncService:
                 "Sync does not have a minute-level schedule to update"
             )
 
-        user_dict = {"email": auth_context.email}
+        user_dict = {"email": auth_context.user.email}
 
         try:
             # Update the Temporal schedule
@@ -634,7 +640,7 @@ class SyncService:
         if not sync.temporal_schedule_id:
             raise ScheduleNotExistsException("Sync does not have a minute-level schedule to pause")
 
-        user_dict = {"email": auth_context.email}
+        user_dict = {"email": auth_context.user.email}
 
         try:
             await temporal_schedule_service.pause_schedule(
@@ -681,7 +687,7 @@ class SyncService:
         if not sync.temporal_schedule_id:
             raise ScheduleNotExistsException("Sync does not have a minute-level schedule to resume")
 
-        user_dict = {"email": auth_context.email}
+        user_dict = {"email": auth_context.user.email}
 
         try:
             await temporal_schedule_service.resume_schedule(
@@ -728,7 +734,7 @@ class SyncService:
         if not sync.temporal_schedule_id:
             raise ScheduleNotExistsException("Sync does not have a minute-level schedule to delete")
 
-        user_dict = {"email": auth_context.email}
+        user_dict = {"email": auth_context.user.email}
 
         try:
             await temporal_schedule_service.delete_schedule(
