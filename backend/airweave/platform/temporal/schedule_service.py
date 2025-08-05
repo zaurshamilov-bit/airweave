@@ -54,8 +54,8 @@ class TemporalScheduleService:
                     "schedule_id": schedule_id,
                     "cron_expressions": desc.schedule.spec.cron_expressions,
                     "paused": desc.schedule.state.paused,
-                    "next_run_time": desc.schedule.state.next_run_time,
-                    "last_run_time": desc.schedule.state.last_run_time,
+                    # Note: next_run_time and last_run_time are not available on ScheduleState
+                    # They would need to be accessed differently if needed
                 },
             }
         except Exception as e:
@@ -118,7 +118,7 @@ class TemporalScheduleService:
         # Create schedule spec with cron expression
         schedule_spec = ScheduleSpec(
             cron_expressions=[cron_expression],
-            # Start immediately
+            # Start immediately (but schedule will be paused initially)
             start_at=datetime.now(timezone.utc),
             # No end time (runs indefinitely)
             end_at=None,
@@ -126,7 +126,7 @@ class TemporalScheduleService:
             jitter=timedelta(seconds=10),
         )
 
-        # Create the schedule
+        # Create the schedule in paused state
         await client.create_schedule(
             schedule_id,
             Schedule(
@@ -145,7 +145,10 @@ class TemporalScheduleService:
                     task_queue="airweave-task-queue",
                 ),
                 spec=schedule_spec,
-                state=ScheduleState(note=f"Minute-level sync schedule for sync {sync_id}"),
+                state=ScheduleState(
+                    note=f"Minute-level sync schedule for sync {sync_id} (paused initially)",
+                    paused=True,
+                ),
             ),
         )
 
@@ -158,11 +161,14 @@ class TemporalScheduleService:
                 "temporal_schedule_id": schedule_id,
                 "minute_level_cron_schedule": cron_expression,
                 "sync_type": "incremental",
+                "status": "INACTIVE",  # Mark as inactive since schedule is paused
             },
             auth_context=auth_context,
         )
 
-        logger.info(f"Created minute-level schedule {schedule_id} for sync {sync_id}")
+        logger.info(
+            f"Created minute-level schedule {schedule_id} for sync {sync_id} (paused initially)"
+        )
         return schedule_id
 
     async def update_schedule(
@@ -307,8 +313,8 @@ class TemporalScheduleService:
             "schedule_id": schedule_id,
             "cron_expressions": desc.schedule.spec.cron_expressions,
             "paused": desc.schedule.state.paused,
-            "next_run_time": desc.schedule.state.next_run_time,
-            "last_run_time": desc.schedule.state.last_run_time,
+            # Note: next_run_time and last_run_time are not available on ScheduleState
+            # They would need to be accessed differently if needed
         }
 
     async def get_sync_schedule_info(
