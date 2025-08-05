@@ -105,9 +105,19 @@ export function SyncSchedule({ value, onChange }: SyncScheduleProps) {
 
   const handleTypeChange = (type: "one-time" | "scheduled" | "incremental") => {
     setActiveType(type);
+
+    // Set default frequency based on type
+    let defaultFrequency = value.frequency;
+    if (type === "incremental") {
+      defaultFrequency = "minute";
+    } else if (type === "scheduled") {
+      defaultFrequency = "daily";
+    }
+
     onChange({
       ...value,
       type,
+      frequency: defaultFrequency,
     });
   };
 
@@ -487,9 +497,7 @@ export function SyncSchedule({ value, onChange }: SyncScheduleProps) {
                   <p className="text-xs text-muted-foreground">
                     Cron expression:{" "}
                     <code className="font-mono">
-                      {activeType === "incremental"
-                        ? "*/1 * * * *"
-                        : buildCronExpression(value)}
+                      {buildCronExpression(value)}
                     </code>
                   </p>
                 </div>
