@@ -206,8 +206,7 @@ class SearchService:
 
         # Get destination for vector search
         destination_class = await self._get_destination_class(db)
-        destination = await destination_class.create(collection_id=collection.id)
-        destination.set_logger(ctx.logger)
+        destination = await destination_class.create(collection_id=collection.id, logger=ctx.logger)
 
         # Get appropriate embedding model
         embedding_model = self._get_embedding_model(readable_id, collection.id, ctx)
