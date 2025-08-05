@@ -134,6 +134,7 @@ const SyncDagCard = ({
   syncJob,
   onCancelSync,
   isCancelling,
+  hasPausedIncrementalSchedule,
 }: {
   sourceConnection: SourceConnection;
   entityDict: Record<string, number>;
@@ -160,6 +161,7 @@ const SyncDagCard = ({
   syncJob: SourceConnectionJob | null;
   onCancelSync: () => void;
   isCancelling: boolean;
+  hasPausedIncrementalSchedule?: boolean;
 }) => {
   const isSyncRunning =
     syncJob?.status === "in_progress" || syncJob?.status === "pending";
@@ -211,6 +213,8 @@ const SyncDagCard = ({
                     ? "Running..."
                     : isInitiatingSyncJob
                     ? "Starting..."
+                    : hasPausedIncrementalSchedule
+                    ? "Resume Sync"
                     : "Run Sync"}
                 </Button>
 
@@ -536,6 +540,8 @@ const SourceConnectionDetailView = ({
   });
   const [nextRunTime, setNextRunTime] = useState<string | null>(null);
   const [hasIncrementalSchedule, setHasIncrementalSchedule] = useState(false);
+  const [hasPausedIncrementalSchedule, setHasPausedIncrementalSchedule] =
+    useState(false);
 
   // Check for incremental schedule
   const checkIncrementalSchedule = async () => {
@@ -546,12 +552,17 @@ const SourceConnectionDetailView = ({
           sourceConnection.sync_id
         );
         setHasIncrementalSchedule(!!existingSchedule);
+        setHasPausedIncrementalSchedule(
+          !!existingSchedule && !existingSchedule.running
+        );
       } catch (error) {
         console.error("Error checking incremental schedule:", error);
         setHasIncrementalSchedule(false);
+        setHasPausedIncrementalSchedule(false);
       }
     } else {
       setHasIncrementalSchedule(false);
+      setHasPausedIncrementalSchedule(false);
     }
   };
 
@@ -814,7 +825,7 @@ const SourceConnectionDetailView = ({
     }
   };
 
-  // API CALL 4: Run sync job (POST /source-connections/{id}/run)
+  // API CALL 4: Run sync job (POST /source-connections/{id}/run) or resume paused schedule
   const handleRunSync = async () => {
     if (!sourceConnection?.id) {
       toast({
@@ -827,6 +838,47 @@ const SourceConnectionDetailView = ({
 
     try {
       setIsInitiatingSyncJob(true);
+
+      // Check if there's a paused incremental schedule that we should resume
+      if (sourceConnection.sync_id && hasIncrementalSchedule) {
+        try {
+          const { SyncService } = await import("@/services/syncService");
+          const existingSchedule = await SyncService.getMinuteLevelScheduleInfo(
+            sourceConnection.sync_id
+          );
+
+          if (existingSchedule && !existingSchedule.running) {
+            // Resume the paused schedule
+            console.log("Resuming paused incremental schedule...");
+            await SyncService.resumeMinuteLevelSchedule(
+              sourceConnection.sync_id
+            );
+
+            // Update the source connection status to reflect it's now active
+            setSourceConnection({
+              ...sourceConnection,
+              status: "ACTIVE",
+            });
+
+            // Update local state to reflect the schedule is no longer paused
+            setHasPausedIncrementalSchedule(false);
+
+            toast({
+              title: "Success",
+              description: "Continuous sync resumed successfully",
+            });
+
+            // Refresh data to get updated status
+            await fetchSourceConnection();
+            return;
+          }
+        } catch (error) {
+          console.error("Error checking/resuming schedule:", error);
+          // Fall through to normal sync job creation
+        }
+      }
+
+      // If no paused schedule to resume, start a new sync job
       console.log("Starting sync job...");
       const response = await apiClient.post(
         `/source-connections/${sourceConnection.id}/run`
@@ -1815,6 +1867,7 @@ const SourceConnectionDetailView = ({
               syncJob={syncJob}
               onCancelSync={handleCancelSync}
               isCancelling={isCancelling}
+              hasPausedIncrementalSchedule={hasPausedIncrementalSchedule}
             />
           </div>
         )}
