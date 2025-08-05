@@ -227,6 +227,17 @@ const Dashboard = () => {
             onRequestNewKey={handleRequestNewKey}
           />
 
+          {/* Example Projects Card */}
+          <ExampleProjectCard
+            id="how-to-use-api"
+            title="How to use our API"
+            description="Learn how to create collections, add sources, and search through your data using the Airweave SDK"
+            icon={<FileText className="h-5 w-5 text-primary" />}
+            onClick={() => {
+              // Open the notebook on GitHub
+              window.open('https://github.com/airweave-ai/airweave/blob/main/examples/how-to-use-our-api.ipynb', '_blank');
+            }}
+          />
 
         </div>
       </div>
