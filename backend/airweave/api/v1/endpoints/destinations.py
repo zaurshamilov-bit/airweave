@@ -52,7 +52,7 @@ async def read_destination(
     --------
         destination (schemas.Destination): The destination
     """
-    destination = await crud.destination.get_by_short_name(db, short_name, ctx=ctx)
+    destination = await crud.destination.get_by_short_name(db, short_name)
     if destination.auth_config_class:
         auth_config_class = resource_locator.get_auth_config(destination.auth_config_class)
         fields = Fields.from_config_class(auth_config_class)
