@@ -14,11 +14,6 @@
         "summary": "Read Source",
         "description": "Get detailed information about a specific data source connector.",
         "operationId": "read_source_sources_detail__short_name__get",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "short_name",
@@ -195,11 +190,6 @@
         "summary": "List Collections",
         "description": "List all collections that belong to your organization.",
         "operationId": "list_collections_collections_get",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "skip",
@@ -333,11 +323,6 @@
         "summary": "Get Collection",
         "description": "Retrieve a specific collection by its readable ID.",
         "operationId": "get_collection_collections__readable_id__get",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -386,11 +371,6 @@
         "summary": "Update Collection",
         "description": "Update a collection's properties.\n\n<br/><br/>\nModifies the display name of an existing collection.\nNote that the readable ID cannot be changed after creation to maintain stable\nAPI endpoints and preserve any existing integrations or bookmarks.",
         "operationId": "update_collection_collections__readable_id__put",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -449,11 +429,6 @@
         "summary": "Delete Collection",
         "description": "Delete a collection and optionally its associated data.\n\n<br/><br/>\nPermanently removes a collection from your organization. By default, this only\ndeletes the collection metadata while preserving the actual data in the\ndestination systems.<br/><br/>All source connections within this collection\nwill also be deleted as part of the cleanup process.",
         "operationId": "delete_collection_collections__readable_id__delete",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -516,11 +491,6 @@
         "summary": "Search Collection",
         "description": "Search across all data sources within the specified collection.\n\nThis GET endpoint provides basic search functionality. For advanced filtering\nand options, use the POST /search endpoint.",
         "operationId": "search_collection_collections__readable_id__search_get",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -712,11 +682,6 @@
         "summary": "Search Collection Advanced",
         "description": "Advanced search with comprehensive filtering and options.\n\nThis endpoint supports:\n- Metadata filtering using Qdrant's native filter syntax\n- Pagination with offset and limit\n- Score threshold filtering\n- Query expansion strategies",
         "operationId": "search_collection_advanced_collections__readable_id__search_post",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -823,11 +788,6 @@
         "summary": "Refresh All Source Connections",
         "description": "Trigger data synchronization for all source connections in the collection.\n\n<br/><br/>The sync jobs run asynchronously in the background, so this endpoint\nreturns immediately with job details that you can use to track progress. You can\nmonitor the status of individual data synchronization using the source connection\nendpoints.",
         "operationId": "refresh_all_source_connections_collections__readable_id__refresh_all_post",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "readable_id",
@@ -913,11 +873,6 @@
         "summary": "List Source Connections",
         "description": "List source connections across your organization.\n\n<br/><br/>\nBy default, returns ALL source connections from every collection in your\norganization. Use the 'collection' parameter to filter results to a specific\ncollection. This is useful for getting an overview of all your data sources\nor managing connections within a particular collection.",
         "operationId": "list_source_connections_source_connections_get",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "collection",
@@ -1069,11 +1024,6 @@
         "summary": "Get Source Connection",
         "description": "Retrieve a specific source connection by its ID.",
         "operationId": "get_source_connection_source_connections__source_connection_id__get",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1135,11 +1085,6 @@
         "summary": "Update Source Connection",
         "description": "Update a source connection's properties.\n\n<br/><br/>\n\nModify the configuration of an existing source connection including its name,\nauthentication credentials, configuration fields, sync schedule, or source-specific settings.",
         "operationId": "update_source_connection_source_connections__source_connection_id__put",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1199,11 +1144,6 @@
         "summary": "Delete Source Connection",
         "description": "Delete a source connection.\n\n<br/><br/>\n\nPermanently removes the source connection configuration and credentials.\nBy default, previously synced data remains in your destination systems for continuity.\nUse delete_data=true to also remove all associated data from destination systems.",
         "operationId": "delete_source_connection_source_connections__source_connection_id__delete",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1267,11 +1207,6 @@
         "summary": "Run Source Connection",
         "description": "Manually trigger a data sync for this source connection.\n\n<br/><br/>\nStarts an immediate synchronization job that extracts fresh data from your source,\ntransforms it according to your configuration, and updates the destination systems.\nThe job runs asynchronously and endpoint returns immediately with tracking information.",
         "operationId": "run_source_connection_source_connections__source_connection_id__run_post",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1361,11 +1296,6 @@
         "summary": "List Source Connection Jobs",
         "description": "List all sync jobs for a source connection.\n\n<br/><br/>\nReturns the complete history of data synchronization jobs including successful syncs,\nfailed attempts, and currently running operations.",
         "operationId": "list_source_connection_jobs_source_connections__source_connection_id__jobs_get",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1452,11 +1382,6 @@
         "summary": "Get Source Connection Job",
         "description": "Get detailed information about a specific sync job.",
         "operationId": "get_source_connection_job_source_connections__source_connection_id__jobs__job_id__get",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1549,11 +1474,6 @@
         "summary": "Cancel Source Connection Job",
         "description": "Cancel a running sync job.\n\n<br/><br/>\nSends a cancellation signal to stop an in-progress data synchronization.\nThe job will complete its current operation and then terminate gracefully.\nOnly jobs in 'created', 'pending', or 'in_progress' states can be cancelled.",
         "operationId": "cancel_source_connection_job_source_connections__source_connection_id__jobs__job_id__cancel_post",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1756,11 +1676,6 @@
         "summary": "Get White Label",
         "description": "Retrieve a specific white label integration by its ID.",
         "operationId": "get_white_label_white_labels__white_label_id__get",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -1810,11 +1725,6 @@
         "summary": "Update White Label",
         "description": "Update a white label integration's configuration.",
         "operationId": "update_white_label_white_labels__white_label_id__put",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -1874,11 +1784,6 @@
         "summary": "Delete White Label",
         "description": "Delete a white label integration.\n\n<br/><br/>\nPermanently removes the white label configuration and OAuth credentials.\nExisting source connections created through this integration will continue to work,\nbut no new OAuth flows can be initiated until a new white label integration is created.",
         "operationId": "delete_white_label_white_labels__white_label_id__delete",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -1988,11 +1893,6 @@
         "summary": "List White Label Source Connections",
         "description": "List all source connections created through a specific white label integration.\n\n<br/><br/>\nReturns source connections that were established using this white label's OAuth flow.",
         "operationId": "list_white_label_source_connections_white_labels__white_label_id__source_connections_get",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
         "parameters": [
           {
             "name": "white_label_id",
@@ -2066,12 +1966,7 @@
         ],
         "summary": "Exchange White Label Oauth2 Code",
         "description": "Complete the OAuth flow and create a source connection.\n\n<br/><br/>\n**This is the core endpoint that converts OAuth authorization codes into working\nsource connections.**<br/><br/>The OAuth credentials are obtained automatically\nfrom the authorization code - you do not need to provide auth_fields. The white\nlabel integration is automatically linked to the created source connection for\ntracking and branding purposes.",
-        "operationId": "exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post",
-        "security": [
-          {
-            "ApiKeyAuth": []
-          }
-        ],
+        "operationId": "exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options",
         "parameters": [
           {
             "name": "white_label_id",
@@ -2091,7 +1986,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post"
+                "$ref": "#/components/schemas/Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options"
               }
             }
           }
@@ -2640,7 +2535,7 @@
         "type": "object",
         "title": "Body_create_credentials_from_authorization_code_source_connections__source_short_name__code_to_token_credentials_post"
       },
-      "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post": {
+      "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options": {
         "properties": {
           "code": {
             "type": "string",
@@ -2666,7 +2561,7 @@
         "required": [
           "code"
         ],
-        "title": "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post"
+        "title": "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options"
       },
       "Body_run_source_connection_source_connections__source_connection_id__run_post": {
         "properties": {
