@@ -58,51 +58,47 @@ def fix_security_scheme(openapi_schema: Dict[str, Any]) -> Dict[str, Any]:
     This function thoroughly removes any duplicated authentication parameters
     to avoid the "duplicate parameter" error in generated SDKs.
     """
-    if "components" in openapi_schema and "securitySchemes" in openapi_schema["components"]:
-        # Replace the security scheme to use only apiKey with header
-        openapi_schema["components"]["securitySchemes"] = {
-            "ApiKeyAuth": {
-                "type": "apiKey",
-                "in": "header",
-                "name": "x-api-key",
-                "description": "API key for authentication",
-            }
+    # Ensure components exists
+    if "components" not in openapi_schema:
+        openapi_schema["components"] = {}
+
+    # Replace the security scheme to use only apiKey with header
+    openapi_schema["components"]["securitySchemes"] = {
+        "ApiKeyAuth": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "x-api-key",
+            "description": "API key for authentication",
         }
+    }
 
-        # Process all paths to fix authentication
-        for path, path_item in openapi_schema["paths"].items():
-            for method, operation in path_item.items():
-                if method.lower() in ["get", "post", "put", "delete", "patch"]:
-                    # Replace any existing security with just the API key
-                    operation["security"] = [{"ApiKeyAuth": []}]
+    # Process all paths to fix authentication
+    for path, path_item in openapi_schema["paths"].items():
+        for method, operation in path_item.items():
+            if method.lower() in ["get", "post", "put", "delete", "patch"]:
+                # Replace any existing security with just the API key
+                operation["security"] = [{"ApiKeyAuth": []}]
 
-                    # Remove all auth-related parameters from operations
-                    # This is critical to avoid duplication with the security scheme
-                    if "parameters" in operation:
-                        operation["parameters"] = [
-                            param
-                            for param in operation["parameters"]
-                            if not (
-                                # Remove Authorization header
-                                (
-                                    param.get("name") == "Authorization"
-                                    and param.get("in") == "header"
-                                )
-                                # Remove x-api-key (lowercase)
-                                or (
-                                    param.get("name") == "x-api-key" and param.get("in") == "header"
-                                )
-                                # Remove X-API-Key (capitalized)
-                                or (
-                                    param.get("name") == "X-API-Key" and param.get("in") == "header"
-                                )
-                                # Remove X-Organization-ID (we don't want this in the public API spec)
-                                or (
-                                    param.get("name") == "X-Organization-ID"
-                                    and param.get("in") == "header"
-                                )
+                # Remove all auth-related parameters from operations
+                # This is critical to avoid duplication with the security scheme
+                if "parameters" in operation:
+                    operation["parameters"] = [
+                        param
+                        for param in operation["parameters"]
+                        if not (
+                            # Remove Authorization header
+                            (param.get("name") == "Authorization" and param.get("in") == "header")
+                            # Remove x-api-key (lowercase)
+                            or (param.get("name") == "x-api-key" and param.get("in") == "header")
+                            # Remove X-API-Key (capitalized)
+                            or (param.get("name") == "X-API-Key" and param.get("in") == "header")
+                            # Remove X-Organization-ID (we don't want this in the public API spec)
+                            or (
+                                param.get("name") == "X-Organization-ID"
+                                and param.get("in") == "header"
                             )
-                        ]
+                        )
+                    ]
 
     # Remove any global security definitions if they exist
     if "security" in openapi_schema:

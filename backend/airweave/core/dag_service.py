@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.api.context import ApiContext
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.platform.entities._base import (
     BaseEntity,
@@ -18,7 +19,6 @@ from airweave.platform.entities._base import (
 )
 from airweave.platform.entities.web import WebFileEntity
 from airweave.platform.locator import resource_locator
-from airweave.schemas.auth import AuthContext
 from airweave.schemas.dag import DagEdgeCreate, DagNodeCreate, NodeType, SyncDagCreate
 
 
@@ -30,7 +30,7 @@ class DagService:
         db: AsyncSession,
         *,
         sync_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         uow: UnitOfWork,
     ) -> schemas.SyncDag:
         """Create an initial DAG with source, entities, and destination.
@@ -39,7 +39,7 @@ class DagService:
         ----
             db (AsyncSession): The database session.
             sync_id (UUID): The ID of the sync to create the DAG for.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             uow (UnitOfWork): The unit of work.
 
         Returns:
@@ -47,7 +47,7 @@ class DagService:
             schemas.SyncDag: The created DAG.
         """
         # Get sync and validate
-        sync = await self._get_and_validate_sync(db, sync_id, auth_context)
+        sync = await self._get_and_validate_sync(db, sync_id, ctx)
 
         # Get file chunker transformer
         file_chunker = await self._get_file_chunker(db)
@@ -60,13 +60,13 @@ class DagService:
             source,
             source_connection,
             entity_definitions,
-        ) = await self._get_source_and_entity_definitions(db, sync, auth_context)
+        ) = await self._get_source_and_entity_definitions(db, sync, ctx)
 
         # Get or create destinations
         (
             destinations,
             destination_connections,
-        ) = await self._get_destinations_and_destination_connections(db, sync, auth_context)
+        ) = await self._get_destinations_and_destination_connections(db, sync, ctx)
 
         # Initialize DAG components
         nodes: List[DagNodeCreate] = []
@@ -92,7 +92,7 @@ class DagService:
         )
 
         # Create and return the DAG
-        return await self._create_and_save_dag(db, sync, sync_id, nodes, edges, auth_context, uow)
+        return await self._create_and_save_dag(db, sync, sync_id, nodes, edges, ctx, uow)
 
     async def _create_source_and_destination_nodes(
         self, source, source_connection, destinations, destination_connections, nodes
@@ -234,7 +234,7 @@ class DagService:
             )
 
     async def _create_and_save_dag(
-        self, db, sync, sync_id, nodes, edges, auth_context, uow
+        self, db, sync, sync_id, nodes, edges, ctx, uow
     ) -> schemas.SyncDag:
         """Create and save the DAG with nodes and edges."""
         sync_dag_create = SyncDagCreate(
@@ -252,7 +252,7 @@ class DagService:
             )
 
             sync_dag = await crud.sync_dag.create_with_nodes_and_edges(
-                db, obj_in=sync_dag_create, auth_context=auth_context, uow=uow
+                db, obj_in=sync_dag_create, ctx=ctx, uow=uow
             )
             logger.info(f"Successfully created DAG with ID {sync_dag.id}")
             return schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
@@ -292,7 +292,7 @@ class DagService:
             logger.error(f"Found invalid edges: {invalid_edges}")
 
     async def _get_and_validate_sync(
-        self, db: AsyncSession, sync_id: UUID, auth_context: AuthContext
+        self, db: AsyncSession, sync_id: UUID, ctx: ApiContext
     ) -> schemas.Sync:
         """Get and validate that the sync exists.
 
@@ -300,7 +300,7 @@ class DagService:
         ----
             db (AsyncSession): The database session.
             sync_id (UUID): The ID of the sync to get.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
 
         Returns:
         -------
@@ -310,7 +310,7 @@ class DagService:
         ------
             Exception: If the sync is not found.
         """
-        sync = await crud.sync.get(db, id=sync_id, auth_context=auth_context, with_connections=True)
+        sync = await crud.sync.get(db, id=sync_id, ctx=ctx, with_connections=True)
         if not sync:
             raise Exception(f"Sync for {sync_id} not found")
         return sync
@@ -338,12 +338,10 @@ class DagService:
         return web_fetcher
 
     async def _get_source_and_entity_definitions(
-        self, db: AsyncSession, sync: schemas.Sync, auth_context: AuthContext
+        self, db: AsyncSession, sync: schemas.Sync, ctx: ApiContext
     ) -> Tuple[schemas.Source, schemas.Connection, Dict]:
         """Get source connection and entity definitions."""
-        source_connection = await crud.connection.get(
-            db, id=sync.source_connection_id, auth_context=auth_context
-        )
+        source_connection = await crud.connection.get(db, id=sync.source_connection_id, ctx=ctx)
         if not source_connection:
             raise Exception(f"Source connection for {sync.source_connection_id} not found")
 
@@ -364,7 +362,7 @@ class DagService:
         return source, source_connection, entity_definitions_dict
 
     async def _get_destinations_and_destination_connections(
-        self, db: AsyncSession, sync: schemas.Sync, auth_context: AuthContext
+        self, db: AsyncSession, sync: schemas.Sync, ctx: ApiContext
     ) -> Tuple[List[schemas.Destination], List[schemas.Connection]]:
         """Get or create destinations and destination connections.
 
@@ -372,7 +370,7 @@ class DagService:
         ----
             db (AsyncSession): The database session.
             sync (schemas.Sync): The sync to get the destinations and destination connections for.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
 
         Returns:
         -------
@@ -391,7 +389,7 @@ class DagService:
         if sync.destination_connection_ids:
             for destination_connection_id in sync.destination_connection_ids:
                 destination_connection = await crud.connection.get(
-                    db, id=destination_connection_id, auth_context=auth_context
+                    db, id=destination_connection_id, ctx=ctx
                 )
                 if not destination_connection:
                     raise HTTPException(status_code=404, detail="Destination connection not found")

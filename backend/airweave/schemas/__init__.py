@@ -9,7 +9,6 @@ from .api_key import (
     APIKeyInDBBase,
     APIKeyUpdate,
 )
-from .auth import AuthContext
 from .auth_provider import (
     AuthProvider,
     AuthProviderConnection,

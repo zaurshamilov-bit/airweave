@@ -16,10 +16,11 @@ The CRUD layer provides a consistent interface for database operations across al
 #### 1. CRUDBaseOrganization (_base_organization.py)
 - **Purpose**: For resources scoped to organizations (most common pattern)
 - **Key Features**:
-  - Enforces organization-level access control via `AuthContext`
+  - Enforces organization-level access control via `ApiContext`
   - Tracks user modifications with `created_by_email` and `modified_by_email`
   - Validates organization access on every operation
   - Supports both user and API key authentication contexts
+  - Logger access via `ctx.logger` for contextual logging
 
 #### 2. CRUDBaseUser (_base_user.py)
 - **Purpose**: For pure user-level data (e.g., user profiles)
@@ -38,14 +39,15 @@ The CRUD layer provides a consistent interface for database operations across al
 
 ## Core Concepts
 
-### AuthContext
-The `AuthContext` (from `schemas.auth`) is central to the CRUD layer:
+### ApiContext
+The `ApiContext` (from `api.context`) is central to the CRUD layer:
 ```python
-class AuthContext:
+class ApiContext:
     organization_id: UUID          # Always present
     user: Optional[User] = None    # Present for user auth, None for API keys
     auth_method: str              # "auth0", "api_key", or "system"
     auth_metadata: Optional[Dict]  # Additional auth-specific data
+    logger: ContextualLogger      # Pre-configured logger with request context
 ```
 
 **Key Properties**:
@@ -53,17 +55,18 @@ class AuthContext:
 - `tracking_email`: Returns user email for audit tracking
 - `is_api_key_auth`: True for API key authentication
 - `is_user_auth`: True for Auth0 user authentication
+- `logger`: Contextual logger with request ID and org/user metadata
 
 ### Unit of Work Pattern
 The `UnitOfWork` class manages database transactions:
 ```python
 # Without UoW - auto-commits
-await crud.create(db, obj_in=data, auth_context=auth)
+await crud.create(db, obj_in=data, ctx=ctx)
 
 # With UoW - manual transaction control
 async with UnitOfWork(db) as uow:
-    obj1 = await crud.create(db, obj_in=data1, auth_context=auth, uow=uow)
-    obj2 = await crud.create(db, obj_in=data2, auth_context=auth, uow=uow)
+    obj1 = await crud.create(db, obj_in=data1, ctx=ctx, uow=uow)
+    obj2 = await crud.create(db, obj_in=data2, ctx=ctx, uow=uow)
     # Commits on context exit, rolls back on exception
 ```
 
@@ -71,17 +74,17 @@ async with UnitOfWork(db) as uow:
 
 ### 1. Standard CRUD Operations
 All base classes provide:
-- `get(db, id, auth_context)` - Get single resource
-- `get_multi(db, auth_context, skip, limit)` - Get multiple resources
-- `create(db, obj_in, auth_context, uow)` - Create resource
-- `update(db, db_obj, obj_in, auth_context, uow)` - Update resource
-- `remove(db, id, auth_context, uow)` - Delete resource
+- `get(db, id, ctx)` - Get single resource
+- `get_multi(db, ctx, skip, limit)` - Get multiple resources
+- `create(db, obj_in, ctx, uow)` - Create resource
+- `update(db, db_obj, obj_in, ctx, uow)` - Update resource
+- `remove(db, id, ctx, uow)` - Delete resource
 
 ### 2. Access Control Validation
 Organization-scoped resources validate access via:
 ```python
-async def _validate_organization_access(auth_context, organization_id):
-    if auth_context.has_user_context:
+async def _validate_organization_access(ctx, organization_id):
+    if ctx.has_user_context:
         # Check user has access to organization
     else:
         # Check API key belongs to organization
@@ -100,7 +103,7 @@ class CRUDSync(CRUDBaseOrganization):
     async def enrich_sync_with_connections(db, sync):
         # Custom method to load related data
 
-    async def get(db, id, auth_context, with_connections=True):
+    async def get(db, id, ctx, with_connections=True):
         # Override to add optional data loading
 ```
 
@@ -126,7 +129,7 @@ collection = CRUDCollection(Collection)
 ### Complex Resource with Custom Logic
 ```python
 class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
-    async def create(self, db, *, obj_in, auth_context, uow=None):
+    async def create(self, db, *, obj_in, ctx, uow=None):
         # Generate secure key
         key = secrets.token_urlsafe(32)
         encrypted_key = credentials.encrypt({"key": key})
@@ -135,7 +138,7 @@ class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
         return await super().create(
             db=db,
             obj_in={"encrypted_key": encrypted_key, ...},
-            auth_context=auth_context,
+            ctx=ctx,
             uow=uow
         )
 ```
@@ -161,9 +164,10 @@ class CRUDOrganization:
 - Let context manager handle commit/rollback
 
 ### 3. Access Control
-- Always pass `AuthContext` to CRUD operations
+- Always pass `ApiContext` to CRUD operations
 - Never bypass `_validate_organization_access()`
 - Handle both user and API key contexts
+- Use `ctx.logger` for contextual logging with request metadata
 
 ### 4. Custom Methods
 - Override base methods when needed (e.g., `get` with extra options)
@@ -191,21 +195,23 @@ Use these instances in API endpoints and services:
 from airweave import crud
 
 # In endpoint
-collection = await crud.collection.get(db, id, auth_context)
+collection = await crud.collection.get(db, id, ctx)
 ```
 
 ## Key Invariants
 
-1. **Every operation requires AuthContext** - No exceptions
+1. **Every operation requires ApiContext** - No exceptions
 2. **Organization resources are isolated** - Cross-org access is prevented
 3. **User tracking is automatic** - When enabled, audit fields are managed
 4. **Transactions are explicit** - Use UoW for multi-step operations
 5. **Access validation is mandatory** - Built into base class methods
+6. **Logger injection via context** - All operations have access to contextual logger
 
 ## Common Gotchas
 
-1. **Don't forget auth_context** - Required for all operations
+1. **Don't forget ctx** - Required for all operations
 2. **Use uow for related creates** - Ensures atomic transactions
 3. **Check track_user flag** - Determines if UserMixin fields are set
 4. **Organization validation** - Happens automatically in base class
 5. **Custom CRUD methods** - Should still validate access control
+6. **Logger is pre-configured** - Use `ctx.logger` instead of creating new loggers

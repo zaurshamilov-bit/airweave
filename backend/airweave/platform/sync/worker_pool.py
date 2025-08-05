@@ -4,7 +4,7 @@ import asyncio
 import threading
 from typing import Any, Callable
 
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger
 
 
 class AsyncWorkerPool:
@@ -14,15 +14,17 @@ class AsyncWorkerPool:
     preventing system overload when processing many items in parallel.
     """
 
-    def __init__(self, max_workers: int = 100):
+    def __init__(self, logger: ContextualLogger, max_workers: int = 100):
         """Initialize worker pool with concurrency control.
 
         Args:
             max_workers: Maximum number of tasks allowed to run concurrently
+            logger: Optional logger instance for contextual logging
         """
         self.semaphore = asyncio.Semaphore(max_workers)
         self.pending_tasks = set()
         self.max_workers = max_workers
+        self.logger = logger
 
     async def submit(self, coro: Callable, *args, **kwargs) -> asyncio.Task:
         """Submit a coroutine to be executed by the worker pool.
@@ -32,7 +34,7 @@ class AsyncWorkerPool:
         """
         task_id = f"task_{len(self.pending_tasks) + 1}"
 
-        logger.info(
+        self.logger.debug(
             f"🔄 WORKER_SUBMIT [{task_id}] Submitting task to worker pool "
             f"(pending: {len(self.pending_tasks)}/{self.max_workers})"
         )
@@ -51,13 +53,13 @@ class AsyncWorkerPool:
         """
         thread_id = threading.get_ident()
 
-        logger.info(
+        self.logger.debug(
             f"⏳ WORKER_WAIT [{task_id}] Waiting for semaphore "
             f"(thread: {thread_id}, available: {self.semaphore._value})"
         )
 
         async with self.semaphore:
-            logger.info(
+            self.logger.debug(
                 f"🚀 WORKER_START [{task_id}] Acquired semaphore, starting execution "
                 f"(thread: {thread_id})"
             )
@@ -67,7 +69,7 @@ class AsyncWorkerPool:
                 result = await coro(*args, **kwargs)
                 elapsed = asyncio.get_event_loop().time() - start_time
 
-                logger.info(
+                self.logger.debug(
                     f"✅ WORKER_COMPLETE [{task_id}] Task completed successfully "
                     f"in {elapsed:.2f}s (thread: {thread_id})"
                 )
@@ -75,7 +77,7 @@ class AsyncWorkerPool:
 
             except Exception as e:
                 elapsed = asyncio.get_event_loop().time() - start_time
-                logger.error(
+                self.logger.error(
                     f"❌ WORKER_ERROR [{task_id}] Task failed after {elapsed:.2f}s "
                     f"(thread: {thread_id}): {type(e).__name__}: {str(e)}"
                 )
@@ -87,10 +89,10 @@ class AsyncWorkerPool:
         self.pending_tasks.discard(task)
 
         if task.cancelled():
-            logger.warning(f"🚫 WORKER_CANCELLED [{task_id}] Task was cancelled")
+            self.logger.warning(f"🚫 WORKER_CANCELLED [{task_id}] Task was cancelled")
         elif task.exception() is not None:
-            logger.error(
+            self.logger.error(
                 f"💥 WORKER_EXCEPTION [{task_id}] Task completed with exception: {task.exception()}"
             )
         else:
-            logger.info(f"🏁 WORKER_CLEANUP [{task_id}] Task cleaned up successfully")
+            self.logger.debug(f"🏁 WORKER_CLEANUP [{task_id}] Task cleaned up successfully")

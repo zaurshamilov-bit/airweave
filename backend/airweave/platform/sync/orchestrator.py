@@ -40,7 +40,7 @@ class SyncOrchestrator:
 
         # Queue size provides buffering for bursty sources
         # Workers pull from this queue when ready
-        self.stream_buffer_size = 100
+        self.stream_buffer_size = 1000
 
     async def run(self) -> schemas.Sync:
         """Execute the synchronization process.
@@ -64,15 +64,12 @@ class SyncOrchestrator:
 
     async def _start_sync(self) -> None:
         """Initialize sync job and update status to in-progress."""
-        self.sync_context.logger.info(
-            f"Starting sync job {self.sync_context.sync_job.id} for sync "
-            f"{self.sync_context.sync.id}"
-        )
+        self.sync_context.logger.info("Starting sync job")
 
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.IN_PROGRESS,
-            auth_context=self.sync_context.auth_context,
+            ctx=self.sync_context.ctx,
             started_at=utc_now_naive(),
         )
 
@@ -157,14 +154,14 @@ class SyncOrchestrator:
             pending_tasks: Set of pending tasks to wait for
         """
         if pending_tasks:
-            self.sync_context.logger.info(
+            self.sync_context.logger.debug(
                 f"Waiting for {len(pending_tasks)} remaining tasks to complete"
             )
             done, _ = await asyncio.wait(pending_tasks)
             # Check for exceptions in completed tasks
             for task in done:
                 if not task.cancelled() and task.exception():
-                    self.sync_context.logger.error(
+                    self.sync_context.logger.warning(
                         f"Task failed with exception: {task.exception()}"
                     )
 
@@ -175,7 +172,7 @@ class SyncOrchestrator:
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.COMPLETED,
-            auth_context=self.sync_context.auth_context,
+            ctx=self.sync_context.ctx,
             completed_at=utc_now_naive(),
             stats=stats,
         )
@@ -196,7 +193,7 @@ class SyncOrchestrator:
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.FAILED,
-            auth_context=self.sync_context.auth_context,
+            ctx=self.sync_context.ctx,
             error=error_message,
             failed_at=utc_now_naive(),
             stats=stats,

@@ -122,7 +122,7 @@ Query expansion has no guarantees with offset.
 - Check `self.openai_client` before using
 
 ### 4. Collection Validation
-Always goes through `crud.collection.get_by_readable_id()` with auth_context.
+Always goes through `crud.collection.get_by_readable_id()` with ctx.
 Raises `NotFoundException` if not found or no access.
 
 ### 5. Embedding Model Selection
@@ -295,7 +295,7 @@ Solution: Fetch extra results, merge, then apply offset manually.
 - Check `self.openai_client` before using
 
 ### 4. Collection Validation
-Always goes through `crud.collection.get_by_readable_id()` with auth_context.
+Always goes through `crud.collection.get_by_readable_id()` with ctx.
 Raises `NotFoundException` if not found or no access.
 
 ### 5. Embedding Model Selection

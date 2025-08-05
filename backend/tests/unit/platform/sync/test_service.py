@@ -65,7 +65,7 @@ class TestSyncServiceCreate:
                 result = await service.create(
                     db=mock_db,
                     sync=sync_create,
-                    auth_context=mock_user,
+                    ctx=mock_user,
                     uow=mock_uow,
                 )
 
@@ -73,14 +73,14 @@ class TestSyncServiceCreate:
                 mock_create.assert_called_once_with(
                     db=mock_db,
                     obj_in=sync_create,
-                    auth_context=mock_user,
+                    ctx=mock_user,
                     uow=mock_uow,
                 )
                 mock_uow.session.flush.assert_called_once()
                 mock_create_dag.assert_called_once_with(
                     db=mock_db,
                     sync_id=sync_id,
-                    auth_context=mock_user,
+                    ctx=mock_user,
                     uow=mock_uow,
                 )
                 assert result == mock_sync
@@ -90,7 +90,15 @@ class TestSyncServiceRun:
     """Tests for the SyncService.run method."""
 
     @pytest.mark.asyncio
-    async def test_run_success(self, mock_sync, mock_sync_job, mock_sync_dag, mock_user, mock_collection, mock_source_connection):
+    async def test_run_success(
+        self,
+        mock_sync,
+        mock_sync_job,
+        mock_sync_dag,
+        mock_user,
+        mock_collection,
+        mock_source_connection,
+    ):
         """Test successful sync run."""
         # Arrange
         mock_db_context = AsyncMock()
@@ -119,7 +127,7 @@ class TestSyncServiceRun:
                     dag=mock_sync_dag,
                     collection=mock_collection,
                     source_connection=mock_source_connection,
-                    auth_context=mock_user,
+                    ctx=mock_user,
                 )
 
                 # Assert
@@ -131,14 +139,22 @@ class TestSyncServiceRun:
                     dag=mock_sync_dag,
                     collection=mock_collection,
                     source_connection=mock_source_connection,
-                    auth_context=mock_user,
+                    ctx=mock_user,
                     access_token=None,
                 )
                 mock_orchestrator.run.assert_called_once()
                 assert result == mock_sync_result
 
     @pytest.mark.asyncio
-    async def test_run_error_handling(self, mock_sync, mock_sync_job, mock_sync_dag, mock_user, mock_collection, mock_source_connection):
+    async def test_run_error_handling(
+        self,
+        mock_sync,
+        mock_sync_job,
+        mock_sync_dag,
+        mock_user,
+        mock_collection,
+        mock_source_connection,
+    ):
         """Test error handling during sync run."""
         # Arrange
         mock_db_context = AsyncMock()
@@ -159,7 +175,9 @@ class TestSyncServiceRun:
                 # Mock logger.error
                 with patch("airweave.core.sync_service.logger.error") as mock_logger_error:
                     # Act & Assert
-                    with patch("airweave.core.sync_service.sync_job_service.update_status") as mock_update_status:
+                    with patch(
+                        "airweave.core.sync_service.sync_job_service.update_status"
+                    ) as mock_update_status:
                         mock_update_status.return_value = None
                         service = SyncService()
                         with pytest.raises(Exception) as excinfo:
@@ -169,7 +187,7 @@ class TestSyncServiceRun:
                                 dag=mock_sync_dag,
                                 collection=mock_collection,
                                 source_connection=mock_source_connection,
-                                auth_context=mock_user,
+                                ctx=mock_user,
                             )
 
                     # Verify the exception was logged and re-raised

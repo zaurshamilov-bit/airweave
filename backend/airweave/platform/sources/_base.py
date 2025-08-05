@@ -119,17 +119,17 @@ class BaseSource:
             self.logger.error(f"No access token provided for file {file_entity.name}")
             raise ValueError(f"No access token available for processing file {file_entity.name}")
 
-        self.logger.info(f"Processing file entity: {file_entity.name}")
+        self.logger.debug(f"Processing file entity: {file_entity.name}")
 
         try:
             # Create stream (pass token as before)
             file_stream = file_manager.stream_file_from_url(
-                url, access_token=token, headers=headers
+                url, access_token=token, headers=headers, logger=self.logger
             )
 
             # Process entity - Fix the stream handling issue
             processed_entity = await file_manager.handle_file_entity(
-                stream=file_stream, entity=file_entity
+                stream=file_stream, entity=file_entity, logger=self.logger
             )
 
             # Skip if file was too large
@@ -171,12 +171,12 @@ class BaseSource:
         self, file_entity, content_stream, metadata: Optional[Dict[str, Any]] = None
     ) -> Optional[ChunkEntity]:
         """Process a file entity with content directly available as a stream."""
-        self.logger.info(f"Processing file entity with direct content: {file_entity.name}")
+        self.logger.debug(f"Processing file entity with direct content: {file_entity.name}")
 
         try:
             # Process entity with the file manager directly
             processed_entity = await file_manager.handle_file_entity(
-                stream=content_stream, entity=file_entity
+                stream=content_stream, entity=file_entity, logger=self.logger
             )
 
             # Add any additional metadata

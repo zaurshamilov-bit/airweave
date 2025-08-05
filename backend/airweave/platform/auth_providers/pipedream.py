@@ -33,6 +33,14 @@ class PipedreamAuthProvider(BaseAuthProvider):
     # Pipedream OAuth token endpoint
     TOKEN_ENDPOINT = "https://api.pipedream.com/v1/oauth/token"
 
+    BLOCKED_SOURCES = [
+        "confluence",
+        "jira",
+        "bitbucket",
+        "github",
+        "ctti",
+    ]
+
     # Mapping of Airweave field names to Pipedream field names
     # Key: Airweave field name, Value: Pipedream field name
     FIELD_NAME_MAPPING = {

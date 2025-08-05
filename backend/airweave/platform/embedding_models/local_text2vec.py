@@ -38,7 +38,8 @@ class LocalText2Vec(BaseEmbeddingModel):
         """Initialize the local text2vec model."""
         # Always call parent __init__ (esp. with Pydantic models!)
         super().__init__(**data)
-        self.logger = logger
+        if logger:
+            self.logger = logger  # Override with contextual logger if provided
 
     def model_post_init(self, __context) -> None:
         """Post initialization hook to set the inference URL from settings.
@@ -47,7 +48,8 @@ class LocalText2Vec(BaseEmbeddingModel):
         """
         super().model_post_init(__context)
         self.inference_url = settings.TEXT2VEC_INFERENCE_URL
-        self.logger.info(f"Text2Vec model using inference URL: {self.inference_url}")
+        if hasattr(self, "logger") and self.logger:
+            self.logger.debug(f"Text2Vec model using inference URL: {self.inference_url}")
 
     async def embed(
         self,
@@ -123,7 +125,8 @@ class LocalText2Vec(BaseEmbeddingModel):
                         response.raise_for_status()
                         result.append(response.json()["vector"])
                     except Exception as e:
-                        self.logger.error(f"Error embedding text: {e}")
+                        if hasattr(self, "logger") and self.logger:
+                            self.logger.error(f"Error embedding text: {e}")
                         # Return zero vector for failed embedding
                         result.append([0.0] * self.vector_dimensions)
                 else:

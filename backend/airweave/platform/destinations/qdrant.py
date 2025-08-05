@@ -6,7 +6,6 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models as rest
 
 from airweave.core.config import settings
-from airweave.core.logging import logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import QdrantAuthConfig
 from airweave.platform.decorators import destination
@@ -24,6 +23,7 @@ class QdrantDestination(VectorDBDestination):
 
     def __init__(self):
         """Initialize Qdrant destination."""
+        super().__init__()  # Initialize base class for logger support
         self.collection_name: str | None = None
         self.collection_id: UUID | None = None
         self.url: str | None = None
@@ -99,9 +99,9 @@ class QdrantDestination(VectorDBDestination):
 
                 # Test connection
                 await self.client.get_collections()
-                logger.info("Successfully connected to Qdrant service.")
+                self.logger.debug("Successfully connected to Qdrant service.")
             except Exception as e:
-                logger.error(f"Error connecting to Qdrant service at {location}: {e}")
+                self.logger.error(f"Error connecting to Qdrant service at {location}: {e}")
                 self.client = None
                 # Provide more specific error messages
                 if "connection refused" in str(e).lower():
@@ -135,11 +135,11 @@ class QdrantDestination(VectorDBDestination):
     async def close_connection(self) -> None:
         """Close the connection to the Qdrant service."""
         if self.client:
-            logger.info("Closing Qdrant client connection gracefully...")
+            self.logger.debug("Closing Qdrant client connection gracefully...")
             # Qdrant client doesn't have an explicit close method, but we can set it to None
             self.client = None
         else:
-            logger.info("No Qdrant client connection to close.")
+            self.logger.debug("No Qdrant client connection to close.")
 
     async def collection_exists(self, collection_name: str) -> bool:
         """Check if a collection exists in Qdrant.
@@ -156,7 +156,7 @@ class QdrantDestination(VectorDBDestination):
             collections = collections_response.collections
             return any(collection.name == collection_name for collection in collections)
         except Exception as e:
-            logger.error(f"Error checking if collection exists: {e}")
+            self.logger.error(f"Error checking if collection exists: {e}")
             raise  # Re-raise the exception instead of returning False
 
     async def setup_collection(self, vector_size: int) -> None:  # noqa: C901
@@ -170,10 +170,10 @@ class QdrantDestination(VectorDBDestination):
         try:
             # Check if collection exists
             if await self.collection_exists(self.collection_name):
-                logger.info(f"Collection {self.collection_name} already exists.")
+                self.logger.debug(f"Collection {self.collection_name} already exists.")
                 return
 
-            logger.info(f"Creating collection {self.collection_name}...")
+            self.logger.info(f"Creating collection {self.collection_name}...")
 
             # Create the collection
             await self.client.create_collection(
@@ -237,7 +237,7 @@ class QdrantDestination(VectorDBDestination):
             entity_data = entity.to_storage_dict()
             # Use the entity's vector directly
             if not hasattr(entity, "vector") or entity.vector is None:
-                logger.warning(f"Entity {entity.entity_id} has no vector, skipping")
+                self.logger.warning(f"Entity {entity.entity_id} has no vector, skipping")
                 continue
 
             if hasattr(entity_data, "vector"):
@@ -253,7 +253,7 @@ class QdrantDestination(VectorDBDestination):
             )
 
         if not point_structs:
-            logger.warning("No valid entities to insert")
+            self.logger.warning("No valid entities to insert")
             return
 
         # Bulk upsert
@@ -366,8 +366,8 @@ class QdrantDestination(VectorDBDestination):
                 wait=True,  # Wait for operation to complete
             )
         except Exception as e:
-            logger.error(f"Error creating Qdrant filter: {e}")
-            logger.error(f"Filter condition: {filter_condition}")
+            self.logger.error(f"Error creating Qdrant filter: {e}")
+            self.logger.error(f"Filter condition: {filter_condition}")
             # Fallback to a different approach if needed
             raise
 
@@ -432,7 +432,7 @@ class QdrantDestination(VectorDBDestination):
 
             return results
         except Exception as e:
-            logger.error(f"Error searching with Qdrant filter: {e}")
+            self.logger.error(f"Error searching with Qdrant filter: {e}")
             raise  # Re-raise the exception instead of returning empty list
 
     async def bulk_search(
@@ -510,5 +510,5 @@ class QdrantDestination(VectorDBDestination):
             return all_results
 
         except Exception as e:
-            logger.error(f"Error performing batch search with Qdrant: {e}")
+            self.logger.error(f"Error performing batch search with Qdrant: {e}")
             raise

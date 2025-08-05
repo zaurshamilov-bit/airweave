@@ -5,7 +5,8 @@ from typing import Dict, List, Optional, Set
 
 from airweave import crud, schemas
 from airweave.core.exceptions import NotFoundException
-from airweave.core.logging import logger
+
+# Logger will be passed from sync_context
 from airweave.db.session import get_db_context
 from airweave.platform.entities._base import BaseEntity, DestinationAction
 from airweave.platform.sync.async_helpers import compute_entity_hash_async, run_in_thread_pool
@@ -51,7 +52,7 @@ class EntityProcessor:
         pipeline_start = asyncio.get_event_loop().time()
 
         try:
-            logger.info(
+            sync_context.logger.debug(
                 f"🛠 PROCESSOR_START [{entity_context}] Starting entity processing pipeline "
                 f"(type: {entity.__class__.__name__})"
             )
@@ -63,7 +64,7 @@ class EntityProcessor:
 
             # Check for duplicate processing
             if entity.entity_id in self._entities_encountered_count[entity_type]:
-                logger.info(
+                sync_context.logger.debug(
                     f"⏭️  PROCESSOR_DUPLICATE [{entity_context}] Already processed, skipping"
                 )
                 return []
@@ -76,29 +77,35 @@ class EntityProcessor:
 
             # Check if entity should be skipped (set by file_manager or source)
             if getattr(entity, "should_skip", False):
-                logger.info(f"⏭️  PROCESSOR_SKIP [{entity_context}] Entity marked to skip")
+                sync_context.logger.debug(
+                    f"⏭️  PROCESSOR_SKIP [{entity_context}] Entity marked to skip"
+                )
                 await sync_context.progress.increment("skipped", 1)
                 return []
 
             # Stage 1: Enrich entity with metadata
-            logger.info(f"🏷️  PROCESSOR_ENRICH_START [{entity_context}] Enriching entity metadata")
+            sync_context.logger.debug(
+                f"🏷️  PROCESSOR_ENRICH_START [{entity_context}] Enriching entity metadata"
+            )
             enrich_start = asyncio.get_event_loop().time()
 
             enriched_entity = await self._enrich(entity, sync_context)
 
             enrich_elapsed = asyncio.get_event_loop().time() - enrich_start
-            logger.info(
+            sync_context.logger.debug(
                 f"✅ PROCESSOR_ENRICH_DONE [{entity_context}] Enriched in {enrich_elapsed:.3f}s"
             )
 
             # Stage 2: Determine action for entity (REQUIRES DATABASE)
-            logger.info(f"🔍 PROCESSOR_ACTION_START [{entity_context}] Determining action")
+            sync_context.logger.debug(
+                f"🔍 PROCESSOR_ACTION_START [{entity_context}] Determining action"
+            )
             action_start = asyncio.get_event_loop().time()
 
             db_entity, action = await self._determine_action(enriched_entity, sync_context)
 
             action_elapsed = asyncio.get_event_loop().time() - action_start
-            logger.info(
+            sync_context.logger.debug(
                 f"📋 PROCESSOR_ACTION_DONE [{entity_context}] Action: {action} "
                 f"(determined in {action_elapsed:.3f}s)"
             )
@@ -107,14 +114,14 @@ class EntityProcessor:
             if action == DestinationAction.KEEP:
                 await sync_context.progress.increment("kept", 1)
                 total_elapsed = asyncio.get_event_loop().time() - pipeline_start
-                logger.info(
+                sync_context.logger.debug(
                     f"⏭️  PROCESSOR_KEEP [{entity_context}] Entity kept, pipeline complete "
                     f"in {total_elapsed:.3f}s"
                 )
                 return []
 
             # Stage 3: Process entity through DAG
-            logger.info(
+            sync_context.logger.debug(
                 f"🔀 PROCESSOR_TRANSFORM_START [{entity_context}] Starting DAG transformation"
             )
             transform_start = asyncio.get_event_loop().time()
@@ -122,14 +129,14 @@ class EntityProcessor:
             processed_entities = await self._transform(enriched_entity, source_node, sync_context)
 
             transform_elapsed = asyncio.get_event_loop().time() - transform_start
-            logger.info(
+            sync_context.logger.debug(
                 f"🔄 PROCESSOR_TRANSFORM_DONE [{entity_context}] Transformed into "
                 f"{len(processed_entities)} entities in {transform_elapsed:.3f}s"
             )
 
             # Check if transformation resulted in no entities
             if len(processed_entities) == 0:
-                logger.warning(
+                sync_context.logger.warning(
                     f"📭 PROCESSOR_EMPTY_TRANSFORM [{entity_context}] "
                     f"No entities produced, marking skipped"
                 )
@@ -137,7 +144,9 @@ class EntityProcessor:
                 return []
 
             # Stage 4: Compute vector
-            logger.info(f"🧮 PROCESSOR_VECTOR_START [{entity_context}] Computing vectors")
+            sync_context.logger.debug(
+                f"🧮 PROCESSOR_VECTOR_START [{entity_context}] Computing vectors"
+            )
             vector_start = asyncio.get_event_loop().time()
 
             processed_entities_with_vector = await self._compute_vector(
@@ -145,13 +154,15 @@ class EntityProcessor:
             )
 
             vector_elapsed = asyncio.get_event_loop().time() - vector_start
-            logger.info(
+            sync_context.logger.debug(
                 f"🎯 PROCESSOR_VECTOR_DONE [{entity_context}] Computed vectors for "
                 f"{len(processed_entities_with_vector)} entities in {vector_elapsed:.3f}s"
             )
 
             # Stage 5: Persist entities based on action (REQUIRES DATABASE)
-            logger.info(f"💾 PROCESSOR_PERSIST_START [{entity_context}] Persisting to destinations")
+            sync_context.logger.debug(
+                f"💾 PROCESSOR_PERSIST_START [{entity_context}] Persisting to destinations"
+            )
             persist_start = asyncio.get_event_loop().time()
 
             await self._persist(
@@ -161,7 +172,7 @@ class EntityProcessor:
             persist_elapsed = asyncio.get_event_loop().time() - persist_start
 
             total_elapsed = asyncio.get_event_loop().time() - pipeline_start
-            logger.info(
+            sync_context.logger.debug(
                 f"✅ PROCESSOR_COMPLETE [{entity_context}] "
                 f"Pipeline complete in {total_elapsed:.3f}s "
                 f"(enrich: {enrich_elapsed:.3f}s, action: {action_elapsed:.3f}s, "
@@ -177,21 +188,21 @@ class EntityProcessor:
             error_message = str(e) if str(e) else "No error details available"
 
             # Log detailed error information
-            logger.error(
+            sync_context.logger.error(
                 f"💥 PROCESSOR_ERROR [{entity_context}] Pipeline failed after "
                 f"{pipeline_elapsed:.3f}s: {error_type}: {error_message}"
             )
 
             # For debugging empty errors
             if not str(e):
-                logger.error(
+                sync_context.logger.error(
                     f"🔍 PROCESSOR_ERROR_DETAILS [{entity_context}] "
                     f"Empty error of type {error_type}, repr: {repr(e)}"
                 )
 
             # Mark as skipped and continue
             await sync_context.progress.increment("skipped", 1)
-            logger.warning(
+            sync_context.logger.warning(
                 f"📊 PROCESSOR_SKIP_COUNT [{entity_context}] Marked as skipped due to error"
             )
 
@@ -201,7 +212,7 @@ class EntityProcessor:
         """Enrich entity with sync metadata."""
         # Check if entity needs lazy materialization
         if hasattr(entity, "needs_materialization") and entity.needs_materialization:
-            logger.info(
+            sync_context.logger.debug(
                 f"🔄 PROCESSOR_LAZY_DETECT [Entity({entity.entity_id})] "
                 f"Entity requires materialization"
             )
@@ -223,7 +234,7 @@ class EntityProcessor:
         """
         entity_context = f"Entity({entity.entity_id})"
 
-        logger.info(
+        sync_context.logger.debug(
             f"🔍 ACTION_DB_LOOKUP [{entity_context}] Looking up existing entity in database"
         )
         db_start = asyncio.get_event_loop().time()
@@ -240,38 +251,44 @@ class EntityProcessor:
         db_elapsed = asyncio.get_event_loop().time() - db_start
 
         if db_entity:
-            logger.info(
+            sync_context.logger.debug(
                 f"📋 ACTION_FOUND [{entity_context}] Found existing entity "
                 f"(DB lookup: {db_elapsed:.3f}s)"
             )
         else:
-            logger.info(
+            sync_context.logger.debug(
                 f"🆕 ACTION_NEW [{entity_context}] No existing entity found "
                 f"(DB lookup: {db_elapsed:.3f}s)"
             )
 
         # Hash computation
-        logger.info(f"🔢 ACTION_HASH_START [{entity_context}] Computing entity hash")
+        sync_context.logger.debug(f"🔢 ACTION_HASH_START [{entity_context}] Computing entity hash")
         hash_start = asyncio.get_event_loop().time()
 
         current_hash = await compute_entity_hash_async(entity)
 
         hash_elapsed = asyncio.get_event_loop().time() - hash_start
-        logger.info(f"🔢 ACTION_HASH_DONE [{entity_context}] Hash computed in {hash_elapsed:.3f}s")
+        sync_context.logger.debug(
+            f"🔢 ACTION_HASH_DONE [{entity_context}] Hash computed in {hash_elapsed:.3f}s"
+        )
 
         if db_entity:
             if db_entity.hash != current_hash:
                 action = DestinationAction.UPDATE
-                logger.info(
+                sync_context.logger.debug(
                     f"🔄 ACTION_UPDATE [{entity_context}] Hash differs "
                     f"(stored: {db_entity.hash[:8]}..., current: {current_hash[:8]}...)"
                 )
             else:
                 action = DestinationAction.KEEP
-                logger.info(f"✅ ACTION_KEEP [{entity_context}] Hash matches, no changes needed")
+                sync_context.logger.debug(
+                    f"✅ ACTION_KEEP [{entity_context}] Hash matches, no changes needed"
+                )
         else:
             action = DestinationAction.INSERT
-            logger.info(f"➕ ACTION_INSERT [{entity_context}] New entity, will insert")
+            sync_context.logger.debug(
+                f"➕ ACTION_INSERT [{entity_context}] New entity, will insert"
+            )
 
         return db_entity, action
 
@@ -285,7 +302,7 @@ class EntityProcessor:
 
         The router will create its own database session if needed.
         """
-        sync_context.logger.info(
+        sync_context.logger.debug(
             f"Starting transformation for entity {entity.entity_id} "
             f"(type: {type(entity).__name__}) from source node {source_node.id}"
         )
@@ -306,7 +323,7 @@ class EntityProcessor:
                 entity_types[entity_type] = 1
 
         type_summary = ", ".join([f"{count} {t}" for t, count in entity_types.items()])
-        sync_context.logger.info(
+        sync_context.logger.debug(
             f"Transformation complete: entity {entity.entity_id} transformed into "
             f"{len(transformed_entities)} entities ({type_summary})"
         )
@@ -352,19 +369,19 @@ class EntityProcessor:
             The entities with vector computed
         """
         if not processed_entities:
-            sync_context.logger.info("📭 VECTOR_EMPTY No entities to vectorize")
+            sync_context.logger.debug("📭 VECTOR_EMPTY No entities to vectorize")
             return []
 
         entity_context = self._get_entity_context(processed_entities)
         entity_count = len(processed_entities)
 
-        sync_context.logger.info(
+        sync_context.logger.debug(
             f"🧮 VECTOR_START [{entity_context}] Computing vectors for {entity_count} entities"
         )
 
         try:
             # Convert entities to dictionaries for embedding
-            sync_context.logger.info(
+            sync_context.logger.debug(
                 f"📦 VECTOR_CONVERT_START [{entity_context}] Converting entities to dicts"
             )
             convert_start = asyncio.get_event_loop().time()
@@ -372,13 +389,13 @@ class EntityProcessor:
             entity_dicts = await self._convert_entities_to_dicts(processed_entities, sync_context)
 
             convert_elapsed = asyncio.get_event_loop().time() - convert_start
-            sync_context.logger.info(
+            sync_context.logger.debug(
                 f"📦 VECTOR_CONVERT_DONE [{entity_context}] Converted {len(entity_dicts)} entities "
                 f"in {convert_elapsed:.3f}s"
             )
 
             # Get embeddings from the model
-            sync_context.logger.info(
+            sync_context.logger.debug(
                 f"🤖 VECTOR_EMBED_START [{entity_context}] Calling embedding model"
             )
             embed_start = asyncio.get_event_loop().time()
@@ -386,13 +403,13 @@ class EntityProcessor:
             embeddings = await self._get_embeddings(entity_dicts, sync_context, entity_context)
 
             embed_elapsed = asyncio.get_event_loop().time() - embed_start
-            sync_context.logger.info(
+            sync_context.logger.debug(
                 f"🤖 VECTOR_EMBED_DONE [{entity_context}] Got {len(embeddings)} embeddings "
                 f"in {embed_elapsed:.3f}s"
             )
 
             # Assign vectors to entities
-            sync_context.logger.info(
+            sync_context.logger.debug(
                 f"🔗 VECTOR_ASSIGN_START [{entity_context}] Assigning vectors to entities"
             )
             assign_start = asyncio.get_event_loop().time()
@@ -402,13 +419,13 @@ class EntityProcessor:
             )
 
             assign_elapsed = asyncio.get_event_loop().time() - assign_start
-            sync_context.logger.info(
+            sync_context.logger.debug(
                 f"🔗 VECTOR_ASSIGN_DONE [{entity_context}] "
                 f"Assigned vectors in {assign_elapsed:.3f}s"
             )
 
             total_elapsed = convert_elapsed + embed_elapsed + assign_elapsed
-            sync_context.logger.info(
+            sync_context.logger.debug(
                 f"✅ VECTOR_COMPLETE [{entity_context}] "
                 f"Vectorization complete in {total_elapsed:.3f}s "
                 f"(convert: {convert_elapsed:.3f}s, embed: {embed_elapsed:.3f}s, "
@@ -436,7 +453,7 @@ class EntityProcessor:
         embedding_model = sync_context.embedding_model
         entity_count = len(processed_entities)
 
-        sync_context.logger.info(
+        sync_context.logger.debug(
             f"Computing vectors for {entity_count} entities using {embedding_model.model_name}"
         )
 
@@ -446,7 +463,7 @@ class EntityProcessor:
         # avg_length = total_length / entity_count if entity_count else 0
         # max_length = max(content_lengths) if content_lengths else 0
 
-        # sync_context.logger.info(
+        # sync_context.logger.debug(
         #     f"Entity content stats: total={total_length}, "
         #     f"avg={avg_length:.2f}, max={max_length}, count={entity_count}"
         # )
@@ -503,7 +520,7 @@ class EntityProcessor:
         for i in range(0, len(processed_entities), batch_size):
             batch = processed_entities[i : i + batch_size]
 
-            sync_context.logger.info(
+            sync_context.logger.debug(
                 f"📦 CONVERT_BATCH Converting batch {i // batch_size + 1} ({len(batch)} entities)"
             )
 
@@ -540,7 +557,7 @@ class EntityProcessor:
             embeddings = await embedding_model.embed_many(entity_dicts)
 
         cpu_elapsed = loop.time() - cpu_start
-        sync_context.logger.info(
+        sync_context.logger.debug(
             f"Vector computation completed in {cpu_elapsed:.2f}s for {len(embeddings)} entities"
         )
 
@@ -569,7 +586,7 @@ class EntityProcessor:
                         continue
 
                     vector_dim = len(vector) if vector else 0
-                    sync_context.logger.info(
+                    sync_context.logger.debug(
                         f"Assigning vector of dimension {vector_dim} to "
                         f"entity {processed_entity.entity_id}"
                     )
@@ -599,16 +616,16 @@ class EntityProcessor:
         entity_context = f"Entity({parent_entity.entity_id})"
 
         if len(processed_entities) == 0:
-            logger.warning(f"📭 INSERT_EMPTY [{entity_context}] No entities to insert")
+            sync_context.logger.warning(f"📭 INSERT_EMPTY [{entity_context}] No entities to insert")
             await sync_context.progress.increment("skipped", 1)
             return
 
-        logger.info(
+        sync_context.logger.debug(
             f"➕ INSERT_START [{entity_context}] Inserting {len(processed_entities)} entities"
         )
 
         # Database insertion
-        logger.info(f"💾 INSERT_DB_START [{entity_context}] Creating database entity")
+        sync_context.logger.debug(f"💾 INSERT_DB_START [{entity_context}] Creating database entity")
         db_start = asyncio.get_event_loop().time()
 
         parent_hash = await compute_entity_hash_async(parent_entity)
@@ -623,34 +640,36 @@ class EntityProcessor:
                     entity_id=parent_entity.entity_id,
                     hash=parent_hash,
                 ),
-                auth_context=sync_context.auth_context,
+                ctx=sync_context.ctx,
             )
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
         parent_entity.db_entity_id = new_db_entity.id
-        logger.info(
+        sync_context.logger.debug(
             f"💾 INSERT_DB_DONE [{entity_context}] Database entity created in {db_elapsed:.3f}s"
         )
         # Destination insertion
-        logger.info(
+        sync_context.logger.debug(
             f"🎯 INSERT_DEST_START [{entity_context}] "
             f"Writing to {len(sync_context.destinations)} destinations"
         )
         dest_start = asyncio.get_event_loop().time()
 
         for i, destination in enumerate(sync_context.destinations):
-            logger.info(f"📤 INSERT_DEST_{i} [{entity_context}] Writing to destination {i + 1}")
+            sync_context.logger.debug(
+                f"📤 INSERT_DEST_{i} [{entity_context}] Writing to destination {i + 1}"
+            )
             await destination.bulk_insert(processed_entities)
 
         dest_elapsed = asyncio.get_event_loop().time() - dest_start
-        logger.info(
+        sync_context.logger.debug(
             f"🎯 INSERT_DEST_DONE [{entity_context}] "
             f"All destinations written in {dest_elapsed:.3f}s"
         )
 
         await sync_context.progress.increment("inserted", 1)
         total_elapsed = db_elapsed + dest_elapsed
-        logger.info(
+        sync_context.logger.debug(
             f"✅ INSERT_COMPLETE [{entity_context}] Insert complete in {total_elapsed:.3f}s"
         )
 
@@ -665,16 +684,16 @@ class EntityProcessor:
         entity_context = f"Entity({parent_entity.entity_id})"
 
         if len(processed_entities) == 0:
-            logger.warning(f"📭 UPDATE_EMPTY [{entity_context}] No entities to update")
+            sync_context.logger.warning(f"📭 UPDATE_EMPTY [{entity_context}] No entities to update")
             await sync_context.progress.increment("skipped", 1)
             return
 
-        logger.info(
+        sync_context.logger.debug(
             f"🔄 UPDATE_START [{entity_context}] Updating {len(processed_entities)} entities"
         )
 
         # Database update
-        logger.info(f"💾 UPDATE_DB_START [{entity_context}] Updating database entity")
+        sync_context.logger.debug(f"💾 UPDATE_DB_START [{entity_context}] Updating database entity")
         db_start = asyncio.get_event_loop().time()
 
         parent_hash = await compute_entity_hash_async(parent_entity)
@@ -685,21 +704,23 @@ class EntityProcessor:
                 db=db,
                 db_obj=db_entity,
                 obj_in=schemas.EntityUpdate(hash=parent_hash),
-                auth_context=sync_context.auth_context,
+                ctx=sync_context.ctx,
             )
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
         parent_entity.db_entity_id = db_entity.id
-        logger.info(f"💾 UPDATE_DB_DONE [{entity_context}] Database updated in {db_elapsed:.3f}s")
+        sync_context.logger.debug(
+            f"💾 UPDATE_DB_DONE [{entity_context}] Database updated in {db_elapsed:.3f}s"
+        )
 
         # Destination update (delete then insert)
-        logger.info(
+        sync_context.logger.debug(
             f"🗑️  UPDATE_DELETE_START [{entity_context}] Deleting old data from destinations"
         )
         delete_start = asyncio.get_event_loop().time()
 
         for i, destination in enumerate(sync_context.destinations):
-            logger.info(
+            sync_context.logger.debug(
                 f"🗑️  UPDATE_DELETE_{i} [{entity_context}] Deleting from destination {i + 1}"
             )
             await destination.bulk_delete_by_parent_id(
@@ -707,26 +728,30 @@ class EntityProcessor:
             )
 
         delete_elapsed = asyncio.get_event_loop().time() - delete_start
-        logger.info(
+        sync_context.logger.debug(
             f"🗑️  UPDATE_DELETE_DONE [{entity_context}] "
             f"All deletions complete in {delete_elapsed:.3f}s"
         )
 
-        logger.info(f"📤 UPDATE_INSERT_START [{entity_context}] Inserting new data to destinations")
+        sync_context.logger.debug(
+            f"📤 UPDATE_INSERT_START [{entity_context}] Inserting new data to destinations"
+        )
         insert_start = asyncio.get_event_loop().time()
 
         for i, destination in enumerate(sync_context.destinations):
-            logger.info(f"📤 UPDATE_INSERT_{i} [{entity_context}] Inserting to destination {i + 1}")
+            sync_context.logger.debug(
+                f"📤 UPDATE_INSERT_{i} [{entity_context}] Inserting to destination {i + 1}"
+            )
             await destination.bulk_insert(processed_entities)
 
         insert_elapsed = asyncio.get_event_loop().time() - insert_start
-        logger.info(
+        sync_context.logger.debug(
             f"✅ UPDATE_INSERT_DONE [{entity_context}] "
             f"All insertions complete in {insert_elapsed:.3f}s"
         )
 
         await sync_context.progress.increment("updated", 1)
         total_elapsed = db_elapsed + delete_elapsed + insert_elapsed
-        logger.info(
+        sync_context.logger.debug(
             f"✅ UPDATE_COMPLETE [{entity_context}] Update complete in {total_elapsed:.3f}s"
         )
