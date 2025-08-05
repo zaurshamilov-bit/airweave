@@ -5,7 +5,13 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from temporalio.client import Client, ScheduleSpec
+from temporalio.client import (
+    Client,
+    Schedule,
+    ScheduleActionStartWorkflow,
+    ScheduleSpec,
+    ScheduleState,
+)
 
 from airweave.core.logging import logger
 from airweave.crud.crud_sync import sync as sync_crud
@@ -26,6 +32,36 @@ class TemporalScheduleService:
             self._client = await temporal_client.get_client()
         return self._client
 
+    async def check_schedule_exists_and_running(self, schedule_id: str) -> dict:
+        """Check if a schedule exists and is running.
+
+        Args:
+            schedule_id: The schedule ID to check
+
+        Returns:
+            Dictionary with 'exists' and 'running' boolean flags, and schedule info if exists
+        """
+        client = await self._get_client()
+
+        try:
+            handle = client.get_schedule_handle(schedule_id)
+            desc = await handle.describe()
+
+            return {
+                "exists": True,
+                "running": not desc.schedule.state.paused,
+                "schedule_info": {
+                    "schedule_id": schedule_id,
+                    "cron_expressions": desc.schedule.spec.cron_expressions,
+                    "paused": desc.schedule.state.paused,
+                    "next_run_time": desc.schedule.state.next_run_time,
+                    "last_run_time": desc.schedule.state.last_run_time,
+                },
+            }
+        except Exception as e:
+            logger.error(f"Error checking schedule {schedule_id}: {e}")
+            return {"exists": False, "running": False, "schedule_info": None}
+
     async def create_minute_level_schedule(
         self,
         sync_id: UUID,
@@ -37,6 +73,7 @@ class TemporalScheduleService:
         source_connection_dict: dict,
         user_dict: dict,
         db: AsyncSession,
+        auth_context,
         access_token: Optional[str] = None,
     ) -> str:
         """Create a minute-level schedule for incremental sync.
@@ -51,6 +88,7 @@ class TemporalScheduleService:
             source_connection_dict: The source connection as dict
             user_dict: The current user as dict
             db: Database session
+            auth_context: Authentication context
             access_token: Optional access token
 
         Returns:
@@ -60,6 +98,22 @@ class TemporalScheduleService:
 
         # Create schedule ID using sync ID
         schedule_id = f"minute-sync-{sync_id}"
+
+        # Check if schedule already exists and is running
+        schedule_status = await self.check_schedule_exists_and_running(schedule_id)
+
+        if schedule_status["exists"]:
+            if schedule_status["running"]:
+                logger.info(
+                    f"Schedule {schedule_id} already exists and is running for sync {sync_id}"
+                )
+                return schedule_id
+            else:
+                logger.info(
+                    f"Schedule {schedule_id} exists but is paused for sync {sync_id}. "
+                    f"Returning existing schedule ID without resuming."
+                )
+                return schedule_id
 
         # Create schedule spec with cron expression
         schedule_spec = ScheduleSpec(
@@ -74,34 +128,38 @@ class TemporalScheduleService:
 
         # Create the schedule
         await client.create_schedule(
-            id=schedule_id,
-            spec=schedule_spec,
-            action=ScheduleSpec.Action.start_workflow(
-                RunSourceConnectionWorkflow.run,
-                args=[
-                    sync_dict,
-                    sync_job_dict,
-                    sync_dag_dict,
-                    collection_dict,
-                    source_connection_dict,
-                    user_dict,
-                    access_token,
-                ],
-                id=f"minute-sync-workflow-{sync_id}",
-                task_queue="airweave-task-queue",
+            schedule_id,
+            Schedule(
+                action=ScheduleActionStartWorkflow(
+                    RunSourceConnectionWorkflow.run,
+                    args=[
+                        sync_dict,
+                        sync_job_dict,
+                        sync_dag_dict,
+                        collection_dict,
+                        source_connection_dict,
+                        user_dict,
+                        access_token,
+                    ],
+                    id=f"minute-sync-workflow-{sync_id}",
+                    task_queue="airweave-task-queue",
+                ),
+                spec=schedule_spec,
+                state=ScheduleState(note=f"Minute-level sync schedule for sync {sync_id}"),
             ),
         )
 
         # Update the sync record in the database
+        sync_obj = await sync_crud.get(db=db, id=sync_id, auth_context=auth_context)
         await sync_crud.update(
             db=db,
-            db_obj_id=sync_id,
+            db_obj=sync_obj,
             obj_in={
                 "temporal_schedule_id": schedule_id,
                 "minute_level_cron_schedule": cron_expression,
                 "sync_type": "incremental",
             },
-            user_email=user_dict.get("email"),
+            auth_context=auth_context,
         )
 
         logger.info(f"Created minute-level schedule {schedule_id} for sync {sync_id}")
