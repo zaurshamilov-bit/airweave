@@ -102,6 +102,26 @@ class SyncUpdate(BaseModel):
     sync_type: Optional[str] = None
     minute_level_cron_schedule: Optional[str] = None
 
+    @field_validator("minute_level_cron_schedule")
+    def validate_minute_level_cron_schedule(cls, v: str) -> str:
+        """Validate minute-level cron schedule format for incremental syncs."""
+        if v is None:
+            return None
+        # Allow minute-level patterns like */1, */5, */15, */30
+        minute_level_pattern = r"^(\*\/[0-9]{1,2}|[0-9]{1,2}) \* \* \* \*$"
+        if not re.match(minute_level_pattern, v):
+            raise ValueError(
+                "Minute-level cron must be minute-level only (e.g., */1 * * * * for every minute)"
+            )
+        return v
+
+    @field_validator("sync_type")
+    def validate_sync_type(cls, v: str) -> str:
+        """Validate sync type."""
+        if v is not None and v not in ["full", "incremental"]:
+            raise ValueError("sync_type must be 'full' or 'incremental'")
+        return v
+
 
 class MinuteLevelScheduleConfig(BaseModel):
     """Configuration for minute-level incremental sync schedules."""
@@ -163,18 +183,35 @@ class SyncWithoutConnections(BaseModel):
     next_scheduled_run: Optional[datetime] = None
     status: SyncStatus
     sync_metadata: Optional[dict] = None
-
-    # New fields for Temporal schedules
     temporal_schedule_id: Optional[str] = None
     sync_type: str = "full"
     minute_level_cron_schedule: Optional[str] = None
-
     id: UUID
     organization_id: UUID
     created_at: datetime
     modified_at: datetime
     created_by_email: Optional[EmailStr] = None
     modified_by_email: Optional[EmailStr] = None
+
+    @field_validator("minute_level_cron_schedule")
+    def validate_minute_level_cron_schedule(cls, v: str) -> str:
+        """Validate minute-level cron schedule format for incremental syncs."""
+        if v is None:
+            return None
+        # Allow minute-level patterns like */1, */5, */15, */30
+        minute_level_pattern = r"^(\*\/[0-9]{1,2}|[0-9]{1,2}) \* \* \* \*$"
+        if not re.match(minute_level_pattern, v):
+            raise ValueError(
+                "Minute-level cron must be minute-level only (e.g., */1 * * * * for every minute)"
+            )
+        return v
+
+    @field_validator("sync_type")
+    def validate_sync_type(cls, v: str) -> str:
+        """Validate sync type."""
+        if v not in ["full", "incremental"]:
+            raise ValueError("sync_type must be 'full' or 'incremental'")
+        return v
 
     class Config:
         """Pydantic config."""
