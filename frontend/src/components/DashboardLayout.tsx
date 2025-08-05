@@ -15,7 +15,9 @@ import {
   ExternalLink,
   LayoutGrid,
   Home,
-  Shield
+  Shield,
+  Github,  // Add Github icon
+  FileText // Change from Book to FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -342,6 +344,18 @@ const DashboardLayout = () => {
               <header className={`h-16 sticky top-0 pr-2 backdrop-blur-sm z-10 ${resolvedTheme === 'dark' ? 'bg-background/80' : 'bg-background/95'} border-b border-border/30`}>
                 <div className="flex justify-end items-center h-full px-6">
                   <nav className="flex items-center space-x-4">
+                    {/* GitHub icon */}
+                    <a
+                      href="https://github.com/airweave-ai/airweave"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-lg transition-all duration-200"
+                    >
+                      <Github size={20} className="text-muted-foreground" />
+                    </a>
+
+
+
                     {/* Discord icon */}
                     <a
                       href="https://discord.com/invite/484HY9Ehxt"
@@ -350,6 +364,16 @@ const DashboardLayout = () => {
                       className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-lg transition-all duration-200"
                     >
                       <DiscordIcon size={20} />
+                    </a>
+
+                    {/* Docs icon */}
+                    <a
+                      href="https://docs.airweave.ai/welcome"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-lg transition-all duration-200"
+                    >
+                      <FileText size={20} className="text-muted-foreground" />
                     </a>
 
                     {/* Get a demo button */}
@@ -362,7 +386,7 @@ const DashboardLayout = () => {
                         variant="outline"
                         className="hidden md:flex border-primary/60 border-[1px] text-primary/90 hover:bg-primary/10 hover:text-foreground/65 h-9 px-4 text-sm rounded-lg transition-all duration-200 hover:shadow-sm"
                       >
-                        Get a demo
+                        Talk to a Founder
                       </Button>
                     </a>
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-import { Copy, Eye, Key, Plus, ExternalLink, FileText, Github } from "lucide-react";
+import { Copy, Eye, Key, Plus, ExternalLink, FileText, Github, Code, Sparkles, TrendingUp, Search, Package } from "lucide-react";
 import { useNavigate, Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useTheme } from "@/lib/theme-provider";
@@ -227,17 +227,66 @@ const Dashboard = () => {
             onRequestNewKey={handleRequestNewKey}
           />
 
-          {/* Example Projects Card */}
-          <ExampleProjectCard
-            id="how-to-use-api"
-            title="How to use our API"
-            description="Learn how to create collections, add sources, and search through your data using the Airweave SDK"
-            icon={<FileText className="h-5 w-5 text-primary" />}
-            onClick={() => {
-              // Open the notebook on GitHub
-              window.open('https://github.com/airweave-ai/airweave/blob/main/examples/how-to-use-our-api.ipynb', '_blank');
-            }}
-          />
+          {/* Example Projects Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Learn & Explore</h3>
+            <div className="space-y-3">
+              <ExampleProjectCard
+                id="how-to-use-the-api"
+                title="How to use the Airweave API"
+                description="Learn to use the API to transform data from an app into a searchable knowledge base in a few steps."
+                tags={["Jupyter Notebook", "Python"]}
+                icon={<Github className="h-5 w-5 text-primary" />}
+                onClick={() => {
+                  window.open('https://github.com/airweave-ai/airweave/blob/feat/main/examples/01_how-to-use-our-api.ipynb', '_blank');
+                }}
+              />
+
+              <ExampleProjectCard
+                id="mcp-server"
+                title="MCP Server Integration"
+                description="Serve your Airweave collection over an MCP server so clients like Cursor or Claude can query it."
+                tags={["Documentation"]}
+                icon={<FileText className="h-5 w-5 text-primary" />}
+                onClick={() => {
+                  window.open('https://docs.airweave.ai/mcp-server', '_blank');
+                }}
+              />
+
+              <ExampleProjectCard
+                id="advanced-search-with-filters"
+                title="Advanced Search with Filters"
+                description="Learn to use search with metadata filtering to find what you need across all your connected data sources."
+                tags={["Jupyter Notebook", "Python"]}
+                icon={<Github className="h-5 w-5 text-primary" />}
+                onClick={() => {
+                  window.open('https://github.com/airweave-ai/airweave/blob/main/examples/02_advanced_search_with_filters.ipynb', '_blank');
+                }}
+              />
+
+              <ExampleProjectCard
+                id="auth-providers"
+                title="Authentication Providers"
+                description="Reuse existing connections from third-party platforms instead of requiring users to authenticate again."
+                tags={["Documentation"]}
+                icon={<FileText className="h-5 w-5 text-primary" />}
+                onClick={() => {
+                  window.open('https://docs.airweave.ai/auth-providers', '_blank');
+                }}
+              />
+
+              <ExampleProjectCard
+                id="white-label"
+                title="White Label Integration"
+                description="Create OAuth2 integrations where customers see your company name instead of Airweave."
+                tags={["Documentation"]}
+                icon={<FileText className="h-5 w-5 text-primary" />}
+                onClick={() => {
+                  window.open('https://docs.airweave.ai/white-label', '_blank');
+                }}
+              />
+            </div>
+          </div>
 
         </div>
       </div>
