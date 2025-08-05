@@ -526,13 +526,13 @@ class SyncService:
         await db.refresh(collection)
         await db.refresh(source_connection)
 
-        sync_dict = schemas.Sync.model_validate(sync).model_dump()
-        sync_job_dict = schemas.SyncJob.model_validate(sync_job).model_dump()
-        dag_dict = schemas.SyncDag.model_validate(dag).model_dump()
-        collection_dict = schemas.Collection.model_validate(collection).model_dump()
+        sync_dict = schemas.Sync.model_validate(sync).model_dump(mode="json")
+        sync_job_dict = schemas.SyncJob.model_validate(sync_job).model_dump(mode="json")
+        dag_dict = schemas.SyncDag.model_validate(dag).model_dump(mode="json")
+        collection_dict = schemas.Collection.model_validate(collection).model_dump(mode="json")
         source_connection_dict = schemas.SourceConnection.model_validate(
             source_connection
-        ).model_dump()
+        ).model_dump(mode="json")
         user_dict = {"email": auth_context.user.email}
 
         try:
@@ -547,6 +547,7 @@ class SyncService:
                 source_connection_dict=source_connection_dict,
                 user_dict=user_dict,
                 db=db,
+                auth_context=auth_context,
             )
 
             return schemas.ScheduleResponse(
