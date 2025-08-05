@@ -533,7 +533,11 @@ class SyncService:
         source_connection_dict = schemas.SourceConnection.model_validate(
             source_connection
         ).model_dump(mode="json")
-        user_dict = {"email": auth_context.user.email}
+        user_dict = {
+            "email": auth_context.user.email,
+            "organization_id": auth_context.organization_id,
+            "auth_method": auth_context.auth_method,
+        }
 
         try:
             # Create the Temporal schedule
@@ -608,7 +612,11 @@ class SyncService:
                 "Sync does not have a minute-level schedule to update"
             )
 
-        user_dict = {"email": auth_context.user.email}
+        user_dict = {
+            "email": auth_context.user.email,
+            "organization_id": auth_context.organization_id,
+            "auth_method": auth_context.auth_method,
+        }
 
         try:
             # Update the Temporal schedule
@@ -657,7 +665,11 @@ class SyncService:
         if not sync.temporal_schedule_id:
             raise ScheduleNotExistsException("Sync does not have a minute-level schedule to pause")
 
-        user_dict = {"email": auth_context.user.email}
+        user_dict = {
+            "email": auth_context.user.email,
+            "organization_id": auth_context.organization_id,
+            "auth_method": auth_context.auth_method,
+        }
 
         try:
             await temporal_schedule_service.pause_schedule(
@@ -704,7 +716,11 @@ class SyncService:
         if not sync.temporal_schedule_id:
             raise ScheduleNotExistsException("Sync does not have a minute-level schedule to resume")
 
-        user_dict = {"email": auth_context.user.email}
+        user_dict = {
+            "email": auth_context.user.email,
+            "organization_id": auth_context.organization_id,
+            "auth_method": auth_context.auth_method,
+        }
 
         try:
             await temporal_schedule_service.resume_schedule(
@@ -751,7 +767,11 @@ class SyncService:
         if not sync.temporal_schedule_id:
             raise ScheduleNotExistsException("Sync does not have a minute-level schedule to delete")
 
-        user_dict = {"email": auth_context.user.email}
+        user_dict = {
+            "email": auth_context.user.email,
+            "organization_id": auth_context.organization_id,
+            "auth_method": auth_context.auth_method,
+        }
 
         try:
             await temporal_schedule_service.delete_schedule(
