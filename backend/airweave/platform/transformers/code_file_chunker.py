@@ -6,7 +6,7 @@ from typing import List
 
 from chonkie import CodeChunker, SemanticChunker
 
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger
 from airweave.platform.decorators import transformer
 from airweave.platform.entities._base import CodeFileEntity
 from airweave.platform.transformers.utils import (
@@ -47,7 +47,7 @@ def get_shared_code_chunker(chunk_size_limit: int):
 
 
 @transformer(name="Code File Chunker")
-async def code_file_chunker(file: CodeFileEntity) -> List[CodeFileEntity]:
+async def code_file_chunker(file: CodeFileEntity, logger: ContextualLogger) -> List[CodeFileEntity]:
     """Chunk a code file.
 
     This transformer:
@@ -57,28 +57,29 @@ async def code_file_chunker(file: CodeFileEntity) -> List[CodeFileEntity]:
 
     Args:
         file: The CodeFileEntity to process
+        logger: The logger to use
 
     Returns:
         List[CodeFileEntity]: The processed chunks
     """
-    logger.info(f"Starting code file chunker for file: {file.name} (file_id: {file.file_id})")
+    logger.debug(f"Starting code file chunker for file: {file.name} (file_id: {file.file_id})")
 
     # If file.content is None, return empty list
     if file.content is None:
-        logger.warning(f"File content is None for {file.name}, returning empty list")
+        logger.debug(f"File content is None for {file.name}, returning empty list")
         return []
 
     # Count tokens in just the content (not the entire entity)
     content_token_count = count_tokens(file.content)
     chunk_size_limit = MAX_CHUNK_SIZE - METADATA_SIZE  # Leave room for metadata
-    logger.info(
+    logger.debug(
         f"File {file.name} content has {content_token_count} tokens, "
         f"chunk limit is {chunk_size_limit}"
     )
 
     # If the content is small enough to fit in one chunk, return it as is
     if content_token_count <= chunk_size_limit:
-        logger.info(
+        logger.debug(
             f"File {file.name} content is small enough ({content_token_count} tokens), "
             f"no chunking needed"
         )
@@ -87,15 +88,15 @@ async def code_file_chunker(file: CodeFileEntity) -> List[CodeFileEntity]:
     # Check if this is a text file by extension
     file_extension = os.path.splitext(file.name)[1].lower().lstrip(".")
     is_text_file = file_extension in ["txt", "text", "csv"]
-    logger.info(f"File {file.name} has extension {file_extension}, is_text_file={is_text_file}")
+    logger.debug(f"File {file.name} has extension {file_extension}, is_text_file={is_text_file}")
 
     if is_text_file:
-        logger.info(f"Using semantic chunker for text file {file.name}")
+        logger.debug(f"Using semantic chunker for text file {file.name}")
         semantic_chunker = get_shared_semantic_chunker(chunk_size_limit)  # Use shared
         chunks = semantic_chunker.chunk(file.content)
         logger.debug(f"Semantic chunker produced {len(chunks)} chunks")
     else:
-        logger.info(f"Using code chunker for code file {file.name}")
+        logger.debug(f"Using code chunker for code file {file.name}")
         code_chunker = get_shared_code_chunker(chunk_size_limit)  # Use shared
         chunks = code_chunker.chunk(file.content)
         logger.debug(f"Code chunker produced {len(chunks)} chunks")
@@ -109,7 +110,7 @@ async def code_file_chunker(file: CodeFileEntity) -> List[CodeFileEntity]:
     # Create a new CodeFileEntity for each chunk
     chunked_files = []
     total_chunks = len(chunks)
-    logger.info(f"Creating {total_chunks} chunked entities for {file.name}")
+    logger.debug(f"Creating {total_chunks} chunked entities for {file.name}")
 
     for idx, chunk in enumerate(chunks):
         # Create a deep copy of the original file
@@ -143,5 +144,5 @@ async def code_file_chunker(file: CodeFileEntity) -> List[CodeFileEntity]:
 
         chunked_files.append(chunked_file)
 
-    logger.info(f"Completed chunking {file.name} into {len(chunked_files)} chunks")
+    logger.debug(f"Completed chunking {file.name} into {len(chunked_files)} chunks")
     return chunked_files

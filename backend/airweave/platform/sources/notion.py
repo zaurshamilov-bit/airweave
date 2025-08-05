@@ -1260,12 +1260,12 @@ class NotionSource(BaseSource):
         try:
             # Create stream without access token for pre-signed URLs
             file_stream = file_manager.stream_file_from_url(
-                file_entity.download_url, access_token=None, headers=None
+                file_entity.download_url, access_token=None, headers=None, logger=self.logger
             )
 
             # Process entity directly with the file manager
             processed_entity = await file_manager.handle_file_entity(
-                stream=file_stream, entity=file_entity
+                stream=file_stream, entity=file_entity, logger=self.logger
             )
 
             # Skip if file was too large

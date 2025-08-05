@@ -161,7 +161,7 @@ class SyncOrchestrator:
             # Check for exceptions in completed tasks
             for task in done:
                 if not task.cancelled() and task.exception():
-                    self.sync_context.logger.error(
+                    self.sync_context.logger.warning(
                         f"Task failed with exception: {task.exception()}"
                     )
 

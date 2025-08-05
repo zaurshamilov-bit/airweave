@@ -11,7 +11,6 @@ from airweave import crud
 from airweave.api import deps
 from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
-from airweave.core.logging import logger
 from airweave.platform.storage import storage_manager
 
 router = TrailingSlashRouter()
@@ -34,7 +33,7 @@ async def verify_picnic_health_access(
         # Get the organization details for logging
         organization = await crud.organization.get(db=db, id=ctx.organization_id, ctx=ctx)
 
-        logger.warning(
+        ctx.logger.warning(
             f"File access denied for organization: "
             f"{organization.name if organization else 'Unknown'} "
             f"(ID: {ctx.organization_id})",
@@ -76,7 +75,9 @@ async def download_file(
     try:
         # Download to temp file
         content, file_path = await storage_manager.download_ctti_file(
-            entity_id, output_path=f"/tmp/{entity_id.replace(':', '_').replace('/', '_')}.md"
+            ctx.logger,
+            entity_id,
+            output_path=f"/tmp/{entity_id.replace(':', '_').replace('/', '_')}.md",
         )
 
         if content is None:
@@ -97,7 +98,7 @@ async def download_file(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
-        logger.error(f"Error downloading file: {e}")
+        ctx.logger.error(f"Error downloading file: {e}")
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
@@ -125,7 +126,7 @@ async def get_file_content(
     await verify_picnic_health_access(ctx, db)
 
     try:
-        content = await storage_manager.get_ctti_file_content(entity_id)
+        content = await storage_manager.get_ctti_file_content(ctx.logger, entity_id)
 
         if content is None:
             raise HTTPException(
@@ -147,7 +148,7 @@ async def get_file_content(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting file content: {e}")
+        ctx.logger.error(f"Error getting file content: {e}")
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
@@ -183,7 +184,7 @@ async def download_files_batch(
     try:
         # Download all files
         results = await storage_manager.download_ctti_files_batch(
-            entity_ids, continue_on_error=True
+            ctx.logger, entity_ids, continue_on_error=True
         )
 
         # Filter successful downloads
@@ -211,7 +212,7 @@ async def download_files_batch(
         zip_buffer.seek(0)
 
         # Log summary
-        logger.info(
+        ctx.logger.info(
             f"Batch download completed: {len(successful_downloads)}/{len(entity_ids)} files",
             extra={
                 "requested": len(entity_ids),
@@ -231,7 +232,7 @@ async def download_files_batch(
         )
 
     except Exception as e:
-        logger.error(f"Error in batch download: {e}")
+        ctx.logger.error(f"Error in batch download: {e}")
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
@@ -267,10 +268,10 @@ async def check_files_exist(
 
     for entity_id in entity_ids:
         try:
-            exists = await storage_manager.check_ctti_file_exists(entity_id)
+            exists = await storage_manager.check_ctti_file_exists(ctx.logger, entity_id)
             results[entity_id] = exists
         except Exception as e:
-            logger.warning(f"Error checking file {entity_id}: {e}")
+            ctx.logger.warning(f"Error checking file {entity_id}: {e}")
             results[entity_id] = False
 
     return {

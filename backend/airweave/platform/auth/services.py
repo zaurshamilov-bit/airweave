@@ -14,7 +14,7 @@ from airweave.api.context import ApiContext
 from airweave.core import credentials
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException, TokenRefreshError
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger
 from airweave.core.shared_models import ConnectionStatus
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.integration_credential import IntegrationType
@@ -25,10 +25,6 @@ from airweave.platform.auth.schemas import (
     OAuth2TokenResponse,
 )
 from airweave.platform.auth.settings import integration_settings
-
-oauth2_service_logger = logger.with_prefix("OAuth2 Service: ").with_context(
-    component="oauth2_service"
-)
 
 
 class OAuth2Service:
@@ -73,6 +69,7 @@ class OAuth2Service:
 
     @staticmethod
     async def exchange_authorization_code_for_token(
+        ctx: ApiContext,
         source_short_name: str,
         code: str,
         client_id: Optional[str] = None,
@@ -82,6 +79,7 @@ class OAuth2Service:
 
         Args:
         ----
+            ctx (ApiContext): The API context.
             source_short_name (str): The short name of the integration source.
             code (str): The authorization code to exchange.
             client_id (Optional[str]): Optional client ID to override the default.
@@ -109,6 +107,7 @@ class OAuth2Service:
             client_secret = oauth2_settings.client_secret
 
         return await OAuth2Service._exchange_code(
+            logger=ctx.logger,
             code=code,
             redirect_uri=redirect_uri,
             client_id=client_id,
@@ -151,15 +150,17 @@ class OAuth2Service:
         """
         try:
             # Get and validate refresh token
-            refresh_token = await OAuth2Service._get_refresh_token(decrypted_credential)
+            refresh_token = await OAuth2Service._get_refresh_token(ctx.logger, decrypted_credential)
 
             # Get and validate integration config
-            integration_config = await OAuth2Service._get_integration_config(integration_short_name)
+            integration_config = await OAuth2Service._get_integration_config(
+                ctx.logger, integration_short_name
+            )
 
             # Get client credentials
             # TODO: this is the only place we need to check the db for client credentials
             client_id, client_secret = await OAuth2Service._get_client_credentials(
-                integration_config, None, decrypted_credential
+                ctx.logger, integration_config, None, decrypted_credential
             )
 
             # Override with white label credentials if available
@@ -169,12 +170,12 @@ class OAuth2Service:
 
             # Prepare request parameters
             headers, payload = OAuth2Service._prepare_token_request(
-                integration_config, refresh_token, client_id, client_secret
+                ctx.logger, integration_config, refresh_token, client_id, client_secret
             )
 
             # Make request and handle response
             response = await OAuth2Service._make_token_request(
-                integration_config.backend_url, headers, payload
+                ctx.logger, integration_config.backend_url, headers, payload
             )
 
             # Handle rotating refresh tokens if needed
@@ -185,18 +186,19 @@ class OAuth2Service:
             return oauth2_token_response
 
         except Exception as e:
-            oauth2_service_logger.error(
+            ctx.logger.error(
                 f"Token refresh failed for organization {ctx.organization_id} and "
                 f"integration {integration_short_name}: {str(e)}"
             )
             raise
 
     @staticmethod
-    async def _get_refresh_token(decrypted_credential: dict) -> str:
+    async def _get_refresh_token(logger: ContextualLogger, decrypted_credential: dict) -> str:
         """Get refresh token from decrypted credentials.
 
         Args:
         ----
+            logger (ContextualLogger): The logger to use.
             decrypted_credential (dict): The decrypted credentials containing the refresh token.
 
         Returns:
@@ -210,18 +212,20 @@ class OAuth2Service:
         refresh_token = decrypted_credential.get("refresh_token", None)
         if not refresh_token:
             error_message = "No refresh token found"
-            oauth2_service_logger.error(error_message)
+            logger.error(error_message)
             raise TokenRefreshError(error_message)
         return refresh_token
 
     @staticmethod
     async def _get_integration_config(
+        logger: ContextualLogger,
         integration_short_name: str,
     ) -> schemas.Source | schemas.Destination | schemas.EmbeddingModel:
         """Get and validate integration configuration exists.
 
         Args:
         ----
+            logger (ContextualLogger): The logger to use.
             integration_short_name (str): The short name of the integration.
 
         Returns:
@@ -237,12 +241,13 @@ class OAuth2Service:
         integration_config = await integration_settings.get_by_short_name(integration_short_name)
         if not integration_config:
             error_message = f"Configuration for {integration_short_name} not found"
-            oauth2_service_logger.error(error_message)
+            logger.error(error_message)
             raise NotFoundException(error_message)
         return integration_config
 
     @staticmethod
     async def _get_client_credentials(
+        logger: ContextualLogger,
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
         auth_fields: Optional[dict] = None,
         decrypted_credential: Optional[dict] = None,
@@ -251,6 +256,7 @@ class OAuth2Service:
 
         Args:
         ----
+            logger (ContextualLogger): The logger to use.
             integration_config: The integration configuration.
             auth_fields: Optional additional authentication fields for the connection.
             decrypted_credential: Optional decrypted credentials that may contain client ID/secret.
@@ -281,6 +287,7 @@ class OAuth2Service:
 
     @staticmethod
     def _prepare_token_request(
+        logger: ContextualLogger,
         integration_config: schemas.Source | schemas.Destination | schemas.EmbeddingModel,
         refresh_token: str,
         client_id: str,
@@ -290,6 +297,7 @@ class OAuth2Service:
 
         Args:
         ----
+            logger (ContextualLogger): The logger to use.
             integration_config (schemas.Source | schemas.Destination | schemas.EmbeddingModel):
                 The integration configuration.
             refresh_token (str): The refresh token.
@@ -318,7 +326,7 @@ class OAuth2Service:
             payload["client_secret"] = client_secret
 
         # Log the request details for debugging
-        oauth2_service_logger.info(
+        logger.info(
             f"OAuth2 code exchange request - "
             f"URL: {integration_config.backend_url}, "
             f"Redirect URI: {integration_config.backend_url}, "
@@ -331,32 +339,24 @@ class OAuth2Service:
         return headers, payload
 
     @staticmethod
-    async def _make_token_request(url: str, headers: dict, payload: dict) -> httpx.Response:
+    async def _make_token_request(
+        logger: ContextualLogger, url: str, headers: dict, payload: dict
+    ) -> httpx.Response:
         """Make the token refresh request."""
-        oauth2_service_logger.info(f"Making token request to: {url}")
+        logger.info(f"Making token request to: {url}")
 
         try:
             async with httpx.AsyncClient() as client:
-                oauth2_service_logger.info(f"Sending POST request with data: {payload}")
+                logger.info(f"Sending request to {url}")
                 response = await client.post(url, headers=headers, data=payload)
 
-                oauth2_service_logger.info(
-                    f"Received response: Status {response.status_code}, "
-                    f"Headers: {dict(response.headers)}"
-                )
-
-                # Log response body for debugging
-                try:
-                    response_json = response.json()
-                    oauth2_service_logger.info(f"Response body: {response_json}")
-                except Exception:
-                    oauth2_service_logger.info(f"Response body (not JSON): {response.text}")
+                logger.info(f"Received response: Status {response.status_code}, ")
 
                 response.raise_for_status()
                 return response
 
         except httpx.HTTPStatusError as e:
-            oauth2_service_logger.error(
+            logger.error(
                 f"HTTP error during token request: {e.response.status_code} "
                 f"{e.response.reason_phrase}"
             )
@@ -364,13 +364,13 @@ class OAuth2Service:
             # Try to log the error response
             try:
                 error_content = e.response.json()
-                oauth2_service_logger.error(f"Error response body: {error_content}")
+                logger.error(f"Error response body: {error_content}")
             except Exception:
-                oauth2_service_logger.error(f"Error response text: {e.response.text}")
+                logger.error(f"Error response text: {e.response.text}")
 
             raise
         except Exception as e:
-            oauth2_service_logger.error(f"Unexpected error during token request: {str(e)}")
+            logger.error(f"Unexpected error during token request: {str(e)}")
             raise
 
     @staticmethod
@@ -386,6 +386,7 @@ class OAuth2Service:
         Args:
         ----
             db (AsyncSession): The database session.
+            logger (ContextualLogger): The logger to use.
             response (httpx.Response): The response from the token refresh request.
             integration_config (schemas.Source | schemas.Destination | schemas.EmbeddingModel):
                 The integration configuration.
@@ -494,6 +495,7 @@ class OAuth2Service:
 
     @staticmethod
     async def exchange_code_for_whitelabel(
+        logger: ContextualLogger,
         code: str,
         white_label: schemas.WhiteLabel,
     ) -> OAuth2TokenResponse:
@@ -501,6 +503,7 @@ class OAuth2Service:
 
         Args:
         ----
+            logger: The logger to use.
             code: The authorization code to exchange
             white_label: The white label configuration to use
 
@@ -531,6 +534,7 @@ class OAuth2Service:
     @staticmethod
     async def _exchange_code(
         *,
+        logger: ContextualLogger,
         code: str,
         redirect_uri: str,
         client_id: str,
@@ -541,6 +545,7 @@ class OAuth2Service:
 
         Args:
         ----
+            logger: The logger to use.
             code: The authorization code to exchange
             redirect_uri: The redirect URI used in the authorization request
             client_id: The OAuth2 client ID
@@ -573,7 +578,7 @@ class OAuth2Service:
             payload["client_secret"] = client_secret
 
         # Log the request details for debugging
-        oauth2_service_logger.info(
+        logger.info(
             f"OAuth2 code exchange request - "
             f"URL: {integration_config.backend_url}, "
             f"Redirect URI: {redirect_uri}, "
@@ -591,13 +596,13 @@ class OAuth2Service:
                 response.raise_for_status()
         except httpx.HTTPStatusError as e:
             # Log the actual error response from the OAuth provider
-            oauth2_service_logger.error(
+            logger.error(
                 f"OAuth2 token exchange failed - Status: {e.response.status_code}, "
                 f"Response text: {e.response.text}"
             )
             raise HTTPException(status_code=400, detail=e.response.text) from e
         except Exception as e:
-            oauth2_service_logger.error(f"Failed to exchange authorization code: {str(e)}")
+            logger.error(f"Failed to exchange authorization code: {str(e)}")
             raise HTTPException(
                 status_code=400, detail="Failed to exchange authorization code"
             ) from e
@@ -637,7 +642,7 @@ class OAuth2Service:
 
         # Exchange code for token using white label credentials
         oauth2_response = await OAuth2Service.exchange_code_for_whitelabel(
-            code=code, white_label=white_label
+            ctx.logger, code=code, white_label=white_label
         )
 
         return await OAuth2Service._create_connection(

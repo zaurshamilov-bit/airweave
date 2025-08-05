@@ -8,7 +8,7 @@ from uuid import uuid4
 import aiofiles
 import httpx
 
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger
 from airweave.platform.entities._base import FileEntity
 from airweave.platform.storage import storage_manager
 
@@ -29,6 +29,7 @@ class FileManager:
         self,
         stream: AsyncIterator[bytes],
         entity: FileEntity,
+        logger: ContextualLogger,
         max_size: int = 1024 * 1024 * 1024,  # 1GB limit
     ) -> FileEntity:
         """Process a file entity by saving its stream and enriching the entity.
@@ -45,6 +46,7 @@ class FileManager:
         Args:
             stream: An async iterator yielding file chunks
             entity: The file entity to process
+            logger: The logger to use
             max_size: Maximum allowed file size in bytes (default: 1GB)
 
         Returns:
@@ -60,20 +62,22 @@ class FileManager:
         is_ctti = storage_manager._is_ctti_entity(entity)
 
         if is_ctti:
-            logger.info(
+            logger.debug(
                 f"🏥 FILE_CTTI Detected CTTI entity, using global deduplication "
                 f"(entity_id: {entity.entity_id})"
             )
 
         # Check if file exists in storage (but still process it)
-        cached_entity = await self._get_cached_entity(entity, is_ctti)
+        cached_entity = await self._get_cached_entity(entity, is_ctti, logger)
         if cached_entity:
             return cached_entity
 
         # File not in cache, download from source
-        return await self._download_and_store_entity(entity, stream, max_size, is_ctti)
+        return await self._download_and_store_entity(entity, stream, max_size, is_ctti, logger)
 
-    async def _get_cached_entity(self, entity: FileEntity, is_ctti: bool) -> Optional[FileEntity]:
+    async def _get_cached_entity(
+        self, entity: FileEntity, is_ctti: bool, logger: ContextualLogger
+    ) -> Optional[FileEntity]:
         """Get cached entity if it exists in storage."""
         # Check if file exists in storage (but not fully processed)
         # Note: CTTI files are handled differently by web_fetcher,
@@ -84,7 +88,7 @@ class FileManager:
             )
 
             if cached_path:
-                logger.info(
+                logger.debug(
                     f"File found in storage cache, using cached version "
                     f"(entity_id: {entity.entity_id}, sync_id: {entity.sync_id}, "
                     f"cached_path: {cached_path})"
@@ -111,6 +115,7 @@ class FileManager:
         stream: AsyncIterator[bytes],
         max_size: int,
         is_ctti: bool,
+        logger: ContextualLogger,
     ) -> FileEntity:
         """Download entity from source and store in persistent storage."""
         file_uuid = uuid4()
@@ -118,16 +123,20 @@ class FileManager:
         temp_path = os.path.join(self.base_temp_dir, f"{file_uuid}-{safe_filename}")
 
         try:
-            downloaded_size = await self._download_file_stream(entity, stream, temp_path, max_size)
+            downloaded_size = await self._download_file_stream(
+                entity, stream, temp_path, max_size, logger
+            )
 
             if entity.should_skip:
                 return entity
 
             # Calculate checksum and update entity
-            await self._update_entity_metadata(entity, temp_path, file_uuid, downloaded_size)
+            await self._update_entity_metadata(
+                entity, temp_path, file_uuid, downloaded_size, logger
+            )
 
             # Store in persistent storage for future use
-            await self._store_entity_in_storage(entity, temp_path, is_ctti)
+            await self._store_entity_in_storage(entity, temp_path, is_ctti, logger)
 
             # IMPORTANT: Keep temp file for processing - chunker will clean it up
 
@@ -148,6 +157,7 @@ class FileManager:
         stream: AsyncIterator[bytes],
         temp_path: str,
         max_size: int,
+        logger: ContextualLogger,
     ) -> int:
         """Download file stream to temporary path."""
         downloaded_size = 0
@@ -157,7 +167,7 @@ class FileManager:
             if len(entity.download_url) > 100
             else entity.download_url
         )
-        logger.info(
+        logger.debug(
             f"Downloading file from source (entity_id: {entity.entity_id}, "
             f"name: {entity.name}, url: {url_display})"
         )
@@ -172,7 +182,7 @@ class FileManager:
                 # Safety check to skip files exceeding max size
                 if downloaded_size > max_size:
                     await self._handle_oversized_file(
-                        entity, f, temp_path, max_size, downloaded_size
+                        entity, f, temp_path, max_size, downloaded_size, logger
                     )
                     return downloaded_size
 
@@ -181,7 +191,7 @@ class FileManager:
                 # Log progress for large files
                 if entity.total_size and entity.total_size > 10 * 1024 * 1024:  # 10MB
                     progress = (downloaded_size / entity.total_size) * 100
-                    logger.info(
+                    logger.debug(
                         f"Download progress for {entity.name}: {progress:.1f}% "
                         f"({downloaded_size}/{entity.total_size} bytes)"
                     )
@@ -195,6 +205,7 @@ class FileManager:
         temp_path: str,
         max_size: int,
         downloaded_size: int,
+        logger: ContextualLogger,
     ) -> None:
         """Handle files that exceed the maximum size limit."""
         max_size_gb = max_size / (1024 * 1024 * 1024)
@@ -221,7 +232,12 @@ class FileManager:
         entity.should_skip = True
 
     async def _update_entity_metadata(
-        self, entity: FileEntity, temp_path: str, file_uuid, downloaded_size: int
+        self,
+        entity: FileEntity,
+        temp_path: str,
+        file_uuid,
+        downloaded_size: int,
+        logger: ContextualLogger,
     ) -> None:
         """Update entity with file metadata."""
         with open(temp_path, "rb") as f:
@@ -231,14 +247,14 @@ class FileManager:
             entity.file_uuid = file_uuid
             entity.total_size = downloaded_size
 
-        logger.info(
+        logger.debug(
             f"File downloaded successfully (entity_id: {entity.entity_id}, "
             f"local_path: {temp_path}, size: {downloaded_size}, "
             f"checksum: {entity.checksum[:8]}...)"
         )
 
     async def _store_entity_in_storage(
-        self, entity: FileEntity, temp_path: str, is_ctti: bool
+        self, entity: FileEntity, temp_path: str, is_ctti: bool, logger: ContextualLogger
     ) -> None:
         """Store entity in persistent storage."""
         # Note: CTTI files are handled by web_fetcher, not here
@@ -246,12 +262,12 @@ class FileManager:
             with open(temp_path, "rb") as f:
                 entity = await storage_manager.store_file_entity(entity, f)
 
-            logger.info(
+            logger.debug(
                 f"File stored in persistent storage (entity_id: {entity.entity_id}, "
                 f"sync_id: {entity.sync_id}, storage_blob_name: {entity.storage_blob_name})"
             )
         elif is_ctti:
-            logger.info(
+            logger.debug(
                 f"🏥 FILE_CTTI_SKIP_STORE Skipping storage for CTTI file "
                 f"(handled by web_fetcher) (entity_id: {entity.entity_id})"
             )
@@ -266,6 +282,7 @@ class FileManager:
     async def stream_file_from_url(
         self,
         url: str,
+        logger: ContextualLogger,
         access_token: Optional[str] = None,
         headers: Optional[Dict[str, str]] = None,
     ) -> AsyncGenerator[bytes, None]:
@@ -302,7 +319,9 @@ class FileManager:
 file_manager = FileManager()
 
 
-async def handle_file_entity(file_entity: FileEntity, stream: AsyncIterator[bytes]) -> FileEntity:
+async def handle_file_entity(
+    file_entity: FileEntity, stream: AsyncIterator[bytes], logger: ContextualLogger
+) -> FileEntity:
     """Utility function to handle a file entity with its stream.
 
     This is a convenience function that can be used directly in source implementations.
@@ -310,8 +329,9 @@ async def handle_file_entity(file_entity: FileEntity, stream: AsyncIterator[byte
     Args:
         file_entity: The file entity
         stream: The file stream
+        logger: The logger to use
 
     Returns:
         The processed entity
     """
-    return await file_manager.handle_file_entity(stream, file_entity)
+    return await file_manager.handle_file_entity(stream, file_entity, logger)

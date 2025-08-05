@@ -328,7 +328,7 @@ airweave-mcp-search`;
                         <h2 className="text-xl font-medium text-foreground">
                             Query your collection
                             <a
-                                href="https://docs.airweave.ai/search"
+                                href="https://docs.airweave.ai/search/concepts"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className={cn(
