@@ -558,6 +558,22 @@ class SyncService:
 
         except Exception as e:
             logger.error(f"Failed to create minute-level schedule for sync {sync_id}: {e}")
+            # Check if the error is because schedule already exists
+            if "Schedule already running" in str(e):
+                # Get the existing schedule info
+                existing_schedule = await temporal_schedule_service.get_sync_schedule_info(
+                    sync_id=sync_id, db=db, auth_context=auth_context
+                )
+                if existing_schedule:
+                    return schemas.ScheduleResponse(
+                        schedule_id=existing_schedule.get("schedule_id", "unknown"),
+                        status="exists",
+                        message=(
+                            f"Schedule already exists with cron: "
+                            f"{existing_schedule.get('cron_expressions', [cron_expression])[0]}"
+                        ),
+                    )
+
             raise MinuteLevelScheduleException(
                 f"Failed to create minute-level schedule: {str(e)}"
             ) from e
