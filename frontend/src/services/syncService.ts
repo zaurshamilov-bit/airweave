@@ -23,6 +23,9 @@ export interface ScheduleResponse {
   schedule_id: string;
   status: string;
   message: string;
+  cron_expression?: string;
+  running?: boolean;
+  paused?: boolean;
 }
 
 export interface MinuteLevelScheduleConfig {
