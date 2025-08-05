@@ -35,7 +35,9 @@ class BaseDestination(ABC):
         self._logger = logger
 
     @abstractmethod
-    async def create(self, collection_id: UUID) -> "BaseDestination":
+    async def create(
+        self, collection_id: UUID, logger: Optional[ContextualLogger] = None
+    ) -> "BaseDestination":
         """Create a new destination."""
         pass
 
