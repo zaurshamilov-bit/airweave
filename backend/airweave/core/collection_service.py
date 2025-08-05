@@ -70,7 +70,9 @@ class CollectionService:
         await uow.session.flush()
 
         # Create a Qdrant destination
-        qdrant_destination = await QdrantDestination.create(collection_id=collection.id)
+        qdrant_destination = await QdrantDestination.create(
+            collection_id=collection.id, logger=ctx.logger
+        )
 
         # Setup the collection on Qdrant
         await qdrant_destination.setup_collection(vector_size=_determine_vector_size())

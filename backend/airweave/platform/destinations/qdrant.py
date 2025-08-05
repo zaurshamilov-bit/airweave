@@ -1,11 +1,14 @@
 """Qdrant destination implementation."""
 
+from typing import Optional
 from uuid import UUID
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models as rest
 
 from airweave.core.config import settings
+from airweave.core.logging import ContextualLogger
+from airweave.core.logging import logger as default_logger
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import QdrantAuthConfig
 from airweave.platform.decorators import destination
@@ -32,17 +35,21 @@ class QdrantDestination(VectorDBDestination):
         self.vector_size: int = 384  # Default vector size
 
     @classmethod
-    async def create(cls, collection_id: UUID) -> "QdrantDestination":
+    async def create(
+        cls, collection_id: UUID, logger: Optional[ContextualLogger] = None
+    ) -> "QdrantDestination":
         """Create a new Qdrant destination.
 
         Args:
             collection_id (UUID): The ID of the collection.
             vector_size (int): The size of the vectors to use.
+            logger (Optional[ContextualLogger]): The logger to use.
 
         Returns:
             QdrantDestination: The created destination.
         """
         instance = cls()
+        instance.set_logger(logger or default_logger)
         instance.collection_id = collection_id
         instance.collection_name = str(collection_id)
 
