@@ -99,6 +99,8 @@ class SearchService:
                     "local_path",
                     "file_uuid",
                     "checksum",
+                    "sync_id",
+                    "sync_job_id",
                 ]
                 for field in fields_to_always_remove:
                     payload.pop(field, None)

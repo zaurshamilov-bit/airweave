@@ -840,20 +840,19 @@ class SourceConnectionService:
         db: AsyncSession,
         source_connection_id: UUID,
         auth_context: AuthContext,
-        delete_data: bool = False,
     ) -> schemas.SourceConnection:
         """Delete a source connection and all related components.
 
         This method:
-        1. Deletes the sync if it exists
-        2. Deletes the integration credential if it exists
-        3. Deletes the source connection
+        1. Deletes all synced data from destinations (Qdrant)
+        2. Deletes the sync if it exists
+        3. Deletes the integration credential if it exists
+        4. Deletes the source connection
 
         Args:
             db: The database session
             source_connection_id: The ID of the source connection to delete
             auth_context: The current authentication context
-            delete_data: Whether to delete the data in destinations
 
         Returns:
             The deleted source connection
@@ -871,6 +870,46 @@ class SourceConnectionService:
         source_connection_schema = schemas.SourceConnection.from_orm_with_collection_mapping(
             source_connection
         )
+
+        # Always delete data from Qdrant when deleting a source connection
+        if source_connection.sync_id and source_connection.readable_collection_id:
+            try:
+                source_connection_logger.info(
+                    f"Deleting data for source connection {source_connection_id} "
+                    f"(sync_id: {source_connection.sync_id}) from destinations"
+                )
+
+                # Get the collection
+                collection = await crud.collection.get_by_readable_id(
+                    db=db,
+                    readable_id=source_connection.readable_collection_id,
+                    auth_context=auth_context,
+                )
+
+                if collection:
+                    # Import here to avoid circular dependency
+                    from airweave.platform.destinations.qdrant import QdrantDestination
+
+                    # Create Qdrant destination and delete by sync_id
+                    destination = await QdrantDestination.create(collection_id=collection.id)
+                    await destination.delete_by_sync_id(source_connection.sync_id)
+
+                    source_connection_logger.info(
+                        f"Successfully deleted data for sync_id {source_connection.sync_id} "
+                        f"from Qdrant collection {collection.id}"
+                    )
+                else:
+                    source_connection_logger.warning(
+                        f"Collection {source_connection.readable_collection_id} not found, "
+                        f"skipping data deletion"
+                    )
+            except Exception as e:
+                source_connection_logger.error(
+                    f"Error deleting data from destinations: {str(e)}. "
+                    f"Continuing with source connection deletion."
+                )
+                # We don't raise here - we still want to delete the source connection
+                # even if data deletion fails
 
         await crud.source_connection.remove(
             db=db, id=source_connection_id, auth_context=auth_context

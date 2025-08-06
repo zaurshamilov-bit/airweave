@@ -60,7 +60,24 @@ const DeleteCollectionDialog = ({
                 <AlertDialogHeader>
                     <AlertDialogTitle className="text-foreground">Delete Collection</AlertDialogTitle>
                     <AlertDialogDescription className={isDark ? "text-gray-300" : "text-foreground"}>
-                        <p className="mb-4">This will permanently delete this collection and all its source connections. This action cannot be undone.</p>
+                        <div className="space-y-3">
+                            <p className="font-medium">This action will permanently delete:</p>
+                            <ul className="space-y-2 ml-4">
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>The collection and all its source connections</span>
+                                </li>
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>All synced data from the knowledge base</span>
+                                </li>
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>All sync history and configuration</span>
+                                </li>
+                            </ul>
+                            <p className="text-sm font-semibold text-destructive">This action cannot be undone.</p>
+                        </div>
 
                         <div className="mt-4">
                             <label htmlFor="confirm-delete" className="text-sm font-medium block mb-2">
@@ -399,7 +416,7 @@ const Collections = () => {
 
                 toast({
                     title: "Success",
-                    description: "Collection deleted successfully"
+                    description: "Collection and all associated data deleted successfully"
                 });
                 // Navigate back to dashboard after successful deletion
                 navigate(protectedPaths.dashboard);

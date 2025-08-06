@@ -14,7 +14,7 @@ from airweave.api.examples import (
 )
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
-from airweave.core.logging import ContextualLogger
+from airweave.core.logging import ContextualLogger, logger
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
@@ -114,20 +114,15 @@ async def delete_collection(
     readable_id: str = Path(
         ..., description="The unique readable identifier of the collection to delete"
     ),
-    delete_data: bool = Query(
-        False,
-        description="Whether to also delete all associated data from destination systems",
-    ),
     db: AsyncSession = Depends(deps.get_db),
     auth_context: AuthContext = Depends(deps.get_auth_context),
 ) -> schemas.Collection:
-    """Delete a collection and optionally its associated data.
+    """Delete a collection and all associated data.
 
     <br/><br/>
-    Permanently removes a collection from your organization. By default, this only
-    deletes the collection metadata while preserving the actual data in the
-    destination systems.<br/><br/>All source connections within this collection
-    will also be deleted as part of the cleanup process.
+    Permanently removes a collection from your organization including all synced data
+    from the destination systems. All source connections within this collection
+    will also be deleted as part of the cleanup process. This action cannot be undone.
     """
     # Find the collection
     db_obj = await crud.collection.get_by_readable_id(
@@ -136,12 +131,18 @@ async def delete_collection(
     if db_obj is None:
         raise HTTPException(status_code=404, detail="Collection not found")
 
-    # If delete_data is true, we need to delete data in destination systems
-    # before deleting the collection (which will cascade delete source connections)
-    if delete_data:
-        # Note: This should be moved to a service method that can properly
-        # handle the destination data deletion without requiring multiple queries
-        pass
+    # Delete the entire Qdrant collection
+    try:
+        from airweave.platform.destinations.qdrant import QdrantDestination
+
+        destination = await QdrantDestination.create(collection_id=db_obj.id)
+        # Delete the entire collection in Qdrant
+        if destination.client:
+            await destination.client.delete_collection(collection_name=str(db_obj.id))
+            logger.info(f"Deleted Qdrant collection {db_obj.id}")
+    except Exception as e:
+        logger.error(f"Error deleting Qdrant collection: {str(e)}")
+        # Continue with deletion even if Qdrant deletion fails
 
     # Delete the collection - CASCADE will handle all child objects
     return await crud.collection.remove(db, id=db_obj.id, auth_context=auth_context)

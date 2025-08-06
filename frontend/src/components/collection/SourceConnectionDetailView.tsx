@@ -1731,15 +1731,28 @@ const SourceConnectionDetailView = ({
                         <AlertDialogHeader>
                             <AlertDialogTitle>Delete Source Connection</AlertDialogTitle>
                             <AlertDialogDescription>
-                                <p className="mb-4">
-                                    This will permanently delete this source connection and all its sync history.
-                                </p>
-                                <p className="mb-4">
-                                    Synced data will remain in the collection, but you won't be able to sync new data from this source.
-                                </p>
-                                <p className="mb-4">
-                                    This action cannot be undone.
-                                </p>
+                                <div className="space-y-4">
+                                    <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 space-y-3">
+                                        <ul className="space-y-2 ml-4">
+                                            <li className="flex items-start">
+                                                <span className="mr-2">•</span>
+                                                <div>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        You will need to re-authenticate and reconfigure the connection to sync data from this source again.
+                                                    </p>
+                                                </div>
+                                            </li>
+                                            <li className="flex items-start">
+                                                <span className="mr-2">•</span>
+                                                <div>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        All data that was synced from this source will be permanently removed from the knowledge base and cannot be recovered.
+                                                    </p>
+                                                </div>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
 
                                 <div className="mt-4">
                                     <Label htmlFor="confirm-delete" className="text-sm font-medium block mb-2">
@@ -1765,6 +1778,7 @@ const SourceConnectionDetailView = ({
                             <AlertDialogAction
                                 onClick={async () => {
                                     try {
+                                        // Delete the source connection (data is always deleted)
                                         const response = await apiClient.delete(`/source-connections/${sourceConnection.id}`);
 
                                         if (!response.ok) {
@@ -1779,7 +1793,7 @@ const SourceConnectionDetailView = ({
                                         // Show success toast
                                         toast({
                                             title: "Source connection deleted",
-                                            description: "The connection has been removed successfully"
+                                            description: "The source connection and all synced data have been permanently deleted from the knowledge base."
                                         });
 
                                         // Emit event to notify parent components

@@ -169,7 +169,7 @@ class BaseEntity(BaseModel):
             if key not in object_fields and isinstance(value, (dict, list)):
                 data[key] = json.dumps(value)
 
-            return data
+        return data
 
 
 class ChunkEntity(BaseEntity):
@@ -178,8 +178,8 @@ class ChunkEntity(BaseEntity):
     # Default fields to exclude when creating storage dict
     default_exclude_fields: List[str] = [
         "vector",  # Exclude the vector itself from the payload
-        "sync_job_id",
-        "sync_id",
+        # "sync_job_id",
+        # "sync_id",
         "db_entity_id",
         "sync_metadata",
         "parent_entity_id",

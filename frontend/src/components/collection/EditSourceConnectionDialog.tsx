@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { getAppIconUrl } from '@/lib/utils/icons';
-import { Pencil, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface EditSourceConnectionDialogProps {
@@ -87,7 +87,7 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                 <div className="flex flex-col h-full">
                     {/* Content area - scrollable */}
                     <div className="flex-grow overflow-y-auto">
-                        <div className="p-8 h-full flex flex-col">
+                        <div className="px-8 py-6 h-full flex flex-col">
                             {/* Heading with Icon */}
                             <div className="flex items-center gap-4 mb-2">
                                 {/* Source Icon - smaller */}
@@ -103,7 +103,7 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                             e.currentTarget.style.display = 'none';
                                             e.currentTarget.parentElement!.innerHTML = `
                                                 <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
-                                                    <span class="text-sm font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
+                                                    <span class="text-xs font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
                                                         ${sourceConnection.short_name.substring(0, 2).toUpperCase()}
                                                     </span>
                                                 </div>
@@ -111,24 +111,24 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                         }}
                                     />
                                 </div>
-                                <DialogTitle className="text-3xl font-semibold text-left">
+                                <DialogTitle className="text-2xl font-semibold text-left">
                                     Edit {sourceConnection.name}
                                 </DialogTitle>
                             </div>
-                            <DialogDescription className="text-sm text-muted-foreground mb-6">
+                            <DialogDescription className="text-xs text-muted-foreground mb-6">
                                 Update your connection details. Leave fields empty to keep current values.
                             </DialogDescription>
 
                             {/* Form */}
-                            <div className="px-2 max-w-md mx-auto w-full">
+                            <div className="w-full">
                                 <form onSubmit={(e) => { e.preventDefault(); handleEditSubmit(); }} className="space-y-8">
                                     {/* Connection Details Section - Non-editable */}
                                     <div className="space-y-3">
-                                        <h3 className="text-base font-semibold text-foreground border-b pb-2 mb-3">Connection Details</h3>
-                                        <div className="bg-muted/20 rounded-lg p-4 space-y-2.5 text-sm">
+                                        <h3 className="text-sm font-semibold text-foreground border-b pb-2 mb-3">Connection Details</h3>
+                                        <div className="bg-muted/20 rounded-lg p-3 space-y-2 text-xs">
                                             <div className="flex justify-between">
                                                 <span className="text-muted-foreground">ID:</span>
-                                                <span className="font-mono text-xs">{sourceConnection.id}</span>
+                                                <span className="font-mono">{sourceConnection.id}</span>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span className="text-muted-foreground">Short name:</span>
@@ -144,46 +144,43 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                             </div>
                                             <div className="flex justify-between">
                                                 <span className="text-muted-foreground">Created by:</span>
-                                                <span className="text-xs truncate max-w-[200px]">{sourceConnection.created_by_email}</span>
+                                                <span className="truncate max-w-[200px]">{sourceConnection.created_by_email}</span>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span className="text-muted-foreground">Modified by:</span>
-                                                <span className="text-xs truncate max-w-[200px]">{sourceConnection.modified_by_email}</span>
+                                                <span className="truncate max-w-[200px]">{sourceConnection.modified_by_email}</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Basic Information Section */}
                                     <div className="space-y-3">
-                                        <h3 className="text-base font-semibold text-foreground border-b pb-2 mb-3">Basic Information</h3>
+                                        <h3 className="text-sm font-semibold text-foreground border-b pb-2 mb-3">Basic Information</h3>
 
                                         {/* Name field */}
-                                        <div className="space-y-1.5">
+                                        <div className="space-y-1">
                                             <Label className="text-xs text-muted-foreground font-normal">Name</Label>
-                                            <div className="relative">
-                                                <Input
-                                                    type="text"
-                                                    className={cn(
-                                                        "w-full py-2 px-3 rounded-md border bg-transparent pr-10",
-                                                        isDark
-                                                            ? "border-gray-700 focus:border-blue-500"
-                                                            : "border-gray-300 focus:border-blue-500",
-                                                        "focus:outline-none"
-                                                    )}
-                                                    value={editFormData.name}
-                                                    onChange={(e) => setEditFormData((prev: any) => ({ ...prev, name: e.target.value }))}
-                                                    placeholder={sourceConnection.name}
-                                                />
-                                                <Pencil className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-70" />
-                                            </div>
+                                            <Input
+                                                type="text"
+                                                className={cn(
+                                                    "w-full h-8 px-3 text-xs rounded-md border bg-transparent",
+                                                    isDark
+                                                        ? "border-gray-700 focus:border-blue-500"
+                                                        : "border-gray-300 focus:border-blue-500",
+                                                    "focus:outline-none"
+                                                )}
+                                                value={editFormData.name}
+                                                onChange={(e) => setEditFormData((prev: any) => ({ ...prev, name: e.target.value }))}
+                                                placeholder={sourceConnection.name}
+                                            />
                                         </div>
 
                                         {/* Description field */}
-                                        <div className="space-y-1.5">
+                                        <div className="space-y-1">
                                             <Label className="text-xs text-muted-foreground font-normal">Description</Label>
                                             <Textarea
                                                 className={cn(
-                                                    "w-full py-2 px-3 rounded-md border bg-transparent resize-none",
+                                                    "w-full py-1.5 px-3 text-xs rounded-md border bg-transparent resize-none",
                                                     isDark
                                                         ? "border-gray-700 focus:border-blue-500"
                                                         : "border-gray-300 focus:border-blue-500",
@@ -200,19 +197,19 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                     {/* Configuration Fields Section */}
                                     {sourceDetails?.config_fields?.fields && sourceDetails.config_fields.fields.length > 0 && (
                                         <div className="space-y-3">
-                                            <h3 className="text-base font-semibold text-foreground border-b pb-2 mb-3">Configuration</h3>
+                                            <h3 className="text-sm font-semibold text-foreground border-b pb-2 mb-3">Configuration</h3>
                                             {sourceDetails.config_fields.fields.map((field: any) => (
-                                                <div key={field.name} className="space-y-1.5">
+                                                <div key={field.name} className="space-y-1">
                                                     <Label className="text-xs text-muted-foreground font-normal">
                                                         {field.title || field.name}
                                                     </Label>
                                                     {field.description && (
-                                                        <p className="text-xs text-muted-foreground">{field.description}</p>
+                                                        <p className="text-xs text-muted-foreground opacity-80">{field.description}</p>
                                                     )}
                                                     <Input
                                                         type={field.type === 'integer' ? 'number' : 'text'}
                                                         className={cn(
-                                                            "w-full py-2 px-3 rounded-md border bg-transparent",
+                                                            "w-full h-8 px-3 text-xs rounded-md border bg-transparent",
                                                             isDark
                                                                 ? "border-gray-700 focus:border-blue-500"
                                                                 : "border-gray-300 focus:border-blue-500",
@@ -236,24 +233,24 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                     {/* Authentication Section - Only show if NOT using auth provider */}
                                     {!sourceConnection.auth_provider && sourceDetails?.auth_fields?.fields && sourceDetails.auth_fields.fields.length > 0 && (
                                         <div className="space-y-3">
-                                            <h3 className="text-base font-semibold text-foreground border-b pb-2 mb-3">Authentication</h3>
+                                            <h3 className="text-sm font-semibold text-foreground border-b pb-2 mb-3">Authentication</h3>
 
                                             {/* Show auth fields only for non-OAuth sources */}
                                             {showAuthFields ? (
                                                 <>
                                                     {sourceDetails.auth_fields.fields.map((field: any) => (
-                                                        <div key={field.name} className="space-y-1.5">
+                                                        <div key={field.name} className="space-y-1">
                                                             <Label className="text-xs text-muted-foreground font-normal">
                                                                 {field.title || field.name}
                                                             </Label>
                                                             {field.description && (
-                                                                <p className="text-xs text-muted-foreground">{field.description}</p>
+                                                                <p className="text-xs text-muted-foreground opacity-80">{field.description}</p>
                                                             )}
                                                             <div className="relative">
                                                                 <Input
                                                                     type={field.secret && !showPasswordFields[field.name] ? 'password' : 'text'}
                                                                     className={cn(
-                                                                        "w-full py-2 px-3 rounded-md border bg-transparent pr-10",
+                                                                        "w-full h-8 px-3 text-xs rounded-md border bg-transparent pr-10",
                                                                         isDark
                                                                             ? "border-gray-700 focus:border-blue-500"
                                                                             : "border-gray-300 focus:border-blue-500",
@@ -272,15 +269,15 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                                                 {field.secret && (
                                                                     <button
                                                                         type="button"
-                                                                        className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                                                                        className="absolute right-2 top-1/2 transform -translate-y-1/2"
                                                                         onClick={() => setShowPasswordFields((prev: any) => ({
                                                                             ...prev,
                                                                             [field.name]: !prev[field.name]
                                                                         }))}
                                                                     >
                                                                         {showPasswordFields[field.name] ?
-                                                                            <EyeOff className="h-4 w-4 text-muted-foreground" /> :
-                                                                            <Eye className="h-4 w-4 text-muted-foreground" />
+                                                                            <EyeOff className="h-3 w-3 text-muted-foreground" /> :
+                                                                            <Eye className="h-3 w-3 text-muted-foreground" />
                                                                         }
                                                                     </button>
                                                                 )}
@@ -289,9 +286,9 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                                     ))}
                                                 </>
                                             ) : (
-                                                <Alert className="mt-2">
-                                                    <AlertCircle className="h-4 w-4" />
-                                                    <AlertDescription>
+                                                <Alert className="mt-2 text-xs">
+                                                    <AlertCircle className="h-3 w-3" />
+                                                    <AlertDescription className="text-xs">
                                                         This source uses OAuth authentication. Authentication tokens cannot be edited directly.
                                                     </AlertDescription>
                                                 </Alert>
@@ -302,15 +299,15 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                     {/* Auth Provider Configuration Section - Only show if using auth provider */}
                                     {sourceConnection.auth_provider && (
                                         <div className="space-y-3">
-                                            <h3 className="text-base font-semibold text-foreground border-b pb-2 mb-3">Auth Provider Configuration</h3>
+                                            <h3 className="text-sm font-semibold text-foreground border-b pb-2 mb-3">Auth Provider Configuration</h3>
 
                                             {/* Auth provider readable_id - editable */}
-                                            <div className="space-y-1.5">
+                                            <div className="space-y-1">
                                                 <Label className="text-xs text-muted-foreground font-normal">Auth Provider Connection ID</Label>
                                                 <Input
                                                     type="text"
                                                     className={cn(
-                                                        "w-full py-2 px-3 rounded-md border bg-transparent",
+                                                        "w-full h-8 px-3 text-xs rounded-md border bg-transparent",
                                                         isDark
                                                             ? "border-gray-700 focus:border-blue-500"
                                                             : "border-gray-300 focus:border-blue-500",
@@ -326,17 +323,17 @@ export const EditSourceConnectionDialog: React.FC<EditSourceConnectionDialogProp
                                             {authProviderDetails?.config_fields?.fields && authProviderDetails.config_fields.fields.length > 0 && (
                                                 <>
                                                     {authProviderDetails.config_fields.fields.map((field: any) => (
-                                                        <div key={field.name} className="space-y-1.5">
+                                                        <div key={field.name} className="space-y-1">
                                                             <Label className="text-xs text-muted-foreground font-normal">
                                                                 {field.title || field.name}
                                                             </Label>
                                                             {field.description && (
-                                                                <p className="text-xs text-muted-foreground">{field.description}</p>
+                                                                <p className="text-xs text-muted-foreground opacity-80">{field.description}</p>
                                                             )}
                                                             <Input
                                                                 type="text"
                                                                 className={cn(
-                                                                    "w-full py-2 px-3 rounded-md border bg-transparent",
+                                                                    "w-full h-8 px-3 text-xs rounded-md border bg-transparent",
                                                                     isDark
                                                                         ? "border-gray-700 focus:border-blue-500"
                                                                         : "border-gray-300 focus:border-blue-500",
