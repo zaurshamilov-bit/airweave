@@ -114,7 +114,6 @@ async def delete_collection(
 ) -> schemas.Collection:
     """Delete a collection and all associated data.
 
-    <br/><br/>
     Permanently removes a collection from your organization including all synced data
     from the destination systems. All source connections within this collection
     will also be deleted as part of the cleanup process. This action cannot be undone.
