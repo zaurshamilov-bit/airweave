@@ -427,7 +427,7 @@
           "collections"
         ],
         "summary": "Delete Collection",
-        "description": "Delete a collection and optionally its associated data.\n\n<br/><br/>\nPermanently removes a collection from your organization. By default, this only\ndeletes the collection metadata while preserving the actual data in the\ndestination systems.<br/><br/>All source connections within this collection\nwill also be deleted as part of the cleanup process.",
+        "description": "Delete a collection and all associated data.\n\nPermanently removes a collection from your organization including all synced data\nfrom the destination systems. All source connections within this collection\nwill also be deleted as part of the cleanup process. This action cannot be undone.",
         "operationId": "delete_collection_collections__readable_id__delete",
         "parameters": [
           {
@@ -440,18 +440,6 @@
               "title": "Readable Id"
             },
             "description": "The unique readable identifier of the collection to delete"
-          },
-          {
-            "name": "delete_data",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "description": "Whether to also delete all associated data from destination systems",
-              "default": false,
-              "title": "Delete Data"
-            },
-            "description": "Whether to also delete all associated data from destination systems"
           }
         ],
         "responses": {
@@ -1142,7 +1130,7 @@
           "source-connections"
         ],
         "summary": "Delete Source Connection",
-        "description": "Delete a source connection.\n\n<br/><br/>\n\nPermanently removes the source connection configuration and credentials.\nBy default, previously synced data remains in your destination systems for continuity.\nUse delete_data=true to also remove all associated data from destination systems.",
+        "description": "Delete a source connection and all associated data.\n\n<br/><br/>\n\nPermanently removes the source connection configuration, credentials, and all synced data\nfrom the destination systems. This action cannot be undone.",
         "operationId": "delete_source_connection_source_connections__source_connection_id__delete",
         "parameters": [
           {
@@ -1156,18 +1144,6 @@
               "title": "Source Connection Id"
             },
             "description": "The unique identifier of the source connection to delete"
-          },
-          {
-            "name": "delete_data",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "description": "Whether to also delete all synced data from destination systems",
-              "default": false,
-              "title": "Delete Data"
-            },
-            "description": "Whether to also delete all synced data from destination systems"
           }
         ],
         "responses": {
