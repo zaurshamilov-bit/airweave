@@ -22,7 +22,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import SourceConnectionDetailView from "@/components/collection/SourceConnectionDetailView";
-import { emitCollectionEvent, COLLECTION_DELETED } from "@/lib/events";
+import { emitCollectionEvent, onCollectionEvent, COLLECTION_DELETED, SOURCE_CONNECTION_UPDATED } from "@/lib/events";
 import { QueryToolAndLiveDoc } from '@/components/collection/QueryToolAndLiveDoc';
 import { DialogFlow } from '@/components/shared';
 import { protectedPaths } from "@/constants/paths";
@@ -60,7 +60,24 @@ const DeleteCollectionDialog = ({
                 <AlertDialogHeader>
                     <AlertDialogTitle className="text-foreground">Delete Collection</AlertDialogTitle>
                     <AlertDialogDescription className={isDark ? "text-gray-300" : "text-foreground"}>
-                        <p className="mb-4">This will permanently delete this collection and all its source connections. This action cannot be undone.</p>
+                        <div className="space-y-3">
+                            <p className="font-medium">This action will permanently delete:</p>
+                            <ul className="space-y-2 ml-4">
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>The collection and all its source connections</span>
+                                </li>
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>All synced data from the knowledge base</span>
+                                </li>
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>All sync history and configuration</span>
+                                </li>
+                            </ul>
+                            <p className="text-sm font-semibold text-destructive">This action cannot be undone.</p>
+                        </div>
 
                         <div className="mt-4">
                             <label htmlFor="confirm-delete" className="text-sm font-medium block mb-2">
@@ -318,7 +335,7 @@ const Collections = () => {
         }
 
         try {
-            const response = await apiClient.patch(`/collections/${readable_id}`, { name: newName });
+            const response = await apiClient.put(`/collections/${readable_id}`, null, { name: newName });
             if (!response.ok) throw new Error("Failed to update collection name");
 
             // Update local state after successful API call
@@ -399,7 +416,7 @@ const Collections = () => {
 
                 toast({
                     title: "Success",
-                    description: "Collection deleted successfully"
+                    description: "Collection and all associated data deleted successfully"
                 });
                 // Navigate back to dashboard after successful deletion
                 navigate(protectedPaths.dashboard);
@@ -437,6 +454,26 @@ const Collections = () => {
             cleanup();
         };
     }, [cleanup]);
+
+    // Listen for source connection updates
+    useEffect(() => {
+        const unsubscribe = onCollectionEvent(SOURCE_CONNECTION_UPDATED, (data) => {
+            console.log("Source connection updated:", data);
+
+            // Always refresh the list from server to ensure consistency
+            if (collection?.readable_id) {
+                fetchSourceConnections(collection.readable_id);
+            }
+
+            // If the deleted connection was selected, clear the selection
+            // The fetchSourceConnections will auto-select the first connection if any remain
+            if (data.deleted && selectedConnection?.id === data.id) {
+                setSelectedConnection(null);
+            }
+        });
+
+        return unsubscribe;
+    }, [collection?.readable_id, selectedConnection?.id]);
 
     // Add right before the source connections section in render
     useEffect(() => {
@@ -809,10 +846,12 @@ const Collections = () => {
                                 </div>
                             </div>
                         ) : (
-                            <SourceConnectionDetailView
-                                key={selectedConnection.id}
-                                sourceConnectionId={selectedConnection.id}
-                            />
+                            <div className="mt-10">
+                                <SourceConnectionDetailView
+                                    key={selectedConnection.id}
+                                    sourceConnectionId={selectedConnection.id}
+                                />
+                            </div>
                         )
                     )}
 

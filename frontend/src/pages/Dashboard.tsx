@@ -238,7 +238,7 @@ const Dashboard = () => {
                 tags={["Jupyter Notebook", "Python"]}
                 icon={<Github className="h-5 w-5 text-primary" />}
                 onClick={() => {
-                  window.open('https://github.com/airweave-ai/airweave/blob/feat/main/examples/01_how-to-use-our-api.ipynb', '_blank');
+                  window.open('https://github.com/airweave-ai/airweave/blob/main/examples/01_how-to-use-the-api.ipynb', '_blank');
                 }}
               />
 
