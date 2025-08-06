@@ -873,7 +873,6 @@ class SourceConnectionService:
         # Always delete data from Qdrant when deleting a source connection
         if source_connection.sync_id and source_connection.readable_collection_id:
             try:
-                source_connection_logger.info(
                     f"Deleting data for source connection {source_connection_id} "
                     f"(sync_id: {source_connection.sync_id}) from destinations"
                 )
