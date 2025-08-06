@@ -842,7 +842,7 @@ class SourceConnectionService:
         """Delete a source connection and all related components.
 
         This method:
-        1. Deletes all synced data from destinations (Qdrant)
+        1. Deletes all synced data from destination
         2. Deletes the sync if it exists
         3. Deletes the integration credential if it exists
         4. Deletes the source connection
@@ -869,10 +869,10 @@ class SourceConnectionService:
             source_connection
         )
 
-        await crud.source_connection.remove(db=db, id=source_connection_id, ctx=ctx)
         # Always delete data from Qdrant when deleting a source connection
         if source_connection.sync_id and source_connection.readable_collection_id:
             try:
+                source_connection_logger.info(
                     f"Deleting data for source connection {source_connection_id} "
                     f"(sync_id: {source_connection.sync_id}) from destinations"
                 )

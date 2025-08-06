@@ -309,10 +309,6 @@ async def delete_source_connection(
     source_connection_id: UUID = Path(
         ..., description="The unique identifier of the source connection to delete"
     ),
-    delete_data: bool = Query(
-        False,
-        description="Whether to also delete all synced data from destination systems",
-    ),
     ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SourceConnection:
     """Delete a source connection and all associated data.
@@ -326,7 +322,6 @@ async def delete_source_connection(
         db=db,
         source_connection_id=source_connection_id,
         ctx=ctx,
-        delete_data=delete_data,
     )
 
 
