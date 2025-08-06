@@ -15,6 +15,7 @@ from airweave.api.examples import (
 )
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
+from airweave.core.logging import logger
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
