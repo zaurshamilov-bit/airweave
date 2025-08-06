@@ -167,6 +167,43 @@ class CRUDBillingPeriod(
         await db.flush()
         return len(periods)
 
+    async def get_previous_periods(
+        self,
+        db: AsyncSession,
+        *,
+        organization_id: UUID,
+        limit: int = 6,
+    ) -> List[BillingPeriod]:
+        """Get previous billing periods for an organization.
+
+        Excludes the current active period.
+
+        Args:
+            db: Database session
+            organization_id: Organization ID
+            limit: Maximum number of periods to return
+
+        Returns:
+            List of previous billing periods ordered by period_end desc
+        """
+        now = datetime.utcnow()
+
+        # Get all periods that have ended
+        query = (
+            select(self.model)
+            .where(
+                and_(
+                    self.model.organization_id == organization_id,
+                    self.model.period_end <= now,
+                )
+            )
+            .order_by(desc(self.model.period_end))
+            .limit(limit)
+        )
+
+        result = await db.execute(query)
+        return list(result.scalars().all())
+
 
 # Create instance
 billing_period = CRUDBillingPeriod(BillingPeriod, track_user=False)

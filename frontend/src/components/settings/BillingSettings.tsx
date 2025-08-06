@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { UsageDashboard } from './UsageDashboard';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -283,19 +284,43 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      active: { icon: CheckCircle, label: 'Active', className: 'text-emerald-600 bg-emerald-50' },
-      trialing: { icon: Clock, label: 'Trial', className: 'text-blue-600 bg-blue-50' },
-      past_due: { icon: AlertCircle, label: 'Past Due', className: 'text-red-600 bg-red-50' },
-      canceled: { icon: XCircle, label: 'Canceled', className: 'text-gray-600 bg-gray-50' },
-      trial_expired: { icon: AlertCircle, label: 'Trial Expired', className: 'text-red-600 bg-red-50' }
+      active: {
+        icon: CheckCircle,
+        label: 'ACTIVE',
+        className: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-400/10 border-emerald-500/20 dark:border-emerald-400/20'
+      },
+      trialing: {
+        icon: Clock,
+        label: 'TRIAL',
+        className: 'text-blue-600 dark:text-blue-400 bg-blue-500/10 dark:bg-blue-400/10 border-blue-500/20 dark:border-blue-400/20'
+      },
+      past_due: {
+        icon: AlertCircle,
+        label: 'PAST DUE',
+        className: 'text-red-600 dark:text-red-400 bg-red-500/10 dark:bg-red-400/10 border-red-500/20 dark:border-red-400/20'
+      },
+      canceled: {
+        icon: XCircle,
+        label: 'CANCELED',
+        className: 'text-gray-600 dark:text-gray-400 bg-gray-500/10 dark:bg-gray-400/10 border-gray-500/20 dark:border-gray-400/20'
+      },
+      trial_expired: {
+        icon: AlertCircle,
+        label: 'TRIAL EXPIRED',
+        className: 'text-red-600 dark:text-red-400 bg-red-500/10 dark:bg-red-400/10 border-red-500/20 dark:border-red-400/20'
+      }
     };
 
-    const config = statusConfig[status] || { icon: AlertCircle, label: status, className: 'text-gray-600 bg-gray-50' };
+    const config = statusConfig[status] || {
+      icon: AlertCircle,
+      label: status.toUpperCase(),
+      className: 'text-gray-600 dark:text-gray-400 bg-gray-500/10 dark:bg-gray-400/10 border-gray-500/20 dark:border-gray-400/20'
+    };
     const Icon = config.icon;
 
     return (
-      <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium', config.className)}>
-        <Icon className="w-3.5 h-3.5" />
+      <span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-medium tracking-wider', config.className)}>
+        <Icon className="w-3 h-3" />
         {config.label}
       </span>
     );
@@ -612,6 +637,9 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
         </div>
       )}
 
+      {/* Usage Dashboard */}
+      <UsageDashboard organizationId={organizationId} />
+
       {/* Support Contact */}
       <div className="border-t border-border pt-6">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -647,8 +675,6 @@ export const BillingSettings = ({ organizationId }: BillingSettingsProps) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-
     </div>
   );
 };

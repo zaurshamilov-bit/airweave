@@ -216,6 +216,25 @@ class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
 
         return current_usage
 
+    async def get_all_by_organization(
+        self,
+        db: AsyncSession,
+        *,
+        organization_id: UUID,
+    ) -> list[Usage]:
+        """Get all usage records for an organization.
+
+        Args:
+            db: Database session
+            organization_id: Organization ID
+
+        Returns:
+            List of all usage records for the organization
+        """
+        query = select(self.model).where(self.model.organization_id == organization_id)
+        result = await db.execute(query)
+        return result.scalars().all()
+
 
 # Create instance
 usage = CRUDUsage(Usage, track_user=False)
