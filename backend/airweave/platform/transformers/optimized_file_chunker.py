@@ -378,7 +378,7 @@ async def optimized_file_chunker(
 
             if not storage_manager._is_ctti_entity(file):
                 await storage_manager.mark_entity_processed(
-                    file.sync_id, file.entity_id, chunks_created
+                    logger, file.sync_id, file.entity_id, chunks_created
                 )
                 logger.debug(
                     f"📝 CHUNKER_MARKED_PROCESSED [{entity_context}] "

@@ -151,7 +151,7 @@ class StorageManager:
                 "fully_processed": False,  # Will be updated after chunking
             }
 
-            await self._store_metadata(entity.sync_id, entity.entity_id, metadata)
+            await self._store_metadata(logger, entity.sync_id, entity.entity_id, metadata)
 
             logger.info(
                 "File stored successfully",
@@ -173,7 +173,7 @@ class StorageManager:
         metadata_bytes = json.dumps(metadata).encode("utf-8")
 
         await self.client.upload_file(
-            self.metadata_container, metadata_blob, io.BytesIO(metadata_bytes)
+            logger, self.metadata_container, metadata_blob, io.BytesIO(metadata_bytes)
         )
 
     async def mark_entity_processed(
@@ -205,7 +205,7 @@ class StorageManager:
             )
 
             # Update metadata
-            await self._store_metadata(sync_id, entity_id, metadata)
+            await self._store_metadata(logger, sync_id, entity_id, metadata)
 
             logger.info(
                 "Marked entity as processed",
