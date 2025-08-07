@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 from typing import Any, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import stripe
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +32,29 @@ from airweave.schemas.usage import UsageCreate
 
 class BillingService:
     """Service for managing organization billing and subscriptions."""
+
+    def _create_system_context(
+        self, organization_id: UUID, source: str = "billing_service"
+    ) -> ApiContext:
+        """Create a system ApiContext for internal operations.
+
+        Args:
+            organization_id: Organization ID
+            source: Source identifier for tracking
+
+        Returns:
+            Properly configured ApiContext for system operations
+        """
+        return ApiContext(
+            request_id=str(uuid4()),
+            organization_id=organization_id,
+            user=None,
+            auth_method="system",
+            auth_metadata={"source": source},
+            logger=logger.with_context(
+                organization_id=str(organization_id), auth_method="system", source=source
+            ),
+        )
 
     # Plan limits configuration
     PLAN_LIMITS = {
@@ -382,12 +405,7 @@ class BillingService:
         )
 
         # Create system auth context
-        ctx = ApiContext(
-            organization_id=organization_id,
-            user=None,
-            auth_method="system",
-            auth_metadata={"source": "billing_service"},
-        )
+        ctx = self._create_system_context(organization_id)
 
         # Store pending change locally
         update_data = OrganizationBillingUpdate(
@@ -454,12 +472,7 @@ class BillingService:
         )
 
         # Create system auth context
-        ctx = ApiContext(
-            organization_id=organization_id,
-            user=None,
-            auth_method="system",
-            auth_metadata={"source": "billing_service"},
-        )
+        system_ctx = self._create_system_context(organization_id)
 
         # Update local billing record
         update_data = OrganizationBillingUpdate(
@@ -474,7 +487,7 @@ class BillingService:
             db,
             db_obj=billing_model,
             obj_in=update_data,
-            ctx=ctx,
+            ctx=system_ctx,
         )
 
         return f"Successfully upgraded to {new_plan} plan"
@@ -785,12 +798,7 @@ class BillingService:
             trial_ends_at = datetime.utcfromtimestamp(subscription.trial_end)
 
         # Create system auth context for update
-        ctx = ApiContext(
-            organization_id=UUID(org_id),
-            user=None,
-            auth_method="system",
-            auth_metadata={"source": "stripe_webhook"},
-        )
+        ctx = self._create_system_context(UUID(org_id), "stripe_webhook")
 
         # Update billing record using CRUD
         update_data = OrganizationBillingUpdate(
@@ -976,18 +984,18 @@ class BillingService:
         self,
         db: AsyncSession,
         subscription: stripe.Subscription,
-        ctx: ApiContext,
         previous_attributes: Optional[dict] = None,
+        contextual_logger: Optional[ContextualLogger] = None,
     ) -> None:
         """Handle subscription updated webhook event.
 
         Args:
-            db: Database session
+            db: Database sessionone i
             subscription: Stripe subscription object
             previous_attributes: Previous values that changed
-            ctx: Authentication context
+            contextual_logger: Logger with organization context
         """
-        log = ctx.logger
+        log = contextual_logger or logger
 
         # Find billing by subscription ID
         billing_model = await crud.organization_billing.get_by_stripe_subscription(
@@ -1001,12 +1009,18 @@ class BillingService:
         # Store organization_id before any DB operations to avoid lazy loading issues
         org_id = billing_model.organization_id
 
-        # Create system auth context
+        # Create webhook auth context for CRUD operations
+        # The contextual logger should already have organization context
         ctx = ApiContext(
+            request_id=str(uuid4()),
             organization_id=org_id,
             user=None,
-            auth_method="system",
-            auth_metadata={"source": "stripe_webhook"},
+            auth_method="stripe_webhook",
+            auth_metadata={
+                "source": "stripe_subscription_updated",
+                "subscription_id": subscription.id,
+            },
+            logger=log,
         )
 
         # Extract plan information
@@ -1107,12 +1121,7 @@ class BillingService:
         org_id = billing_model.organization_id
 
         # Create system auth context for update
-        ctx = ApiContext(
-            organization_id=org_id,
-            user=None,
-            auth_method="system",
-            auth_metadata={"source": "stripe_webhook"},
-        )
+        ctx = self._create_system_context(org_id, "stripe_webhook")
 
         # Check if this is a scheduled cancellation or actual deletion
         # When cancel_at_period_end is set to true, Stripe sends this event but
@@ -1182,12 +1191,7 @@ class BillingService:
         org_id = billing_model.organization_id
 
         # Create system auth context for update
-        ctx = ApiContext(
-            organization_id=org_id,
-            user=None,
-            auth_method="system",
-            auth_metadata={"source": "stripe_webhook"},
-        )
+        ctx = self._create_system_context(org_id, "stripe_webhook")
 
         # Update payment info using CRUD
         update_data = OrganizationBillingUpdate(
@@ -1238,12 +1242,7 @@ class BillingService:
         org_id = billing_model.organization_id
 
         # Create system auth context for update
-        ctx = ApiContext(
-            organization_id=org_id,
-            user=None,
-            auth_method="system",
-            auth_metadata={"source": "stripe_webhook"},
-        )
+        ctx = self._create_system_context(org_id, "stripe_webhook")
 
         # Check if this is a renewal payment failure
         if hasattr(invoice, "billing_reason") and invoice.billing_reason == "subscription_cycle":
@@ -1369,12 +1368,7 @@ class BillingService:
         # Update status if grace period expired
         if grace_period_expired and billing_model.billing_status != BillingStatus.TRIAL_EXPIRED:
             # Create system auth context for update
-            ctx = ApiContext(
-                organization_id=organization_id,
-                user=None,
-                auth_method="system",
-                auth_metadata={"source": "billing_service"},
-            )
+            ctx = self._create_system_context(organization_id)
 
             update_data = OrganizationBillingUpdate(
                 billing_status=BillingStatus.TRIAL_EXPIRED,
@@ -1458,12 +1452,7 @@ class BillingService:
                         "status": BillingPeriodStatus.COMPLETED,
                         "period_end": period_start,  # Ensure continuity!
                     },
-                    ctx=ApiContext(
-                        organization_id=organization_id,
-                        user=None,
-                        auth_method="system",
-                        auth_metadata={"source": "billing_service"},
-                    ),
+                    ctx=self._create_system_context(organization_id),
                 )
 
                 # If no previous_period_id was provided, use the most recent active period
@@ -1492,12 +1481,7 @@ class BillingService:
                 status = BillingPeriodStatus.ACTIVE
 
         # Create system auth context
-        ctx = ApiContext(
-            organization_id=organization_id,
-            user=None,
-            auth_method="system",
-            auth_metadata={"source": "billing_service"},
-        )
+        ctx = self._create_system_context(organization_id)
 
         # Create billing period
         period_create = BillingPeriodCreate(
@@ -1582,12 +1566,7 @@ class BillingService:
             and not billing_model.stripe_subscription_id
         ):
             # Create system auth context for update
-            ctx = ApiContext(
-                organization_id=organization_id,
-                user=None,
-                auth_method="system",
-                auth_metadata={"source": "billing_service"},
-            )
+            ctx = self._create_system_context(organization_id)
 
             update_data = OrganizationBillingUpdate(
                 billing_status=BillingStatus.TRIAL_EXPIRED,

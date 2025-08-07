@@ -159,7 +159,7 @@ class StripeWebhookHandler:
             contextual_logger.info(f"Subscription {subscription.id} plan changed")
 
         await billing_service.handle_subscription_updated(
-            self.db, subscription, previous_attributes, contextual_logger=contextual_logger
+            self.db, subscription, previous_attributes, contextual_logger
         )
 
     async def _handle_subscription_deleted(
