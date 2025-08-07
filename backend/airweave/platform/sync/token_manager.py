@@ -7,11 +7,11 @@ from typing import Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.api.context import ApiContext
 from airweave.core import credentials
 from airweave.core.exceptions import TokenRefreshError
 from airweave.core.logging import logger
 from airweave.platform.auth.services import oauth2_service
-from airweave.schemas.auth import AuthContext
 
 
 class TokenManager:
@@ -34,7 +34,7 @@ class TokenManager:
         db: AsyncSession,
         source_short_name: str,
         source_connection: schemas.SourceConnection,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         initial_credentials: Any,
         white_label: Optional[schemas.WhiteLabel] = None,
         is_direct_injection: bool = False,
@@ -47,7 +47,7 @@ class TokenManager:
             db: Database session
             source_short_name: Short name of the source
             source_connection: Source connection configuration
-            auth_context: Authentication context
+            ctx: The API context
             initial_credentials: The initial credentials (dict, string token, or auth config object)
             white_label: Optional white label configuration
             is_direct_injection: Whether token was directly injected (no refresh)
@@ -58,7 +58,7 @@ class TokenManager:
         self.source_short_name = source_short_name
         self.connection_id = source_connection.id
         self.integration_credential_id = source_connection.integration_credential_id
-        self.auth_context = auth_context
+        self.ctx = ctx
 
         self.white_label_source_short_name = white_label.source_short_name if white_label else None
         self.white_label_client_id = white_label.client_id if white_label else None
@@ -131,7 +131,7 @@ class TokenManager:
                 return self._current_token
 
             # Perform the refresh
-            self.logger.info(
+            self.logger.debug(
                 f"Refreshing token for {self.source_short_name} "
                 f"(last refresh: {time_since_refresh:.0f}s ago)"
             )
@@ -141,7 +141,7 @@ class TokenManager:
                 self._current_token = new_token
                 self._last_refresh_time = current_time
 
-                self.logger.info(f"Successfully refreshed token for {self.source_short_name}")
+                self.logger.debug(f"Successfully refreshed token for {self.source_short_name}")
                 return new_token
 
             except Exception as e:
@@ -173,7 +173,7 @@ class TokenManager:
                 self._current_token = new_token
                 self._last_refresh_time = time.time()
 
-                self.logger.info(
+                self.logger.debug(
                     f"Successfully refreshed token for {self.source_short_name} after 401"
                 )
                 return new_token
@@ -209,7 +209,7 @@ class TokenManager:
         Raises:
             TokenRefreshError: If refresh fails
         """
-        self.logger.info(
+        self.logger.debug(
             f"Refreshing token via auth provider instance for source '{self.source_short_name}'"
         )
 
@@ -243,7 +243,7 @@ class TokenManager:
                     self.db,
                     id=self.integration_credential_id,
                     obj_in=credential_update,
-                    auth_context=self.auth_context,
+                    ctx=self.ctx,
                 )
 
             return access_token
@@ -266,7 +266,7 @@ class TokenManager:
             raise TokenRefreshError("No integration credential found for token refresh")
 
         credential = await crud.integration_credential.get(
-            self.db, self.integration_credential_id, self.auth_context
+            self.db, self.integration_credential_id, self.ctx
         )
         if not credential:
             raise TokenRefreshError("Integration credential not found")
@@ -291,7 +291,7 @@ class TokenManager:
         oauth2_response = await oauth2_service.refresh_access_token(
             db=self.db,
             integration_short_name=self.source_short_name,
-            auth_context=self.auth_context,
+            ctx=self.ctx,
             connection_id=self.connection_id,
             decrypted_credential=decrypted_credential,
             white_label=white_label,

@@ -38,13 +38,23 @@ from airweave import AirweaveSDK
 
 airweave = AirweaveSDK(api_key="YOUR_API_KEY", base_url="https://api.airweave.ai")
 
-collection = airweave.source_connections.run(name="My First Collection")
+job = airweave.source_connections.run_source_connection(
+    source_connection_id="source_connection_id",
+    access_token="ya29.a0AWY7CkkH3CqZXRQ3ZQZHy3lFf6zM7G_9Z5FgkUOzAeoKZs8opR7KXpK5RvXWkGq2vFQmE"
+)
 ```
 
 ```javascript title="Node.js"
 import { AirweaveSDKClient } from "@airweave/sdk";
 
-const airweave = new AirweaveSDKClient({apiKey: "YOUR_API_KEY", base_url="https://api.airweave.ai"});
+const airweave = new AirweaveSDKClient({apiKey: "YOUR_API_KEY", baseUrl: "https://api.airweave.ai"});
+
+const job = await airweave.sourceConnections.runSourceConnection(
+    "source_connection_id",
+    {
+        access_token: "ya29.a0AWY7CkkH3CqZXRQ3ZQZHy3lFf6zM7G_9Z5FgkUOzAeoKZs8opR7KXpK5RvXWkGq2vFQmE"
+    }
+);
 ```
 
 ```bash title="cURL"
@@ -74,15 +84,33 @@ from airweave import AirweaveSDK
 
 airweave = AirweaveSDK(api_key="YOUR_API_KEY", base_url="https://api.airweave.ai")
 
-collection = airweave.collections.create_collection(name="My First Collection")
+source_connection = airweave.source_connections.create_source_connection(
+    name="Asana connection",
+    short_name="asana",
+    collection="my-collection-id",
+    auth_fields={
+        "access_token": "YOUR_ACCESS_TOKEN",
+        "refresh_token": "YOUR_REFRESH_TOKEN"  # Optional
+    },
+    sync_immediately=True
+)
 ```
 
 ```javascript title="Node.js"
 import { AirweaveSDKClient } from "@airweave/sdk";
 
-const airweave = new AirweaveSDKClient({apiKey: "YOUR_API_KEY", base_url="https://api.airweave.ai"});
+const airweave = new AirweaveSDKClient({apiKey: "YOUR_API_KEY", baseUrl: "https://api.airweave.ai"});
 
-const collection = await airweave.collections.createCollection({name: "My First Collection"});
+const sourceConnection = await airweave.sourceConnections.createSourceConnection({
+    name: "Asana connection",
+    short_name: "asana",
+    collection: "my-collection-id",
+    auth_fields: {
+        access_token: "YOUR_ACCESS_TOKEN",
+        refresh_token: "YOUR_REFRESH_TOKEN"  // Optional
+    },
+    sync_immediately: true
+});
 ```
 
 ```bash title="cURL"
@@ -92,6 +120,7 @@ curl -X POST https://api.airweave.ai/source-connections \
      -d '{
   "name": "Asana connection",
   "short_name": "asana",
+  "collection": "my-collection-id",
   "auth_fields": {
     "access_token": "YOUR_ACCESS_TOKEN",
     "refresh_token": "YOUR_REFRESH_TOKEN"
@@ -101,8 +130,10 @@ curl -X POST https://api.airweave.ai/source-connections \
 ```
 </CodeBlocks>
 
-### Upcoming feature: Pipedream & Composio integrations
+### Auth provider connections
 
-We are currently building a way for users to connect to a source via **Pipedream** and **Composio**, with Airweave integrating with these platforms directly.
+Airweave also supports creating source connections through auth providers like Composio and Pipedream. Check out the [Authentication Providers documentation](/auth-providers) to learn how to:
 
-If you have an edge case that isn’t covered by these features, please let us know at **hello@airweave.ai**.
+
+
+If you have an edge case that isn't covered by these features, please let us know at **hello@airweave.ai**.

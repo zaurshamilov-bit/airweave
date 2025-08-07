@@ -49,7 +49,8 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             model_name: OpenAI model name
             logger: Logger to use
         """
-        self.logger = logger
+        super().__init__()  # Initialize base class
+        self.logger = logger  # Override with contextual logger
         self.model_name = model_name or self.model_name
 
         global _openai_semaphore, _tpm_limiter
@@ -67,7 +68,7 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             timeout=1200.0,  # 20 minutes total timeout (was 10 minutes default)
             max_retries=2,  # Retry on transient errors
         )
-        logger.debug("Created shared OpenAI client with 20 minute timeout")
+        self.logger.debug("Created shared OpenAI client with 20 minute timeout")
 
     @staticmethod
     def _count_tokens(txt: str) -> int:  # ~1 µs – negligible

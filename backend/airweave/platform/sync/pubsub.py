@@ -8,7 +8,7 @@ import redis.asyncio as redis
 from pydantic import BaseModel
 
 from airweave.core.config import settings
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger, logger
 from airweave.core.redis_client import redis_client
 
 
@@ -61,7 +61,7 @@ class SyncPubSub:
         subscribers = await redis_client.publish(channel, message)
 
         if subscribers > 0:
-            logger.info(f"Published update to {subscribers} subscribers for job {job_id}")
+            logger.debug(f"Published update to {subscribers} subscribers for job {job_id}")
 
     async def subscribe(self, job_id: UUID) -> redis.client.PubSub:
         """Create a new pubsub instance and subscribe to a sync job's updates.
@@ -113,21 +113,29 @@ class SyncPubSub:
         # Subscribe to the specific channel
         await pubsub.subscribe(channel)
 
-        logger.info(f"Created new pubsub subscription for sync job {job_id}")
+        logger.debug(f"Created new pubsub subscription for sync job {job_id}")
         return pubsub
 
 
 class SyncProgress:
     """Tracks sync progress and automatically publishes updates."""
 
-    def __init__(self, job_id: UUID):
-        """Initialize the SyncProgress instance."""
+    def __init__(self, job_id: UUID, logger: ContextualLogger):
+        """Initialize the SyncProgress instance.
+
+        Args:
+            job_id: The sync job ID
+            logger: Contextual logger with sync metadata
+        """
         self.job_id = job_id
         self.stats = SyncProgressUpdate()
         self._last_published = 0
         self._publish_threshold = PUBLISH_THRESHOLD
         # CRITICAL FIX: Add async lock to prevent race conditions
         self._lock = asyncio.Lock()
+        self.logger = logger
+        self._last_status_update = 0
+        self._status_update_interval = 50  # Log status every 50 items
 
     def __getattr__(self, name: str) -> int:
         """Get counter value for any stat."""
@@ -155,14 +163,16 @@ class SyncProgress:
 
             # Check if we should publish
             if total_ops - self._last_published >= self._publish_threshold:
-                logger.info(f"Progress threshold reached: {total_ops} total ops, publishing update")
+                self.logger.debug(
+                    f"Progress threshold reached: {total_ops} total ops, publishing update"
+                )
                 await self._publish()
                 self._last_published = total_ops
-            else:
-                logger.debug(
-                    f"Progress: {stat_name}={current_value + amount}, total={total_ops}, "
-                    f"threshold={self._publish_threshold}"
-                )
+
+            # Check if we should log a status update (every 50 items)
+            if total_ops - self._last_status_update >= self._status_update_interval:
+                await self._log_status_update(total_ops)
+                self._last_status_update = total_ops
 
     async def _publish(self) -> None:
         """Publish current progress."""
@@ -173,6 +183,33 @@ class SyncProgress:
         async with self._lock:  # Ensure finalize is also synchronized
             self.stats.is_complete = is_complete
             self.stats.is_failed = not is_complete
+
+            # Log final status
+            total_ops = sum(
+                [
+                    self.stats.inserted,
+                    self.stats.updated,
+                    self.stats.deleted,
+                    self.stats.kept,
+                    self.stats.skipped,
+                ]
+            )
+
+            if is_complete:
+                self.logger.info(
+                    f"✅ Sync completed successfully - Total: {total_ops} | "
+                    f"Inserted: {self.stats.inserted} | Updated: {self.stats.updated} | "
+                    f"Deleted: {self.stats.deleted} | Kept: {self.stats.kept} | "
+                    f"Skipped: {self.stats.skipped}"
+                )
+            else:
+                self.logger.error(
+                    f"❌ Sync failed - Progress before failure - Total: {total_ops} | "
+                    f"Inserted: {self.stats.inserted} | Updated: {self.stats.updated} | "
+                    f"Deleted: {self.stats.deleted} | Kept: {self.stats.kept} | "
+                    f"Skipped: {self.stats.skipped}"
+                )
+
             await self._publish()
 
     def to_dict(self) -> dict:
@@ -188,6 +225,41 @@ class SyncProgress:
                 entity_type: len(entity_ids)
                 for entity_type, entity_ids in entities_encountered.items()
             }
+
+    async def _log_status_update(self, total_ops: int) -> None:
+        """Log a periodic status update.
+
+        Args:
+            total_ops: Total operations processed so far
+        """
+        # Calculate rate if possible
+        rate_info = ""
+        if hasattr(self, "_start_time"):
+            elapsed = asyncio.get_event_loop().time() - self._start_time
+            if elapsed > 0:
+                rate = total_ops / elapsed
+                rate_info = f" | Rate: {rate:.1f} ops/sec"
+        else:
+            # Set start time on first status update
+            self._start_time = asyncio.get_event_loop().time()
+
+        # Log entity type breakdown if available
+        entity_info = ""
+        if self.stats.entities_encountered:
+            entity_summary = ", ".join(
+                [
+                    f"{entity_type}: {count}"
+                    for entity_type, count in self.stats.entities_encountered.items()
+                ]
+            )
+            entity_info = f" | Entities: {entity_summary}"
+
+        self.logger.info(
+            f"📊 Sync progress - Total: {total_ops} | "
+            f"Inserted: {self.stats.inserted} | Updated: {self.stats.updated} | "
+            f"Deleted: {self.stats.deleted} | Kept: {self.stats.kept} | "
+            f"Skipped: {self.stats.skipped}{rate_info}{entity_info}"
+        )
 
 
 # Create a global instance for the entire app

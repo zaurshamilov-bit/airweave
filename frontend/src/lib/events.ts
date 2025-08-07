@@ -2,6 +2,7 @@
 export const COLLECTION_DELETED = 'collection:deleted';
 export const COLLECTION_CREATED = 'collection:created';
 export const COLLECTION_UPDATED = 'collection:updated';
+export const SOURCE_CONNECTION_UPDATED = 'source_connection:updated';
 
 /**
  * Emit a collection event

@@ -6,7 +6,7 @@ from typing import List
 
 from chonkie import RecursiveChunker, TokenChunker
 
-from airweave.core.logging import logger
+from airweave.core.logging import ContextualLogger
 from airweave.platform.decorators import transformer
 from airweave.platform.entities._base import ChunkEntity, FileEntity, ParentEntity
 from airweave.platform.file_handling.conversion.factory import document_converter
@@ -73,7 +73,9 @@ def calculate_entity_token_size(entity: ChunkEntity) -> int:
     return count_tokens(entity_string)
 
 
-async def _process_file_content(file: FileEntity, entity_context: str) -> str:
+async def _process_file_content(
+    file: FileEntity, entity_context: str, logger: ContextualLogger
+) -> str:
     """Process file content and convert to text if needed."""
     if not file.local_path:
         logger.error(f"📂 CHUNKER_NO_PATH [{entity_context}] File has no local path")
@@ -104,7 +106,10 @@ async def _process_file_content(file: FileEntity, entity_context: str) -> str:
 
 
 async def _chunk_text_adaptive(
-    text_content: str, entity_context: str, chunk_size: int = INITIAL_CHUNK_SIZE
+    text_content: str,
+    entity_context: str,
+    logger: ContextualLogger,
+    chunk_size: int = INITIAL_CHUNK_SIZE,
 ) -> List[str]:
     """Adaptively chunk text, starting with a target size."""
     logger.debug(
@@ -113,7 +118,7 @@ async def _chunk_text_adaptive(
     )
 
     # Clean problematic content first
-    text_content = _clean_problematic_content(text_content, entity_context)
+    text_content = _clean_problematic_content(text_content, entity_context, logger)
 
     # Try recursive chunking first
     recursive_chunker = get_recursive_chunker(chunk_size)
@@ -148,7 +153,7 @@ async def _chunk_text_adaptive(
     return final_chunks
 
 
-def _clean_problematic_content(text: str, entity_context: str) -> str:
+def _clean_problematic_content(text: str, entity_context: str, logger: ContextualLogger) -> str:
     """Remove base64 images and other content that inflates token count."""
     import re
 
@@ -224,13 +229,14 @@ async def _try_chunk_size(
     text_content: str,
     chunk_size: int,
     entity_context: str,
+    logger: ContextualLogger,
     FileParentClass: type,
     FileChunkClass: type,
 ) -> tuple[bool, list[ChunkEntity]]:
     """Try to chunk with a specific size and validate all chunks fit."""
     logger.debug(f"✂️  CHUNKER_ATTEMPT [{entity_context}] Chunking with size {chunk_size}")
 
-    final_chunk_texts = await _chunk_text_adaptive(text_content, entity_context, chunk_size)
+    final_chunk_texts = await _chunk_text_adaptive(text_content, entity_context, logger, chunk_size)
 
     # Create parent entity
     file_data = file.model_dump()
@@ -279,7 +285,9 @@ async def _try_chunk_size(
 
 
 @transformer(name="Optimized File Chunker")
-async def optimized_file_chunker(file: FileEntity) -> list[ParentEntity | ChunkEntity]:
+async def optimized_file_chunker(
+    file: FileEntity, logger: ContextualLogger
+) -> list[ParentEntity | ChunkEntity]:
     """Optimized file chunker that ensures chunks fit within OpenAI's token limit.
 
     This transformer:
@@ -291,6 +299,7 @@ async def optimized_file_chunker(file: FileEntity) -> list[ParentEntity | ChunkE
 
     Args:
         file: The FileEntity to process
+        logger: The contextual logger for logging
 
     Returns:
         list[ParentEntity | ChunkEntity]: The processed chunks
@@ -310,7 +319,7 @@ async def optimized_file_chunker(file: FileEntity) -> list[ParentEntity | ChunkE
         logger.debug(f"🔍 CHUNKER_PROCESS [{entity_context}] Processing file content")
         start_time = asyncio.get_event_loop().time()
 
-        text_content = await _process_file_content(file, entity_context)
+        text_content = await _process_file_content(file, entity_context, logger)
         process_elapsed = asyncio.get_event_loop().time() - start_time
 
         if not text_content or not text_content.strip():
@@ -329,7 +338,13 @@ async def optimized_file_chunker(file: FileEntity) -> list[ParentEntity | ChunkE
 
         while chunk_size >= MIN_CHUNK_SIZE:
             success, entities = await _try_chunk_size(
-                file, text_content, chunk_size, entity_context, FileParentClass, FileChunkClass
+                file,
+                text_content,
+                chunk_size,
+                entity_context,
+                logger,
+                FileParentClass,
+                FileChunkClass,
             )
 
             if success:
@@ -382,7 +397,15 @@ async def optimized_file_chunker(file: FileEntity) -> list[ParentEntity | ChunkE
         if hasattr(file, "local_path") and file.local_path:
             from airweave.platform.storage import storage_manager
 
-            await storage_manager.cleanup_temp_file(file.local_path)
+            await storage_manager.cleanup_temp_file(logger, file.local_path)
             logger.debug(
                 f"🧹 CHUNKER_CLEANUP [{entity_context}] Cleaned up temp file: {file.local_path}"
             )
+
+
+# Export for use in default_file_chunker
+async def _chunk_text_optimized(
+    text_content: str, entity_context: str, logger: ContextualLogger
+) -> List[str]:
+    """Optimized chunking method for use by default_file_chunker."""
+    return await _chunk_text_adaptive(text_content, entity_context, logger)

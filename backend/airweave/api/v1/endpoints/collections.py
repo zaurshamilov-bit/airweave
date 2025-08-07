@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
+from airweave.api.context import ApiContext
 from airweave.api.examples import (
     create_collection_list_response,
     create_job_list_response,
@@ -20,7 +21,6 @@ from airweave.core.shared_models import ActionType
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
-from airweave.schemas.auth import AuthContext
 from airweave.schemas.search import QueryExpansionStrategy, ResponseType, SearchRequest
 from airweave.search.search_service import search_service
 
@@ -41,22 +41,24 @@ async def list_collections(
         100, description="Maximum number of collections to return (1-1000)", le=1000, ge=1
     ),
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> List[schemas.Collection]:
     """List all collections that belong to your organization."""
-    return await crud.collection.get_multi(
+    collections = await crud.collection.get_multi(
         db,
-        auth_context=auth_context,
+        ctx=ctx,
         skip=skip,
         limit=limit,
     )
+
+    return collections
 
 
 @router.post("/", response_model=schemas.Collection)
 async def create_collection(
     collection: schemas.CollectionCreate,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
 ) -> schemas.Collection:
     """Create a new collection.
@@ -68,9 +70,7 @@ async def create_collection(
     await guard_rail.is_allowed(ActionType.COLLECTIONS)
 
     # Create the collection
-    collection_obj = await collection_service.create(
-        db, collection_in=collection, auth_context=auth_context
-    )
+    collection_obj = await collection_service.create(db, collection_in=collection, ctx=ctx)
 
     # Increment usage after successful creation
     await guard_rail.increment(ActionType.COLLECTIONS)
@@ -85,12 +85,10 @@ async def get_collection(
         description="The unique readable identifier of the collection (e.g., 'finance-data-ab123')",
     ),
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.Collection:
     """Retrieve a specific collection by its readable ID."""
-    db_obj = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, auth_context=auth_context
-    )
+    db_obj = await crud.collection.get_by_readable_id(db, readable_id=readable_id, ctx=ctx)
     if db_obj is None:
         raise HTTPException(status_code=404, detail="Collection not found")
     return db_obj
@@ -103,7 +101,7 @@ async def update_collection(
         ..., description="The unique readable identifier of the collection to update"
     ),
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.Collection:
     """Update a collection's properties.
 
@@ -111,14 +109,10 @@ async def update_collection(
     Note that the readable ID cannot be changed after creation to maintain stable
     API endpoints and preserve any existing integrations or bookmarks.
     """
-    db_obj = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, auth_context=auth_context
-    )
+    db_obj = await crud.collection.get_by_readable_id(db, readable_id=readable_id, ctx=ctx)
     if db_obj is None:
         raise HTTPException(status_code=404, detail="Collection not found")
-    return await crud.collection.update(
-        db, db_obj=db_obj, obj_in=collection, auth_context=auth_context
-    )
+    return await crud.collection.update(db, db_obj=db_obj, obj_in=collection, ctx=ctx)
 
 
 @router.delete("/{readable_id}", response_model=schemas.Collection)
@@ -126,36 +120,35 @@ async def delete_collection(
     readable_id: str = Path(
         ..., description="The unique readable identifier of the collection to delete"
     ),
-    delete_data: bool = Query(
-        False,
-        description="Whether to also delete all associated data from destination systems",
-    ),
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.Collection:
-    """Delete a collection and optionally its associated data.
+    """Delete a collection and all associated data.
 
-    Permanently removes a collection from your organization. By default, this only
-    deletes the collection metadata while preserving the actual data in the
-    destination systems.<br/><br/>All source connections within this collection
-    will also be deleted as part of the cleanup process.
+    Permanently removes a collection from your organization including all synced data
+    from the destination systems. All source connections within this collection
+    will also be deleted as part of the cleanup process. This action cannot be undone.
     """
     # Find the collection
-    db_obj = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, auth_context=auth_context
-    )
+    db_obj = await crud.collection.get_by_readable_id(db, readable_id=readable_id, ctx=ctx)
     if db_obj is None:
         raise HTTPException(status_code=404, detail="Collection not found")
 
-    # If delete_data is true, we need to delete data in destination systems
-    # before deleting the collection (which will cascade delete source connections)
-    if delete_data:
-        # Note: This should be moved to a service method that can properly
-        # handle the destination data deletion without requiring multiple queries
-        pass
+    # Delete the entire Qdrant collection
+    try:
+        from airweave.platform.destinations.qdrant import QdrantDestination
+
+        destination = await QdrantDestination.create(collection_id=db_obj.id)
+        # Delete the entire collection in Qdrant
+        if destination.client:
+            await destination.client.delete_collection(collection_name=str(db_obj.id))
+            ctx.logger.info(f"Deleted Qdrant collection {db_obj.id}")
+    except Exception as e:
+        ctx.logger.error(f"Error deleting Qdrant collection: {str(e)}")
+        # Continue with deletion even if Qdrant deletion fails
 
     # Delete the collection - CASCADE will handle all child objects
-    return await crud.collection.remove(db, id=db_obj.id, auth_context=auth_context)
+    return await crud.collection.remove(db, id=db_obj.id, ctx=ctx)
 
 
 @router.get(
@@ -180,7 +173,7 @@ async def search_collection(
         ),
         examples=["raw", "completion"],
     ),
-    limit: int = Query(20, ge=1, le=100, description="Maximum number of results to return"),
+    limit: int = Query(20, ge=1, le=1000, description="Maximum number of results to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip for pagination"),
     score_threshold: Optional[float] = Query(
         None, ge=0.0, le=1.0, description="Minimum similarity score threshold"
@@ -190,19 +183,17 @@ async def search_collection(
         description="Query expansion strategy (auto, llm, or no_expansion)",
     ),
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
-    logger: ContextualLogger = Depends(deps.get_logger),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SearchResponse:
     """Search across all data sources within the specified collection.
 
     This GET endpoint provides basic search functionality. For advanced filtering
     and options, use the POST /search endpoint.
     """
-    # Check if the organization is allowed to perform queries
     await guard_rail.is_allowed(ActionType.QUERIES)
-
-    logger.info(
+    # Check if the organization is allowed to perform queries
+    ctx.logger.info(
         f"Searching collection {readable_id} with query: {query} "
         f"with response_type: {response_type}, limit: {limit}, offset: {offset}"
     )
@@ -222,8 +213,7 @@ async def search_collection(
             db,
             readable_id=readable_id,
             search_request=search_request,
-            auth_context=auth_context,
-            logger=logger,
+            ctx=ctx,
         )
 
         # Increment usage after successful search
@@ -231,7 +221,7 @@ async def search_collection(
 
         return result
     except Exception as e:
-        logger.error(f"Search error for collection {readable_id}: {str(e)}")
+        ctx.logger.error(f"Search error for collection {readable_id}: {str(e)}")
 
         # Check if it's a connection error
         error_message = str(e).lower()
@@ -267,9 +257,8 @@ async def search_collection_advanced(
     ),
     search_request: SearchRequest = ...,
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
-    logger: ContextualLogger = Depends(deps.get_logger),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SearchResponse:
     """Advanced search with comprehensive filtering and options.
 
@@ -279,10 +268,8 @@ async def search_collection_advanced(
     - Score threshold filtering
     - Query expansion strategies
     """
-    # Check if the organization is allowed to perform queries
     await guard_rail.is_allowed(ActionType.QUERIES)
-
-    logger.info(
+    ctx.logger.info(
         f"Advanced search in collection {readable_id} with query: {search_request.query} "
         f"and filter: {search_request.filter}"
     )
@@ -292,8 +279,7 @@ async def search_collection_advanced(
             db,
             readable_id=readable_id,
             search_request=search_request,
-            auth_context=auth_context,
-            logger=logger,
+            ctx=ctx,
         )
 
         # Increment usage after successful search
@@ -301,7 +287,7 @@ async def search_collection_advanced(
 
         return result
     except Exception as e:
-        logger.error(f"Advanced search error for collection {readable_id}: {str(e)}")
+        ctx.logger.error(f"Advanced search error for collection {readable_id}: {str(e)}")
 
         # Check if it's a connection error
         error_message = str(e).lower()
@@ -342,7 +328,7 @@ async def refresh_all_source_connections(
         ..., description="The unique readable identifier of the collection to refresh"
     ),
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
     logger: ContextualLogger = Depends(deps.get_logger),
@@ -355,9 +341,7 @@ async def refresh_all_source_connections(
     endpoints.
     """
     # Check if collection exists
-    collection = await crud.collection.get_by_readable_id(
-        db, readable_id=readable_id, auth_context=auth_context
-    )
+    collection = await crud.collection.get_by_readable_id(db, readable_id=readable_id, ctx=ctx)
     if collection is None:
         raise HTTPException(status_code=404, detail="Collection not found")
 
@@ -366,7 +350,7 @@ async def refresh_all_source_connections(
 
     # Get all source connections for this collection
     source_connections = await source_connection_service.get_source_connections_by_collection(
-        db=db, collection=readable_id, auth_context=auth_context
+        db=db, collection=readable_id, ctx=ctx
     )
 
     if not source_connections:
@@ -384,38 +368,34 @@ async def refresh_all_source_connections(
     successful_syncs = 0
 
     for sc in source_connections:
+        # Create the sync job
+        sync_job = await source_connection_service.run_source_connection(
+            db=db, source_connection_id=sc.id, ctx=ctx
+        )
+
+        # Get necessary objects for running the sync
+        sync = await crud.sync.get(db=db, id=sync_job.sync_id, ctx=ctx, with_connections=True)
+        sync_dag = await sync_service.get_sync_dag(db=db, sync_id=sync_job.sync_id, ctx=ctx)
+
+        # Get source connection with auth_fields for temporal processing
+        source_connection = await source_connection_service.get_source_connection(
+            db=db,
+            source_connection_id=sc.id,
+            show_auth_fields=True,  # Important: Need actual auth_fields for temporal
+            ctx=ctx,
+        )
+
+        # Prepare objects for background task
+        sync = schemas.Sync.model_validate(sync, from_attributes=True)
+        sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+        source_connection = schemas.SourceConnection.from_orm_with_collection_mapping(
+            source_connection
+        )
+
+        # Add to jobs list
+        sync_jobs.append(sync_job.to_source_connection_job(sc.id))
+
         try:
-            # Create the sync job
-            sync_job = await source_connection_service.run_source_connection(
-                db=db, source_connection_id=sc.id, auth_context=auth_context
-            )
-
-            # Get necessary objects for running the sync
-            sync = await crud.sync.get(
-                db=db, id=sync_job.sync_id, auth_context=auth_context, with_connections=True
-            )
-            sync_dag = await sync_service.get_sync_dag(
-                db=db, sync_id=sync_job.sync_id, auth_context=auth_context
-            )
-
-            # Get source connection with auth_fields for temporal processing
-            source_connection = await source_connection_service.get_source_connection(
-                db=db,
-                source_connection_id=sc.id,
-                show_auth_fields=True,  # Important: Need actual auth_fields for temporal
-                auth_context=auth_context,
-            )
-
-            # Prepare objects for background task
-            sync = schemas.Sync.model_validate(sync, from_attributes=True)
-            sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
-            source_connection = schemas.SourceConnection.from_orm_with_collection_mapping(
-                source_connection
-            )
-
-            # Add to jobs list
-            sync_jobs.append(sync_job.to_source_connection_job(sc.id))
-
             # Start the sync job in the background or via Temporal
             if await temporal_service.is_temporal_enabled():
                 # Use Temporal workflow
@@ -425,7 +405,7 @@ async def refresh_all_source_connections(
                     sync_dag=sync_dag,
                     collection=collection_obj,  # Use the already converted object
                     source_connection=source_connection,
-                    auth_context=auth_context,
+                    ctx=ctx,
                 )
             else:
                 # Fall back to background tasks
@@ -436,7 +416,7 @@ async def refresh_all_source_connections(
                     sync_dag,
                     collection_obj,  # Use the already converted object
                     source_connection,
-                    auth_context,
+                    ctx,
                 )
 
             # Track successful sync setup

@@ -39,10 +39,7 @@ class AsyncSourceStream(Generic[T]):
         self.is_running = True
         self.producer_done = asyncio.Event()
         self.producer_exception = None
-        if logger is None:
-            self.logger = logging.getLogger(__name__)
-        else:
-            self.logger = logger
+        self.logger = logger
 
     async def __aenter__(self):
         """Context manager entry point."""
@@ -61,7 +58,7 @@ class AsyncSourceStream(Generic[T]):
             items_produced = 0
             async for item in self.source_generator:
                 if not self.is_running:
-                    self.logger.info("Producer stopping early")
+                    self.logger.debug("Producer stopping early")
                     break
 
                 # Put item in queue, waiting if queue is full.
@@ -72,7 +69,7 @@ class AsyncSourceStream(Generic[T]):
 
                 # Log progress periodically
                 if items_produced % 50 == 0:
-                    self.logger.info(
+                    self.logger.debug(
                         f"AsyncSourceStream producer progress: {items_produced} items queued, "
                         f"queue size: {self.queue.qsize()}/{self.queue.maxsize}"
                     )

@@ -6,12 +6,12 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airweave.api.context import ApiContext
 from airweave.core.exceptions import NotFoundException
 from airweave.core.shared_models import CollectionStatus, SourceConnectionStatus
 from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.crud.crud_source_connection import source_connection as crud_source_connection
 from airweave.models.collection import Collection
-from airweave.schemas.auth import AuthContext
 from airweave.schemas.collection import CollectionCreate, CollectionUpdate
 
 
@@ -19,7 +19,7 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
     """CRUD operations for collections."""
 
     async def _compute_collection_status(
-        self, db: AsyncSession, collection: Collection, auth_context: AuthContext
+        self, db: AsyncSession, collection: Collection, ctx: ApiContext
     ) -> CollectionStatus:
         """Compute the ephemeral status of a collection based on its source connections.
 
@@ -33,14 +33,14 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
         Args:
             db: The database session
             collection: The collection
-            auth_context: Authentication context
+            ctx: The API context
 
         Returns:
             The computed ephemeral status
         """
         # Get all source connections for this collection
         source_connections = await crud_source_connection.get_for_collection(
-            db, readable_collection_id=collection.readable_id, auth_context=auth_context
+            db, readable_collection_id=collection.readable_id, ctx=ctx
         )
 
         # If no source connections, the collection needs one
@@ -73,14 +73,14 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
         return CollectionStatus.ACTIVE
 
     async def _attach_ephemeral_status(
-        self, db: AsyncSession, collections: List[Collection], auth_context: AuthContext
+        self, db: AsyncSession, collections: List[Collection], ctx: ApiContext
     ) -> List[Collection]:
         """Attach ephemeral status to collections.
 
         Args:
             db: The database session
             collections: The collections to process
-            auth_context: Authentication context
+            ctx: The API context
 
         Returns:
             Collections with computed status
@@ -90,25 +90,23 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
 
         for collection in collections:
             # Compute and set the ephemeral status
-            collection.status = await self._compute_collection_status(db, collection, auth_context)
+            collection.status = await self._compute_collection_status(db, collection, ctx)
 
         return collections
 
-    async def get(
-        self, db: AsyncSession, id: UUID, auth_context: AuthContext
-    ) -> Optional[Collection]:
+    async def get(self, db: AsyncSession, id: UUID, ctx: ApiContext) -> Optional[Collection]:
         """Get a collection by its ID with computed ephemeral status."""
         # Get the collection using the parent method
-        collection = await super().get(db, id=id, auth_context=auth_context)
+        collection = await super().get(db, id=id, ctx=ctx)
 
         if collection:
             # Compute and set the ephemeral status
-            collection = (await self._attach_ephemeral_status(db, [collection], auth_context))[0]
+            collection = (await self._attach_ephemeral_status(db, [collection], ctx))[0]
 
         return collection
 
     async def get_by_readable_id(
-        self, db: AsyncSession, readable_id: str, auth_context: AuthContext
+        self, db: AsyncSession, readable_id: str, ctx: ApiContext
     ) -> Optional[Collection]:
         """Get a collection by its readable ID with computed ephemeral status."""
         result = await db.execute(select(Collection).where(Collection.readable_id == readable_id))
@@ -117,22 +115,22 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
         if not collection:
             raise NotFoundException(f"Collection with readable ID {readable_id} not found")
 
-        await self._validate_organization_access(auth_context, collection.organization_id)
+        await self._validate_organization_access(ctx, collection.organization_id)
 
         # Compute and set the ephemeral status
-        collection = (await self._attach_ephemeral_status(db, [collection], auth_context))[0]
+        collection = (await self._attach_ephemeral_status(db, [collection], ctx))[0]
 
         return collection
 
     async def get_multi(
-        self, db: AsyncSession, *, skip: int = 0, limit: int = 100, auth_context: AuthContext
+        self, db: AsyncSession, *, skip: int = 0, limit: int = 100, ctx: ApiContext
     ) -> List[Collection]:
         """Get multiple collections with computed ephemeral statuses."""
         # Get collections using the parent method
-        collections = await super().get_multi(db, skip=skip, limit=limit, auth_context=auth_context)
+        collections = await super().get_multi(db, skip=skip, limit=limit, ctx=ctx)
 
         # Compute and set the ephemeral status for each collection
-        collections = await self._attach_ephemeral_status(db, collections, auth_context)
+        collections = await self._attach_ephemeral_status(db, collections, ctx)
 
         return collections
 

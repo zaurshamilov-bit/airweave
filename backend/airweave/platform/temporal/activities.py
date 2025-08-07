@@ -39,7 +39,7 @@ async def _run_sync_task(
     sync_dag,
     collection,
     source_connection,
-    auth_context,
+    ctx,
     access_token,
 ):
     """Run the actual sync service."""
@@ -51,7 +51,7 @@ async def _run_sync_task(
         dag=sync_dag,
         collection=collection,
         source_connection=source_connection,
-        auth_context=auth_context,
+        ctx=ctx,
         access_token=access_token,
     )
 
@@ -115,7 +115,7 @@ async def run_sync_activity(
     sync_dag_dict: Dict[str, Any],
     collection_dict: Dict[str, Any],
     source_connection_dict: Dict[str, Any],
-    auth_context_dict: Dict[str, Any],
+    ctx_dict: Dict[str, Any],
     access_token: Optional[str] = None,
 ) -> None:
     """Activity to run a sync job.
@@ -128,11 +128,13 @@ async def run_sync_activity(
         sync_dag_dict: The sync DAG as dict
         collection_dict: The collection as dict
         source_connection_dict: The source connection as dict
-        auth_context_dict: The authentication context as dict
+        ctx_dict: The API context as dict
         access_token: Optional access token
     """
     # Import here to avoid Temporal sandboxing issues
     from airweave import schemas
+    from airweave.api.context import ApiContext
+    from airweave.core.logging import LoggerConfigurator
 
     # Convert dicts back to Pydantic models
     sync = schemas.Sync(**sync_dict)
@@ -140,7 +142,28 @@ async def run_sync_activity(
     sync_dag = schemas.SyncDag(**sync_dag_dict)
     collection = schemas.Collection(**collection_dict)
     source_connection = schemas.SourceConnection(**source_connection_dict)
-    auth_context = schemas.AuthContext(**auth_context_dict)
+
+    # Reconstruct ApiContext with a new logger
+    # The logger from the original context cannot be serialized
+    logger = LoggerConfigurator.configure_logger(
+        "airweave.temporal.activity",
+        dimensions={
+            "sync_job_id": str(sync_job.id),
+            "organization_id": ctx_dict["organization_id"],
+        },
+    )
+
+    # Reconstruct user if present
+    user = schemas.User(**ctx_dict["user"]) if ctx_dict.get("user") else None
+
+    ctx = ApiContext(
+        request_id=ctx_dict["request_id"],
+        organization_id=ctx_dict["organization_id"],
+        user=user,
+        auth_method=ctx_dict["auth_method"],
+        auth_metadata=ctx_dict.get("auth_metadata"),
+        logger=logger,
+    )
 
     activity.logger.info(f"Starting sync activity for job {sync_job.id}")
 
@@ -163,7 +186,7 @@ async def run_sync_activity(
                 sync_dag,
                 collection,
                 source_connection,
-                auth_context,
+                ctx,
                 access_token,
             )
         )
@@ -187,7 +210,7 @@ async def run_sync_activity(
 async def update_sync_job_status_activity(
     sync_job_id: str,
     status: str,
-    auth_context_dict: Dict[str, Any],
+    ctx_dict: Dict[str, Any],
     error: Optional[str] = None,
     failed_at: Optional[str] = None,
 ) -> None:
@@ -199,17 +222,37 @@ async def update_sync_job_status_activity(
     Args:
         sync_job_id: The sync job ID
         status: The new status string (e.g., "failed", "cancelled")
-        auth_context_dict: The current authentication context as dict
+        ctx_dict: The current authentication context as dict
         error: Optional error message
         failed_at: Optional timestamp when the job failed
     """
     # Import here to avoid Temporal sandboxing issues
     from airweave import schemas
+    from airweave.api.context import ApiContext
+    from airweave.core.logging import LoggerConfigurator
     from airweave.core.shared_models import SyncJobStatus
     from airweave.core.sync_job_service import sync_job_service
 
-    # Convert user dict back to Pydantic model
-    auth_context = schemas.AuthContext(**auth_context_dict)
+    # Reconstruct ApiContext with a new logger
+    logger = LoggerConfigurator.configure_logger(
+        "airweave.temporal.activity",
+        dimensions={
+            "sync_job_id": sync_job_id,
+            "organization_id": ctx_dict["organization_id"],
+        },
+    )
+
+    # Reconstruct user if present
+    user = schemas.User(**ctx_dict["user"]) if ctx_dict.get("user") else None
+
+    ctx = ApiContext(
+        request_id=ctx_dict["request_id"],
+        organization_id=ctx_dict["organization_id"],
+        user=user,
+        auth_method=ctx_dict["auth_method"],
+        auth_metadata=ctx_dict.get("auth_metadata"),
+        logger=logger,
+    )
 
     # Convert string status to SyncJobStatus enum
     # Handle both lowercase (Python enum values) and uppercase (database values)
@@ -238,7 +281,7 @@ async def update_sync_job_status_activity(
         await sync_job_service.update_status(
             sync_job_id=UUID(sync_job_id),
             status=status_enum,
-            auth_context=auth_context,
+            ctx=ctx,
             error=error,
             failed_at=failed_at_dt,
         )

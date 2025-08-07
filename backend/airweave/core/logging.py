@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from airweave.schemas.auth import AuthContext
+    from airweave.api.context import ApiContext
 
 
 class JSONFormatter(logging.Formatter):
@@ -159,16 +159,16 @@ class ContextualLogger(logging.LoggerAdapter):
         self.prefix = prefix
         self.dimensions = dimensions or {}
 
-    def from_auth_context(self, auth_context: "AuthContext") -> "ContextualLogger":
-        """Create a new logger with additional context from an AuthContext object."""
+    def from_ctx(self, ctx: "ApiContext") -> "ContextualLogger":
+        """Create a new logger with additional context from an ApiContext object."""
         new_dimensions = self.dimensions.copy()
-        new_dimensions["organization_id"] = str(auth_context.organization_id)
-        new_dimensions["auth_method"] = auth_context.auth_method
+        new_dimensions["organization_id"] = str(ctx.organization_id)
+        new_dimensions["auth_method"] = ctx.auth_method
 
-        if auth_context.user_id:
-            new_dimensions["user_id"] = str(auth_context.user_id)
-        if auth_context.tracking_email:
-            new_dimensions["user_email"] = auth_context.tracking_email
+        if ctx.user_id:
+            new_dimensions["user_id"] = str(ctx.user_id)
+        if ctx.tracking_email:
+            new_dimensions["user_email"] = ctx.tracking_email
 
         return ContextualLogger(self.logger, self.prefix, new_dimensions)
 

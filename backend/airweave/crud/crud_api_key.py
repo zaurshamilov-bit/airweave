@@ -8,13 +8,14 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from airweave.api.context import ApiContext
 from airweave.core import credentials
 from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.exceptions import NotFoundException, PermissionException
 from airweave.crud._base_organization import CRUDBaseOrganization
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.api_key import APIKey
-from airweave.schemas import APIKeyCreate, APIKeyUpdate, AuthContext
+from airweave.schemas import APIKeyCreate, APIKeyUpdate
 
 
 class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
@@ -25,7 +26,7 @@ class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
         db: AsyncSession,
         *,
         obj_in: APIKeyCreate,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         uow: Optional[UnitOfWork] = None,
     ) -> APIKey:
         """Create a new API key with auth context.
@@ -34,7 +35,7 @@ class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
         ----
             db (AsyncSession): The database session.
             obj_in (APIKeyCreate): The API key creation data.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
 
         Returns:
@@ -58,26 +59,26 @@ class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
         return await super().create(
             db=db,
             obj_in=api_key_data,
-            auth_context=auth_context,
+            ctx=ctx,
             uow=uow,
             skip_validation=True,
         )
 
-    async def get_all_for_auth_context(
+    async def get_all_for_ctx(
         self,
         db: AsyncSession,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         organization_id: Optional[UUID] = None,
         *,
         skip: int = 0,
         limit: int = 100,
     ) -> list[APIKey]:
-        """Get all API keys for an auth context's organization.
+        """Get all API keys for an API context's organization.
 
         Args:
         ----
             db (AsyncSession): The database session.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             organization_id (Optional[UUID]): The organization ID to filter by.
             skip (int): The number of records to skip.
             limit (int): The maximum number of records to return.
@@ -89,7 +90,7 @@ class CRUDAPIKey(CRUDBaseOrganization[APIKey, APIKeyCreate, APIKeyUpdate]):
         # Use the parent method which handles organization scoping and access validation
         return await self.get_multi(
             db=db,
-            auth_context=auth_context,
+            ctx=ctx,
             organization_id=organization_id,
             skip=skip,
             limit=limit,

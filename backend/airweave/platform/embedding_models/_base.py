@@ -1,7 +1,10 @@
 """Base class for embedding models."""
 
+import logging
 from abc import abstractmethod
 from typing import List, Optional
+
+from airweave.core.logging import logger as default_logger
 
 
 class BaseEmbeddingModel:
@@ -10,6 +13,25 @@ class BaseEmbeddingModel:
     This base class defines a generic interface for embedding models
     that can be used with different vector stores.
     """
+
+    def __init__(self):
+        """Initialize the base embedding model."""
+        self._logger: Optional[logging.Logger] = (
+            None  # Store contextual logger as instance variable
+        )
+
+    @property
+    def logger(self):
+        """Get the logger for this embedding model, falling back to default if not set."""
+        if self._logger is not None:
+            return self._logger
+        # Fall back to default logger
+        return default_logger
+
+    @logger.setter
+    def logger(self, logger: logging.Logger) -> None:
+        """Set a contextual logger for this embedding model."""
+        self._logger = logger
 
     @abstractmethod
     async def embed(

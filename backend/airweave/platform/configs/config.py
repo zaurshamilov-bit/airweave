@@ -1,5 +1,7 @@
 """Configuration classes for platform components."""
 
+from typing import Optional
+
 from pydantic import Field, validator
 
 from airweave.platform.configs._base import BaseConfig
@@ -294,4 +296,27 @@ class ComposioConfig(AuthProviderConfig):
     account_id: str = Field(
         title="Account ID",
         description="Account ID for the Composio connection",
+    )
+
+
+class PipedreamConfig(AuthProviderConfig):
+    """Pipedream Auth Provider configuration schema."""
+
+    project_id: str = Field(
+        title="Project ID",
+        description="Pipedream project ID (e.g., proj_JPsD74a)",
+    )
+    account_id: str = Field(
+        title="Account ID",
+        description="Pipedream account ID (e.g., apn_gyha5Ky)",
+    )
+    environment: str = Field(
+        default="production",
+        title="Environment",
+        description="Pipedream environment (production or development)",
+    )
+    external_user_id: Optional[str] = Field(
+        default=None,
+        title="External User ID",
+        description="External user ID associated with the account",
     )

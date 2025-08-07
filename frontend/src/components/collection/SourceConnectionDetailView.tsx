@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Alert } from "@/components/ui/alert";
-import { AlertCircle, RefreshCw, Pencil, Play, Clock, Loader2, X } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle, RefreshCw, Play, Clock, Loader2, X, MoreVertical, Edit, Trash, Pencil, Eye, EyeOff } from "lucide-react";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { toast } from "@/hooks/use-toast";
 import { useTheme } from "@/lib/theme-provider";
+import { getAppIconUrl } from "@/lib/utils/icons";
 import ReactFlow, {
     useNodesState,
     useEdgesState,
@@ -23,8 +25,12 @@ import {
 } from '@/components/collection/DagToFlow';
 import { cn } from "@/lib/utils";
 import { SyncErrorCard } from './SyncErrorCard';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { SyncSchedule, SyncScheduleConfig, buildCronExpression, isValidCronExpression } from '@/components/sync/SyncSchedule';
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useSyncStateStore, SyncProgressUpdate } from "@/stores/syncStateStore";
 import { syncStorageService } from "@/services/syncStorageService";
 import { deriveSyncStatus, getSyncStatusColorClass, getSyncStatusDisplayText } from "@/utils/syncStatus";
@@ -37,6 +43,8 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { EditSourceConnectionDialog } from "./EditSourceConnectionDialog";
+import { emitCollectionEvent, SOURCE_CONNECTION_UPDATED } from "@/lib/events";
 
 // Define action check response interface
 interface ActionCheckResponse {
@@ -83,6 +91,8 @@ interface SourceConnection {
     latest_sync_job_error?: string;
     cron_schedule?: string;
     next_scheduled_run?: string;
+    auth_provider?: string;
+    auth_provider_config?: Record<string, any>;
 }
 
 // Source Connection Job interface - matches backend SourceConnectionJob schema exactly
@@ -167,6 +177,7 @@ const SyncDagCard = ({
     syncsCheckDetails: ActionCheckResponse | null;
     isCheckingUsage: boolean;
 }) => {
+    // Calculate if sync is currently running
     const isSyncRunning = syncJob?.status === 'in_progress' || syncJob?.status === 'pending';
 
     return (
@@ -289,8 +300,8 @@ const SyncDagCard = ({
                     <CardContent className="p-3 pt-0">
                         <div
                             ref={flowContainerRef}
-                            className="h-[200px] w-full overflow-hidden rounded-md pointer-events-none [&_.react-flow__handle]:!cursor-default [&_*]:!cursor-default"
-                            style={{ minHeight: '200px' }}
+                            className="h-[238px] w-full overflow-hidden rounded-md pointer-events-none [&_.react-flow__handle]:!cursor-default [&_*]:!cursor-default"
+                            style={{ minHeight: '238px' }}
                         >
                             <ReactFlow
                                 key={sourceConnection.id || 'no-connection'}
@@ -327,7 +338,7 @@ const SyncDagCard = ({
 
                 {/* Entity list - right side panel with same height as Entity Graph */}
                 <div className={cn(
-                    "w-[200px] flex-shrink-0 rounded-lg border flex flex-col h-[270px]",
+                    "w-[200px] flex-shrink-0 rounded-lg border flex flex-col h-[308px]",
                     isDark ? "border-gray-700/50 bg-gray-800/30" : "border-gray-200 bg-white shadow-sm"
                 )}>
                     <div className={cn(
@@ -506,6 +517,24 @@ const SourceConnectionDetailView = ({
 
     // Schedule dialog state
     const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+    const [showEditDetailsDialog, setShowEditDetailsDialog] = useState(false);
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+
+    // Edit dialog state
+    const [editFormData, setEditFormData] = useState({
+        name: '',
+        description: '',
+        config_fields: {} as Record<string, any>,
+        auth_fields: {} as Record<string, any>,
+        auth_provider: '',
+        auth_provider_config: {} as Record<string, any>
+    });
+    const [sourceDetails, setSourceDetails] = useState<any>(null);
+    const [authProviderDetails, setAuthProviderDetails] = useState<any>(null);
+    const [isUpdating, setIsUpdating] = useState(false);
+    const [showPasswordFields, setShowPasswordFields] = useState<Record<string, boolean>>({});
     const [scheduleConfig, setScheduleConfig] = useState<SyncScheduleConfig>({
         type: "one-time",
         frequency: "custom"
@@ -535,6 +564,11 @@ const SourceConnectionDetailView = ({
 
         return { inserted, updated, deleted, kept, skipped, total };
     }, [syncJob, liveProgress]);
+
+    // Calculate if sync is currently running
+    const isSyncRunning = useMemo(() => {
+        return syncJob?.status === 'in_progress' || syncJob?.status === 'pending';
+    }, [syncJob?.status]);
 
     // Derived sync status that uses live progress when available
     const derivedSyncStatus = useMemo(() => {
@@ -584,8 +618,19 @@ const SourceConnectionDetailView = ({
             if (response.ok) {
                 const data = await response.json();
                 console.log("Source connection data received:", data);
-                setSourceConnection(data);
-                return data;
+
+                // Add dummy config fields for prototype testing
+                const enhancedData = {
+                    ...data,
+                    config_fields: data.config_fields || {
+                        api_version: "2023-10-16",
+                        webhook_endpoint: "https://api.company.com/webhooks/stripe",
+                        include_test_data: false
+                    }
+                };
+
+                setSourceConnection(enhancedData);
+                return enhancedData;
             } else {
                 console.error("Failed to load source connection details:", await response.text());
                 return null;
@@ -1016,6 +1061,23 @@ const SourceConnectionDetailView = ({
         }
     };
 
+    // Helper function to check if field is OAuth token field
+    const isTokenField = (fieldName: string): boolean => {
+        return fieldName === 'refresh_token' ||
+            fieldName === 'access_token';
+    };
+
+    // Helper function to check if source has OAuth auth fields
+    const hasOAuthFields = (authFields: any): boolean => {
+        if (!authFields || typeof authFields !== 'object') return false;
+
+        // If auth_fields is a string (like '********'), we can't check
+        if (typeof authFields === 'string') return false;
+
+        // Check if any field is a token field
+        return Object.keys(authFields).some(key => isTokenField(key));
+    };
+
     // Calculate next run time from cron expression
     const calculateNextRunTime = useCallback((cronExpression: string | null) => {
         if (!cronExpression) {
@@ -1428,6 +1490,176 @@ const SourceConnectionDetailView = ({
         }
     }, [syncJob?.id, syncJob?.status, sourceConnectionId]);
 
+    // Fetch source details when edit dialog opens
+    const fetchSourceDetailsForEdit = async () => {
+        if (!sourceConnection?.short_name) return;
+
+        try {
+            // Fetch source details
+            const sourceResponse = await apiClient.get(`/sources/detail/${sourceConnection.short_name}`);
+            if (sourceResponse.ok) {
+                const sourceData = await sourceResponse.json();
+                setSourceDetails(sourceData);
+            }
+
+            // Fetch auth provider details if using auth provider
+            if (sourceConnection.auth_provider) {
+                console.log("Fetching auth provider details for:", sourceConnection.auth_provider);
+
+                // First try to get the auth provider connection by its readable ID
+                let authProviderResponse = await apiClient.get(`/auth-providers/connections/${sourceConnection.auth_provider}`);
+
+                if (authProviderResponse.ok) {
+                    const connectionData = await authProviderResponse.json();
+                    console.log("Auth provider connection data:", connectionData);
+
+                    // Now get the auth provider details using the short name from the connection
+                    const authProviderShortName = connectionData.short_name;
+                    console.log("Auth provider short name from connection:", authProviderShortName);
+
+                    const authProviderDetailsResponse = await apiClient.get(`/auth-providers/detail/${authProviderShortName}`);
+                    if (authProviderDetailsResponse.ok) {
+                        const authProviderData = await authProviderDetailsResponse.json();
+                        console.log("Auth provider details:", authProviderData);
+                        setAuthProviderDetails(authProviderData);
+                    } else {
+                        console.error("Failed to fetch auth provider details:", authProviderDetailsResponse.status);
+                    }
+                } else {
+                    console.error("Failed to fetch auth provider connection:", authProviderResponse.status);
+
+                    // Fallback: try extracting short name from readable ID
+                    const authProviderShortName = sourceConnection.auth_provider.split('-')[0];
+                    console.log("Fallback: trying auth provider short name:", authProviderShortName);
+
+                    authProviderResponse = await apiClient.get(`/auth-providers/detail/${authProviderShortName}`);
+                    if (authProviderResponse.ok) {
+                        const authProviderData = await authProviderResponse.json();
+                        console.log("Auth provider details (fallback):", authProviderData);
+                        setAuthProviderDetails(authProviderData);
+                    } else {
+                        console.error("Failed to fetch auth provider details (fallback):", authProviderResponse.status);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching source details:", error);
+        }
+    };
+
+    // Initialize form data when dialog opens
+    useEffect(() => {
+        if (showEditDetailsDialog && sourceConnection) {
+            // Initialize form data
+            setEditFormData({
+                name: sourceConnection.name || '',
+                description: sourceConnection.description || '',
+                config_fields: sourceConnection.config_fields || {},
+                auth_fields: {},  // Start empty for security
+                auth_provider: sourceConnection.auth_provider || '',
+                auth_provider_config: sourceConnection.auth_provider_config || {}
+            });
+
+            // Fetch source and auth provider details
+            fetchSourceDetailsForEdit();
+        }
+    }, [showEditDetailsDialog, sourceConnection]);
+
+    // Handle edit form submission
+    const handleEditSubmit = async () => {
+        setIsUpdating(true);
+
+        try {
+            const updateData: any = {};
+
+            // Only include fields that have changed
+            if (editFormData.name !== sourceConnection?.name) {
+                updateData.name = editFormData.name;
+            }
+
+            if (editFormData.description !== sourceConnection?.description) {
+                updateData.description = editFormData.description;
+            }
+
+            // Include config fields if any have values
+            const hasConfigChanges = Object.keys(editFormData.config_fields).some(
+                key => editFormData.config_fields[key] !== sourceConnection?.config_fields?.[key]
+            );
+            if (hasConfigChanges) {
+                updateData.config_fields = editFormData.config_fields;
+            }
+
+            // Include auth fields only if any have been filled (not empty)
+            const filledAuthFields = Object.entries(editFormData.auth_fields)
+                .filter(([_, value]) => value && String(value).trim() !== '')
+                .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+
+            if (Object.keys(filledAuthFields).length > 0) {
+                updateData.auth_fields = filledAuthFields;
+            }
+
+            // Include auth provider if changed
+            if (editFormData.auth_provider !== sourceConnection?.auth_provider) {
+                updateData.auth_provider = editFormData.auth_provider;
+            }
+
+            // Include auth provider config if changed and source uses auth provider
+            if (sourceConnection?.auth_provider || editFormData.auth_provider) {
+                const hasAuthProviderConfigChanges = Object.keys(editFormData.auth_provider_config).some(
+                    key => editFormData.auth_provider_config[key] !== sourceConnection?.auth_provider_config?.[key]
+                );
+                if (hasAuthProviderConfigChanges) {
+                    updateData.auth_provider_config = editFormData.auth_provider_config;
+                }
+            }
+
+            // If nothing to update, just close
+            if (Object.keys(updateData).length === 0) {
+                toast({
+                    title: "No changes",
+                    description: "No changes were made to the connection"
+                });
+                setShowEditDetailsDialog(false);
+                return;
+            }
+
+            const response = await apiClient.put(`/source-connections/${sourceConnection?.id}`, null, updateData);
+
+            if (!response.ok) {
+                throw new Error("Failed to update source connection");
+            }
+
+            const updatedConnection = await response.json();
+            setSourceConnection(updatedConnection);
+
+            // Emit event to notify parent components about the update
+            emitCollectionEvent(SOURCE_CONNECTION_UPDATED, {
+                id: updatedConnection.id,
+                collectionId: updatedConnection.collection,
+                updatedConnection
+            });
+
+            // Reload data to ensure everything is in sync
+            await loadAllData();
+
+            toast({
+                title: "Success",
+                description: "Source connection updated successfully"
+            });
+
+            setShowEditDetailsDialog(false);
+        } catch (error) {
+            console.error("Error updating source connection:", error);
+            toast({
+                title: "Error",
+                description: "Failed to update source connection",
+                variant: "destructive"
+            });
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
     if (!sourceConnection) {
         return (
             <div className="w-full py-6">
@@ -1441,91 +1673,79 @@ const SourceConnectionDetailView = ({
 
     return (
         <div className={cn(isDark ? "text-foreground" : "")}>
-            <div className="py-2 space-y-3 mt-4">
-                {/* Display appropriate card based on error status - FROM SYNC JOB */}
-                {syncJob?.error && syncJob?.status !== 'cancelled' ? (
-                    <SyncErrorCard
-                        error={syncJob.error}
-                        onRunSync={handleRunSync}
-                        isInitiatingSyncJob={isInitiatingSyncJob}
-                        isSyncJobRunning={false}
-                        isDark={isDark}
-                    />
-                ) : (
-                    <div className="space-y-3">
-                        {/* Status Dashboard - positioned above the cards */}
-                        <div className="flex gap-2 flex-wrap">
-                            {/* Entities Card - FROM SYNC JOB */}
-                            <div className={cn(
-                                "rounded-lg p-3 flex items-center gap-2 shadow-sm transition-all duration-200 h-10 min-w-[100px]",
-                                isDark
-                                    ? "bg-gray-800/60 border border-gray-700/50"
-                                    : "bg-white border border-gray-100"
-                            )}>
-                                <div className="text-xs uppercase tracking-wider font-medium opacity-60">
-                                    Entities
-                                </div>
-                                <div className="text-base font-semibold">
-                                    {totalEntities.toLocaleString()}
-                                </div>
+            <div className="py-2 space-y-3">
+                {/* Status Dashboard - Always visible */}
+                <div className="flex justify-between items-center gap-2">
+                    {/* Left side - Status cards */}
+                    <div className="flex gap-2 flex-wrap">
+                        {/* Entities Card - FROM SYNC JOB */}
+                        <div className={cn(
+                            "rounded-lg p-3 flex items-center gap-2 shadow-sm transition-all duration-200 h-10 min-w-[100px]",
+                            isDark
+                                ? "bg-gray-800/60 border border-gray-700/50"
+                                : "bg-white border border-gray-100"
+                        )}>
+                            <div className="text-xs uppercase tracking-wider font-medium opacity-60">
+                                Entities
                             </div>
-
-                            {/* Status Card - FROM SYNC JOB */}
-                            <div className={cn(
-                                "rounded-lg p-3 flex items-center gap-2 shadow-sm transition-all duration-200 h-10 min-w-[110px]",
-                                isDark
-                                    ? "bg-gray-800/60 border border-gray-700/50"
-                                    : "bg-white border border-gray-100"
-                            )}>
-                                <div className="text-xs uppercase tracking-wider font-medium opacity-60">
-                                    Status
-                                </div>
-                                <div className="text-base font-medium flex items-center gap-1">
-                                    <span className={`inline-flex h-2 w-2 rounded-full ${getSyncStatusColorClass(derivedSyncStatus)}`} />
-                                    <span className="capitalize text-xs">
-                                        {getSyncStatusDisplayText(derivedSyncStatus)}
-                                    </span>
-
-                                </div>
+                            <div className="text-base font-semibold">
+                                {totalEntities.toLocaleString()}
                             </div>
+                        </div>
 
-                            {/* Runtime Card - FROM SYNC JOB */}
-                            <div className={cn(
-                                "rounded-lg p-3 flex items-center gap-2 shadow-sm transition-all duration-200 h-10 min-w-[100px]",
-                                isDark
-                                    ? "bg-gray-800/60 border border-gray-700/50"
-                                    : "bg-white border border-gray-100"
-                            )}>
-                                <div className="text-xs uppercase tracking-wider font-medium opacity-60">
-                                    Runtime
-                                </div>
-                                <div className="text-base font-medium">
-                                    {totalRuntime ? formatRuntime(totalRuntime) : 'N/A'}
-                                </div>
+                        {/* Status Card - FROM SYNC JOB */}
+                        <div className={cn(
+                            "rounded-lg p-3 flex items-center gap-2 shadow-sm transition-all duration-200 h-10 min-w-[110px]",
+                            isDark
+                                ? "bg-gray-800/60 border border-gray-700/50"
+                                : "bg-white border border-gray-100"
+                        )}>
+                            <div className="text-xs uppercase tracking-wider font-medium opacity-60">
+                                Status
                             </div>
+                            <div className="text-base font-medium flex items-center gap-1">
+                                <span className={`inline-flex h-2 w-2 rounded-full ${getSyncStatusColorClass(derivedSyncStatus)}`} />
+                                <span className="capitalize text-xs">
+                                    {getSyncStatusDisplayText(derivedSyncStatus)}
+                                </span>
 
-                            {/* Schedule Card - FROM SOURCE CONNECTION */}
-                            <div className={cn(
-                                "rounded-lg p-3 flex items-center justify-between shadow-sm transition-all duration-200 h-10 min-w-[120px]",
-                                isDark
-                                    ? "bg-gray-800/60 border border-gray-700/50"
-                                    : "bg-white border border-gray-100"
-                            )}>
-                                <div className="flex items-center gap-2 pr-2">
-                                    <div className="text-xs uppercase tracking-wider font-medium opacity-60">
-                                        Schedule
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <Clock className={cn(
-                                            "w-4 h-4",
-                                            isDark ? "text-gray-400" : "text-gray-500"
-                                        )} />
-                                        <div className="text-base font-medium pl-1">
-                                            {sourceConnection.cron_schedule ?
-                                                (nextRunTime ? `In ${nextRunTime}` : 'Scheduled') :
-                                                'Manual'}
-                                        </div>
-                                    </div>
+                            </div>
+                        </div>
+
+                        {/* Runtime Card - FROM SYNC JOB */}
+                        <div className={cn(
+                            "rounded-lg p-3 flex items-center gap-2 shadow-sm transition-all duration-200 h-10 min-w-[100px]",
+                            isDark
+                                ? "bg-gray-800/60 border border-gray-700/50"
+                                : "bg-white border border-gray-100"
+                        )}>
+                            <div className="text-xs uppercase tracking-wider font-medium opacity-60">
+                                Runtime
+                            </div>
+                            <div className="text-base font-medium">
+                                {totalRuntime ? formatRuntime(totalRuntime) : 'N/A'}
+                            </div>
+                        </div>
+
+                        {/* Schedule Card - FROM SOURCE CONNECTION */}
+                        <div className={cn(
+                            "rounded-lg p-3 flex items-center gap-2 shadow-sm transition-all duration-200 h-10 min-w-[120px]",
+                            isDark
+                                ? "bg-gray-800/60 border border-gray-700/50"
+                                : "bg-white border border-gray-100"
+                        )}>
+                            <div className="text-xs uppercase tracking-wider font-medium opacity-60">
+                                Schedule
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <Clock className={cn(
+                                    "w-4 h-4",
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                )} />
+                                <div className="text-base font-medium pl-1">
+                                    {sourceConnection.cron_schedule ?
+                                        (nextRunTime ? `In ${nextRunTime}` : 'Scheduled') :
+                                        'Manual'}
                                 </div>
                                 <TooltipProvider delayDuration={100}>
                                     <Tooltip>
@@ -1582,6 +1802,7 @@ const SourceConnectionDetailView = ({
                                 </TooltipProvider>
                             </div>
                         </div>
+                    </div>
 
                         {/* Entity Graph and Sync Progress Cards */}
                         <SyncDagCard
@@ -1609,7 +1830,145 @@ const SourceConnectionDetailView = ({
                             syncsCheckDetails={syncsCheckDetails}
                             isCheckingUsage={isCheckingUsage}
                         />
+                    {/* Right side - Action buttons */}
+                    <div className="flex gap-2">
+                        {/* Run Sync Button */}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className={cn(
+                                "h-10 gap-1.5 font-normal px-3",
+                                (isSyncRunning || isInitiatingSyncJob)
+                                    ? isDark
+                                        ? "bg-gray-800/50 border-gray-700/50 text-gray-400 cursor-not-allowed"
+                                        : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
+                                    : isDark
+                                        ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
+                                        : "bg-white border-gray-200 text-gray-800 hover:bg-gray-50"
+                            )}
+                            onClick={handleRunSync}
+                            disabled={isSyncRunning || isInitiatingSyncJob}
+                        >
+                            <Play className="h-3.5 w-3.5" />
+                            {isSyncRunning ? 'Running...' : isInitiatingSyncJob ? 'Starting...' : 'Run Sync'}
+                        </Button>
+
+                        {/* Cancel Sync Button */}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className={cn(
+                                "h-10 gap-1.5 font-normal px-3",
+                                isCancelling
+                                    ? isDark
+                                        ? "bg-orange-900/30 border-orange-700 text-orange-200 hover:bg-orange-900/50"
+                                        : "bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
+                                    : isSyncRunning
+                                        ? isDark
+                                            ? "bg-red-900/30 border-red-700 text-red-200 hover:bg-red-900/50"
+                                            : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+                                        : isDark
+                                            ? "bg-gray-800/50 border-gray-700/50 text-gray-400 cursor-not-allowed"
+                                            : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
+                            )}
+                            onClick={handleCancelSync}
+                            disabled={!isSyncRunning || isCancelling}
+                        >
+                            {isCancelling ? (
+                                <>
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    Cancelling...
+                                </>
+                            ) : (
+                                <>
+                                    <X className="h-3.5 w-3.5" />
+                                    Cancel Sync
+                                </>
+                            )}
+                        </Button>
+
+                        {/* Three-dot menu */}
+                        <div className={cn(
+                            "rounded-lg p-1 shadow-sm transition-all duration-200 h-10 flex items-center justify-center",
+                            isDark
+                                ? "bg-gray-800/60 border border-gray-700/50"
+                                : "bg-white border border-gray-100"
+                        )}>
+                            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+                                <DropdownMenuTrigger asChild>
+                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                                        <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                    <DropdownMenuItem onClick={() => {
+                                        setDropdownOpen(false);
+                                        setShowEditDetailsDialog(true);
+                                    }}>
+                                        <Edit className="h-4 w-4 mr-2" />
+                                        Edit Details
+                                    </DropdownMenuItem>
+
+                                    <DropdownMenuItem onClick={() => {
+                                        setDropdownOpen(false);
+                                        setShowScheduleDialog(true);
+                                    }}>
+                                        <Clock className="h-4 w-4 mr-2" />
+                                        Edit Schedule
+                                    </DropdownMenuItem>
+
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/20"
+                                        onClick={() => {
+                                            setDropdownOpen(false);
+                                            setShowDeleteDialog(true);
+                                        }}
+                                    >
+                                        <Trash className="h-4 w-4 mr-2" />
+                                        Delete
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
                     </div>
+                </div>
+
+                {/* Display appropriate content based on error status */}
+                {syncJob?.error && syncJob?.status !== 'cancelled' ? (
+                    <SyncErrorCard
+                        error={syncJob.error}
+                        onRunSync={handleRunSync}
+                        isInitiatingSyncJob={isInitiatingSyncJob}
+                        isSyncJobRunning={false}
+                        isDark={isDark}
+                    />
+                ) : (
+                    <SyncDagCard
+                        sourceConnection={sourceConnection}
+                        entityDict={entityDict}
+                        selectedEntity={selectedEntity}
+                        setSelectedEntity={setSelectedEntity}
+                        nodes={nodes}
+                        edges={edges}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        reactFlowInstance={reactFlowInstance}
+                        setReactFlowInstance={setReactFlowInstance}
+                        flowContainerRef={flowContainerRef}
+                        syncJobData={syncJobData}
+                        onRunSync={handleRunSync}
+                        isInitiatingSyncJob={isInitiatingSyncJob}
+                        isDark={isDark}
+                        syncJob={syncJob}
+                        onCancelSync={handleCancelSync}
+                        isCancelling={isCancelling}
+                        entitiesAllowed={entitiesAllowed}
+                        syncsAllowed={syncsAllowed}
+                        entitiesCheckDetails={entitiesCheckDetails}
+                        syncsCheckDetails={syncsCheckDetails}
+                        isCheckingUsage={isCheckingUsage}
+                    />
                 )}
             </div>
 
@@ -1650,6 +2009,132 @@ const SourceConnectionDetailView = ({
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+            )}
+
+            {/* Edit Source Connection Dialog */}
+            <EditSourceConnectionDialog
+                open={showEditDetailsDialog}
+                onOpenChange={setShowEditDetailsDialog}
+                sourceConnection={sourceConnection}
+                editFormData={editFormData}
+                setEditFormData={setEditFormData}
+                sourceDetails={sourceDetails}
+                authProviderDetails={authProviderDetails}
+                isUpdating={isUpdating}
+                showPasswordFields={showPasswordFields}
+                setShowPasswordFields={setShowPasswordFields}
+                handleEditSubmit={handleEditSubmit}
+                formatTimeSince={formatTimeSince}
+                isTokenField={isTokenField}
+                isDark={isDark}
+                resolvedTheme={resolvedTheme}
+            />
+
+
+
+
+
+            {/* Delete Confirmation Dialog */}
+            {showDeleteDialog && sourceConnection && (
+                <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                    <AlertDialogContent className={cn(
+                        "border-border",
+                        isDark ? "bg-card-solid text-foreground" : "bg-white"
+                    )}>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Source Connection</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                <div className="space-y-4">
+                                    <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 space-y-3">
+                                        <ul className="space-y-2 ml-4">
+                                            <li className="flex items-start">
+                                                <span className="mr-2">•</span>
+                                                <div>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        You will need to re-authenticate and reconfigure the connection to sync data from this source again.
+                                                    </p>
+                                                </div>
+                                            </li>
+                                            <li className="flex items-start">
+                                                <span className="mr-2">•</span>
+                                                <div>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        All data that was synced from this source will be permanently removed from the knowledge base and cannot be recovered.
+                                                    </p>
+                                                </div>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4">
+                                    <Label htmlFor="confirm-delete" className="text-sm font-medium block mb-2">
+                                        Type <span className="font-bold">{sourceConnection.name}</span> to confirm deletion
+                                    </Label>
+                                    <Input
+                                        id="confirm-delete"
+                                        value={deleteConfirmText}
+                                        onChange={(e) => setDeleteConfirmText(e.target.value)}
+                                        className="w-full"
+                                        placeholder={sourceConnection.name}
+                                    />
+                                </div>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => {
+                                setShowDeleteDialog(false);
+                                setDeleteConfirmText('');
+                            }}>
+                                Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={async () => {
+                                    try {
+                                        // Delete the source connection (data is always deleted)
+                                        const response = await apiClient.delete(`/source-connections/${sourceConnection.id}`);
+
+                                        if (!response.ok) {
+                                            const error = await response.text();
+                                            throw new Error(error || 'Failed to delete source connection');
+                                        }
+
+                                        // Close dialog and clear confirm text
+                                        setShowDeleteDialog(false);
+                                        setDeleteConfirmText('');
+
+                                        // Show success toast
+                                        toast({
+                                            title: "Source connection deleted",
+                                            description: "The source connection and all synced data have been permanently deleted from the knowledge base."
+                                        });
+
+                                        // Emit event to notify parent components
+                                        emitCollectionEvent(SOURCE_CONNECTION_UPDATED, {
+                                            id: sourceConnection.id,
+                                            collectionId: sourceConnection.collection,
+                                            deleted: true
+                                        });
+
+                                        // Navigate back to collection view or reload the page
+                                        // The parent component should handle the removal
+                                    } catch (error) {
+                                        console.error('Error deleting source connection:', error);
+                                        toast({
+                                            title: "Error",
+                                            description: error instanceof Error ? error.message : "Failed to delete source connection",
+                                            variant: "destructive"
+                                        });
+                                    }
+                                }}
+                                disabled={deleteConfirmText !== sourceConnection.name}
+                                className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:text-white dark:hover:bg-red-600 disabled:opacity-50"
+                            >
+                                Delete Connection
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             )}
         </div>
     );

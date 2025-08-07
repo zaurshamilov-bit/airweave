@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.api.context import ApiContext
 from airweave.core import credentials
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
@@ -16,7 +17,6 @@ from airweave.core.shared_models import ConnectionStatus, SyncStatus
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.models.integration_credential import IntegrationType
 from airweave.platform.auth.schemas import AuthType
-from airweave.schemas.auth import AuthContext
 from airweave.schemas.connection import ConnectionCreate
 
 connection_logger = logger.with_prefix("Connection Service: ").with_context(
@@ -35,14 +35,14 @@ class ConnectionService:
     """
 
     async def get_connection(
-        self, db: AsyncSession, connection_id: UUID, auth_context: AuthContext
+        self, db: AsyncSession, connection_id: UUID, ctx: ApiContext
     ) -> schemas.Connection:
         """Get a specific connection by ID.
 
         Args:
             db: The database session
             connection_id: The ID of the connection to retrieve
-            auth_context: The authentication context
+            ctx: The API context
 
         Returns:
             The connection
@@ -50,24 +50,24 @@ class ConnectionService:
         Raises:
             NotFoundException: If the connection is not found
         """
-        connection = await crud.connection.get(db, id=connection_id, auth_context=auth_context)
+        connection = await crud.connection.get(db, id=connection_id, ctx=ctx)
         if not connection:
             raise NotFoundException("Connection not found")
         return connection
 
     async def get_all_connections(
-        self, db: AsyncSession, auth_context: AuthContext
+        self, db: AsyncSession, ctx: ApiContext
     ) -> list[schemas.Connection]:
         """Get all connections for the current user.
 
         Args:
             db: The database session
-            auth_context: The authentication context
+            ctx: The API context
 
         Returns:
             A list of connections
         """
-        return await crud.connection.get_multi(db, auth_context=auth_context)
+        return await crud.connection.get_multi(db, ctx=ctx)
 
     async def get_connections_by_type(
         self, db: AsyncSession, integration_type: IntegrationType, user: schemas.User
@@ -149,14 +149,14 @@ class ConnectionService:
             return connection
 
     async def delete_connection(
-        self, db: AsyncSession, connection_id: UUID, auth_context: AuthContext
+        self, db: AsyncSession, connection_id: UUID, ctx: ApiContext
     ) -> schemas.Connection:
         """Delete a connection and its integration credential.
 
         Args:
             db: The database session
             connection_id: The ID of the connection to delete
-            auth_context: The authentication context
+            ctx: The API context
 
         Returns:
             The deleted connection
@@ -166,20 +166,16 @@ class ConnectionService:
         """
         async with UnitOfWork(db) as uow:
             # Get connection
-            connection = await crud.connection.get(
-                uow.session, id=connection_id, auth_context=auth_context
-            )
+            connection = await crud.connection.get(uow.session, id=connection_id, ctx=ctx)
             if not connection:
                 raise NotFoundException(f"No active connection found for '{connection_id}'")
 
             # Remove all syncs for this connection
-            await crud.sync.remove_all_for_connection(
-                uow.session, connection_id, auth_context=auth_context, uow=uow
-            )
+            await crud.sync.remove_all_for_connection(uow.session, connection_id, ctx=ctx, uow=uow)
 
             # Delete the connection
             connection = await crud.connection.remove(
-                uow.session, id=connection_id, auth_context=auth_context, uow=uow
+                uow.session, id=connection_id, ctx=ctx, uow=uow
             )
 
             # Delete the integration credential if it exists
@@ -187,7 +183,7 @@ class ConnectionService:
                 await crud.integration_credential.remove(
                     uow.session,
                     id=connection.integration_credential_id,
-                    auth_context=auth_context,
+                    ctx=ctx,
                     uow=uow,
                 )
 
@@ -195,14 +191,14 @@ class ConnectionService:
             return connection
 
     async def disconnect_source(
-        self, db: AsyncSession, connection_id: UUID, auth_context: AuthContext
+        self, db: AsyncSession, connection_id: UUID, ctx: ApiContext
     ) -> schemas.Connection:
         """Disconnect from a source connection (set to inactive).
 
         Args:
             db: The database session
             connection_id: The ID of the source connection
-            auth_context: The authentication context
+            ctx: The API context
 
         Returns:
             The updated connection
@@ -212,9 +208,7 @@ class ConnectionService:
             HTTPException: If the connection is not a source
         """
         async with UnitOfWork(db) as uow:
-            connection = await crud.connection.get(
-                uow.session, id=connection_id, auth_context=auth_context
-            )
+            connection = await crud.connection.get(uow.session, id=connection_id, ctx=ctx)
             if not connection:
                 raise NotFoundException("Connection not found")
 
@@ -229,13 +223,13 @@ class ConnectionService:
                 uow.session,
                 db_obj=connection,
                 obj_in=connection_update,
-                auth_context=auth_context,
+                ctx=ctx,
                 uow=uow,
             )
 
             # Also set all syncs using this source to inactive
             syncs = await crud.sync.get_all_for_source_connection(
-                uow.session, connection_id, auth_context=auth_context
+                uow.session, connection_id, ctx=ctx
             )
 
             for sync in syncs:
@@ -245,7 +239,7 @@ class ConnectionService:
                     uow.session,
                     db_obj=sync,
                     obj_in=sync_update,
-                    auth_context=auth_context,
+                    ctx=ctx,
                     uow=uow,
                 )
             connection = schemas.Connection.model_validate(connection, from_attributes=True)
@@ -253,14 +247,14 @@ class ConnectionService:
             return connection
 
     async def get_connection_credentials(
-        self, db: AsyncSession, connection_id: UUID, auth_context: AuthContext
+        self, db: AsyncSession, connection_id: UUID, ctx: ApiContext
     ) -> Dict[str, Any]:
         """Get decrypted credentials for a connection.
 
         Args:
             db: The database session
             connection_id: The ID of the connection
-            auth_context: The authentication context
+            ctx: The API context
 
         Returns:
             The decrypted credentials
@@ -268,7 +262,7 @@ class ConnectionService:
         Raises:
             NotFoundException: If the connection or credential is not found
         """
-        connection = await crud.connection.get(db, id=connection_id, auth_context=auth_context)
+        connection = await crud.connection.get(db, id=connection_id, ctx=ctx)
         if not connection:
             raise NotFoundException("Connection not found")
 
@@ -276,7 +270,7 @@ class ConnectionService:
             raise NotFoundException("Connection has no integration credential")
 
         integration_credential = await crud.integration_credential.get(
-            db, id=connection.integration_credential_id, auth_context=auth_context
+            db, id=connection.integration_credential_id, ctx=ctx
         )
 
         if not integration_credential:
@@ -292,7 +286,7 @@ class ConnectionService:
         auth_type: AuthType,
         encrypted_credentials: str,
         auth_config_class: Optional[str],
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> schemas.Connection:
         """Create a connection with credentials.
 
@@ -305,15 +299,15 @@ class ConnectionService:
             auth_type: The authentication type
             encrypted_credentials: The encrypted credentials
             auth_config_class: The auth config class name
-            auth_context: The authentication context
+            ctx: The API context
 
         Returns:
             The created connection
         """
         # Create integration credential
         integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
-            name=f"{integration_name} - {auth_context.organization_id}",
-            description=f"Credentials for {integration_name} - {auth_context.organization_id}",
+            name=f"{integration_name} - {ctx.organization_id}",
+            description=f"Credentials for {integration_name} - {ctx.organization_id}",
             integration_short_name=short_name,
             integration_type=integration_type,
             auth_type=auth_type,
@@ -322,7 +316,7 @@ class ConnectionService:
         )
 
         integration_cred = await crud.integration_credential.create(
-            uow.session, obj_in=integration_cred_in, auth_context=auth_context, uow=uow
+            uow.session, obj_in=integration_cred_in, ctx=ctx, uow=uow
         )
         await uow.session.flush()
 
@@ -336,9 +330,7 @@ class ConnectionService:
         }
 
         connection_in = ConnectionCreate(**connection_data)
-        return await crud.connection.create(
-            uow.session, obj_in=connection_in, auth_context=auth_context, uow=uow
-        )
+        return await crud.connection.create(uow.session, obj_in=connection_in, ctx=ctx, uow=uow)
 
     async def _validate_slack_token(self, token: str, name: Optional[str]) -> str:
         """Validate a Slack token by making a test API call.
@@ -391,7 +383,7 @@ class ConnectionService:
         integration_type: IntegrationType,
         short_name: str,
         credential_in: schemas.IntegrationCredentialRawCreate,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> schemas.IntegrationCredentialInDB:
         """Create an integration credential with validation.
 
@@ -400,7 +392,7 @@ class ConnectionService:
             integration_type: Type of integration
             short_name: Short name of the integration
             credential_in: The credential data with auth fields
-            auth_context: The authentication context
+            ctx: The API context
 
         Returns:
             The created integration credential with ID
@@ -473,7 +465,7 @@ class ConnectionService:
             auth_type,
             encrypted_credentials,
             auth_config_class,
-            auth_context,
+            ctx,
         )
 
     def _handle_validation_error(self, error, auth_config_class, base_error_message):
@@ -512,14 +504,14 @@ class ConnectionService:
         auth_type,
         encrypted_credentials,
         auth_config_class,
-        auth_context,
+        ctx,
     ):
         """Create the integration credential in the database."""
         async with UnitOfWork(db) as uow:
             integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
                 name=credential_in.name,
                 description=credential_in.description
-                or f"Credentials for {integration.name} - {auth_context.organization_id}",
+                or f"Credentials for {integration.name} - {ctx.organization_id}",
                 integration_short_name=short_name,
                 integration_type=integration_type,
                 auth_type=auth_type,
@@ -528,7 +520,7 @@ class ConnectionService:
             )
 
             integration_credential = await crud.integration_credential.create(
-                uow.session, obj_in=integration_cred_in, auth_context=auth_context, uow=uow
+                uow.session, obj_in=integration_cred_in, ctx=ctx, uow=uow
             )
 
             await uow.commit()
