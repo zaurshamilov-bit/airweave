@@ -20,6 +20,7 @@ from .sync import Sync
 from .sync_connection import SyncConnection
 from .sync_job import SyncJob
 from .transformer import Transformer
+from .usage import Usage
 from .user import User
 from .user_organization import UserOrganization
 from .white_label import WhiteLabel
@@ -47,6 +48,7 @@ __all__ = [
     "SyncDag",
     "SyncJob",
     "Transformer",
+    "Usage",
     "User",
     "UserOrganization",
     "WhiteLabel",

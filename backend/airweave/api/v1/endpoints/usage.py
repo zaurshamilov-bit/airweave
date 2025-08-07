@@ -9,13 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api import deps
+from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.exceptions import PaymentRequiredException, UsageLimitExceededException
 from airweave.core.guard_rail_service import GuardRailService
-from airweave.core.logging import ContextualLogger
 from airweave.core.shared_models import ActionType
 from airweave.models import BillingPeriod, Usage
-from airweave.schemas.auth import AuthContext
 from airweave.schemas.organization_billing import BillingPlan
 from airweave.schemas.usage_dashboard import (
     BillingPeriodUsage,
@@ -35,19 +34,15 @@ async def check_action(
         examples=["queries", "syncs", "entities", "collections", "source_connections"],
     ),
     amount: int = Query(1, ge=1, description="Number of units to check (default 1)"),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
+    ctx: ApiContext = Depends(deps.get_context),
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
-    logger: ContextualLogger = Depends(deps.get_logger),
 ) -> schemas.ActionCheckResponse:
     """Check if a specific action is allowed based on usage limits and billing status.
 
     Returns whether the action is allowed and why it might be blocked.
     Can check for multiple units at once by specifying the amount parameter.
     """
-    logger.info(
-        f"Checking if action '{action}' (amount={amount}) is allowed "
-        f"for organization {auth_context.organization_id}"
-    )
+    ctx.logger.info(f"Checking if action '{action}' (amount={amount}) is allowed.")
 
     # Validate action type
     try:
@@ -87,7 +82,7 @@ async def check_action(
 
     except Exception as e:
         # Unexpected error
-        logger.error(f"Unexpected error checking action {action}: {str(e)}")
+        ctx.logger.error(f"Unexpected error checking action {action}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error checking action: {str(e)}") from e
 
 
@@ -166,18 +161,16 @@ def _create_default_dashboard() -> UsageDashboard:
 async def _get_target_period(
     db: AsyncSession,
     period_id: Optional[UUID],
-    auth_context: AuthContext,
+    ctx: ApiContext,
 ) -> Optional[BillingPeriod]:
     """Get the target billing period based on period_id or current period."""
     if period_id:
-        target_period = await crud.billing_period.get(db, id=period_id, auth_context=auth_context)
+        target_period = await crud.billing_period.get(db, id=period_id, ctx=ctx)
         if not target_period:
             raise HTTPException(status_code=404, detail="Billing period not found")
         return target_period
     else:
-        return await crud.billing_period.get_current_period(
-            db, organization_id=auth_context.organization_id
-        )
+        return await crud.billing_period.get_current_period(db, organization_id=ctx.organization_id)
 
 
 def _calculate_trends(
@@ -257,22 +250,18 @@ async def _build_previous_periods(
 async def get_usage_dashboard(
     period_id: Optional[UUID] = Query(None, description="Specific period to view"),
     db: AsyncSession = Depends(deps.get_db),
-    auth_context: AuthContext = Depends(deps.get_auth_context),
-    logger: ContextualLogger = Depends(deps.get_logger),
+    ctx: ApiContext = Depends(deps.get_context),
 ) -> UsageDashboard:
     """Get comprehensive usage dashboard data.
 
     Returns current period by default, or specific period if requested.
     Includes historical data for comparison and trends.
     """
-    logger.info(
-        f"Fetching usage dashboard for organization {auth_context.organization_id}, "
-        f"period_id={period_id}"
-    )
+    ctx.logger.info(f"Fetching usage dashboard for organization period_id={period_id}")
 
     try:
         # Get target billing period
-        target_period = await _get_target_period(db, period_id, auth_context)
+        target_period = await _get_target_period(db, period_id, ctx)
         if not target_period:
             return _create_default_dashboard()
 
@@ -309,11 +298,11 @@ async def get_usage_dashboard(
         )
 
         # Get previous periods
-        previous_periods = await _build_previous_periods(db, auth_context.organization_id)
+        previous_periods = await _build_previous_periods(db, ctx.organization_id)
 
         # Calculate aggregate stats
         all_usage_records = await crud.usage.get_all_by_organization(
-            db, organization_id=auth_context.organization_id
+            db, organization_id=ctx.organization_id
         )
         total_entities_all_time = (
             sum(u.entities for u in all_usage_records) if all_usage_records else 0
@@ -352,7 +341,7 @@ async def get_usage_dashboard(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to fetch usage dashboard: {str(e)}")
+        ctx.logger.error(f"Failed to fetch usage dashboard: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch usage dashboard: {str(e)}"
         ) from e

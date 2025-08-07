@@ -8,13 +8,13 @@ import stripe
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.api.context import ApiContext
 from airweave.core.config import settings
 from airweave.core.exceptions import InvalidStateError, NotFoundException
 from airweave.core.logging import ContextualLogger, logger
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.integrations.stripe_client import stripe_client
 from airweave.models import Organization
-from airweave.schemas.auth import AuthContext
 from airweave.schemas.billing_period import (
     BillingPeriodCreate,
     BillingPeriodStatus,
@@ -61,7 +61,7 @@ class BillingService:
         organization: Organization,
         stripe_customer_id: str,
         billing_email: str,
-        auth_context: AuthContext,
+        auth_context: ApiContext,
         uow: UnitOfWork,
         contextual_logger: Optional[ContextualLogger] = None,
     ) -> schemas.OrganizationBilling:
@@ -170,7 +170,7 @@ class BillingService:
         plan: str,
         success_url: str,
         cancel_url: str,
-        contextual_logger: Optional[ContextualLogger] = None,
+        ctx: ApiContext,
     ) -> str:
         """Start subscription checkout flow.
 
@@ -180,7 +180,7 @@ class BillingService:
             plan: Plan name (developer, startup)
             success_url: URL to redirect on success
             cancel_url: URL to redirect on cancel
-            contextual_logger: Optional contextual logger with auth context
+            ctx: Authentication context
 
         Returns:
             Checkout session URL
@@ -189,7 +189,7 @@ class BillingService:
             NotFoundException: If billing record not found
             InvalidStateError: If invalid plan or state
         """
-        log = contextual_logger or logger
+        log = ctx.logger
 
         # Get billing record
         billing_model = await crud.organization_billing.get_by_organization(
@@ -213,15 +213,13 @@ class BillingService:
                     f"Redirecting to subscription update for plan change from {current_plan} "
                     f"to {plan} (existing subscription: {billing_model.stripe_subscription_id})"
                 )
-                return await self.update_subscription_plan(
-                    db, organization_id, plan, contextual_logger
-                )
+                return await self.update_subscription_plan(db, organization_id, plan, ctx.logger)
             else:
                 # Same plan - check if it's canceled and needs reactivation
                 if billing_model.cancel_at_period_end:
                     log.info(f"Reactivating canceled {plan} subscription")
                     return await self.update_subscription_plan(
-                        db, organization_id, plan, contextual_logger
+                        db, organization_id, plan, ctx.logger
                     )
                 else:
                     raise InvalidStateError(
@@ -311,22 +309,20 @@ class BillingService:
     async def _handle_trial_subscription_upgrade(
         self,
         billing_model: Any,
-        organization_id: UUID,
+        ctx: ApiContext,
         new_plan: str,
-        contextual_logger: Optional[ContextualLogger] = None,
     ) -> str:
         """Handle upgrading from a trial subscription with no items.
 
         Args:
             billing_model: Organization billing model
-            organization_id: Organization ID
+            ctx: Authentication context
             new_plan: New plan name
-            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Checkout session URL
         """
-        log = contextual_logger or logger
+        log = ctx.logger
 
         log.info(
             f"Creating session for trial upgrade from {billing_model.stripe_subscription_id} "
@@ -348,7 +344,7 @@ class BillingService:
             success_url=f"{settings.app_url}/organization/settings?tab=billing&success=true",
             cancel_url=f"{settings.app_url}/organization/settings?tab=billing",
             metadata={
-                "organization_id": str(organization_id),
+                "organization_id": str(ctx.organization_id),
                 "plan": new_plan,
                 "upgrade_from_trial": "true",
                 "previous_subscription_id": billing_model.stripe_subscription_id,
@@ -386,7 +382,7 @@ class BillingService:
         )
 
         # Create system auth context
-        system_auth = AuthContext(
+        ctx = ApiContext(
             organization_id=organization_id,
             user=None,
             auth_method="system",
@@ -400,15 +396,13 @@ class BillingService:
         )
 
         # Get the billing model from the database to avoid issues with detached instances
-        db_billing_model = await crud.organization_billing.get(
-            db, id=billing_model.id, auth_context=system_auth
-        )
+        db_billing_model = await crud.organization_billing.get(db, id=billing_model.id, ctx=ctx)
 
         await crud.organization_billing.update(
             db,
             db_obj=db_billing_model,
             obj_in=update_data,
-            auth_context=system_auth,
+            ctx=ctx,
         )
 
         return (
@@ -460,7 +454,7 @@ class BillingService:
         )
 
         # Create system auth context
-        system_auth = AuthContext(
+        ctx = ApiContext(
             organization_id=organization_id,
             user=None,
             auth_method="system",
@@ -480,7 +474,7 @@ class BillingService:
             db,
             db_obj=billing_model,
             obj_in=update_data,
-            auth_context=system_auth,
+            ctx=ctx,
         )
 
         return f"Successfully upgraded to {new_plan} plan"
@@ -488,9 +482,8 @@ class BillingService:
     async def update_subscription_plan(
         self,
         db: AsyncSession,
-        organization_id: UUID,
+        ctx: ApiContext,
         new_plan: str,
-        contextual_logger: Optional[ContextualLogger] = None,
     ) -> str:
         """Update subscription to a different plan (upgrade/downgrade).
 
@@ -499,9 +492,8 @@ class BillingService:
 
         Args:
             db: Database session
-            organization_id: Organization ID
+            ctx: Authentication context
             new_plan: Target plan name
-            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Success message or checkout URL if payment update needed
@@ -510,10 +502,10 @@ class BillingService:
             NotFoundException: If billing record not found
             InvalidStateError: If subscription update not allowed
         """
-        log = contextual_logger or logger
+        log = ctx.logger
 
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=organization_id
+            db, organization_id=ctx.organization_id
         )
 
         # Validate plan change
@@ -536,21 +528,19 @@ class BillingService:
                 subscription.status == "trialing"
                 and len(getattr(subscription.items, "data", [])) == 0
             ):
-                return await self._handle_trial_subscription_upgrade(
-                    billing_model, organization_id, new_plan, contextual_logger
-                )
+                return await self._handle_trial_subscription_upgrade(billing_model, ctx, new_plan)
 
             # For downgrades, schedule the change for end of period
             if not is_upgrade:
                 return await self._handle_plan_downgrade(
-                    db, billing_model, organization_id, new_plan, new_price_id
+                    db, billing_model, ctx.organization_id, new_plan, new_price_id
                 )
 
             # For upgrades, proceed with immediate update
             return await self._handle_plan_upgrade(
                 db,
                 billing_model,
-                organization_id,
+                ctx,
                 new_plan,
                 new_price_id,
                 is_trial_to_startup,
@@ -562,15 +552,13 @@ class BillingService:
     async def cancel_subscription(
         self,
         db: AsyncSession,
-        auth_context: AuthContext,
-        contextual_logger: Optional[ContextualLogger] = None,
+        ctx: ApiContext,
     ) -> str:
         """Cancel a subscription.
 
         Args:
             db: Database session
-            auth_context: Authentication context
-            contextual_logger: Optional contextual logger with auth context
+            ctx: Authentication context
 
         Returns:
             Success message
@@ -578,10 +566,8 @@ class BillingService:
         Raises:
             NotFoundException: If no active subscription
         """
-        log = contextual_logger or logger
-
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=auth_context.organization_id
+            db, organization_id=ctx.organization_id
         )
         if not billing_model or not billing_model.stripe_subscription_id:
             raise NotFoundException("No active subscription found")
@@ -593,14 +579,6 @@ class BillingService:
                 cancel_at_period_end=True,
             )
 
-            # Create system auth context for update
-            system_auth = AuthContext(
-                organization_id=auth_context.organization_id,
-                user=None,
-                auth_method="system",
-                auth_metadata={"source": "billing_service"},
-            )
-
             update_data = OrganizationBillingUpdate(
                 cancel_at_period_end=True,
             )
@@ -609,27 +587,25 @@ class BillingService:
                 db,
                 db_obj=billing_model,
                 obj_in=update_data,
-                auth_context=system_auth,
+                ctx=ctx,
             )
 
             return "Subscription will be canceled at the end of the current billing period"
 
         except Exception as e:
-            log.error(f"Failed to cancel subscription: {e}")
+            ctx.logger.error(f"Failed to cancel subscription: {e}")
             raise InvalidStateError(f"Failed to cancel subscription: {str(e)}") from e
 
     async def reactivate_subscription(
         self,
         db: AsyncSession,
-        auth_context: AuthContext,
-        contextual_logger: Optional[ContextualLogger] = None,
+        ctx: ApiContext,
     ) -> str:
         """Reactivate a subscription that's set to cancel at period end.
 
         Args:
             db: Database session
-            auth_context: Authentication context
-            contextual_logger: Optional contextual logger with auth context
+            ctx: Authentication context
 
         Returns:
             Success message
@@ -638,10 +614,8 @@ class BillingService:
             NotFoundException: If no subscription found
             InvalidStateError: If subscription not set to cancel
         """
-        log = contextual_logger or logger
-
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=auth_context.organization_id
+            db, organization_id=ctx.organization_id
         )
         if not billing_model or not billing_model.stripe_subscription_id:
             raise NotFoundException("No active subscription found")
@@ -661,33 +635,31 @@ class BillingService:
                 db,
                 db_obj=billing_model,
                 obj_in=update_data,
-                auth_context=auth_context,
+                ctx=ctx,
             )
 
             return "Subscription reactivated successfully"
 
         except Exception as e:
-            log.error(f"Failed to reactivate subscription: {e}")
+            ctx.logger.error(f"Failed to reactivate subscription: {e}")
             raise InvalidStateError(f"Failed to reactivate subscription: {str(e)}") from e
 
     async def cancel_pending_plan_change(
         self,
         db: AsyncSession,
-        organization_id: UUID,
-        contextual_logger: Optional[ContextualLogger] = None,
+        ctx: ApiContext,
     ) -> str:
         """Cancel a scheduled plan change (downgrade).
 
         Args:
             db: Database session
-            organization_id: Organization ID
-            contextual_logger: Optional contextual logger with auth context
+            ctx: Authentication context
 
         Returns:
             Success message
         """
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=organization_id
+            db, organization_id=ctx.organization_id
         )
 
         if not billing_model or not billing_model.pending_plan_change:
@@ -707,28 +679,19 @@ class BillingService:
         )
 
         # Clear the pending change in our database
-        system_auth = AuthContext(
-            organization_id=organization_id,
-            user=None,
-            auth_method="system",
-            auth_metadata={"source": "billing_service"},
-        )
-
         update_data = OrganizationBillingUpdate(
             pending_plan_change=None,
             pending_plan_change_at=None,
         )
 
         # Get the billing model from the database to avoid issues with detached instances
-        db_billing_model = await crud.organization_billing.get(
-            db, id=billing_model.id, auth_context=system_auth
-        )
+        db_billing_model = await crud.organization_billing.get(db, id=billing_model.id, ctx=ctx)
 
         await crud.organization_billing.update(
             db,
             db_obj=db_billing_model,
             obj_in=update_data,
-            auth_context=system_auth,
+            ctx=ctx,
         )
 
         return "Scheduled plan change has been canceled"
@@ -736,17 +699,15 @@ class BillingService:
     async def create_customer_portal_session(
         self,
         db: AsyncSession,
-        organization_id: UUID,
+        ctx: ApiContext,
         return_url: str,
-        contextual_logger: Optional[ContextualLogger] = None,
     ) -> str:
         """Create customer portal session for billing management.
 
         Args:
             db: Database session
-            organization_id: Organization ID
+            ctx: Authentication context
             return_url: URL to return to
-            contextual_logger: Optional contextual logger with auth context
 
         Returns:
             Portal session URL
@@ -755,7 +716,7 @@ class BillingService:
             NotFoundException: If billing record not found
         """
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=organization_id
+            db, organization_id=ctx.organization_id
         )
         if not billing_model:
             raise NotFoundException("No billing record found for organization")
@@ -824,7 +785,7 @@ class BillingService:
             trial_ends_at = datetime.utcfromtimestamp(subscription.trial_end)
 
         # Create system auth context for update
-        system_auth = AuthContext(
+        ctx = ApiContext(
             organization_id=UUID(org_id),
             user=None,
             auth_method="system",
@@ -851,7 +812,7 @@ class BillingService:
             db,
             db_obj=billing_model,
             obj_in=update_data,
-            auth_context=system_auth,
+            ctx=ctx,
         )
 
         # Create first billing period
@@ -975,38 +936,34 @@ class BillingService:
     async def _handle_trial_conversion(
         self,
         db: AsyncSession,
-        org_id: UUID,
+        ctx: ApiContext,
         subscription: stripe.Subscription,
         new_plan: BillingPlan,
-        system_auth: AuthContext,
     ) -> None:
         """Handle trial to paid conversion.
 
         Args:
             db: Database session
-            org_id: Organization ID
+            ctx: Authentication context
             subscription: Stripe subscription
             new_plan: New plan
-            system_auth: System auth context
         """
-        current_period = await self.get_current_billing_period(db, org_id)
+        current_period = await self.get_current_billing_period(db, ctx.organization_id)
         if not current_period or current_period.status != BillingPeriodStatus.TRIAL:
             return
 
         # End trial period
         await crud.billing_period.update(
             db,
-            db_obj=await crud.billing_period.get(
-                db, id=current_period.id, auth_context=system_auth
-            ),
+            db_obj=await crud.billing_period.get(db, id=current_period.id, ctx=ctx),
             obj_in={"status": BillingPeriodStatus.COMPLETED},
-            auth_context=system_auth,
+            ctx=ctx,
         )
 
         # Create paid period
         await self.create_billing_period(
             db=db,
-            organization_id=org_id,
+            organization_id=ctx.organization_id,
             period_start=datetime.utcnow(),
             period_end=datetime.utcfromtimestamp(subscription.current_period_end),
             plan=BillingPlan(new_plan),
@@ -1019,8 +976,8 @@ class BillingService:
         self,
         db: AsyncSession,
         subscription: stripe.Subscription,
+        ctx: ApiContext,
         previous_attributes: Optional[dict] = None,
-        contextual_logger: Optional[ContextualLogger] = None,
     ) -> None:
         """Handle subscription updated webhook event.
 
@@ -1028,9 +985,9 @@ class BillingService:
             db: Database session
             subscription: Stripe subscription object
             previous_attributes: Previous values that changed
-            contextual_logger: Optional contextual logger with organization context
+            ctx: Authentication context
         """
-        log = contextual_logger or logger
+        log = ctx.logger
 
         # Find billing by subscription ID
         billing_model = await crud.organization_billing.get_by_stripe_subscription(
@@ -1045,7 +1002,7 @@ class BillingService:
         org_id = billing_model.organization_id
 
         # Create system auth context
-        system_auth = AuthContext(
+        ctx = ApiContext(
             organization_id=org_id,
             user=None,
             auth_method="system",
@@ -1102,9 +1059,7 @@ class BillingService:
                 update_data.trial_ends_at = None
                 # Handle trial conversion if needed
                 if previous_attributes and "trial_end" in previous_attributes:
-                    await self._handle_trial_conversion(
-                        db, org_id, subscription, new_plan, system_auth
-                    )
+                    await self._handle_trial_conversion(db, ctx, subscription, new_plan)
             else:
                 update_data.trial_ends_at = datetime.utcfromtimestamp(subscription.trial_end)
 
@@ -1113,7 +1068,7 @@ class BillingService:
             db,
             db_obj=billing_model,
             obj_in=update_data,
-            auth_context=system_auth,
+            ctx=ctx,
         )
 
         log.info(f"Subscription updated for org {org_id}")
@@ -1152,7 +1107,7 @@ class BillingService:
         org_id = billing_model.organization_id
 
         # Create system auth context for update
-        system_auth = AuthContext(
+        ctx = ApiContext(
             organization_id=org_id,
             user=None,
             auth_method="system",
@@ -1177,11 +1132,9 @@ class BillingService:
             if current_period:
                 await crud.billing_period.update(
                     db,
-                    db_obj=await crud.billing_period.get(
-                        db, id=current_period.id, auth_context=system_auth
-                    ),
+                    db_obj=await crud.billing_period.get(db, id=current_period.id, ctx=ctx),
                     obj_in={"status": BillingPeriodStatus.COMPLETED},
-                    auth_context=system_auth,
+                    ctx=ctx,
                 )
                 log.info(f"Completed final billing period {current_period.id} for org {org_id}")
 
@@ -1196,7 +1149,7 @@ class BillingService:
             db,
             db_obj=billing_model,
             obj_in=update_data,
-            auth_context=system_auth,
+            ctx=ctx,
         )
 
     async def handle_payment_succeeded(
@@ -1229,7 +1182,7 @@ class BillingService:
         org_id = billing_model.organization_id
 
         # Create system auth context for update
-        system_auth = AuthContext(
+        ctx = ApiContext(
             organization_id=org_id,
             user=None,
             auth_method="system",
@@ -1250,7 +1203,7 @@ class BillingService:
             db,
             db_obj=billing_model,
             obj_in=update_data,
-            auth_context=system_auth,
+            ctx=ctx,
         )
 
         log.info(f"Payment succeeded for org {org_id}")
@@ -1285,7 +1238,7 @@ class BillingService:
         org_id = billing_model.organization_id
 
         # Create system auth context for update
-        system_auth = AuthContext(
+        ctx = ApiContext(
             organization_id=org_id,
             user=None,
             auth_method="system",
@@ -1300,11 +1253,9 @@ class BillingService:
                 # Mark current period as ended but unpaid
                 await crud.billing_period.update(
                     db,
-                    db_obj=await crud.billing_period.get(
-                        db, id=current_period.id, auth_context=system_auth
-                    ),
+                    db_obj=await crud.billing_period.get(db, id=current_period.id, ctx=ctx),
                     obj_in={"status": BillingPeriodStatus.ENDED_UNPAID},
-                    auth_context=system_auth,
+                    ctx=ctx,
                 )
 
                 # Create grace period
@@ -1346,7 +1297,7 @@ class BillingService:
             db,
             db_obj=billing_model,
             obj_in=update_data,
-            auth_context=system_auth,
+            ctx=ctx,
         )
 
         log.warning(f"Payment failed for org {org_id}")
@@ -1418,7 +1369,7 @@ class BillingService:
         # Update status if grace period expired
         if grace_period_expired and billing_model.billing_status != BillingStatus.TRIAL_EXPIRED:
             # Create system auth context for update
-            system_auth = AuthContext(
+            ctx = ApiContext(
                 organization_id=organization_id,
                 user=None,
                 auth_method="system",
@@ -1433,7 +1384,7 @@ class BillingService:
                 db,
                 db_obj=billing_model,
                 obj_in=update_data,
-                auth_context=system_auth,
+                ctx=ctx,
             )
 
         return SubscriptionInfo(
@@ -1507,7 +1458,7 @@ class BillingService:
                         "status": BillingPeriodStatus.COMPLETED,
                         "period_end": period_start,  # Ensure continuity!
                     },
-                    auth_context=AuthContext(
+                    ctx=ApiContext(
                         organization_id=organization_id,
                         user=None,
                         auth_method="system",
@@ -1541,7 +1492,7 @@ class BillingService:
                 status = BillingPeriodStatus.ACTIVE
 
         # Create system auth context
-        system_auth = AuthContext(
+        ctx = ApiContext(
             organization_id=organization_id,
             user=None,
             auth_method="system",
@@ -1560,9 +1511,7 @@ class BillingService:
             previous_period_id=previous_period_id,
         )
         async with UnitOfWork(db) as uow:
-            period = await crud.billing_period.create(
-                db, obj_in=period_create, auth_context=system_auth, uow=uow
-            )
+            period = await crud.billing_period.create(db, obj_in=period_create, ctx=ctx, uow=uow)
 
             await db.flush()
 
@@ -1575,7 +1524,7 @@ class BillingService:
                 # All counters default to 0
             )
 
-            await crud.usage.create(db, obj_in=usage_create, auth_context=system_auth, uow=uow)
+            await crud.usage.create(db, obj_in=usage_create, ctx=ctx, uow=uow)
 
         log.info(
             f"Created billing period for org {organization_id}: "
@@ -1633,7 +1582,7 @@ class BillingService:
             and not billing_model.stripe_subscription_id
         ):
             # Create system auth context for update
-            system_auth = AuthContext(
+            ctx = ApiContext(
                 organization_id=organization_id,
                 user=None,
                 auth_method="system",
@@ -1649,7 +1598,7 @@ class BillingService:
                 db,
                 db_obj=billing_model,
                 obj_in=update_data,
-                auth_context=system_auth,
+                ctx=ctx,
             )
 
             log.info(f"Trial expired for organization {organization_id}")

@@ -4,9 +4,6 @@
 from airweave.platform.auth.schemas import OAuth2AuthUrl, OAuth2TokenResponse
 
 from .api_key import APIKey, APIKeyCreate, APIKeyInDBBase, APIKeyUpdate
-from .auth import (
-    AuthContext,
-)
 from .auth_provider import (
     AuthProvider,
     AuthProviderConnection,

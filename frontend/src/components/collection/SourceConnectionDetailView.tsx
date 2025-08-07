@@ -1804,133 +1804,49 @@ const SourceConnectionDetailView = ({
                         </div>
                     </div>
 
-                        {/* Entity Graph and Sync Progress Cards */}
-                        <SyncDagCard
-                            sourceConnection={sourceConnection}
-                            entityDict={entityDict}
-                            selectedEntity={selectedEntity}
-                            setSelectedEntity={setSelectedEntity}
-                            nodes={nodes}
-                            edges={edges}
-                            onNodesChange={onNodesChange}
-                            onEdgesChange={onEdgesChange}
-                            reactFlowInstance={reactFlowInstance}
-                            setReactFlowInstance={setReactFlowInstance}
-                            flowContainerRef={flowContainerRef}
-                            syncJobData={syncJobData}
-                            onRunSync={handleRunSync}
-                            isInitiatingSyncJob={isInitiatingSyncJob}
-                            isDark={isDark}
-                            syncJob={syncJob}
-                            onCancelSync={handleCancelSync}
-                            isCancelling={isCancelling}
-                            entitiesAllowed={entitiesAllowed}
-                            syncsAllowed={syncsAllowed}
-                            entitiesCheckDetails={entitiesCheckDetails}
-                            syncsCheckDetails={syncsCheckDetails}
-                            isCheckingUsage={isCheckingUsage}
-                        />
-                    {/* Right side - Action buttons */}
-                    <div className="flex gap-2">
-                        {/* Run Sync Button */}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className={cn(
-                                "h-10 gap-1.5 font-normal px-3",
-                                (isSyncRunning || isInitiatingSyncJob)
-                                    ? isDark
-                                        ? "bg-gray-800/50 border-gray-700/50 text-gray-400 cursor-not-allowed"
-                                        : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
-                                    : isDark
-                                        ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
-                                        : "bg-white border-gray-200 text-gray-800 hover:bg-gray-50"
-                            )}
-                            onClick={handleRunSync}
-                            disabled={isSyncRunning || isInitiatingSyncJob}
-                        >
-                            <Play className="h-3.5 w-3.5" />
-                            {isSyncRunning ? 'Running...' : isInitiatingSyncJob ? 'Starting...' : 'Run Sync'}
-                        </Button>
+                    {/* Right side - Three-dot menu */}
+                    <div className={cn(
+                        "rounded-lg p-1 shadow-sm transition-all duration-200 h-10 flex items-center justify-center",
+                        isDark
+                            ? "bg-gray-800/60 border border-gray-700/50"
+                            : "bg-white border border-gray-100"
+                    )}>
+                        <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+                            <DropdownMenuTrigger asChild>
+                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                                    <MoreVertical className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem onClick={() => {
+                                    setDropdownOpen(false);
+                                    setShowEditDetailsDialog(true);
+                                }}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit Details
+                                </DropdownMenuItem>
 
-                        {/* Cancel Sync Button */}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className={cn(
-                                "h-10 gap-1.5 font-normal px-3",
-                                isCancelling
-                                    ? isDark
-                                        ? "bg-orange-900/30 border-orange-700 text-orange-200 hover:bg-orange-900/50"
-                                        : "bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
-                                    : isSyncRunning
-                                        ? isDark
-                                            ? "bg-red-900/30 border-red-700 text-red-200 hover:bg-red-900/50"
-                                            : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
-                                        : isDark
-                                            ? "bg-gray-800/50 border-gray-700/50 text-gray-400 cursor-not-allowed"
-                                            : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
-                            )}
-                            onClick={handleCancelSync}
-                            disabled={!isSyncRunning || isCancelling}
-                        >
-                            {isCancelling ? (
-                                <>
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    Cancelling...
-                                </>
-                            ) : (
-                                <>
-                                    <X className="h-3.5 w-3.5" />
-                                    Cancel Sync
-                                </>
-                            )}
-                        </Button>
+                                <DropdownMenuItem onClick={() => {
+                                    setDropdownOpen(false);
+                                    setShowScheduleDialog(true);
+                                }}>
+                                    <Clock className="h-4 w-4 mr-2" />
+                                    Edit Schedule
+                                </DropdownMenuItem>
 
-                        {/* Three-dot menu */}
-                        <div className={cn(
-                            "rounded-lg p-1 shadow-sm transition-all duration-200 h-10 flex items-center justify-center",
-                            isDark
-                                ? "bg-gray-800/60 border border-gray-700/50"
-                                : "bg-white border border-gray-100"
-                        )}>
-                            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-                                <DropdownMenuTrigger asChild>
-                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                                        <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                    <DropdownMenuItem onClick={() => {
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/20"
+                                    onClick={() => {
                                         setDropdownOpen(false);
-                                        setShowEditDetailsDialog(true);
-                                    }}>
-                                        <Edit className="h-4 w-4 mr-2" />
-                                        Edit Details
-                                    </DropdownMenuItem>
-
-                                    <DropdownMenuItem onClick={() => {
-                                        setDropdownOpen(false);
-                                        setShowScheduleDialog(true);
-                                    }}>
-                                        <Clock className="h-4 w-4 mr-2" />
-                                        Edit Schedule
-                                    </DropdownMenuItem>
-
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                        className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/20"
-                                        onClick={() => {
-                                            setDropdownOpen(false);
-                                            setShowDeleteDialog(true);
-                                        }}
-                                    >
-                                        <Trash className="h-4 w-4 mr-2" />
-                                        Delete
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
+                                        setShowDeleteDialog(true);
+                                    }}
+                                >
+                                    <Trash className="h-4 w-4 mr-2" />
+                                    Delete
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
 

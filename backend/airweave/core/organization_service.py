@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.api.context import ApiContext
 
 # Import billing dependencies only if Stripe is enabled
 from airweave.core.config import settings
@@ -16,7 +17,6 @@ from airweave.db.unit_of_work import UnitOfWork
 from airweave.integrations.auth0_management import auth0_management_client
 from airweave.models import Organization, User, UserOrganization
 from airweave.schemas.api_key import APIKeyCreate
-from airweave.schemas.auth import AuthContext
 
 if settings.STRIPE_ENABLED:
     from airweave.core.billing_service import billing_service
@@ -117,7 +117,7 @@ class OrganizationService:
                     local_org_schema = schemas.Organization.model_validate(local_org)
 
                     # Create system auth context for billing record creation
-                    system_auth = AuthContext(
+                    ctx = ApiContext(
                         organization_id=local_org_schema.id,
                         user=None,
                         auth_method="system",
@@ -130,7 +130,7 @@ class OrganizationService:
                         organization=local_org_schema,
                         stripe_customer_id=stripe_customer.id,
                         billing_email=owner_user.email,
-                        auth_context=system_auth,
+                        ctx=ctx,
                         uow=uow,
                     )
 
@@ -147,7 +147,7 @@ class OrganizationService:
                 logger.info(f"Creating API key for organization {local_org.id}")
 
                 # Create system auth context for API key creation
-                api_key_auth = AuthContext(
+                api_key_auth = ApiContext(
                     organization_id=local_org.id,
                     user=owner_user,  # Set the owner as the creator
                     auth_method="system",
@@ -159,7 +159,7 @@ class OrganizationService:
                 await crud.api_key.create(
                     db=db,
                     obj_in=api_key_create,
-                    auth_context=api_key_auth,
+                    ctx=api_key_auth,
                     uow=uow,
                 )
 
