@@ -2,7 +2,7 @@
 
 import uuid
 from typing import Dict, List
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -118,10 +118,16 @@ class OrganizationService:
 
                     # Create system auth context for billing record creation
                     ctx = ApiContext(
+                        request_id=str(uuid4()),
                         organization_id=local_org_schema.id,
                         user=None,
                         auth_method="system",
                         auth_metadata={"source": "organization_creation"},
+                        logger=logger.with_context(
+                            organization_id=str(local_org_schema.id),
+                            auth_method="system",
+                            source="organization_creation",
+                        ),
                     )
 
                     # Create billing record
