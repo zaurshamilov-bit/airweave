@@ -21,6 +21,23 @@ export const AuthGuard = ({ children }: AuthGuardProps) => {
   const initializationAttempted = useRef(false);
 
   useEffect(() => {
+    // If auth is disabled (local development), skip all checks but try to load orgs
+    if (!authConfig.authEnabled) {
+      // Still try to initialize organizations for local dev
+      // This will use the superuser's organization created by the backend
+      useOrganizationStore.getState().initializeOrganizations()
+        .then((orgs) => {
+          console.log('Local dev: Loaded organizations:', orgs.length);
+          setCanRenderChildren(true);
+        })
+        .catch((error) => {
+          console.warn('Local dev: Could not load organizations, continuing anyway:', error);
+          // In local dev, always allow access even if org fetch fails
+          setCanRenderChildren(true);
+        });
+      return;
+    }
+
     // Handle unauthenticated users first
     if (authConfig.authEnabled && !authLoading && !isAuthenticated) {
       // Allow access to login/callback pages without redirecting
