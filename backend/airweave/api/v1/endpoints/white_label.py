@@ -303,24 +303,22 @@ async def _prepare_source_connection_config(
 async def _setup_and_run_sync_job(
     sync_job: schemas.SyncJob,
     source_connection: schemas.SourceConnection,
-    auth_context: ApiContext,
+    ctx: ApiContext,
     background_tasks: BackgroundTasks,
 ) -> None:
     """Set up and run sync job in background."""
     async with get_db_context() as sync_db:
         sync_dag = await sync_service.get_sync_dag(
-            db=sync_db, sync_id=source_connection.sync_id, auth_context=auth_context
+            db=sync_db, sync_id=source_connection.sync_id, ctx=ctx
         )
 
         # Get the sync object
-        sync = await crud.sync.get(
-            db=sync_db, id=source_connection.sync_id, auth_context=auth_context
-        )
+        sync = await crud.sync.get(db=sync_db, id=source_connection.sync_id, ctx=ctx)
         sync = schemas.Sync.model_validate(sync, from_attributes=True)
         sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
         sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
         collection = await crud.collection.get_by_readable_id(
-            db=sync_db, readable_id=source_connection.collection, auth_context=auth_context
+            db=sync_db, readable_id=source_connection.collection, ctx=ctx
         )
         collection = schemas.Collection.model_validate(collection, from_attributes=True)
 
@@ -331,7 +329,7 @@ async def _setup_and_run_sync_job(
         sync_dag,
         collection,
         source_connection,
-        auth_context,
+        ctx,
     )
 
 

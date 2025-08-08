@@ -84,7 +84,7 @@ class BillingService:
         organization: Organization,
         stripe_customer_id: str,
         billing_email: str,
-        auth_context: ApiContext,
+        ctx: ApiContext,
         uow: UnitOfWork,
         contextual_logger: Optional[ContextualLogger] = None,
     ) -> schemas.OrganizationBilling:
@@ -95,7 +95,7 @@ class BillingService:
             organization: Organization to create billing for
             stripe_customer_id: Stripe customer ID
             billing_email: Billing contact email
-            auth_context: Authentication context
+            ctx: API context
             uow: Unit of work for transaction management
             contextual_logger: Optional contextual logger with auth context
 
@@ -131,7 +131,7 @@ class BillingService:
         billing = await crud.organization_billing.create(
             db,
             obj_in=billing_create,
-            auth_context=auth_context,
+            ctx=ctx,
             uow=uow,
         )
 
