@@ -261,6 +261,22 @@ class GuardRailService:
             if self.pending_increments[action_type] >= threshold:
                 await self._flush_usage_internal(action_type)
 
+    async def decrement(self, action_type: ActionType, amount: int = 1) -> None:
+        """Decrement the usage for the action."""
+        async with self._lock:
+            self.pending_increments[action_type] = (
+                self.pending_increments.get(action_type, 0) - amount
+            )
+            self.logger.info(
+                f"\n\nDecremented {action_type.value} by {amount}, "
+                f"pending total: {self.pending_increments[action_type]}\n\n"
+            )
+
+            # Check if this specific action type should flush
+            threshold = self.FLUSH_THRESHOLDS.get(action_type, 1)
+            if self.pending_increments[action_type] >= threshold:
+                await self._flush_usage_internal(action_type)
+
     async def _flush_usage_internal(self, action_type: Optional[ActionType] = None) -> None:
         """Flush pending increments to the database using atomic operations.
 

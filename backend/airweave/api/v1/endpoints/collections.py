@@ -122,6 +122,7 @@ async def delete_collection(
     ),
     db: AsyncSession = Depends(deps.get_db),
     ctx: ApiContext = Depends(deps.get_context),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
 ) -> schemas.Collection:
     """Delete a collection and all associated data.
 
@@ -148,6 +149,7 @@ async def delete_collection(
         # Continue with deletion even if Qdrant deletion fails
 
     # Delete the collection - CASCADE will handle all child objects
+    await guard_rail.decrement(ActionType.COLLECTIONS)
     return await crud.collection.remove(db, id=db_obj.id, ctx=ctx)
 
 
