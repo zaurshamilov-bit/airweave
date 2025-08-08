@@ -84,7 +84,7 @@ class FileManager:
         # so this mainly applies to non-CTTI files
         if not is_ctti and entity.sync_id:
             cached_path = await storage_manager.get_cached_file_path(
-                entity.sync_id, entity.entity_id, entity.name
+                logger, entity.sync_id, entity.entity_id, entity.name
             )
 
             if cached_path:
@@ -260,7 +260,7 @@ class FileManager:
         # Note: CTTI files are handled by web_fetcher, not here
         if not is_ctti and entity.sync_id and not entity.should_skip:
             with open(temp_path, "rb") as f:
-                entity = await storage_manager.store_file_entity(entity, f)
+                entity = await storage_manager.store_file_entity(logger, entity, f)
 
             logger.debug(
                 f"File stored in persistent storage (entity_id: {entity.entity_id}, "

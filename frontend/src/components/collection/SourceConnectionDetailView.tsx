@@ -165,8 +165,6 @@ const SyncDagCard = ({
         skipped: number;
         total: number;
     };
-    onRunSync: () => void;
-    isInitiatingSyncJob: boolean;
     isDark: boolean;
     syncJob: SourceConnectionJob | null;
     onCancelSync: () => void;

@@ -430,7 +430,7 @@ async def file_chunker(
             # since they use global deduplication in the aactmarkdowns container
             if not storage_manager._is_ctti_entity(file):
                 await storage_manager.mark_entity_processed(
-                    file.sync_id, file.entity_id, len(final_chunk_texts)
+                    logger, file.sync_id, file.entity_id, len(final_chunk_texts)
                 )
                 logger.debug(
                     f"📝 CHUNKER_MARKED_PROCESSED [{entity_context}] "
