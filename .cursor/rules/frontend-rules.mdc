@@ -205,6 +205,7 @@ const handleError = (error: Error | string, errorSource?: string) => {
 - Interface definitions for props
 - Type inference where possible
 - Avoid `any` types
+- Always try to user interfaces defined universally in /types/index.ts (which wrap Pydantic schemas defined in backend)
 
 ### 2. **Component Organization**
 ```typescript
