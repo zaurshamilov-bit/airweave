@@ -467,6 +467,8 @@ class QdrantDestination(VectorDBDestination):
         limit: int,
         sparse_vector: SparseEmbedding | None,
         search_method: Literal["hybrid", "neural", "keyword"],
+        with_payload: bool = True,
+        score_threshold: float | None = None,
     ) -> rest.QueryRequest:
         """Prepare a query request for Qdrant.
 
@@ -475,6 +477,8 @@ class QdrantDestination(VectorDBDestination):
             limit (int): Maximum number of results to return.
             sparse_vector (SparseEmbedding | None): Optional sparse vector to search with.
             search_method (Literal["hybrid", "neural", "keyword"]): The search method to use.
+            with_payload (bool): Whether to include payload in results.
+            score_threshold (float | None): Optional minimum score threshold.
 
         Returns:
             rest.QueryRequest: The prepared query request.
@@ -523,7 +527,103 @@ class QdrantDestination(VectorDBDestination):
                 fusion=rest.Fusion.RRF,
             )
 
-        return query_request_params
+        return rest.QueryRequest(
+            score_threshold=score_threshold,
+            with_payload=with_payload,
+            **query_request_params,
+        )
+
+    def _validate_bulk_search_inputs(
+        self,
+        query_vectors: list[list[float]],
+        filter_conditions: list[dict] | None,
+        sparse_vectors: list[SparseEmbedding] | None,
+    ) -> None:
+        """Validate inputs for bulk search operation.
+
+        Args:
+            query_vectors (list[list[float]]): List of query vectors to search with.
+            filter_conditions (list[dict] | None): Optional list of filter conditions.
+            sparse_vectors (list[SparseEmbedding] | None): Optional list of sparse vectors.
+
+        Raises:
+            ValueError: If inputs are invalid.
+        """
+        if filter_conditions and len(filter_conditions) != len(query_vectors):
+            raise ValueError(
+                f"Number of filter conditions ({len(filter_conditions)}) must match "
+                f"number of query vectors ({len(query_vectors)})"
+            )
+
+        if sparse_vectors and len(query_vectors) != len(sparse_vectors):
+            raise ValueError("Sparse vector count does not match query vectors")
+
+    async def _prepare_bulk_search_requests(
+        self,
+        query_vectors: list[list[float]],
+        limit: int,
+        score_threshold: float | None,
+        with_payload: bool,
+        filter_conditions: list[dict] | None,
+        sparse_vectors: list[SparseEmbedding] | None,
+        search_method: Literal["hybrid", "neural", "keyword"],
+    ) -> list[rest.QueryRequest]:
+        """Prepare query requests for bulk search.
+
+        Args:
+            query_vectors (list[list[float]]): List of query vectors to search with.
+            limit (int): Maximum number of results per query.
+            score_threshold (float | None): Optional minimum score threshold.
+            with_payload (bool): Whether to include payload in results.
+            filter_conditions (list[dict] | None): Optional list of filter conditions.
+            sparse_vectors (list[SparseEmbedding] | None): Optional list of sparse vectors.
+            search_method (Literal["hybrid", "neural", "keyword"]): The search method to use.
+
+        Returns:
+            list[rest.QueryRequest]: List of prepared query requests.
+        """
+        query_requests = []
+        for i, query_vector in enumerate(query_vectors):
+            sparse_vector = sparse_vectors[i] if sparse_vectors else None
+
+            request = await self._prepare_query_request(
+                query_vector, limit, sparse_vector, search_method, with_payload, score_threshold
+            )
+
+            # Add filter if provided
+            if filter_conditions and filter_conditions[i]:
+                request.filter = rest.Filter.model_validate(filter_conditions[i])
+
+            query_requests.append(request)
+
+        return query_requests
+
+    def _format_bulk_search_results(
+        self, batch_results: list, with_payload: bool
+    ) -> list[list[dict]]:
+        """Format batch search results into standard format.
+
+        Args:
+            batch_results (list): Raw batch search results from Qdrant.
+            with_payload (bool): Whether to include payload in results.
+
+        Returns:
+            list[list[dict]]: Formatted search results.
+        """
+        all_results = []
+        for search_results in batch_results:
+            results = []
+            for result in search_results.points:
+                result_dict = {
+                    "id": result.id,
+                    "score": result.score,
+                }
+                if with_payload:
+                    result_dict["payload"] = result.payload
+                results.append(result_dict)
+            all_results.append(results)
+
+        return all_results
 
     async def bulk_search(
         self,
@@ -533,7 +633,7 @@ class QdrantDestination(VectorDBDestination):
         with_payload: bool = True,
         filter_conditions: list[dict] | None = None,
         sparse_vectors: list[SparseEmbedding] | None = None,
-        search_method: Literal["hybrid", "neural", "keyword"] = "neural",
+        search_method: Literal["hybrid", "neural", "keyword"] = "hybrid",
     ) -> list[list[dict]]:
         """Perform batch search for multiple query vectors in a single request.
 
@@ -555,68 +655,77 @@ class QdrantDestination(VectorDBDestination):
         """
         await self.ensure_client_readiness()
 
-        # Validate inputs
         if not query_vectors:
             return []
 
-        if filter_conditions and len(filter_conditions) != len(query_vectors):
-            raise ValueError(
-                f"Number of filter conditions ({len(filter_conditions)}) must match "
-                f"number of query vectors ({len(query_vectors)})"
-            )
+        # Validate inputs
+        self._validate_bulk_search_inputs(query_vectors, filter_conditions, sparse_vectors)
 
-        if sparse_vectors and len(query_vectors) != len(sparse_vectors):
-            print(
-                f"Number of query vectors ({len(query_vectors)}) must match "
-                f"number of sparse vectors ({len(sparse_vectors)})"
+        # Fallback to neural search if BM25 index does not exist
+        vector_config_names = await self.get_vector_config_names()
+        if "bm25" not in vector_config_names:
+            self.logger.warning(
+                f"BM25 index could not be found in collection {self.collection_name}. "
+                f"Using neural search instead."
             )
-            raise ValueError(
-                f"Number of query vectors ({len(query_vectors)}) must match "
-                f"number of sparse vectors ({len(sparse_vectors)})"
-            )
+            search_method = "neural"
 
         try:
-            query_requests = []
-            for i, query_vector in enumerate(query_vectors):
-                # Create base query request
-                sparse_vector = sparse_vectors[i] if sparse_vectors else None
-
-                query_request_params = self._prepare_query_request(
-                    query_vector, limit, sparse_vector, search_method
-                )
-                request = rest.QueryRequest(
-                    score_threshold=score_threshold,
-                    with_payload=with_payload,
-                    **query_request_params,
-                )
-
-                # Add filter if provided
-                if filter_conditions and filter_conditions[i]:
-                    request.filter = rest.Filter.model_validate(filter_conditions[i])
-
-                query_requests.append(request)
+            # Prepare query requests
+            query_requests = await self._prepare_bulk_search_requests(
+                query_vectors,
+                limit,
+                score_threshold,
+                with_payload,
+                filter_conditions,
+                sparse_vectors,
+                search_method,
+            )
 
             # Perform batch search
             batch_results = await self.client.query_batch_points(
                 collection_name=self.collection_name, requests=query_requests
             )
 
-            # Convert results to standard format
-            all_results = []
-            for search_results in batch_results:
-                results = []
-                for result in search_results.points:
-                    result_dict = {
-                        "id": result.id,
-                        "score": result.score,
-                    }
-                    if with_payload:
-                        result_dict["payload"] = result.payload
-                    results.append(result_dict)
-                all_results.append(results)
-
-            return all_results
+            # Format and return results
+            return self._format_bulk_search_results(batch_results, with_payload)
 
         except Exception as e:
             self.logger.error(f"Error performing batch search with Qdrant: {e}")
+            raise
+
+    async def get_vector_config_names(self) -> list[str]:
+        """Get the names of all vector configurations (both dense and sparse) for the collection.
+
+        Returns:
+            list[str]: A list of vector configuration names from the collection.
+                Includes both dense vector configs and sparse vector configs.
+        """
+        await self.ensure_client_readiness()
+
+        try:
+            # Get collection info
+            collection_info = await self.client.get_collection(collection_name=self.collection_name)
+
+            vector_config_names = []
+
+            # Get dense vector config names
+            if collection_info.config.params.vectors:
+                if isinstance(collection_info.config.params.vectors, dict):
+                    # Named vectors configuration
+                    vector_config_names.extend(collection_info.config.params.vectors.keys())
+                else:
+                    # Single vector configuration (uses default name)
+                    vector_config_names.append(DEFAULT_VECTOR_NAME)
+
+            # Get sparse vector config names
+            if collection_info.config.params.sparse_vectors:
+                vector_config_names.extend(collection_info.config.params.sparse_vectors.keys())
+
+            return vector_config_names
+
+        except Exception as e:
+            self.logger.error(
+                f"Error getting vector configurations from collection {self.collection_name}: {e}"
+            )
             raise
