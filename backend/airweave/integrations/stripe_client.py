@@ -27,6 +27,23 @@ class StripeClient:
             "startup": settings.STRIPE_STARTUP_PRICE_ID,
         }
 
+    def _sanitize_for_stripe(self, text: str) -> str:
+        """Sanitize text for Stripe API to prevent encoding issues.
+
+        Removes or replaces non-ASCII characters that can cause issues
+        with URL encoding in certain environments.
+        """
+        if not text:
+            return text
+
+        # First, try to encode as ASCII, replacing non-ASCII with '?'
+        try:
+            # This will replace any non-ASCII character with '?'
+            return text.encode("ascii", "replace").decode("ascii")
+        except Exception:
+            # Fallback: remove all non-ASCII characters
+            return "".join(char for char in text if ord(char) < 128)
+
     async def create_customer(
         self, email: str, name: str, metadata: Optional[Dict[str, str]] = None
     ) -> stripe.Customer:
@@ -44,17 +61,18 @@ class StripeClient:
             ExternalServiceError: If Stripe API call fails
         """
         try:
-            # Ensure all string values are properly encoded
-            clean_email = str(email).encode("utf-8", errors="replace").decode("utf-8")
-            clean_name = str(name).encode("utf-8", errors="replace").decode("utf-8")
+            # Sanitize all inputs to be ASCII-safe
+            clean_email = self._sanitize_for_stripe(email)
+            clean_name = self._sanitize_for_stripe(name)
 
             # Clean metadata values
             clean_metadata = {}
             if metadata:
                 for key, value in metadata.items():
-                    clean_key = str(key)
-                    clean_value = str(value).encode("utf-8", errors="replace").decode("utf-8")
+                    clean_key = self._sanitize_for_stripe(str(key))
+                    clean_value = self._sanitize_for_stripe(str(value))
                     clean_metadata[clean_key] = clean_value
+
             return await stripe.Customer.create_async(
                 email=clean_email, name=clean_name, metadata=clean_metadata
             )
@@ -63,16 +81,6 @@ class StripeClient:
             raise ExternalServiceError(
                 service_name="Stripe",
                 message=f"Failed to create billing account: {str(e)}",
-            ) from e
-        except UnicodeEncodeError as e:
-            logger.error(f"Unicode encoding error in customer creation: {e}")
-            logger.error(f"Email: {email}, Name: {name}, Metadata: {metadata}")
-            raise ExternalServiceError(
-                service_name="Stripe",
-                message=(
-                    "Failed to create billing account due to encoding error. "
-                    "Please check for special characters in organization name or email."
-                ),
             ) from e
 
     async def delete_customer(self, customer_id: str) -> None:
@@ -118,18 +126,18 @@ class StripeClient:
             ExternalServiceError: If session creation fails
         """
         try:
-            # Ensure URLs are properly encoded strings
-            # This fixes UnicodeEncodeError issues with special characters
-            success_url = str(success_url).encode("utf-8", errors="replace").decode("utf-8")
-            cancel_url = str(cancel_url).encode("utf-8", errors="replace").decode("utf-8")
+            # Sanitize URLs to be ASCII-safe
+            clean_success_url = self._sanitize_for_stripe(success_url)
+            clean_cancel_url = self._sanitize_for_stripe(cancel_url)
 
-            # Ensure metadata values are strings and handle Unicode properly
+            # Clean metadata values
             clean_metadata = {}
             if metadata:
                 for key, value in metadata.items():
-                    clean_key = str(key)
-                    clean_value = str(value).encode("utf-8", errors="replace").decode("utf-8")
+                    clean_key = self._sanitize_for_stripe(str(key))
+                    clean_value = self._sanitize_for_stripe(str(value))
                     clean_metadata[clean_key] = clean_value
+
             session_params = {
                 "customer": customer_id,
                 "payment_method_types": ["card"],
@@ -140,8 +148,8 @@ class StripeClient:
                     }
                 ],
                 "mode": "subscription",
-                "success_url": success_url,
-                "cancel_url": cancel_url,
+                "success_url": clean_success_url,
+                "cancel_url": clean_cancel_url,
                 "metadata": clean_metadata,
                 "allow_promotion_codes": True,
                 "billing_address_collection": "required",
@@ -167,19 +175,6 @@ class StripeClient:
                 service_name="Stripe",
                 message=f"Failed to create checkout session: {str(e)}",
             ) from e
-        except UnicodeEncodeError as e:
-            logger.error(f"Unicode encoding error in checkout session: {e}")
-            logger.error(f"Customer ID: {customer_id}, Price ID: {price_id}")
-            logger.error(f"Success URL: {success_url}")
-            logger.error(f"Cancel URL: {cancel_url}")
-            logger.error(f"Metadata: {metadata}")
-            raise ExternalServiceError(
-                service_name="Stripe",
-                message=(
-                    "Failed to create checkout session due to encoding error. "
-                    "Please check for special characters in URLs or metadata."
-                ),
-            ) from e
 
     async def create_portal_session(
         self, customer_id: str, return_url: str
@@ -197,9 +192,12 @@ class StripeClient:
             ExternalServiceError: If portal creation fails
         """
         try:
+            # Sanitize return URL to be ASCII-safe
+            clean_return_url = self._sanitize_for_stripe(return_url)
+
             return await stripe.billing_portal.Session.create_async(
                 customer=customer_id,
-                return_url=return_url,
+                return_url=clean_return_url,
             )
         except StripeError as e:
             logger.error(f"Failed to create portal session: {e}")
