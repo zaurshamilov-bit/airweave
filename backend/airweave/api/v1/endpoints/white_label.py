@@ -22,6 +22,8 @@ from airweave.api.examples import (
     create_white_label_list_response,
 )
 from airweave.api.router import TrailingSlashRouter
+from airweave.core.guard_rail_service import GuardRailService
+from airweave.core.shared_models import ActionType
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.db.session import get_db_context
@@ -272,6 +274,65 @@ async def list_white_label_source_connections(
     ]
 
 
+async def _prepare_source_connection_config(
+    source_connection_in: Optional[schemas.SourceConnectionCreateWithWhiteLabel],
+    connection: schemas.Connection,
+    white_label: schemas.WhiteLabel,
+    white_label_id: UUID,
+) -> schemas.SourceConnectionCreateWithWhiteLabel:
+    """Prepare source connection configuration."""
+    if source_connection_in is None:
+        # If no source connection provided, create one with defaults
+        return schemas.SourceConnectionCreateWithWhiteLabel(
+            name=f"{connection.name} from {white_label.name}",
+            description=f"Created from white label {white_label.name}",
+            short_name=white_label.source_short_name,
+            sync_immediately=True,
+            white_label_id=white_label_id,
+            credential_id=connection.integration_credential_id,
+        )
+    else:
+        # Ensure white_label_id and short_name are set correctly
+        source_connection_in.white_label_id = white_label_id
+        source_connection_in.credential_id = connection.integration_credential_id
+        if not source_connection_in.short_name:
+            source_connection_in.short_name = white_label.source_short_name
+        return source_connection_in
+
+
+async def _setup_and_run_sync_job(
+    sync_job: schemas.SyncJob,
+    source_connection: schemas.SourceConnection,
+    ctx: ApiContext,
+    background_tasks: BackgroundTasks,
+) -> None:
+    """Set up and run sync job in background."""
+    async with get_db_context() as sync_db:
+        sync_dag = await sync_service.get_sync_dag(
+            db=sync_db, sync_id=source_connection.sync_id, ctx=ctx
+        )
+
+        # Get the sync object
+        sync = await crud.sync.get(db=sync_db, id=source_connection.sync_id, ctx=ctx)
+        sync = schemas.Sync.model_validate(sync, from_attributes=True)
+        sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
+        sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+        collection = await crud.collection.get_by_readable_id(
+            db=sync_db, readable_id=source_connection.collection, ctx=ctx
+        )
+        collection = schemas.Collection.model_validate(collection, from_attributes=True)
+
+    background_tasks.add_task(
+        sync_service.run,
+        sync,
+        sync_job,
+        sync_dag,
+        collection,
+        source_connection,
+        ctx,
+    )
+
+
 @router.api_route(
     "/{white_label_id}/oauth2/code",
     response_model=schemas.SourceConnection,
@@ -304,6 +365,7 @@ async def exchange_white_label_oauth2_code(
     ),
     db: AsyncSession = Depends(deps.get_db),
     ctx: ApiContext = Depends(deps.get_context),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnection:
     """Complete the OAuth flow and create a source connection.
@@ -329,6 +391,10 @@ async def exchange_white_label_oauth2_code(
 
     white_label = schemas.WhiteLabel.model_validate(white_label, from_attributes=True)
     ctx.logger.info(f"Exchanging OAuth2 code for WhiteLabel {white_label.id}.")
+
+    # Check if organization is allowed to create a source connection
+    await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
+
     try:
         # Exchange code for connection
         connection = await oauth2_service.create_oauth2_connection_for_whitelabel(
@@ -337,22 +403,21 @@ async def exchange_white_label_oauth2_code(
         ctx.logger.info(f"Created connection {connection.id} for WhiteLabel {white_label.id}.")
 
         # Create or use the provided source connection config
-        if source_connection_in is None:
-            # If no source connection provided, create one with defaults
-            source_connection_in = schemas.SourceConnectionCreateWithWhiteLabel(
-                name=f"{connection.name} from {white_label.name}",
-                description=f"Created from white label {white_label.name}",
-                short_name=white_label.source_short_name,
-                sync_immediately=True,
-                white_label_id=white_label_id,
-                credential_id=connection.integration_credential_id,
-            )
-        else:
-            # Ensure white_label_id and short_name are set correctly
-            source_connection_in.white_label_id = white_label_id
-            source_connection_in.credential_id = connection.integration_credential_id
-            if not source_connection_in.short_name:
-                source_connection_in.short_name = white_label.source_short_name
+        source_connection_in = await _prepare_source_connection_config(
+            source_connection_in, connection, white_label, white_label_id
+        )
+
+        # Check if we need to create a collection
+        if source_connection_in.collection is None:
+            await guard_rail.is_allowed(ActionType.COLLECTIONS)
+
+        # Check if we need to sync immediately
+        if source_connection_in.sync_immediately:
+            await guard_rail.is_allowed(ActionType.SYNCS)
+            await guard_rail.is_allowed(ActionType.ENTITIES)
+
+        # Store whether we're creating a new collection
+        creating_new_collection = source_connection_in.collection is None
 
         # Create the source connection with the connection ID
         source_connection, sync_job = await source_connection_service.create_source_connection(
@@ -361,32 +426,19 @@ async def exchange_white_label_oauth2_code(
             ctx=ctx,
         )
 
+        # Increment source connection usage after successful creation
+        await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
+
+        # If we created a new collection, increment that too
+        if creating_new_collection:
+            await guard_rail.increment(ActionType.COLLECTIONS)
+
         # If job was created and sync_immediately is True, start it in background
         if sync_job:
-            async with get_db_context() as sync_db:
-                sync_dag = await sync_service.get_sync_dag(
-                    db=sync_db, sync_id=source_connection.sync_id, ctx=ctx
-                )
+            await _setup_and_run_sync_job(sync_job, source_connection, ctx, background_tasks)
 
-                # Get the sync object
-                sync = await crud.sync.get(db=sync_db, id=source_connection.sync_id, ctx=ctx)
-                sync = schemas.Sync.model_validate(sync, from_attributes=True)
-                sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
-                sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
-                collection = await crud.collection.get_by_readable_id(
-                    db=sync_db, readable_id=source_connection.collection, ctx=ctx
-                )
-                collection = schemas.Collection.model_validate(collection, from_attributes=True)
-
-            background_tasks.add_task(
-                sync_service.run,
-                sync,
-                sync_job,
-                sync_dag,
-                collection,
-                source_connection,
-                ctx,
-            )
+            # Increment sync usage only after everything is set up successfully
+            await guard_rail.increment(ActionType.SYNCS)
 
         # Make sure we are returning the source_connection, not anything else
         ctx.logger.debug(f"Returning source_connection: {source_connection}")

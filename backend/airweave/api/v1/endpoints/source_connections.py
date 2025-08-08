@@ -16,8 +16,9 @@ from airweave.api.examples import (
 )
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.datetime_utils import utc_now_naive
+from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import logger
-from airweave.core.shared_models import SyncJobStatus
+from airweave.core.shared_models import ActionType, SyncJobStatus
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_job_service import sync_job_service
 from airweave.core.sync_service import sync_service
@@ -48,7 +49,6 @@ async def list_source_connections(
 ) -> List[schemas.SourceConnectionListItem]:
     """List source connections across your organization.
 
-    <br/><br/>
     By default, returns ALL source connections from every collection in your
     organization. Use the 'collection' parameter to filter results to a specific
     collection. This is useful for getting an overview of all your data sources
@@ -96,11 +96,10 @@ async def create_source_connection(
     db: AsyncSession = Depends(deps.get_db),
     source_connection_in: schemas.SourceConnectionCreate = Body(...),
     ctx: ApiContext = Depends(deps.get_context),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnection:
     """Create a new source connection to sync data into your collection.
-
-    <br/><br/>
 
     **This endpoint only works for sources that do not use OAuth2.0.**
     Sources that do use OAuth2.0 like Google Drive, Slack, or HubSpot must be
@@ -114,6 +113,18 @@ async def create_source_connection(
     [Github](https://docs.airweave.ai/docs/connectors/github)) to see what kind
     of authentication is used.
     """
+    # Check if organization is allowed to create a source connection
+    await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
+
+    # If no collection provided, check if we can create one
+    if source_connection_in.collection is None:
+        await guard_rail.is_allowed(ActionType.COLLECTIONS)
+
+    # If sync_immediately is True, check if we can sync and process entities
+    if source_connection_in.sync_immediately:
+        await guard_rail.is_allowed(ActionType.SYNCS)
+        await guard_rail.is_allowed(ActionType.ENTITIES)
+
     # Temporary: Block certain sources from being created with auth providers
     SOURCES_BLOCKED_FROM_AUTH_PROVIDERS = [
         "confluence",
@@ -139,9 +150,19 @@ async def create_source_connection(
             ),
         )
 
+    # Store whether we're creating a new collection
+    creating_new_collection = source_connection_in.collection is None
+
     source_connection, sync_job = await source_connection_service.create_source_connection(
         db=db, source_connection_in=source_connection_in, ctx=ctx
     )
+
+    # Increment source connection usage after successful creation
+    await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
+
+    # If we created a new collection, increment that too
+    if creating_new_collection:
+        await guard_rail.increment(ActionType.COLLECTIONS)
 
     # If job was created and sync_immediately is True, start it in background
     if sync_job and source_connection_in.sync_immediately:
@@ -190,6 +211,9 @@ async def create_source_connection(
                     ctx,
                 )
 
+            # Increment sync usage only after everything is set up successfully
+            await guard_rail.increment(ActionType.SYNCS)
+
     return source_connection
 
 
@@ -198,6 +222,7 @@ async def create_source_connection_with_credential(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_in: schemas.SourceConnectionCreateWithCredential = Body(...),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     ctx: ApiContext = Depends(deps.get_context),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnection:
@@ -218,14 +243,37 @@ async def create_source_connection_with_credential(
         db: The database session
         source_connection_in: The source connection to create with credential_id
         ctx: The current authentication context
+        guard_rail: The guard rail service
         background_tasks: Background tasks for async operations
 
     Returns:
         The created source connection
     """
+    # Check if organization is allowed to create a source connection
+    await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
+
+    # If no collection provided, check if we can create one
+    if source_connection_in.collection is None:
+        await guard_rail.is_allowed(ActionType.COLLECTIONS)
+
+    # If sync_immediately is True, check if we can sync and process entities
+    if source_connection_in.sync_immediately:
+        await guard_rail.is_allowed(ActionType.SYNCS)
+        await guard_rail.is_allowed(ActionType.ENTITIES)
+
+    # Store whether we're creating a new collection
+    creating_new_collection = source_connection_in.collection is None
+
     source_connection, sync_job = await source_connection_service.create_source_connection(
         db=db, source_connection_in=source_connection_in, ctx=ctx
     )
+
+    # Increment source connection usage after successful creation
+    await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
+
+    # If we created a new collection, increment that too
+    if creating_new_collection:
+        await guard_rail.increment(ActionType.COLLECTIONS)
 
     # If job was created and sync_immediately is True, start it in background
     if sync_job and source_connection_in.sync_immediately:
@@ -274,6 +322,9 @@ async def create_source_connection_with_credential(
                     ctx,
                 )
 
+            # Increment sync usage only after everything is set up successfully
+            await guard_rail.increment(ActionType.SYNCS)
+
     return source_connection
 
 
@@ -288,8 +339,6 @@ async def update_source_connection(
     ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SourceConnection:
     """Update a source connection's properties.
-
-    <br/><br/>
 
     Modify the configuration of an existing source connection including its name,
     authentication credentials, configuration fields, sync schedule, or source-specific settings.
@@ -313,10 +362,9 @@ async def delete_source_connection(
 ) -> schemas.SourceConnection:
     """Delete a source connection and all associated data.
 
-    <br/><br/>
-
-    Permanently removes the source connection configuration, credentials, and all synced data
-    from the destination systems. This action cannot be undone.
+    Permanently removes the source connection configuration and credentials.
+    By default, previously synced data remains in your destination systems for continuity.
+    Use delete_data=true to also remove all associated data from destination systems.
     """
     return await source_connection_service.delete_source_connection(
         db=db,
@@ -352,15 +400,19 @@ async def run_source_connection(
         ],
     ),
     ctx: ApiContext = Depends(deps.get_context),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnectionJob:
     """Manually trigger a data sync for this source connection.
 
-    <br/><br/>
     Starts an immediate synchronization job that extracts fresh data from your source,
     transforms it according to your configuration, and updates the destination systems.
     The job runs asynchronously and endpoint returns immediately with tracking information.
     """
+    # Check if organization is allowed to create syncs and process entities
+    await guard_rail.is_allowed(ActionType.SYNCS)
+    await guard_rail.is_allowed(ActionType.ENTITIES)
+
     sync_job = await source_connection_service.run_source_connection(
         db=db,
         source_connection_id=source_connection_id,
@@ -413,6 +465,9 @@ async def run_source_connection(
             access_token=sync_job.access_token if hasattr(sync_job, "access_token") else None,
         )
 
+    # Increment sync usage only after everything is set up successfully
+    await guard_rail.increment(ActionType.SYNCS)
+
     return sync_job.to_source_connection_job(source_connection_id)
 
 
@@ -431,7 +486,6 @@ async def list_source_connection_jobs(
 ) -> List[schemas.SourceConnectionJob]:
     """List all sync jobs for a source connection.
 
-    <br/><br/>
     Returns the complete history of data synchronization jobs including successful syncs,
     failed attempts, and currently running operations.
     """
@@ -477,7 +531,6 @@ async def cancel_source_connection_job(
 ) -> schemas.SourceConnectionJob:
     """Cancel a running sync job.
 
-    <br/><br/>
     Sends a cancellation signal to stop an in-progress data synchronization.
     The job will complete its current operation and then terminate gracefully.
     Only jobs in 'created', 'pending', or 'in_progress' states can be cancelled.
@@ -547,7 +600,6 @@ async def get_oauth2_authorization_url(
 ) -> schemas.OAuth2AuthUrl:
     """Get the OAuth2 authorization URL for a source.
 
-    <br/><br/>
     Generates the URL where users should be redirected to authorize Airweave
     to access their data. This is the first step in the OAuth flow for sources
     like Google Drive, Slack, or HubSpot.
@@ -584,7 +636,6 @@ async def create_credentials_from_authorization_code(
 ) -> schemas.IntegrationCredentialInDB:
     """Exchange an OAuth2 authorization code for access credentials.
 
-    <br/><br/>
     After users authorize Airweave through the OAuth consent screen, use this endpoint
     to exchange the temporary authorization code for permanent access credentials.
     The credentials are securely encrypted and stored for future syncs.

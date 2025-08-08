@@ -5,6 +5,7 @@ import { useOrganizationStore } from '@/lib/stores/organizations';
 import { Loader2 } from 'lucide-react';
 import authConfig from '@/config/auth';
 import { publicPaths } from '@/constants/paths';
+import { toast } from 'sonner';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -34,26 +35,29 @@ export const AuthGuard = ({ children }: AuthGuardProps) => {
       initializationAttempted.current = true;
 
       useOrganizationStore.getState().initializeOrganizations()
-        .then((fetchedOrganizations) => {
+        .then(async (fetchedOrganizations) => {
           if (fetchedOrganizations.length > 0) {
-            // It's safe to render the protected routes
+            // Check billing status after organizations are loaded
+            const billingCheck = await useOrganizationStore.getState().checkBillingStatus();
+
+            // Always allow access - billing issues are handled per-org
             setCanRenderChildren(true);
           } else {
             // User has no orgs, redirect them
-            navigate(publicPaths.noOrganization, { replace: true });
+            navigate(publicPaths.onboarding, { replace: true });
           }
         })
         .catch(error => {
           console.error('AuthGuard: Failed to initialize organizations, redirecting.', error);
-          navigate(publicPaths.noOrganization, { replace: true });
+          navigate(publicPaths.onboarding, { replace: true });
         });
     }
   }, [isAuthenticated, authLoading, navigate, location.pathname]);
 
   // Show a loading spinner during the initial auth check or org fetch
   if (!canRenderChildren && (authLoading || (isAuthenticated && !initializationAttempted.current))) {
-     // A special check to prevent a flash of the loader on the no-org page
-    if (location.pathname === publicPaths.noOrganization) {
+     // A special check to prevent a flash of the loader on the onboarding page
+    if (location.pathname === publicPaths.onboarding) {
       return null;
     }
     return (

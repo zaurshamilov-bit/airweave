@@ -18,4 +18,4 @@ class APIKey(OrganizationBase, UserMixin):
     __tablename__ = "api_key"
 
     encrypted_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    expiration_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expiration_date: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)

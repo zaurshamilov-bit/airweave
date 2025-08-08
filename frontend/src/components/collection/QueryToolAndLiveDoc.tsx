@@ -23,7 +23,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { JsonViewer } from '@textea/json-viewer';
+import { ActionCheckResponse } from '@/types';
 
 interface QueryToolAndLiveDocProps {
     collectionReadableId: string;
@@ -44,6 +51,11 @@ export const QueryToolAndLiveDoc = ({ collectionReadableId }: QueryToolAndLiveDo
     const [responseTime, setResponseTime] = useState<number | null>(null);
     const [searchStatus, setSearchStatus] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+
+    // Usage limit state
+    const [queriesAllowed, setQueriesAllowed] = useState(true);
+    const [queryCheckDetails, setQueryCheckDetails] = useState<ActionCheckResponse | null>(null);
+    const [isCheckingUsage, setIsCheckingUsage] = useState(true);
 
     // LiveApiDoc state
     const [viewMode, setViewMode] = useState<"restapi" | "mcpserver">("restapi");
@@ -198,11 +210,35 @@ airweave-mcp-search`;
         }
     }, []);
 
+    // Check if queries are allowed
+    const checkQueryAction = useCallback(async () => {
+        try {
+            const response = await apiClient.get('/usage/check-action?action=queries');
+            if (response.ok) {
+                const data: ActionCheckResponse = await response.json();
+                setQueriesAllowed(data.allowed);
+                setQueryCheckDetails(data);
+            }
+        } catch (error) {
+            console.error('Failed to check query action:', error);
+            // Default to allowed on error to not block users
+            setQueriesAllowed(true);
+        } finally {
+            setIsCheckingUsage(false);
+        }
+    }, []);
+
+    // Check on mount and when collection changes
+    useEffect(() => {
+        setIsCheckingUsage(true);
+        checkQueryAction();
+    }, [collectionReadableId, checkQueryAction]);
+
     const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Don't proceed if query is empty
-        if (!query.trim()) return;
+        // Don't proceed if query is empty or queries not allowed
+        if (!query.trim() || !queriesAllowed) return;
 
         setIsLoading(true);
         setStatusCode(null);
@@ -235,6 +271,10 @@ airweave-mcp-search`;
             } else {
                 setCompletion('');
             }
+
+            // After successful query, re-check if queries are still allowed
+            // This updates the UI immediately if user hits their limit
+            await checkQueryAction();
         } catch (error) {
             console.error('Error searching:', error);
             setCompletion(`Error: ${error instanceof Error ? error.message : String(error)}`);
@@ -243,7 +283,7 @@ airweave-mcp-search`;
         } finally {
             setIsLoading(false);
         }
-    }, [query, collectionReadableId, responseType]);
+    }, [query, collectionReadableId, responseType, queriesAllowed, checkQueryAction]);
 
     const handleCopyObjects = useCallback(async () => {
         try {
@@ -380,70 +420,99 @@ airweave-mcp-search`;
 
                 {/* Query input */}
                 <div className="mb-5">
-                    <form onSubmit={handleSubmit} className="flex items-stretch">
-                        {/* Query input field */}
-                        <div className="flex flex-1 h-9 rounded-l-md border-y border-l overflow-hidden">
-                            <div className={cn(
-                                "flex items-center justify-center min-w-[70px] border-r",
-                                isDark
-                                    ? "bg-gray-800/80 text-gray-300 border-gray-700"
-                                    : "bg-gray-50/80 text-gray-600 border-gray-200"
-                            )}>
-                                <span className="text-xs font-medium">query=</span>
-                            </div>
-                            <input
-                                type="text"
-                                placeholder="Ask a question about your data"
-                                value={query}
-                                onChange={(e) => setQuery(e.target.value)}
-                                className={cn(
-                                    "w-full px-3 h-full text-sm",
-                                    isDark
-                                        ? "bg-gray-900 text-gray-200"
-                                        : "bg-white/90"
-                                )}
-                                style={{ outline: 'none', border: 'none' }}
-                            />
-                        </div>
+                    <TooltipProvider delayDuration={100}>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <form onSubmit={handleSubmit} className="flex items-stretch">
+                                    {/* Query input field */}
+                                    <div className={cn(
+                                        "flex flex-1 h-9 rounded-l-md border-y border-l overflow-hidden",
+                                        !queriesAllowed && "opacity-60"
+                                    )}>
+                                        <div className={cn(
+                                            "flex items-center justify-center min-w-[70px] border-r",
+                                            isDark
+                                                ? "bg-gray-800/80 text-gray-300 border-gray-700"
+                                                : "bg-gray-50/80 text-gray-600 border-gray-200"
+                                        )}>
+                                            <span className="text-xs font-medium">query=</span>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            placeholder={queriesAllowed ? "Ask a question about your data" : "Query limit reached"}
+                                            value={query}
+                                            onChange={(e) => setQuery(e.target.value)}
+                                            disabled={!queriesAllowed || isCheckingUsage}
+                                            className={cn(
+                                                "w-full px-3 h-full text-sm",
+                                                isDark
+                                                    ? "bg-gray-900 text-gray-200"
+                                                    : "bg-white/90",
+                                                !queriesAllowed && "cursor-not-allowed"
+                                            )}
+                                            style={{ outline: 'none', border: 'none' }}
+                                        />
+                                    </div>
 
-                        {/* Response type selector */}
-                        <div className={cn(
-                            "h-9 border-y border-l border-r-0",
-                            isDark ? "border-gray-700" : "border-gray-200"
-                        )}>
-                            <Select
-                                value={responseType}
-                                onValueChange={(value) => setResponseType(value as ResponseType)}
-                            >
-                                <SelectTrigger
-                                    className={cn(
-                                        "h-full border-0 rounded-none min-w-[120px] text-xs font-mono focus:outline-none focus:ring-0 focus:ring-offset-0",
-                                        isDark ? "bg-gray-800" : "bg-gray-50"
-                                    )}
-                                >
-                                    <span>{responseType}</span>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="raw" className="text-xs font-mono">raw</SelectItem>
-                                    <SelectItem value="completion" className="text-xs font-mono">completion</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+                                    {/* Response type selector */}
+                                    <div className={cn(
+                                        "h-9 border-y border-l border-r-0",
+                                        isDark ? "border-gray-700" : "border-gray-200",
+                                        !queriesAllowed && "opacity-60"
+                                    )}>
+                                        <Select
+                                            value={responseType}
+                                            onValueChange={(value) => setResponseType(value as ResponseType)}
+                                            disabled={!queriesAllowed || isCheckingUsage}
+                                        >
+                                            <SelectTrigger
+                                                className={cn(
+                                                    "h-full border-0 rounded-none min-w-[120px] text-xs font-mono focus:outline-none focus:ring-0 focus:ring-offset-0",
+                                                    isDark ? "bg-gray-800" : "bg-gray-50",
+                                                    !queriesAllowed && "cursor-not-allowed"
+                                                )}
+                                            >
+                                                <span>{responseType}</span>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="raw" className="text-xs font-mono">raw</SelectItem>
+                                                <SelectItem value="completion" className="text-xs font-mono">completion</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
 
-                        {/* Search button */}
-                        <Button
-                            type="submit"
-                            disabled={isLoading || !query.trim()}
-                            className={cn(
-                                "rounded-l-none rounded-r-md h-9 px-5",
-                                isDark
-                                    ? query.trim() ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-600/90 hover:bg-blue-600/60"
-                                    : query.trim() ? "bg-blue-500 hover:bg-blue-600" : "bg-blue-500/90 hover:bg-blue-500/60"
+                                    {/* Search button */}
+                                    <Button
+                                        type="submit"
+                                        disabled={isLoading || !query.trim() || !queriesAllowed || isCheckingUsage}
+                                        className={cn(
+                                            "rounded-l-none rounded-r-md h-9 px-5",
+                                            isDark
+                                                ? queriesAllowed && query.trim() ? "bg-blue-600 hover:bg-blue-700" : "bg-gray-600 hover:bg-gray-600 cursor-not-allowed"
+                                                : queriesAllowed && query.trim() ? "bg-blue-500 hover:bg-blue-600" : "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
+                                        )}
+                                    >
+                                        {isLoading ? 'Searching...' : isCheckingUsage ? 'Checking...' : 'Search'}
+                                    </Button>
+                                </form>
+                            </TooltipTrigger>
+                            {!queriesAllowed && queryCheckDetails?.reason === 'usage_limit_exceeded' && (
+                                <TooltipContent className="max-w-xs">
+                                    <p className="text-xs">
+                                        Query limit reached.{' '}
+                                        <a
+                                            href="/organization/settings?tab=billing"
+                                            className="underline"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            Upgrade your plan
+                                        </a>
+                                        {' '}for more queries.
+                                    </p>
+                                </TooltipContent>
                             )}
-                        >
-                            {isLoading ? 'Searching...' : 'Search'}
-                        </Button>
-                    </form>
+                        </Tooltip>
+                    </TooltipProvider>
                 </div>
 
                 {/* Unified Response Section */}

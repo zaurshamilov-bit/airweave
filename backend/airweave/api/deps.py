@@ -12,6 +12,7 @@ from airweave.api.auth import auth0
 from airweave.api.context import ApiContext
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
+from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import ContextualLogger, logger
 from airweave.db.session import get_db
 
@@ -204,6 +205,30 @@ async def get_logger(
     return context.logger
 
 
+async def get_guard_rail_service(
+    ctx: ApiContext = Depends(get_context),
+    contextual_logger: ContextualLogger = Depends(get_logger),
+) -> GuardRailService:
+    """Get a GuardRailService instance for the current organization.
+
+    This dependency creates a GuardRailService instance that can be used to check
+    if actions are allowed based on the organization's usage limits and payment status.
+
+    Args:
+    ----
+        ctx (ApiContext): The authentication context containing organization_id.
+        contextual_logger (ContextualLogger): Logger with authentication context.
+
+    Returns:
+    -------
+        GuardRailService: An instance configured for the current organization.
+    """
+    return GuardRailService(
+        organization_id=ctx.organization_id,
+        logger=contextual_logger.with_context(component="guardrail"),
+    )
+
+
 async def get_user(
     db: AsyncSession = Depends(get_db),
     auth0_user: Optional[Auth0User] = Depends(auth0.get_user),
@@ -235,6 +260,8 @@ async def get_user(
         user, _, _ = await _authenticate_system_user(db)
     # Auth0 auth
     else:
+        if not auth0_user:
+            raise HTTPException(status_code=401, detail="User email not found in Auth0")
         user, _, _ = await _authenticate_auth0_user(db, auth0_user)
 
     if not user:
