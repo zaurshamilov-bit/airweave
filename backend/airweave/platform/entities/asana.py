@@ -1,7 +1,7 @@
 """Asana entity schemas."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 from pydantic import Field
 
@@ -253,6 +253,13 @@ class AsanaTaskEntity(ChunkEntity):
 
 class AsanaCommentEntity(ChunkEntity):
     """Schema for Asana comment/story entities."""
+
+    embeddable_fields: ClassVar[List[str]] = [
+        "author",
+        "created_at",
+        "text",
+        "html_text",
+    ]
 
     task_gid: str = Field(
         ..., description="Globally unique identifier of the task this comment belongs to"
