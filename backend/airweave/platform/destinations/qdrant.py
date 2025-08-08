@@ -247,7 +247,8 @@ class QdrantDestination(VectorDBDestination):
                 self.logger.warning(f"Entity {entity.entity_id} has no vector, skipping")
                 continue
 
-            if hasattr(entity_data, "vector"):
+            # Ensure vector is not present in payload
+            if isinstance(entity_data, dict) and "vector" in entity_data:
                 entity_data.pop("vector")
 
             # Create point for Qdrant

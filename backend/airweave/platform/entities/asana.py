@@ -1,7 +1,7 @@
 """Asana entity schemas."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 from pydantic import Field
 
@@ -10,6 +10,11 @@ from airweave.platform.entities._base import ChunkEntity, FileEntity
 
 class AsanaWorkspaceEntity(ChunkEntity):
     """Schema for Asana workspace entities."""
+
+    # Fields to use when constructing embeddable text
+    embeddable_fields: ClassVar[List[str]] = [
+        "name",
+    ]
 
     name: str = Field(..., description="The name of the workspace")
     asana_gid: str = Field(..., description="Globally unique identifier of the workspace")
@@ -24,6 +29,25 @@ class AsanaWorkspaceEntity(ChunkEntity):
 
 class AsanaProjectEntity(ChunkEntity):
     """Schema for Asana project entities."""
+
+    embeddable_fields: ClassVar[List[str]] = [
+        "name",
+        "workspace_name",
+        "current_status",
+        "created_at",
+        "due_date",
+        "due_on",
+        "notes",
+        "html_notes",
+        "start_on",
+        "modified_at",
+        "owner",
+        "team",
+        "members",
+        "followers",
+        "current_status",
+        "workspace_name",
+    ]
 
     name: str = Field(..., description="The name of the project")
     workspace_gid: str = Field(
@@ -88,6 +112,8 @@ class AsanaProjectEntity(ChunkEntity):
 class AsanaSectionEntity(ChunkEntity):
     """Schema for Asana section entities."""
 
+    embeddable_fields: ClassVar[List[str]] = ["name", "created_at", "projects"]
+
     name: str = Field(..., description="The name of the section")
     project_gid: str = Field(
         ..., description="Globally unique identifier of the project this section belongs to"
@@ -103,6 +129,32 @@ class AsanaSectionEntity(ChunkEntity):
 
 class AsanaTaskEntity(ChunkEntity):
     """Schema for Asana task entities."""
+
+    embeddable_fields: ClassVar[List[str]] = [
+        "name",
+        "approval_status",
+        "assignee",
+        "assignee_status",
+        "completed",
+        "completed_at",
+        "completed_by",
+        "created_at",
+        "dependencies",
+        "dependents",
+        "due_at",
+        "due_on",
+        "external",
+        "html_notes",
+        "notes",
+        "html_notes",
+        "parent",
+        "start_at",
+        "start_on",
+        "tags",
+        "custom_fields",
+        "followers",
+        "workspace",
+    ]
 
     name: str = Field(..., description="The name of the task")
     project_gid: str = Field(
@@ -189,6 +241,13 @@ class AsanaTaskEntity(ChunkEntity):
 
 class AsanaCommentEntity(ChunkEntity):
     """Schema for Asana comment/story entities."""
+
+    embeddable_fields: ClassVar[List[str]] = [
+        "author",
+        "created_at",
+        "text",
+        "html_text",
+    ]
 
     task_gid: str = Field(
         ..., description="Globally unique identifier of the task this comment belongs to"

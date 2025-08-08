@@ -8,7 +8,7 @@ from chonkie import RecursiveChunker, TokenChunker
 
 from airweave.core.logging import ContextualLogger
 from airweave.platform.decorators import transformer
-from airweave.platform.entities._base import ChunkEntity, FileEntity, ParentEntity
+from airweave.platform.entities._base import ChunkEntity, FileEntity
 from airweave.platform.file_handling.conversion.factory import document_converter
 from airweave.platform.sync.async_helpers import run_in_thread_pool
 from airweave.platform.transformers.utils import count_tokens
@@ -198,30 +198,7 @@ def _create_chunk_metadata(file: FileEntity, i: int, total_chunks: int) -> dict:
     return chunk_metadata
 
 
-def _create_chunk_entity(
-    file: FileEntity,
-    parent: ParentEntity,
-    chunk_text: str,
-    i: int,
-    chunk_metadata: dict,
-    FileChunkClass: type,
-) -> ChunkEntity:
-    """Create a chunk entity."""
-    md_parent_url = file.original_url if hasattr(file, "original_url") else None
-
-    return FileChunkClass(
-        name=f"{file.name} - Chunk {i + 1}",
-        entity_id=file.entity_id,
-        sync_id=file.sync_id,
-        parent_entity_id=parent.entity_id,
-        parent_db_entity_id=parent.db_entity_id,
-        md_content=chunk_text,
-        md_type="text",
-        md_position=i,
-        md_parent_title=file.name,
-        md_parent_url=md_parent_url,
-        metadata=chunk_metadata,
-    )
+# Note: legacy helper to create parent+chunk removed in unified design
 
 
 async def _try_chunk_size(
@@ -230,18 +207,12 @@ async def _try_chunk_size(
     chunk_size: int,
     entity_context: str,
     logger: ContextualLogger,
-    FileParentClass: type,
-    FileChunkClass: type,
+    UnifiedChunkClass: type,
 ) -> tuple[bool, list[ChunkEntity]]:
     """Try to chunk with a specific size and validate all chunks fit."""
     logger.debug(f"✂️  CHUNKER_ATTEMPT [{entity_context}] Chunking with size {chunk_size}")
 
     final_chunk_texts = await _chunk_text_adaptive(text_content, entity_context, logger, chunk_size)
-
-    # Create parent entity
-    file_data = file.model_dump()
-    file_data.update({"number_of_chunks": len(final_chunk_texts)})
-    parent = FileParentClass(**file_data)
 
     # Test if chunks will fit when serialized
     all_chunks_fit = True
@@ -251,9 +222,22 @@ async def _try_chunk_size(
         if not chunk_text.strip():
             continue
 
-        # Create test chunk entity
+        # Create test unified chunk entity with full file metadata
         chunk_metadata = _create_chunk_metadata(file, i, len(final_chunk_texts))
-        chunk = _create_chunk_entity(file, parent, chunk_text, i, chunk_metadata, FileChunkClass)
+        base_data = file.model_dump()
+        base_data.update(
+            {
+                "entity_id": file.entity_id,
+                "parent_entity_id": file.entity_id,
+                "md_content": chunk_text,
+                "md_type": "text",
+                "md_position": i,
+                "md_parent_title": file.name,
+                "md_parent_url": getattr(file, "original_url", None),
+                "metadata": chunk_metadata,
+            }
+        )
+        chunk = UnifiedChunkClass(**base_data)
 
         # Check actual serialized size
         actual_size = calculate_entity_token_size(chunk)
@@ -278,16 +262,13 @@ async def _try_chunk_size(
             f"🎉 CHUNKER_SUCCESS [{entity_context}] All {len(test_chunks)} chunks fit "
             f"within OpenAI's {OPENAI_TOKEN_LIMIT} token limit"
         )
-        # Return parent with chunks
-        return True, [parent] + test_chunks
+        return True, test_chunks
 
     return False, []
 
 
 @transformer(name="Optimized File Chunker")
-async def optimized_file_chunker(
-    file: FileEntity, logger: ContextualLogger
-) -> list[ParentEntity | ChunkEntity]:
+async def optimized_file_chunker(file: FileEntity, logger: ContextualLogger) -> list[ChunkEntity]:
     """Optimized file chunker that ensures chunks fit within OpenAI's token limit.
 
     This transformer:
@@ -312,7 +293,7 @@ async def optimized_file_chunker(
     )
 
     file_class = type(file)
-    FileParentClass, FileChunkClass = file_class.create_parent_chunk_models()
+    UnifiedChunkClass = file_class.create_unified_chunk_model()
 
     try:
         # Process file content
@@ -334,7 +315,7 @@ async def optimized_file_chunker(
 
         # Try different chunk sizes until we find one that works
         chunk_size = INITIAL_CHUNK_SIZE
-        produced_entities = []
+        produced_entities: list[ChunkEntity] = []
 
         while chunk_size >= MIN_CHUNK_SIZE:
             success, entities = await _try_chunk_size(
@@ -343,8 +324,7 @@ async def optimized_file_chunker(
                 chunk_size,
                 entity_context,
                 logger,
-                FileParentClass,
-                FileChunkClass,
+                UnifiedChunkClass,
             )
 
             if success:
@@ -366,10 +346,10 @@ async def optimized_file_chunker(
             return []
 
         total_elapsed = asyncio.get_event_loop().time() - start_time
-        chunks_created = len(produced_entities) - 1  # Subtract parent
+        chunks_created = len(produced_entities)
         logger.debug(
             f"✅ CHUNKER_COMPLETE [{entity_context}] Chunking completed in {total_elapsed:.2f}s "
-            f"(1 parent + {chunks_created} chunks)"
+            f"({chunks_created} unified chunks)"
         )
 
         # Mark entity as fully processed in storage

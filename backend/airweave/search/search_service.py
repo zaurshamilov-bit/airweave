@@ -97,6 +97,8 @@ class SearchService:
                     "checksum",
                     "sync_id",
                     "sync_job_id",
+                    # Hide embeddable_text in RAW results; still available for LLM context
+                    "embeddable_text",
                 ]
                 for field in fields_to_always_remove:
                     payload.pop(field, None)
@@ -292,7 +294,9 @@ class SearchService:
 
             # Process results and generate completion
             processed_results = self._process_search_results(cleaned_results)
-            completion = await self._generate_ai_completion(query, cleaned_results)
+            # Pass embeddable_text back into context for the LLM by injecting it
+            # (the cleaned_results already have it removed; fetch raw to supply context)
+            completion = await self._generate_ai_completion(query, raw_results)
 
             return schemas.SearchResponse(
                 results=processed_results,
@@ -366,7 +370,7 @@ class SearchService:
             # Process results and generate completion
             processed_results = self._process_search_results(cleaned_results)
 
-            completion = await self._generate_ai_completion(search_request.query, cleaned_results)
+            completion = await self._generate_ai_completion(search_request.query, raw_results)
 
             return schemas.SearchResponse(
                 results=processed_results,

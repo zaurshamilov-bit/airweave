@@ -380,18 +380,29 @@ class EntityProcessor:
         )
 
         try:
-            # Convert entities to dictionaries for embedding
+            # Build embeddable texts (instead of stringifying full dicts)
             sync_context.logger.debug(
-                f"📦 VECTOR_CONVERT_START [{entity_context}] Converting entities to dicts"
+                f"🧩 VECTOR_TEXT_START [{entity_context}] Building embeddable texts"
             )
             convert_start = asyncio.get_event_loop().time()
 
-            entity_dicts = await self._convert_entities_to_dicts(processed_entities, sync_context)
+            texts: list[str] = []
+            for e in processed_entities:
+                text = e.build_embeddable_text() if hasattr(e, "build_embeddable_text") else str(e)
+                # Persist for downstream destinations/UI
+                if hasattr(e, "embeddable_text"):
+                    try:
+                        e.embeddable_text = text
+                    except Exception:
+                        pass
+                texts.append(text)
 
             convert_elapsed = asyncio.get_event_loop().time() - convert_start
             sync_context.logger.debug(
-                f"📦 VECTOR_CONVERT_DONE [{entity_context}] Converted {len(entity_dicts)} entities "
-                f"in {convert_elapsed:.3f}s"
+                (
+                    f"🧩 VECTOR_TEXT_DONE [{entity_context}] Built {len(texts)} texts "
+                    f"in {convert_elapsed:.3f}s"
+                )
             )
 
             # Get embeddings from the model
@@ -400,7 +411,7 @@ class EntityProcessor:
             )
             embed_start = asyncio.get_event_loop().time()
 
-            embeddings = await self._get_embeddings(entity_dicts, sync_context, entity_context)
+            embeddings = await self._get_embeddings(texts, sync_context, entity_context)
 
             embed_elapsed = asyncio.get_event_loop().time() - embed_start
             sync_context.logger.debug(

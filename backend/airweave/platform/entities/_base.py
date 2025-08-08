@@ -1,13 +1,15 @@
 """Entity schemas."""
 
 import hashlib
+import html as html_lib
 import importlib
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, ClassVar, Dict, List, Optional, Tuple, Type
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, create_model
@@ -175,6 +177,12 @@ class BaseEntity(BaseModel):
 class ChunkEntity(BaseEntity):
     """Base class for entities that are storable and embeddable chunks of data."""
 
+    # Persisted canonical text used for embedding and display
+    embeddable_text: Optional[str] = Field(
+        default=None,
+        description=("Canonical, human-readable text built from the entity for embedding and UI."),
+    )
+
     # Default fields to exclude when creating storage dict
     default_exclude_fields: List[str] = [
         "vector",  # Exclude the vector itself from the payload
@@ -182,10 +190,15 @@ class ChunkEntity(BaseEntity):
         # "sync_id",
         "db_entity_id",
         "sync_metadata",
-        "parent_entity_id",
+        # parent_entity_id must remain for update/delete filters and grouping
         "default_exclude_fields",
         "_hash",
     ]
+
+    # Optional per-entity annotation: which fields should feed the embeddable text
+    embeddable_fields: ClassVar[Optional[List[str]]] = None
+    # Global safeguard to cap embeddable text size (characters)
+    embeddable_max_chars: ClassVar[int] = 12000
 
     def to_storage_dict(self, exclude_fields: Optional[List[str]] = None) -> Dict[str, Any]:
         """Convert entity to a dictionary suitable for storage in vector databases.
@@ -207,6 +220,199 @@ class ChunkEntity(BaseEntity):
 
         # Use parent implementation with our combined exclusions
         return super().to_storage_dict(exclude_fields=exclusions)
+
+    # -------- Embedding text construction (generic, source-agnostic) --------
+    def build_embeddable_text(self) -> str:
+        """Create a concise, high-signal markdown-like text for embedding and UI."""
+        lines: List[str] = []
+        # Header lines
+        lines.extend(self._build_header_lines())
+        # Title and breadcrumb
+        used_title_key, title_line = self._build_title_line()
+        if title_line:
+            lines.append(title_line)
+        breadcrumb = self._format_breadcrumbs()
+        if breadcrumb:
+            lines.append(f"* {breadcrumb}")
+        # Annotated details
+        lines.extend(self._build_annotated_lines(used_title_key))
+        # Content snippet
+        content_lines = self._build_content_lines()
+        lines.extend(content_lines)
+        # Finalize
+        text = "\n".join(lines)
+        text = self._normalize_spaces(text)
+        if len(text) > self.embeddable_max_chars:
+            text = text[: self.embeddable_max_chars]
+        return text
+
+    def _build_header_lines(self) -> List[str]:
+        source = getattr(self, "source_name", None) or "unknown"
+        src_line = f"* source: {self._normalize_spaces(str(source))}"
+        type_readable = self._infer_entity_type_name(source)
+        type_line = f"* type: {type_readable}"
+        return [src_line, type_line]
+
+    def _build_title_line(self) -> tuple[Optional[str], Optional[str]]:
+        candidates = [
+            ("md_title", getattr(self, "md_title", None)),
+            ("name", getattr(self, "name", None)),
+        ]
+        title = next((t for _, t in candidates if isinstance(t, str) and t.strip()), None)
+        if not title:
+            return None, None
+        used_key = next((k for k, v in candidates if v == title), None)
+        return used_key, f"* name: {self._clean_text(title)}"
+
+    def _build_annotated_lines(self, used_title_key: Optional[str]) -> List[str]:
+        fields = (
+            self.embeddable_fields
+            if isinstance(self.embeddable_fields, list) and self.embeddable_fields
+            else [
+                "title",
+                "summary",
+                "description",
+                "notes",
+                "html_notes",
+                "content",
+                "text",
+            ]
+        )
+        lines: List[str] = []
+        for field_name in fields:
+            if field_name in ("md_title", used_title_key):
+                continue
+            if not hasattr(self, field_name):
+                continue
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            summarized = self._summarize_value(value)
+            if not summarized:
+                continue
+            label = field_name.replace("_", " ")
+            lines.append(f"* {label}: {summarized}")
+        return lines
+
+    def _build_content_lines(self) -> List[str]:
+        md_content = getattr(self, "md_content", None)
+        if not isinstance(md_content, str) or not md_content.strip():
+            return []
+        content = self._clean_text(md_content)
+        max_len = max(0, min(4000, self.embeddable_max_chars // 3))
+        if len(content) > max_len:
+            content = content[:max_len]
+        return ["---", f"* content: {content}"]
+
+    @staticmethod
+    def _strip_html(value: str) -> str:
+        # Remove HTML tags and unescape entities
+        no_tags = re.sub(r"<[^>]+>", " ", value)
+        return html_lib.unescape(no_tags)
+
+    @classmethod
+    def _clean_text(cls, value: str) -> str:
+        cleaned = cls._strip_html(value)
+        return cls._normalize_spaces(cleaned)
+
+    @staticmethod
+    def _normalize_spaces(value: str) -> str:
+        return re.sub(r"\s+", " ", value).strip()
+
+    @classmethod
+    def _summarize_value(cls, value: Any, max_items: int = 5) -> str:
+        """Summarize a value into a short, readable string."""
+        try:
+            if isinstance(value, str):
+                return cls._clean_text(value)
+            if isinstance(value, dict):
+                return cls._summarize_dict(value, max_items)
+            if isinstance(value, list):
+                return cls._summarize_list(value, max_items)
+            return cls._normalize_spaces(str(value))
+        except Exception:
+            return ""
+
+    @classmethod
+    def _summarize_dict(cls, value: Dict[str, Any], max_items: int) -> str:
+        # Prefer readable keys
+        for key in ("name", "title", "text", "description"):
+            if key in value and isinstance(value[key], str) and value[key].strip():
+                return cls._clean_text(str(value[key]))
+        # Fallback to a few key:value pairs
+        items: List[str] = []
+        count = 0
+        for k, v in value.items():
+            if count >= max_items:
+                break
+            if v is None:
+                continue
+            if isinstance(v, (str, int, float, bool)):
+                items.append(f"{k}:{str(v)}")
+            elif isinstance(v, dict):
+                sub = v.get("name") or v.get("title") or v.get("text")
+                if sub:
+                    items.append(f"{k}:{cls._normalize_spaces(str(sub))}")
+            elif isinstance(v, list) and v:
+                items.append(f"{k}:[{len(v)}]")
+            count += 1
+        return cls._normalize_spaces(", ".join(items))
+
+    @classmethod
+    def _summarize_list(cls, value: List[Any], max_items: int) -> str:
+        pieces: List[str] = []
+        for item in value[:max_items]:
+            if isinstance(item, (str, int, float, bool)):
+                pieces.append(cls._normalize_spaces(str(item)))
+            elif isinstance(item, dict):
+                sub = item.get("name") or item.get("title") or item.get("text")
+                if sub:
+                    pieces.append(cls._normalize_spaces(str(sub)))
+        return ", ".join(pieces)
+
+    def _format_breadcrumbs(self) -> str:
+        if not getattr(self, "breadcrumbs", None):
+            return ""
+        try:
+            path = " → ".join(
+                [
+                    f"{bc.type.capitalize()} {bc.name}" if bc.name else bc.type.capitalize()
+                    for bc in self.breadcrumbs
+                ]
+            )
+            return f"Context: {path}"
+        except Exception:
+            return ""
+
+    def _infer_entity_type_name(self, source_name: Optional[str]) -> str:
+        """Infer a readable type name from class name, e.g., AsanaTaskEntity -> Task.
+
+        If source_name is present and matches the prefix (case-insensitive), remove it.
+        Always strip trailing 'Entity'. Handle auto-generated unified chunks.
+        """
+        try:
+            cls_name = self.__class__.__name__
+            # strip suffix Entity
+            if cls_name.endswith("Entity"):
+                cls_name = cls_name[: -len("Entity")]
+            # remove source prefix if matches
+            if source_name:
+                src = str(source_name).strip()
+                if src and cls_name.lower().startswith(src.lower()):
+                    cls_name = cls_name[len(src) :]
+            # handle auto-generated unified chunk classes, e.g., AsanaFileUnifiedChunk
+            if cls_name.endswith("UnifiedChunk"):
+                base = cls_name[: -len("UnifiedChunk")]
+                # Prefer concise labels
+                if base.endswith("File"):
+                    return "File"
+                # Fallback to the base without suffix
+                cls_name = base or cls_name
+            # fallback
+            readable = cls_name or self.__class__.__name__
+            return readable or "Entity"
+        except Exception:
+            return "Entity"
 
 
 class ParentEntity(BaseEntity):
@@ -412,6 +618,69 @@ class FileEntity(BaseEntity):
         _file_entity_models_created.add(cls)
 
         return parent_model, chunk_model
+
+    @classmethod
+    def create_unified_chunk_model(cls) -> Type["ChunkEntity"]:
+        """Create a unified Chunk model that carries full file metadata.
+
+        This model is intended to replace the Parent/Chunk split. It inherits from
+        ChunkEntity and includes:
+        - All fields from the FileEntity subclass (full file metadata)
+        - Standard chunk fields used for search (`md_*`, `metadata`, `md_position`)
+        """
+        # Get the class name prefix (e.g., "AsanaFile" from "AsanaFileEntity")
+        class_name_prefix = cls.__name__.replace("Entity", "")
+
+        # Standard chunk fields
+        chunk_fields = {
+            "md_title": (Optional[str], Field(None, description="Title or heading of the chunk")),
+            "md_content": (str, Field(..., description="The actual content of the chunk")),
+            "md_type": (
+                str,
+                Field(..., description="Type of content (e.g., paragraph, table, list)"),
+            ),
+            "metadata": (
+                Dict[str, Any],
+                Field(default_factory=dict, description="Additional metadata about the chunk"),
+            ),
+            "md_position": (
+                Optional[int],
+                Field(None, description="Position of this chunk in the document"),
+            ),
+            "md_parent_title": (
+                Optional[str],
+                Field(None, description="Title of the parent document"),
+            ),
+            "md_parent_url": (
+                Optional[str],
+                Field(None, description="URL of the parent document if available"),
+            ),
+        }
+
+        # Include all fields from the FileEntity subclass so each chunk is "beefy"
+        for name, field in cls.model_fields.items():
+            # Don't duplicate BaseEntity fields already present via inheritance
+            if name in BaseEntity.model_fields:
+                continue
+            chunk_fields[name] = (field.annotation, field)
+
+        unified_chunk_model = create_model(
+            f"{class_name_prefix}UnifiedChunk", __base__=ChunkEntity, **chunk_fields
+        )
+
+        # Set module name to match the source entity's module
+        unified_chunk_model.__module__ = cls.__module__
+
+        # Docstring
+        unified_chunk_model.__doc__ = (
+            f"Unified chunk entity for {class_name_prefix} files. Generated from {cls.__name__}."
+        )
+
+        # Register the model in its module for importability/debugging
+        module = sys.modules[cls.__module__]
+        setattr(module, unified_chunk_model.__name__, unified_chunk_model)
+
+        return unified_chunk_model
 
 
 class CodeFileEntity(ChunkEntity):
