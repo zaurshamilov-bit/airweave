@@ -38,17 +38,9 @@ class LocalText2Vec(BaseEmbeddingModel):
         """Initialize the local text2vec model."""
         # Always call parent __init__ (esp. with Pydantic models!)
         super().__init__(**data)
+        self.inference_url = settings.TEXT2VEC_INFERENCE_URL
         if logger:
             self.logger = logger  # Override with contextual logger if provided
-
-    def model_post_init(self, __context) -> None:
-        """Post initialization hook to set the inference URL from settings.
-
-        This runs after Pydantic validation but before the model is used.
-        """
-        super().model_post_init(__context)
-        self.inference_url = settings.TEXT2VEC_INFERENCE_URL
-        if hasattr(self, "logger") and self.logger:
             self.logger.debug(f"Text2Vec model using inference URL: {self.inference_url}")
 
     async def embed(
