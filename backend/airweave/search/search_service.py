@@ -1,6 +1,7 @@
 """Search service for vector database integrations."""
 
 import json
+from datetime import datetime
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -11,6 +12,7 @@ from airweave.api.context import ApiContext
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
 from airweave.platform.destinations._base import BaseDestination
+from airweave.platform.destinations._config import DecayConfig
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
 from airweave.platform.embedding_models.bm25_text2vec import BM25Text2Vec
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
@@ -216,7 +218,7 @@ class SearchService:
 
         # Perform search based on query expansion strategy
         if expansion_strategy and expansion_strategy != QueryExpansionStrategy.NO_EXPANSION:
-            search_results = await self._search_with_expansion(
+            return await self._search_with_expansion(
                 query,
                 expansion_strategy,
                 embedding_model,
@@ -227,19 +229,17 @@ class SearchService:
                 offset=offset,
                 score_threshold=score_threshold,
             )
-        else:
-            search_results = await self._search_single_query(
-                query,
-                embedding_model,
-                destination,
-                ctx.logger,
-                filter=filter,
-                limit=limit,
-                offset=offset,
-                score_threshold=score_threshold,
-            )
 
-        return search_results
+        return await self._search_single_query(
+            query,
+            embedding_model,
+            destination,
+            ctx.logger,
+            filter=filter,
+            limit=limit,
+            offset=offset,
+            score_threshold=score_threshold,
+        )
 
     async def search(
         self,
@@ -464,16 +464,21 @@ class SearchService:
             with_payload=True,
             filter_conditions=filter_conditions,
             sparse_vectors=list(sparse_embeddings),
+            # TODO: Determine an optimal default for this
+            search_method="hybrid",
+            decay_config=DecayConfig(
+                decay_type="linear",
+                datetime_field="created_time",
+                target_datetime=datetime.now(),
+                scale_unit="year",
+                scale_value=1.0,
+                midpoint=0.5,
+            ),
         )
-
-        # Flatten results from all queries
-        all_results = []
-        for query_results in batch_results:
-            all_results.extend(query_results)
 
         # Apply offset after merging (since bulk search doesn't support offset)
         merged_results = self._merge_search_results(
-            all_results, max_results=limit + offset, ctx=ctx
+            batch_results, max_results=limit + offset, ctx=ctx
         )
 
         # Apply offset

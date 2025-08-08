@@ -15,6 +15,7 @@ from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import QdrantAuthConfig
 from airweave.platform.decorators import destination
 from airweave.platform.destinations._base import VectorDBDestination
+from airweave.platform.destinations._config import DecayConfig
 from airweave.platform.entities._base import ChunkEntity
 
 
@@ -397,69 +398,58 @@ class QdrantDestination(VectorDBDestination):
             # Fallback to a different approach if needed
             raise
 
-    async def search(
+    def _prepare_index_search_request(
         self,
-        query_vector: list[float],
-        filter: dict | None = None,
-        limit: int = 10,
-        offset: int = 0,
-        score_threshold: float | None = None,
-        with_payload: bool = True,
-    ) -> list[dict]:
-        """Search for entities in the destination.
+        params: dict,
+        decay_config: Optional[DecayConfig] = None,
+    ) -> dict:
+        """Prepare a query request for Qdrant.
+
+        If decay is enabled, we need to use prefetch + formula query pattern in order to
+        bias the result wrt to the decay score, otherwise we just return the params as is
+        (since the query does not need to be prefetched or have a custom formula applied
+        to it in that case).
 
         Args:
-            query_vector (list[float]): The query vector to search with.
-            filter (dict | None): Optional filter conditions as a dictionary.
-            limit (int): Maximum number of results to return.
-            offset (int): Number of results to skip.
-            score_threshold (float | None): Optional minimum score threshold.
-            with_payload (bool): Whether to include payload in results.
+            params (dict): The parameters for the query request.
+            decay_config (Optional[DecayConfig]): Configuration for time-based decay.
+                If None, no decay is applied.
 
         Returns:
-            list[dict]: The search results.
+            dict: The prepared query request.
         """
-        await self.ensure_client_readiness()
+        if decay_config is None:
+            return params
 
-        try:
-            # Build search parameters
-            search_params = {
-                "collection_name": self.collection_name,
-                "query": query_vector,
-                "limit": limit,
-                "with_payload": with_payload,
-            }
+        scale_seconds = decay_config.get_scale_seconds()
+        decay_params = rest.DecayParamsExpression(
+            x=rest.DatetimeKeyExpression(datetime_key=decay_config.datetime_field),
+            target=rest.DatetimeExpression(datetime=decay_config.target_datetime.isoformat()),
+            scale=scale_seconds,
+            midpoint=decay_config.midpoint,
+        )
 
-            # Add optional parameters
-            if offset and offset > 0:
-                search_params["offset"] = offset
+        decay_expressions = {
+            "linear": lambda p: rest.LinDecayExpression(lin_decay=p),
+            "exponential": lambda p: rest.ExpDecayExpression(exp_decay=p),
+            "gaussian": lambda p: rest.GaussDecayExpression(gauss_decay=p),
+        }
 
-            if score_threshold is not None:
-                search_params["score_threshold"] = score_threshold
+        decay_expression = decay_expressions[decay_config.decay_type](decay_params)
 
-            if filter:
-                # Convert dict filter to Qdrant filter
-                qdrant_filter = rest.Filter.model_validate(filter)
-                search_params["query_filter"] = qdrant_filter
-
-            # Perform search
-            search_results = await self.client.query_points(**search_params)
-
-            # Convert results to a standard format
-            results = []
-            for result in search_results.points:
-                results.append(
-                    {
-                        "id": result.id,
-                        "score": result.score,
-                        "payload": result.payload if with_payload else None,
-                    }
+        return {
+            "prefetch": rest.Prefetch(**params),
+            "query": rest.FormulaQuery(
+                formula=rest.SumExpression(
+                    sum=[
+                        # Original similarity score
+                        "$score",
+                        # Time-based decay boost
+                        decay_expression,
+                    ]
                 )
-
-            return results
-        except Exception as e:
-            self.logger.error(f"Error searching with Qdrant filter: {e}")
-            raise  # Re-raise the exception instead of returning empty list
+            ),
+        }
 
     async def _prepare_query_request(
         self,
@@ -467,8 +457,7 @@ class QdrantDestination(VectorDBDestination):
         limit: int,
         sparse_vector: SparseEmbedding | None,
         search_method: Literal["hybrid", "neural", "keyword"],
-        with_payload: bool = True,
-        score_threshold: float | None = None,
+        decay_config: Optional[DecayConfig] = None,
     ) -> rest.QueryRequest:
         """Prepare a query request for Qdrant.
 
@@ -477,8 +466,8 @@ class QdrantDestination(VectorDBDestination):
             limit (int): Maximum number of results to return.
             sparse_vector (SparseEmbedding | None): Optional sparse vector to search with.
             search_method (Literal["hybrid", "neural", "keyword"]): The search method to use.
-            with_payload (bool): Whether to include payload in results.
-            score_threshold (float | None): Optional minimum score threshold.
+            decay_config (Optional[DecayConfig]): Configuration for time-based decay.
+                If None, no decay is applied.
 
         Returns:
             rest.QueryRequest: The prepared query request.
@@ -486,50 +475,69 @@ class QdrantDestination(VectorDBDestination):
         query_request_params = {}
 
         if search_method == "neural":
-            query_request_params = {
+            neural_params = {
                 "query": query_vector,
                 "using": DEFAULT_VECTOR_NAME,
                 "limit": limit,
             }
+            query_request_params = self._prepare_index_search_request(
+                params=neural_params,
+                decay_config=decay_config,
+            )
 
         if search_method == "keyword":
             if not sparse_vector:
                 raise ValueError("Keyword search requires sparse vector")
 
-            query_request_params = {
+            keyword_params = {
                 "query": rest.SparseVector(**sparse_vector.as_object()),
                 "using": "bm25",
                 "limit": limit,
             }
+            query_request_params = self._prepare_index_search_request(
+                params=keyword_params,
+                decay_config=decay_config,
+            )
 
         if search_method == "hybrid":
             if not sparse_vector:
-                raise ValueError("Keyword search requires sparse vector")
+                raise ValueError("Hybrid search requires sparse vector")
 
-            query_request_params["prefetch"] = [
+            prefetch_params = [
                 # Neural embedding
-                rest.Prefetch(
-                    query=query_vector,
-                    using=DEFAULT_VECTOR_NAME,
-                    limit=limit,
-                ),
+                {
+                    "query": query_vector,
+                    "using": DEFAULT_VECTOR_NAME,
+                    "limit": limit,
+                },
                 # BM25 embedding
-                rest.Prefetch(
-                    query=rest.SparseVector(**sparse_vector.as_object()),
-                    using="bm25",
-                    limit=limit,
-                ),
+                {
+                    "query": rest.SparseVector(**sparse_vector.as_object()),
+                    "using": "bm25",
+                    "limit": limit,
+                },
             ]
 
-            # Qdrant doesn't support doing weighted fusion with RRF.
-            # https://github.com/qdrant/qdrant/issues/6067
-            query_request_params["query"] = rest.FusionQuery(
-                fusion=rest.Fusion.RRF,
-            )
+            prefetches = []
+            if decay_config is None:
+                # Only prefetch (which precomputes the rankings) without decay
+                prefetches = [rest.Prefetch(**params) for params in prefetch_params]
+            else:
+                # Prefetch and decay score per vector config
+                prefetches = [
+                    self._prepare_index_search_request(
+                        params=params,
+                        decay_config=decay_config,
+                    )
+                    for params in prefetch_params
+                ]
+
+            query_request_params = {
+                "prefetch": prefetches,
+                "query": rest.FusionQuery(fusion=rest.Fusion.RRF),
+            }
 
         return rest.QueryRequest(
-            score_threshold=score_threshold,
-            with_payload=with_payload,
             **query_request_params,
         )
 
@@ -567,6 +575,8 @@ class QdrantDestination(VectorDBDestination):
         filter_conditions: list[dict] | None,
         sparse_vectors: list[SparseEmbedding] | None,
         search_method: Literal["hybrid", "neural", "keyword"],
+        decay_config: Optional[DecayConfig],
+        offset: Optional[int],
     ) -> list[rest.QueryRequest]:
         """Prepare query requests for bulk search.
 
@@ -578,6 +588,9 @@ class QdrantDestination(VectorDBDestination):
             filter_conditions (list[dict] | None): Optional list of filter conditions.
             sparse_vectors (list[SparseEmbedding] | None): Optional list of sparse vectors.
             search_method (Literal["hybrid", "neural", "keyword"]): The search method to use.
+            decay_config (Optional[DecayConfig]): Configuration for time-based decay.
+            If None, no decay is applied.
+            offset (Optional[int]): Number of results to skip.
 
         Returns:
             list[rest.QueryRequest]: List of prepared query requests.
@@ -587,12 +600,27 @@ class QdrantDestination(VectorDBDestination):
             sparse_vector = sparse_vectors[i] if sparse_vectors else None
 
             request = await self._prepare_query_request(
-                query_vector, limit, sparse_vector, search_method, with_payload, score_threshold
+                query_vector=query_vector,
+                limit=limit,
+                sparse_vector=sparse_vector,
+                search_method=search_method,
+                decay_config=decay_config,
             )
 
             # Add filter if provided
             if filter_conditions and filter_conditions[i]:
                 request.filter = rest.Filter.model_validate(filter_conditions[i])
+
+            # Add optional parameters
+            if offset and offset > 0:
+                request.offset = offset
+
+            # Add score threshold if provided
+            if score_threshold is not None:
+                request.score_threshold = score_threshold
+
+            # Include payload
+            request.with_payload = with_payload
 
             query_requests.append(request)
 
@@ -625,6 +653,47 @@ class QdrantDestination(VectorDBDestination):
 
         return all_results
 
+    async def search(
+        self,
+        query_vector: list[float],
+        limit: int = 10,
+        score_threshold: float | None = None,
+        with_payload: bool = True,
+        filter: dict | None = None,
+        decay_config: Optional[DecayConfig] = None,
+        sparse_vector: SparseEmbedding | None = None,
+        search_method: Literal["hybrid", "neural", "keyword"] = "hybrid",
+        offset: int = 0,
+    ) -> list[dict]:
+        """Search for entities in the destination.
+
+        Args:
+            query_vector (list[float]): The query vector to search with.
+            limit (int): Maximum number of results to return.
+            score_threshold (float | None): Optional minimum score threshold.
+            with_payload (bool): Whether to include payload in results.
+            filter (dict | None): Optional filter conditions as a dictionary.
+            decay_config (Optional[DecayConfig]): Configuration for time-based decay.
+                If None, no decay is applied.
+            sparse_vector (SparseEmbedding | None): Optional sparse vector to search with.
+            search_method (Literal["hybrid", "neural", "keyword"]): The search method to use.
+            offset (int): Number of results to skip.
+
+        Returns:
+            list[dict]: The search results.
+        """
+        return await self.bulk_search(
+            query_vectors=[query_vector],
+            limit=limit,
+            score_threshold=score_threshold,
+            with_payload=with_payload,
+            filter_conditions=[filter] if filter else None,
+            sparse_vectors=[sparse_vector] if sparse_vector else None,
+            search_method=search_method,
+            decay_config=decay_config,
+            offset=offset,
+        )
+
     async def bulk_search(
         self,
         query_vectors: list[list[float]],
@@ -634,7 +703,9 @@ class QdrantDestination(VectorDBDestination):
         filter_conditions: list[dict] | None = None,
         sparse_vectors: list[SparseEmbedding] | None = None,
         search_method: Literal["hybrid", "neural", "keyword"] = "hybrid",
-    ) -> list[list[dict]]:
+        decay_config: Optional[DecayConfig] = None,
+        offset: Optional[int] = None,
+    ) -> list[dict]:
         """Perform batch search for multiple query vectors in a single request.
 
         Args:
@@ -647,7 +718,10 @@ class QdrantDestination(VectorDBDestination):
             sparse_vectors (List[SparseEmbedding] | None): Optional list of sparse vectors.
                 If provided, must have same length as query_vectors.
             search_method (Literal["hybrid", "neural", "keyword"]): The search method to use.
-                Defaults to "neural".
+                Defaults to "hybrid".
+            decay_config (Optional[DecayConfig]): Configuration for time-based decay.
+                If None, no decay is applied.
+            offset (Optional[int]): Number of results to skip.
 
         Returns:
             list[list[dict]]: List of search results for each query vector.
@@ -673,13 +747,15 @@ class QdrantDestination(VectorDBDestination):
         try:
             # Prepare query requests
             query_requests = await self._prepare_bulk_search_requests(
-                query_vectors,
-                limit,
-                score_threshold,
-                with_payload,
-                filter_conditions,
-                sparse_vectors,
-                search_method,
+                query_vectors=query_vectors,
+                limit=limit,
+                score_threshold=score_threshold,
+                with_payload=with_payload,
+                filter_conditions=filter_conditions,
+                sparse_vectors=sparse_vectors,
+                search_method=search_method,
+                decay_config=decay_config,
+                offset=offset,
             )
 
             # Perform batch search
@@ -688,7 +764,14 @@ class QdrantDestination(VectorDBDestination):
             )
 
             # Format and return results
-            return self._format_bulk_search_results(batch_results, with_payload)
+            formatted_results = self._format_bulk_search_results(batch_results, with_payload)
+
+            # Flatten results from all queries
+            flattened_results = []
+            for query_results in formatted_results:
+                flattened_results.extend(query_results)
+
+            return flattened_results
 
         except Exception as e:
             self.logger.error(f"Error performing batch search with Qdrant: {e}")
