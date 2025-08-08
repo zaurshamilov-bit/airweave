@@ -44,14 +44,35 @@ class StripeClient:
             ExternalServiceError: If Stripe API call fails
         """
         try:
+            # Ensure all string values are properly encoded
+            clean_email = str(email).encode("utf-8", errors="replace").decode("utf-8")
+            clean_name = str(name).encode("utf-8", errors="replace").decode("utf-8")
+
+            # Clean metadata values
+            clean_metadata = {}
+            if metadata:
+                for key, value in metadata.items():
+                    clean_key = str(key)
+                    clean_value = str(value).encode("utf-8", errors="replace").decode("utf-8")
+                    clean_metadata[clean_key] = clean_value
             return await stripe.Customer.create_async(
-                email=email, name=name, metadata=metadata or {}
+                email=clean_email, name=clean_name, metadata=clean_metadata
             )
         except StripeError as e:
             logger.error(f"Failed to create Stripe customer: {e}")
             raise ExternalServiceError(
                 service_name="Stripe",
                 message=f"Failed to create billing account: {str(e)}",
+            ) from e
+        except UnicodeEncodeError as e:
+            logger.error(f"Unicode encoding error in customer creation: {e}")
+            logger.error(f"Email: {email}, Name: {name}, Metadata: {metadata}")
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=(
+                    "Failed to create billing account due to encoding error. "
+                    "Please check for special characters in organization name or email."
+                ),
             ) from e
 
     async def delete_customer(self, customer_id: str) -> None:
@@ -97,6 +118,18 @@ class StripeClient:
             ExternalServiceError: If session creation fails
         """
         try:
+            # Ensure URLs are properly encoded strings
+            # This fixes UnicodeEncodeError issues with special characters
+            success_url = str(success_url).encode("utf-8", errors="replace").decode("utf-8")
+            cancel_url = str(cancel_url).encode("utf-8", errors="replace").decode("utf-8")
+
+            # Ensure metadata values are strings and handle Unicode properly
+            clean_metadata = {}
+            if metadata:
+                for key, value in metadata.items():
+                    clean_key = str(key)
+                    clean_value = str(value).encode("utf-8", errors="replace").decode("utf-8")
+                    clean_metadata[clean_key] = clean_value
             session_params = {
                 "customer": customer_id,
                 "payment_method_types": ["card"],
@@ -109,7 +142,7 @@ class StripeClient:
                 "mode": "subscription",
                 "success_url": success_url,
                 "cancel_url": cancel_url,
-                "metadata": metadata or {},
+                "metadata": clean_metadata,
                 "allow_promotion_codes": True,
                 "billing_address_collection": "required",
                 "customer_update": {
@@ -117,7 +150,7 @@ class StripeClient:
                     "name": "auto",
                 },
                 "subscription_data": {
-                    "metadata": metadata or {},
+                    "metadata": clean_metadata,
                 },
             }
 
@@ -133,6 +166,19 @@ class StripeClient:
             raise ExternalServiceError(
                 service_name="Stripe",
                 message=f"Failed to create checkout session: {str(e)}",
+            ) from e
+        except UnicodeEncodeError as e:
+            logger.error(f"Unicode encoding error in checkout session: {e}")
+            logger.error(f"Customer ID: {customer_id}, Price ID: {price_id}")
+            logger.error(f"Success URL: {success_url}")
+            logger.error(f"Cancel URL: {cancel_url}")
+            logger.error(f"Metadata: {metadata}")
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=(
+                    "Failed to create checkout session due to encoding error. "
+                    "Please check for special characters in URLs or metadata."
+                ),
             ) from e
 
     async def create_portal_session(
