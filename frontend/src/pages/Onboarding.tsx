@@ -23,6 +23,7 @@ import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
 import { useOrganizationStore } from '@/lib/stores/organizations';
 import { useAuth } from '@/lib/auth-context';
+import authConfig from '@/config/auth';
 
 interface OnboardingData {
   organizationName: string;
@@ -269,21 +270,45 @@ export const Onboarding = () => {
       // Step 2: Update organization context
       setCurrentOrganization(organization);
 
-      // Step 3: Create checkout session for the selected plan
-      const checkoutResponse = await apiClient.post('/billing/checkout-session', {
-        plan: formData.subscriptionPlan,
-        success_url: `${window.location.origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${window.location.origin}/billing/cancel`,
-      });
-
-      if (!checkoutResponse.ok) {
-        throw new Error('Failed to create billing session');
+      // Step 3: Handle billing based on environment
+      if (!authConfig.authEnabled) {
+        // In local development, skip billing and go straight to dashboard
+        toast.success('Organization created successfully!');
+        navigate('/');
+        return;
       }
 
-      const { checkout_url } = await checkoutResponse.json();
+      // Step 4: Try to create checkout session for production
+      try {
+        const checkoutResponse = await apiClient.post('/billing/checkout-session', {
+          plan: formData.subscriptionPlan,
+          success_url: `${window.location.origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${window.location.origin}/billing/cancel`,
+        });
 
-      // Step 4: Redirect to Stripe checkout
-      window.location.href = checkout_url;
+        if (!checkoutResponse.ok) {
+          const errorData = await checkoutResponse.json().catch(() => null);
+
+          // If billing is not enabled on the backend, just navigate to dashboard
+          if (errorData?.detail === 'Billing is not enabled for this instance') {
+            toast.success('Organization created successfully!');
+            navigate('/');
+            return;
+          }
+
+          throw new Error(errorData?.detail || 'Failed to create billing session');
+        }
+
+        const { checkout_url } = await checkoutResponse.json();
+
+        // Step 5: Redirect to Stripe checkout
+        window.location.href = checkout_url;
+      } catch (billingError) {
+        // If billing fails but org was created, still navigate to dashboard
+        console.warn('Billing setup failed, but organization was created:', billingError);
+        toast.success('Organization created successfully!');
+        navigate('/');
+      }
 
     } catch (error) {
       console.error('Onboarding error:', error);
@@ -625,6 +650,13 @@ export const Onboarding = () => {
               <p className="text-muted-foreground">
                 You can always upgrade or downgrade later
               </p>
+              {!authConfig.authEnabled && (
+                <div className="mt-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    <strong>Local Development Mode:</strong> Billing is disabled. You'll go straight to the dashboard after setup.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="grid gap-4">
@@ -653,8 +685,13 @@ export const Onboarding = () => {
                       <p className="text-sm text-muted-foreground">{plan.description}</p>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-light">{plan.price}</div>
-                      {plan.period && (
+                      <div className="text-2xl font-light">
+                        {!authConfig.authEnabled ? 'Free' : plan.price}
+                      </div>
+                      {plan.period && !authConfig.authEnabled && (
+                        <div className="text-xs text-muted-foreground">local dev</div>
+                      )}
+                      {plan.period && authConfig.authEnabled && (
                         <div className="text-xs text-muted-foreground">{plan.period}</div>
                       )}
                       {plan.recommended && (
@@ -898,12 +935,12 @@ export const Onboarding = () => {
             >
               {isCreating ? (
                 <>
-                  <span>Complete Setup</span>
+                  <span>{!authConfig.authEnabled ? 'Creating Organization' : 'Complete Setup'}</span>
                   <Loader2 className="w-4 h-4 animate-spin" />
                 </>
               ) : (
                 <>
-                  <span>Complete Setup</span>
+                  <span>{!authConfig.authEnabled ? 'Create Organization' : 'Complete Setup'}</span>
                   <Check className="w-4 h-4" />
                 </>
               )}
