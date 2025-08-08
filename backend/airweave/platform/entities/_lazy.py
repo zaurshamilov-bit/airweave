@@ -58,7 +58,7 @@ class LazyEntity(BaseEntity, ABC):
         if self._is_materialized:
             return
 
-        logger.info(
+        logger.debug(
             f"🔄 LAZY_MATERIALIZE Starting materialization for {self.__class__.__name__} "
             f"{self.entity_id} with {len(self._lazy_operations)} operations"
         )
@@ -87,7 +87,7 @@ class LazyEntity(BaseEntity, ABC):
         await self._apply_results()
         self._is_materialized = True
 
-        logger.info(
+        logger.debug(
             f"✅ LAZY_COMPLETE Materialization complete for {self.__class__.__name__} "
             f"{self.entity_id}"
         )
