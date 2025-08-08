@@ -516,7 +516,7 @@ const DashboardLayout = () => {
                       href="https://github.com/airweave-ai/airweave"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-lg transition-all duration-200"
+                      className="flex items-center justify-center hover:bg-black/[0.04] dark:hover:bg-white/[0.04] h-8 w-8 rounded-full transition-colors duration-150 ease-out"
                     >
                       <Github size={20} className="text-muted-foreground" />
                     </a>
@@ -528,7 +528,7 @@ const DashboardLayout = () => {
                       href="https://discord.com/invite/484HY9Ehxt"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-lg transition-all duration-200"
+                      className="flex items-center justify-center hover:bg-black/[0.04] dark:hover:bg-white/[0.04] h-8 w-8 rounded-full transition-colors duration-150 ease-out"
                     >
                       <DiscordIcon size={20} />
                     </a>
@@ -538,7 +538,7 @@ const DashboardLayout = () => {
                       href="https://docs.airweave.ai/welcome"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-lg transition-all duration-200"
+                      className="flex items-center justify-center hover:bg-black/[0.04] dark:hover:bg-white/[0.04] h-8 w-8 rounded-full transition-colors duration-150 ease-out"
                     >
                       <FileText size={20} className="text-muted-foreground" />
                     </a>

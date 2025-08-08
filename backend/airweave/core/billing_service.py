@@ -333,6 +333,10 @@ class BillingService:
     ) -> str:
         """Handle upgrading from a trial subscription with no items.
 
+        This method creates a new checkout session WITHOUT canceling the existing
+        trial subscription. The old subscription will only be canceled after the
+        new subscription is successfully created (handled in the webhook).
+
         Args:
             billing_model: Organization billing model
             ctx: Authentication context
@@ -344,18 +348,12 @@ class BillingService:
         log = ctx.logger
 
         log.info(
-            f"Creating session for trial upgrade from {billing_model.stripe_subscription_id} "
-            f"to {new_plan} plan"
-        )
-        log.info(
-            f"Canceling trial subscription {billing_model.stripe_subscription_id} to "
-            f"create new one for trial upgrade"
-        )
-        await stripe_client.cancel_subscription(
-            subscription_id=billing_model.stripe_subscription_id,
-            cancel_at_period_end=False,  # Cancel immediately
+            f"Creating checkout session for trial upgrade from "
+            f"{billing_model.stripe_subscription_id} to {new_plan} plan "
+            f"(keeping trial active until checkout completes)"
         )
 
+        # Will handle the trial subscription cancellation in the webhook
         price_id = stripe_client.get_price_id_for_plan(new_plan)
         session = await stripe_client.create_checkout_session(
             customer_id=billing_model.stripe_customer_id,
@@ -770,19 +768,32 @@ class BillingService:
         previous_subscription_id = subscription.metadata.get("previous_subscription_id")
 
         # If this is a trial upgrade, cancel the old subscription
+        # This happens AFTER the new subscription is successfully created
         if is_trial_upgrade and previous_subscription_id:
             log.info(
-                f"Canceling previous trial subscription {previous_subscription_id} "
-                f"after successful upgrade to {subscription.id}"
+                f"Trial upgrade successful: New subscription {subscription.id} created. "
+                f"Now canceling previous trial subscription {previous_subscription_id}"
             )
             try:
-                await stripe_client.cancel_subscription(
-                    subscription_id=previous_subscription_id,
-                    cancel_at_period_end=False,  # Cancel immediately
-                )
+                # First check if the old subscription still exists and is active
+                old_sub = await stripe_client.get_subscription(previous_subscription_id)
+                if old_sub and old_sub.status not in ["canceled", "incomplete_expired"]:
+                    await stripe_client.cancel_subscription(
+                        subscription_id=previous_subscription_id,
+                        cancel_at_period_end=False,  # Cancel immediately
+                    )
+                    log.info(
+                        f"Successfully canceled previous trial subscription "
+                        f"{previous_subscription_id}"
+                    )
+                else:
+                    log.info(
+                        f"Previous subscription {previous_subscription_id} "
+                        f"already canceled or expired"
+                    )
             except Exception as e:
                 log.error(f"Failed to cancel previous subscription {previous_subscription_id}: {e}")
-                # Continue processing even if cancellation fails
+                # Continue processing even if cancellation fails - the new subscription is active
 
         # Determine plan from metadata or price
         plan = subscription.metadata.get("plan", "developer")
@@ -1129,6 +1140,12 @@ class BillingService:
                 cancel_at_period_end=True,
                 # Keep current status - subscription is still active
             )
+            await crud.organization_billing.update(
+                db,
+                db_obj=billing_model,
+                obj_in=update_data,
+                ctx=ctx,
+            )
             log.info(f"Subscription scheduled to cancel at period end for org {org_id}")
         else:
             # Subscription is actually deleted/ended
@@ -1149,13 +1166,6 @@ class BillingService:
                 cancel_at_period_end=False,
             )
             log.info(f"Subscription fully canceled for org {org_id}")
-
-        await crud.organization_billing.update(
-            db,
-            db_obj=billing_model,
-            obj_in=update_data,
-            ctx=ctx,
-        )
 
     async def handle_payment_succeeded(
         self,

@@ -7,7 +7,6 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   Plus, Crown, Shield, Users, Check, Copy, Star, CreditCard
 } from 'lucide-react';
-import { CreateOrganizationModal } from '@/components/organization';
 import { APIKeysSettings } from '@/components/settings/APIKeysSettings';
 import { MembersSettings } from '@/components/settings/MembersSettings';
 import { BillingSettings } from '@/components/settings/BillingSettings';
@@ -33,9 +32,6 @@ export const OrganizationSettingsUnified = () => {
   const initialTab = searchParams.get('tab') as TabType || 'settings';
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
 
-  // General state
-  const [showCreateOrgModal, setShowCreateOrgModal] = useState(false);
-
   // Add state for copy animation
   const [isCopied, setIsCopied] = useState(false);
 
@@ -59,9 +55,7 @@ export const OrganizationSettingsUnified = () => {
     }
   }, [searchParams, activeTab, navigate]);
 
-  const handleCreateOrgSuccess = (newOrganization: any) => {
-    console.log('New organization created from settings:', newOrganization);
-  };
+
 
   // Enhanced organization update handler that also refreshes organizations list
   const handleOrganizationUpdate = async (id: string, updates: Partial<any>) => {
@@ -146,10 +140,10 @@ export const OrganizationSettingsUnified = () => {
         <div className="text-center">
           <h2 className="text-xl font-medium mb-2">No organization selected</h2>
           <p className="text-muted-foreground text-sm mb-6">
-            Select an organization to view settings
+            Create your first organization to get started
           </p>
           <Button
-            onClick={() => setShowCreateOrgModal(true)}
+            onClick={() => navigate('/onboarding')}
             size="sm"
             className="h-8 px-3 text-sm"
           >
@@ -157,12 +151,6 @@ export const OrganizationSettingsUnified = () => {
             Create organization
           </Button>
         </div>
-
-        <CreateOrganizationModal
-          open={showCreateOrgModal}
-          onOpenChange={setShowCreateOrgModal}
-          onSuccess={handleCreateOrgSuccess}
-        />
       </div>
     );
   }
@@ -279,12 +267,6 @@ export const OrganizationSettingsUnified = () => {
           </div>
         </div>
       </TooltipProvider>
-
-      <CreateOrganizationModal
-        open={showCreateOrgModal}
-        onOpenChange={setShowCreateOrgModal}
-        onSuccess={handleCreateOrgSuccess}
-      />
     </>
   );
 };

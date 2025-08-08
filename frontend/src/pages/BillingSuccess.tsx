@@ -45,7 +45,7 @@ export const BillingSuccess = () => {
           // Send team invites
           for (const invite of invites) {
             try {
-              const response = await apiClient.post(`/organizations/${currentOrganization.id}/invitations`, {
+              const response = await apiClient.post(`/organizations/${currentOrganization.id}/invite`, {
                 email: invite.email,
                 role: invite.role,
               });

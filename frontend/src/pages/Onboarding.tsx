@@ -196,10 +196,22 @@ export const Onboarding = () => {
         return;
       }
 
-      // Check alphanumeric only (allowing spaces)
-      const alphanumericRegex = /^[a-zA-Z0-9\s]+$/;
-      if (!alphanumericRegex.test(orgName)) {
-        toast.error('Organization name can only contain letters, numbers, and spaces');
+      // Check for safe characters only (alphanumeric, spaces, hyphens, underscores)
+      // Avoid special characters that could interfere with Auth0 or other integrations
+      const safeCharRegex = /^[a-zA-Z0-9\s\-_]+$/;
+      if (!safeCharRegex.test(orgName)) {
+        toast.error('Organization name can only contain letters, numbers, spaces, hyphens, and underscores');
+        return;
+      }
+
+      // Additional safety checks for Auth0 compatibility
+      if (orgName.includes('  ')) {
+        toast.error('Organization name cannot contain consecutive spaces');
+        return;
+      }
+
+      if (orgName.startsWith(' ') || orgName.endsWith(' ')) {
+        toast.error('Organization name cannot start or end with spaces');
         return;
       }
     }
@@ -295,10 +307,22 @@ export const Onboarding = () => {
           return;
         }
 
-        // Check alphanumeric only (allowing spaces)
-        const alphanumericRegex = /^[a-zA-Z0-9\s]+$/;
-        if (!alphanumericRegex.test(orgName)) {
-          toast.error('Organization name can only contain letters, numbers, and spaces');
+        // Check for safe characters only (alphanumeric, spaces, hyphens, underscores)
+        // Avoid special characters that could interfere with Auth0 or other integrations
+        const safeCharRegex = /^[a-zA-Z0-9\s\-_]+$/;
+        if (!safeCharRegex.test(orgName)) {
+          toast.error('Organization name can only contain letters, numbers, spaces, hyphens, and underscores');
+          return;
+        }
+
+        // Additional safety checks for Auth0 compatibility
+        if (orgName.includes('  ')) {
+          toast.error('Organization name cannot contain consecutive spaces');
+          return;
+        }
+
+        if (orgName.startsWith(' ') || orgName.endsWith(' ')) {
+          toast.error('Organization name cannot start or end with spaces');
           return;
         }
       }
@@ -473,7 +497,7 @@ export const Onboarding = () => {
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
-                You can always change this later
+                Use letters, numbers, spaces, hyphens, and underscores only • You can always change this later
               </p>
             </div>
           </div>
