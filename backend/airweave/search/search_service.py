@@ -12,6 +12,7 @@ from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
+from airweave.platform.embedding_models.bm25_text2vec import BM25Text2Vec
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
 from airweave.platform.locator import resource_locator
@@ -231,6 +232,7 @@ class SearchService:
                 query,
                 embedding_model,
                 destination,
+                ctx.logger,
                 filter=filter,
                 limit=limit,
                 offset=offset,
@@ -440,6 +442,8 @@ class SearchService:
 
         # Embed all expanded queries
         vectors = await embedding_model.embed_many(expanded_queries)
+        sparse_embedder = BM25Text2Vec(ctx.logger)
+        sparse_embeddings = await sparse_embedder.embed_many(expanded_queries)
 
         # Convert filter to dict if it's a Qdrant Filter object
         filter_dict = None
@@ -459,6 +463,7 @@ class SearchService:
             score_threshold=score_threshold,
             with_payload=True,
             filter_conditions=filter_conditions,
+            sparse_vectors=list(sparse_embeddings),
         )
 
         # Flatten results from all queries
@@ -488,6 +493,7 @@ class SearchService:
         query: str,
         embedding_model: BaseEmbeddingModel,
         destination: BaseDestination,
+        ctx: ApiContext,
         filter: Any | None = None,
         limit: int = 10,
         offset: int = 0,
@@ -495,6 +501,9 @@ class SearchService:
     ) -> list[dict]:
         """Perform search with a single query (no expansion)."""
         vector = await embedding_model.embed(query)
+
+        sparse_embedder = BM25Text2Vec(ctx.logger)
+        sparse_embeddings = await sparse_embedder.embed(query)
 
         # Convert filter to dict if it's a Qdrant Filter object
         filter_dict = None
@@ -511,6 +520,7 @@ class SearchService:
             offset=offset,
             score_threshold=score_threshold,
             with_payload=True,
+            sparse_vector=list(sparse_embeddings)[0],
         )
 
     def _check_result_quality(self, results: list[dict]) -> schemas.SearchResponse | None:

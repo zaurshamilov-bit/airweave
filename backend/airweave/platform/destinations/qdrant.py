@@ -1,10 +1,12 @@
 """Qdrant destination implementation."""
 
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
+from fastembed import SparseEmbedding
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models as rest
+from qdrant_client.local.local_collection import DEFAULT_VECTOR_NAME
 
 from airweave.core.config import settings
 from airweave.core.logging import ContextualLogger
@@ -185,10 +187,21 @@ class QdrantDestination(VectorDBDestination):
             # Create the collection
             await self.client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config=rest.VectorParams(
-                    size=vector_size if vector_size else self.vector_size,
-                    distance=rest.Distance.COSINE,
-                ),
+                vectors_config={
+                    # Existing collections will have the default vector config,
+                    # so we should tick to it even for new collections.
+                    # Annoyingly, the DEFAULT_VECTOR_NAME is an empty string.
+                    # Source: https://python-client.qdrant.tech/_modules/qdrant_client/local/local_collection
+                    DEFAULT_VECTOR_NAME: rest.VectorParams(
+                        size=vector_size if vector_size else self.vector_size,
+                        distance=rest.Distance.COSINE,
+                    ),
+                },
+                sparse_vectors_config={
+                    "bm25": rest.SparseVectorParams(
+                        modifier=rest.Modifier.IDF,
+                    )
+                },
                 optimizers_config=rest.OptimizersConfigDiff(
                     indexing_threshold=20000,  # Default indexing threshold
                 ),
@@ -215,12 +228,15 @@ class QdrantDestination(VectorDBDestination):
             raise ValueError(f"Entity {entity.entity_id} has no vector")
 
         # Insert point with vector from entity
-        await self.client.upsert(
-            collection_name=self.collection_name,
+        await self.client.upload_points(
+            self.collection_name,
             points=[
                 rest.PointStruct(
                     id=str(entity.db_entity_id),
-                    vector=entity.vector,
+                    vector={
+                        DEFAULT_VECTOR_NAME: entity.vector[0],
+                        "bm25": entity.vector[1].as_object(),
+                    },
                     payload=data_object,
                 )
             ],
@@ -243,18 +259,21 @@ class QdrantDestination(VectorDBDestination):
             # Use the entity's to_storage_dict method to get properly serialized data
             entity_data = entity.to_storage_dict()
             # Use the entity's vector directly
-            if not hasattr(entity, "vector") or entity.vector is None:
+            if not hasattr(entity, "vectors") or entity.vectors is None:
                 self.logger.warning(f"Entity {entity.entity_id} has no vector, skipping")
                 continue
 
-            if hasattr(entity_data, "vector"):
-                entity_data.pop("vector")
+            if hasattr(entity_data, "vectors"):
+                entity_data.pop("vectors")
 
             # Create point for Qdrant
             point_structs.append(
                 rest.PointStruct(
                     id=str(entity.db_entity_id),
-                    vector=entity.vector,
+                    vector={
+                        DEFAULT_VECTOR_NAME: entity.vectors[0],
+                        "bm25": entity.vectors[1].as_object(),
+                    },
                     payload=entity_data,
                 )
             )
@@ -264,10 +283,10 @@ class QdrantDestination(VectorDBDestination):
             return
 
         # Bulk upsert
-        operation_response = await self.client.upsert(
-            collection_name=self.collection_name,
+        operation_response = await self.client.upload_points(
+            self.collection_name,
             points=point_structs,
-            wait=False,  # Wait for operation to complete
+            wait=True,  # Wait for operation to complete
         )
 
         if hasattr(operation_response, "errors") and operation_response.errors:
@@ -406,7 +425,7 @@ class QdrantDestination(VectorDBDestination):
             # Build search parameters
             search_params = {
                 "collection_name": self.collection_name,
-                "query_vector": query_vector,
+                "query": query_vector,
                 "limit": limit,
                 "with_payload": with_payload,
             }
@@ -424,11 +443,11 @@ class QdrantDestination(VectorDBDestination):
                 search_params["query_filter"] = qdrant_filter
 
             # Perform search
-            search_results = await self.client.search(**search_params)
+            search_results = await self.client.query_points(**search_params)
 
             # Convert results to a standard format
             results = []
-            for result in search_results:
+            for result in search_results.points:
                 results.append(
                     {
                         "id": result.id,
@@ -442,6 +461,70 @@ class QdrantDestination(VectorDBDestination):
             self.logger.error(f"Error searching with Qdrant filter: {e}")
             raise  # Re-raise the exception instead of returning empty list
 
+    async def _prepare_query_request(
+        self,
+        query_vector: list[float],
+        limit: int,
+        sparse_vector: SparseEmbedding | None,
+        search_method: Literal["hybrid", "neural", "keyword"],
+    ) -> rest.QueryRequest:
+        """Prepare a query request for Qdrant.
+
+        Args:
+            query_vector (list[float]): The query vector to search with.
+            limit (int): Maximum number of results to return.
+            sparse_vector (SparseEmbedding | None): Optional sparse vector to search with.
+            search_method (Literal["hybrid", "neural", "keyword"]): The search method to use.
+
+        Returns:
+            rest.QueryRequest: The prepared query request.
+        """
+        query_request_params = {}
+
+        if search_method == "neural":
+            query_request_params = {
+                "query": query_vector,
+                "using": DEFAULT_VECTOR_NAME,
+                "limit": limit,
+            }
+
+        if search_method == "keyword":
+            if not sparse_vector:
+                raise ValueError("Keyword search requires sparse vector")
+
+            query_request_params = {
+                "query": rest.SparseVector(**sparse_vector.as_object()),
+                "using": "bm25",
+                "limit": limit,
+            }
+
+        if search_method == "hybrid":
+            if not sparse_vector:
+                raise ValueError("Keyword search requires sparse vector")
+
+            query_request_params["prefetch"] = [
+                # Neural embedding
+                rest.Prefetch(
+                    query=query_vector,
+                    using=DEFAULT_VECTOR_NAME,
+                    limit=limit,
+                ),
+                # BM25 embedding
+                rest.Prefetch(
+                    query=rest.SparseVector(**sparse_vector.as_object()),
+                    using="bm25",
+                    limit=limit,
+                ),
+            ]
+
+            # Qdrant doesn't support doing weighted fusion with RRF.
+            # https://github.com/qdrant/qdrant/issues/6067
+            query_request_params["query"] = rest.FusionQuery(
+                fusion=rest.Fusion.RRF,
+            )
+
+        return query_request_params
+
     async def bulk_search(
         self,
         query_vectors: list[list[float]],
@@ -449,6 +532,8 @@ class QdrantDestination(VectorDBDestination):
         score_threshold: float | None = None,
         with_payload: bool = True,
         filter_conditions: list[dict] | None = None,
+        sparse_vectors: list[SparseEmbedding] | None = None,
+        search_method: Literal["hybrid", "neural", "keyword"] = "neural",
     ) -> list[list[dict]]:
         """Perform batch search for multiple query vectors in a single request.
 
@@ -459,6 +544,10 @@ class QdrantDestination(VectorDBDestination):
             with_payload (bool): Whether to include payload in results. Defaults to True.
             filter_conditions (list[dict] | None): Optional list of filter conditions,
                 one per query vector. If provided, must have same length as query_vectors.
+            sparse_vectors (List[SparseEmbedding] | None): Optional list of sparse vectors.
+                If provided, must have same length as query_vectors.
+            search_method (Literal["hybrid", "neural", "keyword"]): The search method to use.
+                Defaults to "neural".
 
         Returns:
             list[list[dict]]: List of search results for each query vector.
@@ -476,35 +565,47 @@ class QdrantDestination(VectorDBDestination):
                 f"number of query vectors ({len(query_vectors)})"
             )
 
+        if sparse_vectors and len(query_vectors) != len(sparse_vectors):
+            print(
+                f"Number of query vectors ({len(query_vectors)}) must match "
+                f"number of sparse vectors ({len(sparse_vectors)})"
+            )
+            raise ValueError(
+                f"Number of query vectors ({len(query_vectors)}) must match "
+                f"number of sparse vectors ({len(sparse_vectors)})"
+            )
+
         try:
-            # Build search requests for batch processing
-            search_requests = []
+            query_requests = []
             for i, query_vector in enumerate(query_vectors):
-                # Create base search request
-                request = rest.SearchRequest(
-                    vector=query_vector,
-                    limit=limit,
-                    with_payload=with_payload,
+                # Create base query request
+                sparse_vector = sparse_vectors[i] if sparse_vectors else None
+
+                query_request_params = self._prepare_query_request(
+                    query_vector, limit, sparse_vector, search_method
+                )
+                request = rest.QueryRequest(
                     score_threshold=score_threshold,
+                    with_payload=with_payload,
+                    **query_request_params,
                 )
 
                 # Add filter if provided
                 if filter_conditions and filter_conditions[i]:
                     request.filter = rest.Filter.model_validate(filter_conditions[i])
 
-                search_requests.append(request)
+                query_requests.append(request)
 
             # Perform batch search
-            batch_results = await self.client.search_batch(
-                collection_name=self.collection_name,
-                requests=search_requests,
+            batch_results = await self.client.query_batch_points(
+                collection_name=self.collection_name, requests=query_requests
             )
 
             # Convert results to standard format
             all_results = []
             for search_results in batch_results:
                 results = []
-                for result in search_results:
+                for result in search_results.points:
                     result_dict = {
                         "id": result.id,
                         "score": result.score,
