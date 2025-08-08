@@ -79,13 +79,13 @@
     ],
     "compounds": [
         {
-            "name": "FastAPI + Temporal Worker",
+            "name": "Full Dev Stack",
             "configurations": [
                 "FastAPI",
                 "Temporal Worker"
             ],
             "stopAll": true,
-            "preLaunchTask": "start-docker-services",
+            "preLaunchTask": "start-dev-stack"
         }
     ]
 }

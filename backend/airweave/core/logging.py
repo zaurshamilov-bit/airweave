@@ -319,7 +319,7 @@ class LoggerConfigurator:
 
         # Use text format only for local development, JSON everywhere else
         if settings.LOCAL_DEVELOPMENT:
-            formatter = JSONFormatter()
+            formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         else:
             formatter = JSONFormatter()
 

@@ -189,7 +189,6 @@ class BillingService:
     async def start_subscription_checkout(
         self,
         db: AsyncSession,
-        organization_id: UUID,
         plan: str,
         success_url: str,
         cancel_url: str,
@@ -199,7 +198,6 @@ class BillingService:
 
         Args:
             db: Database session
-            organization_id: Organization ID
             plan: Plan name (developer, startup)
             success_url: URL to redirect on success
             cancel_url: URL to redirect on cancel
@@ -216,7 +214,7 @@ class BillingService:
 
         # Get billing record
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=organization_id
+            db, organization_id=ctx.organization_id
         )
         if not billing_model:
             raise NotFoundException("No billing record found for organization")
@@ -236,14 +234,12 @@ class BillingService:
                     f"Redirecting to subscription update for plan change from {current_plan} "
                     f"to {plan} (existing subscription: {billing_model.stripe_subscription_id})"
                 )
-                return await self.update_subscription_plan(db, organization_id, plan, ctx.logger)
+                return await self.update_subscription_plan(db, ctx, plan)
             else:
                 # Same plan - check if it's canceled and needs reactivation
                 if billing_model.cancel_at_period_end:
                     log.info(f"Reactivating canceled {plan} subscription")
-                    return await self.update_subscription_plan(
-                        db, organization_id, plan, ctx.logger
-                    )
+                    return await self.update_subscription_plan(db, ctx, plan)
                 else:
                     raise InvalidStateError(
                         f"Organization already has an active {plan} subscription"
@@ -262,7 +258,7 @@ class BillingService:
             success_url=success_url,
             cancel_url=cancel_url,
             metadata={
-                "organization_id": str(organization_id),
+                "organization_id": str(ctx.organization_id),
                 "plan": plan,
             },
             trial_period_days=use_trial_period_days,

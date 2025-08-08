@@ -153,11 +153,26 @@ class OrganizationService:
                 logger.info(f"Creating API key for organization {local_org.id}")
 
                 # Create system auth context for API key creation
+                # Generate a request ID for the API key creation context
+                request_id = str(uuid4())
+
+                # Create logger with organization context
+                contextual_logger = logger.with_context(
+                    request_id=request_id,
+                    organization_id=str(local_org.id),
+                    auth_method="system",
+                    context_base="organization_service",
+                    user_id=str(owner_user.id),
+                    user_email=owner_user.email,
+                )
+
                 api_key_auth = ApiContext(
+                    request_id=request_id,
                     organization_id=local_org.id,
                     user=owner_user,  # Set the owner as the creator
                     auth_method="system",
                     auth_metadata={"source": "organization_creation"},
+                    logger=contextual_logger,
                 )
 
                 # Create API key with default expiration (180 days)
