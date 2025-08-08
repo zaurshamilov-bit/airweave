@@ -1,3 +1,34 @@
+// Action check response for billing/usage checks
+export interface ActionCheckResponse {
+  allowed: boolean;
+  action: string;
+  reason?: 'payment_required' | 'usage_limit_exceeded' | null;
+  details?: {
+    message: string;
+    current_usage?: number;
+    limit?: number;
+    payment_status?: string;
+    upgrade_url?: string;
+  } | null;
+}
+
+// Billing information for organization subscription
+export interface BillingInfo {
+  plan: string;
+  status: string;
+  trial_ends_at?: string;
+  grace_period_ends_at?: string;
+  current_period_end?: string;
+  cancel_at_period_end: boolean;
+  limits: Record<string, any>;
+  is_oss: boolean;
+  has_active_subscription: boolean;
+  in_trial: boolean;
+  in_grace_period: boolean;
+  payment_method_added: boolean;
+  requires_payment_method: boolean;
+}
+
 export interface Connection {
   id: string;
   name: string;

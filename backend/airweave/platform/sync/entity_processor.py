@@ -5,8 +5,7 @@ from typing import Dict, List, Optional, Set
 
 from airweave import crud, schemas
 from airweave.core.exceptions import NotFoundException
-
-# Logger will be passed from sync_context
+from airweave.core.shared_models import ActionType
 from airweave.db.session import get_db_context
 from airweave.platform.entities._base import BaseEntity, DestinationAction
 from airweave.platform.sync.async_helpers import compute_entity_hash_async, run_in_thread_pool
@@ -679,6 +678,10 @@ class EntityProcessor:
         )
 
         await sync_context.progress.increment("inserted", 1)
+
+        # Increment guard rail usage for actual entity processing
+        await sync_context.guard_rail.increment(ActionType.ENTITIES)
+
         total_elapsed = db_elapsed + dest_elapsed
         sync_context.logger.debug(
             f"✅ INSERT_COMPLETE [{entity_context}] Insert complete in {total_elapsed:.3f}s"
@@ -762,6 +765,10 @@ class EntityProcessor:
         )
 
         await sync_context.progress.increment("updated", 1)
+
+        # Increment guard rail usage for actual entity processing
+        await sync_context.guard_rail.increment(ActionType.ENTITIES)
+
         total_elapsed = db_elapsed + delete_elapsed + insert_elapsed
         sync_context.logger.debug(
             f"✅ UPDATE_COMPLETE [{entity_context}] Update complete in {total_elapsed:.3f}s"

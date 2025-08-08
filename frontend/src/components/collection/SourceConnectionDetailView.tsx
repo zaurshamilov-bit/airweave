@@ -35,8 +35,17 @@ import { useSyncStateStore, SyncProgressUpdate } from "@/stores/syncStateStore";
 import { syncStorageService } from "@/services/syncStorageService";
 import { deriveSyncStatus, getSyncStatusColorClass, getSyncStatusDisplayText } from "@/utils/syncStatus";
 import { utcNow, parseBackendTimestamp, calculateRuntime, formatRuntime } from "@/utils/dateTime";
+import { useNavigate } from "react-router-dom";
+import { redirectWithError } from "@/lib/error-utils";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { EditSourceConnectionDialog } from "./EditSourceConnectionDialog";
 import { emitCollectionEvent, SOURCE_CONNECTION_UPDATED } from "@/lib/events";
+import { ActionCheckResponse } from "@/types";
 
 const nodeTypes = {
     sourceNode: SourceNode,
@@ -113,7 +122,17 @@ const SyncDagCard = ({
     setReactFlowInstance,
     flowContainerRef,
     syncJobData,
-    isDark
+    onRunSync,
+    isInitiatingSyncJob,
+    isDark,
+    syncJob,
+    onCancelSync,
+    isCancelling,
+    entitiesAllowed,
+    syncsAllowed,
+    entitiesCheckDetails,
+    syncsCheckDetails,
+    isCheckingUsage
 }: {
     sourceConnection: SourceConnection;
     entityDict: Record<string, number>;
@@ -135,7 +154,17 @@ const SyncDagCard = ({
         total: number;
     };
     isDark: boolean;
+    syncJob: SourceConnectionJob | null;
+    onCancelSync: () => void;
+    isCancelling: boolean;
+    entitiesAllowed: boolean;
+    syncsAllowed: boolean;
+    entitiesCheckDetails: ActionCheckResponse | null;
+    syncsCheckDetails: ActionCheckResponse | null;
+    isCheckingUsage: boolean;
 }) => {
+    // Calculate if sync is currently running
+    const isSyncRunning = syncJob?.status === 'in_progress' || syncJob?.status === 'pending';
 
     return (
         <div className="space-y-3">
@@ -147,12 +176,112 @@ const SyncDagCard = ({
                     isDark ? "border-gray-700/50 bg-gray-800/30" : "border-gray-200 bg-white shadow-sm"
                 )}>
                     <CardHeader className="p-3">
-                        <h3 className={cn(
-                            "text-base font-medium",
-                            isDark ? "text-gray-200" : "text-gray-700"
-                        )}>
-                            Entity Graph
-                        </h3>
+                        <div className="flex justify-between items-center">
+                            <h3 className={cn(
+                                "text-base font-medium",
+                                isDark ? "text-gray-200" : "text-gray-700"
+                            )}>
+                                Entity Graph
+                            </h3>
+
+                            <div className="flex gap-2">
+                                {/* Run Sync Button - Always visible */}
+                                <TooltipProvider delayDuration={100}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span tabIndex={0}>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className={cn(
+                                                        "h-8 gap-1.5 font-normal",
+                                                        (isSyncRunning || isInitiatingSyncJob || !entitiesAllowed || !syncsAllowed || isCheckingUsage)
+                                                            ? isDark
+                                                                ? "bg-gray-800/50 border-gray-700/50 text-gray-400 cursor-not-allowed"
+                                                                : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
+                                                            : isDark
+                                                                ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
+                                                                : "bg-white border-gray-200 text-gray-800 hover:bg-gray-50"
+                                                    )}
+                                                    onClick={onRunSync}
+                                                    disabled={isSyncRunning || isInitiatingSyncJob || !entitiesAllowed || !syncsAllowed || isCheckingUsage}
+                                                >
+                                                    <Play className="h-3.5 w-3.5" />
+                                                    {isSyncRunning ? 'Running...' : isInitiatingSyncJob ? 'Starting...' : 'Run Sync'}
+                                                </Button>
+                                            </span>
+                                        </TooltipTrigger>
+                                        {(!entitiesAllowed || !syncsAllowed) && (
+                                            <TooltipContent className="max-w-xs">
+                                                <p className="text-xs">
+                                                    {!entitiesAllowed && entitiesCheckDetails?.reason === 'usage_limit_exceeded' ? (
+                                                        <>
+                                                            Entity processing limit reached.{' '}
+                                                            <a
+                                                                href="/organization/settings?tab=billing"
+                                                                className="underline"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                Upgrade your plan
+                                                            </a>
+                                                            {' '}to run syncs.
+                                                        </>
+                                                    ) : !syncsAllowed && syncsCheckDetails?.reason === 'usage_limit_exceeded' ? (
+                                                        <>
+                                                            Sync limit reached.{' '}
+                                                            <a
+                                                                href="/organization/settings?tab=billing"
+                                                                className="underline"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                Upgrade your plan
+                                                            </a>
+                                                            {' '}for more syncs.
+                                                        </>
+                                                    ) : (
+                                                        'Unable to run sync at this time.'
+                                                    )}
+                                                </p>
+                                            </TooltipContent>
+                                        )}
+                                    </Tooltip>
+                                </TooltipProvider>
+
+                                {/* Cancel Sync Button - Always visible */}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className={cn(
+                                        "h-8 gap-1.5 font-normal",
+                                        isCancelling
+                                            ? isDark
+                                                ? "bg-orange-900/30 border-orange-700 text-orange-200 hover:bg-orange-900/50"
+                                                : "bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
+                                            : isSyncRunning
+                                                ? isDark
+                                                    ? "bg-red-900/30 border-red-700 text-red-200 hover:bg-red-900/50"
+                                                    : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+                                                : isDark
+                                                    ? "bg-gray-800/50 border-gray-700/50 text-gray-400 cursor-not-allowed"
+                                                    : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
+                                    )}
+                                    onClick={onCancelSync}
+                                    disabled={!isSyncRunning || isCancelling}
+                                >
+                                    {isCancelling ? (
+                                        <>
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            Cancelling...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <X className="h-3.5 w-3.5" />
+                                            Cancel Sync
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent className="p-3 pt-0">
                         <div
@@ -330,6 +459,7 @@ const SourceConnectionDetailView = ({
 }: SourceConnectionDetailViewProps) => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
+    const navigate = useNavigate();
 
     // Sync state store
     const { subscribe, getProgressForSource, hasActiveSubscription, restoreProgressFromStorage } = useSyncStateStore();
@@ -397,6 +527,13 @@ const SourceConnectionDetailView = ({
     });
     const [nextRunTime, setNextRunTime] = useState<string | null>(null);
 
+    // Add state for usage limits
+    const [entitiesAllowed, setEntitiesAllowed] = useState(true);
+    const [entitiesCheckDetails, setEntitiesCheckDetails] = useState<ActionCheckResponse | null>(null);
+    const [syncsAllowed, setSyncsAllowed] = useState(true);
+    const [syncsCheckDetails, setSyncsCheckDetails] = useState<ActionCheckResponse | null>(null);
+    const [isCheckingUsage, setIsCheckingUsage] = useState(true);
+
     const flowContainerRef = useRef<HTMLDivElement>(null);
 
     // Sync job data processed for UI display
@@ -428,7 +565,35 @@ const SourceConnectionDetailView = ({
         );
     }, [liveProgress, syncJob?.status, hasActiveSubscription, sourceConnectionId]);
 
+    // Check if actions are allowed based on usage limits
+    const checkUsageActions = useCallback(async () => {
+        try {
+            // Check both entities and syncs in parallel
+            const [entitiesResponse, syncsResponse] = await Promise.all([
+                apiClient.get('/usage/check-action?action=entities'),
+                apiClient.get('/usage/check-action?action=syncs')
+            ]);
 
+            if (entitiesResponse.ok) {
+                const data: ActionCheckResponse = await entitiesResponse.json();
+                setEntitiesAllowed(data.allowed);
+                setEntitiesCheckDetails(data);
+            }
+
+            if (syncsResponse.ok) {
+                const data: ActionCheckResponse = await syncsResponse.json();
+                setSyncsAllowed(data.allowed);
+                setSyncsCheckDetails(data);
+            }
+        } catch (error) {
+            console.error('Failed to check usage actions:', error);
+            // Default to allowed on error to not block users
+            setEntitiesAllowed(true);
+            setSyncsAllowed(true);
+        } finally {
+            setIsCheckingUsage(false);
+        }
+    }, []);
 
     // API CALL 1: Fetch Source Connection details (from /source-connections/{id})
     const fetchSourceConnection = async () => {
@@ -592,10 +757,12 @@ const SourceConnectionDetailView = ({
             return;
         }
 
+        let response: Response | undefined;
+
         try {
             setIsInitiatingSyncJob(true);
             console.log("Starting sync job...");
-            const response = await apiClient.post(`/source-connections/${sourceConnection.id}/run`);
+            response = await apiClient.post(`/source-connections/${sourceConnection.id}/run`);
 
             if (!response.ok) {
                 throw new Error("Failed to start sync job");
@@ -632,14 +799,48 @@ const SourceConnectionDetailView = ({
                 description: "Sync job started successfully",
             });
 
+            // Re-check usage limits after starting sync
+            await checkUsageActions();
+
             // Don't reload data immediately - we'll get live updates via SSE
 
         } catch (error) {
             console.error("Error running sync:", error);
-            toast({
-                title: "Error",
-                description: "Failed to start sync job",
-                variant: "destructive"
+
+            let errorMessage = "Failed to start sync job";
+            let errorDetails = "";
+
+            // Try to parse error response
+            if (error instanceof Error) {
+                errorMessage = error.message;
+                errorDetails = error.stack || "";
+            }
+
+            // If the error came from an API response, try to get more details
+            try {
+                if (response && !response.ok) {
+                    const errorData = await response.json();
+                    if (errorData.detail) {
+                        errorMessage = errorData.detail;
+                    } else if (errorData.message) {
+                        errorMessage = errorData.message;
+                    } else if (typeof errorData === 'string') {
+                        errorMessage = errorData;
+                    }
+                }
+            } catch (parseError) {
+                console.error("Could not parse error response:", parseError);
+            }
+
+            // Use redirectWithError to show the error in a dialog
+            redirectWithError(navigate, {
+                serviceName: sourceConnection?.name || "Sync Job",
+                sourceShortName: sourceConnection?.short_name || "sync",
+                errorMessage: errorMessage,
+                errorDetails: errorDetails,
+                canRetry: true,
+                dialogId: `sync-${sourceConnectionId}`,
+                timestamp: Date.now()
             });
         } finally {
             setIsInitiatingSyncJob(false);
@@ -993,6 +1194,11 @@ const SourceConnectionDetailView = ({
         loadAllData();
     }, [sourceConnectionId]);
 
+    // Check usage limits on mount
+    useEffect(() => {
+        checkUsageActions();
+    }, [checkUsageActions]);
+
     // Restore saved progress when sync job data is loaded
     useEffect(() => {
         // Handle case where job completed while page was closed
@@ -1192,11 +1398,13 @@ const SourceConnectionDetailView = ({
             const timer = setTimeout(() => {
                 console.log('🔄 Reloading data after sync completion');
                 loadAllData();
+                // Re-check usage limits after sync completes
+                checkUsageActions();
             }, 3000);
 
             return () => clearTimeout(timer);
         }
-    }, [liveProgress?.is_complete, liveProgress?.is_failed]);
+    }, [liveProgress?.is_complete, liveProgress?.is_failed, checkUsageActions]);
 
     // Clear cancelling state when we see the status change to cancelled
     useEffect(() => {
@@ -1204,8 +1412,10 @@ const SourceConnectionDetailView = ({
             setIsCancelling(false);
             // Reload data to get the final state
             loadAllData();
+            // Re-check usage limits after cancellation
+            checkUsageActions();
         }
-    }, [derivedSyncStatus, isCancelling]);
+    }, [derivedSyncStatus, isCancelling, checkUsageActions]);
 
     // Live runtime calculation for running jobs
     useEffect(() => {
@@ -1523,111 +1733,106 @@ const SourceConnectionDetailView = ({
                                         (nextRunTime ? `In ${nextRunTime}` : 'Scheduled') :
                                         'Manual'}
                                 </div>
+                                <TooltipProvider delayDuration={100}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span tabIndex={0}>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className={cn(
+                                                        "h-6 w-6 p-0",
+                                                        (!entitiesAllowed || !syncsAllowed || isCheckingUsage) && "opacity-50 cursor-not-allowed"
+                                                    )}
+                                                    onClick={() => setShowScheduleDialog(true)}
+                                                    disabled={!entitiesAllowed || !syncsAllowed || isCheckingUsage}
+                                                >
+                                                    <Pencil className="h-3 w-3" />
+                                                </Button>
+                                            </span>
+                                        </TooltipTrigger>
+                                        {(!entitiesAllowed || !syncsAllowed) && (
+                                            <TooltipContent className="max-w-xs">
+                                                <p className="text-xs">
+                                                    {!entitiesAllowed && entitiesCheckDetails?.reason === 'usage_limit_exceeded' ? (
+                                                        <>
+                                                            Entity processing limit reached.{' '}
+                                                            <a
+                                                                href="/organization/settings?tab=billing"
+                                                                className="underline"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                Upgrade your plan
+                                                            </a>
+                                                            {' '}to schedule syncs.
+                                                        </>
+                                                    ) : !syncsAllowed && syncsCheckDetails?.reason === 'usage_limit_exceeded' ? (
+                                                        <>
+                                                            Sync limit reached.{' '}
+                                                            <a
+                                                                href="/organization/settings?tab=billing"
+                                                                className="underline"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                Upgrade your plan
+                                                            </a>
+                                                            {' '}to schedule syncs.
+                                                        </>
+                                                    ) : (
+                                                        'Unable to schedule syncs at this time.'
+                                                    )}
+                                                </p>
+                                            </TooltipContent>
+                                        )}
+                                    </Tooltip>
+                                </TooltipProvider>
                             </div>
                         </div>
                     </div>
 
-                    {/* Right side - Action buttons */}
-                    <div className="flex gap-2">
-                        {/* Run Sync Button */}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className={cn(
-                                "h-10 gap-1.5 font-normal px-3",
-                                (isSyncRunning || isInitiatingSyncJob)
-                                    ? isDark
-                                        ? "bg-gray-800/50 border-gray-700/50 text-gray-400 cursor-not-allowed"
-                                        : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
-                                    : isDark
-                                        ? "bg-gray-700 border-gray-600 text-white hover:bg-gray-600"
-                                        : "bg-white border-gray-200 text-gray-800 hover:bg-gray-50"
-                            )}
-                            onClick={handleRunSync}
-                            disabled={isSyncRunning || isInitiatingSyncJob}
-                        >
-                            <Play className="h-3.5 w-3.5" />
-                            {isSyncRunning ? 'Running...' : isInitiatingSyncJob ? 'Starting...' : 'Run Sync'}
-                        </Button>
+                    {/* Right side - Three-dot menu */}
+                    <div className={cn(
+                        "rounded-lg p-1 shadow-sm transition-all duration-200 h-10 flex items-center justify-center",
+                        isDark
+                            ? "bg-gray-800/60 border border-gray-700/50"
+                            : "bg-white border border-gray-100"
+                    )}>
+                        <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+                            <DropdownMenuTrigger asChild>
+                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                                    <MoreVertical className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem onClick={() => {
+                                    setDropdownOpen(false);
+                                    setShowEditDetailsDialog(true);
+                                }}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit Details
+                                </DropdownMenuItem>
 
-                        {/* Cancel Sync Button */}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className={cn(
-                                "h-10 gap-1.5 font-normal px-3",
-                                isCancelling
-                                    ? isDark
-                                        ? "bg-orange-900/30 border-orange-700 text-orange-200 hover:bg-orange-900/50"
-                                        : "bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100"
-                                    : isSyncRunning
-                                        ? isDark
-                                            ? "bg-red-900/30 border-red-700 text-red-200 hover:bg-red-900/50"
-                                            : "bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
-                                        : isDark
-                                            ? "bg-gray-800/50 border-gray-700/50 text-gray-400 cursor-not-allowed"
-                                            : "bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed"
-                            )}
-                            onClick={handleCancelSync}
-                            disabled={!isSyncRunning || isCancelling}
-                        >
-                            {isCancelling ? (
-                                <>
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    Cancelling...
-                                </>
-                            ) : (
-                                <>
-                                    <X className="h-3.5 w-3.5" />
-                                    Cancel Sync
-                                </>
-                            )}
-                        </Button>
+                                <DropdownMenuItem onClick={() => {
+                                    setDropdownOpen(false);
+                                    setShowScheduleDialog(true);
+                                }}>
+                                    <Clock className="h-4 w-4 mr-2" />
+                                    Edit Schedule
+                                </DropdownMenuItem>
 
-                        {/* Three-dot menu */}
-                        <div className={cn(
-                            "rounded-lg p-1 shadow-sm transition-all duration-200 h-10 flex items-center justify-center",
-                            isDark
-                                ? "bg-gray-800/60 border border-gray-700/50"
-                                : "bg-white border border-gray-100"
-                        )}>
-                            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
-                                <DropdownMenuTrigger asChild>
-                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                                        <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                    <DropdownMenuItem onClick={() => {
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/20"
+                                    onClick={() => {
                                         setDropdownOpen(false);
-                                        setShowEditDetailsDialog(true);
-                                    }}>
-                                        <Edit className="h-4 w-4 mr-2" />
-                                        Edit Details
-                                    </DropdownMenuItem>
-
-                                    <DropdownMenuItem onClick={() => {
-                                        setDropdownOpen(false);
-                                        setShowScheduleDialog(true);
-                                    }}>
-                                        <Clock className="h-4 w-4 mr-2" />
-                                        Edit Schedule
-                                    </DropdownMenuItem>
-
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                        className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-900/20"
-                                        onClick={() => {
-                                            setDropdownOpen(false);
-                                            setShowDeleteDialog(true);
-                                        }}
-                                    >
-                                        <Trash className="h-4 w-4 mr-2" />
-                                        Delete
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </div>
+                                        setShowDeleteDialog(true);
+                                    }}
+                                >
+                                    <Trash className="h-4 w-4 mr-2" />
+                                    Delete
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
 
@@ -1654,7 +1859,17 @@ const SourceConnectionDetailView = ({
                         setReactFlowInstance={setReactFlowInstance}
                         flowContainerRef={flowContainerRef}
                         syncJobData={syncJobData}
+                        onRunSync={handleRunSync}
+                        isInitiatingSyncJob={isInitiatingSyncJob}
                         isDark={isDark}
+                        syncJob={syncJob}
+                        onCancelSync={handleCancelSync}
+                        isCancelling={isCancelling}
+                        entitiesAllowed={entitiesAllowed}
+                        syncsAllowed={syncsAllowed}
+                        entitiesCheckDetails={entitiesCheckDetails}
+                        syncsCheckDetails={syncsCheckDetails}
+                        isCheckingUsage={isCheckingUsage}
                     />
                 )}
             </div>

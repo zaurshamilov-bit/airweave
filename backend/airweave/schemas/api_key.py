@@ -28,7 +28,7 @@ class APIKeyCreate(BaseModel):
 
     @model_validator(mode="before")
     def set_expiration_utc(cls, values: dict) -> dict:
-        """Ensure expiration_date is in UTC if no timezone is specified.
+        """Ensure expiration_date is in UTC but as timezone-naive.
 
         Args:
         ----
@@ -44,14 +44,28 @@ class APIKeyCreate(BaseModel):
             return values  # Let the datetime validation handle this
 
         if isinstance(expiration_date, str):
-            # Parse the string and set to UTC
+            # Parse the string and convert to UTC naive
             try:
                 parsed_date = datetime.fromisoformat(expiration_date)
-                values["expiration_date"] = parsed_date.astimezone(timezone.utc)
+                if parsed_date.tzinfo is not None:
+                    # Convert to UTC and make naive
+                    values["expiration_date"] = parsed_date.astimezone(timezone.utc).replace(
+                        tzinfo=None
+                    )
+                else:
+                    # Already naive, assume UTC
+                    values["expiration_date"] = parsed_date
             except ValueError:
                 return values  # Let the datetime validation handle this
         elif isinstance(expiration_date, datetime):
-            values["expiration_date"] = expiration_date.astimezone(timezone.utc)
+            if expiration_date.tzinfo is not None:
+                # Convert to UTC and make naive
+                values["expiration_date"] = expiration_date.astimezone(timezone.utc).replace(
+                    tzinfo=None
+                )
+            else:
+                # Already naive, assume UTC
+                values["expiration_date"] = expiration_date
 
         return values
 

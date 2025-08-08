@@ -15,7 +15,9 @@ from airweave.api.examples import (
 )
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
-from airweave.core.logging import logger
+from airweave.core.guard_rail_service import GuardRailService
+from airweave.core.logging import ContextualLogger
+from airweave.core.shared_models import ActionType
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
@@ -57,14 +59,23 @@ async def create_collection(
     collection: schemas.CollectionCreate,
     db: AsyncSession = Depends(deps.get_db),
     ctx: ApiContext = Depends(deps.get_context),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
 ) -> schemas.Collection:
     """Create a new collection.
 
-    <br/><br/>
     The newly created collection is initially empty and does not contain any data
     until you explicitly add source connections to it.
     """
-    return await collection_service.create(db, collection_in=collection, ctx=ctx)
+    # Check if the organization is allowed to create a collection
+    await guard_rail.is_allowed(ActionType.COLLECTIONS)
+
+    # Create the collection
+    collection_obj = await collection_service.create(db, collection_in=collection, ctx=ctx)
+
+    # Increment usage after successful creation
+    await guard_rail.increment(ActionType.COLLECTIONS)
+
+    return collection_obj
 
 
 @router.get("/{readable_id}", response_model=schemas.Collection)
@@ -94,7 +105,6 @@ async def update_collection(
 ) -> schemas.Collection:
     """Update a collection's properties.
 
-    <br/><br/>
     Modifies the display name of an existing collection.
     Note that the readable ID cannot be changed after creation to maintain stable
     API endpoints and preserve any existing integrations or bookmarks.
@@ -112,6 +122,7 @@ async def delete_collection(
     ),
     db: AsyncSession = Depends(deps.get_db),
     ctx: ApiContext = Depends(deps.get_context),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
 ) -> schemas.Collection:
     """Delete a collection and all associated data.
 
@@ -132,12 +143,13 @@ async def delete_collection(
         # Delete the entire collection in Qdrant
         if destination.client:
             await destination.client.delete_collection(collection_name=str(db_obj.id))
-            logger.info(f"Deleted Qdrant collection {db_obj.id}")
+            ctx.logger.info(f"Deleted Qdrant collection {db_obj.id}")
     except Exception as e:
-        logger.error(f"Error deleting Qdrant collection: {str(e)}")
+        ctx.logger.error(f"Error deleting Qdrant collection: {str(e)}")
         # Continue with deletion even if Qdrant deletion fails
 
     # Delete the collection - CASCADE will handle all child objects
+    await guard_rail.decrement(ActionType.COLLECTIONS)
     return await crud.collection.remove(db, id=db_obj.id, ctx=ctx)
 
 
@@ -173,6 +185,7 @@ async def search_collection(
         description="Query expansion strategy (auto, llm, or no_expansion)",
     ),
     db: AsyncSession = Depends(deps.get_db),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SearchResponse:
     """Search across all data sources within the specified collection.
@@ -180,6 +193,8 @@ async def search_collection(
     This GET endpoint provides basic search functionality. For advanced filtering
     and options, use the POST /search endpoint.
     """
+    await guard_rail.is_allowed(ActionType.QUERIES)
+    # Check if the organization is allowed to perform queries
     ctx.logger.info(
         f"Searching collection {readable_id} with query: {query} "
         f"with response_type: {response_type}, limit: {limit}, offset: {offset}"
@@ -196,12 +211,17 @@ async def search_collection(
     )
 
     try:
-        return await search_service.search_with_request(
+        result = await search_service.search_with_request(
             db,
             readable_id=readable_id,
             search_request=search_request,
             ctx=ctx,
         )
+
+        # Increment usage after successful search
+        await guard_rail.increment(ActionType.QUERIES)
+
+        return result
     except Exception as e:
         ctx.logger.error(f"Search error for collection {readable_id}: {str(e)}")
 
@@ -239,6 +259,7 @@ async def search_collection_advanced(
     ),
     search_request: SearchRequest = ...,
     db: AsyncSession = Depends(deps.get_db),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SearchResponse:
     """Advanced search with comprehensive filtering and options.
@@ -249,18 +270,24 @@ async def search_collection_advanced(
     - Score threshold filtering
     - Query expansion strategies
     """
+    await guard_rail.is_allowed(ActionType.QUERIES)
     ctx.logger.info(
         f"Advanced search in collection {readable_id} with query: {search_request.query} "
         f"and filter: {search_request.filter}"
     )
 
     try:
-        return await search_service.search_with_request(
+        result = await search_service.search_with_request(
             db,
             readable_id=readable_id,
             search_request=search_request,
             ctx=ctx,
         )
+
+        # Increment usage after successful search
+        await guard_rail.increment(ActionType.QUERIES)
+
+        return result
     except Exception as e:
         ctx.logger.error(f"Advanced search error for collection {readable_id}: {str(e)}")
 
@@ -304,11 +331,13 @@ async def refresh_all_source_connections(
     ),
     db: AsyncSession = Depends(deps.get_db),
     ctx: ApiContext = Depends(deps.get_context),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
+    logger: ContextualLogger = Depends(deps.get_logger),
 ) -> list[schemas.SourceConnectionJob]:
     """Trigger data synchronization for all source connections in the collection.
 
-    <br/><br/>The sync jobs run asynchronously in the background, so this endpoint
+    The sync jobs run asynchronously in the background, so this endpoint
     returns immediately with job details that you can use to track progress. You can
     monitor the status of individual data synchronization using the source connection
     endpoints.
@@ -329,8 +358,16 @@ async def refresh_all_source_connections(
     if not source_connections:
         return []
 
+    # Check if we're allowed to process entities
+    await guard_rail.is_allowed(ActionType.ENTITIES)
+
+    # Check if we're allowed to create N syncs at once
+    num_syncs = len(source_connections)
+    await guard_rail.is_allowed(ActionType.SYNCS, amount=num_syncs)
+
     # Create a sync job for each source connection and run it in the background
     sync_jobs = []
+    successful_syncs = 0
 
     for sc in source_connections:
         # Create the sync job
@@ -360,27 +397,40 @@ async def refresh_all_source_connections(
         # Add to jobs list
         sync_jobs.append(sync_job.to_source_connection_job(sc.id))
 
-        # Start the sync job in the background or via Temporal
-        if await temporal_service.is_temporal_enabled():
-            # Use Temporal workflow
-            await temporal_service.run_source_connection_workflow(
-                sync=sync,
-                sync_job=sync_job,
-                sync_dag=sync_dag,
-                collection=collection_obj,  # Use the already converted object
-                source_connection=source_connection,
-                ctx=ctx,
-            )
-        else:
-            # Fall back to background tasks
-            background_tasks.add_task(
-                sync_service.run,
-                sync,
-                sync_job,
-                sync_dag,
-                collection_obj,  # Use the already converted object
-                source_connection,
-                ctx,
-            )
+        try:
+            # Start the sync job in the background or via Temporal
+            if await temporal_service.is_temporal_enabled():
+                # Use Temporal workflow
+                await temporal_service.run_source_connection_workflow(
+                    sync=sync,
+                    sync_job=sync_job,
+                    sync_dag=sync_dag,
+                    collection=collection_obj,  # Use the already converted object
+                    source_connection=source_connection,
+                    ctx=ctx,
+                )
+            else:
+                # Fall back to background tasks
+                background_tasks.add_task(
+                    sync_service.run,
+                    sync,
+                    sync_job,
+                    sync_dag,
+                    collection_obj,  # Use the already converted object
+                    source_connection,
+                    ctx,
+                )
+
+            # Track successful sync setup
+            successful_syncs += 1
+        except Exception as e:
+            # Log the error but continue with other source connections
+            logger.error(f"Failed to create sync job for source connection {sc.id}: {e}")
+            # Don't increment successful_syncs for this one
+
+    # Increment sync usage by the number of successfully created syncs
+    if successful_syncs > 0:
+        for _ in range(successful_syncs):
+            await guard_rail.increment(ActionType.SYNCS)
 
     return sync_jobs

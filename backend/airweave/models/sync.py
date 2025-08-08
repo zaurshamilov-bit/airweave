@@ -27,7 +27,7 @@ class Sync(OrganizationBase, UserMixin):
     status: Mapped[SyncStatus] = mapped_column(default=SyncStatus.ACTIVE)
     cron_schedule: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     next_scheduled_run: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=False), nullable=True
     )
     sync_metadata: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 

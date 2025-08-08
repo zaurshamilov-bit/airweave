@@ -170,14 +170,15 @@ async def run_sync_activity(
     # Start background tasks
     heartbeat_task = None
     sync_task = None
-    try:
-        # Create a flag to stop heartbeating when done
-        should_heartbeat_flag = {"value": True}
+    should_heartbeat_flag = {"value": True}
 
-        # Start heartbeating in background
+    try:
+        # Import here to avoid Temporal sandboxing issues
+
+        # Start heartbeat task
         heartbeat_task = asyncio.create_task(_send_heartbeats(should_heartbeat_flag))
 
-        # Run the actual sync in a cancellable task
+        # Start the sync
         sync_task = asyncio.create_task(
             _run_sync_task(
                 sync,
