@@ -30,6 +30,7 @@ import {
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { JsonViewer } from '@textea/json-viewer';
+import { ActionCheckResponse } from '@/types';
 
 interface QueryToolAndLiveDocProps {
     collectionReadableId: string;
@@ -37,19 +38,6 @@ interface QueryToolAndLiveDocProps {
 
 // Define response type enum to match backend
 type ResponseType = 'raw' | 'completion';
-
-// Define action check response interface
-interface ActionCheckResponse {
-    allowed: boolean;
-    action: string;
-    reason?: 'payment_required' | 'usage_limit_exceeded' | null;
-    details?: {
-        message: string;
-        current_usage?: number;
-        limit?: number;
-        payment_status?: string;
-    } | null;
-}
 
 export const QueryToolAndLiveDoc = ({ collectionReadableId }: QueryToolAndLiveDocProps) => {
     // QueryTool state

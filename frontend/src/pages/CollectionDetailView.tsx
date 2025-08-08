@@ -36,19 +36,7 @@ import { useSyncStateStore } from "@/stores/syncStateStore";
 import { syncStorageService } from "@/services/syncStorageService";
 import { deriveSyncStatus, getSyncStatusColorClass } from "@/utils/syncStatus";
 import { redirectWithError } from "@/lib/error-utils";
-
-// Define action check response interface
-interface ActionCheckResponse {
-    allowed: boolean;
-    action: string;
-    reason?: 'payment_required' | 'usage_limit_exceeded' | null;
-    details?: {
-        message: string;
-        current_usage?: number;
-        limit?: number;
-        payment_status?: string;
-    } | null;
-}
+import { ActionCheckResponse } from "@/types";
 
 interface DeleteCollectionDialogProps {
     open: boolean;

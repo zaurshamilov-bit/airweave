@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiClient } from '@/lib/api';
+import { BillingInfo } from '@/types';
 
 interface Organization {
   id: string;
@@ -25,22 +26,6 @@ interface Organization {
     };
     [key: string]: any;
   };
-}
-
-interface BillingInfo {
-  plan: string;
-  status: string;
-  trial_ends_at?: string;
-  grace_period_ends_at?: string;
-  current_period_end?: string;
-  cancel_at_period_end: boolean;
-  limits: Record<string, any>;
-  is_oss: boolean;
-  has_active_subscription: boolean;
-  in_trial: boolean;
-  in_grace_period: boolean;
-  payment_method_added: boolean;
-  requires_payment_method: boolean;
 }
 
 interface CreateOrganizationRequest {

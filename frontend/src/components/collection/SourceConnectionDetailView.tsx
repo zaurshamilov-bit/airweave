@@ -45,19 +45,7 @@ import {
 } from "@/components/ui/tooltip";
 import { EditSourceConnectionDialog } from "./EditSourceConnectionDialog";
 import { emitCollectionEvent, SOURCE_CONNECTION_UPDATED } from "@/lib/events";
-
-// Define action check response interface
-interface ActionCheckResponse {
-    allowed: boolean;
-    action: string;
-    reason?: 'payment_required' | 'usage_limit_exceeded' | null;
-    details?: {
-        message: string;
-        current_usage?: number;
-        limit?: number;
-        payment_status?: string;
-    } | null;
-}
+import { ActionCheckResponse } from "@/types";
 
 const nodeTypes = {
     sourceNode: SourceNode,

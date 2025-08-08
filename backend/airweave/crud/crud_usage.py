@@ -182,25 +182,39 @@ class CRUDUsage(CRUDBaseOrganization[Usage, UsageCreate, UsageUpdate]):
             logger.info(f"[increment_usage] Executing SQL update with params: {params}")
             result = await db.execute(query, params)
 
+            # Fetch the updated row BEFORE committing to avoid cursor invalidation
+            updated_row = result.first()
+
             # Commit the transaction
             await db.commit()
             logger.info("[increment_usage] SQL update committed successfully")
 
-            # Get the updated row from the RETURNING clause
-            updated_row = result.first()
             if updated_row:
-                # Create a new Usage object from the returned data
+                # Buffer values explicitly to decouple from the DB cursor
+                updated_values = {
+                    "id": updated_row.id,
+                    "organization_id": updated_row.organization_id,
+                    "syncs": updated_row.syncs,
+                    "entities": updated_row.entities,
+                    "queries": updated_row.queries,
+                    "collections": updated_row.collections,
+                    "source_connections": updated_row.source_connections,
+                    "billing_period_id": updated_row.billing_period_id,
+                    "created_at": updated_row.created_at,
+                    "modified_at": updated_row.modified_at,
+                }
+
                 updated = Usage(
-                    id=updated_row.id,
-                    organization_id=updated_row.organization_id,
-                    syncs=updated_row.syncs,
-                    entities=updated_row.entities,
-                    queries=updated_row.queries,
-                    collections=updated_row.collections,
-                    source_connections=updated_row.source_connections,
-                    billing_period_id=updated_row.billing_period_id,
-                    created_at=updated_row.created_at,
-                    modified_at=updated_row.modified_at,
+                    id=updated_values["id"],
+                    organization_id=updated_values["organization_id"],
+                    syncs=updated_values["syncs"],
+                    entities=updated_values["entities"],
+                    queries=updated_values["queries"],
+                    collections=updated_values["collections"],
+                    source_connections=updated_values["source_connections"],
+                    billing_period_id=updated_values["billing_period_id"],
+                    created_at=updated_values["created_at"],
+                    modified_at=updated_values["modified_at"],
                 )
 
                 logger.info(

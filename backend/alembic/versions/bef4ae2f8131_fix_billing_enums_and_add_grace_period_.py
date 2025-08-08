@@ -89,7 +89,7 @@ def upgrade() -> None:
     if "grace_period_ends_at" not in existing_columns:
         op.add_column(
             "organization_billing",
-            sa.Column("grace_period_ends_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("grace_period_ends_at", sa.DateTime(timezone=False), nullable=True),
         )
 
     if "payment_method_added" not in existing_columns:

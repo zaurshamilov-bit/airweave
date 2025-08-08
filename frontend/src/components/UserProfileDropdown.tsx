@@ -18,6 +18,7 @@ import {
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
+import { BillingInfo } from '@/types';
 
 // Consistent styling for all menu items
 const menuItemClass = "flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer";
@@ -72,12 +73,6 @@ const InternalMenuLink = ({ to, icon, children }: { to: string; icon: React.Reac
 
 // Consistent separator component
 const MenuSeparator = () => <div className="h-px bg-border/10 my-1" />;
-
-interface BillingInfo {
-  plan: string;
-  status: string;
-  trial_ends_at?: string;
-}
 
 export function UserProfileDropdown() {
   const { user, logout } = useAuth();

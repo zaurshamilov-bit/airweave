@@ -43,19 +43,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-
-// Define action check response interface
-interface ActionCheckResponse {
-  allowed: boolean;
-  action: string;
-  reason?: 'payment_required' | 'usage_limit_exceeded' | null;
-  details?: {
-    message: string;
-    current_usage?: number;
-    limit?: number;
-    payment_status?: string;
-  } | null;
-}
+import { ActionCheckResponse } from "@/types";
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {

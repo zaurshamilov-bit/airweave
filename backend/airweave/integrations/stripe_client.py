@@ -44,7 +44,9 @@ class StripeClient:
             ExternalServiceError: If Stripe API call fails
         """
         try:
-            return stripe.Customer.create(email=email, name=name, metadata=metadata or {})
+            return await stripe.Customer.create_async(
+                email=email, name=name, metadata=metadata or {}
+            )
         except StripeError as e:
             logger.error(f"Failed to create Stripe customer: {e}")
             raise ExternalServiceError(
@@ -62,7 +64,7 @@ class StripeClient:
             ExternalServiceError: If deletion fails
         """
         try:
-            stripe.Customer.delete(customer_id)
+            await stripe.Customer.delete_async(customer_id)
         except StripeError as e:
             logger.error(f"Failed to delete Stripe customer {customer_id}: {e}")
             # Don't raise on cleanup failures
@@ -125,7 +127,7 @@ class StripeClient:
             elif trial_period_days:
                 session_params["subscription_data"]["trial_period_days"] = trial_period_days
 
-            return stripe.checkout.Session.create(**session_params)
+            return await stripe.checkout.Session.create_async(**session_params)
         except StripeError as e:
             logger.error(f"Failed to create checkout session: {e}")
             raise ExternalServiceError(
@@ -149,7 +151,7 @@ class StripeClient:
             ExternalServiceError: If portal creation fails
         """
         try:
-            return stripe.billing_portal.Session.create(
+            return await stripe.billing_portal.Session.create_async(
                 customer=customer_id,
                 return_url=return_url,
             )
@@ -173,7 +175,7 @@ class StripeClient:
             ExternalServiceError: If retrieval fails
         """
         try:
-            return stripe.Subscription.retrieve(subscription_id)
+            return await stripe.Subscription.retrieve_async(subscription_id)
         except StripeError as e:
             logger.error(f"Failed to retrieve subscription {subscription_id}: {e}")
             raise ExternalServiceError(
@@ -198,12 +200,17 @@ class StripeClient:
         """
         try:
             if cancel_at_period_end:
-                return stripe.Subscription.modify(subscription_id, cancel_at_period_end=True)
+                return await stripe.Subscription.modify_async(
+                    subscription_id, cancel_at_period_end=True
+                )
             else:
-                return stripe.Subscription.delete(subscription_id)
+                return await stripe.Subscription.delete_async(subscription_id)
         except StripeError as e:
             logger.error(f"Failed to cancel subscription {subscription_id}: {e}")
-            raise ExternalServiceError(f"Failed to cancel subscription: {str(e)}") from e
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=f"Failed to cancel subscription: {str(e)}",
+            ) from e
 
     async def update_subscription(
         self,
@@ -244,7 +251,8 @@ class StripeClient:
             if price_id:
                 if not subscription_item_id:
                     raise ExternalServiceError(
-                        f"Subscription {subscription_id} has no items to update."
+                        service_name="Stripe",
+                        message=f"Subscription {subscription_id} has no items to update.",
                     )
                 update_params["items"] = [
                     {
@@ -257,7 +265,10 @@ class StripeClient:
                 pass  # No item changes needed, just status update
             else:
                 raise ExternalServiceError(
-                    f"No valid update parameters provided for subscription {subscription_id}"
+                    service_name="Stripe",
+                    message=(
+                        f"No valid update parameters provided for subscription {subscription_id}"
+                    ),
                 )
 
             # Add cancel_at_period_end if specified
@@ -268,11 +279,14 @@ class StripeClient:
             if trial_end is not None:
                 update_params["trial_end"] = trial_end
 
-            return stripe.Subscription.modify(subscription_id, **update_params)
+            return await stripe.Subscription.modify_async(subscription_id, **update_params)
 
         except StripeError as e:
             logger.error(f"Failed to update subscription {subscription_id}: {e}")
-            raise ExternalServiceError(f"Failed to update subscription: {str(e)}") from e
+            raise ExternalServiceError(
+                service_name="Stripe",
+                message=f"Failed to update subscription: {str(e)}",
+            ) from e
 
     def construct_webhook_event(self, payload: bytes, sig_header: str) -> stripe.Event:
         """Verify and construct webhook event from Stripe.

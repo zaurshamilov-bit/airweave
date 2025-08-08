@@ -29,8 +29,6 @@ export const BillingSuccess = () => {
         return;
       }
 
-      setHasProcessed(true);
-
       try {
         // Wait a moment to ensure auth token is fully available
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -38,8 +36,17 @@ export const BillingSuccess = () => {
         // Refresh organizations to get updated billing status
         await fetchUserOrganizations();
 
+        // Wait for currentOrganization to be available
+        // Don't mark as processed until we've actually checked for invites
+        if (!currentOrganization) {
+          return;
+        }
+
+        // Now we can safely mark as processed since we have the organization data
+        setHasProcessed(true);
+
         // Get the current organization with metadata
-        if (currentOrganization?.org_metadata?.onboarding?.teamInvites) {
+        if (currentOrganization.org_metadata?.onboarding?.teamInvites) {
           const invites = currentOrganization.org_metadata.onboarding.teamInvites;
 
           // Send team invites
@@ -77,6 +84,8 @@ export const BillingSuccess = () => {
         console.error('Error processing billing success:', error);
         toast.error('Something went wrong. Please contact support.');
         setIsProcessing(false);
+        // Mark as processed even on error to prevent infinite retries
+        setHasProcessed(true);
       }
     };
 
