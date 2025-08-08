@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any, ClassVar, Dict, List, Optional, Tuple, Type
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, create_model, model_validator
 
 
 class DestinationAction(str, Enum):
@@ -77,6 +77,40 @@ class BaseEntity(BaseModel):
         """Pydantic config."""
 
         from_attributes = True
+
+    @model_validator(mode="after")
+    def validate_timestamp_flags(self):
+        """Validate that there is only one created_at and one updated_at field.
+
+        Ensures that multiple fields don't claim to be the same timestamp type.
+        """
+        created_at_fields = []
+        updated_at_fields = []
+
+        for field_name, field_info in self.model_fields.items():
+            if field_info.json_schema_extra and isinstance(field_info.json_schema_extra, dict):
+                # Check for created_at flag
+                if field_info.json_schema_extra.get("is_created_at"):
+                    created_at_fields.append(field_name)
+
+                # Check for updated_at flag
+                if field_info.json_schema_extra.get("is_updated_at"):
+                    updated_at_fields.append(field_name)
+
+        # Check for duplicates
+        errors = []
+        if len(created_at_fields) > 1:
+            errors.append(f"Multiple created_at fields: {created_at_fields}")
+        if len(updated_at_fields) > 1:
+            errors.append(f"Multiple updated_at fields: {updated_at_fields}")
+
+        if errors:
+            raise ValueError(
+                f"Duplicate timestamp fields found in {self.__class__.__name__}: "
+                + "; ".join(errors)
+            )
+
+        return self
 
     def hash(self) -> str:
         """Hash the entity using only content-relevant fields."""
@@ -195,8 +229,6 @@ class ChunkEntity(BaseEntity):
         "_hash",
     ]
 
-    # Optional per-entity annotation: which fields should feed the embeddable text
-    embeddable_fields: ClassVar[Optional[List[str]]] = None
     # Global safeguard to cap embeddable text size (characters)
     embeddable_max_chars: ClassVar[int] = 12000
 
@@ -265,9 +297,14 @@ class ChunkEntity(BaseEntity):
         return used_key, f"* name: {self._clean_text(title)}"
 
     def _build_annotated_lines(self, used_title_key: Optional[str]) -> List[str]:
+        """Build annotated lines from fields marked as embeddable."""
+        # Get embeddable fields from field metadata
+        embeddable_field_names = self._get_embeddable_fields()
+
+        # If no explicit embeddable fields, use defaults
         fields = (
-            self.embeddable_fields
-            if isinstance(self.embeddable_fields, list) and self.embeddable_fields
+            embeddable_field_names
+            if embeddable_field_names
             else [
                 "title",
                 "summary",
@@ -293,6 +330,33 @@ class ChunkEntity(BaseEntity):
             label = field_name.replace("_", " ")
             lines.append(f"* {label}: {summarized}")
         return lines
+
+    def _get_embeddable_fields(self) -> List[str]:
+        """Extract field names marked as embeddable from field metadata."""
+        embeddable_fields = []
+        for field_name, field_info in self.model_fields.items():
+            # Check if field has embeddable metadata
+            if field_info.json_schema_extra and isinstance(field_info.json_schema_extra, dict):
+                if field_info.json_schema_extra.get("embeddable"):
+                    embeddable_fields.append(field_name)
+        return embeddable_fields
+
+    def get_harmonized_timestamps(self) -> Dict[str, Any]:
+        """Get harmonized timestamp values from fields marked with timestamp flags.
+
+        Returns:
+            Dict with 'created_at' and 'updated_at' keys mapped to actual field values
+        """
+        timestamps = {}
+        for field_name, field_info in self.model_fields.items():
+            if field_info.json_schema_extra and isinstance(field_info.json_schema_extra, dict):
+                # Check for created_at flag
+                if field_info.json_schema_extra.get("is_created_at"):
+                    timestamps["created_at"] = getattr(self, field_name, None)
+                # Check for updated_at flag
+                if field_info.json_schema_extra.get("is_updated_at"):
+                    timestamps["updated_at"] = getattr(self, field_name, None)
+        return timestamps
 
     def _build_content_lines(self) -> List[str]:
         md_content = getattr(self, "md_content", None)

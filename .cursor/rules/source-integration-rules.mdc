@@ -75,6 +75,31 @@ class FileEntity(BaseEntity):
 
 ```
 
+## AirweaveField
+
+An enhanced Pydantic Field with Airweave-specific metadata for entity processing.
+
+**Key Features:**
+1. **Embeddable fields** - Mark fields for inclusion in text generation with `embeddable=True`
+2. **Timestamp harmonization** - Designate creation/update timestamps with `is_created_at=True` or `is_updated_at=True`
+
+**Example:**
+```python
+name: str = AirweaveField(..., embeddable=True)
+created_at: datetime = AirweaveField(None, is_created_at=True)
+```
+
+**Benefits:**
+- Type-safe metadata colocated with field definitions
+- Replaces class-level `embeddable_fields` lists
+- Allows `build_embeddable_text()` to build better chunkable body of text
+
+**Helper Methods:**
+- `_get_embeddable_fields()` - Returns list of embeddable field names
+- `get_harmonized_timestamps()` - Returns standardized timestamp mapping
+
+This approach makes entity field configuration more explicit and maintainable by keeping all field metadata in one place.
+
 
 **What you will need to implement, based on the API object described in docs:**
 
