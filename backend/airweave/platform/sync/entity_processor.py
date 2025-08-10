@@ -10,7 +10,6 @@ from airweave.core.exceptions import NotFoundException
 
 # Logger will be passed from sync_context
 from airweave.db.session import get_db_context
-from airweave.platform.embedding_models.bm25_text2vec import BM25Text2Vec
 from airweave.platform.entities._base import BaseEntity, DestinationAction
 from airweave.platform.sync.async_helpers import compute_entity_hash_async, run_in_thread_pool
 from airweave.platform.sync.context import SyncContext
@@ -403,11 +402,14 @@ class EntityProcessor:
             )
             embed_start = asyncio.get_event_loop().time()
 
-            embeddings = await self._get_embeddings(entity_dicts, sync_context, entity_context)
+            embeddings, sparse_embeddings = await self._get_embeddings(
+                entity_dicts, sync_context, entity_context
+            )
 
             embed_elapsed = asyncio.get_event_loop().time() - embed_start
             sync_context.logger.debug(
-                f"🤖 VECTOR_EMBED_DONE [{entity_context}] Got {len(embeddings)} embeddings "
+                f"🤖 VECTOR_EMBED_DONE [{entity_context}] Got {len(embeddings)} neural embeddings "
+                f"and {len(sparse_embeddings) if sparse_embeddings else 0} sparse embeddings "
                 f"in {embed_elapsed:.3f}s"
             )
 
@@ -418,7 +420,7 @@ class EntityProcessor:
             assign_start = asyncio.get_event_loop().time()
 
             processed_entities = await self._assign_vectors_to_entities(
-                processed_entities, embeddings, sync_context
+                processed_entities, embeddings, sparse_embeddings, sync_context
             )
 
             assign_elapsed = asyncio.get_event_loop().time() - assign_start
@@ -537,7 +539,7 @@ class EntityProcessor:
 
     async def _get_embeddings(
         self, entity_dicts: List[str], sync_context: SyncContext, entity_context: str
-    ) -> Tuple[List[List[float]], List[SparseTextEmbedding]]:
+    ) -> Tuple[List[List[float]], List[SparseTextEmbedding] | None]:
         """Get embeddings from the embedding model."""
         import asyncio
         import inspect
@@ -559,20 +561,32 @@ class EntityProcessor:
         else:
             embeddings = await embedding_model.embed_many(entity_dicts)
 
-        sparse_embedder = BM25Text2Vec(sync_context.logger)
-        sparse_embeddings = await sparse_embedder.embed_many(entity_dicts)
+        # Some destinations might not have a BM25 index, so we need to check if we need to compute
+        # sparse embeddings.
+        calculate_sparse_embeddings = any(
+            await asyncio.gather(
+                *[destination.has_keyword_index() for destination in sync_context.destinations]
+            )
+        )
+
+        if calculate_sparse_embeddings:
+            sparse_embedder = sync_context.keyword_indexing_model
+            sparse_embeddings = list(await sparse_embedder.embed_many(entity_dicts))
+        else:
+            sparse_embeddings = None
 
         cpu_elapsed = loop.time() - cpu_start
         sync_context.logger.debug(
             f"Vector computation completed in {cpu_elapsed:.2f}s for {len(embeddings)} entities"
         )
 
-        return embeddings, list(sparse_embeddings)
+        return embeddings, sparse_embeddings
 
     async def _assign_vectors_to_entities(
         self,
         processed_entities: List[BaseEntity],
         embeddings: List[List[float]],
+        sparse_embeddings: List[SparseTextEmbedding] | None,
         sync_context: SyncContext,
     ) -> List[BaseEntity]:
         """Assign vectors to entities."""
@@ -585,8 +599,8 @@ class EntityProcessor:
 
         # Assign vectors to entities in thread pool (CPU-bound operation for many entities)
         def _assign_vectors_to_entities_sync(entities, neural_vectors, sparse_vectors):
-            for i, (processed_entity, neural_vector, sparse_vector) in enumerate(
-                zip(entities, neural_vectors, sparse_vectors, strict=False)
+            for i, (processed_entity, neural_vector) in enumerate(
+                zip(entities, neural_vectors, strict=False)
             ):
                 try:
                     if neural_vector is None:
@@ -595,6 +609,7 @@ class EntityProcessor:
                         )
                         continue
 
+                    sparse_vector = sparse_vectors[i] if sparse_vectors else None
                     vector_dim = len(neural_vector) if neural_vector else 0
                     sync_context.logger.debug(
                         f"Assigning vector of dimension {vector_dim} to "
@@ -608,7 +623,7 @@ class EntityProcessor:
             return entities
 
         return await run_in_thread_pool(
-            _assign_vectors_to_entities_sync, processed_entities, *embeddings
+            _assign_vectors_to_entities_sync, processed_entities, embeddings, sparse_embeddings
         )
 
     async def _handle_keep(self, sync_context: SyncContext) -> None:

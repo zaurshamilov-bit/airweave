@@ -213,8 +213,13 @@ class SearchService:
         destination_class = await self._get_destination_class(db)
         destination = await destination_class.create(collection_id=collection.id, logger=ctx.logger)
 
-        # Get appropriate embedding model
+        # Get appropriate embedding models
         embedding_model = self._get_embedding_model(readable_id, collection.id, ctx)
+
+        # Load keyword indexing model if destination has/supports it
+        keyword_indexing_model = None
+        if await destination.has_keyword_index():
+            keyword_indexing_model = self._get_keyword_indexing_model(ctx)
 
         # Perform search based on query expansion strategy
         if expansion_strategy and expansion_strategy != QueryExpansionStrategy.NO_EXPANSION:
@@ -222,6 +227,7 @@ class SearchService:
                 query,
                 expansion_strategy,
                 embedding_model,
+                keyword_indexing_model,
                 destination,
                 ctx.logger,
                 filter=filter,
@@ -233,6 +239,7 @@ class SearchService:
         return await self._search_single_query(
             query,
             embedding_model,
+            keyword_indexing_model,
             destination,
             ctx.logger,
             filter=filter,
@@ -418,11 +425,16 @@ class SearchService:
             )
             return LocalText2Vec(logger=ctx.logger)
 
+    def _get_keyword_indexing_model(self, ctx: ApiContext) -> BaseEmbeddingModel:
+        """Get the appropriate keyword embedding model based on configuration."""
+        return BM25Text2Vec(ctx.logger)
+
     async def _search_with_expansion(
         self,
         query: str,
         expansion_strategy: QueryExpansionStrategy,
         embedding_model: BaseEmbeddingModel,
+        keyword_indexing_model: BaseEmbeddingModel | None,
         destination: BaseDestination,
         ctx: ApiContext,
         filter: Any | None = None,
@@ -442,8 +454,9 @@ class SearchService:
 
         # Embed all expanded queries
         vectors = await embedding_model.embed_many(expanded_queries)
-        sparse_embedder = BM25Text2Vec(ctx.logger)
-        sparse_embeddings = await sparse_embedder.embed_many(expanded_queries)
+        sparse_embeddings = None
+        if keyword_indexing_model:
+            sparse_embeddings = await keyword_indexing_model.embed_many(expanded_queries)
 
         # Convert filter to dict if it's a Qdrant Filter object
         filter_dict = None
@@ -463,7 +476,7 @@ class SearchService:
             score_threshold=score_threshold,
             with_payload=True,
             filter_conditions=filter_conditions,
-            sparse_vectors=list(sparse_embeddings),
+            sparse_vectors=list(sparse_embeddings) if sparse_embeddings else None,
             # TODO: Determine an optimal default for this
             search_method="hybrid",
             decay_config=DecayConfig(
@@ -497,6 +510,7 @@ class SearchService:
         self,
         query: str,
         embedding_model: BaseEmbeddingModel,
+        keyword_indexing_model: BaseEmbeddingModel | None,
         destination: BaseDestination,
         ctx: ApiContext,
         filter: Any | None = None,
@@ -506,9 +520,9 @@ class SearchService:
     ) -> list[dict]:
         """Perform search with a single query (no expansion)."""
         vector = await embedding_model.embed(query)
-
-        sparse_embedder = BM25Text2Vec(ctx.logger)
-        sparse_embeddings = await sparse_embedder.embed(query)
+        sparse_embeddings = None
+        if keyword_indexing_model:
+            sparse_embeddings = await keyword_indexing_model.embed(query)
 
         # Convert filter to dict if it's a Qdrant Filter object
         filter_dict = None
@@ -525,7 +539,7 @@ class SearchService:
             offset=offset,
             score_threshold=score_threshold,
             with_payload=True,
-            sparse_vector=list(sparse_embeddings)[0],
+            sparse_vector=list(sparse_embeddings)[0] if sparse_embeddings else None,
         )
 
     def _check_result_quality(self, results: list[dict]) -> schemas.SearchResponse | None:

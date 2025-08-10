@@ -7,7 +7,7 @@ import os
 import sys
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type
 from uuid import UUID, uuid4
 
 from fastembed import SparseEmbedding
@@ -61,7 +61,7 @@ class BaseEntity(BaseModel):
         None, description="ID of the parent entity in the source."
     )
 
-    vectors: Optional[List[Union[List[float], SparseEmbedding]]] = Field(
+    vectors: Optional[List[List[float] | SparseEmbedding | None]] = Field(
         None, description="Vector representations of the entity."
     )
     chunk_index: Optional[int] = Field(
@@ -94,17 +94,12 @@ class BaseEntity(BaseModel):
         if value is None:
             return None
 
-        try:
-            from fastembed import SparseEmbedding as _SparseEmbedding
-        except Exception:
-            _SparseEmbedding = None
-
         if not isinstance(value, list):
             return value
 
         deserialized: list = []
         for item in value:
-            if _SparseEmbedding and isinstance(item, _SparseEmbedding):
+            if isinstance(item, SparseEmbedding):
                 deserialized.append(item)
                 continue
 
@@ -117,9 +112,8 @@ class BaseEntity(BaseModel):
 
                     indices_np = np.asarray(indices, dtype=int)
                     values_np = np.asarray(values, dtype=float)
-                    if _SparseEmbedding:
-                        deserialized.append(_SparseEmbedding(indices=indices_np, values=values_np))
-                        continue
+                    deserialized.append(SparseEmbedding(indices=indices_np, values=values_np))
+                    continue
                 except Exception:
                     # Fallback: pass through as-is if numpy or construction fails
                     pass

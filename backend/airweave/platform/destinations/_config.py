@@ -3,6 +3,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+KEYWORD_VECTOR_NAME = "bm25"
+
 
 class DecayConfig(BaseModel):
     """Configuration for time-based decay functions in search queries."""

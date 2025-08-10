@@ -17,6 +17,7 @@ from airweave.platform.auth.services import oauth2_service
 from airweave.platform.auth_providers._base import BaseAuthProvider
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
+from airweave.platform.embedding_models.bm25_text2vec import BM25Text2Vec
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
 from airweave.platform.entities._base import BaseEntity
@@ -174,6 +175,7 @@ class SyncFactory:
             logger=logger,  # Pass the contextual logger
         )
         embedding_model = cls._get_embedding_model(logger=logger)
+        keyword_indexing_model = cls._get_keyword_indexing_model(logger=logger)
         destinations = await cls._create_destination_instances(
             db=db,
             sync=sync,
@@ -193,6 +195,7 @@ class SyncFactory:
             source=source,
             destinations=destinations,
             embedding_model=embedding_model,
+            keyword_indexing_model=keyword_indexing_model,
             transformers=transformers,
             sync=sync,
             sync_job=sync_job,
@@ -711,6 +714,11 @@ class SyncFactory:
             return OpenAIText2Vec(api_key=settings.OPENAI_API_KEY, logger=logger)
 
         return LocalText2Vec(logger=logger)
+
+    @classmethod
+    def _get_keyword_indexing_model(cls, logger: ContextualLogger) -> BaseEmbeddingModel:
+        """Get keyword indexing model instance."""
+        return BM25Text2Vec(logger=logger)
 
     @classmethod
     async def _create_destination_instances(

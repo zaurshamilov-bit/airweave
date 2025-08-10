@@ -15,7 +15,7 @@ from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import QdrantAuthConfig
 from airweave.platform.decorators import destination
 from airweave.platform.destinations._base import VectorDBDestination
-from airweave.platform.destinations._config import DecayConfig
+from airweave.platform.destinations._config import KEYWORD_VECTOR_NAME, DecayConfig
 from airweave.platform.entities._base import ChunkEntity
 
 
@@ -199,7 +199,7 @@ class QdrantDestination(VectorDBDestination):
                     ),
                 },
                 sparse_vectors_config={
-                    "bm25": rest.SparseVectorParams(
+                    KEYWORD_VECTOR_NAME: rest.SparseVectorParams(
                         modifier=rest.Modifier.IDF,
                     )
                 },
@@ -236,8 +236,14 @@ class QdrantDestination(VectorDBDestination):
                     id=str(entity.db_entity_id),
                     vector={
                         DEFAULT_VECTOR_NAME: entity.vector[0],
-                        "bm25": entity.vector[1].as_object(),
-                    },
+                    }
+                    | (
+                        {
+                            KEYWORD_VECTOR_NAME: entity.vector[1].as_object(),
+                        }
+                        if entity.vector[1] is not None
+                        else {}
+                    ),
                     payload=data_object,
                 )
             ],
@@ -273,8 +279,14 @@ class QdrantDestination(VectorDBDestination):
                     id=str(entity.db_entity_id),
                     vector={
                         DEFAULT_VECTOR_NAME: entity.vectors[0],
-                        "bm25": entity.vectors[1].as_object(),
-                    },
+                    }
+                    | (
+                        {
+                            KEYWORD_VECTOR_NAME: entity.vectors[1].as_object(),
+                        }
+                        if entity.vectors[1] is not None
+                        else {}
+                    ),
                     payload=entity_data,
                 )
             )
@@ -491,7 +503,7 @@ class QdrantDestination(VectorDBDestination):
 
             keyword_params = {
                 "query": rest.SparseVector(**sparse_vector.as_object()),
-                "using": "bm25",
+                "using": KEYWORD_VECTOR_NAME,
                 "limit": limit,
             }
             query_request_params = self._prepare_index_search_request(
@@ -513,7 +525,7 @@ class QdrantDestination(VectorDBDestination):
                 # BM25 embedding
                 {
                     "query": rest.SparseVector(**sparse_vector.as_object()),
-                    "using": "bm25",
+                    "using": KEYWORD_VECTOR_NAME,
                     "limit": limit,
                 },
             ]
@@ -737,9 +749,10 @@ class QdrantDestination(VectorDBDestination):
 
         # Fallback to neural search if BM25 index does not exist
         vector_config_names = await self.get_vector_config_names()
-        if "bm25" not in vector_config_names:
+        if KEYWORD_VECTOR_NAME not in vector_config_names:
             self.logger.warning(
-                f"BM25 index could not be found in collection {self.collection_name}. "
+                f"{KEYWORD_VECTOR_NAME} index could not be found in "
+                f"collection {self.collection_name}. "
                 f"Using neural search instead."
             )
             search_method = "neural"
@@ -776,6 +789,11 @@ class QdrantDestination(VectorDBDestination):
         except Exception as e:
             self.logger.error(f"Error performing batch search with Qdrant: {e}")
             raise
+
+    async def has_keyword_index(self) -> bool:
+        """Check if the destination has a keyword index."""
+        vector_config_names = await self.get_vector_config_names()
+        return KEYWORD_VECTOR_NAME in vector_config_names
 
     async def get_vector_config_names(self) -> list[str]:
         """Get the names of all vector configurations (both dense and sparse) for the collection.

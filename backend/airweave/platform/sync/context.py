@@ -21,6 +21,7 @@ class SyncContext:
     - source - the source instance
     - destinations - the destination instances
     - embedding model - the embedding model used for the sync
+    - keyword indexing model - the keyword indexing model used for the sync
     - transformers - a dictionary of transformer callables
     - sync - the main sync object
     - sync job - the sync job that is created for the sync
@@ -36,6 +37,7 @@ class SyncContext:
     source: BaseSource
     destinations: list[BaseDestination]
     embedding_model: BaseEmbeddingModel
+    keyword_indexing_model: BaseEmbeddingModel
     transformers: dict[str, callable]
     sync: schemas.Sync
     sync_job: schemas.SyncJob
@@ -55,6 +57,7 @@ class SyncContext:
         source: BaseSource,
         destinations: list[BaseDestination],
         embedding_model: BaseEmbeddingModel,
+        keyword_indexing_model: BaseEmbeddingModel,
         transformers: dict[str, callable],
         sync: schemas.Sync,
         sync_job: schemas.SyncJob,
@@ -72,6 +75,7 @@ class SyncContext:
         self.source = source
         self.destinations = destinations
         self.embedding_model = embedding_model
+        self.keyword_indexing_model = keyword_indexing_model
         self.transformers = transformers
         self.sync = sync
         self.sync_job = sync_job
