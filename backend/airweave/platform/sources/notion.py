@@ -1237,10 +1237,10 @@ class NotionSource(BaseSource):
                     )
                     processed_entity = await self._process_presigned_file(file_entity)
 
-            if processed_entity and not getattr(processed_entity, "should_skip", False):
+            if processed_entity and not processed_entity.airweave_system_metadata.should_skip:
                 self.logger.info(
                     f"Successfully processed file {processed_entity.name} "
-                    f"with local_path: {processed_entity.local_path}"
+                    f"with local_path: {processed_entity.airweave_system_metadata.local_path}"
                 )
                 return processed_entity
             else:
@@ -1269,7 +1269,7 @@ class NotionSource(BaseSource):
             )
 
             # Skip if file was too large
-            if hasattr(processed_entity, "should_skip") and processed_entity.should_skip:
+            if processed_entity.airweave_system_metadata.should_skip:
                 error_msg = "Unknown reason"
                 if processed_entity.metadata:
                     error_msg = processed_entity.metadata.get("error", "Unknown reason")

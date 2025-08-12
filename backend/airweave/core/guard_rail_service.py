@@ -251,9 +251,9 @@ class GuardRailService:
                 self.pending_increments.get(action_type, 0) + amount
             )
 
-            self.logger.info(
-                f"\n\nIncremented {action_type.value} by {amount}, "
-                f"pending total: {self.pending_increments[action_type]}\n\n"
+            self.logger.debug(
+                f"Incremented {action_type.value} by {amount}, "
+                f"pending total: {self.pending_increments[action_type]}"
             )
 
             # Check if this specific action type should flush
@@ -267,9 +267,9 @@ class GuardRailService:
             self.pending_increments[action_type] = (
                 self.pending_increments.get(action_type, 0) - amount
             )
-            self.logger.info(
-                f"\n\nDecremented {action_type.value} by {amount}, "
-                f"pending total: {self.pending_increments[action_type]}\n\n"
+            self.logger.debug(
+                f"Decremented {action_type.value} by {amount}, "
+                f"pending total: {self.pending_increments[action_type]}"
             )
 
             # Check if this specific action type should flush
@@ -293,9 +293,7 @@ class GuardRailService:
             )
             return
 
-        self.logger.info(
-            f"\n\nFlushing usage to database for {action_type or 'all action types'}\n\n"
-        )
+        self.logger.info(f"Flushing usage to database for {action_type or 'all action types'}")
 
         # Determine what to flush
         if action_type is not None:

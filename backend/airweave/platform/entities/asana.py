@@ -304,3 +304,15 @@ class AsanaFileEntity(FileEntity):
     )
     view_url: Optional[str] = Field(None, description="URL to view the attachment")
     permanent: bool = Field(False, description="Whether this is a permanent attachment")
+    updated_at: Optional[datetime] = AirweaveField(
+        None,
+        description="The time at which this file was last modified",
+        embeddable=True,
+        is_updated_at=True,
+    )
+    created_at: Optional[datetime] = AirweaveField(
+        None,
+        description="The time at which this file was created",
+        embeddable=True,
+        is_created_at=True,
+    )

@@ -210,17 +210,21 @@ class QdrantDestination(VectorDBDestination):
         # Use the entity's to_storage_dict method to get properly serialized data
         data_object = entity.to_storage_dict()
 
-        # Use the entity's vector directly
-        if not hasattr(entity, "vector") or entity.vector is None:
-            raise ValueError(f"Entity {entity.entity_id} has no vector")
+        # Get vector from system metadata
+        if not entity.airweave_system_metadata or not entity.airweave_system_metadata.vector:
+            raise ValueError(f"Entity {entity.entity_id} has no vector in system metadata")
 
-        # Insert point with vector from entity
+        # Get db_entity_id from system metadata
+        if not entity.airweave_system_metadata.db_entity_id:
+            raise ValueError(f"Entity {entity.entity_id} has no db_entity_id in system metadata")
+
+        # Insert point with vector from system metadata
         await self.client.upsert(
             collection_name=self.collection_name,
             points=[
                 rest.PointStruct(
-                    id=str(entity.db_entity_id),
-                    vector=entity.vector,
+                    id=str(entity.airweave_system_metadata.db_entity_id),
+                    vector=entity.airweave_system_metadata.vector,
                     payload=data_object,
                 )
             ],
@@ -243,20 +247,26 @@ class QdrantDestination(VectorDBDestination):
         for entity in entities:
             # Use the entity's to_storage_dict method to get properly serialized data
             entity_data = entity.to_storage_dict()
-            # Use the entity's vector directly
-            if not hasattr(entity, "vector") or entity.vector is None:
-                self.logger.warning(f"Entity {entity.entity_id} has no vector, skipping")
+
+            # Check system metadata exists
+            if not entity.airweave_system_metadata:
+                self.logger.warning(f"Entity {entity.entity_id} has no system metadata, skipping")
                 continue
 
-            # Ensure vector is not present in payload
-            if isinstance(entity_data, dict) and "vector" in entity_data:
-                entity_data.pop("vector")
+            # Get vector from system metadata
+            if not entity.airweave_system_metadata.vector:
+                self.logger.warning(
+                    f"Entity {entity.entity_id} has no vector in system metadata, skipping"
+                )
+                continue
+
+            vector = entity_data["airweave_system_metadata"].pop("vector")
 
             # Create point for Qdrant
             point_structs.append(
                 rest.PointStruct(
-                    id=str(entity.db_entity_id),
-                    vector=entity.vector,
+                    id=str(entity.airweave_system_metadata.db_entity_id),
+                    vector=vector,
                     payload=entity_data,
                 )
             )
@@ -301,7 +311,8 @@ class QdrantDestination(VectorDBDestination):
                 filter=rest.Filter(
                     should=[
                         rest.FieldCondition(
-                            key="sync_id", match=rest.MatchValue(value=str(sync_id))
+                            key="airweave_system_metadata.sync_id",
+                            match=rest.MatchValue(value=str(sync_id)),
                         )
                     ]
                 )
@@ -327,7 +338,8 @@ class QdrantDestination(VectorDBDestination):
                 filter=rest.Filter(
                     must=[
                         rest.FieldCondition(
-                            key="sync_id", match=rest.MatchValue(value=str(sync_id))
+                            key="airweave_system_metadata.sync_id",
+                            match=rest.MatchValue(value=str(sync_id)),
                         ),
                         rest.FieldCondition(key="entity_id", match=rest.MatchAny(any=entity_ids)),
                     ]
@@ -358,7 +370,10 @@ class QdrantDestination(VectorDBDestination):
         filter_condition = {
             "must": [
                 {"key": "parent_entity_id", "match": {"value": parent_id_str}},
-                {"key": "sync_id", "match": {"value": sync_id_str}},
+                {
+                    "key": "airweave_system_metadata.sync_id",
+                    "match": {"value": sync_id_str},
+                },
             ]
         }
 

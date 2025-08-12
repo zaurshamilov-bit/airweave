@@ -631,10 +631,8 @@ def _create_web_file_entity(
         # Copy BaseEntity fields
         breadcrumbs=web_entity.breadcrumbs,
         parent_entity_id=web_entity.parent_entity_id,
-        sync_id=web_entity.sync_id,
-        sync_job_id=web_entity.sync_job_id,
-        source_name=web_entity.source_name,
-        sync_metadata=web_entity.sync_metadata,
+        # Copy system metadata object
+        airweave_system_metadata=web_entity.airweave_system_metadata,
         # WebFileEntity specific
         original_url=web_entity.url,
         crawl_metadata=metadata,

@@ -7,7 +7,7 @@ import httpx
 from pydantic import BaseModel
 
 from airweave.core.logging import logger
-from airweave.platform.entities._base import ChunkEntity
+from airweave.platform.entities._base import ChunkEntity, FileEntity
 from airweave.platform.file_handling.file_manager import file_manager
 
 
@@ -92,7 +92,7 @@ class BaseSource:
         pass
 
     async def process_file_entity(
-        self, file_entity, download_url=None, access_token=None, headers=None
+        self, file_entity: FileEntity, download_url=None, access_token=None, headers=None
     ) -> Optional[ChunkEntity]:
         """Process a file entity with automatic size limit checking.
 
@@ -133,7 +133,7 @@ class BaseSource:
             )
 
             # Skip if file was too large
-            if hasattr(processed_entity, "should_skip") and processed_entity.should_skip:
+            if processed_entity.airweave_system_metadata.should_skip:
                 self.logger.warning(
                     f"Skipping file {processed_entity.name}: "
                     f"{processed_entity.metadata.get('error', 'Unknown reason')}"
@@ -148,7 +148,7 @@ class BaseSource:
             self.logger.error(f"HTTP error downloading file {file_entity.name}: {error_msg}")
 
             # Mark entity as skipped instead of failing
-            file_entity.should_skip = True
+            file_entity.airweave_system_metadata.should_skip = True
             if not hasattr(file_entity, "metadata") or file_entity.metadata is None:
                 file_entity.metadata = {}
             file_entity.metadata["error"] = error_msg
@@ -160,7 +160,7 @@ class BaseSource:
             self.logger.error(f"Error processing file {file_entity.name}: {str(e)}")
 
             # Mark entity as skipped
-            file_entity.should_skip = True
+            file_entity.airweave_system_metadata.should_skip = True
             if not hasattr(file_entity, "metadata") or file_entity.metadata is None:
                 file_entity.metadata = {}
             file_entity.metadata["error"] = str(e)
@@ -187,7 +187,7 @@ class BaseSource:
                 processed_entity.metadata.update(metadata)
 
             # Skip if file was too large
-            if hasattr(processed_entity, "should_skip") and processed_entity.should_skip:
+            if processed_entity.airweave_system_metadata.should_skip:
                 self.logger.warning(
                     f"Skipping file {processed_entity.name}: "
                     f"{processed_entity.metadata.get('error', 'Unknown reason')}"
