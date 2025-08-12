@@ -77,24 +77,26 @@ async def _process_file_content(
     file: FileEntity, entity_context: str, logger: ContextualLogger
 ) -> str:
     """Process file content and convert to text if needed."""
-    if not file.local_path:
+    if not file.airweave_system_metadata.local_path:
         logger.error(f"📂 CHUNKER_NO_PATH [{entity_context}] File has no local path")
         return ""
 
-    _, extension = os.path.splitext(file.local_path)
+    _, extension = os.path.splitext(file.airweave_system_metadata.local_path)
     extension = extension.lower()
 
     if extension == ".md":
         logger.debug(f"📑 CHUNKER_READ_MD [{entity_context}] Reading markdown file directly")
         import aiofiles
 
-        async with aiofiles.open(file.local_path, "r", encoding="utf-8") as f:
+        async with aiofiles.open(
+            file.airweave_system_metadata.local_path, "r", encoding="utf-8"
+        ) as f:
             content = await f.read()
         logger.debug(f"📖 CHUNKER_READ_DONE [{entity_context}] Read {len(content)} characters")
         return content
     else:
         logger.debug(f"🔄 CHUNKER_CONVERT [{entity_context}] Converting file to markdown")
-        result = await document_converter.convert(file.local_path)
+        result = await document_converter.convert(file.airweave_system_metadata.local_path)
         if not result or not result.text_content:
             logger.warning(f"🚫 CHUNKER_CONVERT_EMPTY [{entity_context}] No content extracted")
             return ""
@@ -353,12 +355,15 @@ async def optimized_file_chunker(file: FileEntity, logger: ContextualLogger) -> 
         )
 
         # Mark entity as fully processed in storage
-        if file.sync_id:
+        if file.airweave_system_metadata.sync_id:
             from airweave.platform.storage import storage_manager
 
             if not storage_manager._is_ctti_entity(file):
                 await storage_manager.mark_entity_processed(
-                    logger, file.sync_id, file.entity_id, chunks_created
+                    logger,
+                    file.airweave_system_metadata.sync_id,
+                    file.entity_id,
+                    chunks_created,
                 )
                 logger.debug(
                     f"📝 CHUNKER_MARKED_PROCESSED [{entity_context}] "
@@ -374,12 +379,15 @@ async def optimized_file_chunker(file: FileEntity, logger: ContextualLogger) -> 
         raise e
     finally:
         # Clean up temporary file if it exists
-        if hasattr(file, "local_path") and file.local_path:
+        if file.airweave_system_metadata.local_path:
             from airweave.platform.storage import storage_manager
 
-            await storage_manager.cleanup_temp_file(logger, file.local_path)
+            await storage_manager.cleanup_temp_file(
+                logger, file.airweave_system_metadata.local_path
+            )
             logger.debug(
-                f"🧹 CHUNKER_CLEANUP [{entity_context}] Cleaned up temp file: {file.local_path}"
+                f"🧹 CHUNKER_CLEANUP [{entity_context}] Cleaned up temp file: "
+                f"{file.airweave_system_metadata.local_path}"
             )
 
 

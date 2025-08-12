@@ -9,6 +9,7 @@ from uuid import UUID
 
 from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import ContextualLogger
+from airweave.platform.entities._base import FileEntity
 from airweave.platform.storage.storage_client import StorageClient
 
 
@@ -103,7 +104,7 @@ class StorageManager:
         return False
 
     async def store_file_entity(
-        self, logger: ContextualLogger, entity: Any, content: BinaryIO
+        self, logger: ContextualLogger, entity: FileEntity, content: BinaryIO
     ) -> Any:
         """Store a file entity in persistent storage.
 
@@ -115,52 +116,66 @@ class StorageManager:
         Returns:
             Updated entity with storage information
         """
-        if not entity.sync_id:
+        if not entity.airweave_system_metadata or not entity.airweave_system_metadata.sync_id:
             logger.warning(
                 "Cannot store file without sync_id", extra={"entity_id": entity.entity_id}
             )
             return entity
 
-        blob_name = self._get_blob_name(entity.sync_id, entity.entity_id)
+        sync_id = entity.airweave_system_metadata.sync_id
+        blob_name = self._get_blob_name(sync_id, entity.entity_id)
 
         # Store the file
         logger.info(
             "Storing file in persistent storage",
             extra={
-                "sync_id": str(entity.sync_id),
+                "sync_id": str(sync_id),
                 "entity_id": entity.entity_id,
                 "blob_name": blob_name,
-                "size": entity.total_size,
+                "size": (
+                    entity.airweave_system_metadata.total_size
+                    if entity.airweave_system_metadata
+                    else None
+                ),
             },
         )
 
         success = await self.client.upload_file(self.container_name, blob_name, content)
 
         if success:
-            entity.storage_blob_name = blob_name
+            # Set storage blob name in system metadata (always exists for FileEntity)
+            entity.airweave_system_metadata.storage_blob_name = blob_name
 
             # Store metadata
             metadata = {
                 "entity_id": entity.entity_id,
-                "sync_id": str(entity.sync_id),
+                "sync_id": str(sync_id),
                 "file_name": entity.name,
-                "size": entity.total_size,
-                "checksum": entity.checksum,
+                "size": (
+                    entity.airweave_system_metadata.total_size
+                    if entity.airweave_system_metadata
+                    else None
+                ),
+                "checksum": (
+                    entity.airweave_system_metadata.checksum
+                    if entity.airweave_system_metadata
+                    else None
+                ),
                 "mime_type": getattr(entity, "mime_type", None),
                 "stored_at": utc_now_naive().isoformat(),
                 "fully_processed": False,  # Will be updated after chunking
             }
 
-            await self._store_metadata(logger, entity.sync_id, entity.entity_id, metadata)
+            await self._store_metadata(logger, sync_id, entity.entity_id, metadata)
 
             logger.info(
                 "File stored successfully",
-                extra={"sync_id": str(entity.sync_id), "entity_id": entity.entity_id},
+                extra={"sync_id": str(sync_id), "entity_id": entity.entity_id},
             )
         else:
             logger.error(
                 "Failed to store file",
-                extra={"sync_id": str(entity.sync_id), "entity_id": entity.entity_id},
+                extra={"sync_id": str(sync_id), "entity_id": entity.entity_id},
             )
 
         return entity
@@ -297,7 +312,10 @@ class StorageManager:
             True if entity is from CTTI source
         """
         # Check multiple indicators for CTTI source
-        if hasattr(entity, "source_name") and entity.source_name == "CTTI AACT":
+        if (
+            entity.airweave_system_metadata
+            and entity.airweave_system_metadata.source_name == "CTTI AACT"
+        ):
             return True
 
         # Check entity type
@@ -342,7 +360,7 @@ class StorageManager:
         return exists
 
     async def store_ctti_file(
-        self, logger: ContextualLogger, entity: Any, content: BinaryIO
+        self, logger: ContextualLogger, entity: FileEntity, content: BinaryIO
     ) -> Any:
         """Store a CTTI file in the global aactmarkdowns container.
 
@@ -376,7 +394,8 @@ class StorageManager:
 
         if success:
             # Update entity with storage information
-            entity.storage_blob_name = safe_filename
+            # Set storage blob name in system metadata (always exists for FileEntity)
+            entity.airweave_system_metadata.storage_blob_name = safe_filename
 
             # Add CTTI-specific metadata to the entity
             if not hasattr(entity, "metadata") or entity.metadata is None:

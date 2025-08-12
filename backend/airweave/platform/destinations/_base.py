@@ -1,6 +1,5 @@
 """Base destination classes."""
 
-import json
 from abc import ABC, abstractmethod
 from typing import ClassVar, List, Optional
 from uuid import UUID
@@ -95,26 +94,3 @@ class VectorDBDestination(BaseDestination):
 
     # For now, no additional abstract methods are defined here; it uses BaseDestination's interface.
     pass
-
-
-class GraphDBDestination(BaseDestination):
-    """Abstract base class for destinations backed by a graph database."""
-
-    # No additional abstract methods needed - the graph-specific operations
-    # should be implementation details of the standard methods.
-
-    # If needed, add helper methods that are not abstract:
-
-    def _entity_to_node_properties(self, entity: ChunkEntity) -> dict:
-        """Convert a ChunkEntity to Neo4j-compatible node properties."""
-        # Get the basic serialized properties
-        properties = entity.to_storage_dict()
-
-        # Handle special fields like breadcrumbs for Neo4j
-        if "breadcrumbs" in properties and isinstance(properties["breadcrumbs"], list):
-            # Either serialize breadcrumbs to JSON string
-            properties["breadcrumbs"] = json.dumps(properties["breadcrumbs"])
-            # OR extract the most important properties from breadcrumbs
-            # and store them as separate properties
-
-        return properties

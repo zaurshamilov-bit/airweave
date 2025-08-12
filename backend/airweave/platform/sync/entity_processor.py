@@ -3,7 +3,7 @@
 import asyncio
 from typing import Dict, List, Optional, Set
 
-from airweave import crud, schemas
+from airweave import crud, models, schemas
 from airweave.core.exceptions import NotFoundException
 from airweave.core.shared_models import ActionType
 from airweave.db.session import get_db_context
@@ -209,6 +209,10 @@ class EntityProcessor:
 
     async def _enrich(self, entity: BaseEntity, sync_context: SyncContext) -> BaseEntity:
         """Enrich entity with sync metadata."""
+        from datetime import datetime, timedelta, timezone
+
+        from airweave.platform.entities._base import AirweaveSystemMetadata
+
         # Check if entity needs lazy materialization
         if hasattr(entity, "needs_materialization") and entity.needs_materialization:
             sync_context.logger.debug(
@@ -217,16 +221,37 @@ class EntityProcessor:
             )
             await entity.materialize()
 
-        entity.source_name = sync_context.source._name
-        entity.sync_id = sync_context.sync.id
-        entity.sync_job_id = sync_context.sync_job.id
-        entity.sync_metadata = sync_context.sync.sync_metadata
+        # Create or update system metadata
+        if entity.airweave_system_metadata is None:
+            entity.airweave_system_metadata = AirweaveSystemMetadata()
+
+        # Set all system metadata fields
+        entity.airweave_system_metadata.source_name = sync_context.source._short_name
+        entity.airweave_system_metadata.entity_type = entity.__class__.__name__
+        entity.airweave_system_metadata.sync_id = sync_context.sync.id
+        entity.airweave_system_metadata.sync_job_id = sync_context.sync_job.id
+        entity.airweave_system_metadata.sync_metadata = sync_context.sync.sync_metadata
+
+        # Get harmonized timestamps and use updated_at if available
+        timestamps = entity.get_harmonized_timestamps()
+        updated_at = timestamps.get("updated_at")
+        created_at = timestamps.get("created_at")
+
+        if updated_at:
+            entity.airweave_system_metadata.airweave_updated_at = updated_at
+        elif created_at:
+            entity.airweave_system_metadata.airweave_updated_at = created_at
+        else:
+            # Default to 2 weeks ago in UTC if no updated_at field
+            entity.airweave_system_metadata.airweave_updated_at = datetime.now(
+                timezone.utc
+            ) - timedelta(weeks=2)
 
         return entity
 
     async def _determine_action(
         self, entity: BaseEntity, sync_context: SyncContext
-    ) -> tuple[schemas.Entity, DestinationAction]:
+    ) -> tuple[Optional[models.Entity], DestinationAction]:
         """Determine what action to take for an entity.
 
         Creates a temporary database session for the lookup.
@@ -333,7 +358,7 @@ class EntityProcessor:
         self,
         parent_entity: BaseEntity,
         processed_entities: List[BaseEntity],
-        db_entity: schemas.Entity,
+        db_entity: Optional[models.Entity],
         action: DestinationAction,
         sync_context: SyncContext,
     ) -> None:
@@ -600,7 +625,12 @@ class EntityProcessor:
                         f"Assigning vector of dimension {vector_dim} to "
                         f"entity {processed_entity.entity_id}"
                     )
-                    processed_entity.vector = vector
+                    # Ensure system metadata exists before setting vector
+                    if processed_entity.airweave_system_metadata is None:
+                        from airweave.platform.entities._base import AirweaveSystemMetadata
+
+                        processed_entity.airweave_system_metadata = AirweaveSystemMetadata()
+                    processed_entity.airweave_system_metadata.vector = vector
                 except Exception as e:
                     sync_context.logger.error(
                         f"Error assigning vector to entity at index {i}: {str(e)}"
@@ -619,7 +649,7 @@ class EntityProcessor:
         self,
         parent_entity: BaseEntity,
         processed_entities: List[BaseEntity],
-        db_entity: Optional[schemas.Entity],
+        db_entity: Optional[models.Entity],
         sync_context: SyncContext,
     ) -> None:
         """Handle INSERT action."""
@@ -654,7 +684,9 @@ class EntityProcessor:
             )
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
-        parent_entity.db_entity_id = new_db_entity.id
+        # Update system metadata with DB entity ID
+        if parent_entity.airweave_system_metadata:
+            parent_entity.airweave_system_metadata.db_entity_id = new_db_entity.id
         sync_context.logger.debug(
             f"💾 INSERT_DB_DONE [{entity_context}] Database entity created in {db_elapsed:.3f}s"
         )
@@ -691,7 +723,7 @@ class EntityProcessor:
         self,
         parent_entity: BaseEntity,
         processed_entities: List[BaseEntity],
-        db_entity: schemas.Entity,
+        db_entity: models.Entity,
         sync_context: SyncContext,
     ) -> None:
         """Handle UPDATE action."""
@@ -714,15 +746,29 @@ class EntityProcessor:
 
         # Create a new database session just for this update
         async with get_db_context() as db:
-            await crud.entity.update(
-                db=db,
-                db_obj=db_entity,
-                obj_in=schemas.EntityUpdate(hash=parent_hash),
-                ctx=sync_context.ctx,
-            )
+            # Re-query the entity in the new session to avoid session issues
+            try:
+                fresh_db_entity = await crud.entity.get_by_entity_and_sync_id(
+                    db=db, entity_id=parent_entity.entity_id, sync_id=sync_context.sync.id
+                )
+                await crud.entity.update(
+                    db=db,
+                    db_obj=fresh_db_entity,
+                    obj_in=schemas.EntityUpdate(hash=parent_hash),
+                    ctx=sync_context.ctx,
+                )
+            except NotFoundException:
+                sync_context.logger.warning(
+                    f"📭 UPDATE_ENTITY_NOT_FOUND [{entity_context}] "
+                    f"Entity no longer exists in database"
+                )
+                await sync_context.progress.increment("skipped", 1)
+                return
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
-        parent_entity.db_entity_id = db_entity.id
+        # Update system metadata with DB entity ID
+        if parent_entity.airweave_system_metadata:
+            parent_entity.airweave_system_metadata.db_entity_id = db_entity.id
         sync_context.logger.debug(
             f"💾 UPDATE_DB_DONE [{entity_context}] Database updated in {db_elapsed:.3f}s"
         )

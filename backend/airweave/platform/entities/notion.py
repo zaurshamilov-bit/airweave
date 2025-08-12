@@ -130,12 +130,12 @@ class NotionFileEntity(FileEntity):
         if getattr(self, "_hash", None):
             return self._hash
 
-        if hasattr(self, "local_path") and self.local_path:
+        if self.airweave_system_metadata.local_path:
             # If we have the actual file, compute hash from its contents
             try:
                 import hashlib
 
-                with open(self.local_path, "rb") as f:
+                with open(self.airweave_system_metadata.local_path, "rb") as f:
                     content = f.read()
                     self._hash = hashlib.sha256(content).hexdigest()
                     return self._hash
