@@ -429,10 +429,21 @@ class SearchService:
         score_threshold: float | None = None,
     ) -> list[dict]:
         """Perform search with query expansion."""
-        from airweave.search.query_preprocessor import query_preprocessor
+        from airweave.search.operations.query_expansion import QueryExpansion
 
-        # Expand the query
-        expanded_queries = await query_preprocessor.expand(query, strategy=expansion_strategy)
+        # Use QueryExpansion for compatibility
+        query_expander = QueryExpansion(strategy=expansion_strategy)
+
+        # Create a minimal context for the operation
+        temp_context = {
+            "query": query,
+            "config": type("Config", (), {"expansion_strategy": expansion_strategy})(),
+            "logger": ctx.logger,
+        }
+
+        # Execute the expansion
+        await query_expander.execute(temp_context)
+        expanded_queries = temp_context.get("expanded_queries", [query])
         ctx.logger.info(
             f"Expanded query '{query}' to {len(expanded_queries)} variants "
             f"using {expansion_strategy.value} strategy"

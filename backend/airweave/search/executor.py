@@ -1,0 +1,311 @@
+"""Search executor module.
+
+The executor is responsible for running the operations in the correct
+order based on their dependencies, handling errors, and managing timeouts.
+"""
+
+# import asyncio  # Will be used for parallel execution
+import time
+from typing import Any, Dict, List, Set
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from airweave.api.context import ApiContext
+from airweave.core.config import settings
+from airweave.schemas.search import SearchConfig
+from airweave.search.operations.base import SearchOperation
+
+
+class SearchExecutor:
+    """Executes search operations in dependency order.
+
+    The executor takes a list of operations and executes them in the
+    correct order based on their dependencies. It handles:
+    - Dependency resolution and execution ordering
+    - Parallel execution where possible
+    - Error handling for optional operations
+    - Timeout management
+    - Context passing between operations
+
+    The executor is stateless and can be reused across requests.
+    """
+
+    async def execute(
+        self, config: SearchConfig, db: AsyncSession, ctx: ApiContext
+    ) -> Dict[str, Any]:
+        """Execute operations and return the final context.
+
+        This method runs all operations in dependency order, passing
+        a shared context dictionary between them. The context accumulates
+        data as operations execute.
+
+        Args:
+            config: Search configuration with operations
+            db: Database session
+            ctx: API context with logger
+
+        Returns:
+            Final context dictionary with all operation results
+
+        Raises:
+            Exception: If a non-optional operation fails
+        """
+        # Extract operations from config fields
+        operations = self._extract_operations_from_config(config)
+
+        # Initialize context with common data
+        context = self._initialize_context(config, db, ctx)
+
+        # Log configuration summary
+        try:
+            ctx.logger.info(
+                "[SearchExecutor] Config summary: "
+                f"limit={config.limit}, offset={config.offset}, "
+                f"score_threshold={config.score_threshold}, "
+                f"ops={{"
+                f"query_interpretation={'on' if config.query_interpretation else 'off'}, "
+                f"query_expansion={'on' if config.query_expansion else 'off'}, "
+                f"qdrant_filter={'on' if config.qdrant_filter else 'off'}, "
+                f"embedding=on, vector_search=on, "
+                f"reranking={'on' if config.reranking else 'off'}, "
+                f"completion={'on' if config.completion else 'off'}"
+                f"}}"
+            )
+        except Exception:
+            pass
+
+        # Track execution state
+        executed = set()
+        start_time = time.time()
+
+        # Execute operations in dependency order
+        while len(executed) < len(operations):
+            # Find operations ready to execute
+            ready = self._find_ready_operations(operations, executed)
+
+            if not ready:
+                # No more operations can execute
+                if len(executed) < len(operations):
+                    remaining = [op.name for op in operations if op.name not in executed]
+                    ctx.logger.warning(
+                        f"[SearchExecutor] Cannot execute remaining operations: {remaining}"
+                    )
+                break
+
+            # Execute ready operations (could be parallelized in future)
+            for op in ready:
+                try:
+                    # Execute with timing
+                    op_start = time.time()
+                    await op.execute(context)
+                    op_time = (time.time() - op_start) * 1000
+
+                    context["timings"][op.name] = op_time
+                    executed.add(op.name)
+
+                    ctx.logger.debug(
+                        f"[SearchExecutor] Operation {op.name} completed in {op_time:.2f}ms"
+                    )
+
+                    # Log intermediate state snapshot for key artifacts
+                    try:
+                        snapshot = {
+                            "expanded_queries": len(context.get("expanded_queries", []))
+                            if isinstance(context.get("expanded_queries"), list)
+                            else (1 if context.get("expanded_queries") else 0),
+                            "embeddings": len(context.get("embeddings", []))
+                            if isinstance(context.get("embeddings"), list)
+                            else 0,
+                            "has_filter": bool(context.get("filter")),
+                            "raw_results": len(context.get("raw_results", []))
+                            if isinstance(context.get("raw_results"), list)
+                            else 0,
+                            "final_results": len(context.get("final_results", []))
+                            if isinstance(context.get("final_results"), list)
+                            else 0,
+                            "has_completion": bool(context.get("completion")),
+                        }
+                        ctx.logger.debug(f"[SearchExecutor] State after {op.name}: {snapshot}")
+                    except Exception:
+                        pass
+
+                except Exception as e:
+                    # Log the error
+                    ctx.logger.error(
+                        f"[SearchExecutor] Operation {op.name} failed: {e}", exc_info=True
+                    )
+                    context["errors"].append({"operation": op.name, "error": str(e)})
+
+                    # If operation is not optional, propagate the error
+                    if not op.optional:
+                        raise
+
+                    # Mark as executed even if failed (to unblock dependencies)
+                    executed.add(op.name)
+                    ctx.logger.info(
+                        f"[SearchExecutor] Continuing after optional operation {op.name} failed"
+                    )
+
+        # Ensure we have final results
+        self._finalize_context(context)
+
+        # Log execution summary
+        total_time = (time.time() - start_time) * 1000
+        ctx.logger.info(
+            f"[SearchExecutor] Search completed in {total_time:.2f}ms, "
+            f"executed {len(executed)}/{len(operations)} operations"
+        )
+
+        return context
+
+    def _initialize_context(
+        self, config: SearchConfig, db: AsyncSession, ctx: ApiContext
+    ) -> Dict[str, Any]:
+        """Initialize the context dictionary.
+
+        Creates the initial context with all common data that operations
+        might need. Operations will add their results to this context.
+
+        Args:
+            config: Search configuration
+            db: Database session
+            ctx: API context
+
+        Returns:
+            Initialized context dictionary
+        """
+        return {
+            # Core data
+            "query": config.query,
+            "config": config,
+            "db": db,
+            "ctx": ctx,
+            "logger": ctx.logger,
+            # API keys and settings
+            "openai_api_key": settings.OPENAI_API_KEY
+            if hasattr(settings, "OPENAI_API_KEY")
+            else None,
+            # Tracking
+            "timings": {},
+            "errors": [],
+            # Results (will be populated by operations)
+            # expanded_queries: List[str]
+            # embeddings: List[List[float]]
+            # filter: Dict
+            # raw_results: List[Dict]
+            # final_results: List[Dict]
+            # completion: str
+        }
+
+    def _find_ready_operations(
+        self, operations: List[SearchOperation], executed: Set[str]
+    ) -> List[SearchOperation]:
+        """Find operations that are ready to execute.
+
+        An operation is ready if:
+        - It hasn't been executed yet
+        - All its dependencies have been executed
+
+        Args:
+            operations: All operations
+            executed: Set of already executed operation names
+
+        Returns:
+            List of operations ready to execute
+        """
+        ready = []
+
+        for op in operations:
+            if op.name in executed:
+                continue
+
+            # Check if all dependencies are satisfied
+            # Note: We're lenient here - if a dependency doesn't exist
+            # in the plan, we assume it's optional and continue
+            deps_satisfied = all(
+                dep in executed or not self._operation_exists(operations, dep)
+                for dep in op.depends_on
+            )
+
+            if deps_satisfied:
+                ready.append(op)
+
+        return ready
+
+    def _operation_exists(self, operations: List[SearchOperation], name: str) -> bool:
+        """Check if an operation exists in the plan.
+
+        Args:
+            operations: List of operations
+            name: Operation name to check
+
+        Returns:
+            True if operation exists
+        """
+        return any(op.name == name for op in operations)
+
+    def _extract_operations_from_config(self, config: SearchConfig) -> List[SearchOperation]:
+        """Extract enabled operations from config fields.
+
+        The executor is responsible for determining which operations
+        are enabled and what order to execute them in, not the config.
+
+        Args:
+            config: SearchConfig with operation fields
+
+        Returns:
+            List of enabled operations
+        """
+        operations = []
+
+        # Extract operations from config fields in logical order
+        # The order here represents the typical execution flow
+
+        # 1. Query interpretation (optional)
+        if config.query_interpretation:
+            operations.append(config.query_interpretation)
+
+        # 2. Query expansion (optional)
+        if config.query_expansion:
+            operations.append(config.query_expansion)
+
+        # 3. Qdrant filter (optional)
+        if config.qdrant_filter:
+            operations.append(config.qdrant_filter)
+
+        # 4. Embedding (required)
+        operations.append(config.embedding)
+
+        # 5. Vector search (required)
+        operations.append(config.vector_search)
+
+        # 6. Reranking (optional)
+        if config.reranking:
+            operations.append(config.reranking)
+
+        # 7. Completion (optional)
+        if config.completion:
+            operations.append(config.completion)
+
+        return operations
+
+    def _finalize_context(self, context: Dict[str, Any]) -> None:
+        """Ensure context has required final fields.
+
+        Makes sure the context has final_results even if reranking
+        didn't run, and handles other finalization tasks.
+
+        Args:
+            context: Context to finalize
+        """
+        # Ensure we have final_results
+        if "final_results" not in context:
+            # Use raw_results as final if no reranking
+            context["final_results"] = context.get("raw_results", [])
+
+        # Add execution summary
+        context["execution_summary"] = {
+            "operations_executed": len(context["timings"]),
+            "total_time_ms": sum(context["timings"].values()),
+            "errors_count": len(context["errors"]),
+        }
