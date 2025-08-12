@@ -745,6 +745,7 @@ class EntityProcessor:
         parent_hash = await compute_entity_hash_async(parent_entity)
 
         # Create a new database session just for this update
+        # Re-fetch entity in this session (original was from a different session)
         async with get_db_context() as db:
             # Re-query the entity in the new session to avoid session issues
             try:
