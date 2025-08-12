@@ -424,33 +424,6 @@ class ChunkEntity(BaseEntity):
             lines.append(f"* {label}: {summarized}")
         return lines
 
-    def _get_embeddable_fields(self) -> List[str]:
-        """Extract field names marked as embeddable from field metadata."""
-        embeddable_fields = []
-        for field_name, field_info in self.model_fields.items():
-            # Check if field has embeddable metadata
-            if field_info.json_schema_extra and isinstance(field_info.json_schema_extra, dict):
-                if field_info.json_schema_extra.get("embeddable"):
-                    embeddable_fields.append(field_name)
-        return embeddable_fields
-
-    def get_harmonized_timestamps(self) -> Dict[str, Any]:
-        """Get harmonized timestamp values from fields marked with timestamp flags.
-
-        Returns:
-            Dict with 'created_at' and 'updated_at' keys mapped to actual field values
-        """
-        timestamps = {}
-        for field_name, field_info in self.model_fields.items():
-            if field_info.json_schema_extra and isinstance(field_info.json_schema_extra, dict):
-                # Check for created_at flag
-                if field_info.json_schema_extra.get("is_created_at"):
-                    timestamps["created_at"] = getattr(self, field_name, None)
-                # Check for updated_at flag
-                if field_info.json_schema_extra.get("is_updated_at"):
-                    timestamps["updated_at"] = getattr(self, field_name, None)
-        return timestamps
-
     def _build_content_lines(self) -> List[str]:
         md_content = getattr(self, "md_content", None)
         if not isinstance(md_content, str) or not md_content.strip():
