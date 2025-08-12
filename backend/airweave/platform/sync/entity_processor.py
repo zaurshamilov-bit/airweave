@@ -702,13 +702,19 @@ class EntityProcessor:
         parent_hash = await compute_entity_hash_async(parent_entity)
 
         # Create a new database session just for this update
+        # Re-fetch entity in this session (original was from a different session)
         async with get_db_context() as db:
-            await crud.entity.update(
-                db=db,
-                db_obj=db_entity,
-                obj_in=schemas.EntityUpdate(hash=parent_hash),
-                ctx=sync_context.ctx,
-            )
+            # Re-fetch the entity in this session
+            fresh_db_entity = await crud.entity.get(db=db, id=db_entity.id, ctx=sync_context.ctx)
+            if fresh_db_entity:
+                await crud.entity.update(
+                    db=db,
+                    db_obj=fresh_db_entity,
+                    obj_in=schemas.EntityUpdate(hash=parent_hash),
+                    ctx=sync_context.ctx,
+                )
+            else:
+                sync_context.logger.error(f"Failed to find entity {db_entity.id} for update")
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
         parent_entity.db_entity_id = db_entity.id

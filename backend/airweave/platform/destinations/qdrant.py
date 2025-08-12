@@ -224,6 +224,7 @@ class QdrantDestination(VectorDBDestination):
                     payload=data_object,
                 )
             ],
+            wait=True,  # Wait for operation to complete
         )
 
     async def bulk_insert(self, entities: list[ChunkEntity]) -> None:
@@ -267,7 +268,7 @@ class QdrantDestination(VectorDBDestination):
         operation_response = await self.client.upsert(
             collection_name=self.collection_name,
             points=point_structs,
-            wait=False,  # Wait for operation to complete
+            wait=True,  # Wait for operation to complete
         )
 
         if hasattr(operation_response, "errors") and operation_response.errors:
