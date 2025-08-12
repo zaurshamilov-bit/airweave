@@ -178,11 +178,9 @@ class ChunkEntity(BaseEntity):
     # Default fields to exclude when creating storage dict
     default_exclude_fields: List[str] = [
         "vector",  # Exclude the vector itself from the payload
-        # "sync_job_id",
-        # "sync_id",
         "db_entity_id",
         "sync_metadata",
-        "parent_entity_id",
+        # "parent_entity_id",  # Keep parent_entity_id for deletion tracking
         "default_exclude_fields",
         "_hash",
     ]
