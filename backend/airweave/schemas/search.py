@@ -1,16 +1,25 @@
-"""Schemas for search operations.
+"""Search schemas for Airweave's search API.
 
-Search is the core functionality that makes Airweave powerful - enabling unified
+This module provides schemas for unified semantic search functionality, enabling
 queries across multiple data sources within collections. These schemas define
 the search request and response formats for both raw search results and
 AI-generated completions.
 """
 
 from enum import Enum
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from pydantic import BaseModel, Field
 from qdrant_client.http.models import Filter as QdrantFilter
+
+if TYPE_CHECKING:
+    from airweave.search.operations.completion import CompletionGeneration
+    from airweave.search.operations.embedding import Embedding
+    from airweave.search.operations.qdrant_filter import QdrantFilterOperation
+    from airweave.search.operations.query_expansion import QueryExpansion
+    from airweave.search.operations.query_interpretation import QueryInterpretation
+    from airweave.search.operations.reranking import LLMReranking
+    from airweave.search.operations.vector_search import VectorSearch
 
 
 class ResponseType(str, Enum):
@@ -40,9 +49,9 @@ class QueryExpansions(BaseModel):
     """Structured output for LLM-based query expansions."""
 
     alternatives: List[str] = Field(
-        description="List of alternative phrasings for the search query",
-        min_items=1,
-        max_items=10,
+        ...,
+        description="Alternative query phrasings",
+        max_length=4,
     )
 
 
@@ -75,18 +84,34 @@ class SearchRequest(BaseModel):
         None, ge=0.0, le=1.0, description="Minimum similarity score threshold"
     )
 
-    # Result options
-    summarize: Optional[bool] = Field(False, description="Whether to summarize results")
-
     # Response configuration
     response_type: ResponseType = Field(
         ResponseType.RAW, description="Type of response (raw or completion)"
     )
 
-    expansion_strategy: QueryExpansionStrategy = Field(
-        QueryExpansionStrategy.AUTO,
-        description="Query expansion strategy. Enhances recall by expanding the query with "
-        "synonyms, related terms, and other variations, but increases latency.",
+    expansion_strategy: Optional[QueryExpansionStrategy] = Field(
+        None,
+        description=(
+            "Query expansion strategy. If omitted, the configuration builder defaults to AUTO "
+            "(generates up to 4 variations when LLM is available)."
+        ),
+    )
+
+    # Advanced features (POST endpoint only)
+    enable_reranking: Optional[bool] = Field(
+        None,
+        description=(
+            "Enable LLM-based reranking to improve result relevance "
+            "(default: True, set to False to disable)"
+        ),
+    )
+
+    enable_query_interpretation: Optional[bool] = Field(
+        None,
+        description=(
+            "Enable automatic filter extraction from natural language query "
+            "(default: True, set to False to disable)"
+        ),
     )
 
     model_config = {
@@ -96,16 +121,18 @@ class SearchRequest(BaseModel):
                     "query": "customer payment issues",
                     "filter": {
                         "must": [
-                            {"key": "source_name", "match": {"value": "Stripe"}},
-                            {"key": "created_at", "range": {"gte": "2024-01-01T00:00:00Z"}},
+                            {"key": "source_name", "match": {"value": "Support"}},
+                            {"key": "status", "match": {"value": "open"}},
                         ]
                     },
-                    "limit": 50,
+                    "limit": 10,
                     "score_threshold": 0.7,
                     "response_type": "completion",
-                }
-            ]
-        }
+                },
+                {"query": "Q4 revenue analysis", "limit": 20, "response_type": "raw"},
+            ],
+            "required": ["query"],
+        },
     }
 
 
@@ -153,36 +180,50 @@ class SearchResponse(BaseModel):
                 {
                     "results": [
                         {
-                            "id": "stripe_cust_1234567890",
-                            "title": "Customer Payment Record",
-                            "content": (
-                                "Monthly subscription payment of $99.00 processed successfully for "
-                                "customer John Doe (john@company.com). Payment method: Visa ending "
-                                "in 4242."
-                            ),
-                            "source": "stripe",
                             "score": 0.92,
-                            "metadata": {
-                                "date": "2024-01-15T10:30:00Z",
-                                "type": "payment",
-                                "amount": 99.00,
-                                "currency": "USD",
+                            "payload": {
+                                "source_name": "Payment API",
+                                "entity_id": "trans_1234567890",
+                                "title": "Transaction Processing",
+                                "md_content": (
+                                    "Customer John Doe successfully processed payment of $99 "
+                                    "for monthly subscription"
+                                ),
+                                "created_at": "2024-01-15T10:30:00Z",
+                                "metadata": {
+                                    "amount": 99,
+                                    "currency": "USD",
+                                    "status": "completed",
+                                },
                             },
                         },
                         {
-                            "id": "zendesk_ticket_789",
-                            "title": "Billing Question - Subscription Upgrade",
-                            "content": (
-                                "Customer inquiry about upgrading from Basic to Pro plan. Customer "
-                                "mentioned they need advanced analytics features."
-                            ),
-                            "source": "zendesk",
                             "score": 0.87,
-                            "metadata": {
-                                "date": "2024-01-14T14:22:00Z",
-                                "type": "support_ticket",
-                                "status": "resolved",
-                                "priority": "medium",
+                            "payload": {
+                                "source_name": "Support Tickets",
+                                "entity_id": "ticket_987654321",
+                                "title": "Billing Inquiry",
+                                "md_content": (
+                                    "Customer inquired about upgrading subscription plan "
+                                    "for advanced analytics features"
+                                ),
+                                "created_at": "2024-01-14T14:22:00Z",
+                                "metadata": {"priority": "medium", "status": "resolved"},
+                            },
+                        },
+                    ],
+                    "response_type": "raw",
+                    "status": "success",
+                },
+                {
+                    "results": [
+                        {
+                            "score": 0.95,
+                            "payload": {
+                                "source_name": "Customer Database",
+                                "entity_id": "cust_abc123",
+                                "md_content": "Premium customer account details",
+                                "metadata": {"tier": "premium", "active": True},
                             },
                         },
                     ],
@@ -195,7 +236,56 @@ class SearchResponse(BaseModel):
                         "suggests strong customer engagement with your premium offerings."
                     ),
                     "status": "success",
-                }
+                },
             ]
         }
     }
+
+
+class SearchConfig(BaseModel):
+    """Search configuration with operation instances.
+
+    This represents the complete execution plan for a search request.
+    Each field contains either an operation instance or None, making it
+    clear which operations are enabled for this search.
+    """
+
+    # Core search parameters (from request)
+    query: str = Field(..., description="The search query text")
+    collection_id: str = Field(..., description="ID of the collection to search")
+    limit: int = Field(20, ge=1, le=1000, description="Maximum number of results")
+    offset: int = Field(0, ge=0, description="Pagination offset")
+    score_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Minimum score")
+
+    # Control parameters (none currently, but keeping section for future use)
+
+    # Operations - each field is either an operation instance or None
+    # This makes it explicit which operations are enabled
+    query_interpretation: Optional["QueryInterpretation"] = Field(
+        None, description="LLM-based filter extraction from natural language"
+    )
+
+    query_expansion: Optional["QueryExpansion"] = Field(
+        None, description="Query expansion for improved recall"
+    )
+
+    qdrant_filter: Optional["QdrantFilterOperation"] = Field(
+        None, description="User-provided Qdrant filter application"
+    )
+
+    embedding: "Embedding" = Field(..., description="Embedding generation (always required)")
+
+    vector_search: "VectorSearch" = Field(
+        ..., description="Vector similarity search (always required)"
+    )
+
+    reranking: Optional["LLMReranking"] = Field(None, description="LLM-based result reranking")
+
+    completion: Optional["CompletionGeneration"] = Field(
+        None, description="AI completion generation"
+    )
+
+    class Config:
+        """Pydantic config."""
+
+        arbitrary_types_allowed = True  # Allow operation instances
