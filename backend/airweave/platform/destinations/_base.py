@@ -85,6 +85,11 @@ class BaseDestination(ABC):
         """Get credentials for the destination."""
         pass
 
+    @abstractmethod
+    async def has_keyword_index(self) -> bool:
+        """Check if the destination has a keyword index."""
+        pass
+
 
 class VectorDBDestination(BaseDestination):
     """Abstract base class for destinations backed by a vector database.
@@ -92,5 +97,7 @@ class VectorDBDestination(BaseDestination):
     Inherits from BaseDestination and can have additional vector-specific methods if necessary.
     """
 
-    # For now, no additional abstract methods are defined here; it uses BaseDestination's interface.
-    pass
+    @abstractmethod
+    async def get_vector_config_names(self) -> list[str]:
+        """Get the vector config names for the destination."""
+        pass

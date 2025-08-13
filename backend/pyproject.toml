@@ -50,6 +50,7 @@ azure-identity = "^1.23.0"
 posthog = "^5.4.0"
 aiolimiter = "^1.1.0"
 pyyaml = "^6.0.1"
+fastembed = "^0.7.1"
 stripe = "^11.3.0"
 
 [tool.poetry.group.dev.dependencies]

@@ -13,7 +13,16 @@ from enum import Enum
 from typing import Any, ClassVar, Dict, List, Optional, Tuple, Type
 from uuid import UUID
 
-from pydantic import BaseModel, Field, create_model, model_validator
+from fastembed import SparseEmbedding
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    create_model,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 
 class DestinationAction(str, Enum):
@@ -135,6 +144,11 @@ class BaseEntity(BaseModel):
     parent_entity_id: Optional[str] = Field(
         None, description="ID of the parent entity in the source."
     )
+
+    vectors: Optional[List[List[float] | SparseEmbedding | None]] = Field(
+        None, description="Vector representations of the entity."
+    )
+
     chunk_index: Optional[int] = Field(
         None,
         description=(
@@ -155,6 +169,12 @@ class BaseEntity(BaseModel):
 
         from_attributes = True
 
+    # Pydantic v2 configuration
+    model_config = ConfigDict(
+        from_attributes=True,
+        arbitrary_types_allowed=True,
+    )
+
     @model_validator(mode="before")
     @classmethod
     def ensure_system_metadata(cls, values):
@@ -165,6 +185,97 @@ class BaseEntity(BaseModel):
         ):
             values["airweave_system_metadata"] = AirweaveSystemMetadata()
         return values
+
+    @field_validator("vectors", mode="before")
+    @classmethod
+    def _deserialize_vectors(cls, value):
+        """Convert JSON-loaded dicts into SparseEmbedding instances when applicable.
+
+        Accepts:
+        - None
+        - List of dense vectors (list[float])
+        - List containing dicts with keys {indices, values} representing SparseEmbedding
+        - Already-instantiated SparseEmbedding objects
+        """
+        if value is None:
+            return None
+
+        if not isinstance(value, list):
+            return value
+
+        deserialized: list = []
+        for item in value:
+            if isinstance(item, SparseEmbedding):
+                deserialized.append(item)
+                continue
+
+            if isinstance(item, dict) and ("indices" in item and "values" in item):
+                indices = item.get("indices")
+                values = item.get("values")
+                # Convert lists to numpy arrays if available
+                try:
+                    import numpy as np  # type: ignore
+
+                    indices_np = np.asarray(indices, dtype=int)
+                    values_np = np.asarray(values, dtype=float)
+                    deserialized.append(SparseEmbedding(indices=indices_np, values=values_np))
+                    continue
+                except Exception:
+                    # Fallback: pass through as-is if numpy or construction fails
+                    pass
+
+                # If we can't instantiate SparseEmbedding, keep the dict form
+                deserialized.append({"indices": indices, "values": values})
+            else:
+                # Dense vector or other structure
+                deserialized.append(item)
+        return deserialized
+
+    @field_serializer("vectors")
+    def _serialize_vectors(self, vectors):
+        """Serialize vectors to JSON-safe structures.
+
+        - Dense vectors (List[float]) are returned as-is
+        - SparseEmbedding instances are converted to {"indices": [...], "values": [...]} with lists
+        """
+        if vectors is None:
+            return None
+
+        serialized: list = []
+        for item in vectors:
+            # Handle sparse embedding objects
+            if isinstance(item, SparseEmbedding):
+                indices = getattr(item, "indices", None)
+                values = getattr(item, "values", None)
+
+                # Convert possible numpy arrays to lists
+                if hasattr(indices, "tolist"):
+                    indices = indices.tolist()
+                if hasattr(values, "tolist"):
+                    values = values.tolist()
+
+                serialized.append({"indices": indices, "values": values})
+            else:
+                # Dense vector or already-serializable structure
+                serialized.append(item)
+        return serialized
+
+    def hash(self) -> str:
+        """Hash the entity using only content-relevant fields."""
+        if getattr(self, "_hash", None):
+            return self._hash
+
+        # Define content-relevant fields (exclude metadata fields)
+        metadata_fields = {
+            "sync_job_id",
+            "vector",
+            "vectors",
+            "_hash",
+            "db_entity_id",
+            "source_name",
+            "sync_id",
+            "sync_metadata",
+        }
 
     @model_validator(mode="after")
     def validate_timestamp_flags(self):
