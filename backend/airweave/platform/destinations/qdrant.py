@@ -225,7 +225,7 @@ class QdrantDestination(VectorDBDestination):
         data_object = entity.to_storage_dict()
 
         # Get vector from system metadata
-        if not entity.airweave_system_metadata or not entity.airweave_system_metadata.vector:
+        if not entity.airweave_system_metadata or not entity.airweave_system_metadata.vectors:
             raise ValueError(f"Entity {entity.entity_id} has no vector in system metadata")
 
         # Get db_entity_id from system metadata
@@ -275,15 +275,11 @@ class QdrantDestination(VectorDBDestination):
 
             # Check system metadata exists
             if not entity.airweave_system_metadata:
-                self.logger.warning(f"Entity {entity.entity_id} has no system metadata, skipping")
-                continue
+                raise ValueError(f"Entity {entity.entity_id} has no system metadata")
 
             # Get vector from system metadata
             if not entity.airweave_system_metadata.vectors:
-                self.logger.warning(
-                    f"Entity {entity.entity_id} has no vector in system metadata, skipping"
-                )
-                continue
+                raise ValueError(f"Entity {entity.entity_id} has no vector in system metadata")
 
             if hasattr(entity_data["airweave_system_metadata"], "vectors"):
                 entity_data["airweave_system_metadata"].pop("vectors")

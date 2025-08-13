@@ -4,7 +4,7 @@ This operation performs the actual similarity search against
 the Qdrant vector database using the generated embeddings.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal
 from uuid import UUID
 
 from airweave.search.operations.base import SearchOperation
@@ -18,17 +18,25 @@ class VectorSearch(SearchOperation):
     both single and multi-query searches (from query expansion) and
     applies any filters that were generated or provided.
 
+    Supports hybrid search (neural + BM25) and time-based decay.
+
     The operation also handles deduplication when multiple expanded
     queries return overlapping results.
     """
 
-    def __init__(self, default_limit: int = 20):
+    def __init__(
+        self,
+        default_limit: int = 20,
+        search_method: Literal["hybrid", "neural", "keyword"] = "hybrid",
+    ):
         """Initialize vector search operation.
 
         Args:
             default_limit: Default number of results if not specified
+            search_method: Search method to use (hybrid, neural, or keyword)
         """
         self.default_limit = default_limit
+        self.search_method = search_method
 
     @property
     def name(self) -> str:
@@ -44,9 +52,10 @@ class VectorSearch(SearchOperation):
         """Execute vector search against Qdrant.
 
         Reads from context:
-            - embeddings: Vector embeddings to search with
+            - embeddings: Neural vector embeddings to search with
+            - sparse_embeddings: Optional sparse BM25 embeddings for hybrid search
             - filter: Optional Qdrant filter
-            - config: SearchConfig for limit, offset, threshold
+            - config: SearchConfig for limit, offset, threshold, search_method, decay_config
             - logger: For logging
 
         Writes to context:
@@ -56,9 +65,14 @@ class VectorSearch(SearchOperation):
 
         config = context["config"]
         embeddings = context["embeddings"]
+        sparse_embeddings = context.get("sparse_embeddings")
         # Use filter from context (set by qdrant_filter or query_interpretation ops)
         filter_dict = context.get("filter")
         logger = context["logger"]
+
+        # Get search method and decay config from SearchConfig
+        search_method = getattr(config, "search_method", self.search_method)
+        decay_config = getattr(config, "decay_config", None)
 
         # Determine limit - fetch extra if we're going to rerank
         limit = config.limit
@@ -69,8 +83,9 @@ class VectorSearch(SearchOperation):
 
         logger.info(
             f"[VectorSearch] Searching with {len(embeddings)} embeddings, "
-            f"limit={limit}, offset={config.offset}, "
-            f"score_threshold={config.score_threshold}, filter={bool(filter_dict)}"
+            f"search_method={search_method}, limit={limit}, offset={config.offset}, "
+            f"score_threshold={config.score_threshold}, filter={bool(filter_dict)}, "
+            f"decay={bool(decay_config)}"
         )
 
         try:
@@ -88,13 +103,16 @@ class VectorSearch(SearchOperation):
                 # Create filter conditions list (same filter for all queries)
                 filter_conditions = [filter_dict] * len(embeddings) if filter_dict else None
 
-                # Perform bulk search
+                # Perform bulk search with hybrid search and decay support
                 batch_results = await destination.bulk_search(
                     embeddings,
                     limit=limit,
                     score_threshold=config.score_threshold,
                     with_payload=True,
                     filter_conditions=filter_conditions,
+                    sparse_vectors=sparse_embeddings,
+                    search_method=search_method,
+                    decay_config=decay_config,
                 )
 
                 # Flatten results from all queries
@@ -120,7 +138,9 @@ class VectorSearch(SearchOperation):
 
             else:
                 # Single embedding - use regular search
-                logger.debug("[VectorSearch] Performing single vector search")
+                logger.debug(
+                    f"[VectorSearch] Performing single vector search with method={search_method}"
+                )
 
                 results = await destination.search(
                     embeddings[0],
@@ -129,6 +149,9 @@ class VectorSearch(SearchOperation):
                     offset=config.offset,
                     score_threshold=config.score_threshold,
                     with_payload=True,
+                    sparse_vector=sparse_embeddings[0] if sparse_embeddings else None,
+                    search_method=search_method,
+                    decay_config=decay_config,
                 )
 
                 context["raw_results"] = results

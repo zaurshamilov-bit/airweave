@@ -7,10 +7,13 @@ AI-generated completions.
 """
 
 from enum import Enum
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 from qdrant_client.http.models import Filter as QdrantFilter
+
+# Import DecayConfig directly for use in SearchRequest
+from airweave.platform.destinations._config import DecayConfig
 
 if TYPE_CHECKING:
     from airweave.search.operations.completion import CompletionGeneration
@@ -87,6 +90,19 @@ class SearchRequest(BaseModel):
     # Response configuration
     response_type: ResponseType = Field(
         ResponseType.RAW, description="Type of response (raw or completion)"
+    )
+
+    # Hybrid search parameters
+    search_method: Optional[Literal["hybrid", "neural", "keyword"]] = Field(
+        None, description="Search method to use (defaults to hybrid if BM25 index exists)"
+    )
+
+    # Time decay parameters
+    enable_decay: Optional[bool] = Field(
+        None, description="Enable time-based decay for recency bias"
+    )
+    decay_config: Optional[DecayConfig] = Field(
+        None, description="Custom decay configuration (uses defaults if enable_decay=True)"
     )
 
     expansion_strategy: Optional[QueryExpansionStrategy] = Field(
@@ -257,7 +273,13 @@ class SearchConfig(BaseModel):
     offset: int = Field(0, ge=0, description="Pagination offset")
     score_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Minimum score")
 
-    # Control parameters (none currently, but keeping section for future use)
+    # Hybrid search and decay parameters
+    search_method: Literal["hybrid", "neural", "keyword"] = Field(
+        "hybrid", description="Search method to use"
+    )
+    decay_config: Optional[DecayConfig] = Field(
+        None, description="Time-based decay configuration for recency bias"
+    )
 
     # Operations - each field is either an operation instance or None
     # This makes it explicit which operations are enabled

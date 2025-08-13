@@ -9,6 +9,8 @@ All default values for search operations are centralized here:
 - limit: 20 (if not specified)
 - offset: 0 (if not specified)
 - score_threshold: None (no threshold by default)
+- search_method: "hybrid" (combines neural + BM25 search)
+- decay_config: Enabled by default with 7-day linear decay (can be disabled with enable_decay=False)
 - expansion_strategy: AUTO (if not specified, generates up to 4 query variations)
 - response_type: RAW (if not specified)
 - enable_reranking: True (ON by default, can be disabled with enable_reranking=False)
@@ -19,6 +21,7 @@ These defaults can only be overridden by explicit values in the SearchRequest.
 """
 
 from airweave.api.context import ApiContext
+from airweave.platform.destinations._config import DecayConfig
 from airweave.schemas.search import (
     QueryExpansionStrategy,
     ResponseType,
@@ -93,6 +96,27 @@ class SearchConfigBuilder:
         offset = search_request.offset if search_request.offset is not None else 0
         score_threshold = search_request.score_threshold  # None is valid (no threshold)
 
+        # Handle hybrid search and decay parameters
+        search_method = search_request.search_method or "hybrid"
+
+        # Handle decay config - apply defaults
+        if search_request.decay_config:
+            # User provided explicit decay config
+            decay_config = search_request.decay_config
+        elif search_request.enable_decay is False:
+            # User explicitly disabled decay
+            decay_config = None
+        else:
+            # Default: Enable decay with default config (unless explicitly disabled)
+            # This applies when enable_decay is True or None (not specified)
+            decay_config = DecayConfig(
+                decay_type="linear",
+                datetime_field="airweave_system_metadata.airweave_updated_at",
+                scale_unit="day",
+                scale_value=7,  # Decay over 7 days
+                midpoint=0.5,  # 50% score at 7 days old
+            )
+
         # Create the config with operations as fields
         config = SearchConfig(
             # Core parameters with defaults
@@ -101,6 +125,9 @@ class SearchConfigBuilder:
             limit=limit,
             offset=offset,
             score_threshold=score_threshold,
+            # Hybrid search and decay parameters
+            search_method=search_method,
+            decay_config=decay_config,
             # Operations as fields
             query_interpretation=ops["query_interpretation"],
             query_expansion=ops["query_expansion"],
@@ -126,6 +153,9 @@ class SearchConfigBuilder:
             Dictionary with operation instances keyed by field name
         """
         ops = {}
+
+        # Get search method for operations that need it
+        search_method = search_request.search_method or "hybrid"
 
         # ========== Query Interpretation (Optional) ==========
         if self._should_enable_query_interpretation(search_request):
@@ -162,9 +192,11 @@ class SearchConfigBuilder:
             ops["qdrant_filter"] = None
 
         # ========== Core Operations (Always Required) ==========
-        ctx.logger.debug("Adding core operations: embedding, vector_search")
-        ops["embedding"] = Embedding()
-        ops["vector_search"] = VectorSearch()
+        ctx.logger.debug(
+            f"Adding core operations: embedding, vector_search with search_method={search_method}"
+        )
+        ops["embedding"] = Embedding(search_method=search_method)
+        ops["vector_search"] = VectorSearch(search_method=search_method)
 
         # ========== Reranking (Optional) ==========
         if self._should_enable_reranking(search_request):

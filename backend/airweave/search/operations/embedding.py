@@ -4,7 +4,7 @@ This operation converts text queries into vector embeddings
 that can be used for similarity search in the vector database.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal
 
 from airweave.search.operations.base import SearchOperation
 
@@ -16,18 +16,24 @@ class Embedding(SearchOperation):
     converts them into vector embeddings using either OpenAI's
     embedding model or a local model depending on configuration.
 
+    For hybrid search, it also generates sparse BM25 embeddings.
+
     The embeddings are then used by the vector search operation
     to find similar documents in the vector database.
     """
 
-    def __init__(self, model: str = "auto"):
+    def __init__(
+        self, model: str = "auto", search_method: Literal["hybrid", "neural", "keyword"] = "hybrid"
+    ):
         """Initialize embedding operation.
 
         Args:
             model: Embedding model to use ("auto", "openai", "local")
                   "auto" selects based on available API keys
+            search_method: Search method that determines which embeddings to generate
         """
         self.model = model
+        self.search_method = search_method
 
     @property
     def name(self) -> str:
@@ -50,8 +56,10 @@ class Embedding(SearchOperation):
             - logger: For logging
 
         Writes to context:
-            - embeddings: List of vector embeddings
+            - embeddings: List of neural vector embeddings
+            - sparse_embeddings: List of sparse BM25 embeddings (if hybrid/keyword search)
         """
+        from airweave.platform.embedding_models.bm25_text2vec import BM25Text2Vec
         from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
         from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
 
@@ -60,43 +68,70 @@ class Embedding(SearchOperation):
         logger = context["logger"]
         openai_api_key = context.get("openai_api_key")
 
-        logger.info(f"[Embedding] Generating embeddings for {len(queries)} queries")
+        logger.info(
+            f"[Embedding] Generating embeddings for {len(queries)} queries "
+            f"with search_method={self.search_method}"
+        )
 
         try:
-            # Select embedding model based on configuration and available keys
-            if self.model == "openai" and openai_api_key:
-                embedder = OpenAIText2Vec(api_key=openai_api_key, logger=logger)
-                logger.info("[Embedding] Using OpenAI embedding model")
-            elif self.model == "local":
-                embedder = LocalText2Vec(logger=logger)
-                logger.info("[Embedding] Using local embedding model")
-            elif self.model == "auto":
-                # Auto-select based on API key availability
-                if openai_api_key:
+            # Generate neural embeddings if needed
+            if self.search_method in ["hybrid", "neural"]:
+                # Select embedding model based on configuration and available keys
+                if self.model == "openai" and openai_api_key:
                     embedder = OpenAIText2Vec(api_key=openai_api_key, logger=logger)
-                    logger.info("[Embedding] Auto-selected OpenAI embedding model")
-                else:
+                    logger.info("[Embedding] Using OpenAI embedding model")
+                elif self.model == "local":
                     embedder = LocalText2Vec(logger=logger)
-                    logger.info("[Embedding] Auto-selected local embedding model (no OpenAI key)")
+                    logger.info("[Embedding] Using local embedding model")
+                elif self.model == "auto":
+                    # Auto-select based on API key availability
+                    if openai_api_key:
+                        embedder = OpenAIText2Vec(api_key=openai_api_key, logger=logger)
+                        logger.info("[Embedding] Auto-selected OpenAI embedding model")
+                    else:
+                        embedder = LocalText2Vec(logger=logger)
+                        logger.info(
+                            "[Embedding] Auto-selected local embedding model (no OpenAI key)"
+                        )
+                else:
+                    # Default to local if model is unrecognized
+                    embedder = LocalText2Vec(logger=logger)
+                    logger.warning(
+                        f"[Embedding] Unknown model '{self.model}', using local embedding model"
+                    )
+
+                # Generate neural embeddings
+                if len(queries) == 1:
+                    # Single query - use embed method
+                    embedding = await embedder.embed(queries[0])
+                    context["embeddings"] = [embedding]
+                else:
+                    # Multiple queries - use embed_many for efficiency
+                    context["embeddings"] = await embedder.embed_many(queries)
+
+                logger.info(f"[Embedding] Generated {len(context['embeddings'])} neural embeddings")
             else:
-                # Default to local if model is unrecognized
-                embedder = LocalText2Vec(logger=logger)
-                logger.warning(
-                    f"[Embedding] Unknown model '{self.model}', using local embedding model"
+                # For keyword-only search, create dummy neural embeddings
+                context["embeddings"] = [[0.0] * 384] * len(queries)
+                logger.info("[Embedding] Skipping neural embeddings for keyword-only search")
+
+            # Generate sparse BM25 embeddings if needed
+            if self.search_method in ["hybrid", "keyword"]:
+                bm25_embedder = BM25Text2Vec(logger=logger)
+                logger.info("[Embedding] Generating BM25 sparse embeddings")
+
+                if len(queries) == 1:
+                    sparse_embedding = await bm25_embedder.embed(queries[0])
+                    context["sparse_embeddings"] = [sparse_embedding]
+                else:
+                    context["sparse_embeddings"] = await bm25_embedder.embed_many(queries)
+
+                logger.info(
+                    f"[Embedding] Generated {len(context['sparse_embeddings'])} sparse embeddings"
                 )
-
-            # Generate embeddings
-            if len(queries) == 1:
-                # Single query - use embed method
-                embedding = await embedder.embed(queries[0])
-                context["embeddings"] = [embedding]
             else:
-                # Multiple queries - use embed_many for efficiency
-                context["embeddings"] = await embedder.embed_many(queries)
-
-            logger.info(
-                f"[Embedding] Generated {len(context['embeddings'])} embeddings successfully"
-            )
+                context["sparse_embeddings"] = None
+                logger.info("[Embedding] Skipping sparse embeddings for neural-only search")
 
         except Exception as e:
             logger.error(f"[Embedding] Failed: {e}", exc_info=True)
