@@ -247,6 +247,7 @@ class QdrantDestination(VectorDBDestination):
                     payload=data_object,
                 )
             ],
+            wait=True,  # Wait for operation to complete
         )
 
     async def bulk_insert(self, entities: list[ChunkEntity]) -> None:

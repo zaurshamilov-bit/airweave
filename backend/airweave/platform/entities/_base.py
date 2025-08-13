@@ -262,7 +262,7 @@ class ChunkEntity(BaseEntity):
         # "sync_id",
         "db_entity_id",
         "sync_metadata",
-        "parent_entity_id",
+        # "parent_entity_id",  # Keep parent_entity_id for deletion tracking
         "default_exclude_fields",
         "_hash",
     ]

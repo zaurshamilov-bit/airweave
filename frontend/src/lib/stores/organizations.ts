@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiClient } from '@/lib/api';
+import { BillingInfo } from '@/types';
 
 interface Organization {
   id: string;
@@ -11,6 +12,20 @@ interface Organization {
   is_primary: boolean;
   created_at?: string;
   modified_at?: string;
+  org_metadata?: {
+    onboarding?: {
+      organizationSize: string;
+      userRole: string;
+      organizationType: string;
+      subscriptionPlan: string;
+      teamInvites: Array<{
+        email: string;
+        role: 'member' | 'admin';
+      }>;
+      completedAt: string;
+    };
+    [key: string]: any;
+  };
 }
 
 interface CreateOrganizationRequest {
@@ -23,6 +38,8 @@ interface OrganizationState {
   organizations: Organization[];
   currentOrganization: Organization | null;
   isLoading: boolean;
+  billingInfo: BillingInfo | null;
+  billingLoading: boolean;
 
   // Actions
   setOrganizations: (orgs: Organization[]) => void;
@@ -36,6 +53,11 @@ interface OrganizationState {
   switchOrganization: (orgId: string) => void;
   setPrimaryOrganization: (orgId: string) => Promise<boolean>;
   initializeOrganizations: () => Promise<Organization[]>;
+
+  // Billing actions
+  fetchBillingInfo: () => Promise<BillingInfo | null>;
+  checkBillingStatus: () => Promise<{ requiresAction: boolean; message?: string; redirectUrl?: string }>;
+  clearBillingInfo: () => void;
 
   // Member management actions
   inviteUserToOrganization: (orgId: string, email: string, role: string) => Promise<boolean>;
@@ -79,6 +101,8 @@ export const useOrganizationStore = create<OrganizationState>()(
       organizations: [],
       currentOrganization: null,
       isLoading: false,
+      billingInfo: null,
+      billingLoading: false,
 
       setOrganizations: (organizations) => {
         const currentOrgId = get().currentOrganization?.id;
@@ -119,7 +143,7 @@ export const useOrganizationStore = create<OrganizationState>()(
         const { organizations } = get();
         const org = organizations.find(o => o.id === orgId);
         if (org) {
-          set({ currentOrganization: org });
+          set({ currentOrganization: org, billingInfo: null }); // Clear billing info on switch
           console.log(`🔄 [OrganizationStore] Switched to organization: ${org.name} (${org.id})`);
         }
       },
@@ -248,6 +272,104 @@ export const useOrganizationStore = create<OrganizationState>()(
           throw error;
         }
       },
+
+      // Billing methods
+      fetchBillingInfo: async (): Promise<BillingInfo | null> => {
+        try {
+          set({ billingLoading: true });
+
+          const response = await apiClient.get('/billing/subscription');
+
+          if (!response.ok) {
+            if (response.status === 400) {
+              // Billing not enabled (OSS mode)
+              set({ billingInfo: null, billingLoading: false });
+              return null;
+            }
+            throw new Error(`Failed to fetch billing info: ${response.status}`);
+          }
+
+          const billingInfo: BillingInfo = await response.json();
+          set({ billingInfo, billingLoading: false });
+          return billingInfo;
+        } catch (error) {
+          console.error('Failed to fetch billing info:', error);
+          set({ billingLoading: false });
+          return null;
+        }
+      },
+
+      checkBillingStatus: async (): Promise<{ requiresAction: boolean; message?: string; redirectUrl?: string }> => {
+        const billingInfo = await get().fetchBillingInfo();
+
+        if (!billingInfo || billingInfo.is_oss) {
+          // OSS mode, no action required
+          return { requiresAction: false };
+        }
+
+        // Check if payment method is required
+        if (billingInfo.requires_payment_method) {
+          const gracePeriodExpired = billingInfo.grace_period_ends_at &&
+            new Date(billingInfo.grace_period_ends_at) <= new Date();
+
+          if (gracePeriodExpired) {
+            return {
+              requiresAction: true,
+              message: 'Your grace period has expired. Please add a payment method to continue using Airweave.',
+              redirectUrl: '/billing/setup'
+            };
+          } else if (billingInfo.in_grace_period) {
+            const daysLeft = Math.ceil(
+              (new Date(billingInfo.grace_period_ends_at!).getTime() - new Date().getTime()) /
+              (1000 * 60 * 60 * 24)
+            );
+            return {
+              requiresAction: true,
+              message: `You have ${daysLeft} days left to add a payment method.`,
+              redirectUrl: '/billing/setup'
+            };
+          }
+        }
+
+        // Check if subscription is past due
+        if (billingInfo.status === 'past_due') {
+          return {
+            requiresAction: true,
+            message: 'Your subscription payment failed. Please update your payment method.',
+            redirectUrl: '/billing/portal'
+          };
+        }
+
+        // Check if subscription is canceled but still valid
+        if (billingInfo.status === 'canceled') {
+          // Check if we're past the current period end
+          const isExpired = billingInfo.current_period_end &&
+            new Date(billingInfo.current_period_end) <= new Date();
+
+          if (isExpired) {
+            return {
+              requiresAction: true,
+              message: 'Your subscription has ended. Please reactivate to continue using Airweave.',
+              redirectUrl: '/billing/setup'
+            };
+          }
+          // If canceled but not expired, no action required yet
+          return { requiresAction: false };
+        }
+
+        // Check if trial expired
+        if (billingInfo.status === 'trial_expired') {
+          return {
+            requiresAction: true,
+            message: 'Your trial has expired. Please subscribe to continue using Airweave.',
+            redirectUrl: '/billing/setup'
+          };
+        }
+
+        return { requiresAction: false };
+      },
+
+      clearBillingInfo: () => set({ billingInfo: null }),
 
       // Member management actions
       inviteUserToOrganization: async (orgId: string, email: string, role: string): Promise<boolean> => {

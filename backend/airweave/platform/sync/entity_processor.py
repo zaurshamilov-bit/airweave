@@ -7,8 +7,7 @@ from fastembed import SparseTextEmbedding
 
 from airweave import crud, schemas
 from airweave.core.exceptions import NotFoundException
-
-# Logger will be passed from sync_context
+from airweave.core.shared_models import ActionType
 from airweave.db.session import get_db_context
 from airweave.platform.entities._base import BaseEntity, DestinationAction
 from airweave.platform.sync.async_helpers import compute_entity_hash_async, run_in_thread_pool
@@ -693,6 +692,10 @@ class EntityProcessor:
         )
 
         await sync_context.progress.increment("inserted", 1)
+
+        # Increment guard rail usage for actual entity processing
+        await sync_context.guard_rail.increment(ActionType.ENTITIES)
+
         total_elapsed = db_elapsed + dest_elapsed
         sync_context.logger.debug(
             f"✅ INSERT_COMPLETE [{entity_context}] Insert complete in {total_elapsed:.3f}s"
@@ -724,13 +727,19 @@ class EntityProcessor:
         parent_hash = await compute_entity_hash_async(parent_entity)
 
         # Create a new database session just for this update
+        # Re-fetch entity in this session (original was from a different session)
         async with get_db_context() as db:
-            await crud.entity.update(
-                db=db,
-                db_obj=db_entity,
-                obj_in=schemas.EntityUpdate(hash=parent_hash),
-                ctx=sync_context.ctx,
-            )
+            # Re-fetch the entity in this session
+            fresh_db_entity = await crud.entity.get(db=db, id=db_entity.id, ctx=sync_context.ctx)
+            if fresh_db_entity:
+                await crud.entity.update(
+                    db=db,
+                    db_obj=fresh_db_entity,
+                    obj_in=schemas.EntityUpdate(hash=parent_hash),
+                    ctx=sync_context.ctx,
+                )
+            else:
+                sync_context.logger.error(f"Failed to find entity {db_entity.id} for update")
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
         parent_entity.db_entity_id = db_entity.id
@@ -776,6 +785,10 @@ class EntityProcessor:
         )
 
         await sync_context.progress.increment("updated", 1)
+
+        # Increment guard rail usage for actual entity processing
+        await sync_context.guard_rail.increment(ActionType.ENTITIES)
+
         total_elapsed = db_elapsed + delete_elapsed + insert_elapsed
         sync_context.logger.debug(
             f"✅ UPDATE_COMPLETE [{entity_context}] Update complete in {total_elapsed:.3f}s"

@@ -12,6 +12,7 @@ from airweave.api.context import ApiContext
 from airweave.core import credentials
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
+from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import ContextualLogger, LoggerConfigurator, logger
 from airweave.platform.auth.services import oauth2_service
 from airweave.platform.auth_providers._base import BaseAuthProvider
@@ -191,6 +192,12 @@ class SyncFactory:
 
         logger.info("Sync context created")
 
+        # Create GuardRailService with contextual logger
+        guard_rail = GuardRailService(
+            organization_id=ctx.organization_id,
+            logger=logger.with_context(component="guardrail"),
+        )
+
         return SyncContext(
             source=source,
             destinations=destinations,
@@ -207,6 +214,7 @@ class SyncFactory:
             entity_map=entity_map,
             ctx=ctx,
             logger=logger,
+            guard_rail=guard_rail,
             white_label=white_label,
         )
 

@@ -22,7 +22,11 @@ import Callback from '@/pages/Callback';
 import { protectedPaths, publicPaths } from '@/constants/paths';
 import { AuthCallback } from '@/pages/AuthCallback';
 import { OrganizationSettingsUnified } from '@/pages/organization/OrganizationSettingsUnified';
-import NoOrganization from '@/pages/NoOrganization';
+import Onboarding from '@/pages/Onboarding';
+import BillingSuccess from '@/pages/BillingSuccess';
+import BillingCancel from '@/pages/BillingCancel';
+import BillingSetup from '@/pages/BillingSetup';
+import BillingPortal from '@/pages/BillingPortal';
 
 function App() {
   // Initialize collections event listeners when the app loads
@@ -38,7 +42,9 @@ function App() {
         <Route path={publicPaths.login} element={<Login />} />
         <Route path={publicPaths.callback} element={<Callback />} />
         <Route path={publicPaths.semanticMcp} element={<SemanticMcp />} />
-        <Route path={publicPaths.noOrganization} element={<NoOrganization />} />
+        <Route path={publicPaths.onboarding} element={<Onboarding />} />
+        <Route path={publicPaths.billingSuccess} element={<BillingSuccess />} />
+        <Route path={publicPaths.billingCancel} element={<BillingCancel />} />
 
         {/* Auth callback routes - OUTSIDE of DashboardLayout */}
         <Route path="/auth/callback/:short_name" element={<AuthCallback />} />
@@ -58,6 +64,10 @@ function App() {
 
           {/* Organization routes */}
           <Route path="/organization/settings" element={<OrganizationSettingsUnified />} />
+
+          {/* Billing routes */}
+          <Route path="/billing/setup" element={<BillingSetup />} />
+          <Route path="/billing/portal" element={<BillingPortal />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

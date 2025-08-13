@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Plus } from "lucide-react";
@@ -6,6 +6,15 @@ import { useNavigate } from "react-router-dom";
 import { CollectionCard } from "@/components/dashboard";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 import { DialogFlow } from "@/components/shared";
+import { apiClient } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ActionCheckResponse } from "@/types";
 
 const CollectionsView = () => {
   const navigate = useNavigate();
@@ -22,6 +31,69 @@ const CollectionsView = () => {
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  // State for usage limits
+  const [collectionsAllowed, setCollectionsAllowed] = useState(true);
+  const [sourceConnectionsAllowed, setSourceConnectionsAllowed] = useState(true);
+  const [entitiesAllowed, setEntitiesAllowed] = useState(true);
+  const [syncsAllowed, setSyncsAllowed] = useState(true);
+  const [usageCheckDetails, setUsageCheckDetails] = useState<{
+    collections?: ActionCheckResponse | null;
+    source_connections?: ActionCheckResponse | null;
+    entities?: ActionCheckResponse | null;
+    syncs?: ActionCheckResponse | null;
+  }>({});
+  const [isCheckingUsage, setIsCheckingUsage] = useState(true);
+
+  // Check if actions are allowed based on usage limits
+  const checkUsageActions = useCallback(async () => {
+    try {
+      // Check all four actions in parallel
+      const [collectionsRes, sourceConnectionsRes, entitiesRes, syncsRes] = await Promise.all([
+        apiClient.get('/usage/check-action?action=collections'),
+        apiClient.get('/usage/check-action?action=source_connections'),
+        apiClient.get('/usage/check-action?action=entities'),
+        apiClient.get('/usage/check-action?action=syncs')
+      ]);
+
+      const details: typeof usageCheckDetails = {};
+
+      if (collectionsRes.ok) {
+        const data: ActionCheckResponse = await collectionsRes.json();
+        setCollectionsAllowed(data.allowed);
+        details.collections = data;
+      }
+
+      if (sourceConnectionsRes.ok) {
+        const data: ActionCheckResponse = await sourceConnectionsRes.json();
+        setSourceConnectionsAllowed(data.allowed);
+        details.source_connections = data;
+      }
+
+      if (entitiesRes.ok) {
+        const data: ActionCheckResponse = await entitiesRes.json();
+        setEntitiesAllowed(data.allowed);
+        details.entities = data;
+      }
+
+      if (syncsRes.ok) {
+        const data: ActionCheckResponse = await syncsRes.json();
+        setSyncsAllowed(data.allowed);
+        details.syncs = data;
+      }
+
+      setUsageCheckDetails(details);
+    } catch (error) {
+      console.error('Failed to check usage actions:', error);
+      // Default to allowed on error to not block users
+      setCollectionsAllowed(true);
+      setSourceConnectionsAllowed(true);
+      setEntitiesAllowed(true);
+      setSyncsAllowed(true);
+    } finally {
+      setIsCheckingUsage(false);
+    }
+  }, []);
+
   // Initialize collections and event listeners
   useEffect(() => {
     console.log("🔄 [CollectionsView] Initializing");
@@ -36,6 +108,11 @@ const CollectionsView = () => {
 
     return unsubscribe;
   }, [fetchCollections]);
+
+  // Check usage limits on mount
+  useEffect(() => {
+    checkUsageActions();
+  }, [checkUsageActions]);
 
   // Filter collections based on search query
   useEffect(() => {
@@ -53,10 +130,12 @@ const CollectionsView = () => {
   }, [searchQuery, collections]);
 
   // Refresh collections after creating a new one
-  const handleDialogClose = () => {
+  const handleDialogClose = async () => {
     setDialogOpen(false);
     // Force refresh collections to get the newly created one
     fetchCollections(true);
+    // Re-check usage limits after creating a collection
+    await checkUsageActions();
   };
 
   // Open create collection dialog
@@ -94,13 +173,84 @@ const CollectionsView = () => {
             View and manage all your collections
           </p>
         </div>
-        <Button
-          onClick={handleCreateCollection}
-          className="bg-primary hover:bg-primary/90 text-white rounded-lg h-9 px-4"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create Collection
-        </Button>
+        <TooltipProvider delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0}>
+                <Button
+                  onClick={handleCreateCollection}
+                  disabled={!collectionsAllowed || !sourceConnectionsAllowed || !entitiesAllowed || !syncsAllowed || isCheckingUsage}
+                  className={cn(
+                    "bg-primary text-white rounded-lg h-9 px-4 transition-all duration-200",
+                    (!collectionsAllowed || !sourceConnectionsAllowed || !entitiesAllowed || !syncsAllowed || isCheckingUsage)
+                      ? "opacity-50 cursor-not-allowed hover:bg-primary"
+                      : "hover:bg-primary/90"
+                  )}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Collection
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {(!collectionsAllowed || !sourceConnectionsAllowed || !entitiesAllowed || !syncsAllowed) && (
+              <TooltipContent className="max-w-xs">
+                <p className="text-xs">
+                  {!collectionsAllowed && usageCheckDetails.collections?.reason === 'usage_limit_exceeded' ? (
+                    <>
+                      Collection limit reached.{' '}
+                      <a
+                        href="/organization/settings?tab=billing"
+                        className="underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Upgrade your plan
+                      </a>
+                      {' '}to create more collections.
+                    </>
+                  ) : !sourceConnectionsAllowed && usageCheckDetails.source_connections?.reason === 'usage_limit_exceeded' ? (
+                    <>
+                      Source connection limit reached.{' '}
+                      <a
+                        href="/organization/settings?tab=billing"
+                        className="underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Upgrade your plan
+                      </a>
+                      {' '}for more connections.
+                    </>
+                  ) : !entitiesAllowed && usageCheckDetails.entities?.reason === 'usage_limit_exceeded' ? (
+                    <>
+                      Entity processing limit reached.{' '}
+                      <a
+                        href="/organization/settings?tab=billing"
+                        className="underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Upgrade your plan
+                      </a>
+                      {' '}to process more data.
+                    </>
+                  ) : !syncsAllowed && usageCheckDetails.syncs?.reason === 'usage_limit_exceeded' ? (
+                    <>
+                      Sync limit reached.{' '}
+                      <a
+                        href="/organization/settings?tab=billing"
+                        className="underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Upgrade your plan
+                      </a>
+                      {' '}for more syncs.
+                    </>
+                  ) : (
+                    'Unable to create collection at this time.'
+                  )}
+                </p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       {/* Search bar */}
