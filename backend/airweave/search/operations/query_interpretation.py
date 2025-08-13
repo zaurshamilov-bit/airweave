@@ -385,21 +385,28 @@ class QueryInterpretation(SearchOperation):
         return available_fields
 
     def _get_common_fields(self) -> Dict[str, Dict[str, str]]:
-        """Get common fields available for all entities."""
         return {
             "common": {
                 "entity_id": "ID of the entity in the source system (string)",
-                "source_name": (
+                "airweave_system_metadata.source_name": (  # Changed
                     "Name of the source connector this data came from (string, case-sensitive)"
                 ),
-                "sync_id": (
+                "airweave_system_metadata.sync_id": (  # Changed
                     "Internal sync identifier (UUID, useful for debugging; "
                     "rarely used for filtering)"
                 ),
-                "sync_job_id": "Internal sync job identifier (UUID; rarely used for filtering)",
+                "airweave_system_metadata.sync_job_id": (
+                    "Internal sync job identifier (UUID; rarely used for filtering)"
+                ),
                 "url": "Canonical URL to view the item in the source system (string)",
                 "parent_entity_id": "ID of the parent entity in the source (string)",
                 "chunk_index": "Index of the chunk within a document (integer)",
+                "airweave_system_metadata.airweave_created_at": (
+                    "Timestamp of when the entity was created in Airweave (ISO8601 datetime string)"
+                ),
+                "airweave_system_metadata.airweave_updated_at": (
+                    "Harmonized update timestamp for decay calculations (ISO8601 datetime string)"
+                ),
             }
         }
 
@@ -620,6 +627,19 @@ class QueryInterpretation(SearchOperation):
         return (
             "You are a search query analyzer. Extract Qdrant filters from natural "
             "language queries.\n\n"
+            "CRITICAL FIELD STRUCTURE INFORMATION:\n"
+            "In the Qdrant database, fields are stored in a nested structure within the payload:\n"
+            "- Fields marked with 'airweave_system_metadata.' prefix are nested under that object\n"
+            "- Other fields are stored directly in the payload\n"
+            "- The system will AUTOMATICALLY map the field names to their correct nested paths\n"
+            "- You should use the field names AS SHOWN in the list below\n"
+            "- DO NOT manually add 'airweave_system_metadata.' prefix - the system handles this\n\n"
+            "For example:\n"
+            "- If you see 'airweave_system_metadata.source_name' in the list, "
+            "just use 'source_name' in your filter\n"
+            "- If you see 'entity_id' in the list, use 'entity_id' as-is\n"
+            "- The system knows which fields need the nested path and will apply "
+            "it automatically\n\n"
             f"{fields_description}\n"
             "Generate Qdrant filter conditions in this format:\n"
             '- For exact matches: {"key": "field_name", "match": {"value": "exact_value"}}\n'
@@ -629,7 +649,7 @@ class QueryInterpretation(SearchOperation):
             '- For number ranges: {"key": "field_name", "range": {"gte": 0, "lte": 100}}\n\n'
             "Common patterns to look for:\n"
             '- Source/platform mentions: "in Asana", "from GitHub", "on Slack" -> '
-            "source_name field\n"
+            "source_name field (will be mapped to airweave_system_metadata.source_name)\n"
             '- Status indicators: "open", "closed", "pending", "completed" -> '
             "status or state field\n"
             '- Time references: "last week", "yesterday", "past month" -> choose a '
@@ -640,21 +660,21 @@ class QueryInterpretation(SearchOperation):
             "Do not use a generic field name if it is not listed.\n"
             '- Assignee mentions: "assigned to John" -> assignee field\n'
             '- Priority levels: "high priority", "critical" -> priority field\n\n'
-            "        IMPORTANT CONSTRAINTS:\n"
+            "IMPORTANT CONSTRAINTS:\n"
             "- Do NOT invent sources or fields. Use only the sources listed above and only "
             "the field names explicitly listed for each source or in Common fields.\n"
             "- If you cannot confidently map a term to an available field, omit the filter "
             "and lower the confidence.\n"
             "- The value for source_name must match one of the listed sources exactly "
             "(case-sensitive).\n"
-            " - If you use a field that only exists for some sources, also include a matching "
+            "- If you use a field that only exists for some sources, also include a matching "
             "source_name condition to scope the filter appropriately when the source is "
             "implied by the query.\n"
-            " - When time-based language is used, identify the most relevant date field from "
+            "- When time-based language is used, identify the most relevant date field from "
             "the listed fields for the implicated source (e.g., for Notion use created_time "
             "or last_edited_time if listed). If ambiguous and no appropriate field is listed, "
             "omit the time filter and lower confidence.\n"
-            "        - When a user mentions a file name or document title, prefer fields whose "
+            "- When a user mentions a file name or document title, prefer fields whose "
             "description indicates they store the parent document/file title (e.g., "
             "md_parent_title) or the file name (e.g., name) over generic title fields.\n\n"
             "Be conservative with confidence:\n"
@@ -663,19 +683,32 @@ class QueryInterpretation(SearchOperation):
             "- Low confidence (<0.5): Unclear or ambiguous, no matching fields\n\n"
             "The refined query should remove filter terms but keep the semantic search intent.\n\n"
             "IMPORTANT: Only suggest filters for fields that actually exist in the available "
-            "fields list above."
+            "fields list above. Remember that the system will automatically handle the nested "
+            "path mapping for fields like source_name, sync_id, entity_type, etc."
         )
 
+    def _map_to_qdrant_path(self, key: str) -> str:
+        """Map field names to their actual Qdrant payload paths."""
+        nested_fields = {
+            "source_name",
+            "entity_type",
+            "sync_id",
+            "sync_job_id",
+            "airweave_created_at",
+            "airweave_updated_at",
+        }
+        if key in nested_fields:
+            return f"airweave_system_metadata.{key}"
+        return key
+
     def _build_qdrant_filter(self, filter_conditions: List[Dict[str, Any]]) -> Optional[Dict]:
-        """Build a Qdrant filter from extracted conditions.
-
-        Args:
-            filter_conditions: List of filter condition dictionaries
-
-        Returns:
-            Qdrant filter dict or None
-        """
         if not filter_conditions:
             return None
-        # Always wrap as Filter.must (list of FieldCondition-like dicts)
-        return {"must": filter_conditions}
+
+        mapped_conditions = []
+        for cond in filter_conditions:
+            new_cond = cond.copy()
+            new_cond["key"] = self._map_to_qdrant_path(new_cond["key"])
+            mapped_conditions.append(new_cond)
+
+        return {"must": mapped_conditions}

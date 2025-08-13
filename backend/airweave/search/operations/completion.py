@@ -230,7 +230,8 @@ class CompletionGeneration(SearchOperation):
     def _add_content_field(self, parts: List[str], payload: Dict):
         """Add content field to parts."""
         content = (
-            payload.get("md_content")
+            payload.get("embeddable_text")  # Add this first
+            or payload.get("md_content")
             or payload.get("content")
             or payload.get("text")
             or payload.get("description", "")

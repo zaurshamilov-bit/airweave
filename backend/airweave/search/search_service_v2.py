@@ -201,7 +201,16 @@ class SearchServiceV2:
                 payload = clean_result["payload"]
 
                 # Remove sensitive/internal fields from payload
-                sensitive_fields = ["vector", "download_url", "local_path", "file_uuid", "checksum"]
+                sensitive_fields = [
+                    "vector",
+                    "download_url",
+                    "local_path",
+                    "file_uuid",
+                    "checksum",
+                    "sync_id",
+                    "sync_job_id",
+                    "embeddable_text",
+                ]
                 for field in sensitive_fields:
                     payload.pop(field, None)
 

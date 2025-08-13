@@ -76,7 +76,10 @@ class LLMReranking(SearchOperation):
             for i, result in enumerate(results[:20]):  # Limit to top 20 for LLM
                 payload = result.get("payload", {})
                 content = (
-                    payload.get("md_content") or payload.get("content") or payload.get("text", "")
+                    payload.get("md_content")
+                    or payload.get("content")
+                    or payload.get("text", "")
+                    or payload.get("embeddable_text", "")
                 )[:500]  # Truncate content
 
                 results_for_llm.append(
