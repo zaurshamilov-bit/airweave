@@ -9,26 +9,26 @@ if [ ! -f .env ]; then
     echo ".env file created"
 fi
 
-# Generate new encryption key regardless of existing value
-echo "Generating new encryption key..."
-NEW_KEY=$(openssl rand -base64 32)
-echo "Generated key: $NEW_KEY"
+# Check if ENCRYPTION_KEY already exists in .env
+if grep -q "^ENCRYPTION_KEY=" .env; then
+    echo "Encryption key already exists in .env file, skipping generation."
+    echo "Current ENCRYPTION_KEY value:"
+    grep "^ENCRYPTION_KEY=" .env | head -1
+else
+    echo "No encryption key found. Generating new encryption key..."
+    NEW_KEY=$(openssl rand -base64 32)
+    echo "Generated key: $NEW_KEY"
 
-# Remove any existing ENCRYPTION_KEY line and create clean .env
-grep -v "^ENCRYPTION_KEY=" .env > .env.tmp
-mv .env.tmp .env
-
-# Add the new encryption key at the end of the file
-echo "ENCRYPTION_KEY=\"$NEW_KEY\"" >> .env
+    # Add the new encryption key at the end of the file
+    echo "ENCRYPTION_KEY=\"$NEW_KEY\"" >> .env
+    echo "Added new ENCRYPTION_KEY to .env file"
+fi
 
 # Add SKIP_AZURE_STORAGE for faster local startup
 if ! grep -q "^SKIP_AZURE_STORAGE=" .env; then
     echo "SKIP_AZURE_STORAGE=true" >> .env
     echo "Added SKIP_AZURE_STORAGE=true for faster startup"
 fi
-
-echo "Updated .env file. Current ENCRYPTION_KEY value:"
-grep "^ENCRYPTION_KEY=" .env
 
 # Ask for OpenAI API key
 echo ""

@@ -77,7 +77,7 @@ class AsyncWorkerPool:
 
             except Exception as e:
                 elapsed = asyncio.get_event_loop().time() - start_time
-                self.logger.error(
+                self.logger.warning(
                     f"❌ WORKER_ERROR [{task_id}] Task failed after {elapsed:.2f}s "
                     f"(thread: {thread_id}): {type(e).__name__}: {str(e)}"
                 )
@@ -91,7 +91,7 @@ class AsyncWorkerPool:
         if task.cancelled():
             self.logger.warning(f"🚫 WORKER_CANCELLED [{task_id}] Task was cancelled")
         elif task.exception() is not None:
-            self.logger.error(
+            self.logger.warning(
                 f"💥 WORKER_EXCEPTION [{task_id}] Task completed with exception: {task.exception()}"
             )
         else:
