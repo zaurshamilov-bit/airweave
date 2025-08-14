@@ -354,7 +354,7 @@ async def entity_chunker(entity: BaseEntity, logger: ContextualLogger) -> List[B
         # ➌ halve chunk size each recursion → exponential shrink
         tgt_chunk = int(max(300, f_size / 2 / 1.5))
         chunks = await chunk_text_optimized(
-            e_dict[target_field], tgt_chunk, target_field, current.entity_id
+            e_dict[target_field], tgt_chunk, target_field, current.entity_id, logger
         )
 
         # re-queue new chunks for further checking
