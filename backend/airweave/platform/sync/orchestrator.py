@@ -5,6 +5,8 @@ from typing import Optional
 
 from airweave import schemas
 from airweave.core.datetime_utils import utc_now_naive
+from airweave.core.exceptions import PaymentRequiredException, UsageLimitExceededException
+from airweave.core.guard_rail_service import ActionType
 from airweave.core.shared_models import SyncJobStatus
 from airweave.core.sync_cursor_service import sync_cursor_service
 from airweave.core.sync_job_service import sync_job_service
@@ -42,7 +44,7 @@ class SyncOrchestrator:
 
         # Queue size provides buffering for bursty sources
         # Workers pull from this queue when ready
-        self.stream_buffer_size = 100
+        self.stream_buffer_size = 1000
 
     async def run(self) -> schemas.Sync:
         """Execute the synchronization process.
@@ -63,27 +65,29 @@ class SyncOrchestrator:
         except Exception as e:
             await self._handle_sync_failure(e)
             raise
+        finally:
+            # Always flush guard rail usage to prevent data loss
+            try:
+                self.sync_context.logger.info("Flushing guard rail usage data...")
+                await self.sync_context.guard_rail.flush_all()
+            except Exception as flush_error:
+                self.sync_context.logger.error(
+                    f"Failed to flush guard rail usage: {flush_error}", exc_info=True
+                )
 
     async def _start_sync(self) -> None:
         """Initialize sync job and update status to in-progress."""
-        self.sync_context.logger.info(
-            f"Starting sync job {self.sync_context.sync_job.id} for sync "
-            f"{self.sync_context.sync.id}"
-        )
+        self.sync_context.logger.info("Starting sync job")
 
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.IN_PROGRESS,
-            auth_context=self.sync_context.auth_context,
+            ctx=self.sync_context.ctx,
             started_at=utc_now_naive(),
         )
 
     async def _process_entities(self) -> None:
-        """Process entities with pull-based concurrency control.
-
-        Only pulls an entity from the stream when a worker is available,
-        ensuring natural backpressure throughout the pipeline.
-        """
+        """Process entities with explicit stream lifecycle management."""
         source_node = self.sync_context.dag.get_source_node()
 
         self.sync_context.logger.info(
@@ -91,48 +95,72 @@ class SyncOrchestrator:
             f"(buffer: {self.stream_buffer_size}, max workers: {self.worker_pool.max_workers})"
         )
 
+        stream = None
         stream_error: Optional[Exception] = None
         pending_tasks: set[asyncio.Task] = set()
 
         try:
-            async with AsyncSourceStream(
+            # Create stream outside the async with to have explicit control
+            stream = AsyncSourceStream(
                 self.sync_context.source.generate_entities(),
                 queue_size=self.stream_buffer_size,
                 logger=self.sync_context.logger,
-            ) as stream:
-                async for entity in stream.get_entities():
-                    # Handle skipped entities without using a worker
-                    if getattr(entity, "should_skip", False):
-                        self.sync_context.logger.debug(f"Skipping entity: {entity.entity_id}")
-                        await self.sync_context.progress.increment("skipped")
-                        continue
+            )
+            await stream.start()
 
-                    # Submit entity processing to worker pool
-                    # This creates a task that runs concurrently with others
-                    task = await self.worker_pool.submit(
-                        self.entity_processor.process,
-                        entity=entity,
-                        source_node=source_node,
-                        sync_context=self.sync_context,
+            async for entity in stream.get_entities():
+                try:
+                    # Check guard rail
+                    await self.sync_context.guard_rail.is_allowed(ActionType.ENTITIES)
+                except (UsageLimitExceededException, PaymentRequiredException) as guard_error:
+                    self.sync_context.logger.error(
+                        f"Guard rail check failed: {type(guard_error).__name__}: {str(guard_error)}"
                     )
-                    pending_tasks.add(task)
+                    stream_error = guard_error
+                    break  # Exit the loop cleanly instead of raising
 
-                    # Clean up completed tasks periodically to avoid memory buildup
-                    if len(pending_tasks) >= self.worker_pool.max_workers:
-                        pending_tasks = await self._handle_completed_tasks(pending_tasks)
+                # Handle skipped entities without using a worker
+                if getattr(entity, "should_skip", False):
+                    self.sync_context.logger.debug(f"Skipping entity: {entity.entity_id}")
+                    await self.sync_context.progress.increment("skipped")
+                    continue
+
+                # Submit entity processing to worker pool
+                task = await self.worker_pool.submit(
+                    self.entity_processor.process,
+                    entity=entity,
+                    source_node=source_node,
+                    sync_context=self.sync_context,
+                )
+                pending_tasks.add(task)
+
+                # Clean up completed tasks periodically
+                if len(pending_tasks) >= self.worker_pool.max_workers:
+                    pending_tasks = await self._handle_completed_tasks(pending_tasks)
 
         except Exception as e:
             stream_error = e
             self.sync_context.logger.error(f"Error during entity streaming: {get_error_message(e)}")
-            # Cancel all pending tasks
-            for task in pending_tasks:
-                task.cancel()
-            raise
 
         finally:
-            # Wait for all remaining tasks to complete
+            # Always clean up the stream first
+            if stream:
+                await stream.stop()
+
+            # Then handle pending tasks
+            if stream_error:
+                # Cancel all pending tasks if there was an error
+                self.sync_context.logger.info(f"Cancelling {len(pending_tasks)} pending tasks...")
+                for task in pending_tasks:
+                    task.cancel()
+
+            # Wait for all tasks to complete
             await self._wait_for_remaining_tasks(pending_tasks)
             await self.sync_context.progress.finalize(is_complete=(stream_error is None))
+
+            # Re-raise the error after cleanup
+            if stream_error:
+                raise stream_error
 
     async def _handle_completed_tasks(self, pending_tasks: set[asyncio.Task]) -> set[asyncio.Task]:
         """Handle completed tasks and check for exceptions.
@@ -159,14 +187,14 @@ class SyncOrchestrator:
             pending_tasks: Set of pending tasks to wait for
         """
         if pending_tasks:
-            self.sync_context.logger.info(
+            self.sync_context.logger.debug(
                 f"Waiting for {len(pending_tasks)} remaining tasks to complete"
             )
             done, _ = await asyncio.wait(pending_tasks)
             # Check for exceptions in completed tasks
             for task in done:
                 if not task.cancelled() and task.exception():
-                    self.sync_context.logger.error(
+                    self.sync_context.logger.warning(
                         f"Task failed with exception: {task.exception()}"
                     )
 
@@ -180,7 +208,7 @@ class SyncOrchestrator:
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.COMPLETED,
-            auth_context=self.sync_context.auth_context,
+            ctx=self.sync_context.ctx,
             completed_at=utc_now_naive(),
             stats=stats,
         )
@@ -222,7 +250,7 @@ class SyncOrchestrator:
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.FAILED,
-            auth_context=self.sync_context.auth_context,
+            ctx=self.sync_context.ctx,
             error=error_message,
             failed_at=utc_now_naive(),
             stats=stats,

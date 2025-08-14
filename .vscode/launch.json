@@ -20,7 +20,6 @@
       "console": "integratedTerminal",
       "jinja": true,
       "justMyCode": true,
-
       "envFile": "${workspaceFolder}/.env",
       "env": {
         "LOCAL_DEVELOPMENT": "true"

@@ -1,18 +1,20 @@
 """Dependencies that are used in the API endpoints."""
 
+import uuid
 from typing import Optional, Tuple
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from fastapi_auth0 import Auth0User
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
 from airweave.api.auth import auth0
+from airweave.api.context import ApiContext
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
+from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import ContextualLogger, logger
 from airweave.db.session import get_db
-from airweave.schemas.auth import AuthContext
 
 
 async def _authenticate_system_user(db: AsyncSession) -> Tuple[Optional[schemas.User], str, dict]:
@@ -104,19 +106,23 @@ async def _validate_organization_access(
             )
 
 
-async def get_auth_context(
+async def get_context(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     x_organization_id: Optional[str] = Header(None, alias="X-Organization-ID"),
     auth0_user: Optional[Auth0User] = Depends(auth0.get_user),
-) -> AuthContext:
-    """Retrieve authentication context for the request.
+) -> ApiContext:
+    """Create unified API context for the request.
 
-    Creates a unified AuthContext that works for both Auth0 users and API key authentication.
-    Uses X-Organization-ID header to determine the current organization context.
+    This is the primary dependency for all API endpoints, providing:
+    - Request tracking (request_id)
+    - The API context (user, organization, auth method)
+    - Pre-configured contextual logger with all dimensions
 
     Args:
     ----
+        request (Request): The FastAPI request object.
         db (AsyncSession): Database session.
         x_api_key (Optional[str]): API key provided in the request header.
         x_organization_id (Optional[str]): Organization ID provided in the X-Organization-ID header.
@@ -124,12 +130,16 @@ async def get_auth_context(
 
     Returns:
     -------
-        AuthContext: Unified authentication context.
+        ApiContext: Unified API context with auth and logging.
 
     Raises:
     ------
         HTTPException: If no valid auth method is provided or org access is denied.
     """
+    # Get request ID from middleware
+    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
+
+    # Perform authentication (reuse existing logic)
     user_context = None
     auth_method = ""
     auth_metadata = {}
@@ -153,19 +163,70 @@ async def get_auth_context(
     # Validate organization access
     await _validate_organization_access(db, organization_id, user_context, auth_method, x_api_key)
 
-    return AuthContext(
+    # Create logger with full context
+    base_logger = logger.with_context(
+        request_id=request_id,
+        organization_id=str(organization_id),
+        auth_method=auth_method,
+        context_base="api",
+    )
+
+    # Add user context if available
+    if user_context:
+        base_logger = base_logger.with_context(
+            user_id=str(user_context.id), user_email=user_context.email
+        )
+
+    return ApiContext(
+        request_id=request_id,
         organization_id=organization_id,
         user=user_context,
         auth_method=auth_method,
         auth_metadata=auth_metadata,
+        logger=base_logger,
     )
 
 
 async def get_logger(
-    auth_context: AuthContext = Depends(get_auth_context),
+    context: ApiContext = Depends(get_context),
 ) -> ContextualLogger:
-    """Get a logger with the current authentication context."""
-    return logger.from_auth_context(auth_context)
+    """Get a logger with the current authentication context.
+
+    Backward compatibility wrapper that extracts the logger from ApiContext.
+
+    Args:
+    ----
+        context (AppContext): The unified application context.
+
+    Returns:
+    -------
+        ContextualLogger: Pre-configured logger with full context.
+    """
+    return context.logger
+
+
+async def get_guard_rail_service(
+    ctx: ApiContext = Depends(get_context),
+    contextual_logger: ContextualLogger = Depends(get_logger),
+) -> GuardRailService:
+    """Get a GuardRailService instance for the current organization.
+
+    This dependency creates a GuardRailService instance that can be used to check
+    if actions are allowed based on the organization's usage limits and payment status.
+
+    Args:
+    ----
+        ctx (ApiContext): The authentication context containing organization_id.
+        contextual_logger (ContextualLogger): Logger with authentication context.
+
+    Returns:
+    -------
+        GuardRailService: An instance configured for the current organization.
+    """
+    return GuardRailService(
+        organization_id=ctx.organization_id,
+        logger=contextual_logger.with_context(component="guardrail"),
+    )
 
 
 async def get_user(
@@ -199,6 +260,8 @@ async def get_user(
         user, _, _ = await _authenticate_system_user(db)
     # Auth0 auth
     else:
+        if not auth0_user:
+            raise HTTPException(status_code=401, detail="User email not found in Auth0")
         user, _, _ = await _authenticate_auth0_user(db, auth0_user)
 
     if not user:

@@ -15,7 +15,9 @@ import {
   ExternalLink,
   LayoutGrid,
   Home,
-  Shield
+  Shield,
+  Github,  // Add Github icon
+  FileText // Change from Book to FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -34,6 +36,14 @@ import { DialogFlow } from '@/components/shared';
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 import { useOrganizationStore } from "@/lib/stores/organizations";
 import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
+import { BillingGuard } from "@/components/BillingGuard";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ActionCheckResponse } from "@/types";
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
@@ -192,11 +202,22 @@ const DashboardLayout = () => {
   const { resolvedTheme, setTheme } = useTheme();
   const { fetchSources } = useSourcesStore();
   const { currentOrganization } = useOrganizationStore();
-  const [searchParams] = useSearchParams();
-  const [errorData, setErrorData] = useState<any>(null);
 
   // State for the create collection dialog
   const [showCreateCollectionFlow, setShowCreateCollectionFlow] = useState(false);
+
+  // State for usage limits
+  const [collectionsAllowed, setCollectionsAllowed] = useState(true);
+  const [sourceConnectionsAllowed, setSourceConnectionsAllowed] = useState(true);
+  const [entitiesAllowed, setEntitiesAllowed] = useState(true);
+  const [syncsAllowed, setSyncsAllowed] = useState(true);
+  const [usageCheckDetails, setUsageCheckDetails] = useState<{
+    collections?: ActionCheckResponse | null;
+    source_connections?: ActionCheckResponse | null;
+    entities?: ActionCheckResponse | null;
+    syncs?: ActionCheckResponse | null;
+  }>({});
+  const [isCheckingUsage, setIsCheckingUsage] = useState(true);
 
   // Add array of routes that should be non-scrollable
   const nonScrollableRoutes = ['/chat', '/chat/'];
@@ -205,13 +226,78 @@ const DashboardLayout = () => {
   const isNonScrollable = nonScrollableRoutes.some(route =>
     location.pathname === route || location.pathname.startsWith('/chat/'));
 
+  // Check if actions are allowed based on usage limits
+  const checkUsageActions = useCallback(async () => {
+    try {
+      // Check all four actions in parallel
+      const [collectionsRes, sourceConnectionsRes, entitiesRes, syncsRes] = await Promise.all([
+        apiClient.get('/usage/check-action?action=collections'),
+        apiClient.get('/usage/check-action?action=source_connections'),
+        apiClient.get('/usage/check-action?action=entities'),
+        apiClient.get('/usage/check-action?action=syncs')
+      ]);
+
+      const details: typeof usageCheckDetails = {};
+
+      if (collectionsRes.ok) {
+        const data: ActionCheckResponse = await collectionsRes.json();
+        setCollectionsAllowed(data.allowed);
+        details.collections = data;
+      }
+
+      if (sourceConnectionsRes.ok) {
+        const data: ActionCheckResponse = await sourceConnectionsRes.json();
+        setSourceConnectionsAllowed(data.allowed);
+        details.source_connections = data;
+      }
+
+      if (entitiesRes.ok) {
+        const data: ActionCheckResponse = await entitiesRes.json();
+        setEntitiesAllowed(data.allowed);
+        details.entities = data;
+      }
+
+      if (syncsRes.ok) {
+        const data: ActionCheckResponse = await syncsRes.json();
+        setSyncsAllowed(data.allowed);
+        details.syncs = data;
+      }
+
+      setUsageCheckDetails(details);
+    } catch (error) {
+      console.error('Failed to check usage actions:', error);
+      // Default to allowed on error to not block users
+      setCollectionsAllowed(true);
+      setSourceConnectionsAllowed(true);
+      setEntitiesAllowed(true);
+      setSyncsAllowed(true);
+    } finally {
+      setIsCheckingUsage(false);
+    }
+  }, []);
+
   const handleCreateCollection = useCallback(() => {
     setShowCreateCollectionFlow(true);
   }, []);
 
-  const handleCreateCollectionComplete = useCallback(() => {
+  const handleCreateCollectionComplete = useCallback(async () => {
     setShowCreateCollectionFlow(false);
-  }, []);
+    // Re-check usage limits after creating a collection
+    await checkUsageActions();
+  }, [checkUsageActions]);
+
+  // Check usage limits on mount
+  useEffect(() => {
+    checkUsageActions();
+  }, [checkUsageActions]);
+
+  // Re-check usage limits when organization changes
+  useEffect(() => {
+    if (currentOrganization) {
+      console.log(`🔄 [DashboardLayout] Organization changed to ${currentOrganization.name}, re-checking usage limits`);
+      checkUsageActions();
+    }
+  }, [currentOrganization?.id, checkUsageActions]);
 
   // Memoize active status checks
   const isDashboardActive = useMemo(() =>
@@ -241,15 +327,86 @@ const DashboardLayout = () => {
         <div className="space-y-0 pr-3 pb-4">
           {/* Create Collection Button */}
           <div className="pb-1 pt-1">
-            <Button
-              onClick={handleCreateCollection}
-              variant="outline"
-              size="sm"
-              className="flex items-center justify-center w-[214px] gap-1.5 text-sm text-primary hover:bg-primary/15 bg-background border border-primary/60 hover:text-primary rounded-lg py-2 font-medium transition-all duration-200 hover:shadow-sm"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Create collection
-            </Button>
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0} className="w-full">
+                    <Button
+                      onClick={handleCreateCollection}
+                      variant="outline"
+                      size="sm"
+                      disabled={!collectionsAllowed || !sourceConnectionsAllowed || !entitiesAllowed || !syncsAllowed || isCheckingUsage}
+                      className={cn(
+                        "flex items-center justify-center w-[214px] gap-1.5 text-sm bg-background border rounded-lg py-2 hover:shadow-sm",
+                        (!collectionsAllowed || !sourceConnectionsAllowed || !entitiesAllowed || !syncsAllowed || isCheckingUsage)
+                          ? "opacity-50 cursor-not-allowed text-muted-foreground border-border"
+                          : "text-primary hover:bg-primary/15 border-primary/60 hover:text-primary font-medium transition-all duration-200"
+                      )}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Create collection
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {(!collectionsAllowed || !sourceConnectionsAllowed || !entitiesAllowed || !syncsAllowed) && (
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-xs">
+                      {!collectionsAllowed && usageCheckDetails.collections?.reason === 'usage_limit_exceeded' ? (
+                        <>
+                          Collection limit reached.{' '}
+                          <a
+                            href="/organization/settings?tab=billing"
+                            className="underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Upgrade your plan
+                          </a>
+                          {' '}to create more collections.
+                        </>
+                      ) : !sourceConnectionsAllowed && usageCheckDetails.source_connections?.reason === 'usage_limit_exceeded' ? (
+                        <>
+                          Source connection limit reached.{' '}
+                          <a
+                            href="/organization/settings?tab=billing"
+                            className="underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Upgrade your plan
+                          </a>
+                          {' '}for more connections.
+                        </>
+                      ) : !entitiesAllowed && usageCheckDetails.entities?.reason === 'usage_limit_exceeded' ? (
+                        <>
+                          Entity processing limit reached.{' '}
+                          <a
+                            href="/organization/settings?tab=billing"
+                            className="underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Upgrade your plan
+                          </a>
+                          {' '}to process more data.
+                        </>
+                      ) : !syncsAllowed && usageCheckDetails.syncs?.reason === 'usage_limit_exceeded' ? (
+                        <>
+                          Sync limit reached.{' '}
+                          <a
+                            href="/organization/settings?tab=billing"
+                            className="underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            Upgrade your plan
+                          </a>
+                          {' '}for more syncs.
+                        </>
+                      ) : (
+                        'Unable to create collection at this time.'
+                      )}
+                    </p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           </div>
 
           {/* Home Button */}
@@ -306,7 +463,7 @@ const DashboardLayout = () => {
         <UserProfileDropdown />
       </div>
     </div>
-  ), [resolvedTheme, handleCreateCollection, isDashboardActive, isApiKeysActive, isAuthProvidersActive, isWhiteLabelActive, currentOrganization?.id]);
+  ), [resolvedTheme, handleCreateCollection, isDashboardActive, isApiKeysActive, isAuthProvidersActive, isWhiteLabelActive, currentOrganization?.id, collectionsAllowed, sourceConnectionsAllowed, entitiesAllowed, syncsAllowed, isCheckingUsage, usageCheckDetails]);
 
   // Main component render
   return (
@@ -342,14 +499,36 @@ const DashboardLayout = () => {
               <header className={`h-16 sticky top-0 pr-2 backdrop-blur-sm z-10 ${resolvedTheme === 'dark' ? 'bg-background/80' : 'bg-background/95'} border-b border-border/30`}>
                 <div className="flex justify-end items-center h-full px-6">
                   <nav className="flex items-center space-x-4">
+                    {/* GitHub icon */}
+                    <a
+                      href="https://github.com/airweave-ai/airweave"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center hover:bg-black/[0.04] dark:hover:bg-white/[0.04] h-8 w-8 rounded-full transition-colors duration-150 ease-out"
+                    >
+                      <Github size={20} className="text-muted-foreground" />
+                    </a>
+
+
+
                     {/* Discord icon */}
                     <a
                       href="https://discord.com/invite/484HY9Ehxt"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center hover:bg-background-alpha-40 h-8 w-8 rounded-lg transition-all duration-200"
+                      className="flex items-center justify-center hover:bg-black/[0.04] dark:hover:bg-white/[0.04] h-8 w-8 rounded-full transition-colors duration-150 ease-out"
                     >
                       <DiscordIcon size={20} />
+                    </a>
+
+                    {/* Docs icon */}
+                    <a
+                      href="https://docs.airweave.ai/welcome"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center hover:bg-black/[0.04] dark:hover:bg-white/[0.04] h-8 w-8 rounded-full transition-colors duration-150 ease-out"
+                    >
+                      <FileText size={20} className="text-muted-foreground" />
                     </a>
 
                     {/* Get a demo button */}
@@ -362,7 +541,7 @@ const DashboardLayout = () => {
                         variant="outline"
                         className="hidden md:flex border-primary/60 border-[1px] text-primary/90 hover:bg-primary/10 hover:text-foreground/65 h-9 px-4 text-sm rounded-lg transition-all duration-200 hover:shadow-sm"
                       >
-                        Get a demo
+                        Talk to a Founder
                       </Button>
                     </a>
 
@@ -414,24 +593,48 @@ const DashboardLayout = () => {
                 </div>
               </header>
 
-              <div className={cn(
-                "h-[calc(100%-4rem)]",
-                isNonScrollable ? "overflow-hidden" : "pb-8"
-              )}>
-                {location.pathname === "/api-keys" ? (
-                  <div className="container pb-8 pt-8">
-                    <div className="flex items-center gap-2 mb-8">
-                      <Key className="h-8 w-8 text-primary" />
-                      <h1 className="text-3xl font-bold">API Keys</h1>
+              {location.pathname.startsWith('/billing') ? (
+                // Don't wrap billing pages with BillingGuard to avoid infinite loops
+                <div className={cn(
+                  "h-[calc(100%-4rem)]",
+                  isNonScrollable ? "overflow-hidden" : "pb-8"
+                )}>
+                  {location.pathname === "/api-keys" ? (
+                    <div className="container pb-8 pt-8">
+                      <div className="flex items-center gap-2 mb-8">
+                        <Key className="h-6 w-6" />
+                        <h1 className="text-2xl font-semibold">API Keys</h1>
+                      </div>
+                      <div className="max-w-4xl">
+                        <APIKeysSettings />
+                      </div>
                     </div>
-                    <div className="max-w-4xl">
-                      <APIKeysSettings />
-                    </div>
+                  ) : (
+                    <Outlet />
+                  )}
+                </div>
+              ) : (
+                <BillingGuard>
+                  <div className={cn(
+                    "h-[calc(100%-4rem)]",
+                    isNonScrollable ? "overflow-hidden" : "pb-8"
+                  )}>
+                    {location.pathname === "/api-keys" ? (
+                      <div className="container pb-8 pt-8">
+                        <div className="flex items-center gap-2 mb-8">
+                          <Key className="h-6 w-6" />
+                          <h1 className="text-2xl font-semibold">API Keys</h1>
+                        </div>
+                        <div className="max-w-4xl">
+                          <APIKeysSettings />
+                        </div>
+                      </div>
+                    ) : (
+                      <Outlet />
+                    )}
                   </div>
-                ) : (
-                  <Outlet />
-                )}
-              </div>
+                </BillingGuard>
+              )}
             </div>
           </div>
         </div>
@@ -444,7 +647,6 @@ const DashboardLayout = () => {
         mode="create-collection"
         dialogId="dashboard-layout-create-collection"
         onComplete={handleCreateCollectionComplete}
-        errorData={errorData}
       />
     </GradientBackground>
   );

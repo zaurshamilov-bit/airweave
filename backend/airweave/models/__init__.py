@@ -2,6 +2,7 @@
 
 from .api_key import APIKey
 from .auth_provider import AuthProvider
+from .billing_period import BillingPeriod
 from .collection import Collection
 from .connection import Connection
 from .dag import DagEdge, DagNode, SyncDag
@@ -12,6 +13,7 @@ from .entity_definition import EntityDefinition
 from .entity_relation import EntityRelation
 from .integration_credential import IntegrationCredential
 from .organization import Organization
+from .organization_billing import OrganizationBilling
 from .source import Source
 from .source_connection import SourceConnection
 from .sync import Sync
@@ -19,6 +21,7 @@ from .sync_connection import SyncConnection
 from .sync_cursor import SyncCursor
 from .sync_job import SyncJob
 from .transformer import Transformer
+from .usage import Usage
 from .user import User
 from .user_organization import UserOrganization
 from .white_label import WhiteLabel
@@ -26,6 +29,7 @@ from .white_label import WhiteLabel
 __all__ = [
     "APIKey",
     "AuthProvider",
+    "BillingPeriod",
     "Collection",
     "Entity",
     "Connection",
@@ -37,6 +41,7 @@ __all__ = [
     "EntityRelation",
     "IntegrationCredential",
     "Organization",
+    "OrganizationBilling",
     "Source",
     "SourceConnection",
     "Sync",
@@ -45,6 +50,7 @@ __all__ = [
     "SyncDag",
     "SyncJob",
     "Transformer",
+    "Usage",
     "User",
     "UserOrganization",
     "WhiteLabel",

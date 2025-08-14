@@ -1,5 +1,5 @@
 ---
-description: Useful if trying to understand backend or editing something in the backend.
+globs: **/backend/**
 alwaysApply: false
 ---
 # Airweave Backend Architecture
@@ -19,7 +19,7 @@ alwaysApply: false
 ### Data Access Layer
 - **CRUD Modules** (`crud/`): Database operations for each entity
 - **Unit of Work**: Transaction management with atomic operations
-- **Database Session**: Async SQLAlchemy session management
+- **Database Session**: Async SQLAlchemy session management. This extra care must be applied with lazy objects and sessions.
 
 ### Domain Layer
 - **Models** (`models/`): Database models (SQLAlchemy ORM)
@@ -74,6 +74,12 @@ If necessary (like editing ), refer [sync-architecture.mdc](mdc:.cursor/rules/sy
 - Background processing with Redis workers (upcoming)
 
 ### API Convention
-- RESTful endpoints in `api/v1/ndpoints/` -> the version is not part of the endpoint. It's just host.com/{endpoint}!
+- RESTful endpoints in `api/v1/endpoints/` -> the version is not part of the endpoint. It's just host.com/{endpoint}!
 - Consistent response structures
 - One router per resource type
+- Logger injected via `ctx` dependency for contextual logging
+
+
+### Logging convention
+- Stick to log level standards
+- Always try to use logger from ctx (in case of API) or sync_context (if during sync)

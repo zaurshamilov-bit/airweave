@@ -40,6 +40,17 @@ export const setTokenProvider = (provider: TokenProvider) => {
 
   // Try to process any queued requests when provider changes
   processQueue();
+
+  // Set up a periodic check to process queue when auth becomes ready
+  const checkInterval = setInterval(() => {
+    if (provider.isReady && provider.isReady() && requestQueue.length > 0) {
+      processQueue();
+      clearInterval(checkInterval);
+    }
+  }, 100);
+
+  // Clear interval after 10 seconds to prevent memory leak
+  setTimeout(() => clearInterval(checkInterval), 10000);
 };
 
 // Process the request queue

@@ -8,10 +8,8 @@ from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from airweave.core.datetime_utils import utc_now_naive
-from airweave.core.logging import LoggerConfigurator
+from airweave.core.logging import ContextualLogger
 from airweave.platform.storage.storage_client import StorageClient
-
-logger = LoggerConfigurator.configure_logger(__name__, dimensions={"component": "storage_manager"})
 
 
 class StorageManager:
@@ -48,10 +46,13 @@ class StorageManager:
         """Get blob name for metadata."""
         return f"{sync_id}/{entity_id}.metadata.json"
 
-    async def check_file_exists(self, sync_id: UUID, entity_id: str) -> bool:
+    async def check_file_exists(
+        self, logger: ContextualLogger, sync_id: UUID, entity_id: str
+    ) -> bool:
         """Check if a file exists in storage.
 
         Args:
+            logger: The logger to use
             sync_id: Sync ID
             entity_id: Entity ID
 
@@ -69,10 +70,11 @@ class StorageManager:
 
         return exists
 
-    async def is_entity_fully_processed(self, cache_key: str) -> bool:
+    async def is_entity_fully_processed(self, logger: ContextualLogger, cache_key: str) -> bool:
         """Check if an entity has been fully processed (including chunking).
 
         Args:
+            logger: The logger to use
             cache_key: Format "sync_id/entity_id"
 
         Returns:
@@ -87,7 +89,9 @@ class StorageManager:
             sync_id, entity_id = parts[0], parts[1]
             metadata_blob = self._get_metadata_blob_name(UUID(sync_id), entity_id)
 
-            metadata_bytes = await self.client.download_file(self.metadata_container, metadata_blob)
+            metadata_bytes = await self.client.download_file(
+                logger, self.metadata_container, metadata_blob
+            )
 
             if metadata_bytes:
                 metadata = json.loads(metadata_bytes.decode("utf-8"))
@@ -98,10 +102,13 @@ class StorageManager:
 
         return False
 
-    async def store_file_entity(self, entity: Any, content: BinaryIO) -> Any:
+    async def store_file_entity(
+        self, logger: ContextualLogger, entity: Any, content: BinaryIO
+    ) -> Any:
         """Store a file entity in persistent storage.
 
         Args:
+            logger: The logger to use
             entity: FileEntity to store
             content: File content as binary stream
 
@@ -144,7 +151,7 @@ class StorageManager:
                 "fully_processed": False,  # Will be updated after chunking
             }
 
-            await self._store_metadata(entity.sync_id, entity.entity_id, metadata)
+            await self._store_metadata(logger, entity.sync_id, entity.entity_id, metadata)
 
             logger.info(
                 "File stored successfully",
@@ -159,20 +166,23 @@ class StorageManager:
         return entity
 
     async def _store_metadata(
-        self, sync_id: UUID, entity_id: str, metadata: Dict[str, Any]
+        self, logger: ContextualLogger, sync_id: UUID, entity_id: str, metadata: Dict[str, Any]
     ) -> None:
         """Store metadata for a file."""
         metadata_blob = self._get_metadata_blob_name(sync_id, entity_id)
         metadata_bytes = json.dumps(metadata).encode("utf-8")
 
         await self.client.upload_file(
-            self.metadata_container, metadata_blob, io.BytesIO(metadata_bytes)
+            logger, self.metadata_container, metadata_blob, io.BytesIO(metadata_bytes)
         )
 
-    async def mark_entity_processed(self, sync_id: UUID, entity_id: str, chunk_count: int) -> None:
+    async def mark_entity_processed(
+        self, logger: ContextualLogger, sync_id: UUID, entity_id: str, chunk_count: int
+    ) -> None:
         """Mark an entity as fully processed after chunking.
 
         Args:
+            logger: The logger to use
             sync_id: Sync ID
             entity_id: Entity ID
             chunk_count: Number of chunks created
@@ -180,7 +190,9 @@ class StorageManager:
         metadata_blob = self._get_metadata_blob_name(sync_id, entity_id)
 
         # Get existing metadata
-        metadata_bytes = await self.client.download_file(self.metadata_container, metadata_blob)
+        metadata_bytes = await self.client.download_file(
+            logger, self.metadata_container, metadata_blob
+        )
 
         if metadata_bytes:
             metadata = json.loads(metadata_bytes.decode("utf-8"))
@@ -193,7 +205,7 @@ class StorageManager:
             )
 
             # Update metadata
-            await self._store_metadata(sync_id, entity_id, metadata)
+            await self._store_metadata(logger, sync_id, entity_id, metadata)
 
             logger.info(
                 "Marked entity as processed",
@@ -201,7 +213,7 @@ class StorageManager:
             )
 
     async def get_cached_file_path(
-        self, sync_id: UUID, entity_id: str, file_name: str
+        self, logger: ContextualLogger, sync_id: UUID, entity_id: str, file_name: str
     ) -> Optional[str]:
         """Get or create a local cache path for a file.
 
@@ -209,6 +221,7 @@ class StorageManager:
         to a local cache if needed for processing.
 
         Args:
+            logger: The logger to use
             sync_id: Sync ID
             entity_id: Entity ID
             file_name: Original file name
@@ -243,7 +256,7 @@ class StorageManager:
             extra={"sync_id": str(sync_id), "entity_id": entity_id, "blob_name": blob_name},
         )
 
-        content = await self.client.download_file(self.container_name, blob_name)
+        content = await self.client.download_file(logger, self.container_name, blob_name)
         if content:
             with open(cache_path, "wb") as f:
                 f.write(content)
@@ -251,10 +264,11 @@ class StorageManager:
 
         return None
 
-    async def cleanup_temp_file(self, file_path: str) -> None:
+    async def cleanup_temp_file(self, logger: ContextualLogger, file_path: str) -> None:
         """Clean up a temporary file after processing.
 
         Args:
+            logger: The logger to use
             file_path: Path to the temporary file
         """
         try:
@@ -300,10 +314,11 @@ class StorageManager:
 
         return False
 
-    async def check_ctti_file_exists(self, entity_id: str) -> bool:
+    async def check_ctti_file_exists(self, logger: ContextualLogger, entity_id: str) -> bool:
         """Check if a CTTI file exists in the global aactmarkdowns container.
 
         Args:
+            logger: The logger to use
             entity_id: Entity ID (will be used as filename)
 
         Returns:
@@ -326,12 +341,15 @@ class StorageManager:
 
         return exists
 
-    async def store_ctti_file(self, entity: Any, content: BinaryIO) -> Any:
+    async def store_ctti_file(
+        self, logger: ContextualLogger, entity: Any, content: BinaryIO
+    ) -> Any:
         """Store a CTTI file in the global aactmarkdowns container.
 
         This method stores files without sync_id organization for global deduplication.
 
         Args:
+            logger: The logger to use
             entity: FileEntity to store (must be from CTTI source)
             content: File content as binary stream
 
@@ -398,22 +416,26 @@ class StorageManager:
 
         return entity
 
-    async def is_ctti_entity_processed(self, entity_id: str) -> bool:
+    async def is_ctti_entity_processed(self, logger: ContextualLogger, entity_id: str) -> bool:
         """Check if a CTTI entity has been fully processed (globally).
 
         Args:
+            logger: The logger to use
             entity_id: Entity ID to check
 
         Returns:
             True if entity was fully processed by any sync
         """
         # For CTTI, just check if the file exists in the global container
-        return await self.check_ctti_file_exists(entity_id)
+        return await self.check_ctti_file_exists(logger, entity_id)
 
-    async def get_ctti_file_content(self, entity_id: str) -> Optional[str]:
+    async def get_ctti_file_content(
+        self, logger: ContextualLogger, entity_id: str
+    ) -> Optional[str]:
         """Retrieve CTTI file content from global storage.
 
         Args:
+            logger: The logger to use
             entity_id: Entity ID to retrieve
 
         Returns:
@@ -432,7 +454,7 @@ class StorageManager:
         )
 
         # Download the file content
-        content_bytes = await self.client.download_file("aactmarkdowns", safe_filename)
+        content_bytes = await self.client.download_file(logger, "aactmarkdowns", safe_filename)
 
         if content_bytes:
             # Decode markdown content
@@ -457,6 +479,7 @@ class StorageManager:
 
     async def download_ctti_file(
         self,
+        logger: ContextualLogger,
         entity_id: str,
         output_path: Optional[str] = None,
         create_dirs: bool = True,
@@ -467,6 +490,7 @@ class StorageManager:
         'aactmarkdowns' container in Azure storage.
 
         Args:
+            logger: The logger to use
             entity_id: The CTTI entity ID (e.g., "CTTI:study:NCT00000001")
             output_path: Optional path to save the file. If not provided, returns content only.
                         Can be a directory (file will be named after entity) or full file path.
@@ -492,7 +516,7 @@ class StorageManager:
 
         try:
             # Check if file exists first
-            if not await self.check_ctti_file_exists(entity_id):
+            if not await self.check_ctti_file_exists(logger, entity_id):
                 logger.warning(
                     "CTTI file not found in storage",
                     extra={
@@ -503,7 +527,7 @@ class StorageManager:
                 return None, None
 
             # Retrieve content from storage
-            content = await self.get_ctti_file_content(entity_id)
+            content = await self.get_ctti_file_content(logger, entity_id)
 
             if content is None:
                 logger.error("Failed to retrieve CTTI file content", extra={"entity_id": entity_id})
@@ -556,6 +580,7 @@ class StorageManager:
 
     async def download_ctti_files_batch(
         self,
+        logger: ContextualLogger,
         entity_ids: List[str],
         output_dir: Optional[str] = None,
         create_dirs: bool = True,
@@ -564,6 +589,7 @@ class StorageManager:
         """Download multiple CTTI files in batch.
 
         Args:
+            logger: The logger to use
             entity_ids: List of CTTI entity IDs to download
             output_dir: Optional directory to save files. If not provided, returns content only.
             create_dirs: Whether to create the output directory if it doesn't exist
@@ -583,7 +609,7 @@ class StorageManager:
         for entity_id in entity_ids:
             try:
                 content, file_path = await self.download_ctti_file(
-                    entity_id, output_dir, create_dirs=create_dirs
+                    logger, entity_id, output_dir, create_dirs=create_dirs
                 )
                 results[entity_id] = (content, file_path)
 

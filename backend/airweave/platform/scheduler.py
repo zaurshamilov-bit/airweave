@@ -5,6 +5,7 @@ and triggers them when they are due.
 """
 
 import asyncio
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -13,7 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
-from airweave.core.datetime_utils import utc_now, utc_now_naive
+from airweave.api.context import ApiContext
+from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import logger
 from airweave.core.shared_models import SyncJobStatus, SyncStatus
 from airweave.core.source_connection_service import source_connection_service
@@ -21,7 +23,6 @@ from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
 from airweave.db.session import get_db_context
 from airweave.models.sync import Sync
-from airweave.schemas.auth import AuthContext
 
 
 def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
@@ -76,7 +77,7 @@ class PlatformScheduler:
                 return
 
             logger.debug(f"Found {len(syncs)} syncs with cron schedules")
-            now = utc_now()
+            now = utc_now_naive()  # Changed from utc_now() to utc_now_naive()
 
             # Process each sync
             for sync in syncs:
@@ -86,34 +87,37 @@ class PlatformScheduler:
 
                     # Get the last run time (or use epoch if never run)
                     last_run_time = (
-                        ensure_utc(latest_job.created_at)
+                        latest_job.created_at  # Remove ensure_utc - already naive from DB
                         if latest_job
-                        else datetime.fromtimestamp(0, tz=timezone.utc)
+                        else datetime.fromtimestamp(0, tz=timezone.utc).replace(
+                            tzinfo=None
+                        )  # Make it naive
                     )
 
                     # Calculate the next run time
                     cron = croniter(sync.cron_schedule, last_run_time)
-                    next_run = ensure_utc(cron.get_next(datetime))
+                    next_run = cron.get_next(datetime)  # Remove ensure_utc - keep it naive
 
                     # If next run is in the past, calculate from now
                     if next_run < now:
                         cron = croniter(sync.cron_schedule, now)
-                        next_run = ensure_utc(cron.get_next(datetime))
+                        next_run = cron.get_next(datetime)  # Remove ensure_utc - keep it naive
 
                     # Update the sync
-                    auth_context = AuthContext(
-                        organization_id=sync.organization_id, auth_method="system"
+                    ctx = ApiContext(
+                        request_id=str(uuid.uuid4()),
+                        organization_id=sync.organization_id,
+                        auth_method="system",
+                        logger=logger,
                     )
-                    db_sync = await crud.sync.get(
-                        db, id=sync.id, auth_context=auth_context, with_connections=False
-                    )
+                    db_sync = await crud.sync.get(db, id=sync.id, ctx=ctx, with_connections=False)
                     if not db_sync:
                         raise ValueError(f"Could not find sync {sync.id} in database")
                     await crud.sync.update(
                         db=db,
                         db_obj=db_sync,
                         obj_in={"next_scheduled_run": next_run},
-                        auth_context=auth_context,
+                        ctx=ctx,
                     )
                     updated_count += 1
 
@@ -260,7 +264,12 @@ class PlatformScheduler:
         # Get the latest job for this sync
         logger.debug(f"Getting latest job for sync {sync.id}")
         latest_job = await crud.sync_job.get_latest_by_sync_id(db, sync_id=sync.id)
-        auth_context = AuthContext(organization_id=sync.organization_id, auth_method="system")
+        ctx = ApiContext(
+            request_id=str(uuid.uuid4()),
+            organization_id=sync.organization_id,
+            auth_method="system",
+            logger=logger,
+        )
 
         if latest_job:
             logger.debug(
@@ -281,16 +290,16 @@ class PlatformScheduler:
 
         # Get the last run time (or use epoch if never run)
         last_run_time = (
-            ensure_utc(latest_job.created_at)
+            latest_job.created_at  # Remove ensure_utc - already naive from DB
             if latest_job
-            else datetime.fromtimestamp(0, tz=timezone.utc)
+            else datetime.fromtimestamp(0, tz=timezone.utc).replace(tzinfo=None)  # Make it naive
         )
         logger.debug(f"Last run time for sync {sync.id}: {last_run_time.isoformat()}")
 
         # Calculate the next run time
-        now = utc_now()  # Changed from utc_now_naive() to utc_now() for timezone consistency
+        now = utc_now_naive()  # Changed from utc_now() to utc_now_naive() for consistency
         cron = croniter(sync.cron_schedule, last_run_time)
-        next_run = ensure_utc(cron.get_next(datetime))
+        next_run = cron.get_next(datetime)  # Remove ensure_utc - keep it naive
         logger.debug(
             f"Calculated next run for sync {sync.id} at {next_run.isoformat()} "
             f"(cron: {sync.cron_schedule})"
@@ -299,7 +308,8 @@ class PlatformScheduler:
         # If next_scheduled_run is None or different from what we calculated, update it
         if (
             sync.next_scheduled_run is None
-            or abs((ensure_utc(sync.next_scheduled_run) - next_run).total_seconds()) > 1
+            or abs((sync.next_scheduled_run - next_run).total_seconds())
+            > 1  # Remove ensure_utc - already naive
         ):
             logger.debug(
                 f"Updating next_scheduled_run for sync {sync.id} from "
@@ -309,9 +319,7 @@ class PlatformScheduler:
 
             async with get_db_context() as db:
                 # Get the actual SQLAlchemy model object from the database
-                db_sync = await crud.sync.get(
-                    db, id=sync.id, auth_context=auth_context, with_connections=False
-                )
+                db_sync = await crud.sync.get(db, id=sync.id, ctx=ctx, with_connections=False)
                 if not db_sync:
                     logger.error(f"Could not find sync {sync.id} in database, skipping update")
                     return False
@@ -321,7 +329,7 @@ class PlatformScheduler:
                     db=db,
                     db_obj=db_sync,
                     obj_in={"next_scheduled_run": next_run},
-                    auth_context=auth_context,
+                    ctx=ctx,
                 )
                 logger.debug(f"Successfully updated next_scheduled_run for sync {sync.id}")
                 # Update our local copy
@@ -333,9 +341,7 @@ class PlatformScheduler:
             logger.debug(
                 f"Sync {sync.id} ({sync.name}) is due (overdue by {time_diff:.1f}s), triggering"
             )
-            sync_schema = await crud.sync.get(
-                db, id=sync.id, auth_context=auth_context, with_connections=True
-            )
+            sync_schema = await crud.sync.get(db, id=sync.id, ctx=ctx, with_connections=True)
             await self._trigger_sync(db, sync_schema)
 
             return True
@@ -352,23 +358,24 @@ class PlatformScheduler:
         try:
             logger.debug(f"Triggering sync {sync.id} ({sync.name})")
 
-            auth_context = AuthContext(organization_id=sync.organization_id, auth_method="system")
+            ctx = ApiContext(
+                request_id=str(uuid.uuid4()),
+                organization_id=sync.organization_id,
+                auth_method="system",
+                logger=logger,
+            )
 
             # Create a new sync job with unit of work
             logger.debug(f"Creating new sync job for sync {sync.id}")
             async with get_db_context() as db:
                 sync_job_in = schemas.SyncJobCreate(sync_id=sync.id)
                 # Use the system user for creating the job
-                sync_job = await crud.sync_job.create(
-                    db=db, obj_in=sync_job_in, auth_context=auth_context
-                )
+                sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_in, ctx=ctx)
                 logger.debug(f"Created sync job {sync_job.id} for sync {sync.id}")
 
             # Get the DAG for this sync
             logger.debug(f"Getting DAG for sync {sync.id}")
-            sync_dag = await crud.sync_dag.get_by_sync_id(
-                db=db, sync_id=sync.id, auth_context=auth_context
-            )
+            sync_dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync.id, ctx=ctx)
 
             if not sync_dag:
                 logger.error(f"No DAG found for sync {sync.id}, cannot trigger sync")
@@ -379,12 +386,12 @@ class PlatformScheduler:
                 f"{len(sync_dag.nodes)} nodes and {len(sync_dag.edges)} edges"
             )
             source_connection = await crud.source_connection.get_by_sync_id(
-                db=db, sync_id=sync.id, auth_context=auth_context
+                db=db, sync_id=sync.id, ctx=ctx
             )
             collection = await crud.collection.get_by_readable_id(
                 db=db,
                 readable_id=source_connection.readable_collection_id,
-                auth_context=auth_context,
+                ctx=ctx,
             )
 
             # Convert to schemas
@@ -397,7 +404,7 @@ class PlatformScheduler:
                 source_connection_with_auth = await source_connection_service.get_source_connection(
                     db=db,
                     source_connection_id=source_connection.id,
-                    auth_context=auth_context,
+                    ctx=ctx,
                     show_auth_fields=True,  # Important: Need actual auth_fields for temporal
                 )
 
@@ -411,7 +418,7 @@ class PlatformScheduler:
                     sync_dag=sync_dag_schema,
                     collection=collection,
                     source_connection=source_connection_with_auth,
-                    auth_context=auth_context,
+                    ctx=ctx,
                     access_token=None,  # No access token for scheduled syncs
                 )
                 logger.debug(
@@ -433,7 +440,7 @@ class PlatformScheduler:
                         sync_dag_schema,
                         collection,
                         source_connection_schema,
-                        auth_context,
+                        ctx,
                     )
                 )
         except Exception as e:

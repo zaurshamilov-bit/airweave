@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.api.context import ApiContext
 from airweave.core.dag_service import dag_service
 from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.exceptions import (
@@ -26,7 +27,7 @@ from airweave.db.session import get_db_context
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.platform.sync.factory import SyncFactory
 from airweave.platform.temporal.schedule_service import temporal_schedule_service
-from airweave.schemas.auth import AuthContext
+from airweave.schemas import AuthContext
 
 
 class SyncService:
@@ -36,7 +37,7 @@ class SyncService:
         self,
         db: AsyncSession,
         sync: schemas.SyncCreate,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         uow: UnitOfWork,
     ) -> schemas.Sync:
         """Create a new sync.
@@ -49,7 +50,7 @@ class SyncService:
         ----
             db (AsyncSession): The database session.
             sync (schemas.SyncCreate): The sync to create.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             uow (UnitOfWork): The unit of work.
 
         Returns:
@@ -59,13 +60,11 @@ class SyncService:
         sync = await crud.sync.create(
             db=db,
             obj_in=sync,
-            auth_context=auth_context,
+            ctx=ctx,
             uow=uow,
         )
         await uow.session.flush()
-        await dag_service.create_initial_dag(
-            db=db, sync_id=sync.id, auth_context=auth_context, uow=uow
-        )
+        await dag_service.create_initial_dag(db=db, sync_id=sync.id, ctx=ctx, uow=uow)
         return sync
 
     async def run(
@@ -75,7 +74,7 @@ class SyncService:
         dag: schemas.SyncDag,
         collection: schemas.Collection,
         source_connection: schemas.Connection,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         access_token: Optional[str] = None,
     ) -> schemas.Sync:
         """Run a sync.
@@ -87,7 +86,7 @@ class SyncService:
             dag (schemas.SyncDag): The DAG to run.
             collection (schemas.Collection): The collection to sync.
             source_connection (schemas.Connection): The source connection to sync.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             access_token (Optional[str]): Optional access token to use
                 instead of stored credentials.
 
@@ -105,7 +104,7 @@ class SyncService:
                     dag=dag,
                     collection=collection,
                     source_connection=source_connection,
-                    auth_context=auth_context,
+                    ctx=ctx,
                     access_token=access_token,
                 )
         except Exception as e:
@@ -114,7 +113,7 @@ class SyncService:
             await sync_job_service.update_status(
                 sync_job_id=sync_job.id,
                 status=SyncJobStatus.FAILED,
-                auth_context=auth_context,
+                ctx=ctx,
                 error=str(e),
                 failed_at=utc_now_naive(),
             )
@@ -126,7 +125,7 @@ class SyncService:
     async def list_syncs(
         self,
         db: AsyncSession,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         skip: int = 0,
         limit: int = 100,
         with_source_connection: bool = False,
@@ -136,7 +135,7 @@ class SyncService:
         Args:
         ----
             db (AsyncSession): The database session.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             skip (int): The number of syncs to skip.
             limit (int): The number of syncs to return.
             with_source_connection (bool): Whether to include source connections.
@@ -146,20 +145,16 @@ class SyncService:
             Union[List[schemas.Sync], List[schemas.SyncWithSourceConnection]]: A list of syncs.
         """
         if with_source_connection:
-            syncs = await crud.sync.get_all_syncs_join_with_source_connection(
-                db=db, auth_context=auth_context
-            )
+            syncs = await crud.sync.get_all_syncs_join_with_source_connection(db=db, ctx=ctx)
         else:
-            syncs = await crud.sync.get_multi(
-                db=db, auth_context=auth_context, skip=skip, limit=limit
-            )
+            syncs = await crud.sync.get_multi(db=db, ctx=ctx, skip=skip, limit=limit)
         return syncs
 
     async def get_sync(
         self,
         db: AsyncSession,
         sync_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         with_connections: bool = False,
     ) -> schemas.Sync:
         """Get a specific sync by ID.
@@ -168,7 +163,7 @@ class SyncService:
         ----
             db (AsyncSession): The database session.
             sync_id (UUID): The ID of the sync to get.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             with_connections (bool): Whether to include connections.
 
         Returns:
@@ -179,9 +174,7 @@ class SyncService:
         ------
             SyncNotFoundException: If the sync is not found.
         """
-        sync = await crud.sync.get(
-            db=db, id=sync_id, auth_context=auth_context, with_connections=with_connections
-        )
+        sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=with_connections)
         if not sync:
             raise SyncNotFoundException(f"Sync {sync_id} not found")
         return sync
@@ -190,7 +183,7 @@ class SyncService:
         self,
         db: AsyncSession,
         sync_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         delete_data: bool = False,
         uow: Optional[UnitOfWork] = None,
     ) -> schemas.Sync:
@@ -200,7 +193,7 @@ class SyncService:
         ----
             db (AsyncSession): The database session.
             sync_id (UUID): The ID of the sync to delete.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             delete_data (bool): Whether to delete the data.
             uow (Optional[UnitOfWork]): The unit of work.
 
@@ -212,7 +205,7 @@ class SyncService:
         ------
             SyncNotFoundException: If the sync is not found.
         """
-        sync = await crud.sync.get(db=db, id=sync_id, auth_context=auth_context)
+        sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx)
         if not sync:
             raise SyncNotFoundException("Sync not found")
 
@@ -220,12 +213,12 @@ class SyncService:
             # TODO: Implement data deletion logic, should be part of destination interface
             pass
 
-        return await crud.sync.remove(db=db, id=sync_id, auth_context=auth_context, uow=uow)
+        return await crud.sync.remove(db=db, id=sync_id, ctx=ctx, uow=uow)
 
     async def _create_and_run_sync_internal(
         self,
         sync_in: schemas.SyncCreate,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         uow: UnitOfWork,
     ) -> tuple[schemas.Sync, Optional[schemas.SyncJob]]:
         """Internal helper method for creating and running a sync.
@@ -233,16 +226,14 @@ class SyncService:
         Args:
         ----
             sync_in (schemas.SyncCreate): The sync to create.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             uow (UnitOfWork): The unit of work to use.
 
         Returns:
         -------
             tuple[schemas.Sync, Optional[schemas.SyncJob]]: The created sync and job if run.
         """
-        sync = await self.create(
-            db=uow.session, sync=sync_in.to_base(), auth_context=auth_context, uow=uow
-        )
+        sync = await self.create(db=uow.session, sync=sync_in.to_base(), ctx=ctx, uow=uow)
         await uow.session.flush()
         sync_schema = schemas.Sync.model_validate(sync)
 
@@ -250,7 +241,7 @@ class SyncService:
         if sync_in.run_immediately:
             sync_job_create = schemas.SyncJobCreate(sync_id=sync_schema.id)
             sync_job = await crud.sync_job.create(
-                db=uow.session, obj_in=sync_job_create, auth_context=auth_context, uow=uow
+                db=uow.session, obj_in=sync_job_create, ctx=ctx, uow=uow
             )
             await uow.session.flush()
             await uow.session.refresh(sync_job)
@@ -262,7 +253,7 @@ class SyncService:
         self,
         db: AsyncSession,
         sync_in: schemas.SyncCreate,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         uow: Optional[UnitOfWork] = None,
     ) -> tuple[schemas.Sync, Optional[schemas.SyncJob]]:
         """Create a new sync and optionally run it immediately.
@@ -275,7 +266,7 @@ class SyncService:
         ----
             db (AsyncSession): The database session.
             sync_in (schemas.SyncCreate): The sync to create.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             uow (Optional[UnitOfWork]): Existing unit of work if provided, otherwise create new one.
 
         Returns:
@@ -284,11 +275,11 @@ class SyncService:
         """
         if uow is not None:
             # Use the provided UnitOfWork without managing its lifecycle
-            return await self._create_and_run_sync_internal(sync_in, auth_context, uow)
+            return await self._create_and_run_sync_internal(sync_in, ctx, uow)
         else:
             # Create and manage our own UnitOfWork
             async with UnitOfWork(db) as local_uow:
-                result = await self._create_and_run_sync_internal(sync_in, auth_context, local_uow)
+                result = await self._create_and_run_sync_internal(sync_in, ctx, local_uow)
                 await local_uow.commit()
                 return result
 
@@ -296,7 +287,7 @@ class SyncService:
         self,
         db: AsyncSession,
         sync_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> tuple[schemas.Sync, schemas.SyncJob, schemas.SyncDag]:
         """Trigger a sync run.
 
@@ -308,7 +299,7 @@ class SyncService:
         ----
             db (AsyncSession): The database session.
             sync_id (UUID): The ID of the sync to run.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
 
         Returns:
         -------
@@ -318,22 +309,18 @@ class SyncService:
         ------
             SyncNotFoundException: If the sync is not found.
         """
-        sync = await crud.sync.get(
-            db=db, id=sync_id, auth_context=auth_context, with_connections=True
-        )
+        sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=True)
         if not sync:
             raise SyncNotFoundException("Sync not found")
 
         sync_schema = schemas.Sync.model_validate(sync)
 
         sync_job_in = schemas.SyncJobCreate(sync_id=sync_id)
-        sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_in, auth_context=auth_context)
+        sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_in, ctx=ctx)
         await db.flush()
         sync_job_schema = schemas.SyncJob.model_validate(sync_job)
 
-        sync_dag = await crud.sync_dag.get_by_sync_id(
-            db=db, sync_id=sync_id, auth_context=auth_context
-        )
+        sync_dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, ctx=ctx)
         sync_dag_schema = schemas.SyncDag.model_validate(sync_dag)
 
         return sync_schema, sync_job_schema, sync_dag_schema
@@ -341,7 +328,7 @@ class SyncService:
     async def list_sync_jobs(
         self,
         db: AsyncSession,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         sync_id: Optional[UUID] = None,
         skip: int = 0,
         limit: int = 100,
@@ -352,7 +339,7 @@ class SyncService:
         Args:
         ----
             db (AsyncSession): The database session.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             sync_id (Optional[UUID]): The specific sync ID, if any.
             skip (int): The number of jobs to skip.
             limit (int): The number of jobs to return.
@@ -367,20 +354,20 @@ class SyncService:
             SyncNotFoundException: If the sync is not found (when sync_id is provided).
         """
         if sync_id:
-            sync = await crud.sync.get(db=db, id=sync_id, auth_context=auth_context)
+            sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx)
             if not sync:
                 raise SyncNotFoundException("Sync not found")
             return await crud.sync_job.get_all_by_sync_id(db=db, sync_id=sync_id)
         else:
             return await crud.sync_job.get_all_jobs(
-                db=db, skip=skip, limit=limit, auth_context=auth_context, status=status
+                db=db, skip=skip, limit=limit, ctx=ctx, status=status
             )
 
     async def get_sync_job(
         self,
         db: AsyncSession,
         job_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
         sync_id: Optional[UUID] = None,
     ) -> schemas.SyncJob:
         """Get a specific sync job.
@@ -389,7 +376,7 @@ class SyncService:
         ----
             db (AsyncSession): The database session.
             job_id (UUID): The ID of the job to get.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
             sync_id (Optional[UUID]): The sync ID for validation.
 
         Returns:
@@ -400,7 +387,7 @@ class SyncService:
         ------
             SyncJobNotFoundException: If the job is not found or doesn't match the sync.
         """
-        sync_job = await crud.sync_job.get(db=db, id=job_id, auth_context=auth_context)
+        sync_job = await crud.sync_job.get(db=db, id=job_id, ctx=ctx)
         if not sync_job or (sync_id and sync_job.sync_id != sync_id):
             raise SyncJobNotFoundException("Sync job not found")
         return sync_job
@@ -409,7 +396,7 @@ class SyncService:
         self,
         db: AsyncSession,
         sync_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> schemas.SyncDag:
         """Get the DAG for a specific sync.
 
@@ -417,7 +404,7 @@ class SyncService:
         ----
             db (AsyncSession): The database session.
             sync_id (UUID): The ID of the sync.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
 
         Returns:
         -------
@@ -427,7 +414,7 @@ class SyncService:
         ------
             SyncDagNotFoundException: If the DAG is not found.
         """
-        dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, auth_context=auth_context)
+        dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, ctx=ctx)
         if not dag:
             raise SyncDagNotFoundException(f"DAG for sync {sync_id} not found")
         return dag
@@ -437,7 +424,7 @@ class SyncService:
         db: AsyncSession,
         sync_id: UUID,
         sync_update: schemas.SyncUpdate,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> schemas.Sync:
         """Update a sync configuration.
 
@@ -446,7 +433,7 @@ class SyncService:
             db (AsyncSession): The database session.
             sync_id (UUID): The ID of the sync to update.
             sync_update (schemas.SyncUpdate): The sync update data.
-            auth_context (AuthContext): The authentication context.
+            ctx (ApiContext): The API context.
 
         Returns:
         -------
@@ -456,16 +443,12 @@ class SyncService:
         ------
             SyncNotFoundException: If the sync is not found.
         """
-        sync = await crud.sync.get(
-            db=db, id=sync_id, auth_context=auth_context, with_connections=False
-        )
+        sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         if not sync:
             raise SyncNotFoundException(f"Sync {sync_id} not found")
 
-        await crud.sync.update(db=db, db_obj=sync, obj_in=sync_update, auth_context=auth_context)
-        updated_sync = await crud.sync.get(
-            db=db, id=sync_id, auth_context=auth_context, with_connections=True
-        )
+        await crud.sync.update(db=db, db_obj=sync, obj_in=sync_update, ctx=ctx)
+        updated_sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=True)
         return updated_sync
 
     async def create_minute_level_schedule(

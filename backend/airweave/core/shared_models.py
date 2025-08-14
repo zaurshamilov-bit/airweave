@@ -54,3 +54,13 @@ class CollectionStatus(str, Enum):
     PARTIAL_ERROR = "PARTIAL ERROR"
     NEEDS_SOURCE = "NEEDS SOURCE"
     ERROR = "ERROR"
+
+
+class ActionType(str, Enum):
+    """Action type enum."""
+
+    SYNCS = "syncs"
+    ENTITIES = "entities"
+    QUERIES = "queries"
+    COLLECTIONS = "collections"
+    SOURCE_CONNECTIONS = "source_connections"

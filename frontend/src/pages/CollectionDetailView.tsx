@@ -21,16 +21,23 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import SourceConnectionDetailView from "@/components/collection/SourceConnectionDetailView";
-import { emitCollectionEvent, COLLECTION_DELETED } from "@/lib/events";
+import { emitCollectionEvent, onCollectionEvent, COLLECTION_DELETED, SOURCE_CONNECTION_UPDATED } from "@/lib/events";
 import { QueryToolAndLiveDoc } from '@/components/collection/QueryToolAndLiveDoc';
 import { DialogFlow } from '@/components/shared';
 import { protectedPaths } from "@/constants/paths";
 import { useSyncStateStore } from "@/stores/syncStateStore";
 import { syncStorageService } from "@/services/syncStorageService";
 import { deriveSyncStatus, getSyncStatusColorClass } from "@/utils/syncStatus";
+import { redirectWithError } from "@/lib/error-utils";
+import { ActionCheckResponse } from "@/types";
 
-// DeleteCollectionDialog component
 interface DeleteCollectionDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -60,7 +67,24 @@ const DeleteCollectionDialog = ({
                 <AlertDialogHeader>
                     <AlertDialogTitle className="text-foreground">Delete Collection</AlertDialogTitle>
                     <AlertDialogDescription className={isDark ? "text-gray-300" : "text-foreground"}>
-                        <p className="mb-4">This will permanently delete this collection and all its source connections. This action cannot be undone.</p>
+                        <div className="space-y-3">
+                            <p className="font-medium">This action will permanently delete:</p>
+                            <ul className="space-y-2 ml-4">
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>The collection and all its source connections</span>
+                                </li>
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>All synced data from the knowledge base</span>
+                                </li>
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>All sync history and configuration</span>
+                                </li>
+                            </ul>
+                            <p className="text-sm font-semibold text-destructive">This action cannot be undone.</p>
+                        </div>
 
                         <div className="mt-4">
                             <label htmlFor="confirm-delete" className="text-sm font-medium block mb-2">
@@ -172,9 +196,56 @@ const Collections = () => {
     const [isRefreshingAll, setIsRefreshingAll] = useState(false);
     const [refreshingSourceIds, setRefreshingSourceIds] = useState<string[]>([]);
 
+    // Add state for usage limits
+    const [sourceConnectionsAllowed, setSourceConnectionsAllowed] = useState(true);
+    const [sourceConnectionCheckDetails, setSourceConnectionCheckDetails] = useState<ActionCheckResponse | null>(null);
+    const [entitiesAllowed, setEntitiesAllowed] = useState(true);
+    const [entitiesCheckDetails, setEntitiesCheckDetails] = useState<ActionCheckResponse | null>(null);
+    const [syncsAllowed, setSyncsAllowed] = useState(true);
+    const [syncsCheckDetails, setSyncsCheckDetails] = useState<ActionCheckResponse | null>(null);
+    const [isCheckingUsage, setIsCheckingUsage] = useState(true);
+
     /********************************************
      * API AND DATA FETCHING FUNCTIONS
      ********************************************/
+
+    // Check if actions are allowed based on usage limits
+    const checkUsageActions = useCallback(async (syncAmount: number = 1) => {
+        try {
+            // Check all three actions in parallel
+            const [sourceResponse, entitiesResponse, syncsResponse] = await Promise.all([
+                apiClient.get('/usage/check-action?action=source_connections'),
+                apiClient.get('/usage/check-action?action=entities'),
+                apiClient.get(`/usage/check-action?action=syncs&amount=${syncAmount}`)
+            ]);
+
+            if (sourceResponse.ok) {
+                const data: ActionCheckResponse = await sourceResponse.json();
+                setSourceConnectionsAllowed(data.allowed);
+                setSourceConnectionCheckDetails(data);
+            }
+
+            if (entitiesResponse.ok) {
+                const data: ActionCheckResponse = await entitiesResponse.json();
+                setEntitiesAllowed(data.allowed);
+                setEntitiesCheckDetails(data);
+            }
+
+            if (syncsResponse.ok) {
+                const data: ActionCheckResponse = await syncsResponse.json();
+                setSyncsAllowed(data.allowed);
+                setSyncsCheckDetails(data);
+            }
+        } catch (error) {
+            console.error('Failed to check usage actions:', error);
+            // Default to allowed on error to not block users
+            setSourceConnectionsAllowed(true);
+            setEntitiesAllowed(true);
+            setSyncsAllowed(true);
+        } finally {
+            setIsCheckingUsage(false);
+        }
+    }, []);
 
     // Fetch source connections for a collection with detailed sync job status
     const fetchSourceConnections = async (collectionId: string) => {
@@ -318,7 +389,7 @@ const Collections = () => {
         }
 
         try {
-            const response = await apiClient.patch(`/collections/${readable_id}`, { name: newName });
+            const response = await apiClient.put(`/collections/${readable_id}`, null, { name: newName });
             if (!response.ok) throw new Error("Failed to update collection name");
 
             // Update local state after successful API call
@@ -385,6 +456,18 @@ const Collections = () => {
         fetchCollection();
     }, [readable_id]);
 
+    // Initial usage check on mount
+    useEffect(() => {
+        checkUsageActions(1);
+    }, []);
+
+    // Re-check usage limits when source connections change
+    useEffect(() => {
+        if (!isCheckingUsage && sourceConnections.length > 0) {
+            checkUsageActions(sourceConnections.length);
+        }
+    }, [sourceConnections.length, checkUsageActions]);
+
     // Handle collection deletion
     const handleDeleteCollection = async () => {
         if (!readable_id || confirmText !== readable_id) return;
@@ -399,7 +482,7 @@ const Collections = () => {
 
                 toast({
                     title: "Success",
-                    description: "Collection deleted successfully"
+                    description: "Collection and all associated data deleted successfully"
                 });
                 // Navigate back to dashboard after successful deletion
                 navigate(protectedPaths.dashboard);
@@ -438,6 +521,26 @@ const Collections = () => {
         };
     }, [cleanup]);
 
+    // Listen for source connection updates
+    useEffect(() => {
+        const unsubscribe = onCollectionEvent(SOURCE_CONNECTION_UPDATED, (data) => {
+            console.log("Source connection updated:", data);
+
+            // Always refresh the list from server to ensure consistency
+            if (collection?.readable_id) {
+                fetchSourceConnections(collection.readable_id);
+            }
+
+            // If the deleted connection was selected, clear the selection
+            // The fetchSourceConnections will auto-select the first connection if any remain
+            if (data.deleted && selectedConnection?.id === data.id) {
+                setSelectedConnection(null);
+            }
+        });
+
+        return unsubscribe;
+    }, [collection?.readable_id, selectedConnection?.id]);
+
     // Add right before the source connections section in render
     useEffect(() => {
         console.log("Source connections state:", {
@@ -457,9 +560,11 @@ const Collections = () => {
     const handleRefreshAllSources = async () => {
         if (!collection?.readable_id) return;
 
+        let response: Response | undefined;
+
         setIsRefreshingAll(true);
         try {
-            const response = await apiClient.post(`/collections/${collection.readable_id}/refresh_all`);
+            response = await apiClient.post(`/collections/${collection.readable_id}/refresh_all`);
 
             if (response.ok) {
                 const jobs = await response.json();
@@ -486,16 +591,51 @@ const Collections = () => {
                 if (!jobs || jobs.length === 0) {
                     setIsRefreshingAll(false);
                 }
+
+                // Re-check usage limits after refresh
+                await checkUsageActions(sourceConnections.length);
             } else {
                 throw new Error("Failed to refresh sources");
             }
         } catch (error) {
             console.error("Error refreshing sources:", error);
-            toast({
-                title: "Error",
-                description: "Failed to refresh all sources",
-                variant: "destructive"
+
+            let errorMessage = "Failed to refresh all sources";
+            let errorDetails = "";
+
+            // Try to parse error response
+            if (error instanceof Error) {
+                errorMessage = error.message;
+                errorDetails = error.stack || "";
+            }
+
+            // If the error came from an API response, try to get more details
+            try {
+                if (response && !response.ok) {
+                    const errorData = await response.json();
+                    if (errorData.detail) {
+                        errorMessage = errorData.detail;
+                    } else if (errorData.message) {
+                        errorMessage = errorData.message;
+                    } else if (typeof errorData === 'string') {
+                        errorMessage = errorData;
+                    }
+                }
+            } catch (parseError) {
+                console.error("Could not parse error response:", parseError);
+            }
+
+            // Use redirectWithError to show the error in a dialog
+            redirectWithError(navigate, {
+                serviceName: collection?.name || "Collection",
+                sourceShortName: "collection",
+                errorMessage: errorMessage,
+                errorDetails: errorDetails,
+                canRetry: true,
+                dialogId: `refresh-all-${collection?.readable_id}`,
+                timestamp: Date.now()
             });
+
             setIsRefreshingAll(false);
         }
     };
@@ -679,28 +819,96 @@ const Collections = () => {
                     </div>
 
                     <div className="flex justify-end gap-2 mb-0">
-                        <Button
-                            variant="outline"
-                            onClick={() => setShowAddSourceDialog(true)}
-                            className={cn(
-                                "gap-1 text-xs font-medium h-8 px-3",
-                                isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50"
-                            )}
-                        >
-                            <Plus className="h-3.5 w-3.5" />
-                            Add Source
-                        </Button>
-                        <Button
-                            variant="outline"
-                            onClick={handleRefreshAllSources}
-                            className={cn(
-                                "gap-1 text-xs font-medium h-8 px-3",
-                                isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50"
-                            )}
-                        >
-                            <Plug className="h-3.5 w-3.5 mr-1" />
-                            Refresh all sources
-                        </Button>
+                        <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span tabIndex={0}>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setShowAddSourceDialog(true)}
+                                            disabled={!sourceConnectionsAllowed || isCheckingUsage}
+                                            className={cn(
+                                                "gap-1 text-xs font-medium h-8 px-3",
+                                                isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50",
+                                                (!sourceConnectionsAllowed || isCheckingUsage) && "opacity-50 cursor-not-allowed"
+                                            )}
+                                        >
+                                            <Plus className="h-3.5 w-3.5" />
+                                            Add Source
+                                        </Button>
+                                    </span>
+                                </TooltipTrigger>
+                                {!sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'usage_limit_exceeded' && (
+                                    <TooltipContent className="max-w-xs">
+                                        <p className="text-xs">
+                                            Source connection limit reached.{' '}
+                                            <a
+                                                href="/organization/settings?tab=billing"
+                                                className="underline"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                Upgrade your plan
+                                            </a>
+                                            {' '}for more connections.
+                                        </p>
+                                    </TooltipContent>
+                                )}
+                            </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span tabIndex={0}>
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleRefreshAllSources}
+                                            disabled={!entitiesAllowed || !syncsAllowed || isCheckingUsage}
+                                            className={cn(
+                                                "gap-1 text-xs font-medium h-8 px-3",
+                                                isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50",
+                                                (!entitiesAllowed || !syncsAllowed || isCheckingUsage) && "opacity-50 cursor-not-allowed"
+                                            )}
+                                        >
+                                            <Plug className="h-3.5 w-3.5 mr-1" />
+                                            Refresh all sources
+                                        </Button>
+                                    </span>
+                                </TooltipTrigger>
+                                {(!entitiesAllowed || !syncsAllowed) && (
+                                    <TooltipContent className="max-w-xs">
+                                        <p className="text-xs">
+                                            {!entitiesAllowed && entitiesCheckDetails?.reason === 'usage_limit_exceeded' ? (
+                                                <>
+                                                    Entity processing limit reached.{' '}
+                                                    <a
+                                                        href="/organization/settings?tab=billing"
+                                                        className="underline"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        Upgrade your plan
+                                                    </a>
+                                                    {' '}to refresh sources.
+                                                </>
+                                            ) : !syncsAllowed && syncsCheckDetails?.reason === 'usage_limit_exceeded' ? (
+                                                <>
+                                                    Sync limit reached.{' '}
+                                                    <a
+                                                        href="/organization/settings?tab=billing"
+                                                        className="underline"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        Upgrade your plan
+                                                    </a>
+                                                    {' '}for more syncs.
+                                                </>
+                                            ) : (
+                                                'Unable to refresh sources at this time.'
+                                            )}
+                                        </p>
+                                    </TooltipContent>
+                                )}
+                            </Tooltip>
+                        </TooltipProvider>
                     </div>
 
                     {/* Add QueryToolAndLiveDoc when a connection with syncId is selected */}
@@ -761,17 +969,42 @@ const Collections = () => {
                                 isDark ? "border-gray-700 bg-gray-800/20 text-gray-400" : "border-gray-200 bg-white text-muted-foreground"
                             )}>
                                 <p className="mb-2">No source connections found.</p>
-                                <Button
-                                    variant="outline"
-                                    className={cn(
-                                        "mt-2",
-                                        isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50"
-                                    )}
-                                    onClick={() => setShowAddSourceDialog(true)}
-                                >
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Add a source connection
-                                </Button>
+                                <TooltipProvider delayDuration={100}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <span tabIndex={0}>
+                                                <Button
+                                                    variant="outline"
+                                                    className={cn(
+                                                        "mt-2",
+                                                        isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50",
+                                                        (!sourceConnectionsAllowed || isCheckingUsage) && "opacity-50 cursor-not-allowed"
+                                                    )}
+                                                    onClick={() => setShowAddSourceDialog(true)}
+                                                    disabled={!sourceConnectionsAllowed || isCheckingUsage}
+                                                >
+                                                    <Plus className="h-4 w-4 mr-2" />
+                                                    Add a source connection
+                                                </Button>
+                                            </span>
+                                        </TooltipTrigger>
+                                        {!sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'usage_limit_exceeded' && (
+                                            <TooltipContent className="max-w-xs">
+                                                <p className="text-xs">
+                                                    Source connection limit reached.{' '}
+                                                    <a
+                                                        href="/organization/settings?tab=billing"
+                                                        className="underline"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        Upgrade your plan
+                                                    </a>
+                                                    {' '}for more connections.
+                                                </p>
+                                            </TooltipContent>
+                                        )}
+                                    </Tooltip>
+                                </TooltipProvider>
                             </div>
                         )}
                     </div>
@@ -809,10 +1042,12 @@ const Collections = () => {
                                 </div>
                             </div>
                         ) : (
-                            <SourceConnectionDetailView
-                                key={selectedConnection.id}
-                                sourceConnectionId={selectedConnection.id}
-                            />
+                            <div className="mt-10">
+                                <SourceConnectionDetailView
+                                    key={selectedConnection.id}
+                                    sourceConnectionId={selectedConnection.id}
+                                />
+                            </div>
                         )
                     )}
 
@@ -849,6 +1084,9 @@ const Collections = () => {
 
                                 // Reload to get the new source connection in the list
                                 await reloadData();
+
+                                // Re-check source connection limits after creating a new one
+                                await checkUsageActions(sourceConnections.length + 1);
                             }}
                         />
                     )}
