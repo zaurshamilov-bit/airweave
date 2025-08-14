@@ -13,7 +13,7 @@ fi
 if grep -q "^ENCRYPTION_KEY=" .env; then
     echo "Encryption key already exists in .env file, skipping generation."
     echo "Current ENCRYPTION_KEY value:"
-    grep "^ENCRYPTION_KEY=" .env | head -1
+    grep "^ENCRYPTION_KEY=" .env | head -1 | sed 's/=.*/=********/'
 else
     echo "No encryption key found. Generating new encryption key..."
     NEW_KEY=$(openssl rand -base64 32)
