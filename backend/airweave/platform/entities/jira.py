@@ -7,32 +7,43 @@ Airweave's capabilities with minimal complexity.
 from datetime import datetime
 from typing import Optional
 
-from pydantic import Field
-
+from airweave.platform.entities._airweave_field import AirweaveField
 from airweave.platform.entities._base import ChunkEntity
 
 
 class JiraProjectEntity(ChunkEntity):
     """Schema for a Jira Project."""
 
-    project_key: str = Field(..., description="Unique key of the project (e.g., 'PROJ').")
-    name: Optional[str] = Field(None, description="Name of the project.")
-    description: Optional[str] = Field(None, description="Description of the project.")
+    project_key: str = AirweaveField(
+        ..., description="Unique key of the project (e.g., 'PROJ').", embeddable=True
+    )
+    name: Optional[str] = AirweaveField(None, description="Name of the project.", embeddable=True)
+    description: Optional[str] = AirweaveField(
+        None, description="Description of the project.", embeddable=True
+    )
 
 
 class JiraIssueEntity(ChunkEntity):
     """Schema for a Jira Issue."""
 
-    issue_key: str = Field(..., description="Jira key for the issue (e.g. 'PROJ-123').")
-    summary: Optional[str] = Field(None, description="Short summary field of the issue.")
-    description: Optional[str] = Field(None, description="Detailed description of the issue.")
-    status: Optional[str] = Field(None, description="Current workflow status of the issue.")
-    issue_type: Optional[str] = Field(
-        None, description="Type of the issue (bug, task, story, etc.)."
+    issue_key: str = AirweaveField(
+        ..., description="Jira key for the issue (e.g. 'PROJ-123').", embeddable=True
     )
-    created_at: Optional[datetime] = Field(
-        None, description="Timestamp when the issue was created."
+    summary: Optional[str] = AirweaveField(
+        None, description="Short summary field of the issue.", embeddable=True
     )
-    updated_at: Optional[datetime] = Field(
-        None, description="Timestamp when the issue was last updated."
+    description: Optional[str] = AirweaveField(
+        None, description="Detailed description of the issue.", embeddable=True
+    )
+    status: Optional[str] = AirweaveField(
+        None, description="Current workflow status of the issue.", embeddable=True
+    )
+    issue_type: Optional[str] = AirweaveField(
+        None, description="Type of the issue (bug, task, story, etc.).", embeddable=True
+    )
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the issue was created.", is_created_at=True
+    )
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the issue was last updated.", is_updated_at=True
     )

@@ -50,7 +50,7 @@ def AirweaveField(  # noqa: D417
 
     Args:
         default: Default value for the field
-        embeddable: Whether this field should be included in embeddable text generation
+        embeddable: Whether this field should be included in neural embedding
         is_created_at: If True, this field represents the creation timestamp
         is_updated_at: If True, this field represents the update timestamp
         **extra: Any additional metadata to be added to the field
@@ -63,6 +63,7 @@ def AirweaveField(  # noqa: D417
         ...     name: str = AirweaveField(..., description="Name", embeddable=True)
         ...     modified_at: datetime = AirweaveField(None, is_updated_at=True, embeddable=True)
         ...     created: datetime = AirweaveField(None, is_created_at=True)
+        ...     description: str = AirweaveField(..., description="Description", embeddable=True)
     """
     # Build json_schema_extra with Airweave metadata
     airweave_metadata = {}

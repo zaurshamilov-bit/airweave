@@ -54,6 +54,7 @@ class BaseEntity(BaseModel):
     # Set in source connector
     entity_id: str = Field(
         ..., description="ID of the entity this entity represents in the source."
+
     )
     breadcrumbs: list[Breadcrumb] = Field(
         default_factory=list, description="List of breadcrumbs for this entity."
@@ -80,13 +81,14 @@ class FileEntity(BaseEntity):
 An enhanced Pydantic Field with Airweave-specific metadata for entity processing.
 
 **Key Features:**
-1. **Embeddable fields** - Mark fields for inclusion in text generation with `embeddable=True`
+1. **Embeddable fields** - Mark fields for inclusion in neural embedding with `embeddable=True`
 2. **Timestamp harmonization** - Designate creation/update timestamps with `is_created_at=True` or `is_updated_at=True`
 
 **Example:**
 ```python
 name: str = AirweaveField(..., embeddable=True)
 created_at: datetime = AirweaveField(None, is_created_at=True)
+description: str = AirweaveField(.., embeddable=True)
 ```
 
 **Benefits:**
