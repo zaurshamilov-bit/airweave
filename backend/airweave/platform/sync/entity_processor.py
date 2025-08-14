@@ -187,21 +187,21 @@ class EntityProcessor:
             error_message = str(e) if str(e) else "No error details available"
 
             # Log detailed error information
-+                sync_context.logger.warning(
+            sync_context.logger.warning(
                 f"💥 PROCESSOR_ERROR [{entity_context}] Pipeline failed after "
                 f"{pipeline_elapsed:.3f}s: {error_type}: {error_message}"
             )
 
             # For debugging empty errors
             if not str(e):
-                sync_context.logger.warn(
+                sync_context.logger.warning(
                     f"🔍 PROCESSOR_ERROR_DETAILS [{entity_context}] "
                     f"Empty error of type {error_type}, repr: {repr(e)}"
                 )
 
             # Mark as skipped and continue
             await sync_context.progress.increment("skipped", 1)
-            sync_context.logger.warn(
+            sync_context.logger.warning(
                 f"📊 PROCESSOR_SKIP_COUNT [{entity_context}] Marked as skipped due to error"
             )
 
