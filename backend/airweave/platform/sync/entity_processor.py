@@ -438,7 +438,7 @@ class EntityProcessor:
             embed_start = asyncio.get_event_loop().time()
 
             embeddings, sparse_embeddings = await self._get_embeddings(
-                entity_dicts, sync_context, entity_context
+                texts, sync_context, entity_context
             )
 
             embed_elapsed = asyncio.get_event_loop().time() - embed_start
@@ -573,7 +573,7 @@ class EntityProcessor:
         return all_dicts
 
     async def _get_embeddings(
-        self, entity_dicts: List[str], sync_context: SyncContext, entity_context: str
+        self, texts: List[str], sync_context: SyncContext, entity_context: str
     ) -> Tuple[List[List[float]], List[SparseTextEmbedding] | None]:
         """Get embeddings from the embedding model."""
         import asyncio
@@ -588,13 +588,11 @@ class EntityProcessor:
             # Check if the embedding model supports entity_context parameter
             embed_many_signature = inspect.signature(embedding_model.embed_many)
             if "entity_context" in embed_many_signature.parameters:
-                embeddings = await embedding_model.embed_many(
-                    entity_dicts, entity_context=entity_context
-                )
+                embeddings = await embedding_model.embed_many(texts, entity_context=entity_context)
             else:
-                embeddings = await embedding_model.embed_many(entity_dicts)
+                embeddings = await embedding_model.embed_many(texts)
         else:
-            embeddings = await embedding_model.embed_many(entity_dicts)
+            embeddings = await embedding_model.embed_many(texts)
 
         # Some destinations might not have a BM25 index, so we need to check if we need to compute
         # sparse embeddings.
@@ -606,7 +604,7 @@ class EntityProcessor:
 
         if calculate_sparse_embeddings:
             sparse_embedder = sync_context.keyword_indexing_model
-            sparse_embeddings = list(await sparse_embedder.embed_many(entity_dicts))
+            sparse_embeddings = list(await sparse_embedder.embed_many(texts))
         else:
             sparse_embeddings = None
 
@@ -712,9 +710,15 @@ class EntityProcessor:
             )
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
-        # Update system metadata with DB entity ID
+        # Update system metadata with DB entity ID for parent and all processed entities
         if parent_entity.airweave_system_metadata:
             parent_entity.airweave_system_metadata.db_entity_id = new_db_entity.id
+
+        # CRITICAL: Set db_entity_id for all processed entities (chunks)
+        for entity in processed_entities:
+            if entity.airweave_system_metadata:
+                entity.airweave_system_metadata.db_entity_id = new_db_entity.id
+
         sync_context.logger.debug(
             f"💾 INSERT_DB_DONE [{entity_context}] Database entity created in {db_elapsed:.3f}s"
         )
@@ -795,9 +799,15 @@ class EntityProcessor:
                 return
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
-        # Update system metadata with DB entity ID
+        # Update system metadata with DB entity ID for parent and all processed entities
         if parent_entity.airweave_system_metadata:
             parent_entity.airweave_system_metadata.db_entity_id = db_entity.id
+
+        # CRITICAL: Set db_entity_id for all processed entities (chunks)
+        for entity in processed_entities:
+            if entity.airweave_system_metadata:
+                entity.airweave_system_metadata.db_entity_id = db_entity.id
+
         sync_context.logger.debug(
             f"💾 UPDATE_DB_DONE [{entity_context}] Database updated in {db_elapsed:.3f}s"
         )

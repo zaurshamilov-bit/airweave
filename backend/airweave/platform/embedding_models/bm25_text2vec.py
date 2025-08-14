@@ -77,4 +77,5 @@ class BM25Text2Vec(BaseEmbeddingModel):
         if not texts:
             return []
 
-        return self._model.embed(texts)
+        # Convert generator to list
+        return list(self._model.embed(texts))

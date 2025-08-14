@@ -177,6 +177,15 @@ async def search_collection(
     ),
     limit: int = Query(20, ge=1, le=1000, description="Maximum number of results to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip for pagination"),
+    recency_bias: float | None = Query(
+        None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "How much to weigh recency vs similarity (0..1). "
+            "0 = no recency effect; 1 = rank by recency only."
+        ),
+    ),
     db: AsyncSession = Depends(deps.get_db),
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     ctx: ApiContext = Depends(deps.get_context),
@@ -202,6 +211,7 @@ async def search_collection(
         limit=limit,
         offset=offset,
         score_threshold=None,
+        recency_bias=recency_bias,
     )
 
     try:

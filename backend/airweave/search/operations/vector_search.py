@@ -72,7 +72,8 @@ class VectorSearch(SearchOperation):
 
         # Get search method and decay config from SearchConfig
         search_method = getattr(config, "search_method", self.search_method)
-        decay_config = getattr(config, "decay_config", None)
+        # Allow a pre-search operator to override decay_config dynamically
+        decay_config = context.get("decay_config", getattr(config, "decay_config", None))
 
         # Determine limit - fetch extra if we're going to rerank
         limit = config.limit
@@ -88,81 +89,182 @@ class VectorSearch(SearchOperation):
             f"decay={bool(decay_config)}"
         )
 
+        # Extra transparency: log recency bias weight if available
+        if decay_config is not None and hasattr(decay_config, "weight"):
+            logger.info(
+                f"[VectorSearch] Recency bias weight={getattr(decay_config, 'weight', None)}; "
+                f"datetime_field={getattr(decay_config, 'datetime_field', None)}"
+            )
+
         try:
-            # Create Qdrant destination
             destination = await QdrantDestination.create(
                 collection_id=UUID(config.collection_id), logger=logger
             )
-
             if len(embeddings) > 1:
-                # Multiple embeddings - use bulk search
-                logger.debug(
-                    f"[VectorSearch] Performing bulk search with {len(embeddings)} query vectors"
-                )
-
-                # Create filter conditions list (same filter for all queries)
-                filter_conditions = [filter_dict] * len(embeddings) if filter_dict else None
-
-                # Perform bulk search with hybrid search and decay support
-                batch_results = await destination.bulk_search(
+                await self._execute_bulk(
+                    destination,
                     embeddings,
-                    limit=limit,
-                    score_threshold=config.score_threshold,
-                    with_payload=True,
-                    filter_conditions=filter_conditions,
-                    sparse_vectors=sparse_embeddings,
-                    search_method=search_method,
-                    decay_config=decay_config,
+                    sparse_embeddings,
+                    filter_dict,
+                    search_method,
+                    decay_config,
+                    limit,
+                    config,
+                    logger,
+                    context,
                 )
-
-                # Flatten results from all queries
-                all_results = []
-                for query_results in batch_results:
-                    all_results.extend(query_results)
-
-                # Deduplicate and merge results
-                merged_results = self._deduplicate(all_results)
-
-                # Apply offset after merging (since bulk search doesn't support offset)
-                if config.offset > 0:
-                    if config.offset < len(merged_results):
-                        merged_results = merged_results[config.offset :]
-                    else:
-                        merged_results = []
-
-                # Ensure we don't exceed limit
-                if len(merged_results) > limit:
-                    merged_results = merged_results[:limit]
-
-                context["raw_results"] = merged_results
-
             else:
-                # Single embedding - use regular search
-                logger.debug(
-                    f"[VectorSearch] Performing single vector search with method={search_method}"
+                await self._execute_single(
+                    destination,
+                    embeddings,
+                    sparse_embeddings,
+                    filter_dict,
+                    search_method,
+                    decay_config,
+                    limit,
+                    config,
+                    logger,
+                    context,
                 )
-
-                results = await destination.search(
-                    embeddings[0],
-                    filter=filter_dict,
-                    limit=limit,
-                    offset=config.offset,
-                    score_threshold=config.score_threshold,
-                    with_payload=True,
-                    sparse_vector=sparse_embeddings[0] if sparse_embeddings else None,
-                    search_method=search_method,
-                    decay_config=decay_config,
-                )
-
-                context["raw_results"] = results
-
-            logger.info(f"[VectorSearch] Found {len(context['raw_results'])} results")
-
         except Exception as e:
             logger.error(f"[VectorSearch] Failed: {e}", exc_info=True)
-            # Return empty results to allow pipeline to continue
             context["raw_results"] = []
-            raise  # Re-raise to let executor handle based on optional flag
+            raise
+
+    async def _execute_bulk(
+        self,
+        destination,
+        embeddings,
+        sparse_embeddings,
+        filter_dict,
+        search_method,
+        decay_config,
+        limit,
+        config,
+        logger,
+        context,
+    ) -> None:
+        logger.debug(f"[VectorSearch] Performing bulk search with {len(embeddings)} query vectors")
+        if sparse_embeddings:
+            count_sparse = len(sparse_embeddings)
+            logger.info("[VectorSearch] HYBRID search with %s BM25 vectors", count_sparse)
+            try:
+                non_zeros = [len(v.indices) for v in sparse_embeddings if hasattr(v, "indices")]
+                if non_zeros:
+                    avg_nz = sum(non_zeros) / len(non_zeros)
+                    logger.debug(f"[VectorSearch] BM25 sparse avg non-zeros={avg_nz:.1f}")
+            except Exception:
+                pass
+        else:
+            logger.info("[VectorSearch] Using NEURAL-only search (no sparse vectors)")
+
+        if decay_config:
+            logger.info(
+                ("[VectorSearch] Time decay ENABLED: type=%s, field=%s, scale=%s %s, midpoint=%s"),
+                decay_config.decay_type,
+                decay_config.datetime_field,
+                decay_config.scale_value,
+                decay_config.scale_unit,
+                decay_config.midpoint,
+            )
+        else:
+            logger.info("[VectorSearch] Time decay DISABLED")
+
+        filter_conditions = [filter_dict] * len(embeddings) if filter_dict else None
+        batch_results = await destination.bulk_search(
+            embeddings,
+            limit=limit,
+            score_threshold=config.score_threshold,
+            with_payload=True,
+            filter_conditions=filter_conditions,
+            sparse_vectors=sparse_embeddings,
+            search_method=search_method,
+            decay_config=decay_config,
+        )
+        all_results = batch_results if isinstance(batch_results, list) else []
+        merged_results = self._deduplicate(all_results)
+        if config.offset > 0:
+            merged_results = (
+                merged_results[config.offset :] if config.offset < len(merged_results) else []
+            )
+        if len(merged_results) > limit:
+            merged_results = merged_results[:limit]
+        context["raw_results"] = merged_results
+
+    async def _execute_single(
+        self,
+        destination,
+        embeddings,
+        sparse_embeddings,
+        filter_dict,
+        search_method,
+        decay_config,
+        limit,
+        config,
+        logger,
+        context,
+    ) -> None:
+        logger.debug(f"[VectorSearch] Performing single vector search with method={search_method}")
+        if sparse_embeddings and sparse_embeddings[0]:
+            logger.info("[VectorSearch] Using HYBRID search with BM25 sparse vector")
+            try:
+                nz = len(getattr(sparse_embeddings[0], "indices", []) or [])
+                logger.debug(f"[VectorSearch] BM25 sparse non-zeros (query 0)={nz}")
+            except Exception:
+                pass
+        else:
+            logger.info("[VectorSearch] Using NEURAL-only search (no sparse vector)")
+
+        if decay_config:
+            logger.info(
+                ("[VectorSearch] Time decay ENABLED: type=%s, field=%s, scale=%s %s, midpoint=%s"),
+                decay_config.decay_type,
+                decay_config.datetime_field,
+                decay_config.scale_value,
+                decay_config.scale_unit,
+                decay_config.midpoint,
+            )
+        else:
+            logger.info("[VectorSearch] Time decay DISABLED")
+
+        results = await destination.search(
+            embeddings[0],
+            filter=filter_dict,
+            limit=limit,
+            offset=config.offset,
+            score_threshold=config.score_threshold,
+            with_payload=True,
+            sparse_vector=sparse_embeddings[0] if sparse_embeddings else None,
+            search_method=search_method,
+            decay_config=decay_config,
+        )
+        context["raw_results"] = results
+
+        logger.info(f"[VectorSearch] Found {len(context['raw_results'])} results")
+        if context.get("raw_results") and logger.isEnabledFor(10):
+            top_results = context["raw_results"][:5]
+            for i, result in enumerate(top_results, 1):
+                if isinstance(result, dict):
+                    score = result.get("score", 0)
+                    payload = result.get("payload", {})
+                    date_field = None
+                    if decay_config and isinstance(payload, dict):
+                        if "airweave_system_metadata" in decay_config.datetime_field:
+                            metadata = payload.get("airweave_system_metadata", {})
+                            if isinstance(metadata, dict):
+                                field_name = decay_config.datetime_field.split(".")[-1]
+                                date_field = metadata.get(field_name)
+                        else:
+                            date_field = payload.get(decay_config.datetime_field)
+                    entity_name = (
+                        payload.get("name", payload.get("entity_id", ""))[:50]
+                        if isinstance(payload, dict)
+                        else ""
+                    )
+                    logger.debug(
+                        f"[VectorSearch] Result {i}: score={score:.3f}, date={date_field or 'N/A'},"
+                        f"name={entity_name}"
+                    )
 
     def _deduplicate(self, results: List[Dict]) -> List[Dict]:
         """Deduplicate results keeping highest scores.
@@ -183,15 +285,19 @@ class VectorSearch(SearchOperation):
         best_results = {}
 
         for result in results:
+            # Skip non-dict results
+            if not isinstance(result, dict):
+                continue
+
             # Try to extract document ID from various possible locations
             doc_id = None
-            if isinstance(result, dict):
-                # Try direct ID field
-                doc_id = result.get("id") or result.get("_id")
+            # Try direct ID field
+            doc_id = result.get("id") or result.get("_id")
 
-                # If not found, try in payload
-                if not doc_id and "payload" in result:
-                    payload = result.get("payload", {})
+            # If not found, try in payload
+            if not doc_id and "payload" in result:
+                payload = result.get("payload", {})
+                if isinstance(payload, dict):
                     doc_id = (
                         payload.get("entity_id")
                         or payload.get("id")
@@ -204,7 +310,9 @@ class VectorSearch(SearchOperation):
                 score = result.get("score", 0)
 
                 # Keep result with highest score
-                if doc_id not in best_results or score > best_results[doc_id].get("score", 0):
+                if doc_id not in best_results:
+                    best_results[doc_id] = result
+                elif score > best_results[doc_id].get("score", 0):
                     best_results[doc_id] = result
             else:
                 # If we can't find an ID, include the result anyway
@@ -214,6 +322,9 @@ class VectorSearch(SearchOperation):
 
         # Convert back to list and sort by score
         merged = list(best_results.values())
-        merged.sort(key=lambda x: x.get("score", 0), reverse=True)
+        # Filter out any non-dict values that shouldn't be there
+        merged = [r for r in merged if isinstance(r, dict)]
+        if merged:
+            merged.sort(key=lambda x: x.get("score", 0), reverse=True)
 
         return merged

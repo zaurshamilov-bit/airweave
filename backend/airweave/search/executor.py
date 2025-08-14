@@ -67,6 +67,7 @@ class SearchExecutor:
                 f"query_expansion={'on' if config.query_expansion else 'off'}, "
                 f"qdrant_filter={'on' if config.qdrant_filter else 'off'}, "
                 f"embedding=on, vector_search=on, "
+                f"recency={'on' if getattr(config, 'recency', None) else 'off'}, "
                 f"reranking={'on' if config.reranking else 'off'}, "
                 f"completion={'on' if config.completion else 'off'}"
                 f"}}"
@@ -279,11 +280,15 @@ class SearchExecutor:
         # 5. Vector search (required)
         operations.append(config.vector_search)
 
-        # 6. Reranking (optional)
+        # 6. Dynamic recency (optional)
+        if getattr(config, "recency", None):
+            operations.append(config.recency)
+
+        # 7. Reranking (optional)
         if config.reranking:
             operations.append(config.reranking)
 
-        # 7. Completion (optional)
+        # 8. Completion (optional)
         if config.completion:
             operations.append(config.completion)
 

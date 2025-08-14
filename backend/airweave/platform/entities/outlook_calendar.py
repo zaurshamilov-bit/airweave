@@ -204,10 +204,3 @@ class OutlookCalendarAttachmentEntity(FileEntity):
     metadata: Optional[Dict[str, Any]] = AirweaveField(
         default_factory=dict, description="Additional metadata about the attachment"
     )
-
-    class Config:
-        """Pydantic configuration."""
-
-        json_encoders = {
-            datetime: lambda v: v.isoformat() if v else None,
-        }

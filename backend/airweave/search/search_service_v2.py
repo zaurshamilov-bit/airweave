@@ -41,6 +41,7 @@ class SearchServiceV2:
             from airweave.search.operations.query_interpretation import (
                 QueryInterpretation,  # noqa: F401
             )
+            from airweave.search.operations.recency_bias import RecencyBias  # noqa: F401
             from airweave.search.operations.reranking import LLMReranking  # noqa: F401
             from airweave.search.operations.vector_search import VectorSearch  # noqa: F401
 

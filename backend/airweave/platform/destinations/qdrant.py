@@ -15,8 +15,10 @@ from airweave.platform.auth.schemas import AuthType
 from airweave.platform.configs.auth import QdrantAuthConfig
 from airweave.platform.decorators import destination
 from airweave.platform.destinations._base import VectorDBDestination
-from airweave.platform.destinations._config import KEYWORD_VECTOR_NAME, DecayConfig
 from airweave.platform.entities._base import ChunkEntity
+from airweave.search.decay import DecayConfig
+
+KEYWORD_VECTOR_NAME = "bm25"
 
 
 @destination("Qdrant", "qdrant", AuthType.config_class, "QdrantAuthConfig", labels=["Vector"])
@@ -233,8 +235,8 @@ class QdrantDestination(VectorDBDestination):
             raise ValueError(f"Entity {entity.entity_id} has no db_entity_id in system metadata")
 
         # Insert point with vector from entity
-        await self.client.upload_points(
-            self.collection_name,
+        await self.client.upsert(
+            collection_name=self.collection_name,
             points=[
                 rest.PointStruct(
                     id=str(entity.airweave_system_metadata.db_entity_id),
@@ -281,7 +283,7 @@ class QdrantDestination(VectorDBDestination):
             if not entity.airweave_system_metadata.vectors:
                 raise ValueError(f"Entity {entity.entity_id} has no vector in system metadata")
 
-            if hasattr(entity_data["airweave_system_metadata"], "vectors"):
+            if "vectors" in entity_data["airweave_system_metadata"]:
                 entity_data["airweave_system_metadata"].pop("vectors")
 
             # Create point for Qdrant
@@ -309,8 +311,8 @@ class QdrantDestination(VectorDBDestination):
             return
 
         # Bulk upsert
-        operation_response = await self.client.upload_points(
-            self.collection_name,
+        operation_response = await self.client.upsert(
+            collection_name=self.collection_name,
             points=point_structs,
             wait=True,  # Wait for operation to complete
         )
@@ -467,18 +469,34 @@ class QdrantDestination(VectorDBDestination):
 
         decay_expression = decay_expressions[decay_config.decay_type](decay_params)
 
+        # If DecayConfig has weight < 1, combine using weighted sum: (1-w)*score + w*decay
+        weight = getattr(decay_config, "weight", 1.0) if decay_config else 1.0
+        score_weight = max(0.0, min(1.0, 1.0 - weight))
+
+        if weight >= 1.0:
+            weighted_formula = rest.SumExpression(sum=["$score", decay_expression])
+        elif weight <= 0.0:
+            weighted_formula = "$score"
+        else:
+            weighted_formula = rest.SumExpression(
+                sum=[
+                    rest.MulExpression(mul=[score_weight, "$score"]),
+                    rest.MulExpression(mul=[weight, decay_expression]),
+                ]
+            )
+
+        # Log the formula composition for transparency
+        try:
+            self.logger.debug(
+                f"[Qdrant] Decay formula applied: using={params.get('using')}, "
+                f"weight={weight}, score_weight={score_weight}, field={decay_config.datetime_field}"
+            )
+        except Exception:
+            pass
+
         return {
             "prefetch": rest.Prefetch(**params),
-            "query": rest.FormulaQuery(
-                formula=rest.SumExpression(
-                    sum=[
-                        # Original similarity score
-                        "$score",
-                        # Time-based decay boost
-                        decay_expression,
-                    ]
-                )
-            ),
+            "query": rest.FormulaQuery(formula=weighted_formula),
         }
 
     async def _prepare_query_request(
@@ -775,6 +793,22 @@ class QdrantDestination(VectorDBDestination):
             )
             search_method = "neural"
 
+        # Log search configuration at Qdrant level
+        weight = getattr(decay_config, "weight", None) if decay_config else None
+        self.logger.info(
+            f"[Qdrant] Executing {search_method.upper()} search: "
+            f"queries={len(query_vectors)}, limit={limit}, "
+            f"has_sparse={sparse_vectors is not None}, "
+            f"decay_enabled={decay_config is not None}, "
+            f"decay_weight={weight}"
+        )
+
+        if decay_config:
+            self.logger.debug(
+                f"[Qdrant] Decay details: field={decay_config.datetime_field}, "
+                f"scale={decay_config.scale_value} {decay_config.scale_unit}"
+            )
+
         try:
             # Prepare query requests
             query_requests = await self._prepare_bulk_search_requests(
@@ -801,6 +835,19 @@ class QdrantDestination(VectorDBDestination):
             flattened_results = []
             for query_results in formatted_results:
                 flattened_results.extend(query_results)
+
+            # Log score statistics to show hybrid search impact
+            if flattened_results:
+                scores = [r.get("score", 0) for r in flattened_results if isinstance(r, dict)]
+                if scores:
+                    avg_score = sum(scores) / len(scores)
+                    max_score = max(scores)
+                    min_score = min(scores)
+                    self.logger.info(
+                        f"[Qdrant] Result scores with {search_method} search: "
+                        f"count={len(scores)}, avg={avg_score:.3f}, "
+                        f"max={max_score:.3f}, min={min_score:.3f}"
+                    )
 
             return flattened_results
 

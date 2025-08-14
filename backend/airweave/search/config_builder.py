@@ -3,25 +3,11 @@
 This module builds a SearchConfig from a SearchRequest, creating the execution
 plan with the appropriate operations based on the request parameters.
 
-DEFAULT VALUES:
---------------
-All default values for search operations are centralized here:
-- limit: 20 (if not specified)
-- offset: 0 (if not specified)
-- score_threshold: None (no threshold by default)
-- search_method: "hybrid" (combines neural + BM25 search)
-- decay_config: Enabled by default with 7-day linear decay (can be disabled with enable_decay=False)
-- expansion_strategy: AUTO (if not specified, generates up to 4 query variations)
-- response_type: RAW (if not specified)
-- enable_reranking: True (ON by default, can be disabled with enable_reranking=False)
-- enable_query_interpretation: True (ON by default, can be disabled with
-  enable_query_interpretation=False)
-
-These defaults can only be overridden by explicit values in the SearchRequest.
+IMPORTANT: These defaults are designed for optimal search quality out of the box.
+Most users should not need to change them unless they have specific requirements.
 """
 
 from airweave.api.context import ApiContext
-from airweave.platform.destinations._config import DecayConfig
 from airweave.schemas.search import (
     QueryExpansionStrategy,
     ResponseType,
@@ -35,8 +21,31 @@ from airweave.search.operations import (
     QdrantFilterOperation,
     QueryExpansion,
     QueryInterpretation,
+    RecencyBias,
     VectorSearch,
 )
+
+# ============================================================================
+# SEARCH DEFAULTS - Single source of truth for all default values
+# ============================================================================
+
+# Core search defaults
+DEFAULT_LIMIT = 20
+DEFAULT_OFFSET = 0
+DEFAULT_SCORE_THRESHOLD = None  # No threshold by default
+DEFAULT_SEARCH_METHOD = "hybrid"  # Combines neural + BM25
+
+# Recency defaults
+DEFAULT_RECENCY_BIAS = 0.3
+DEFAULT_DATETIME_FIELD_HINT = "airweave_system_metadata.airweave_updated_at"
+
+# Operation defaults
+DEFAULT_EXPANSION_STRATEGY = QueryExpansionStrategy.AUTO  # Up to 4 variants
+DEFAULT_QUERY_INTERPRETATION = False  # DISABLED by default
+DEFAULT_RERANKING = True  # ENABLED by default
+DEFAULT_RESPONSE_TYPE = ResponseType.RAW  # Raw results, not completion
+
+# ============================================================================
 
 
 class SearchConfigBuilder:
@@ -90,32 +99,22 @@ class SearchConfigBuilder:
 
         ctx.logger.info(f"Enabled operations: {enabled_ops}")
 
-        # Apply defaults for all parameters
+        # Apply defaults for all parameters using the constants
         # Use explicit None checks to handle 0 values correctly
-        limit = search_request.limit if search_request.limit is not None else 20
-        offset = search_request.offset if search_request.offset is not None else 0
-        score_threshold = search_request.score_threshold  # None is valid (no threshold)
+        limit = search_request.limit if search_request.limit is not None else DEFAULT_LIMIT
+        offset = search_request.offset if search_request.offset is not None else DEFAULT_OFFSET
+        score_threshold = search_request.score_threshold  # DEFAULT_SCORE_THRESHOLD (None is valid)
 
-        # Handle hybrid search and decay parameters
-        search_method = search_request.search_method or "hybrid"
+        # Handle hybrid search and recency parameters
+        search_method = search_request.search_method or DEFAULT_SEARCH_METHOD
 
-        # Handle decay config - apply defaults
-        if search_request.decay_config:
-            # User provided explicit decay config
-            decay_config = search_request.decay_config
-        elif search_request.enable_decay is False:
-            # User explicitly disabled decay
-            decay_config = None
-        else:
-            # Default: Enable decay with default config (unless explicitly disabled)
-            # This applies when enable_decay is True or None (not specified)
-            decay_config = DecayConfig(
-                decay_type="linear",
-                datetime_field="airweave_system_metadata.airweave_updated_at",
-                scale_unit="day",
-                scale_value=7,  # Decay over 7 days
-                midpoint=0.5,  # 50% score at 7 days old
-            )
+        # Public recency_bias (0..1) controls dynamic post-retrieval recency operator
+        recency_bias = (
+            search_request.recency_bias
+            if getattr(search_request, "recency_bias", None) is not None
+            else DEFAULT_RECENCY_BIAS
+        )
+        # No static DecayConfig; RecencyBias operator derives decay at runtime
 
         # Create the config with operations as fields
         config = SearchConfig(
@@ -125,15 +124,17 @@ class SearchConfigBuilder:
             limit=limit,
             offset=offset,
             score_threshold=score_threshold,
-            # Hybrid search and decay parameters
+            # Hybrid search and recency parameters
             search_method=search_method,
-            decay_config=decay_config,
+            recency_bias=recency_bias,
             # Operations as fields
             query_interpretation=ops["query_interpretation"],
             query_expansion=ops["query_expansion"],
             qdrant_filter=ops["qdrant_filter"],
             embedding=ops["embedding"],
             vector_search=ops["vector_search"],
+            # Recency operator instance and knob
+            recency=ops["recency"],
             reranking=ops["reranking"],
             completion=ops["completion"],
         )
@@ -168,7 +169,7 @@ class SearchConfigBuilder:
         # Apply default expansion strategy if not specified
         expansion_strategy = search_request.expansion_strategy
         if expansion_strategy is None:
-            expansion_strategy = QueryExpansionStrategy.AUTO
+            expansion_strategy = DEFAULT_EXPANSION_STRATEGY
 
         if expansion_strategy != QueryExpansionStrategy.NO_EXPANSION:
             ctx.logger.debug(f"Enabling query expansion with strategy: {expansion_strategy}")
@@ -198,6 +199,15 @@ class SearchConfigBuilder:
         ops["embedding"] = Embedding(search_method=search_method)
         ops["vector_search"] = VectorSearch(search_method=search_method)
 
+        # ========== Dynamic Recency (Optional) ==========
+        # Enable when user sets a positive bias
+        if (search_request.recency_bias or 0) > 0:
+            bias = search_request.recency_bias or DEFAULT_RECENCY_BIAS
+            ctx.logger.debug(f"Enabling recency operator with bias={bias}")
+            ops["recency"] = RecencyBias(datetime_field=DEFAULT_DATETIME_FIELD_HINT)
+        else:
+            ops["recency"] = None
+
         # ========== Reranking (Optional) ==========
         if self._should_enable_reranking(search_request):
             ctx.logger.debug("Enabling LLM reranking")
@@ -209,7 +219,7 @@ class SearchConfigBuilder:
         # Apply default response type if not specified
         response_type = search_request.response_type
         if response_type is None:
-            response_type = ResponseType.RAW
+            response_type = DEFAULT_RESPONSE_TYPE
 
         if response_type == ResponseType.COMPLETION:
             ctx.logger.debug("Enabling completion generation")
@@ -228,9 +238,9 @@ class SearchConfigBuilder:
         Returns:
             Whether to enable query interpretation
         """
-        # Default is ON, can be explicitly disabled with False
+        # Use DEFAULT_QUERY_INTERPRETATION if not specified
         if search_request.enable_query_interpretation is None:
-            return True  # Default ON
+            return DEFAULT_QUERY_INTERPRETATION
         return bool(search_request.enable_query_interpretation)
 
     def _should_enable_reranking(self, search_request: SearchRequest) -> bool:
@@ -242,7 +252,7 @@ class SearchConfigBuilder:
         Returns:
             Whether to enable reranking
         """
-        # Default is ON, can be explicitly disabled with False
+        # Use DEFAULT_RERANKING if not specified
         if search_request.enable_reranking is None:
-            return True  # Default ON
+            return DEFAULT_RERANKING
         return bool(search_request.enable_reranking)

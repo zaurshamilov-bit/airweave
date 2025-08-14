@@ -100,6 +100,11 @@ class AirweaveSystemMetadata(BaseModel):
         None, description="Additional metadata for the sync."
     )
 
+    # Pydantic v2 configuration - needed for SparseEmbedding with numpy arrays
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+    )
+
     @field_validator("vectors", mode="before")
     @classmethod
     def _deserialize_vectors(cls, value):
@@ -247,11 +252,6 @@ class BaseEntity(BaseModel):
     airweave_system_metadata: Optional[AirweaveSystemMetadata] = Field(
         default=None, description="Airweave system metadata for tracking and synchronization."
     )
-
-    class Config:
-        """Pydantic config."""
-
-        from_attributes = True
 
     # Pydantic v2 configuration
     model_config = ConfigDict(

@@ -12,15 +12,13 @@ from typing import TYPE_CHECKING, List, Literal, Optional
 from pydantic import BaseModel, Field
 from qdrant_client.http.models import Filter as QdrantFilter
 
-# Import DecayConfig directly for use in SearchRequest
-from airweave.platform.destinations._config import DecayConfig
-
 if TYPE_CHECKING:
     from airweave.search.operations.completion import CompletionGeneration
     from airweave.search.operations.embedding import Embedding
     from airweave.search.operations.qdrant_filter import QdrantFilterOperation
     from airweave.search.operations.query_expansion import QueryExpansion
     from airweave.search.operations.query_interpretation import QueryInterpretation
+    from airweave.search.operations.recency_bias import RecencyBias
     from airweave.search.operations.reranking import LLMReranking
     from airweave.search.operations.vector_search import VectorSearch
 
@@ -76,40 +74,46 @@ class SearchRequest(BaseModel):
     )
 
     # Pagination
-    offset: Optional[int] = Field(0, ge=0, description="Number of results to skip")
+    offset: Optional[int] = Field(0, ge=0, description="Number of results to skip (DEFAULT: 0)")
 
     limit: Optional[int] = Field(
-        20, ge=1, le=1000, description="Maximum number of results to return"
+        20, ge=1, le=1000, description="Maximum number of results to return (DEFAULT: 20)"
     )
 
     # Search quality parameters
     score_threshold: Optional[float] = Field(
-        None, ge=0.0, le=1.0, description="Minimum similarity score threshold"
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity score threshold (DEFAULT: None - no filtering)",
     )
 
     # Response configuration
     response_type: ResponseType = Field(
-        ResponseType.RAW, description="Type of response (raw or completion)"
+        ResponseType.RAW, description="Type of response - 'raw' or 'completion' (DEFAULT: 'raw')"
     )
 
     # Hybrid search parameters
     search_method: Optional[Literal["hybrid", "neural", "keyword"]] = Field(
-        None, description="Search method to use (defaults to hybrid if BM25 index exists)"
+        None, description="Search method to use (DEFAULT: 'hybrid' - combines neural + BM25)"
     )
 
-    # Time decay parameters
-    enable_decay: Optional[bool] = Field(
-        None, description="Enable time-based decay for recency bias"
-    )
-    decay_config: Optional[DecayConfig] = Field(
-        None, description="Custom decay configuration (uses defaults if enable_decay=True)"
+    # Recency bias (public abstraction over decay)
+    recency_bias: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "How much to weigh recency vs content similarity (0..1). "
+            "0 = no recency effect; 1 = rank by recency only. DEFAULT from config builder."
+        ),
     )
 
     expansion_strategy: Optional[QueryExpansionStrategy] = Field(
         None,
         description=(
-            "Query expansion strategy. If omitted, the configuration builder defaults to AUTO "
-            "(generates up to 4 variations when LLM is available)."
+            "Query expansion strategy (DEFAULT: 'auto' - generates up to 4 query variations). "
+            "Options: 'auto', 'llm', 'no_expansion'"
         ),
     )
 
@@ -118,7 +122,7 @@ class SearchRequest(BaseModel):
         None,
         description=(
             "Enable LLM-based reranking to improve result relevance "
-            "(default: True, set to False to disable)"
+            "(DEFAULT: True - enabled, set to False to disable)"
         ),
     )
 
@@ -126,7 +130,7 @@ class SearchRequest(BaseModel):
         None,
         description=(
             "Enable automatic filter extraction from natural language query "
-            "(default: True, set to False to disable)"
+            "(DEFAULT: True - enabled, set to False to disable)"
         ),
     )
 
@@ -273,12 +277,18 @@ class SearchConfig(BaseModel):
     offset: int = Field(0, ge=0, description="Pagination offset")
     score_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Minimum score")
 
-    # Hybrid search and decay parameters
+    # Hybrid search and recency parameters
     search_method: Literal["hybrid", "neural", "keyword"] = Field(
         "hybrid", description="Search method to use"
     )
-    decay_config: Optional[DecayConfig] = Field(
-        None, description="Time-based decay configuration for recency bias"
+    # Decay config removed: recency_bias and pre-search operator control recency
+    recency_bias: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Relative weight for recency vs similarity when combining final scores (0..1)."
+        ),
     )
 
     # Operations - each field is either an operation instance or None
@@ -299,6 +309,11 @@ class SearchConfig(BaseModel):
 
     vector_search: "VectorSearch" = Field(
         ..., description="Vector similarity search (always required)"
+    )
+
+    # Recency normalization/boost (optional)
+    recency: Optional["RecencyBias"] = Field(
+        None, description="Dynamic recency normalization and boosting after retrieval"
     )
 
     reranking: Optional["LLMReranking"] = Field(None, description="LLM-based result reranking")
