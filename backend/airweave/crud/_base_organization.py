@@ -240,6 +240,46 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
 
         return db_obj
 
+    async def bulk_remove(
+        self,
+        db: AsyncSession,
+        *,
+        ids: list[UUID],
+        ctx: ApiContext,
+        uow: Optional[UnitOfWork] = None,
+    ) -> list[ModelType]:
+        """Delete organization resources with auth context.
+
+        Args:
+        ----
+            db (AsyncSession): The database session.
+            ids (list[UUID]): The UUIDs of the objects to delete.
+            ctx (ApiContext): The API context.
+            uow (Optional[UnitOfWork]): The unit of work to use for the transaction.
+
+        Returns:
+        -------
+            list[ModelType]: The deleted objects.
+        """
+        query = select(self.model).where(
+            self.model.id.in_(ids), self.model.organization_id == ctx.organization_id
+        )
+        result = await db.execute(query)
+        db_objs = result.unique().scalars().all()
+
+        # Validate access for all objects
+        for db_obj in db_objs:
+            await self._validate_organization_access(ctx, db_obj.organization_id)
+
+        # Delete each object individually
+        for db_obj in db_objs:
+            await db.delete(db_obj)
+
+        if not uow:
+            await db.commit()
+
+        return db_objs
+
     async def _validate_organization_access(self, ctx: ApiContext, organization_id: UUID) -> None:
         """Validate auth context has access to organization.
 
