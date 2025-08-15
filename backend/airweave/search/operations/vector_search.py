@@ -144,7 +144,37 @@ class VectorSearch(SearchOperation):
         logger,
         context,
     ) -> None:
+        self._log_search_info(embeddings, sparse_embeddings, decay_config, logger)
+
+        filter_conditions = [filter_dict] * len(embeddings) if filter_dict else None
+        batch_results = await destination.bulk_search(
+            embeddings,
+            limit=limit,
+            score_threshold=config.score_threshold,
+            with_payload=True,
+            filter_conditions=filter_conditions,
+            sparse_vectors=sparse_embeddings,
+            search_method=search_method,
+            decay_config=decay_config,
+        )
+        all_results = batch_results if isinstance(batch_results, list) else []
+        merged_results = self._deduplicate(all_results)
+
+        self._log_search_results(merged_results, decay_config, logger)
+
+        # Apply offset and limit
+        if config.offset > 0:
+            merged_results = (
+                merged_results[config.offset :] if config.offset < len(merged_results) else []
+            )
+        if len(merged_results) > limit:
+            merged_results = merged_results[:limit]
+        context["raw_results"] = merged_results
+
+    def _log_search_info(self, embeddings, sparse_embeddings, decay_config, logger) -> None:
+        """Log search configuration and parameters."""
         logger.debug(f"[VectorSearch] Performing bulk search with {len(embeddings)} query vectors")
+
         if sparse_embeddings:
             count_sparse = len(sparse_embeddings)
             logger.info("[VectorSearch] HYBRID search with %s BM25 vectors", count_sparse)
@@ -170,26 +200,112 @@ class VectorSearch(SearchOperation):
         else:
             logger.info("[VectorSearch] Time decay DISABLED")
 
-        filter_conditions = [filter_dict] * len(embeddings) if filter_dict else None
-        batch_results = await destination.bulk_search(
-            embeddings,
-            limit=limit,
-            score_threshold=config.score_threshold,
-            with_payload=True,
-            filter_conditions=filter_conditions,
-            sparse_vectors=sparse_embeddings,
-            search_method=search_method,
-            decay_config=decay_config,
+    def _log_search_results(self, merged_results, decay_config, logger) -> None:
+        """Log search results with optional decay details."""
+        logger.debug(
+            f"[VectorSearch] Found {len(merged_results)} unique results after deduplication"
         )
-        all_results = batch_results if isinstance(batch_results, list) else []
-        merged_results = self._deduplicate(all_results)
-        if config.offset > 0:
-            merged_results = (
-                merged_results[config.offset :] if config.offset < len(merged_results) else []
+
+        if decay_config and merged_results:
+            self._log_results_with_decay(merged_results, decay_config, logger)
+        else:
+            self._log_results_without_decay(merged_results, logger)
+
+    def _log_results_with_decay(self, merged_results, decay_config, logger) -> None:
+        """Log detailed results with decay analysis."""
+        logger.debug(
+            f"[VectorSearch] RECENCY BIAS APPLIED: weight={decay_config.weight}, "
+            f"field={decay_config.datetime_field}"
+        )
+        logger.debug("[VectorSearch] Top 10 results with recency details:")
+
+        for i, result in enumerate(merged_results[:10]):
+            if isinstance(result, dict):
+                self._log_single_result_with_decay(i, result, decay_config, logger)
+
+    def _log_single_result_with_decay(self, index, result, decay_config, logger) -> None:
+        """Log a single result with decay analysis."""
+        score = result.get("score", 0)
+        payload = result.get("payload", {})
+
+        # Extract the timestamp used for decay
+        timestamp_value = self._extract_timestamp(payload, decay_config)
+
+        # Extract entity info for logging
+        entity_id = payload.get("entity_id", "unknown")
+        source = payload.get("airweave_system_metadata", {}).get("source_name", "unknown")
+
+        # Estimate score breakdown for debugging
+        if timestamp_value != "N/A" and decay_config:
+            self._log_with_decay_calculation(
+                index, score, timestamp_value, source, entity_id, decay_config, logger
             )
-        if len(merged_results) > limit:
-            merged_results = merged_results[:limit]
-        context["raw_results"] = merged_results
+        else:
+            logger.debug(
+                f"  [{index + 1}] Score={score:.3f}, Timestamp={timestamp_value}, "
+                f"Source={source}, Entity={entity_id[:20]}..."
+            )
+
+    def _extract_timestamp(self, payload, decay_config) -> str:
+        """Extract timestamp value from payload."""
+        try:
+            # Navigate nested structure for timestamp
+            parts = decay_config.datetime_field.split(".")
+            temp = payload
+            for part in parts:
+                temp = temp.get(part, {})
+            return temp if isinstance(temp, str) else "N/A"
+        except Exception:
+            return "N/A"
+
+    def _log_with_decay_calculation(
+        self, index, score, timestamp_value, source, entity_id, decay_config, logger
+    ) -> None:
+        """Log result with decay calculation details."""
+        try:
+            from datetime import datetime
+
+            # Known data span from logs
+            oldest = datetime.fromisoformat(
+                "2024-05-15T12:24:39.566000+00:00".replace("+00:00", "")
+            )
+            newest = datetime.fromisoformat(
+                "2025-07-31T10:13:02.207309+00:00".replace("+00:00", "")
+            )
+            item_date = datetime.fromisoformat(
+                timestamp_value.replace("+00:00", "").replace("Z", "")
+            )
+
+            span_seconds = (newest - oldest).total_seconds()
+            age_seconds = (newest - item_date).total_seconds()
+            # Linear decay: 1.0 at newest, 0.0 at oldest
+            estimated_decay = max(0.0, 1.0 - (age_seconds / span_seconds))
+
+            # Reverse engineer similarity from final score
+            weight = decay_config.weight
+            multiplier = (1 - weight) + weight * estimated_decay
+            estimated_similarity = score / multiplier if multiplier > 0 else 0
+
+            logger.debug(
+                f"  [{index + 1}] Final={score:.3f} = Sim≈{estimated_similarity:.2f} × "
+                f"({1 - weight:.1f} + {weight:.1f}×Decay{estimated_decay:.2f}), "
+                f"Date={timestamp_value[:10]}, {source}/{entity_id[:15]}..."
+            )
+        except Exception:
+            logger.debug(
+                f"  [{index + 1}] Score={score:.3f}, Timestamp={timestamp_value}, "
+                f"Source={source}, Entity={entity_id[:20]}..."
+            )
+
+    def _log_results_without_decay(self, merged_results, logger) -> None:
+        """Log top results without decay details."""
+        logger.debug("[VectorSearch] Top 5 results (no recency bias):")
+        for i, result in enumerate(merged_results[:5]):
+            if isinstance(result, dict):
+                score = result.get("score", 0)
+                payload = result.get("payload", {})
+                entity_id = payload.get("entity_id", "unknown")
+                logger.debug(f"  [{i + 1}] Score={score:.3f}, Entity={entity_id[:30]}...")
 
     async def _execute_single(
         self,

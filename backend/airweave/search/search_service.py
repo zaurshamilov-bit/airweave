@@ -12,7 +12,6 @@ from airweave.api.context import ApiContext
 from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
 from airweave.platform.destinations._base import BaseDestination
-from airweave.platform.destinations._config import DecayConfig
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
 from airweave.platform.embedding_models.bm25_text2vec import BM25Text2Vec
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
@@ -24,6 +23,7 @@ from airweave.schemas.search import (
     SearchRequest,
     SearchStatus,
 )
+from airweave.search.decay import DecayConfig
 
 
 class SearchService:

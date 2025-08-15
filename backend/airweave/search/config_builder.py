@@ -80,8 +80,11 @@ class SearchConfigBuilder:
             f"collection: {collection_id}"
         )
 
+        # Apply defaults first
+        search_method = search_request.search_method or DEFAULT_SEARCH_METHOD
+
         # Build the operations based on request
-        ops = self._create_operations(search_request, ctx)
+        ops = self._create_operations(search_request, search_method, ctx)
 
         # Log which operations are enabled
         enabled_ops = []
@@ -92,6 +95,8 @@ class SearchConfigBuilder:
         if ops["qdrant_filter"]:
             enabled_ops.append("qdrant_filter")
         enabled_ops.extend(["embedding", "vector_search"])  # Always present
+        if ops["recency"]:
+            enabled_ops.append("recency")
         if ops["reranking"]:
             enabled_ops.append(f"reranking({ops['reranking'].name})")
         if ops["completion"]:
@@ -104,9 +109,6 @@ class SearchConfigBuilder:
         limit = search_request.limit if search_request.limit is not None else DEFAULT_LIMIT
         offset = search_request.offset if search_request.offset is not None else DEFAULT_OFFSET
         score_threshold = search_request.score_threshold  # DEFAULT_SCORE_THRESHOLD (None is valid)
-
-        # Handle hybrid search and recency parameters
-        search_method = search_request.search_method or DEFAULT_SEARCH_METHOD
 
         # Public recency_bias (0..1) controls dynamic post-retrieval recency operator
         recency_bias = (
@@ -141,22 +143,22 @@ class SearchConfigBuilder:
 
         return config
 
-    def _create_operations(self, search_request: SearchRequest, ctx: ApiContext) -> dict:
+    def _create_operations(
+        self, search_request: SearchRequest, search_method: str, ctx: ApiContext
+    ) -> dict:
         """Create operations based on request parameters.
 
         Returns a dictionary with operation instances or None for each field.
 
         Args:
             search_request: User's search request
+            search_method: The search method to use (already defaulted)
             ctx: API context for logging
 
         Returns:
             Dictionary with operation instances keyed by field name
         """
         ops = {}
-
-        # Get search method for operations that need it
-        search_method = search_request.search_method or "hybrid"
 
         # ========== Query Interpretation (Optional) ==========
         if self._should_enable_query_interpretation(search_request):
@@ -200,10 +202,16 @@ class SearchConfigBuilder:
         ops["vector_search"] = VectorSearch(search_method=search_method)
 
         # ========== Dynamic Recency (Optional) ==========
-        # Enable when user sets a positive bias
-        if (search_request.recency_bias or 0) > 0:
-            bias = search_request.recency_bias or DEFAULT_RECENCY_BIAS
-            ctx.logger.debug(f"Enabling recency operator with bias={bias}")
+        # Get recency bias with default
+        recency_bias = (
+            search_request.recency_bias
+            if getattr(search_request, "recency_bias", None) is not None
+            else DEFAULT_RECENCY_BIAS
+        )
+
+        # Enable when bias is positive
+        if recency_bias > 0:
+            ctx.logger.debug(f"Enabling recency operator with bias={recency_bias}")
             ops["recency"] = RecencyBias(datetime_field=DEFAULT_DATETIME_FIELD_HINT)
         else:
             ops["recency"] = None

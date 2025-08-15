@@ -211,6 +211,26 @@ class QdrantDestination(VectorDBDestination):
                 on_disk_payload=True,  # Store payload on disk to save memory
             )
 
+            # Create range indexes for timestamp fields to enable order_by operations
+            # These are required for the RecencyBias operator to fetch min/max timestamps
+            self.logger.debug(
+                f"Creating range indexes for timestamp fields in {self.collection_name}..."
+            )
+
+            # Index for harmonized updated_at timestamp (primary field for recency)
+            await self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="airweave_system_metadata.airweave_updated_at",
+                field_schema=rest.PayloadSchemaType.DATETIME,
+            )
+
+            # Index for harmonized created_at timestamp (fallback field)
+            await self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="airweave_system_metadata.airweave_created_at",
+                field_schema=rest.PayloadSchemaType.DATETIME,
+            )
+
         except Exception as e:
             if "already exists" not in str(e):
                 raise
@@ -469,27 +489,44 @@ class QdrantDestination(VectorDBDestination):
 
         decay_expression = decay_expressions[decay_config.decay_type](decay_params)
 
-        # If DecayConfig has weight < 1, combine using weighted sum: (1-w)*score + w*decay
+        # Decay returns 0-1 (1=newest, 0=oldest)
+        # We want to multiply scores by a factor that boosts newer items
+        # With weight=1.0, newest items get full score, oldest get 0
+        # With weight=0.5, newest get full score, oldest get 0.5*score
         weight = getattr(decay_config, "weight", 1.0) if decay_config else 1.0
-        score_weight = max(0.0, min(1.0, 1.0 - weight))
 
-        if weight >= 1.0:
-            weighted_formula = rest.SumExpression(sum=["$score", decay_expression])
-        elif weight <= 0.0:
+        if weight <= 0.0:
+            # No recency bias
             weighted_formula = "$score"
+        elif weight >= 1.0:
+            # Full recency: rank by recency only within candidate set
+            # This ignores similarity entirely
+            weighted_formula = decay_expression
         else:
-            weighted_formula = rest.SumExpression(
+            # Partial recency: blend similarity and decay proportionally
+            # Since we can't predict RRF score range (could be 0.03 to 20+),
+            # we use a multiplicative approach that works regardless of scale:
+            # score * (1 - weight + weight * decay)
+            # This ensures:
+            # - Newest items (decay=1): score * 1.0 (full score)
+            # - Oldest items (decay=0): score * (1-weight) (reduced score)
+            # - Mid-age items scale linearly between these
+
+            decay_factor = rest.SumExpression(
                 sum=[
-                    rest.MulExpression(mul=[score_weight, "$score"]),
-                    rest.MulExpression(mul=[weight, decay_expression]),
+                    1.0 - weight,  # Base multiplier for all items
+                    rest.MultExpression(
+                        mult=[weight, decay_expression]
+                    ),  # Additional boost for newer items
                 ]
             )
+            weighted_formula = rest.MultExpression(mult=["$score", decay_factor])
 
         # Log the formula composition for transparency
         try:
             self.logger.debug(
                 f"[Qdrant] Decay formula applied: using={params.get('using')}, "
-                f"weight={weight}, score_weight={score_weight}, field={decay_config.datetime_field}"
+                f"weight={weight}, field={decay_config.datetime_field}"
             )
         except Exception:
             pass
@@ -551,39 +588,63 @@ class QdrantDestination(VectorDBDestination):
             if not sparse_vector:
                 raise ValueError("Hybrid search requires sparse vector")
 
+            # Use a large prefetch limit to ensure recency can work across a broad candidate set
+            # Optional: scale based on recency bias strength
+            prefetch_limit = 10000  # Large fixed limit for good recency coverage
+            if decay_config is not None:
+                try:
+                    weight = max(0.0, min(1.0, float(getattr(decay_config, "weight", 0.0) or 0.0)))
+                    # Optional heuristic: increase prefetch with higher recency bias
+                    # At weight=0.3: 10k, at weight=0.7: 15k, at weight=1.0: 20k
+                    if weight > 0.3:
+                        prefetch_limit = int(10000 * (1 + weight))
+                except Exception:
+                    pass
+
             prefetch_params = [
                 # Neural embedding
                 {
                     "query": query_vector,
                     "using": DEFAULT_VECTOR_NAME,
-                    "limit": limit,
+                    "limit": prefetch_limit,
                 },
                 # BM25 embedding
                 {
                     "query": rest.SparseVector(**sparse_vector.as_object()),
                     "using": KEYWORD_VECTOR_NAME,
-                    "limit": limit,
+                    "limit": prefetch_limit,
                 },
             ]
 
-            prefetches = []
-            if decay_config is None:
-                # Only prefetch (which precomputes the rankings) without decay
-                prefetches = [rest.Prefetch(**params) for params in prefetch_params]
-            else:
-                # Prefetch and decay score per vector config
-                prefetches = [
-                    self._prepare_index_search_request(
-                        params=params,
-                        decay_config=decay_config,
-                    )
-                    for params in prefetch_params
-                ]
+            # Always do prefetch without decay first to get similarity-based candidates
+            prefetches = [rest.Prefetch(**params) for params in prefetch_params]
 
-            query_request_params = {
-                "prefetch": prefetches,
-                "query": rest.FusionQuery(fusion=rest.Fusion.RRF),
-            }
+            if decay_config is None or decay_config.weight <= 0.0:
+                # No decay, just use RRF fusion
+                query_request_params = {
+                    "prefetch": prefetches,
+                    "query": rest.FusionQuery(fusion=rest.Fusion.RRF),
+                }
+            else:
+                # Apply decay AFTER fusion using nested prefetch pattern
+                # Step 1: Create the RRF fusion prefetch (this will be normalized)
+                rrf_prefetch = rest.Prefetch(
+                    prefetch=prefetches,  # List of prefetches to fuse
+                    query=rest.FusionQuery(fusion=rest.Fusion.RRF),
+                    limit=prefetch_limit,  # Large limit for good candidate pool
+                )
+
+                # Step 2: Apply decay formula to the normalized RRF results
+                decay_params = self._prepare_index_search_request(
+                    params={},  # Empty params since we're applying to fused results
+                    decay_config=decay_config,
+                )
+
+                # Use nested prefetch to ensure normalization happens before decay
+                query_request_params = {
+                    "prefetch": [rrf_prefetch],  # Single prefetch with RRF fusion
+                    "query": decay_params["query"],  # Apply decay formula to normalized results
+                }
 
         return rest.QueryRequest(
             **query_request_params,
@@ -804,9 +865,15 @@ class QdrantDestination(VectorDBDestination):
         )
 
         if decay_config:
+            weight_val = getattr(decay_config, "weight", 0)
+            strategy = (
+                "Pure recency (RRF then decay)"
+                if weight_val >= 1.0
+                else "RRF fusion THEN decay applied"
+            )
             self.logger.debug(
-                f"[Qdrant] Decay details: field={decay_config.datetime_field}, "
-                f"scale={decay_config.scale_value} {decay_config.scale_unit}"
+                f"[Qdrant] Decay strategy: weight={weight_val:.1f} - {strategy}, "
+                f"field={decay_config.datetime_field}, scale={decay_config.scale_value}s"
             )
 
         try:
@@ -843,11 +910,30 @@ class QdrantDestination(VectorDBDestination):
                     avg_score = sum(scores) / len(scores)
                     max_score = max(scores)
                     min_score = min(scores)
-                    self.logger.info(
-                        f"[Qdrant] Result scores with {search_method} search: "
-                        f"count={len(scores)}, avg={avg_score:.3f}, "
-                        f"max={max_score:.3f}, min={min_score:.3f}"
-                    )
+
+                    if decay_config:
+                        # Calculate score distribution in quartiles
+                        sorted_scores = sorted(scores, reverse=True)
+                        q1_idx = len(sorted_scores) // 4
+                        q2_idx = len(sorted_scores) // 2
+                        q3_idx = 3 * len(sorted_scores) // 4
+
+                        q1_score = sorted_scores[q1_idx] if q1_idx < len(sorted_scores) else 0
+                        q2_score = sorted_scores[q2_idx] if q2_idx < len(sorted_scores) else 0
+                        q3_score = sorted_scores[q3_idx] if q3_idx < len(sorted_scores) else 0
+
+                        self.logger.debug(
+                            f"[Qdrant] Result scores with {search_method} search + RECENCY "
+                            f"(weight={decay_config.weight}): count={len(scores)}, "
+                            f"avg={avg_score:.3f}, max={max_score:.3f}, Q1={q1_score:.3f}, "
+                            f"median={q2_score:.3f}, Q3={q3_score:.3f}, min={min_score:.3f}"
+                        )
+                    else:
+                        self.logger.debug(
+                            f"[Qdrant] Result scores with {search_method} search (NO recency): "
+                            f"count={len(scores)}, avg={avg_score:.3f}, "
+                            f"max={max_score:.3f}, min={min_score:.3f}"
+                        )
 
             return flattened_results
 

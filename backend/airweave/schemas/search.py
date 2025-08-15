@@ -104,8 +104,12 @@ class SearchRequest(BaseModel):
         ge=0.0,
         le=1.0,
         description=(
-            "How much to weigh recency vs content similarity (0..1). "
-            "0 = no recency effect; 1 = rank by recency only. DEFAULT from config builder."
+            "How much document age penalizes the similarity score (0..1). "
+            "0 = no age penalty (pure similarity); "
+            "0.5 = old docs lose up to 50% of their score; "
+            "1 = old docs get zero score (pure recency). "
+            "Applied as: score × (1 - bias + bias × age_factor). "
+            "Works within top ~10,000 semantic matches. DEFAULT: 0.3"
         ),
     )
 

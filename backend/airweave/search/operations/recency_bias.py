@@ -26,15 +26,17 @@ from airweave.search.operations.base import SearchOperation
 class RecencyBias(SearchOperation):
     """Compute dynamic DecayConfig before search and store it in context."""
 
-    def __init__(self, datetime_field: Optional[str] = None, span_fraction: float = 0.2):
+    # Fraction of the data age span to use as the decay scale
+    # 0.2 means the decay extends over 20% of your data's age range
+    SPAN_FRACTION = 0.2
+
+    def __init__(self, datetime_field: Optional[str] = None):
         """Initialize.
 
         Args:
             datetime_field: Preferred datetime field to use if available
-            span_fraction: Fraction of observed time span to use as decay scale
         """
         self.datetime_field = datetime_field
-        self.span_fraction = max(0.01, min(1.0, span_fraction))
 
     @property
     def name(self) -> str:
@@ -61,8 +63,14 @@ class RecencyBias(SearchOperation):
         collection_id: str,
         field: str,
         qdrant_filter: Optional[rest.Filter],
+        logger,
     ) -> tuple[Optional[datetime], Optional[datetime]]:
         """Fetch oldest/newest timestamps using ordered scrolls."""
+        logger.debug(
+            f"[RecencyBias._get_min_max] Fetching min/max for field={field}, "
+            f"collection={collection_id}"
+        )
+
         # Oldest
         oldest_points = await destination.client.scroll(  # type: ignore
             collection_name=str(collection_id),
@@ -71,6 +79,8 @@ class RecencyBias(SearchOperation):
             order_by=rest.OrderBy(key=field, direction="asc"),
             scroll_filter=qdrant_filter,
         )
+        logger.debug(f"[RecencyBias._get_min_max] Oldest scroll result: {oldest_points}")
+
         # Newest
         newest_points = await destination.client.scroll(  # type: ignore
             collection_name=str(collection_id),
@@ -79,23 +89,33 @@ class RecencyBias(SearchOperation):
             order_by=rest.OrderBy(key=field, direction="desc"),
             scroll_filter=qdrant_filter,
         )
+        logger.debug(f"[RecencyBias._get_min_max] Newest scroll result: {newest_points}")
 
         def extract_dt(point) -> Optional[datetime]:
             if not point or not getattr(point, "payload", None):
+                logger.debug(f"[RecencyBias.extract_dt] No point or payload: point={point}")
                 return None
             value: Any = point.payload
+            logger.debug(f"[RecencyBias.extract_dt] Initial payload: {value}")
             for part in field.split("."):
                 if isinstance(value, dict):
                     value = value.get(part)
+                    logger.debug(f"[RecencyBias.extract_dt] After getting '{part}': {value}")
                 else:
+                    logger.debug("[RecencyBias.extract_dt] Value not a dict, returning None")
                     return None
             if isinstance(value, str):
                 try:
-                    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-                except ValueError:
+                    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                    logger.debug(f"[RecencyBias.extract_dt] Parsed datetime: {dt}")
+                    return dt
+                except ValueError as e:
+                    logger.debug(f"[RecencyBias.extract_dt] Failed to parse datetime: {e}")
                     return None
             if isinstance(value, datetime):
+                logger.debug(f"[RecencyBias.extract_dt] Already datetime: {value}")
                 return value
+            logger.debug(f"[RecencyBias.extract_dt] Value not string or datetime: {type(value)}")
             return None
 
         oldest = extract_dt(oldest_points[0][0] if oldest_points and oldest_points[0] else None)
@@ -112,26 +132,24 @@ class RecencyBias(SearchOperation):
         """Construct DecayConfig from time span and weight."""
         from airweave.search.decay import DecayConfig
 
+        # Use the newest item's time as target, not current time
+        # This ensures our actual data gets meaningful decay values
         span_seconds = max(1.0, (t_max - t_min).total_seconds())
-        scale_seconds = max(43200.0, span_seconds * self.span_fraction)
+
+        # Scale should cover the full data span, not just 20% of it
+        # This ensures oldest items get near 0, newest get near 1
+        scale_seconds = span_seconds  # Full span for linear decay
 
         decay_config = DecayConfig(
             decay_type="linear",
             datetime_field=chosen_field,
-            target_datetime=datetime.now(),
+            target_datetime=t_max,  # Use newest item time, not now()
             scale_unit="second",
             scale_value=scale_seconds,
-            midpoint=0.5,
+            midpoint=0.5,  # Not used for linear, but kept for compatibility
             weight=recency_bias,
         )
 
-        # Ensure seconds return path for unit='second'
-        def _get_scale_seconds_override(self) -> float:  # type: ignore
-            return float(self.scale_value)
-
-        decay_config.get_scale_seconds = _get_scale_seconds_override.__get__(
-            decay_config, DecayConfig
-        )  # type: ignore
         return decay_config
 
     async def execute(self, context: Dict[str, Any]) -> None:
@@ -166,9 +184,11 @@ class RecencyBias(SearchOperation):
         qdrant_filter = self._get_filter(context)
 
         try:
+            logger.debug(f"[RecencyBias] Attempting to fetch min/max for field: {field}")
             oldest, newest = await self._get_min_max(
-                destination, config.collection_id, field, qdrant_filter
+                destination, config.collection_id, field, qdrant_filter, logger
             )
+            logger.debug(f"[RecencyBias] Got oldest={oldest}, newest={newest}")
             if oldest and newest and newest > oldest:
                 chosen_field = field
                 t_min, t_max = oldest, newest
@@ -179,7 +199,12 @@ class RecencyBias(SearchOperation):
                     t_min.isoformat(),
                     t_max.isoformat(),
                 )
-        except Exception:
+            else:
+                logger.warning(
+                    f"[RecencyBias] Invalid timestamps: oldest={oldest}, newest={newest}"
+                )
+        except Exception as e:
+            logger.error(f"[RecencyBias] Error fetching min/max timestamps: {e}")
             chosen_field = None
 
         if not chosen_field:
@@ -192,5 +217,6 @@ class RecencyBias(SearchOperation):
         context["decay_config"] = decay_config
         logger.info(
             f"[RecencyBias] Using datetime_field='{chosen_field}', span={(t_max - t_min)}, "
-            f"scale={decay_config.scale_value:.0f}s, weight={recency_bias}"
+            f"target=newest ({t_max.isoformat()}), "
+            f"scale={decay_config.scale_value:.0f}s (full span), weight={recency_bias}"
         )
