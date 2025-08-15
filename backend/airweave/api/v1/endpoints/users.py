@@ -5,6 +5,7 @@ database, as it contains the endpoints for user creation and retrieval.
 """
 
 from typing import List, Optional
+from uuid import uuid4
 
 from fastapi import Depends, HTTPException
 from fastapi_auth0 import Auth0User
@@ -177,6 +178,7 @@ async def create_or_update_user(
                 db,
                 obj_in=schemas.APIKeyCreate(name="Default API Key"),
                 ctx=ApiContext(
+                    request=uuid4(),
                     user=user,
                     organization=organization,
                     auth_method="auth0",
