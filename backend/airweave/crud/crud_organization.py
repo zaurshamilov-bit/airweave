@@ -286,7 +286,7 @@ class CRUDOrganization:
             if organization_id not in [org.organization.id for org in ctx.user.user_organizations]:
                 raise PermissionException("User does not have access to organization")
         else:
-            if str(organization_id) != ctx.organization.id:
+if organization_id != ctx.organization.id:
                 raise PermissionException("API key does not have access to organization")
 
     async def get_user_organizations_with_roles(
