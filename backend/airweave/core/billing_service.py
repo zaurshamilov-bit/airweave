@@ -1,7 +1,7 @@
 """Billing service for managing subscriptions and payments."""
 
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from uuid import UUID, uuid4
 
 import stripe
@@ -33,26 +33,44 @@ from airweave.schemas.usage import UsageCreate
 class BillingService:
     """Service for managing organization billing and subscriptions."""
 
-    def _create_system_context(
-        self, organization_id: UUID, source: str = "billing_service"
+    async def _create_system_context(
+        self,
+        db: AsyncSession,
+        organization: Union[schemas.Organization, UUID],
+        source: str = "billing_service",
     ) -> ApiContext:
         """Create a system ApiContext for internal operations.
 
         Args:
-            organization_id: Organization ID
+            db: Database session
+            organization: Organization object or UUID
             source: Source identifier for tracking
 
         Returns:
             Properly configured ApiContext for system operations
         """
+        # If we got an ID, fetch the organization
+        if isinstance(organization, UUID):
+            org_model = await crud.organization.get(
+                db, id=organization, skip_access_validation=True
+            )
+            if not org_model:
+                raise NotFoundException(f"Organization {organization} not found")
+            organization_obj = schemas.Organization.model_validate(org_model, from_attributes=True)
+        else:
+            organization_obj = organization
+
         return ApiContext(
             request_id=str(uuid4()),
-            organization_id=organization_id,
+            organization=organization_obj,
             user=None,
             auth_method="system",
             auth_metadata={"source": source},
             logger=logger.with_context(
-                organization_id=str(organization_id), auth_method="system", source=source
+                organization_id=str(organization_obj.id),
+                organization_name=organization_obj.name,
+                auth_method="system",
+                source=source,
             ),
         )
 
@@ -214,7 +232,7 @@ class BillingService:
 
         # Get billing record
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=ctx.organization_id
+            db, organization_id=ctx.organization.id
         )
         if not billing_model:
             raise NotFoundException("No billing record found for organization")
@@ -258,7 +276,7 @@ class BillingService:
             success_url=success_url,
             cancel_url=cancel_url,
             metadata={
-                "organization_id": str(ctx.organization_id),
+                "organization_id": str(ctx.organization.id),
                 "plan": plan,
             },
             trial_period_days=use_trial_period_days,
@@ -361,7 +379,7 @@ class BillingService:
             success_url=f"{settings.app_url}/organization/settings?tab=billing&success=true",
             cancel_url=f"{settings.app_url}/organization/settings?tab=billing",
             metadata={
-                "organization_id": str(ctx.organization_id),
+                "organization_id": str(ctx.organization.id),
                 "plan": new_plan,
                 "upgrade_from_trial": "true",
                 "previous_subscription_id": billing_model.stripe_subscription_id,
@@ -375,7 +393,7 @@ class BillingService:
         self,
         db: AsyncSession,
         billing_model: schemas.OrganizationBilling,
-        organization_id: UUID,
+        organization: schemas.Organization,
         new_plan: str,
         new_price_id: str,
     ) -> str:
@@ -384,7 +402,7 @@ class BillingService:
         Args:
             db: Database session
             billing_model: Organization billing model
-            organization_id: Organization ID
+            organization: Organization object
             new_plan: New plan name
             new_price_id: Stripe price ID for new plan
 
@@ -399,7 +417,7 @@ class BillingService:
         )
 
         # Create system auth context
-        ctx = self._create_system_context(organization_id)
+        ctx = await self._create_system_context(db, organization)
 
         # Store pending change locally
         update_data = OrganizationBillingUpdate(
@@ -426,7 +444,7 @@ class BillingService:
         self,
         db: AsyncSession,
         billing_model: Any,
-        organization_id: UUID,
+        organization: schemas.Organization,
         new_plan: str,
         new_price_id: str,
         is_trial_to_startup: bool,
@@ -436,7 +454,7 @@ class BillingService:
         Args:
             db: Database session
             billing_model: Organization billing model
-            organization_id: Organization ID
+            organization: Organization
             new_plan: New plan name
             new_price_id: Stripe price ID for new plan
             is_trial_to_startup: Whether this is trial to startup upgrade
@@ -449,7 +467,7 @@ class BillingService:
         # Reactivate if canceled
         if billing_model.cancel_at_period_end:
             log.info(
-                f"Reactivate canceled subscription before plan change for org {organization_id}"
+                f"Reactivate canceled subscription before plan change for org {organization.id}"
             )
             await stripe_client.update_subscription(
                 subscription_id=billing_model.stripe_subscription_id,
@@ -466,7 +484,7 @@ class BillingService:
         )
 
         # Create system auth context
-        system_ctx = self._create_system_context(organization_id)
+        system_ctx = await self._create_system_context(db, organization)
 
         # Update local billing record
         update_data = OrganizationBillingUpdate(
@@ -512,7 +530,7 @@ class BillingService:
         log = ctx.logger
 
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=ctx.organization_id
+            db, organization_id=ctx.organization.id
         )
 
         # Validate plan change
@@ -540,14 +558,14 @@ class BillingService:
             # For downgrades, schedule the change for end of period
             if not is_upgrade:
                 return await self._handle_plan_downgrade(
-                    db, billing_model, ctx.organization_id, new_plan, new_price_id
+                    db, billing_model, ctx.organization, new_plan, new_price_id
                 )
 
             # For upgrades, proceed with immediate update
             return await self._handle_plan_upgrade(
                 db,
                 billing_model,
-                ctx,
+                ctx.organization,
                 new_plan,
                 new_price_id,
                 is_trial_to_startup,
@@ -574,7 +592,7 @@ class BillingService:
             NotFoundException: If no active subscription
         """
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=ctx.organization_id
+            db, organization_id=ctx.organization.id
         )
         if not billing_model or not billing_model.stripe_subscription_id:
             raise NotFoundException("No active subscription found")
@@ -622,7 +640,7 @@ class BillingService:
             InvalidStateError: If subscription not set to cancel
         """
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=ctx.organization_id
+            db, organization_id=ctx.organization.id
         )
         if not billing_model or not billing_model.stripe_subscription_id:
             raise NotFoundException("No active subscription found")
@@ -666,7 +684,7 @@ class BillingService:
             Success message
         """
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=ctx.organization_id
+            db, organization_id=ctx.organization.id
         )
 
         if not billing_model or not billing_model.pending_plan_change:
@@ -723,7 +741,7 @@ class BillingService:
             NotFoundException: If billing record not found
         """
         billing_model = await crud.organization_billing.get_by_organization(
-            db, organization_id=ctx.organization_id
+            db, organization_id=ctx.organization.id
         )
         if not billing_model:
             raise NotFoundException("No billing record found for organization")
@@ -805,7 +823,7 @@ class BillingService:
             trial_ends_at = datetime.utcfromtimestamp(subscription.trial_end)
 
         # Create system auth context for update
-        ctx = self._create_system_context(UUID(org_id), "stripe_webhook")
+        ctx = await self._create_system_context(db, UUID(org_id), "stripe_webhook")
 
         # Update billing record using CRUD
         update_data = OrganizationBillingUpdate(
@@ -963,7 +981,7 @@ class BillingService:
             subscription: Stripe subscription
             new_plan: New plan
         """
-        current_period = await self.get_current_billing_period(db, ctx.organization_id)
+        current_period = await self.get_current_billing_period(db, ctx.organization.id)
         if not current_period or current_period.status != BillingPeriodStatus.TRIAL:
             return
 
@@ -978,7 +996,7 @@ class BillingService:
         # Create paid period
         await self.create_billing_period(
             db=db,
-            organization_id=ctx.organization_id,
+            organization_id=ctx.organization.id,
             period_start=datetime.utcnow(),
             period_end=datetime.utcfromtimestamp(subscription.current_period_end),
             plan=BillingPlan(new_plan),
@@ -987,7 +1005,7 @@ class BillingService:
             previous_period_id=current_period.id,
         )
 
-    async def handle_subscription_updated(
+    async def handle_subscription_updated(  # noqa: C901
         self,
         db: AsyncSession,
         subscription: stripe.Subscription,
@@ -1017,10 +1035,17 @@ class BillingService:
         org_id = billing_model.organization_id
 
         # Create webhook auth context for CRUD operations
-        # The contextual logger should already have organization context
+        # Fetch the organization for the context
+        org_model = await crud.organization.get(db, id=org_id, skip_access_validation=True)
+        if not org_model:
+            log.error(f"Organization {org_id} not found")
+            return
+
+        organization = schemas.Organization.model_validate(org_model, from_attributes=True)
+
         ctx = ApiContext(
             request_id=str(uuid4()),
-            organization_id=org_id,
+            organization=organization,
             user=None,
             auth_method="stripe_webhook",
             auth_metadata={
@@ -1128,7 +1153,7 @@ class BillingService:
         org_id = billing_model.organization_id
 
         # Create system auth context for update
-        ctx = self._create_system_context(org_id, "stripe_webhook")
+        ctx = await self._create_system_context(db, org_id, "stripe_webhook")
 
         # Check if this is a scheduled cancellation or actual deletion
         # When cancel_at_period_end is set to true, Stripe sends this event but
@@ -1197,7 +1222,7 @@ class BillingService:
         org_id = billing_model.organization_id
 
         # Create system auth context for update
-        ctx = self._create_system_context(org_id, "stripe_webhook")
+        ctx = await self._create_system_context(db, org_id, "stripe_webhook")
 
         # Update payment info using CRUD
         update_data = OrganizationBillingUpdate(
@@ -1248,7 +1273,7 @@ class BillingService:
         org_id = billing_model.organization_id
 
         # Create system auth context for update
-        ctx = self._create_system_context(org_id, "stripe_webhook")
+        ctx = await self._create_system_context(db, org_id, "stripe_webhook")
 
         # Check if this is a renewal payment failure
         if hasattr(invoice, "billing_reason") and invoice.billing_reason == "subscription_cycle":
@@ -1374,7 +1399,7 @@ class BillingService:
         # Update status if grace period expired
         if grace_period_expired and billing_model.billing_status != BillingStatus.TRIAL_EXPIRED:
             # Create system auth context for update
-            ctx = self._create_system_context(organization_id)
+            ctx = await self._create_system_context(db, organization_id)
 
             update_data = OrganizationBillingUpdate(
                 billing_status=BillingStatus.TRIAL_EXPIRED,
@@ -1458,7 +1483,7 @@ class BillingService:
                         "status": BillingPeriodStatus.COMPLETED,
                         "period_end": period_start,  # Ensure continuity!
                     },
-                    ctx=self._create_system_context(organization_id),
+                    ctx=await self._create_system_context(db, organization_id),
                 )
 
                 # If no previous_period_id was provided, use the most recent active period
@@ -1487,7 +1512,7 @@ class BillingService:
                 status = BillingPeriodStatus.ACTIVE
 
         # Create system auth context
-        ctx = self._create_system_context(organization_id)
+        ctx = await self._create_system_context(db, organization_id)
 
         # Create billing period
         period_create = BillingPeriodCreate(
@@ -1572,7 +1597,7 @@ class BillingService:
             and not billing_model.stripe_subscription_id
         ):
             # Create system auth context for update
-            ctx = self._create_system_context(organization_id)
+            ctx = await self._create_system_context(db, organization_id)
 
             update_data = OrganizationBillingUpdate(
                 billing_status=BillingStatus.TRIAL_EXPIRED,

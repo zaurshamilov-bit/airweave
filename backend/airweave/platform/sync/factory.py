@@ -153,7 +153,7 @@ class SyncFactory:
             dimensions={
                 "sync_id": str(sync.id),
                 "sync_job_id": str(sync_job.id),
-                "organization_id": str(ctx.organization_id),
+                "organization_id": str(ctx.organization.id),
                 "source_connection_id": str(source_connection_data["connection_id"]),
                 "collection_readable_id": str(collection.readable_id),
             },
@@ -192,7 +192,7 @@ class SyncFactory:
 
         # Create GuardRailService with contextual logger
         guard_rail = GuardRailService(
-            organization_id=ctx.organization_id,
+            organization_id=ctx.organization.id,
             logger=logger.with_context(component="guardrail"),
         )
 
@@ -750,7 +750,7 @@ class SyncFactory:
             raise NotFoundException(
                 (
                     f"Destination connection not found for organization "
-                    f"{ctx.organization_id}"
+                    f"{ctx.organization.id}"
                     f" and connection id {destination_connection_id}"
                 )
             )

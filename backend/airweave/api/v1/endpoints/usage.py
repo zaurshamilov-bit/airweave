@@ -170,7 +170,7 @@ async def _get_target_period(
             raise HTTPException(status_code=404, detail="Billing period not found")
         return target_period
     else:
-        return await crud.billing_period.get_current_period(db, organization_id=ctx.organization_id)
+        return await crud.billing_period.get_current_period(db, organization_id=ctx.organization.id)
 
 
 def _calculate_trends(
@@ -298,11 +298,11 @@ async def get_usage_dashboard(
         )
 
         # Get previous periods
-        previous_periods = await _build_previous_periods(db, ctx.organization_id)
+        previous_periods = await _build_previous_periods(db, ctx.organization.id)
 
         # Calculate aggregate stats
         all_usage_records = await crud.usage.get_all_by_organization(
-            db, organization_id=ctx.organization_id
+            db, organization_id=ctx.organization.id
         )
         total_entities_all_time = (
             sum(u.entities for u in all_usage_records) if all_usage_records else 0

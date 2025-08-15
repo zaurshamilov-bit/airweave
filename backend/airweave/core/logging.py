@@ -162,7 +162,7 @@ class ContextualLogger(logging.LoggerAdapter):
     def from_ctx(self, ctx: "ApiContext") -> "ContextualLogger":
         """Create a new logger with additional context from an ApiContext object."""
         new_dimensions = self.dimensions.copy()
-        new_dimensions["organization_id"] = str(ctx.organization_id)
+        new_dimensions["organization_id"] = str(ctx.organization.id)
         new_dimensions["auth_method"] = ctx.auth_method
 
         if ctx.user_id:

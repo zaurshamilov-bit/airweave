@@ -306,8 +306,8 @@ class ConnectionService:
         """
         # Create integration credential
         integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
-            name=f"{integration_name} - {ctx.organization_id}",
-            description=f"Credentials for {integration_name} - {ctx.organization_id}",
+            name=f"{integration_name} - {ctx.organization.id}",
+            description=f"Credentials for {integration_name} - {ctx.organization.id}",
             integration_short_name=short_name,
             integration_type=integration_type,
             auth_type=auth_type,
@@ -511,7 +511,7 @@ class ConnectionService:
             integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
                 name=credential_in.name,
                 description=credential_in.description
-                or f"Credentials for {integration.name} - {ctx.organization_id}",
+                or f"Credentials for {integration.name} - {ctx.organization.id}",
                 integration_short_name=short_name,
                 integration_type=integration_type,
                 auth_type=auth_type,

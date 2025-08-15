@@ -92,7 +92,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
         user_query = (
             select(self.model)
             .where(
-                self.model.organization_id == ctx.organization_id,
+                self.model.organization_id == ctx.organization.id,
             )
             .order_by(desc(self.model.created_at))
             .offset(skip)
@@ -139,7 +139,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
             .options(selectinload(Connection.integration_credential))
             .where(
                 Connection.integration_type == integration_type,
-                Connection.organization_id == ctx.organization_id,
+                Connection.organization_id == ctx.organization.id,
             )
         )
         org_result = await db.execute(org_query)
@@ -188,7 +188,7 @@ class CRUDConnection(CRUDBaseOrganization[Connection, ConnectionCreate, Connecti
             .options(selectinload(Connection.integration_credential))
             .where(
                 Connection.short_name == short_name,
-                Connection.organization_id == ctx.organization_id,
+                Connection.organization_id == ctx.organization.id,
             )
         )
         org_result = await db.execute(org_query)

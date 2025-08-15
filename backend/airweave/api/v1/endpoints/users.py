@@ -177,7 +177,9 @@ async def create_or_update_user(
                 db,
                 obj_in=schemas.APIKeyCreate(name="Default API Key"),
                 ctx=ApiContext(
-                    user=user, organization_id=str(organization.id), auth_method="auth0"
+                    user=user,
+                    organization=organization,
+                    auth_method="auth0",
                 ),
                 uow=uow,
             )

@@ -53,7 +53,7 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
         # Validate auth context has org access
 
         query = select(self.model).where(
-            self.model.id == id, self.model.organization_id == ctx.organization_id
+            self.model.id == id, self.model.organization_id == ctx.organization.id
         )
 
         result = await db.execute(query)
@@ -90,7 +90,7 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
 
         query = (
             select(self.model)
-            .where(self.model.organization_id == ctx.organization_id)
+            .where(self.model.organization_id == ctx.organization.id)
             .offset(skip)
             .limit(limit)
         )
@@ -129,12 +129,12 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
         """
         if not skip_validation:
             # Validate auth context has org access
-            await self._validate_organization_access(ctx, ctx.organization_id)
+            await self._validate_organization_access(ctx, ctx.organization.id)
 
         if not isinstance(obj_in, dict):
             obj_in = obj_in.model_dump(exclude_unset=True)
 
-        obj_in["organization_id"] = ctx.organization_id
+        obj_in["organization_id"] = ctx.organization.id
 
         if self.track_user:
             if ctx.has_user_context:
@@ -219,7 +219,7 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
         -------
             Optional[ModelType]: The deleted object.
         """
-        effective_org_id = organization_id or ctx.organization_id
+        effective_org_id = organization_id or ctx.organization.id
 
         query = select(self.model).where(
             self.model.id == id, self.model.organization_id == effective_org_id
@@ -256,5 +256,5 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
             if organization_id not in [org.organization.id for org in ctx.user.user_organizations]:
                 raise PermissionException("User does not have access to organization")
         else:
-            if organization_id != ctx.organization_id:
+            if organization_id != ctx.organization.id:
                 raise PermissionException("API key does not have access to organization")

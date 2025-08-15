@@ -43,7 +43,7 @@ async def init_db(db: AsyncSession) -> None:
             ctx=ApiContext(
                 request_id=str(uuid.uuid4()),
                 user=user,
-                organization_id=organization.id,
+                organization=organization,
                 auth_method="system",
                 logger=logger,
             ),
