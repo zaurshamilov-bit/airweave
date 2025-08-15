@@ -1,7 +1,7 @@
 """Module for entity processing within the sync architecture."""
 
 import asyncio
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set
 
 from airweave import crud, schemas
 from airweave.core.exceptions import NotFoundException
@@ -333,7 +333,7 @@ class EntityProcessor:
         self,
         parent_entity: BaseEntity,
         processed_entities: List[BaseEntity],
-        db_entity: Optional[schemas.Entity],
+        db_entity: schemas.Entity,
         action: DestinationAction,
         sync_context: SyncContext,
     ) -> None:
@@ -349,7 +349,7 @@ class EntityProcessor:
         if action == DestinationAction.KEEP:
             await self._handle_keep(sync_context)
         elif action == DestinationAction.INSERT:
-            await self._handle_insert(parent_entity, processed_entities, db_entity, sync_context)
+            await self._handle_insert(parent_entity, processed_entities, sync_context)
         elif action == DestinationAction.UPDATE:
             await self._handle_update(parent_entity, processed_entities, db_entity, sync_context)
 
@@ -608,7 +608,6 @@ class EntityProcessor:
         self,
         parent_entity: BaseEntity,
         processed_entities: List[BaseEntity],
-        db_entity: Optional[schemas.Entity],
         sync_context: SyncContext,
     ) -> None:
         """Handle INSERT action."""
@@ -770,7 +769,7 @@ class EntityProcessor:
         )
 
     async def cleanup_orphaned_entities(self, sync_context: SyncContext) -> None:
-        """Clean up orphaned entities that exist in the database but weren't encountered during sync."""
+        """Clean up orphaned entities that exist in the database."""
         sync_context.logger.info("🧹 Starting cleanup of orphaned entities")
 
         try:
@@ -803,26 +802,18 @@ class EntityProcessor:
                     f"🧹 Found {len(orphaned_entities)} orphaned entities to delete"
                 )
 
+                # TODO: wrap this in a unit of work transaction
+
                 # Extract entity IDs for bulk operations
                 orphaned_entity_ids = [entity.entity_id for entity in orphaned_entities]
                 orphaned_db_ids = [entity.id for entity in orphaned_entities]
 
                 # Delete from destinations first using bulk_delete
                 for destination in sync_context.destinations:
-                    try:
-                        await destination.bulk_delete(orphaned_entity_ids, sync_context.sync.id)
-                    except Exception as e:
-                        sync_context.logger.warning(
-                            f"⚠️ Failed to bulk delete orphaned entities from destination: {e}"
-                        )
+                    await destination.bulk_delete(orphaned_entity_ids, sync_context.sync.id)
 
                 # Delete from database using bulk_remove
-                try:
-                    await crud.entity.bulk_remove(db=db, ids=orphaned_db_ids, ctx=sync_context.ctx)
-                except Exception as e:
-                    sync_context.logger.warning(
-                        f"⚠️ Failed to bulk delete orphaned entities from database: {e}"
-                    )
+                await crud.entity.bulk_remove(db=db, ids=orphaned_db_ids, ctx=sync_context.ctx)
 
                 # Update progress tracking
                 await sync_context.progress.increment("deleted", len(orphaned_entities))
@@ -832,5 +823,5 @@ class EntityProcessor:
                 )
 
         except Exception as e:
-            sync_context.logger.warning(f"💥 Cleanup failed: {str(e)}", exc_info=True)
-            # Don't raise - cleanup failure shouldn't fail the entire sync
+            sync_context.logger.error(f"💥 Cleanup failed: {str(e)}", exc_info=True)
+            raise e

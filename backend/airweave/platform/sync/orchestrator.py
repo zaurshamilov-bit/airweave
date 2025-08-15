@@ -84,7 +84,7 @@ class SyncOrchestrator:
             started_at=utc_now_naive(),
         )
 
-    async def _process_entities(self) -> None:
+    async def _process_entities(self) -> None:  # noqa: C901
         """Process entities with explicit stream lifecycle management."""
         source_node = self.sync_context.dag.get_source_node()
 
@@ -166,8 +166,7 @@ class SyncOrchestrator:
                         f"💥 Orphaned entity cleanup failed: {get_error_message(cleanup_error)}",
                         exc_info=True,
                     )
-                    # Don't fail the sync due to cleanup errors
-                    # Just log the error and continue
+                    raise cleanup_error
 
             # Re-raise the error after cleanup
             if stream_error:
