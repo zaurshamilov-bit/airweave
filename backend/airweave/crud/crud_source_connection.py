@@ -231,7 +231,7 @@ class CRUDSourceConnection(
         """
         query = (
             select(self.model)
-            .where(self.model.organization_id == ctx.organization_id)
+            .where(self.model.organization_id == ctx.organization.id)
             .offset(skip)
             .limit(limit)
         )
@@ -270,7 +270,7 @@ class CRUDSourceConnection(
             select(self.model)
             .where(
                 self.model.readable_collection_id == readable_collection_id,
-                self.model.organization_id == ctx.organization_id,
+                self.model.organization_id == ctx.organization.id,
             )
             .offset(skip)
             .limit(limit)
@@ -300,7 +300,7 @@ class CRUDSourceConnection(
         """
         query = select(self.model).where(
             self.model.sync_id == sync_id,
-            self.model.organization_id == ctx.organization_id,
+            self.model.organization_id == ctx.organization.id,
         )
         result = await db.execute(query)
         source_connection = result.scalar_one_or_none()
@@ -330,7 +330,7 @@ class CRUDSourceConnection(
         """
         query = select(self.model).where(
             self.model.white_label_id == white_label_id,
-            self.model.organization_id == ctx.organization_id,
+            self.model.organization_id == ctx.organization.id,
         )
         result = await db.execute(query)
         source_connections = list(result.scalars().all())

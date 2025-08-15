@@ -143,26 +143,26 @@ async def run_sync_activity(
     collection = schemas.Collection(**collection_dict)
     source_connection = schemas.SourceConnection(**source_connection_dict)
 
-    # Reconstruct ApiContext with a new logger
-    # The logger from the original context cannot be serialized
-    logger = LoggerConfigurator.configure_logger(
-        "airweave.temporal.activity",
-        dimensions={
-            "sync_job_id": str(sync_job.id),
-            "organization_id": ctx_dict["organization_id"],
-        },
-    )
-
     # Reconstruct user if present
     user = schemas.User(**ctx_dict["user"]) if ctx_dict.get("user") else None
 
+    # Reconstruct organization from the dictionary
+    organization = schemas.Organization(**ctx_dict["organization"])
+
     ctx = ApiContext(
         request_id=ctx_dict["request_id"],
-        organization_id=ctx_dict["organization_id"],
+        organization=organization,
         user=user,
         auth_method=ctx_dict["auth_method"],
         auth_metadata=ctx_dict.get("auth_metadata"),
-        logger=logger,
+        logger=LoggerConfigurator.configure_logger(
+            "airweave.temporal.activity",
+            dimensions={
+                "sync_job_id": str(sync_job.id),
+                "organization_id": str(organization.id),
+                "organization_name": organization.name,
+            },
+        ),
     )
 
     activity.logger.info(f"Starting sync activity for job {sync_job.id}")
@@ -245,9 +245,12 @@ async def update_sync_job_status_activity(
     # Reconstruct user if present
     user = schemas.User(**ctx_dict["user"]) if ctx_dict.get("user") else None
 
+    # Reconstruct organization from the dictionary
+    organization = schemas.Organization(**ctx_dict["organization"])
+
     ctx = ApiContext(
         request_id=ctx_dict["request_id"],
-        organization_id=ctx_dict["organization_id"],
+        organization=organization,
         user=user,
         auth_method=ctx_dict["auth_method"],
         auth_metadata=ctx_dict.get("auth_metadata"),
