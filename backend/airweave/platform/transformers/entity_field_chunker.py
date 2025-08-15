@@ -227,7 +227,7 @@ async def chunk_text_optimized(
         List of chunks
     """
     # Clean text
-    cleaned_text = _clean_text_for_chunking(text)
+    cleaned_text = _clean_text_for_chunking(text, logger)
     text_size = count_tokens(cleaned_text)
 
     logger.debug(

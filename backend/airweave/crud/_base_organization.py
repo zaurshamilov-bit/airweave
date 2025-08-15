@@ -262,7 +262,7 @@ class CRUDBaseOrganization(Generic[ModelType, CreateSchemaType, UpdateSchemaType
             list[ModelType]: The deleted objects.
         """
         query = select(self.model).where(
-            self.model.id.in_(ids), self.model.organization_id == ctx.organization_id
+            self.model.id.in_(ids), self.model.organization_id == ctx.organization.id
         )
         result = await db.execute(query)
         db_objs = result.unique().scalars().all()

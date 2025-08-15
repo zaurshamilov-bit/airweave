@@ -734,6 +734,10 @@ class EntityProcessor:
             await destination.bulk_delete_by_parent_id(
                 parent_entity.entity_id, sync_context.sync.id
             )
+            await destination.bulk_delete(
+                [entity.entity_id for entity in processed_entities],
+                sync_context.sync.id,
+            )
 
         delete_elapsed = asyncio.get_event_loop().time() - delete_start
         sync_context.logger.debug(
