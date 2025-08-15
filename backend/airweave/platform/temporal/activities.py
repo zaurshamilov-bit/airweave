@@ -233,20 +233,21 @@ async def update_sync_job_status_activity(
     from airweave.core.shared_models import SyncJobStatus
     from airweave.core.sync_job_service import sync_job_service
 
-    # Reconstruct ApiContext with a new logger
-    logger = LoggerConfigurator.configure_logger(
-        "airweave.temporal.activity",
-        dimensions={
-            "sync_job_id": sync_job_id,
-            "organization_id": ctx_dict["organization_id"],
-        },
-    )
-
     # Reconstruct user if present
     user = schemas.User(**ctx_dict["user"]) if ctx_dict.get("user") else None
 
     # Reconstruct organization from the dictionary
     organization = schemas.Organization(**ctx_dict["organization"])
+
+    # Reconstruct ApiContext with a new logger
+    logger = LoggerConfigurator.configure_logger(
+        "airweave.temporal.activity",
+        dimensions={
+            "sync_job_id": sync_job_id,
+            "organization_id": str(organization.id),
+            "organization_name": organization.name,
+        },
+    )
 
     ctx = ApiContext(
         request_id=ctx_dict["request_id"],

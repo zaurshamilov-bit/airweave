@@ -156,6 +156,7 @@ class SyncFactory:
                 "organization_id": str(ctx.organization.id),
                 "source_connection_id": str(source_connection_data["connection_id"]),
                 "collection_readable_id": str(collection.readable_id),
+                "organization_name": ctx.organization.name,
             },
         )
 
