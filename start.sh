@@ -9,15 +9,20 @@ if [ ! -f .env ]; then
     echo ".env file created"
 fi
 
-# Check if ENCRYPTION_KEY already exists in .env
-if grep -q "^ENCRYPTION_KEY=" .env; then
+# Check if ENCRYPTION_KEY exists AND has a non-empty value in .env
+EXISTING_KEY=$(grep "^ENCRYPTION_KEY=" .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d ' ')
+
+if [ -n "$EXISTING_KEY" ]; then
     echo "Encryption key already exists in .env file, skipping generation."
-    echo "Current ENCRYPTION_KEY value:"
-    grep "^ENCRYPTION_KEY=" .env | head -1 | sed 's/=.*/=********/'
+    echo "Current ENCRYPTION_KEY value: ********"
 else
-    echo "No encryption key found. Generating new encryption key..."
+    echo "No valid encryption key found. Generating new encryption key..."
     NEW_KEY=$(openssl rand -base64 32)
     echo "Generated key: $NEW_KEY"
+
+    # Remove any existing empty ENCRYPTION_KEY line
+    grep -v "^ENCRYPTION_KEY=" .env > .env.tmp 2>/dev/null || true
+    mv .env.tmp .env
 
     # Add the new encryption key at the end of the file
     echo "ENCRYPTION_KEY=\"$NEW_KEY\"" >> .env
