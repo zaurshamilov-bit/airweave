@@ -675,7 +675,6 @@ class EntityProcessor:
         self,
         parent_entity: BaseEntity,
         processed_entities: List[BaseEntity],
-        db_entity: Optional[models.Entity],
         sync_context: SyncContext,
     ) -> None:
         """Handle INSERT action."""
