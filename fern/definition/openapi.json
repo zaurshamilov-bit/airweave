@@ -550,7 +550,7 @@
             "description": "Number of results to skip for pagination"
           },
           {
-            "name": "score_threshold",
+            "name": "recency_bias",
             "in": "query",
             "required": false,
             "schema": {
@@ -564,21 +564,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Minimum similarity score threshold",
-              "title": "Score Threshold"
+              "description": "How much to weigh recency vs similarity (0..1). 0 = no recency effect; 1 = rank by recency only.",
+              "title": "Recency Bias"
             },
-            "description": "Minimum similarity score threshold"
-          },
-          {
-            "name": "expansion_strategy",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/QueryExpansionStrategy",
-              "description": "Query expansion strategy (auto, llm, or no_expansion)",
-              "default": "auto"
-            },
-            "description": "Query expansion strategy (auto, llm, or no_expansion)"
+            "description": "How much to weigh recency vs similarity (0..1). 0 = no recency effect; 1 = rank by recency only."
           }
         ],
         "responses": {
@@ -668,7 +657,7 @@
           "collections"
         ],
         "summary": "Search Collection Advanced",
-        "description": "Advanced search with comprehensive filtering and options.\n\nThis endpoint supports:\n- Metadata filtering using Qdrant's native filter syntax\n- Pagination with offset and limit\n- Score threshold filtering\n- Query expansion strategies",
+        "description": "Advanced search with comprehensive filtering and options.\n\nThis endpoint supports:\n- Metadata filtering using Qdrant's native filter syntax\n- Pagination with offset and limit\n- Score threshold filtering\n- Query expansion strategies (default: AUTO, generates up to 4 variations)\n- Automatic filter extraction from natural language (default: ON)\n- LLM-based result reranking (default: ON)\n\nDefault behavior:\n- Query expansion: ON (AUTO strategy)\n- Query interpretation: ON (extracts filters from natural language)\n- Reranking: ON (improves relevance using LLM)\n- Score threshold: None (no filtering)\n\nTo disable features, explicitly set:\n- enable_reranking: false\n- enable_query_interpretation: false\n- expansion_strategy: \"no_expansion\"",
         "operationId": "search_collection_advanced_collections__readable_id__search_post",
         "parameters": [
           {
@@ -5496,7 +5485,7 @@
               }
             ],
             "title": "Offset",
-            "description": "Number of results to skip",
+            "description": "Number of results to skip (DEFAULT: 0)",
             "default": 0
           },
           "limit": {
@@ -5511,7 +5500,7 @@
               }
             ],
             "title": "Limit",
-            "description": "Maximum number of results to return",
+            "description": "Maximum number of results to return (DEFAULT: 20)",
             "default": 20
           },
           "score_threshold": {
@@ -5526,9 +5515,56 @@
               }
             ],
             "title": "Score Threshold",
-            "description": "Minimum similarity score threshold"
+            "description": "Minimum similarity score threshold (DEFAULT: None - no filtering)"
           },
-          "summarize": {
+          "response_type": {
+            "$ref": "#/components/schemas/ResponseType",
+            "description": "Type of response - 'raw' or 'completion' (DEFAULT: 'raw')",
+            "default": "raw"
+          },
+          "search_method": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "hybrid",
+                  "neural",
+                  "keyword"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Method",
+            "description": "Search method to use (DEFAULT: 'hybrid' - combines neural + BM25)"
+          },
+          "recency_bias": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recency Bias",
+            "description": "How much document age penalizes the similarity score (0..1). 0 = no age penalty (pure similarity); 0.5 = old docs lose up to 50% of their score; 1 = old docs get zero score (pure recency). Applied as: score \u00d7 (1 - bias + bias \u00d7 age_factor). Works within top ~10,000 semantic matches. DEFAULT: 0.3"
+          },
+          "expansion_strategy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QueryExpansionStrategy"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Query expansion strategy (DEFAULT: 'auto' - generates up to 4 query variations). Options: 'auto', 'llm', 'no_expansion'"
+          },
+          "enable_reranking": {
             "anyOf": [
               {
                 "type": "boolean"
@@ -5537,19 +5573,20 @@
                 "type": "null"
               }
             ],
-            "title": "Summarize",
-            "description": "Whether to summarize results",
-            "default": false
+            "title": "Enable Reranking",
+            "description": "Enable LLM-based reranking to improve result relevance (DEFAULT: True - enabled, set to False to disable)"
           },
-          "response_type": {
-            "$ref": "#/components/schemas/ResponseType",
-            "description": "Type of response (raw or completion)",
-            "default": "raw"
-          },
-          "expansion_strategy": {
-            "$ref": "#/components/schemas/QueryExpansionStrategy",
-            "description": "Query expansion strategy. Enhances recall by expanding the query with synonyms, related terms, and other variations, but increases latency.",
-            "default": "auto"
+          "enable_query_interpretation": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enable Query Interpretation",
+            "description": "Enable automatic filter extraction from natural language query (DEFAULT: True - enabled, set to False to disable)"
           }
         },
         "type": "object",
@@ -5565,21 +5602,26 @@
                 {
                   "key": "source_name",
                   "match": {
-                    "value": "Stripe"
+                    "value": "Support"
                   }
                 },
                 {
-                  "key": "created_at",
-                  "range": {
-                    "gte": "2024-01-01T00:00:00Z"
+                  "key": "status",
+                  "match": {
+                    "value": "open"
                   }
                 }
               ]
             },
-            "limit": 50,
+            "limit": 10,
             "query": "customer payment issues",
             "response_type": "completion",
             "score_threshold": 0.7
+          },
+          {
+            "limit": 20,
+            "query": "Q4 revenue analysis",
+            "response_type": "raw"
           }
         ]
       },
@@ -5625,34 +5667,55 @@
         "description": "Comprehensive search response containing results and metadata.",
         "examples": [
           {
+            "response_type": "raw",
+            "results": [
+              {
+                "payload": {
+                  "created_at": "2024-01-15T10:30:00Z",
+                  "entity_id": "trans_1234567890",
+                  "md_content": "Customer John Doe successfully processed payment of $99 for monthly subscription",
+                  "metadata": {
+                    "amount": 99,
+                    "currency": "USD",
+                    "status": "completed"
+                  },
+                  "source_name": "Payment API",
+                  "title": "Transaction Processing"
+                },
+                "score": 0.92
+              },
+              {
+                "payload": {
+                  "created_at": "2024-01-14T14:22:00Z",
+                  "entity_id": "ticket_987654321",
+                  "md_content": "Customer inquired about upgrading subscription plan for advanced analytics features",
+                  "metadata": {
+                    "priority": "medium",
+                    "status": "resolved"
+                  },
+                  "source_name": "Support Tickets",
+                  "title": "Billing Inquiry"
+                },
+                "score": 0.87
+              }
+            ],
+            "status": "success"
+          },
+          {
             "completion": "Based on your recent data, customer John Doe successfully processed a $99 monthly subscription payment on January 15th. There was also a related support ticket from January 14th where a customer inquired about upgrading from Basic to Pro plan for advanced analytics features. This suggests strong customer engagement with your premium offerings.",
             "response_type": "completion",
             "results": [
               {
-                "content": "Monthly subscription payment of $99.00 processed successfully for customer John Doe (john@company.com). Payment method: Visa ending in 4242.",
-                "id": "stripe_cust_1234567890",
-                "metadata": {
-                  "amount": 99.0,
-                  "currency": "USD",
-                  "date": "2024-01-15T10:30:00Z",
-                  "type": "payment"
+                "payload": {
+                  "entity_id": "cust_abc123",
+                  "md_content": "Premium customer account details",
+                  "metadata": {
+                    "active": true,
+                    "tier": "premium"
+                  },
+                  "source_name": "Customer Database"
                 },
-                "score": 0.92,
-                "source": "stripe",
-                "title": "Customer Payment Record"
-              },
-              {
-                "content": "Customer inquiry about upgrading from Basic to Pro plan. Customer mentioned they need advanced analytics features.",
-                "id": "zendesk_ticket_789",
-                "metadata": {
-                  "date": "2024-01-14T14:22:00Z",
-                  "priority": "medium",
-                  "status": "resolved",
-                  "type": "support_ticket"
-                },
-                "score": 0.87,
-                "source": "zendesk",
-                "title": "Billing Question - Subscription Upgrade"
+                "score": 0.95
               }
             ],
             "status": "success"
