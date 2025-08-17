@@ -20,8 +20,10 @@ from airweave.core.exceptions import (
     CollectionNotFoundException,
     ImmutableFieldError,
     InvalidScheduleOperationException,
+    InvalidStateError,
     MinuteLevelScheduleException,
     NotFoundException,
+    PaymentRequiredException,
     PermissionException,
     ScheduleNotExistsException,
     ScheduleOperationException,
@@ -29,6 +31,7 @@ from airweave.core.exceptions import (
     SyncJobNotFoundException,
     SyncNotFoundException,
     TokenRefreshError,
+    UsageLimitExceededException,
     unpack_validation_error,
 )
 from airweave.core.logging import logger
@@ -346,3 +349,55 @@ async def airweave_exception_handler(request: Request, exc: AirweaveException) -
     status_code = status_code_map.get(type(exc), 500)
 
     return JSONResponse(status_code=status_code, content={"detail": str(exc)})
+
+
+async def payment_required_exception_handler(
+    request: Request, exc: PaymentRequiredException
+) -> JSONResponse:
+    """Exception handler for PaymentRequiredException.
+
+    Args:
+    ----
+        request (Request): The incoming request that triggered the exception.
+        exc (PaymentRequiredException): The exception object that was raised.
+
+    Returns:
+    -------
+        JSONResponse: A 400 Bad Request status response that details the error message.
+
+    """
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+async def usage_limit_exceeded_exception_handler(
+    request: Request, exc: UsageLimitExceededException
+) -> JSONResponse:
+    """Exception handler for UsageLimitExceededException.
+
+    Args:
+    ----
+        request (Request): The incoming request that triggered the exception.
+        exc (UsageLimitExceededException): The exception object that was raised.
+
+    Returns:
+    -------
+        JSONResponse: A 400 Bad Request status response that details the error message.
+
+    """
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+async def invalid_state_exception_handler(request: Request, exc: InvalidStateError) -> JSONResponse:
+    """Exception handler for InvalidStateError.
+
+    Args:
+    ----
+        request (Request): The incoming request that triggered the exception.
+        exc (InvalidStateError): The exception object that was raised.
+
+    Returns:
+    -------
+        JSONResponse: A 400 Bad Request status response that details the error message.
+
+    """
+    return JSONResponse(status_code=400, content={"detail": str(exc)})

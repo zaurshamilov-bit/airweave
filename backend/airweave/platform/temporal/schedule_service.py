@@ -74,7 +74,7 @@ class TemporalScheduleService:
         source_connection_dict: dict,
         user_dict: dict,
         db: AsyncSession,
-        auth_context,
+        ctx,
         access_token: Optional[str] = None,
     ) -> str:
         """Create a minute-level schedule for incremental sync.
@@ -89,7 +89,7 @@ class TemporalScheduleService:
             source_connection_dict: The source connection as dict
             user_dict: The current user as dict
             db: Database session
-            auth_context: Authentication context
+            ctx: Authentication context
             access_token: Optional access token
 
         Returns:
@@ -154,7 +154,8 @@ class TemporalScheduleService:
         )
 
         # Update the sync record in the database
-        sync_obj = await sync_crud.get(db=db, id=sync_id, auth_context=auth_context)
+        # Get the sync model object (not schema) for updating
+        sync_obj = await sync_crud.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         await sync_crud.update(
             db=db,
             db_obj=sync_obj,
@@ -164,7 +165,7 @@ class TemporalScheduleService:
                 "sync_type": "incremental",
                 "status": "INACTIVE",  # Mark as inactive since schedule is paused
             },
-            auth_context=auth_context,
+            ctx=ctx,
         )
 
         logger.info(
@@ -179,6 +180,7 @@ class TemporalScheduleService:
         sync_id: UUID,
         user_dict: dict,
         db: AsyncSession,
+        ctx,
     ) -> None:
         """Update an existing schedule with a new cron expression.
 
@@ -188,6 +190,7 @@ class TemporalScheduleService:
             sync_id: The sync ID
             user_dict: The current user as dict
             db: Database session
+            ctx: Authentication context
         """
         client = await self._get_client()
 
@@ -205,17 +208,18 @@ class TemporalScheduleService:
         )
 
         # Update the sync record in the database
+        sync_obj = await sync_crud.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         await sync_crud.update(
             db=db,
-            db_obj_id=sync_id,
+            db_obj=sync_obj,
             obj_in={"minute_level_cron_schedule": cron_expression},
-            user_email=user_dict.get("email"),
+            ctx=ctx,
         )
 
         logger.info(f"Updated schedule {schedule_id} with cron expression {cron_expression}")
 
     async def pause_schedule(
-        self, schedule_id: str, sync_id: UUID, user_dict: dict, db: AsyncSession
+        self, schedule_id: str, sync_id: UUID, user_dict: dict, db: AsyncSession, ctx
     ) -> None:
         """Pause a schedule.
 
@@ -224,6 +228,7 @@ class TemporalScheduleService:
             sync_id: The sync ID
             user_dict: The current user as dict
             db: Database session
+            ctx: Authentication context
         """
         client = await self._get_client()
         handle = client.get_schedule_handle(schedule_id)
@@ -231,17 +236,18 @@ class TemporalScheduleService:
         await handle.pause()
 
         # Update sync status to indicate paused schedule
+        sync_obj = await sync_crud.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         await sync_crud.update(
             db=db,
-            db_obj_id=sync_id,
+            db_obj=sync_obj,
             obj_in={"status": "INACTIVE"},
-            user_email=user_dict.get("email"),
+            ctx=ctx,
         )
 
         logger.info(f"Paused schedule {schedule_id}")
 
     async def resume_schedule(
-        self, schedule_id: str, sync_id: UUID, user_dict: dict, db: AsyncSession
+        self, schedule_id: str, sync_id: UUID, user_dict: dict, db: AsyncSession, ctx
     ) -> None:
         """Resume a paused schedule.
 
@@ -250,6 +256,7 @@ class TemporalScheduleService:
             sync_id: The sync ID
             user_dict: The current user as dict
             db: Database session
+            ctx: Authentication context
         """
         client = await self._get_client()
         handle = client.get_schedule_handle(schedule_id)
@@ -257,17 +264,18 @@ class TemporalScheduleService:
         await handle.unpause()
 
         # Update sync status to indicate active schedule
+        sync_obj = await sync_crud.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         await sync_crud.update(
             db=db,
-            db_obj_id=sync_id,
+            db_obj=sync_obj,
             obj_in={"status": "ACTIVE"},
-            user_email=user_dict.get("email"),
+            ctx=ctx,
         )
 
         logger.info(f"Resumed schedule {schedule_id}")
 
     async def delete_schedule(
-        self, schedule_id: str, sync_id: UUID, user_dict: dict, db: AsyncSession
+        self, schedule_id: str, sync_id: UUID, user_dict: dict, db: AsyncSession, ctx
     ) -> None:
         """Delete a schedule.
 
@@ -276,6 +284,7 @@ class TemporalScheduleService:
             sync_id: The sync ID
             user_dict: The current user as dict
             db: Database session
+            ctx: Authentication context
         """
         client = await self._get_client()
         handle = client.get_schedule_handle(schedule_id)
@@ -283,15 +292,16 @@ class TemporalScheduleService:
         await handle.delete()
 
         # Clear the temporal schedule fields from the sync record
+        sync_obj = await sync_crud.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         await sync_crud.update(
             db=db,
-            db_obj_id=sync_id,
+            db_obj=sync_obj,
             obj_in={
                 "temporal_schedule_id": None,
                 "minute_level_cron_schedule": None,
                 "sync_type": "full",
             },
-            user_email=user_dict.get("email"),
+            ctx=ctx,
         )
 
         logger.info(f"Deleted schedule {schedule_id}")
@@ -312,26 +322,24 @@ class TemporalScheduleService:
 
         return {
             "schedule_id": schedule_id,
-            "cron_expressions": desc.schedule.spec.cron_expressions,
+            "cron_expressions": list(desc.schedule.spec.cron_expressions),  # Convert to list
             "paused": desc.schedule.state.paused,
             # Note: next_run_time and last_run_time are not available on ScheduleState
             # They would need to be accessed differently if needed
         }
 
-    async def get_sync_schedule_info(
-        self, sync_id: UUID, db: AsyncSession, auth_context
-    ) -> Optional[dict]:
+    async def get_sync_schedule_info(self, sync_id: UUID, db: AsyncSession, ctx) -> Optional[dict]:
         """Get schedule information for a specific sync.
 
         Args:
             sync_id: The sync ID
             db: Database session
-            auth_context: Authentication context
+            ctx: Authentication context
 
         Returns:
             Schedule information if exists, None otherwise
         """
-        sync = await sync_crud.get(db=db, id=sync_id, auth_context=auth_context)
+        sync = await sync_crud.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         if not sync or not sync.temporal_schedule_id:
             return None
 

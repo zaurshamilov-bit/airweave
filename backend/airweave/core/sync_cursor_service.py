@@ -6,30 +6,26 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.api.context import ApiContext
 from airweave.core.logging import logger
-from airweave.schemas.auth import AuthContext
 
 
 class SyncCursorService:
     """Service for managing sync cursor operations."""
 
-    async def get_cursor_data(
-        self, db: AsyncSession, sync_id: UUID, auth_context: AuthContext
-    ) -> dict:
+    async def get_cursor_data(self, db: AsyncSession, sync_id: UUID, ctx: ApiContext) -> dict:
         """Get cursor data for a sync.
 
         Args:
             db: Database session
             sync_id: The sync ID
-            auth_context: Authentication context
+            ctx: API context
 
         Returns:
             Cursor data dictionary, empty dict if no cursor exists
         """
         try:
-            cursor = await crud.sync_cursor.get_by_sync_id(
-                db, sync_id=sync_id, auth_context=auth_context
-            )
+            cursor = await crud.sync_cursor.get_by_sync_id(db, sync_id=sync_id, ctx=ctx)
             if cursor:
                 return cursor.cursor_data or {}
             return {}
@@ -42,7 +38,7 @@ class SyncCursorService:
         db: AsyncSession,
         sync_id: UUID,
         cursor_data: dict,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> Optional[schemas.SyncCursor]:
         """Create or update cursor data for a sync.
 
@@ -50,7 +46,7 @@ class SyncCursorService:
             db: Database session
             sync_id: The sync ID
             cursor_data: Cursor data to store
-            auth_context: Authentication context
+            ctx: API context
 
         Returns:
             Created or updated sync cursor, None if operation failed
@@ -62,7 +58,7 @@ class SyncCursorService:
                 db=db,
                 obj_in=cursor_create,
                 sync_id=sync_id,
-                auth_context=auth_context,
+                ctx=ctx,
             )
 
             logger.info(f"Successfully created/updated cursor for sync {sync_id}")
@@ -77,7 +73,7 @@ class SyncCursorService:
         db: AsyncSession,
         sync_id: UUID,
         cursor_data: dict,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> Optional[schemas.SyncCursor]:
         """Update cursor data for a sync.
 
@@ -85,14 +81,14 @@ class SyncCursorService:
             db: Database session
             sync_id: The sync ID
             cursor_data: New cursor data
-            auth_context: Authentication context
+            ctx: API context
 
         Returns:
             Updated sync cursor, None if operation failed
         """
         try:
             cursor = await crud.sync_cursor.update_cursor_data(
-                db, sync_id=sync_id, cursor_data=cursor_data, auth_context=auth_context
+                db, sync_id=sync_id, cursor_data=cursor_data, ctx=ctx
             )
 
             if cursor:
@@ -110,22 +106,20 @@ class SyncCursorService:
         self,
         db: AsyncSession,
         sync_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> bool:
         """Delete cursor for a sync.
 
         Args:
             db: Database session
             sync_id: The sync ID
-            auth_context: Authentication context
+            ctx: API context
 
         Returns:
             True if cursor was deleted, False otherwise
         """
         try:
-            deleted = await crud.sync_cursor.delete_by_sync_id(
-                db, sync_id=sync_id, auth_context=auth_context
-            )
+            deleted = await crud.sync_cursor.delete_by_sync_id(db, sync_id=sync_id, ctx=ctx)
 
             if deleted:
                 logger.info(f"Successfully deleted cursor for sync {sync_id}")

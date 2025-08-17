@@ -27,7 +27,6 @@ from airweave.db.session import get_db_context
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.platform.sync.factory import SyncFactory
 from airweave.platform.temporal.schedule_service import temporal_schedule_service
-from airweave.schemas import AuthContext
 
 
 class SyncService:
@@ -456,7 +455,7 @@ class SyncService:
         db: AsyncSession,
         sync_id: UUID,
         cron_expression: str,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> schemas.ScheduleResponse:
         """Create a minute-level schedule for incremental sync.
 
@@ -464,32 +463,30 @@ class SyncService:
             db: Database session
             sync_id: The sync ID
             cron_expression: Cron expression (e.g., "*/1 * * * *")
-            auth_context: Authentication context
+            ctx: API context
 
         Returns:
             Schedule response with status and message
         """
         # Get the sync with all required data
-        sync = await crud.sync.get(
-            db=db, id=sync_id, auth_context=auth_context, with_connections=True
-        )
+        sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=True)
         if not sync:
             raise SyncNotFoundException(f"Sync {sync_id} not found")
 
         # Get the source connection separately
         source_connection = await crud.source_connection.get_by_sync_id(
-            db=db, sync_id=sync_id, auth_context=auth_context
+            db=db, sync_id=sync_id, ctx=ctx
         )
         if not source_connection:
             raise NotFoundException(f"Source connection for sync {sync_id} not found")
 
         # Get required related data
-        dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, auth_context=auth_context)
+        dag = await crud.sync_dag.get_by_sync_id(db=db, sync_id=sync_id, ctx=ctx)
         if not dag:
             raise SyncDagNotFoundException(f"Sync DAG for sync {sync_id} not found")
 
         collection = await crud.collection.get_by_readable_id(
-            db=db, readable_id=source_connection.readable_collection_id, auth_context=auth_context
+            db=db, readable_id=source_connection.readable_collection_id, ctx=ctx
         )
         if not collection:
             raise CollectionNotFoundException(
@@ -498,9 +495,7 @@ class SyncService:
 
         # Create a sync job for the schedule
         sync_job_create = schemas.SyncJobCreate(sync_id=sync_id)
-        sync_job = await crud.sync_job.create(
-            db=db, obj_in=sync_job_create, auth_context=auth_context
-        )
+        sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_create, ctx=ctx)
 
         # Convert to dict format for Temporal
         # Only refresh SQLAlchemy models (not Pydantic schemas)
@@ -517,9 +512,10 @@ class SyncService:
             source_connection
         ).model_dump(mode="json")
         user_dict = {
-            "email": auth_context.user.email,
-            "organization_id": auth_context.organization_id,
-            "auth_method": auth_context.auth_method,
+            "email": ctx.user.email if ctx.user else "api-key-user",
+            "organization_id": ctx.organization_id,
+            "auth_method": ctx.auth_method,
+            "request_id": ctx.request_id,
         }
 
         try:
@@ -534,7 +530,7 @@ class SyncService:
                 source_connection_dict=source_connection_dict,
                 user_dict=user_dict,
                 db=db,
-                auth_context=auth_context,
+                ctx=ctx,
             )
 
             return schemas.ScheduleResponse(
@@ -549,7 +545,7 @@ class SyncService:
             if "Schedule already running" in str(e):
                 # Get the existing schedule info
                 existing_schedule = await temporal_schedule_service.get_sync_schedule_info(
-                    sync_id=sync_id, db=db, auth_context=auth_context
+                    sync_id=sync_id, db=db, ctx=ctx
                 )
                 if existing_schedule:
                     return schemas.ScheduleResponse(
@@ -570,7 +566,7 @@ class SyncService:
         db: AsyncSession,
         sync_id: UUID,
         cron_expression: str,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> schemas.ScheduleResponse:
         """Update an existing minute-level schedule.
 
@@ -578,15 +574,13 @@ class SyncService:
             db: Database session
             sync_id: The sync ID
             cron_expression: New cron expression
-            auth_context: Authentication context
+            ctx: API context
 
         Returns:
             Schedule response with status and message
         """
         # Get the sync to check if it has a temporal schedule
-        sync = await crud.sync.get(
-            db=db, id=sync_id, auth_context=auth_context, with_connections=False
-        )
+        sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         if not sync:
             raise SyncNotFoundException(f"Sync {sync_id} not found")
 
@@ -596,9 +590,10 @@ class SyncService:
             )
 
         user_dict = {
-            "email": auth_context.user.email,
-            "organization_id": auth_context.organization_id,
-            "auth_method": auth_context.auth_method,
+            "email": ctx.user.email if ctx.user else "api-key-user",
+            "organization_id": ctx.organization_id,
+            "auth_method": ctx.auth_method,
+            "request_id": ctx.request_id,
         }
 
         try:
@@ -627,21 +622,19 @@ class SyncService:
         self,
         db: AsyncSession,
         sync_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> schemas.ScheduleResponse:
         """Pause a minute-level schedule.
 
         Args:
             db: Database session
             sync_id: The sync ID
-            auth_context: Authentication context
+            ctx: API context
 
         Returns:
             Schedule response with status and message
         """
-        sync = await crud.sync.get(
-            db=db, id=sync_id, auth_context=auth_context, with_connections=False
-        )
+        sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         if not sync:
             raise SyncNotFoundException("Sync not found")
 
@@ -649,9 +642,10 @@ class SyncService:
             raise ScheduleNotExistsException("Sync does not have a minute-level schedule to pause")
 
         user_dict = {
-            "email": auth_context.user.email,
-            "organization_id": auth_context.organization_id,
-            "auth_method": auth_context.auth_method,
+            "email": ctx.user.email if ctx.user else "api-key-user",
+            "organization_id": ctx.organization_id,
+            "auth_method": ctx.auth_method,
+            "request_id": ctx.request_id,
         }
 
         try:
@@ -660,6 +654,7 @@ class SyncService:
                 sync_id=sync_id,
                 user_dict=user_dict,
                 db=db,
+                ctx=ctx,
             )
 
             return schemas.ScheduleResponse(
@@ -678,21 +673,19 @@ class SyncService:
         self,
         db: AsyncSession,
         sync_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> schemas.ScheduleResponse:
         """Resume a paused minute-level schedule.
 
         Args:
             db: Database session
             sync_id: The sync ID
-            auth_context: Authentication context
+            ctx: API context
 
         Returns:
             Schedule response with status and message
         """
-        sync = await crud.sync.get(
-            db=db, id=sync_id, auth_context=auth_context, with_connections=False
-        )
+        sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         if not sync:
             raise SyncNotFoundException("Sync not found")
 
@@ -700,9 +693,10 @@ class SyncService:
             raise ScheduleNotExistsException("Sync does not have a minute-level schedule to resume")
 
         user_dict = {
-            "email": auth_context.user.email,
-            "organization_id": auth_context.organization_id,
-            "auth_method": auth_context.auth_method,
+            "email": ctx.user.email if ctx.user else "api-key-user",
+            "organization_id": ctx.organization_id,
+            "auth_method": ctx.auth_method,
+            "request_id": ctx.request_id,
         }
 
         try:
@@ -711,6 +705,7 @@ class SyncService:
                 sync_id=sync_id,
                 user_dict=user_dict,
                 db=db,
+                ctx=ctx,
             )
 
             return schemas.ScheduleResponse(
@@ -729,21 +724,19 @@ class SyncService:
         self,
         db: AsyncSession,
         sync_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> schemas.ScheduleResponse:
         """Delete a minute-level schedule.
 
         Args:
             db: Database session
             sync_id: The sync ID
-            auth_context: Authentication context
+            ctx: API context
 
         Returns:
             Schedule response with status and message
         """
-        sync = await crud.sync.get(
-            db=db, id=sync_id, auth_context=auth_context, with_connections=False
-        )
+        sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         if not sync:
             raise SyncNotFoundException("Sync not found")
 
@@ -751,9 +744,10 @@ class SyncService:
             raise ScheduleNotExistsException("Sync does not have a minute-level schedule to delete")
 
         user_dict = {
-            "email": auth_context.user.email,
-            "organization_id": auth_context.organization_id,
-            "auth_method": auth_context.auth_method,
+            "email": ctx.user.email if ctx.user else "api-key-user",
+            "organization_id": ctx.organization_id,
+            "auth_method": ctx.auth_method,
+            "request_id": ctx.request_id,
         }
 
         try:
@@ -762,6 +756,7 @@ class SyncService:
                 sync_id=sync_id,
                 user_dict=user_dict,
                 db=db,
+                ctx=ctx,
             )
 
             return schemas.ScheduleResponse(
@@ -780,26 +775,24 @@ class SyncService:
         self,
         db: AsyncSession,
         sync_id: UUID,
-        auth_context: AuthContext,
+        ctx: ApiContext,
     ) -> Optional[dict]:
         """Get information about a minute-level schedule.
 
         Args:
             db: Database session
             sync_id: The sync ID
-            auth_context: Authentication context
+            ctx: API context
 
         Returns:
             Schedule information if exists, None otherwise
         """
         # Verify sync exists and user has access
-        sync = await crud.sync.get(
-            db=db, id=sync_id, auth_context=auth_context, with_connections=False
-        )
+        sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=False)
         if not sync:
             raise SyncNotFoundException("Sync not found")
 
-        return await temporal_schedule_service.get_sync_schedule_info(sync_id, db, auth_context)
+        return await temporal_schedule_service.get_sync_schedule_info(sync_id, db, ctx)
 
 
 sync_service = SyncService()

@@ -1,5 +1,6 @@
 """Asana source implementation for syncing workspaces, projects, tasks, and comments."""
 
+from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
@@ -112,6 +113,119 @@ class AsanaSource(BaseSource):
         except Exception as e:
             self.logger.error(f"Unexpected error accessing Asana API: {url}, {str(e)}")
             raise
+
+    def _get_cursor_data(self) -> Dict[str, Any]:
+        """Get cursor data from sync cursor.
+
+        Returns:
+            Cursor data dictionary, empty dict if no cursor exists
+        """
+        if hasattr(self, "cursor") and self.cursor:
+            return getattr(self.cursor, "cursor_data", {})
+        return {}
+
+    def _update_cursor_data(self, timestamp: str):
+        """Update cursor data with latest sync timestamp.
+
+        Args:
+            timestamp: ISO 8601 timestamp to store
+        """
+        if hasattr(self, "cursor") and self.cursor:
+            self.cursor.cursor_data.update(
+                {
+                    "last_sync_timestamp": timestamp,
+                    "source": "asana",
+                }
+            )
+            self.logger.debug(f"Updated cursor data: {self.cursor.cursor_data}")
+
+    async def _search_modified_tasks(
+        self,
+        client: httpx.AsyncClient,
+        workspace_gid: str,
+        modified_after: str,
+        limit: int = 100,
+    ) -> List[Dict]:
+        """Search for tasks modified after a specific timestamp.
+
+        Args:
+            client: HTTP client
+            workspace_gid: Workspace ID to search in
+            modified_after: ISO 8601 timestamp
+            limit: Number of results per page (max 100)
+
+        Returns:
+            List of task objects
+        """
+        search_url = f"https://app.asana.com/api/1.0/workspaces/{workspace_gid}/tasks/search"
+
+        # Build search parameters
+        params = {
+            "modified_at.after": modified_after,
+            "limit": limit,
+            "opt_fields": (
+                "gid,name,notes,html_notes,completed,completed_at,completed_by,"
+                "created_at,modified_at,due_at,due_on,start_at,start_on,"
+                "assignee,assignee_status,parent,projects,memberships,tags,"
+                "workspace,num_likes,num_subtasks,liked,resource_subtype,"
+                "is_rendered_as_separator,external,custom_fields,followers,"
+                "dependencies,dependents,permalink_url"
+            ),
+            "sort_by": "modified_at",
+            "sort_ascending": "true",
+        }
+
+        all_tasks = []
+
+        # Manual pagination - search results are not stable
+        # We sort by modified_at and keep fetching until we get all results
+        last_modified_at = modified_after
+
+        while True:
+            # Update the search to exclude already seen tasks
+            params["modified_at.after"] = last_modified_at
+
+            # Get fresh token for each request
+            access_token = await self.get_access_token()
+            headers = {"Authorization": f"Bearer {access_token}"}
+
+            response = await client.get(search_url, headers=headers, params=params)
+
+            # Handle 402 Payment Required (non-premium workspace)
+            if response.status_code == 402:
+                self.logger.warning(
+                    f"Workspace {workspace_gid} requires premium access for search. "
+                    "Falling back to full sync for this workspace."
+                )
+                return []  # Return empty list to trigger fallback
+
+            response.raise_for_status()
+            data = response.json()
+
+            tasks = data.get("data", [])
+            if not tasks:
+                break
+
+            all_tasks.extend(tasks)
+
+            # Update last_modified_at to the last task's modified_at for next page
+            # This handles unstable pagination
+            if tasks:
+                last_task_modified = tasks[-1].get("modified_at")
+                if last_task_modified and last_task_modified > last_modified_at:
+                    last_modified_at = last_task_modified
+                else:
+                    # If we're not making progress, stop to avoid infinite loop
+                    break
+
+            # If we got less than the limit, we've reached the end
+            if len(tasks) < limit:
+                break
+
+            self.logger.debug(f"Fetched {len(tasks)} tasks, total so far: {len(all_tasks)}")
+
+        self.logger.info(f"Found {len(all_tasks)} modified tasks in workspace {workspace_gid}")
+        return all_tasks
 
     async def _generate_workspace_entities(
         self, client: httpx.AsyncClient
@@ -353,8 +467,174 @@ class AsanaSource(BaseSource):
 
             yield processed_entity
 
-    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
-        """Generate all entities from Asana."""
+    async def _generate_task_entity_from_data(
+        self,
+        task_data: Dict,
+        client: httpx.AsyncClient,
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Generate a task entity from task data retrieved via search.
+
+        This reconstructs the breadcrumbs and yields the task entity.
+        Used for incremental sync where we get tasks directly from search.
+
+        Args:
+            task_data: Task data from Asana API
+            client: HTTP client for additional API calls if needed
+        """
+        # Build breadcrumbs from task's project and workspace info
+        breadcrumbs = []
+
+        # Get workspace info from task
+        workspace = task_data.get("workspace", {})
+        if workspace:
+            workspace_breadcrumb = Breadcrumb(
+                entity_id=workspace.get("gid"),
+                name=workspace.get("name", "Unknown Workspace"),
+                type="workspace",
+            )
+            breadcrumbs.append(workspace_breadcrumb)
+
+        # Get first project if exists (tasks can be in multiple projects)
+        projects = task_data.get("projects", [])
+        if projects and len(projects) > 0:
+            project = projects[0]  # Use first project for breadcrumb
+            project_breadcrumb = Breadcrumb(
+                entity_id=project.get("gid"),
+                name=project.get("name", "Unknown Project"),
+                type="project",
+            )
+            breadcrumbs.append(project_breadcrumb)
+
+        # Get section info if task has memberships
+        section_gid = None
+        memberships = task_data.get("memberships", [])
+        for membership in memberships:
+            section = membership.get("section")
+            if section:
+                section_gid = section.get("gid")
+                section_breadcrumb = Breadcrumb(
+                    entity_id=section_gid,
+                    name=section.get("name", "Unknown Section"),
+                    type="section",
+                )
+                # Only add section breadcrumb if we have a project
+                if len(breadcrumbs) > 1:
+                    breadcrumbs.append(section_breadcrumb)
+                break
+
+        # Create the task entity
+        yield AsanaTaskEntity(
+            entity_id=task_data["gid"],
+            breadcrumbs=breadcrumbs,
+            name=task_data.get("name", ""),
+            project_gid=projects[0].get("gid") if projects else None,
+            section_gid=section_gid,
+            actual_time_minutes=task_data.get("actual_time_minutes"),
+            approval_status=task_data.get("approval_status"),
+            assignee=task_data.get("assignee"),
+            assignee_status=task_data.get("assignee_status"),
+            completed=task_data.get("completed", False),
+            completed_at=task_data.get("completed_at"),
+            completed_by=task_data.get("completed_by"),
+            created_at=task_data.get("created_at"),
+            dependencies=task_data.get("dependencies", []),
+            dependents=task_data.get("dependents", []),
+            due_at=task_data.get("due_at"),
+            due_on=task_data.get("due_on"),
+            external=task_data.get("external"),
+            html_notes=task_data.get("html_notes"),
+            notes=task_data.get("notes"),
+            is_rendered_as_separator=task_data.get("is_rendered_as_separator", False),
+            liked=task_data.get("liked", False),
+            memberships=task_data.get("memberships", []),
+            modified_at=task_data.get("modified_at"),
+            num_likes=task_data.get("num_likes", 0),
+            num_subtasks=task_data.get("num_subtasks", 0),
+            parent=task_data.get("parent"),
+            permalink_url=task_data.get("permalink_url"),
+            resource_subtype=task_data.get("resource_subtype", "default_task"),
+            start_at=task_data.get("start_at"),
+            start_on=task_data.get("start_on"),
+            tags=task_data.get("tags", []),
+            custom_fields=task_data.get("custom_fields", []),
+            followers=task_data.get("followers", []),
+            workspace=task_data.get("workspace"),
+        )
+
+    async def _generate_entities_incremental(
+        self,
+        since_timestamp: str,
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Generate only entities that changed since the given timestamp.
+
+        For now, this only handles tasks as they support modified_at filtering.
+        Other entities (projects, workspaces) will be synced in full mode only.
+
+        Args:
+            since_timestamp: ISO 8601 timestamp of last sync
+        """
+        # Record current timestamp at start of sync
+        current_timestamp = datetime.now(timezone.utc).isoformat()
+
+        async with httpx.AsyncClient() as client:
+            # First, get all workspaces (we need these for context)
+            workspaces_data = await self._get_with_auth(
+                client, "https://app.asana.com/api/1.0/workspaces"
+            )
+
+            # For each workspace, search for modified tasks
+            for workspace in workspaces_data.get("data", []):
+                workspace_gid = workspace["gid"]
+                workspace_name = workspace["name"]
+
+                self.logger.info(
+                    f"Searching for tasks modified after {since_timestamp} "
+                    f"in workspace: {workspace_name}"
+                )
+
+                # Get modified tasks using search API
+                modified_tasks = await self._search_modified_tasks(
+                    client,
+                    workspace_gid,
+                    since_timestamp,
+                )
+
+                # If search failed (e.g., non-premium), we got empty list
+                if not modified_tasks:
+                    self.logger.warning(
+                        f"No modified tasks found or search not available "
+                        f"for workspace {workspace_name}"
+                    )
+                    continue
+
+                # Process each modified task
+                for task_data in modified_tasks:
+                    # Skip tasks matching exclude_path
+                    task_name = task_data.get("name", "")
+                    if self.exclude_path and self.exclude_path in task_name:
+                        self.logger.debug(f"Skipping excluded task: {task_name}")
+                        continue
+
+                    # Generate task entity
+                    async for entity in self._generate_task_entity_from_data(task_data, client):
+                        yield entity
+
+                self.logger.info(
+                    f"Processed {len(modified_tasks)} modified tasks "
+                    f"from workspace {workspace_name}"
+                )
+
+            # Update cursor with current timestamp for next sync
+            self._update_cursor_data(current_timestamp)
+            self.logger.info(
+                f"Incremental sync complete. New cursor timestamp: {current_timestamp}"
+            )
+
+    async def _generate_entities_full(self) -> AsyncGenerator[ChunkEntity, None]:
+        """Generate all entities from Asana (full sync).
+
+        This is the original implementation moved to a separate method.
+        """
         async with httpx.AsyncClient() as client:
             async for workspace_entity in self._generate_workspace_entities(client):
                 yield workspace_entity
@@ -436,3 +716,39 @@ class AsanaSource(BaseSource):
                             task_breadcrumbs,
                         ):
                             yield file_entity
+
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
+        """Generate entities from Asana with incremental sync support.
+
+        This method checks for cursor data to determine whether to perform:
+        - Incremental sync: Only fetch tasks modified since last sync
+        - Full sync: Fetch all entities (workspaces, projects, sections, tasks, files)
+        """
+        # Check for cursor data to determine sync type
+        cursor_data = self._get_cursor_data()
+        last_sync_timestamp = cursor_data.get("last_sync_timestamp")
+
+        if last_sync_timestamp:
+            # We have a previous sync timestamp, do incremental sync
+            self.logger.info(f"Performing incremental sync since {last_sync_timestamp}")
+            self.logger.info(
+                "Note: Incremental sync only updates tasks. "
+                "Projects, workspaces, and sections are not checked for updates."
+            )
+
+            async for entity in self._generate_entities_incremental(last_sync_timestamp):
+                yield entity
+        else:
+            # No cursor data, do full sync
+            self.logger.info("No previous sync found, performing full sync")
+
+            # Record timestamp at start of full sync
+            current_timestamp = datetime.now(timezone.utc).isoformat()
+
+            # Perform full sync
+            async for entity in self._generate_entities_full():
+                yield entity
+
+            # Update cursor after successful full sync
+            self._update_cursor_data(current_timestamp)
+            self.logger.info(f"Full sync complete. Stored cursor timestamp: {current_timestamp}")

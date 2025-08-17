@@ -835,7 +835,9 @@ class EntityProcessor:
                 )
                 if db_entity:
                     await crud.entity.remove(
-                        db=db, id=db_entity.id, auth_context=sync_context.auth_context
+                        db=db,
+                        id=db_entity.id,
+                        ctx=sync_context.ctx,
                     )
                     sync_context.logger.info(
                         f"💾 DELETE_DB_DONE [{entity_context}] Database entity deleted"

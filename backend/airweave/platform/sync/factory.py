@@ -199,9 +199,7 @@ class SyncFactory:
         )
 
         # Load existing cursor data from database
-        cursor_data = await sync_cursor_service.get_cursor_data(
-            db=db, sync_id=sync.id, auth_context=ctx.auth_context
-        )
+        cursor_data = await sync_cursor_service.get_cursor_data(db=db, sync_id=sync.id, ctx=ctx)
         cursor = SyncCursor(sync_id=sync.id, cursor_data=cursor_data)
 
         # Create sync context

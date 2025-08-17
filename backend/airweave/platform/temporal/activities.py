@@ -156,8 +156,11 @@ async def run_sync_activity(
     # Reconstruct user if present
     user = schemas.User(**ctx_dict["user"]) if ctx_dict.get("user") else None
 
+    # Handle missing request_id for backwards compatibility with existing workflows
+    request_id = ctx_dict.get("request_id") or str(UUID(int=0))
+
     ctx = ApiContext(
-        request_id=ctx_dict["request_id"],
+        request_id=request_id,
         organization_id=ctx_dict["organization_id"],
         user=user,
         auth_method=ctx_dict["auth_method"],
@@ -245,8 +248,11 @@ async def update_sync_job_status_activity(
     # Reconstruct user if present
     user = schemas.User(**ctx_dict["user"]) if ctx_dict.get("user") else None
 
+    # Handle missing request_id for backwards compatibility with existing workflows
+    request_id = ctx_dict.get("request_id") or str(UUID(int=0))
+
     ctx = ApiContext(
-        request_id=ctx_dict["request_id"],
+        request_id=request_id,
         organization_id=ctx_dict["organization_id"],
         user=user,
         auth_method=ctx_dict["auth_method"],

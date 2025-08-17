@@ -228,7 +228,7 @@ class SyncOrchestrator:
                     db=db,
                     sync_id=self.sync_context.sync.id,
                     cursor_data=self.sync_context.cursor.cursor_data,
-                    auth_context=self.sync_context.auth_context,
+                    ctx=self.sync_context.ctx,
                 )
                 self.sync_context.logger.info(
                     f"Saved cursor data for sync {self.sync_context.sync.id}"

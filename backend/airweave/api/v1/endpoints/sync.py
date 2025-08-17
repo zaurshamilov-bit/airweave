@@ -349,9 +349,7 @@ async def update_sync(
     --------
         sync (schemas.Sync): The updated sync
     """
-    return await sync_service.update_sync(
-        db=db, sync_id=sync_id, sync_update=sync_update, auth_context=ctx.auth_context
-    )
+    return await sync_service.update_sync(db=db, sync_id=sync_id, sync_update=sync_update, ctx=ctx)
 
 
 # Minute-level schedule endpoints
@@ -380,7 +378,7 @@ async def create_minute_level_schedule(
         db=db,
         sync_id=sync_id,
         cron_expression=config.cron_expression,
-        auth_context=ctx.auth_context,
+        ctx=ctx,
     )
 
 
@@ -409,7 +407,7 @@ async def update_minute_level_schedule(
         db=db,
         sync_id=sync_id,
         cron_expression=config.cron_expression,
-        auth_context=ctx.auth_context,
+        ctx=ctx,
     )
 
 
@@ -432,9 +430,7 @@ async def pause_minute_level_schedule(
     --------
         schemas.ScheduleResponse: The schedule response with status and message
     """
-    return await sync_service.pause_minute_level_schedule(
-        db=db, sync_id=sync_id, auth_context=ctx.auth_context
-    )
+    return await sync_service.pause_minute_level_schedule(db=db, sync_id=sync_id, ctx=ctx)
 
 
 @router.post("/{sync_id}/minute-level-schedule/resume", response_model=schemas.ScheduleResponse)
@@ -456,9 +452,7 @@ async def resume_minute_level_schedule(
     --------
         schemas.ScheduleResponse: The schedule response with status and message
     """
-    return await sync_service.resume_minute_level_schedule(
-        db=db, sync_id=sync_id, auth_context=ctx.auth_context
-    )
+    return await sync_service.resume_minute_level_schedule(db=db, sync_id=sync_id, ctx=ctx)
 
 
 @router.delete("/{sync_id}/minute-level-schedule", response_model=schemas.ScheduleResponse)
@@ -480,9 +474,7 @@ async def delete_minute_level_schedule(
     --------
         schemas.ScheduleResponse: The schedule response with status and message
     """
-    return await sync_service.delete_minute_level_schedule(
-        db=db, sync_id=sync_id, auth_context=ctx.auth_context
-    )
+    return await sync_service.delete_minute_level_schedule(db=db, sync_id=sync_id, ctx=ctx)
 
 
 @router.get("/{sync_id}/minute-level-schedule")
@@ -509,7 +501,7 @@ async def get_minute_level_schedule_info(
         404: If no minute-level schedule exists for the sync
     """
     schedule_info = await sync_service.get_minute_level_schedule_info(
-        db=db, sync_id=sync_id, auth_context=ctx.auth_context
+        db=db, sync_id=sync_id, ctx=ctx
     )
 
     if schedule_info is None:
