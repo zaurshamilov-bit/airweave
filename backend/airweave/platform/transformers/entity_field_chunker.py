@@ -222,7 +222,7 @@ async def chunk_text_optimized(
         List of chunks
     """
     # Clean text
-    cleaned_text = _clean_text_for_chunking(text)
+    cleaned_text = _clean_text_for_chunking(text, logger)
     text_size = count_tokens(cleaned_text)
 
     logger.debug(
@@ -351,7 +351,11 @@ async def entity_chunker(entity: BaseEntity, logger: ContextualLogger) -> List[B
                 f"Chunk {i} still exceeds limit ({new_size} tokens), may need further processing"
             )
 
-        output_entities.append(new_entity)
+        # ➌ halve chunk size each recursion → exponential shrink
+        tgt_chunk = int(max(300, field_size / 2 / 1.5))
+        chunks = await chunk_text_optimized(
+            field_value, tgt_chunk, field_name, entity.entity_id, logger
+        )
 
     logger.debug(f"Created {len(output_entities)} chunks from entity {entity.entity_id}")
 

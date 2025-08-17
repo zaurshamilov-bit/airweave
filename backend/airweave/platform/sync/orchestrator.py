@@ -84,7 +84,7 @@ class SyncOrchestrator:
             started_at=utc_now_naive(),
         )
 
-    async def _process_entities(self) -> None:
+    async def _process_entities(self) -> None:  # noqa: C901
         """Process entities with explicit stream lifecycle management."""
         source_node = self.sync_context.dag.get_source_node()
 
@@ -155,6 +155,18 @@ class SyncOrchestrator:
             # Wait for all tasks to complete
             await self._wait_for_remaining_tasks(pending_tasks)
             await self.sync_context.progress.finalize(is_complete=(stream_error is None))
+
+            # Clean up orphaned entities after all processing is complete
+            if not stream_error:
+                try:
+                    self.sync_context.logger.info("🧹 Starting orphaned entity cleanup phase")
+                    await self.entity_processor.cleanup_orphaned_entities(self.sync_context)
+                except Exception as cleanup_error:
+                    self.sync_context.logger.error(
+                        f"💥 Orphaned entity cleanup failed: {get_error_message(cleanup_error)}",
+                        exc_info=True,
+                    )
+                    raise cleanup_error
 
             # Re-raise the error after cleanup
             if stream_error:

@@ -404,7 +404,7 @@ class QdrantDestination(VectorDBDestination):
         )
 
     async def bulk_delete_by_parent_id(self, parent_id: str, sync_id: str) -> None:
-        """Bulk delete entities from Qdrant by parent ID and sync ID.
+        """Bulk delete entities from Qdrant by entity ID, parent entity IDand sync ID.
 
         This deletes all entities that have the specified parent_entity_id and sync_id.
 
@@ -421,34 +421,22 @@ class QdrantDestination(VectorDBDestination):
         sync_id_str = str(sync_id)
         parent_id_str = str(parent_id)
 
-        # Create filter for parent_id and sync_id using the correct Qdrant structure
-        filter_condition = {
-            "must": [
-                {"key": "parent_entity_id", "match": {"value": parent_id_str}},
-                {
-                    "key": "airweave_system_metadata.sync_id",
-                    "match": {"value": sync_id_str},
-                },
-            ]
-        }
-
-        # Use try-except to handle any filter validation errors
-        try:
-            # Convert dict filter to Qdrant filter format
-            qdrant_filter = rest.Filter.model_validate(filter_condition)
-
-            await self.client.delete(
-                collection_name=self.collection_name,
-                points_selector=rest.FilterSelector(
-                    filter=qdrant_filter,
-                ),
-                wait=True,  # Wait for operation to complete
-            )
-        except Exception as e:
-            self.logger.error(f"Error creating Qdrant filter: {e}")
-            self.logger.error(f"Filter condition: {filter_condition}")
-            # Fallback to a different approach if needed
-            raise
+        # Create filter using Qdrant SDK objects directly
+        await self.client.delete(
+            collection_name=self.collection_name,
+            points_selector=rest.FilterSelector(
+                must=[
+                    rest.FieldCondition(
+                        key="parent_entity_id", match=rest.MatchValue(value=parent_id_str)
+                    ),
+                    rest.FieldCondition(
+                        key="airweave_system_metadata.sync_id",
+                        match=rest.MatchValue(value=sync_id_str),
+                    ),
+                ]
+            ),
+            wait=True,  # Wait for operation to complete
+        )
 
     def _prepare_index_search_request(
         self,

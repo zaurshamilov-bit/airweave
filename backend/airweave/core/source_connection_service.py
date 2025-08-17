@@ -407,8 +407,8 @@ class SourceConnectionService:
                 )
 
                 integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
-                    name=f"{source.name} - {ctx.organization_id}",
-                    description=f"Credentials for {source.name} - {ctx.organization_id}",
+                    name=f"{source.name} - {ctx.organization.id}",
+                    description=f"Credentials for {source.name} - {ctx.organization.id}",
                     integration_short_name=source_connection_in.short_name,
                     integration_type=IntegrationType.SOURCE,
                     auth_type=source.auth_type,

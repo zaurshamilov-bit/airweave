@@ -43,10 +43,15 @@ async def _authenticate_api_key(db: AsyncSession, api_key: str) -> Tuple[None, s
     """Authenticate API key."""
     try:
         api_key_obj = await crud.api_key.get_by_key(db, key=api_key)
+        # Fetch the organization to get its name
+        organization = await crud.organization.get(
+            db, id=api_key_obj.organization_id, skip_access_validation=True
+        )
         auth_metadata = {
             "api_key_id": str(api_key_obj.id),
             "created_by": api_key_obj.created_by_email,
             "organization_id": str(api_key_obj.organization_id),
+            "organization_name": organization.name if organization else None,
         }
         return None, "api_key", auth_metadata
     except (ValueError, NotFoundException) as e:
@@ -160,13 +165,18 @@ async def get_context(
         x_organization_id, user_context, auth_method, auth_metadata
     )
 
+    organization = await crud.organization.get(db, id=organization_id, skip_access_validation=True)
+    organization_schema = schemas.Organization.model_validate(organization, from_attributes=True)
+
     # Validate organization access
     await _validate_organization_access(db, organization_id, user_context, auth_method, x_api_key)
 
     # Create logger with full context
+
     base_logger = logger.with_context(
         request_id=request_id,
-        organization_id=str(organization_id),
+        organization_id=str(organization_schema.id),
+        organization_name=organization_schema.name,
         auth_method=auth_method,
         context_base="api",
     )
@@ -179,7 +189,7 @@ async def get_context(
 
     return ApiContext(
         request_id=request_id,
-        organization_id=organization_id,
+        organization=organization_schema,
         user=user_context,
         auth_method=auth_method,
         auth_metadata=auth_metadata,
@@ -224,7 +234,7 @@ async def get_guard_rail_service(
         GuardRailService: An instance configured for the current organization.
     """
     return GuardRailService(
-        organization_id=ctx.organization_id,
+        organization_id=ctx.organization.id,
         logger=contextual_logger.with_context(component="guardrail"),
     )
 

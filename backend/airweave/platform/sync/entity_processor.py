@@ -19,7 +19,7 @@ class EntityProcessor:
 
     def __init__(self):
         """Initialize the entity processor with empty tracking dictionary."""
-        self._entities_encountered_count: Dict[str, Set[str]] = {}
+        self._entity_ids_encountered_by_type: Dict[str, Set[str]] = {}
 
     def initialize_tracking(self, sync_context: SyncContext) -> None:
         """Initialize entity tracking with entity types from the DAG.
@@ -27,7 +27,7 @@ class EntityProcessor:
         Args:
             sync_context: The sync context containing the DAG
         """
-        self._entities_encountered_count.clear()
+        self._entity_ids_encountered_by_type.clear()
 
         # Get all entity nodes from the DAG
         entity_nodes = [
@@ -37,7 +37,7 @@ class EntityProcessor:
         # Create a dictionary with entity names as keys and empty sets as values
         for node in entity_nodes:
             if node.name.endswith("Entity"):
-                self._entities_encountered_count[node.name] = set()
+                self._entity_ids_encountered_by_type[node.name] = set()
 
     async def process(
         self,
@@ -60,20 +60,20 @@ class EntityProcessor:
 
             # Track the current entity
             entity_type = entity.__class__.__name__
-            if entity_type not in self._entities_encountered_count:
-                self._entities_encountered_count[entity_type] = set()
+            if entity_type not in self._entity_ids_encountered_by_type:
+                self._entity_ids_encountered_by_type[entity_type] = set()
 
             # Check for duplicate processing
-            if entity.entity_id in self._entities_encountered_count[entity_type]:
+            if entity.entity_id in self._entity_ids_encountered_by_type[entity_type]:
                 sync_context.logger.debug(
                     f"⏭️  PROCESSOR_DUPLICATE [{entity_context}] Already processed, skipping"
                 )
                 return []
 
             # Update entity tracking
-            self._entities_encountered_count[entity_type].add(entity.entity_id)
+            self._entity_ids_encountered_by_type[entity_type].add(entity.entity_id)
             await sync_context.progress.update_entities_encountered_count(
-                self._entities_encountered_count
+                self._entity_ids_encountered_by_type
             )
 
             # Check if entity should be skipped (set by file_manager or source)
@@ -189,14 +189,14 @@ class EntityProcessor:
             error_message = str(e) if str(e) else "No error details available"
 
             # Log detailed error information
-            sync_context.logger.error(
+            sync_context.logger.warning(
                 f"💥 PROCESSOR_ERROR [{entity_context}] Pipeline failed after "
                 f"{pipeline_elapsed:.3f}s: {error_type}: {error_message}"
             )
 
             # For debugging empty errors
             if not str(e):
-                sync_context.logger.error(
+                sync_context.logger.warning(
                     f"🔍 PROCESSOR_ERROR_DETAILS [{entity_context}] "
                     f"Empty error of type {error_type}, repr: {repr(e)}"
                 )
@@ -376,7 +376,7 @@ class EntityProcessor:
         if action == DestinationAction.KEEP:
             await self._handle_keep(sync_context)
         elif action == DestinationAction.INSERT:
-            await self._handle_insert(parent_entity, processed_entities, db_entity, sync_context)
+            await self._handle_insert(parent_entity, processed_entities, sync_context)
         elif action == DestinationAction.UPDATE:
             await self._handle_update(parent_entity, processed_entities, db_entity, sync_context)
 
@@ -475,7 +475,7 @@ class EntityProcessor:
             return processed_entities
 
         except Exception as e:
-            sync_context.logger.error(
+            sync_context.logger.warning(
                 f"💥 VECTOR_ERROR [{entity_context}] Vectorization failed: {str(e)}"
             )
             raise
@@ -523,12 +523,12 @@ class EntityProcessor:
                     dict_length = len(entity_dict)
                     if dict_length > 30000:  # ~7500 tokens
                         entity_type = type(entity).__name__
-                        sync_context.logger.error(
+                        sync_context.logger.warning(
                             f"🚨 ENTITY_TOO_LARGE Entity {entity.entity_id} ({entity_type}) "
                             f"stringified to {dict_length} chars (~{dict_length // 4} tokens)"
                         )
                         # Log first 1000 chars
-                        sync_context.logger.error(
+                        sync_context.logger.warning(
                             f"📄 ENTITY_PREVIEW First 1000 chars of {entity.entity_id}:\n"
                             f"{entity_dict[:1000]}..."
                         )
@@ -540,7 +540,7 @@ class EntityProcessor:
                                 if isinstance(field_value, str) and len(field_value) > 1000:
                                     large_fields.append(f"{field_name}: {len(field_value)} chars")
                             if large_fields:
-                                sync_context.logger.error(
+                                sync_context.logger.warning(
                                     f"📊 LARGE_FIELDS in {entity.entity_id}: "
                                     f"{', '.join(large_fields)}"
                                 )
@@ -548,7 +548,7 @@ class EntityProcessor:
                     entity_dicts.append(entity_dict)
 
                 except Exception as e:
-                    sync_context.logger.error(f"Error converting entity to dict: {str(e)}")
+                    sync_context.logger.warning(f"Error converting entity to dict: {str(e)}")
                     # Provide a fallback empty string to maintain array alignment
                     entity_dicts.append("")
             return entity_dicts
@@ -658,7 +658,7 @@ class EntityProcessor:
                         sparse_vector,
                     ]
                 except Exception as e:
-                    sync_context.logger.error(
+                    sync_context.logger.warning(
                         f"Error assigning vector to entity at index {i}: {str(e)}"
                     )
             return entities
@@ -825,6 +825,10 @@ class EntityProcessor:
             await destination.bulk_delete_by_parent_id(
                 parent_entity.entity_id, sync_context.sync.id
             )
+            await destination.bulk_delete(
+                [entity.entity_id for entity in processed_entities],
+                sync_context.sync.id,
+            )
 
         delete_elapsed = asyncio.get_event_loop().time() - delete_start
         sync_context.logger.debug(
@@ -858,3 +862,61 @@ class EntityProcessor:
         sync_context.logger.debug(
             f"✅ UPDATE_COMPLETE [{entity_context}] Update complete in {total_elapsed:.3f}s"
         )
+
+    async def cleanup_orphaned_entities(self, sync_context: SyncContext) -> None:
+        """Clean up orphaned entities that exist in the database."""
+        sync_context.logger.info("🧹 Starting cleanup of orphaned entities")
+
+        try:
+            async with get_db_context() as db:
+                # Get all entities currently stored for this sync (by sync_id, not sync_job_id)
+                stored_entities = await crud.entity.get_by_sync_id(
+                    db=db, sync_id=sync_context.sync.id
+                )
+
+                if not stored_entities:
+                    sync_context.logger.info("🧹 No stored entities found, nothing to clean up")
+                    return
+
+                # Find orphaned entities (stored but not encountered)
+                orphaned_entities = []
+                for stored_entity in stored_entities:
+                    # Check if entity_id exists in any of the node sets
+                    entity_was_encountered = any(
+                        stored_entity.entity_id in entity_set
+                        for entity_set in self._entity_ids_encountered_by_type.values()
+                    )
+                    if not entity_was_encountered:
+                        orphaned_entities.append(stored_entity)
+
+                if not orphaned_entities:
+                    sync_context.logger.info("🧹 No orphaned entities found")
+                    return
+
+                sync_context.logger.info(
+                    f"🧹 Found {len(orphaned_entities)} orphaned entities to delete"
+                )
+
+                # TODO: wrap this in a unit of work transaction
+
+                # Extract entity IDs for bulk operations
+                orphaned_entity_ids = [entity.entity_id for entity in orphaned_entities]
+                orphaned_db_ids = [entity.id for entity in orphaned_entities]
+
+                # Delete from destinations first using bulk_delete
+                for destination in sync_context.destinations:
+                    await destination.bulk_delete(orphaned_entity_ids, sync_context.sync.id)
+
+                # Delete from database using bulk_remove
+                await crud.entity.bulk_remove(db=db, ids=orphaned_db_ids, ctx=sync_context.ctx)
+
+                # Update progress tracking
+                await sync_context.progress.increment("deleted", len(orphaned_entities))
+
+                sync_context.logger.info(
+                    f"✅ Cleanup complete: deleted {len(orphaned_entities)} orphaned entities"
+                )
+
+        except Exception as e:
+            sync_context.logger.error(f"💥 Cleanup failed: {str(e)}", exc_info=True)
+            raise e

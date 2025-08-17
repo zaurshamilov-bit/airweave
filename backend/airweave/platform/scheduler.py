@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from airweave import crud, schemas
 from airweave.api.context import ApiContext
 from airweave.core.datetime_utils import utc_now_naive
-from airweave.core.logging import logger
+from airweave.core.logging import LoggerConfigurator, logger
 from airweave.core.shared_models import SyncJobStatus, SyncStatus
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
@@ -104,11 +104,27 @@ class PlatformScheduler:
                         next_run = cron.get_next(datetime)  # Remove ensure_utc - keep it naive
 
                     # Update the sync
+                    # Fetch the organization for the context
+                    org_model = await crud.organization.get(
+                        db, id=sync.organization_id, skip_access_validation=True
+                    )
+
+                    organization = schemas.Organization.model_validate(
+                        org_model, from_attributes=True
+                    )
+
                     ctx = ApiContext(
                         request_id=str(uuid.uuid4()),
-                        organization_id=sync.organization_id,
+                        organization=organization,
                         auth_method="system",
-                        logger=logger,
+                        logger=LoggerConfigurator.configure_logger(
+                            "airweave.scheduler",
+                            dimensions={
+                                "sync_id": str(sync.id),
+                                "organization_id": str(organization.id),
+                                "organization_name": organization.name,
+                            },
+                        ),
                     )
                     db_sync = await crud.sync.get(db, id=sync.id, ctx=ctx, with_connections=False)
                     if not db_sync:
@@ -264,11 +280,28 @@ class PlatformScheduler:
         # Get the latest job for this sync
         logger.debug(f"Getting latest job for sync {sync.id}")
         latest_job = await crud.sync_job.get_latest_by_sync_id(db, sync_id=sync.id)
+
+        # Fetch the organization for the context
+        org_model = await crud.organization.get(
+            db, id=sync.organization_id, skip_access_validation=True
+        )
+        if not org_model:
+            logger.error(f"Organization {sync.organization_id} not found for sync {sync.id}")
+            return False
+        organization = schemas.Organization.model_validate(org_model, from_attributes=True)
+
         ctx = ApiContext(
             request_id=str(uuid.uuid4()),
-            organization_id=sync.organization_id,
+            organization=organization,
             auth_method="system",
-            logger=logger,
+            logger=LoggerConfigurator.configure_logger(
+                "airweave.scheduler",
+                dimensions={
+                    "sync_id": str(sync.id),
+                    "organization_id": str(organization.id),
+                    "organization_name": organization.name,
+                },
+            ),
         )
 
         if latest_job:
@@ -358,11 +391,27 @@ class PlatformScheduler:
         try:
             logger.debug(f"Triggering sync {sync.id} ({sync.name})")
 
+            # Fetch the organization for the context
+            org_model = await crud.organization.get(
+                db, id=sync.organization_id, skip_access_validation=True
+            )
+            if not org_model:
+                logger.error(f"Organization {sync.organization_id} not found for sync {sync.id}")
+                return
+            organization = schemas.Organization.model_validate(org_model, from_attributes=True)
+
             ctx = ApiContext(
                 request_id=str(uuid.uuid4()),
-                organization_id=sync.organization_id,
+                organization=organization,
                 auth_method="system",
-                logger=logger,
+                logger=LoggerConfigurator.configure_logger(
+                    "airweave.scheduler",
+                    dimensions={
+                        "sync_id": str(sync.id),
+                        "organization_id": str(organization.id),
+                        "organization_name": organization.name,
+                    },
+                ),
             )
 
             # Create a new sync job with unit of work

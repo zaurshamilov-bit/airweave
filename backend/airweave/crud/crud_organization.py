@@ -172,14 +172,18 @@ class CRUDOrganization:
         self,
         db: AsyncSession,
         id: UUID,
-        ctx: ApiContext,
+        ctx: Optional[ApiContext] = None,
+        skip_access_validation: bool = False,
     ) -> Optional[Organization]:
         """Get organization by ID with access validation.
 
         Organizations don't have organization_id field, so we override the base method.
         """
         # Check if the user has access to this organization
-        await self._validate_organization_access(ctx, id)
+        if not skip_access_validation:
+            if not ctx:
+                raise PermissionException("No context provided")
+            await self._validate_organization_access(ctx, id)
 
         query = select(self.model).where(self.model.id == id)
         result = await db.execute(query)
@@ -213,7 +217,7 @@ class CRUDOrganization:
             # For API key access, only return the key's organization
             query = (
                 select(self.model)
-                .where(self.model.id == ctx.organization_id)
+                .where(self.model.id == ctx.organization.id)
                 .offset(skip)
                 .limit(limit)
             )
@@ -243,7 +247,7 @@ class CRUDOrganization:
                 raise PermissionException("User does not have access to organization")
         else:
             # For API key access, only allow access to the key's organization
-            if str(db_obj.id) != ctx.organization_id:
+            if db_obj.id != ctx.organization.id:
                 from airweave.core.exceptions import PermissionException
 
                 raise PermissionException("API key does not have access to organization")
@@ -284,7 +288,7 @@ class CRUDOrganization:
             if organization_id not in [org.organization.id for org in ctx.user.user_organizations]:
                 raise PermissionException("User does not have access to organization")
         else:
-            if str(organization_id) != ctx.organization_id:
+            if organization_id != ctx.organization.id:  # type: ignore
                 raise PermissionException("API key does not have access to organization")
 
     async def get_user_organizations_with_roles(

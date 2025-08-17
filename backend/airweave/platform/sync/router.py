@@ -186,7 +186,7 @@ class SyncDAGRouter:
                     self.entity_map[entity_type] = definition_id
                     return definition_id
 
-        self.logger.error(f"❌ ROUTER_NO_DEF_FOUND No entity definition found for {entity_type}")
+        self.logger.warning(f"❌ ROUTER_NO_DEF_FOUND No entity definition found for {entity_type}")
         raise ValueError(f"No entity definition found for {entity_type}")
 
     async def process_entity(self, producer_id: UUID, entity: BaseEntity) -> list[BaseEntity]:
@@ -377,7 +377,7 @@ class SyncDAGRouter:
                 f"Found entity definition ID: {entity_definition_id}"
             )
         except ValueError as e:
-            self.logger.error(
+            self.logger.warning(
                 f"❌ ROUTER_NO_DEF [{entity_context}] No entity definition found: {str(e)}"
             )
             # Return entity as-is if no definition found

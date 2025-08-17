@@ -21,7 +21,7 @@ class CRUDSyncJob(CRUDBaseOrganization[SyncJob, SyncJobCreate, SyncJobUpdate]):
         stmt = (
             select(SyncJob, Sync.name.label("sync_name"))
             .join(Sync, SyncJob.sync_id == Sync.id)
-            .where(SyncJob.id == id, SyncJob.organization_id == ctx.organization_id)
+            .where(SyncJob.id == id, SyncJob.organization_id == ctx.organization.id)
         )
         result = await db.execute(stmt)
         row = result.first()

@@ -120,7 +120,7 @@ async def get_subscription(
     Returns:
         Subscription information
     """
-    subscription_info = await billing_service.get_subscription_info(db, ctx.organization_id)
+    subscription_info = await billing_service.get_subscription_info(db, ctx.organization.id)
 
     return subscription_info
 

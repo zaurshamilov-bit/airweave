@@ -6,8 +6,9 @@ from uuid import UUID
 import pytest
 
 from airweave.api.v1.endpoints.api_keys import create_api_key, read_api_key
-from airweave.schemas import APIKey, APIKeyCreate, User
+from airweave.schemas import APIKey, APIKeyCreate, User, Organization
 from airweave.api.context import ApiContext
+from airweave.core.logging import logger
 
 
 @pytest.fixture
@@ -20,8 +21,17 @@ def mock_user():
         is_active=True,
         organization_id=UUID("87654321-8765-4321-8765-432187654321"),
     )
+    organization = Organization(
+        id=UUID("87654321-8765-4321-8765-432187654321"),
+        name="Test Organization",
+        description="Test organization for unit tests",
+    )
     return ApiContext(
-        organization_id=UUID("87654321-8765-4321-8765-432187654321"), user=user, auth_method="auth0"
+        request_id="test-request-id",
+        organization=organization,
+        user=user,
+        auth_method="auth0",
+        logger=logger,
     )
 
 

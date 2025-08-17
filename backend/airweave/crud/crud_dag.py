@@ -38,7 +38,7 @@ class CRUDSyncDag(CRUDBaseOrganization[SyncDag, SyncDagCreate, SyncDagUpdate]):
             name=obj_in.name,
             description=obj_in.description,
             sync_id=obj_in.sync_id,
-            organization_id=ctx.organization_id,
+            organization_id=ctx.organization.id,
             created_by_email=ctx.user.email if ctx.has_user_context else None,
             modified_by_email=ctx.user.email if ctx.has_user_context else None,
         )
@@ -51,7 +51,7 @@ class CRUDSyncDag(CRUDBaseOrganization[SyncDag, SyncDagCreate, SyncDagUpdate]):
             db_node = DagNode(
                 **node_data,
                 dag_id=db_obj.id,
-                organization_id=ctx.organization_id,
+                organization_id=ctx.organization.id,
                 created_by_email=ctx.user.email if ctx.has_user_context else None,
                 modified_by_email=(ctx.user.email if ctx.has_user_context else None),
             )
@@ -64,7 +64,7 @@ class CRUDSyncDag(CRUDBaseOrganization[SyncDag, SyncDagCreate, SyncDagUpdate]):
                 from_node_id=edge_in.from_node_id,
                 to_node_id=edge_in.to_node_id,
                 dag_id=db_obj.id,
-                organization_id=ctx.organization_id,
+                organization_id=ctx.organization.id,
                 created_by_email=ctx.user.email if ctx.has_user_context else None,
                 modified_by_email=(ctx.user.email if ctx.has_user_context else None),
             )
@@ -110,7 +110,7 @@ class CRUDSyncDag(CRUDBaseOrganization[SyncDag, SyncDagCreate, SyncDagUpdate]):
                 db_node = DagNode(
                     **node_data,
                     dag_id=db_obj.id,
-                    organization_id=ctx.organization_id,
+                    organization_id=ctx.organization.id,
                     created_by_email=(ctx.user.email if ctx.has_user_context else None),
                     modified_by_email=(ctx.user.email if ctx.has_user_context else None),
                 )
@@ -127,7 +127,7 @@ class CRUDSyncDag(CRUDBaseOrganization[SyncDag, SyncDagCreate, SyncDagUpdate]):
                     from_node_id=edge_in.from_node_id,
                     to_node_id=edge_in.to_node_id,
                     dag_id=db_obj.id,
-                    organization_id=ctx.organization_id,
+                    organization_id=ctx.organization.id,
                     created_by_email=(ctx.user.email if ctx.has_user_context else None),
                     modified_by_email=(ctx.user.email if ctx.has_user_context else None),
                 )
@@ -159,7 +159,7 @@ class CRUDSyncDag(CRUDBaseOrganization[SyncDag, SyncDagCreate, SyncDagUpdate]):
             select(SyncDag)
             .where(
                 SyncDag.sync_id == sync_id,
-                SyncDag.organization_id == ctx.organization_id,
+                SyncDag.organization_id == ctx.organization.id,
             )
             .options(
                 selectinload(SyncDag.nodes),
