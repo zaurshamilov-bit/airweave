@@ -25,8 +25,7 @@ Reference:
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from pydantic import Field
-
+from airweave.platform.entities._airweave_field import AirweaveField
 from airweave.platform.entities._base import ChunkEntity, FileEntity
 
 
@@ -37,16 +36,18 @@ class ConfluenceSpaceEntity(ChunkEntity):
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-spaces/
     """
 
-    space_key: str = Field(..., description="Unique key for the space.")
-    name: Optional[str] = Field(None, description="Name of the space.")
-    space_type: Optional[str] = Field(None, description="Type of space (e.g. 'global').")
-    description: Optional[str] = Field(None, description="Description of the space.")
-    status: Optional[str] = Field(None, description="Status of the space if applicable.")
-    created_at: Optional[datetime] = Field(
-        None, description="Timestamp when the space was created."
+    space_key: str = AirweaveField(..., description="Unique key for the space.", embeddable=True)
+    name: Optional[str] = AirweaveField(None, description="Name of the space.", embeddable=True)
+    space_type: Optional[str] = AirweaveField(None, description="Type of space (e.g. 'global').")
+    description: Optional[str] = AirweaveField(
+        None, description="Description of the space.", embeddable=True
     )
-    updated_at: Optional[datetime] = Field(
-        None, description="Timestamp when the space was last updated."
+    status: Optional[str] = AirweaveField(None, description="Status of the space if applicable.")
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the space was created.", is_created_at=True
+    )
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the space was last updated.", is_updated_at=True
     )
 
 
@@ -57,17 +58,23 @@ class ConfluencePageEntity(FileEntity):
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-pages/
     """
 
-    content_id: Optional[str] = Field(None, description="Actual Confluence page ID.")
-    title: Optional[str] = Field(None, description="Title of the page.")
-    space_id: Optional[str] = Field(None, description="ID of the space this page belongs to.")
-    body: Optional[str] = Field(None, description="HTML body or excerpt of the page.")
-    version: Optional[int] = Field(None, description="Page version number.")
-    status: Optional[str] = Field(None, description="Status of the page (e.g., 'current').")
-    created_at: Optional[datetime] = Field(None, description="Timestamp when the page was created.")
-    updated_at: Optional[datetime] = Field(
-        None, description="Timestamp when the page was last updated."
+    content_id: Optional[str] = AirweaveField(None, description="Actual Confluence page ID.")
+    title: Optional[str] = AirweaveField(None, description="Title of the page.", embeddable=True)
+    space_id: Optional[str] = AirweaveField(
+        None, description="ID of the space this page belongs to.", embeddable=True
     )
-    metadata: Optional[Dict[str, Any]] = Field(
+    body: Optional[str] = AirweaveField(
+        None, description="HTML body or excerpt of the page.", embeddable=True
+    )
+    version: Optional[int] = AirweaveField(None, description="Page version number.")
+    status: Optional[str] = AirweaveField(None, description="Status of the page (e.g., 'current').")
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the page was created.", is_created_at=True
+    )
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the page was last updated.", is_updated_at=True
+    )
+    metadata: Optional[Dict[str, Any]] = AirweaveField(
         default_factory=dict, description="Additional metadata about the page"
     )
 
@@ -79,17 +86,25 @@ class ConfluenceBlogPostEntity(ChunkEntity):
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-blog-posts/
     """
 
-    content_id: Optional[str] = Field(None, description="Actual Confluence blog post ID.")
-    title: Optional[str] = Field(None, description="Title of the blog post.")
-    space_id: Optional[str] = Field(None, description="ID of the space this blog post is in.")
-    body: Optional[str] = Field(None, description="HTML body of the blog post.")
-    version: Optional[int] = Field(None, description="Blog post version number.")
-    status: Optional[str] = Field(None, description="Status of the blog post (e.g., 'current').")
-    created_at: Optional[datetime] = Field(
-        None, description="Timestamp when the blog post was created."
+    content_id: Optional[str] = AirweaveField(None, description="Actual Confluence blog post ID.")
+    title: Optional[str] = AirweaveField(
+        None, description="Title of the blog post.", embeddable=True
     )
-    updated_at: Optional[datetime] = Field(
-        None, description="Timestamp when the blog post was last updated."
+    space_id: Optional[str] = AirweaveField(
+        None, description="ID of the space this blog post is in.", embeddable=True
+    )
+    body: Optional[str] = AirweaveField(
+        None, description="HTML body of the blog post.", embeddable=True
+    )
+    version: Optional[int] = AirweaveField(None, description="Blog post version number.")
+    status: Optional[str] = AirweaveField(
+        None, description="Status of the blog post (e.g., 'current')."
+    )
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the blog post was created.", is_created_at=True
+    )
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the blog post was last updated.", is_updated_at=True
     )
 
 
@@ -100,20 +115,24 @@ class ConfluenceCommentEntity(ChunkEntity):
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-comments/
     """
 
-    content_id: Optional[str] = Field(
-        None, description="ID of the content this comment is attached to."
+    content_id: Optional[str] = AirweaveField(
+        None, description="ID of the content this comment is attached to.", embeddable=True
     )
-    text: Optional[str] = Field(None, description="Text/HTML body of the comment.")
-    created_by: Optional[Dict[str, Any]] = Field(
+    text: Optional[str] = AirweaveField(
+        None, description="Text/HTML body of the comment.", embeddable=True
+    )
+    created_by: Optional[Dict[str, Any]] = AirweaveField(
         None, description="Information about the user who created the comment."
     )
-    created_at: Optional[datetime] = Field(
-        None, description="Timestamp when this comment was created."
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when this comment was created.", is_created_at=True
     )
-    updated_at: Optional[datetime] = Field(
-        None, description="Timestamp when this comment was last updated."
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when this comment was last updated.", is_updated_at=True
     )
-    status: Optional[str] = Field(None, description="Status of the comment (e.g., 'current').")
+    status: Optional[str] = AirweaveField(
+        None, description="Status of the comment (e.g., 'current')."
+    )
 
 
 class ConfluenceDatabaseEntity(ChunkEntity):
@@ -123,16 +142,22 @@ class ConfluenceDatabaseEntity(ChunkEntity):
       (the "database" content type in Confluence Cloud).
     """
 
-    title: Optional[str] = Field(None, description="Title or name of the database.")
-    space_key: Optional[str] = Field(None, description="Space key for the database item.")
-    description: Optional[str] = Field(None, description="Description or extra info about the DB.")
-    created_at: Optional[datetime] = Field(
-        None, description="Timestamp when the database was created."
+    title: Optional[str] = AirweaveField(
+        None, description="Title or name of the database.", embeddable=True
     )
-    updated_at: Optional[datetime] = Field(
-        None, description="Timestamp when the database was last updated."
+    space_key: Optional[str] = AirweaveField(
+        None, description="Space key for the database item.", embeddable=True
     )
-    status: Optional[str] = Field(None, description="Status of the database content item.")
+    description: Optional[str] = AirweaveField(
+        None, description="Description or extra info about the DB.", embeddable=True
+    )
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the database was created.", is_created_at=True
+    )
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the database was last updated.", is_updated_at=True
+    )
+    status: Optional[str] = AirweaveField(None, description="Status of the database content item.")
 
 
 class ConfluenceFolderEntity(ChunkEntity):
@@ -142,15 +167,19 @@ class ConfluenceFolderEntity(ChunkEntity):
       (the "folder" content type in Confluence Cloud).
     """
 
-    title: Optional[str] = Field(None, description="Name of the folder.")
-    space_key: Optional[str] = Field(None, description="Key of the space this folder is in.")
-    created_at: Optional[datetime] = Field(
-        None, description="Timestamp when the folder was created."
+    title: Optional[str] = AirweaveField(None, description="Name of the folder.", embeddable=True)
+    space_key: Optional[str] = AirweaveField(
+        None, description="Key of the space this folder is in.", embeddable=True
     )
-    updated_at: Optional[datetime] = Field(
-        None, description="Timestamp when the folder was last updated."
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the folder was created.", is_created_at=True
     )
-    status: Optional[str] = Field(None, description="Status of the folder (e.g., 'current').")
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the folder was last updated.", is_updated_at=True
+    )
+    status: Optional[str] = AirweaveField(
+        None, description="Status of the folder (e.g., 'current')."
+    )
 
 
 class ConfluenceLabelEntity(ChunkEntity):
@@ -160,9 +189,13 @@ class ConfluenceLabelEntity(ChunkEntity):
       https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-labels/
     """
 
-    name: str = Field(..., description="The text value of the label.")
-    label_type: Optional[str] = Field(None, description="Type of the label (e.g., 'global').")
-    owner_id: Optional[str] = Field(None, description="ID of the user or content that owns label.")
+    name: str = AirweaveField(..., description="The text value of the label.", embeddable=True)
+    label_type: Optional[str] = AirweaveField(
+        None, description="Type of the label (e.g., 'global')."
+    )
+    owner_id: Optional[str] = AirweaveField(
+        None, description="ID of the user or content that owns label."
+    )
 
 
 class ConfluenceTaskEntity(ChunkEntity):
@@ -171,23 +204,29 @@ class ConfluenceTaskEntity(ChunkEntity):
     For example, tasks extracted from Confluence pages or macros.
     """
 
-    content_id: Optional[str] = Field(
-        None, description="The content ID (page, blog, etc.) that this task is associated with."
+    content_id: Optional[str] = AirweaveField(
+        None,
+        description="The content ID (page, blog, etc.) that this task is associated with.",
+        embeddable=True,
     )
-    space_key: Optional[str] = Field(
-        None, description="Space key if task is associated with a space."
+    space_key: Optional[str] = AirweaveField(
+        None, description="Space key if task is associated with a space.", embeddable=True
     )
-    text: Optional[str] = Field(None, description="Text of the task.")
-    assignee: Optional[Dict[str, Any]] = Field(
+    text: Optional[str] = AirweaveField(None, description="Text of the task.", embeddable=True)
+    assignee: Optional[Dict[str, Any]] = AirweaveField(
         None, description="Information about the user assigned to this task."
     )
-    completed: bool = Field(False, description="Indicates if this task is completed.")
-    due_date: Optional[datetime] = Field(None, description="Due date/time if applicable.")
-    created_at: Optional[datetime] = Field(
-        None, description="Timestamp when this task was created."
+    completed: bool = AirweaveField(
+        False, description="Indicates if this task is completed.", embeddable=True
     )
-    updated_at: Optional[datetime] = Field(
-        None, description="Timestamp when this task was last updated."
+    due_date: Optional[datetime] = AirweaveField(
+        None, description="Due date/time if applicable.", embeddable=True
+    )
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when this task was created.", is_created_at=True
+    )
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when this task was last updated.", is_updated_at=True
     )
 
 
@@ -198,15 +237,21 @@ class ConfluenceWhiteboardEntity(ChunkEntity):
       (the "whiteboard" content type in Confluence Cloud).
     """
 
-    title: Optional[str] = Field(None, description="Title of the whiteboard.")
-    space_key: Optional[str] = Field(None, description="Key of the space this whiteboard is in.")
-    created_at: Optional[datetime] = Field(
-        None, description="Timestamp when the whiteboard was created."
+    title: Optional[str] = AirweaveField(
+        None, description="Title of the whiteboard.", embeddable=True
     )
-    updated_at: Optional[datetime] = Field(
-        None, description="Timestamp when the whiteboard was last updated."
+    space_key: Optional[str] = AirweaveField(
+        None, description="Key of the space this whiteboard is in.", embeddable=True
     )
-    status: Optional[str] = Field(None, description="Status of the whiteboard (e.g., 'current').")
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the whiteboard was created.", is_created_at=True
+    )
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the whiteboard was last updated.", is_updated_at=True
+    )
+    status: Optional[str] = AirweaveField(
+        None, description="Status of the whiteboard (e.g., 'current')."
+    )
 
 
 class ConfluenceCustomContentEntity(ChunkEntity):
@@ -216,15 +261,21 @@ class ConfluenceCustomContentEntity(ChunkEntity):
       (the "custom content" type in Confluence Cloud).
     """
 
-    title: Optional[str] = Field(None, description="Title or name of this custom content.")
-    space_key: Optional[str] = Field(None, description="Key of the space this content resides in.")
-    body: Optional[str] = Field(None, description="Optional HTML body or representation.")
-    created_at: Optional[datetime] = Field(
-        None, description="Timestamp when the custom content was created."
+    title: Optional[str] = AirweaveField(
+        None, description="Title or name of this custom content.", embeddable=True
     )
-    updated_at: Optional[datetime] = Field(
-        None, description="Timestamp when the custom content was last updated."
+    space_key: Optional[str] = AirweaveField(
+        None, description="Key of the space this content resides in.", embeddable=True
     )
-    status: Optional[str] = Field(
+    body: Optional[str] = AirweaveField(
+        None, description="Optional HTML body or representation.", embeddable=True
+    )
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the custom content was created.", is_created_at=True
+    )
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="Timestamp when the custom content was last updated.", is_updated_at=True
+    )
+    status: Optional[str] = AirweaveField(
         None, description="Status of the custom content item (e.g., 'current')."
     )

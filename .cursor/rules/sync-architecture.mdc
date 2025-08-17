@@ -71,7 +71,7 @@ await sync_context.router.initialize_transformer_cache(db)
 ```python
 # Workers pull entities only when ready
 async for entity in stream.get_entities():
-    if getattr(entity, "should_skip", False):
+    if entity.airweave_system_metadata.should_skip:
         # Skip without using a worker
         await sync_context.progress.increment("skipped")
         continue
@@ -335,12 +335,6 @@ Every operation increments counter
 4. Log with contextual information
 5. Handle errors at entity level
 
-### Performance Tips
-1. Tune worker count for workload
-2. Adjust queue size for memory
-3. Batch similar operations
-4. Cache frequently accessed data
-5. Profile before optimizing
 
 ### Common Pitfalls
 1. Don't block the event loop

@@ -55,8 +55,7 @@ class FileManager:
         if not entity.download_url:
             return entity
 
-        # Initialize skip flag
-        entity.should_skip = False
+        entity.airweave_system_metadata.should_skip = False
 
         # Check if this is a CTTI entity for special handling
         is_ctti = storage_manager._is_ctti_entity(entity)
@@ -82,29 +81,35 @@ class FileManager:
         # Check if file exists in storage (but not fully processed)
         # Note: CTTI files are handled differently by web_fetcher,
         # so this mainly applies to non-CTTI files
-        if not is_ctti and entity.sync_id:
+        if (
+            not is_ctti
+            and entity.airweave_system_metadata
+            and entity.airweave_system_metadata.sync_id
+        ):
             cached_path = await storage_manager.get_cached_file_path(
-                logger, entity.sync_id, entity.entity_id, entity.name
+                logger, entity.airweave_system_metadata.sync_id, entity.entity_id, entity.name
             )
 
             if cached_path:
                 logger.debug(
                     f"File found in storage cache, using cached version "
-                    f"(entity_id: {entity.entity_id}, sync_id: {entity.sync_id}, "
+                    f"(entity_id: {entity.entity_id}, "
+                    f"sync_id: {entity.airweave_system_metadata.sync_id}, "
                     f"cached_path: {cached_path})"
                 )
 
                 # Update entity with cached file info
-                entity.local_path = cached_path
-                entity.storage_blob_name = storage_manager._get_blob_name(
-                    entity.sync_id, entity.entity_id
+                entity.airweave_system_metadata.local_path = cached_path
+                entity.airweave_system_metadata.storage_blob_name = storage_manager._get_blob_name(
+                    entity.airweave_system_metadata.sync_id, entity.entity_id
                 )
+                entity.airweave_system_metadata.is_cached = True
 
                 # Calculate checksum from cached file
                 with open(cached_path, "rb") as f:
                     content = f.read()
-                    entity.checksum = hashlib.sha256(content).hexdigest()
-                    entity.total_size = len(content)
+                    entity.airweave_system_metadata.checksum = hashlib.sha256(content).hexdigest()
+                    entity.airweave_system_metadata.total_size = len(content)
 
                 return entity
         return None
@@ -127,7 +132,7 @@ class FileManager:
                 entity, stream, temp_path, max_size, logger
             )
 
-            if entity.should_skip:
+            if entity.airweave_system_metadata.should_skip:
                 return entity
 
             # Calculate checksum and update entity
@@ -189,11 +194,15 @@ class FileManager:
                 await f.write(chunk)
 
                 # Log progress for large files
-                if entity.total_size and entity.total_size > 10 * 1024 * 1024:  # 10MB
-                    progress = (downloaded_size / entity.total_size) * 100
+                if (
+                    entity.airweave_system_metadata
+                    and entity.airweave_system_metadata.total_size
+                    and entity.airweave_system_metadata.total_size > 10 * 1024 * 1024
+                ):  # 10MB
+                    progress = (downloaded_size / entity.airweave_system_metadata.total_size) * 100
                     logger.debug(
                         f"Download progress for {entity.name}: {progress:.1f}% "
-                        f"({downloaded_size}/{entity.total_size} bytes)"
+                        f"({downloaded_size}/{entity.airweave_system_metadata.total_size} bytes)"
                     )
 
         return downloaded_size
@@ -229,7 +238,7 @@ class FileManager:
         entity.metadata["size_exceeded"] = downloaded_size
 
         # Set the skip flag
-        entity.should_skip = True
+        entity.airweave_system_metadata.should_skip = True
 
     async def _update_entity_metadata(
         self,
@@ -242,15 +251,15 @@ class FileManager:
         """Update entity with file metadata."""
         with open(temp_path, "rb") as f:
             content = f.read()
-            entity.checksum = hashlib.sha256(content).hexdigest()
-            entity.local_path = temp_path
-            entity.file_uuid = file_uuid
-            entity.total_size = downloaded_size
+            entity.airweave_system_metadata.checksum = hashlib.sha256(content).hexdigest()
+            entity.airweave_system_metadata.local_path = temp_path
+            entity.airweave_system_metadata.file_uuid = file_uuid
+            entity.airweave_system_metadata.total_size = downloaded_size
 
         logger.debug(
             f"File downloaded successfully (entity_id: {entity.entity_id}, "
             f"local_path: {temp_path}, size: {downloaded_size}, "
-            f"checksum: {entity.checksum[:8]}...)"
+            f"checksum: {entity.airweave_system_metadata.checksum[:8]}...)"
         )
 
     async def _store_entity_in_storage(
@@ -258,13 +267,19 @@ class FileManager:
     ) -> None:
         """Store entity in persistent storage."""
         # Note: CTTI files are handled by web_fetcher, not here
-        if not is_ctti and entity.sync_id and not entity.should_skip:
+        if (
+            not is_ctti
+            and entity.airweave_system_metadata
+            and entity.airweave_system_metadata.sync_id
+            and not entity.airweave_system_metadata.should_skip
+        ):
             with open(temp_path, "rb") as f:
                 entity = await storage_manager.store_file_entity(logger, entity, f)
 
             logger.debug(
                 f"File stored in persistent storage (entity_id: {entity.entity_id}, "
-                f"sync_id: {entity.sync_id}, storage_blob_name: {entity.storage_blob_name})"
+                f"sync_id: {entity.airweave_system_metadata.sync_id}, "
+                f"storage_blob_name: {entity.airweave_system_metadata.storage_blob_name})"
             )
         elif is_ctti:
             logger.debug(

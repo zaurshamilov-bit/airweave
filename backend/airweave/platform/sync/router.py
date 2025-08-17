@@ -150,7 +150,7 @@ class SyncDAGRouter:
             )
             return RESERVED_TABLE_ENTITY_ID
 
-        # Handle dynamically created Parent/Chunk classes
+        # Handle dynamically created Parent/Chunk/UnifiedChunk classes
         entity_name = entity_type.__name__
         entity_module = entity_type.__module__
 
@@ -168,6 +168,12 @@ class SyncDAGRouter:
             base_name = entity_name.replace("Chunk", "Entity")
             self.logger.debug(
                 f"🔍 ROUTER_CHUNK_PATTERN Detected Chunk class, looking for base: {base_name}"
+            )
+        elif entity_name.endswith("UnifiedChunk"):
+            base_name = entity_name.replace("UnifiedChunk", "Entity")
+            self.logger.debug(
+                f"🔍 ROUTER_UNIFIED_CHUNK_PATTERN Detected UnifiedChunk class, "
+                f"looking for base: {base_name}"
             )
 
         if base_name:
@@ -312,7 +318,7 @@ class SyncDAGRouter:
         self.logger.debug(
             f"📄 ROUTER_FILE_CHUNK_DONE [{entity_context}] "
             f"File chunking complete in {chunk_elapsed:.3f}s "
-            f"({len(transformed_entities)} entities created)"
+            f"({len(transformed_entities)} unified chunks created)"
         )
 
         total_elapsed = asyncio.get_event_loop().time() - router_start

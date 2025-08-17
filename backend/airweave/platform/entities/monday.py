@@ -7,8 +7,7 @@ commonly used Monday resources: Boards, Groups, Columns, Items, Subitems, and Up
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from pydantic import Field
-
+from airweave.platform.entities._airweave_field import AirweaveField
 from airweave.platform.entities._base import ChunkEntity
 
 
@@ -18,30 +17,38 @@ class MondayBoardEntity(ChunkEntity):
     https://developer.monday.com/api-reference/reference/boards
     """
 
-    board_id: str = Field(..., description="The unique identifier (ID) of the board.")
-    board_kind: Optional[str] = Field(
+    board_id: str = AirweaveField(..., description="The unique identifier (ID) of the board.")
+    board_kind: Optional[str] = AirweaveField(
         None, description="The board's kind/type: 'public', 'private', or 'share'."
     )
-    columns: List[Dict] = Field(
+    columns: List[Dict] = AirweaveField(
         default_factory=list,
         description="A list of columns on the board (each column is typically a dict of fields).",
     )
-    created_at: Optional[datetime] = Field(None, description="When the board was first created.")
-    description: Optional[str] = Field(None, description="The description of the board.")
-    groups: List[Dict] = Field(
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="When the board was first created.", is_created_at=True
+    )
+    description: Optional[str] = AirweaveField(
+        None, description="The description of the board.", embeddable=True
+    )
+    groups: List[Dict] = AirweaveField(
         default_factory=list,
         description="A list of groups on the board (each group is typically a dict of fields).",
     )
-    name: Optional[str] = Field(None, description="The display name/title of the board.")
-    owners: List[Dict] = Field(
+    name: Optional[str] = AirweaveField(
+        None, description="The display name/title of the board.", embeddable=True
+    )
+    owners: List[Dict] = AirweaveField(
         default_factory=list,
         description="A list of users or teams who own the board.",
     )
-    state: Optional[str] = Field(
+    state: Optional[str] = AirweaveField(
         None, description="The board's current state: 'active', 'archived', or 'deleted'."
     )
-    updated_at: Optional[datetime] = Field(None, description="When the board was last updated.")
-    workspace_id: Optional[str] = Field(
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="When the board was last updated.", is_updated_at=True
+    )
+    workspace_id: Optional[str] = AirweaveField(
         None,
         description="The unique identifier of the workspace containing this board (if any).",
     )
@@ -55,14 +62,16 @@ class MondayGroupEntity(ChunkEntity):
     https://developer.monday.com/api-reference/reference/boards
     """
 
-    group_id: str = Field(..., description="The unique identifier (ID) of the group.")
-    board_id: str = Field(..., description="ID of the board this group belongs to.")
-    title: Optional[str] = Field(None, description="Title or display name of the group.")
-    color: Optional[str] = Field(
+    group_id: str = AirweaveField(..., description="The unique identifier (ID) of the group.")
+    board_id: str = AirweaveField(..., description="ID of the board this group belongs to.")
+    title: Optional[str] = AirweaveField(
+        None, description="Title or display name of the group.", embeddable=True
+    )
+    color: Optional[str] = AirweaveField(
         None, description="Group color code (e.g., 'red', 'green', 'blue', etc.)."
     )
-    archived: bool = Field(False, description="Whether this group is archived.")
-    items: List[Dict] = Field(
+    archived: bool = AirweaveField(False, description="Whether this group is archived.")
+    items: List[Dict] = AirweaveField(
         default_factory=list,
         description="List of items (rows) contained within this group.",
     )
@@ -76,19 +85,23 @@ class MondayColumnEntity(ChunkEntity):
     https://developer.monday.com/api-reference/reference/column-types-reference
     """
 
-    column_id: str = Field(..., description="The unique identifier (ID) of the column.")
-    board_id: str = Field(..., description="ID of the board this column belongs to.")
-    title: Optional[str] = Field(None, description="The display title of the column.")
-    column_type: Optional[str] = Field(
+    column_id: str = AirweaveField(..., description="The unique identifier (ID) of the column.")
+    board_id: str = AirweaveField(..., description="ID of the board this column belongs to.")
+    title: Optional[str] = AirweaveField(
+        None, description="The display title of the column.", embeddable=True
+    )
+    column_type: Optional[str] = AirweaveField(
         None,
         description="The type of the column (e.g., 'text', 'number', 'date', 'link').",
     )
-    description: Optional[str] = Field(None, description="The description of the column.")
-    settings_str: Optional[str] = Field(
+    description: Optional[str] = AirweaveField(
+        None, description="The description of the column.", embeddable=True
+    )
+    settings_str: Optional[str] = AirweaveField(
         None,
         description="Raw settings/configuration details for the column.",
     )
-    archived: bool = Field(False, description="Whether this column is archived or hidden.")
+    archived: bool = AirweaveField(False, description="Whether this column is archived or hidden.")
 
 
 class MondayItemEntity(ChunkEntity):
@@ -97,22 +110,30 @@ class MondayItemEntity(ChunkEntity):
     https://developer.monday.com/api-reference/reference/boards
     """
 
-    item_id: str = Field(..., description="The unique identifier (ID) of the item.")
-    board_id: str = Field(..., description="ID of the board this item belongs to.")
-    group_id: Optional[str] = Field(None, description="ID of the group this item is placed in.")
-    name: Optional[str] = Field(None, description="The display name/title of the item.")
-    state: Optional[str] = Field(
+    item_id: str = AirweaveField(..., description="The unique identifier (ID) of the item.")
+    board_id: str = AirweaveField(..., description="ID of the board this item belongs to.")
+    group_id: Optional[str] = AirweaveField(
+        None, description="ID of the group this item is placed in."
+    )
+    name: Optional[str] = AirweaveField(
+        None, description="The display name/title of the item.", embeddable=True
+    )
+    state: Optional[str] = AirweaveField(
         None, description="The current state of the item: active, archived, or deleted."
     )
-    column_values: List[Dict] = Field(
+    column_values: List[Dict] = AirweaveField(
         default_factory=list,
         description="A list of column-value dicts that contain the data for each column.",
     )
-    creator: Optional[Dict] = Field(
+    creator: Optional[Dict] = AirweaveField(
         None, description="Information about the user/team who created this item."
     )
-    created_at: Optional[datetime] = Field(None, description="When the item was first created.")
-    updated_at: Optional[datetime] = Field(None, description="When the item was last updated.")
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="When the item was first created.", is_created_at=True
+    )
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="When the item was last updated.", is_updated_at=True
+    )
 
 
 class MondaySubitemEntity(ChunkEntity):
@@ -123,23 +144,33 @@ class MondaySubitemEntity(ChunkEntity):
     https://developer.monday.com/api-reference/reference/boards
     """
 
-    subitem_id: str = Field(..., description="The unique identifier (ID) of the subitem.")
-    parent_item_id: str = Field(..., description="ID of the parent item this subitem belongs to.")
-    board_id: str = Field(..., description="ID of the board that this subitem resides in.")
-    group_id: Optional[str] = Field(None, description="ID of the group this subitem is placed in.")
-    name: Optional[str] = Field(None, description="The display name/title of the subitem.")
-    state: Optional[str] = Field(
+    subitem_id: str = AirweaveField(..., description="The unique identifier (ID) of the subitem.")
+    parent_item_id: str = AirweaveField(
+        ..., description="ID of the parent item this subitem belongs to."
+    )
+    board_id: str = AirweaveField(..., description="ID of the board that this subitem resides in.")
+    group_id: Optional[str] = AirweaveField(
+        None, description="ID of the group this subitem is placed in."
+    )
+    name: Optional[str] = AirweaveField(
+        None, description="The display name/title of the subitem.", embeddable=True
+    )
+    state: Optional[str] = AirweaveField(
         None, description="The current state of the subitem: active, archived, or deleted."
     )
-    column_values: List[Dict] = Field(
+    column_values: List[Dict] = AirweaveField(
         default_factory=list,
         description="A list of column-value dicts for each column on the subitem.",
     )
-    creator: Optional[Dict] = Field(
+    creator: Optional[Dict] = AirweaveField(
         None, description="Information about the user/team who created this subitem."
     )
-    created_at: Optional[datetime] = Field(None, description="When the subitem was first created.")
-    updated_at: Optional[datetime] = Field(None, description="When the subitem was last updated.")
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="When the subitem was first created.", is_created_at=True
+    )
+    updated_at: Optional[datetime] = AirweaveField(
+        None, description="When the subitem was last updated.", is_updated_at=True
+    )
 
 
 class MondayUpdateEntity(ChunkEntity):
@@ -150,24 +181,27 @@ class MondayUpdateEntity(ChunkEntity):
     https://developer.monday.com/api-reference/reference/updates
     """
 
-    update_id: str = Field(..., description="The unique identifier (ID) of the update.")
-    item_id: Optional[str] = Field(
+    update_id: str = AirweaveField(..., description="The unique identifier (ID) of the update.")
+    item_id: Optional[str] = AirweaveField(
         None,
         description=(
             "ID of the item this update is referencing (could also be a board-level update)."
         ),
     )
-    board_id: Optional[str] = Field(None, description="ID of the board, if applicable.")
-    creator_id: Optional[str] = Field(
+    board_id: Optional[str] = AirweaveField(None, description="ID of the board, if applicable.")
+    creator_id: Optional[str] = AirweaveField(
         None,
         description="ID of the user who created this update.",
     )
-    body: Optional[str] = Field(
+    body: Optional[str] = AirweaveField(
         None,
         description="The text (body) of the update, which may include markdown or HTML formatting.",
+        embeddable=True,
     )
-    created_at: Optional[datetime] = Field(None, description="When the update was first created.")
-    assets: List[Dict] = Field(
+    created_at: Optional[datetime] = AirweaveField(
+        None, description="When the update was first created.", is_created_at=True
+    )
+    assets: List[Dict] = AirweaveField(
         default_factory=list,
         description="Assets (e.g. images, attachments) associated with this update.",
     )

@@ -111,11 +111,15 @@ async def compute_entity_hash_async(entity: Any) -> str:
     from airweave.platform.entities._base import FileEntity
 
     # Handle FileEntity specially
-    if isinstance(entity, FileEntity) and entity.local_path:
+    if (
+        isinstance(entity, FileEntity)
+        and entity.airweave_system_metadata
+        and entity.airweave_system_metadata.local_path
+    ):
         try:
-            hash_value = await compute_file_hash_async(entity.local_path)
-            # Cache the hash
-            entity._hash = hash_value
+            hash_value = await compute_file_hash_async(entity.airweave_system_metadata.local_path)
+            # Cache the hash in system metadata
+            entity.airweave_system_metadata.hash = hash_value
             return hash_value
         except Exception:
             # Fall back to metadata hash

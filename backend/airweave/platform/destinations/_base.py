@@ -1,6 +1,5 @@
 """Base destination classes."""
 
-import json
 from abc import ABC, abstractmethod
 from typing import ClassVar, List, Optional
 from uuid import UUID
@@ -86,6 +85,11 @@ class BaseDestination(ABC):
         """Get credentials for the destination."""
         pass
 
+    @abstractmethod
+    async def has_keyword_index(self) -> bool:
+        """Check if the destination has a keyword index."""
+        pass
+
 
 class VectorDBDestination(BaseDestination):
     """Abstract base class for destinations backed by a vector database.
@@ -93,28 +97,7 @@ class VectorDBDestination(BaseDestination):
     Inherits from BaseDestination and can have additional vector-specific methods if necessary.
     """
 
-    # For now, no additional abstract methods are defined here; it uses BaseDestination's interface.
-    pass
-
-
-class GraphDBDestination(BaseDestination):
-    """Abstract base class for destinations backed by a graph database."""
-
-    # No additional abstract methods needed - the graph-specific operations
-    # should be implementation details of the standard methods.
-
-    # If needed, add helper methods that are not abstract:
-
-    def _entity_to_node_properties(self, entity: ChunkEntity) -> dict:
-        """Convert a ChunkEntity to Neo4j-compatible node properties."""
-        # Get the basic serialized properties
-        properties = entity.to_storage_dict()
-
-        # Handle special fields like breadcrumbs for Neo4j
-        if "breadcrumbs" in properties and isinstance(properties["breadcrumbs"], list):
-            # Either serialize breadcrumbs to JSON string
-            properties["breadcrumbs"] = json.dumps(properties["breadcrumbs"])
-            # OR extract the most important properties from breadcrumbs
-            # and store them as separate properties
-
-        return properties
+    @abstractmethod
+    async def get_vector_config_names(self) -> list[str]:
+        """Get the vector config names for the destination."""
+        pass

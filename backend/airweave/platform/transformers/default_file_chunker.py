@@ -8,7 +8,7 @@ from chonkie import RecursiveChunker, RecursiveLevel, RecursiveRules, SemanticCh
 
 from airweave.core.logging import ContextualLogger
 from airweave.platform.decorators import transformer
-from airweave.platform.entities._base import ChunkEntity, FileEntity, ParentEntity
+from airweave.platform.entities._base import ChunkEntity, FileEntity
 from airweave.platform.file_handling.conversion.factory import document_converter
 from airweave.platform.sync.async_helpers import run_in_thread_pool
 from airweave.platform.transformers.utils import (
@@ -102,22 +102,24 @@ async def _process_file_content(
     file: FileEntity, entity_context: str, logger: ContextualLogger
 ) -> str:
     """Process file content and convert to text if needed."""
-    if not file.local_path:
+    if not file.airweave_system_metadata.local_path:
         logger.warning(f"📂 CHUNKER_NO_PATH [{entity_context}] File has no local path")
         return ""
 
-    _, extension = os.path.splitext(file.local_path)
+    _, extension = os.path.splitext(file.airweave_system_metadata.local_path)
     extension = extension.lower()
 
     if extension == ".md":
         logger.debug(f"📑 CHUNKER_READ_MD [{entity_context}] Reading markdown file directly")
-        async with aiofiles.open(file.local_path, "r", encoding="utf-8") as f:
+        async with aiofiles.open(
+            file.airweave_system_metadata.local_path, "r", encoding="utf-8"
+        ) as f:
             content = await f.read()
         logger.debug(f"📖 CHUNKER_READ_DONE [{entity_context}] Read {len(content)} characters")
         return content
     else:
         logger.debug(f"🔄 CHUNKER_CONVERT [{entity_context}] Converting file to markdown")
-        result = await document_converter.convert(file.local_path)
+        result = await document_converter.convert(file.airweave_system_metadata.local_path)
         if not result or not result.text_content:
             logger.warning(f"🚫 CHUNKER_CONVERT_EMPTY [{entity_context}] No content extracted")
             return ""
@@ -299,9 +301,7 @@ def _reconstruct_chunk_list(
 
 
 @transformer(name="File Chunker")
-async def file_chunker(
-    file: FileEntity, logger: ContextualLogger
-) -> list[ParentEntity | ChunkEntity]:
+async def file_chunker(file: FileEntity, logger: ContextualLogger) -> list[ChunkEntity]:
     """Default file chunker that converts files to markdown chunks using Chonkie.
 
     This transformer:
@@ -328,9 +328,10 @@ async def file_chunker(
     )
 
     file_class = type(file)
-    produced_entities = []
+    produced_entities: list[ChunkEntity] = []
 
-    FileParentClass, FileChunkClass = file_class.create_parent_chunk_models()
+    # Use unified chunk model that carries full file metadata
+    UnifiedChunkClass = file_class.create_unified_chunk_model()
 
     try:
         # Process file content
@@ -363,20 +364,10 @@ async def file_chunker(
             f"in {chunk_elapsed:.2f}s"
         )
 
-        # Create entities
+        # Create entities (unified chunks that include all file metadata)
         logger.debug(
-            f"🏗️  CHUNKER_ENTITIES_START [{entity_context}] Creating parent and chunk entities"
+            f"🏗️  CHUNKER_ENTITIES_START [{entity_context}] Creating unified chunk entities"
         )
-
-        # Create parent entity for the file using all fields from original entity
-        file_data = file.model_dump()
-        file_data.update(
-            {
-                "number_of_chunks": len(final_chunk_texts),
-            }
-        )
-        parent = FileParentClass(**file_data)
-        produced_entities.append(parent)
 
         for i, chunk_text in enumerate(final_chunk_texts):
             if not chunk_text.strip():
@@ -401,36 +392,42 @@ async def file_chunker(
                     }
                 )
 
-            chunk = FileChunkClass(
-                name=f"{file.name} - Chunk {i + 1}",
-                entity_id=file.entity_id,
-                sync_id=file.sync_id,
-                parent_entity_id=parent.entity_id,
-                parent_db_entity_id=parent.db_entity_id,
-                md_content=chunk_text,
-                md_type="text",
-                md_position=i,
-                md_parent_title=file.name,
-                md_parent_url=md_parent_url,  # Set the parent URL
-                metadata=chunk_metadata,  # Include web metadata
+            # Build base data from file so each chunk carries full metadata
+            base_data = file.model_dump()
+            base_data.update(
+                {
+                    "entity_id": file.entity_id,
+                    "parent_entity_id": file.entity_id,
+                    "md_content": chunk_text,
+                    "md_type": "text",
+                    "md_position": i,
+                    "md_parent_title": file.name,
+                    "md_parent_url": md_parent_url,
+                    "metadata": chunk_metadata,
+                }
             )
+
+            chunk = UnifiedChunkClass(**base_data)
             produced_entities.append(chunk)
 
         total_elapsed = asyncio.get_event_loop().time() - start_time
         logger.debug(
             f"✅ CHUNKER_COMPLETE [{entity_context}] Chunking completed in {total_elapsed:.2f}s "
-            f"(1 parent + {len(final_chunk_texts)} chunks)"
+            f"({len(final_chunk_texts)} unified chunks)"
         )
 
         # Mark entity as fully processed in storage
-        if file.sync_id:
+        if file.airweave_system_metadata.sync_id:
             from airweave.platform.storage import storage_manager
 
             # Check if this is a CTTI entity - they don't need marking as processed
             # since they use global deduplication in the aactmarkdowns container
             if not storage_manager._is_ctti_entity(file):
                 await storage_manager.mark_entity_processed(
-                    logger, file.sync_id, file.entity_id, len(final_chunk_texts)
+                    logger,
+                    file.airweave_system_metadata.sync_id,
+                    file.entity_id,
+                    len(final_chunk_texts),
                 )
                 logger.debug(
                     f"📝 CHUNKER_MARKED_PROCESSED [{entity_context}] "
@@ -449,12 +446,15 @@ async def file_chunker(
         raise e
     finally:
         # Clean up temporary file if it exists
-        if hasattr(file, "local_path") and file.local_path:
+        if hasattr(file, "airweave_system_metadata") and file.airweave_system_metadata.local_path:
             from airweave.platform.storage import storage_manager
 
-            await storage_manager.cleanup_temp_file(logger, file.local_path)
+            await storage_manager.cleanup_temp_file(
+                logger, file.airweave_system_metadata.local_path
+            )
             logger.debug(
-                f"🧹 CHUNKER_CLEANUP [{entity_context}] Cleaned up temp file: {file.local_path}"
+                f"🧹 CHUNKER_CLEANUP [{entity_context}] Cleaned up temp file:"
+                f"{file.airweave_system_metadata.local_path}"
             )
 
     return produced_entities

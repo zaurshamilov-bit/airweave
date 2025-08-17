@@ -118,7 +118,7 @@ class SyncOrchestrator:
                     break  # Exit the loop cleanly instead of raising
 
                 # Handle skipped entities without using a worker
-                if getattr(entity, "should_skip", False):
+                if entity.airweave_system_metadata.should_skip:
                     self.sync_context.logger.debug(f"Skipping entity: {entity.entity_id}")
                     await self.sync_context.progress.increment("skipped")
                     continue
