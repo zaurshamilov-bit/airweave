@@ -20,7 +20,7 @@ async def list_entity_definitions(
     ctx: ApiContext = Depends(deps.get_context),
 ) -> List[schemas.EntityDefinition]:
     """List all entity definitions for the current user's organization."""
-    return await crud.entity_definition.get_multi(db, organization_id=ctx.organization_id)
+    return await crud.entity_definition.get_multi(db, organization_id=ctx.organization.id)
 
 
 @router.post("/definitions/", response_model=schemas.EntityDefinition)

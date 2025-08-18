@@ -9,8 +9,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from airweave import schemas
 from airweave.core.logging import ContextualLogger
-from airweave.schemas.user import User
 
 
 class ApiContext(BaseModel):
@@ -25,8 +25,8 @@ class ApiContext(BaseModel):
     request_id: str
 
     # Authentication context
-    organization_id: UUID
-    user: Optional[User] = None
+    organization: schemas.Organization
+    user: Optional[schemas.User] = None
     auth_method: str  # "auth0", "api_key", "system"
     auth_metadata: Optional[Dict[str, Any]] = None
 
@@ -69,12 +69,12 @@ class ApiContext(BaseModel):
             return (
                 f"ApiContext(request_id={self.request_id[:8]}..., "
                 f"method={self.auth_method}, user={self.user.email}, "
-                f"org={self.organization_id})"
+                f"org={self.organization.id})"
             )
         else:
             return (
                 f"ApiContext(request_id={self.request_id[:8]}..., "
-                f"method={self.auth_method}, org={self.organization_id})"
+                f"method={self.auth_method}, org={self.organization.id})"
             )
 
     def to_serializable_dict(self) -> Dict[str, Any]:
@@ -85,7 +85,8 @@ class ApiContext(BaseModel):
         """
         return {
             "request_id": self.request_id,
-            "organization_id": str(self.organization_id),
+            "organization_id": str(self.organization.id),
+            "organization": self.organization.model_dump(mode="json"),
             "user": self.user.model_dump(mode="json") if self.user else None,
             "auth_method": self.auth_method,
             "auth_metadata": self.auth_metadata,

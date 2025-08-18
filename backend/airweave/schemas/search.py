@@ -1,16 +1,26 @@
-"""Schemas for search operations.
+"""Search schemas for Airweave's search API.
 
-Search is the core functionality that makes Airweave powerful - enabling unified
+This module provides schemas for unified semantic search functionality, enabling
 queries across multiple data sources within collections. These schemas define
 the search request and response formats for both raw search results and
 AI-generated completions.
 """
 
 from enum import Enum
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 from qdrant_client.http.models import Filter as QdrantFilter
+
+if TYPE_CHECKING:
+    from airweave.search.operations.completion import CompletionGeneration
+    from airweave.search.operations.embedding import Embedding
+    from airweave.search.operations.qdrant_filter import QdrantFilterOperation
+    from airweave.search.operations.query_expansion import QueryExpansion
+    from airweave.search.operations.query_interpretation import QueryInterpretation
+    from airweave.search.operations.recency_bias import RecencyBias
+    from airweave.search.operations.reranking import LLMReranking
+    from airweave.search.operations.vector_search import VectorSearch
 
 
 class ResponseType(str, Enum):
@@ -40,9 +50,9 @@ class QueryExpansions(BaseModel):
     """Structured output for LLM-based query expansions."""
 
     alternatives: List[str] = Field(
-        description="List of alternative phrasings for the search query",
-        min_items=1,
-        max_items=10,
+        ...,
+        description="Alternative query phrasings",
+        max_length=4,
     )
 
 
@@ -64,29 +74,68 @@ class SearchRequest(BaseModel):
     )
 
     # Pagination
-    offset: Optional[int] = Field(0, ge=0, description="Number of results to skip")
+    offset: Optional[int] = Field(0, ge=0, description="Number of results to skip (DEFAULT: 0)")
 
     limit: Optional[int] = Field(
-        20, ge=1, le=1000, description="Maximum number of results to return"
+        20, ge=1, le=1000, description="Maximum number of results to return (DEFAULT: 20)"
     )
 
     # Search quality parameters
     score_threshold: Optional[float] = Field(
-        None, ge=0.0, le=1.0, description="Minimum similarity score threshold"
+        None,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity score threshold (DEFAULT: None - no filtering)",
     )
-
-    # Result options
-    summarize: Optional[bool] = Field(False, description="Whether to summarize results")
 
     # Response configuration
     response_type: ResponseType = Field(
-        ResponseType.RAW, description="Type of response (raw or completion)"
+        ResponseType.RAW, description="Type of response - 'raw' or 'completion' (DEFAULT: 'raw')"
     )
 
-    expansion_strategy: QueryExpansionStrategy = Field(
-        QueryExpansionStrategy.AUTO,
-        description="Query expansion strategy. Enhances recall by expanding the query with "
-        "synonyms, related terms, and other variations, but increases latency.",
+    # Hybrid search parameters
+    search_method: Optional[Literal["hybrid", "neural", "keyword"]] = Field(
+        None, description="Search method to use (DEFAULT: 'hybrid' - combines neural + BM25)"
+    )
+
+    # Recency bias (public abstraction over decay)
+    recency_bias: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "How much document age penalizes the similarity score (0..1). "
+            "0 = no age penalty (pure similarity); "
+            "0.5 = old docs lose up to 50% of their score; "
+            "1 = old docs get zero score (pure recency). "
+            "Applied as: score × (1 - bias + bias × age_factor). "
+            "Works within top ~10,000 semantic matches. DEFAULT: 0.3"
+        ),
+    )
+
+    expansion_strategy: Optional[QueryExpansionStrategy] = Field(
+        None,
+        description=(
+            "Query expansion strategy (DEFAULT: 'auto' - generates up to 4 query variations). "
+            "Options: 'auto', 'llm', 'no_expansion'"
+        ),
+    )
+
+    # Advanced features (POST endpoint only)
+    enable_reranking: Optional[bool] = Field(
+        None,
+        description=(
+            "Enable LLM-based reranking to improve result relevance "
+            "(DEFAULT: True - enabled, set to False to disable)"
+        ),
+    )
+
+    enable_query_interpretation: Optional[bool] = Field(
+        None,
+        description=(
+            "Enable automatic filter extraction from natural language query "
+            "(DEFAULT: True - enabled, set to False to disable)"
+        ),
     )
 
     model_config = {
@@ -96,16 +145,18 @@ class SearchRequest(BaseModel):
                     "query": "customer payment issues",
                     "filter": {
                         "must": [
-                            {"key": "source_name", "match": {"value": "Stripe"}},
-                            {"key": "created_at", "range": {"gte": "2024-01-01T00:00:00Z"}},
+                            {"key": "source_name", "match": {"value": "Support"}},
+                            {"key": "status", "match": {"value": "open"}},
                         ]
                     },
-                    "limit": 50,
+                    "limit": 10,
                     "score_threshold": 0.7,
                     "response_type": "completion",
-                }
-            ]
-        }
+                },
+                {"query": "Q4 revenue analysis", "limit": 20, "response_type": "raw"},
+            ],
+            "required": ["query"],
+        },
     }
 
 
@@ -153,36 +204,50 @@ class SearchResponse(BaseModel):
                 {
                     "results": [
                         {
-                            "id": "stripe_cust_1234567890",
-                            "title": "Customer Payment Record",
-                            "content": (
-                                "Monthly subscription payment of $99.00 processed successfully for "
-                                "customer John Doe (john@company.com). Payment method: Visa ending "
-                                "in 4242."
-                            ),
-                            "source": "stripe",
                             "score": 0.92,
-                            "metadata": {
-                                "date": "2024-01-15T10:30:00Z",
-                                "type": "payment",
-                                "amount": 99.00,
-                                "currency": "USD",
+                            "payload": {
+                                "source_name": "Payment API",
+                                "entity_id": "trans_1234567890",
+                                "title": "Transaction Processing",
+                                "md_content": (
+                                    "Customer John Doe successfully processed payment of $99 "
+                                    "for monthly subscription"
+                                ),
+                                "created_at": "2024-01-15T10:30:00Z",
+                                "metadata": {
+                                    "amount": 99,
+                                    "currency": "USD",
+                                    "status": "completed",
+                                },
                             },
                         },
                         {
-                            "id": "zendesk_ticket_789",
-                            "title": "Billing Question - Subscription Upgrade",
-                            "content": (
-                                "Customer inquiry about upgrading from Basic to Pro plan. Customer "
-                                "mentioned they need advanced analytics features."
-                            ),
-                            "source": "zendesk",
                             "score": 0.87,
-                            "metadata": {
-                                "date": "2024-01-14T14:22:00Z",
-                                "type": "support_ticket",
-                                "status": "resolved",
-                                "priority": "medium",
+                            "payload": {
+                                "source_name": "Support Tickets",
+                                "entity_id": "ticket_987654321",
+                                "title": "Billing Inquiry",
+                                "md_content": (
+                                    "Customer inquired about upgrading subscription plan "
+                                    "for advanced analytics features"
+                                ),
+                                "created_at": "2024-01-14T14:22:00Z",
+                                "metadata": {"priority": "medium", "status": "resolved"},
+                            },
+                        },
+                    ],
+                    "response_type": "raw",
+                    "status": "success",
+                },
+                {
+                    "results": [
+                        {
+                            "score": 0.95,
+                            "payload": {
+                                "source_name": "Customer Database",
+                                "entity_id": "cust_abc123",
+                                "md_content": "Premium customer account details",
+                                "metadata": {"tier": "premium", "active": True},
                             },
                         },
                     ],
@@ -195,7 +260,73 @@ class SearchResponse(BaseModel):
                         "suggests strong customer engagement with your premium offerings."
                     ),
                     "status": "success",
-                }
+                },
             ]
         }
     }
+
+
+class SearchConfig(BaseModel):
+    """Search configuration with operation instances.
+
+    This represents the complete execution plan for a search request.
+    Each field contains either an operation instance or None, making it
+    clear which operations are enabled for this search.
+    """
+
+    # Core search parameters (from request)
+    query: str = Field(..., description="The search query text")
+    collection_id: str = Field(..., description="ID of the collection to search")
+    limit: int = Field(20, ge=1, le=1000, description="Maximum number of results")
+    offset: int = Field(0, ge=0, description="Pagination offset")
+    score_threshold: Optional[float] = Field(None, ge=0.0, le=1.0, description="Minimum score")
+
+    # Hybrid search and recency parameters
+    search_method: Literal["hybrid", "neural", "keyword"] = Field(
+        "hybrid", description="Search method to use"
+    )
+    # Decay config removed: recency_bias and pre-search operator control recency
+    recency_bias: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Relative weight for recency vs similarity when combining final scores (0..1)."
+        ),
+    )
+
+    # Operations - each field is either an operation instance or None
+    # This makes it explicit which operations are enabled
+    query_interpretation: Optional["QueryInterpretation"] = Field(
+        None, description="LLM-based filter extraction from natural language"
+    )
+
+    query_expansion: Optional["QueryExpansion"] = Field(
+        None, description="Query expansion for improved recall"
+    )
+
+    qdrant_filter: Optional["QdrantFilterOperation"] = Field(
+        None, description="User-provided Qdrant filter application"
+    )
+
+    embedding: "Embedding" = Field(..., description="Embedding generation (always required)")
+
+    vector_search: "VectorSearch" = Field(
+        ..., description="Vector similarity search (always required)"
+    )
+
+    # Recency normalization/boost (optional)
+    recency: Optional["RecencyBias"] = Field(
+        None, description="Dynamic recency normalization and boosting after retrieval"
+    )
+
+    reranking: Optional["LLMReranking"] = Field(None, description="LLM-based result reranking")
+
+    completion: Optional["CompletionGeneration"] = Field(
+        None, description="AI completion generation"
+    )
+
+    class Config:
+        """Pydantic config."""
+
+        arbitrary_types_allowed = True  # Allow operation instances

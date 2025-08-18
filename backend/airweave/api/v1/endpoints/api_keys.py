@@ -45,7 +45,7 @@ async def create_api_key(
 
     api_key_data = {
         "id": api_key_obj.id,
-        "organization": ctx.organization_id,  # Use the user's organization_id
+        "organization": ctx.organization.id,  # Use the user's organization_id
         "created_at": api_key_obj.created_at,
         "modified_at": api_key_obj.modified_at,
         "last_used_date": None,  # New key has no last used date
@@ -88,7 +88,7 @@ async def read_api_key(
 
     api_key_data = {
         "id": api_key.id,
-        "organization": ctx.organization_id,
+        "organization": ctx.organization.id,
         "created_at": api_key.created_at,
         "modified_at": api_key.modified_at,
         "last_used_date": api_key.last_used_date if hasattr(api_key, "last_used_date") else None,
@@ -132,7 +132,7 @@ async def read_api_keys(
 
         api_key_data = {
             "id": api_key.id,
-            "organization": ctx.organization_id,
+            "organization": ctx.organization.id,
             "created_at": api_key.created_at,
             "modified_at": api_key.modified_at,
             "last_used_date": (
@@ -181,7 +181,7 @@ async def delete_api_key(
     # Create a copy of the data before deletion
     api_key_data = {
         "id": api_key.id,
-        "organization": ctx.organization_id,
+        "organization": ctx.organization.id,
         "created_at": api_key.created_at,
         "modified_at": api_key.modified_at,
         "last_used_date": api_key.last_used_date if hasattr(api_key, "last_used_date") else None,

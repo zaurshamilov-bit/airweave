@@ -3,9 +3,8 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import Field
-
 from airweave.core.datetime_utils import utc_now_naive
+from airweave.platform.entities._airweave_field import AirweaveField
 from airweave.platform.entities._base import ChunkEntity, FileEntity
 from airweave.platform.entities._lazy import LazyEntity
 
@@ -13,49 +12,65 @@ from airweave.platform.entities._lazy import LazyEntity
 class NotionDatabaseEntity(ChunkEntity):
     """Schema for a Notion database."""
 
-    database_id: str = Field(..., description="The ID of the database")
-    title: str = Field(..., description="The title of the database")
-    description: str = Field(default="", description="The description of the database")
-    properties: Dict[str, Any] = Field(
-        default_factory=dict, description="Database properties schema"
+    database_id: str = AirweaveField(..., description="The ID of the database")
+    title: str = AirweaveField(..., description="The title of the database", embeddable=True)
+    description: str = AirweaveField(
+        default="", description="The description of the database", embeddable=True
     )
-    parent_id: str = Field(description="The ID of the parent")
-    parent_type: str = Field(description="The type of the parent (workspace, page_id, etc.)")
-    icon: Optional[Dict[str, Any]] = Field(None, description="The icon of the database")
-    cover: Optional[Dict[str, Any]] = Field(None, description="The cover of the database")
-    archived: bool = Field(default=False, description="Whether the database is archived")
-    is_inline: bool = Field(default=False, description="Whether the database is inline")
-    url: str = Field(description="The URL of the database")
-    created_time: Optional[datetime] = Field(None, description="When the database was created")
-    last_edited_time: Optional[datetime] = Field(
-        None, description="When the database was last edited"
+    properties: Dict[str, Any] = AirweaveField(
+        default_factory=dict, description="Database properties schema", embeddable=True
+    )
+    parent_id: str = AirweaveField(description="The ID of the parent")
+    parent_type: str = AirweaveField(
+        description="The type of the parent (workspace, page_id, etc.)"
+    )
+    icon: Optional[Dict[str, Any]] = AirweaveField(None, description="The icon of the database")
+    cover: Optional[Dict[str, Any]] = AirweaveField(None, description="The cover of the database")
+    archived: bool = AirweaveField(default=False, description="Whether the database is archived")
+    is_inline: bool = AirweaveField(default=False, description="Whether the database is inline")
+    url: str = AirweaveField(description="The URL of the database")
+    created_time: Optional[datetime] = AirweaveField(
+        None, description="When the database was created", is_created_at=True
+    )
+    last_edited_time: Optional[datetime] = AirweaveField(
+        None, description="When the database was last edited", is_updated_at=True
     )
 
 
 class NotionPageEntity(ChunkEntity, LazyEntity):
     """Schema for a Notion page with aggregated content."""
 
-    page_id: str = Field(..., description="The ID of the page")
-    parent_id: str = Field(description="The ID of the parent")
-    parent_type: str = Field(
+    page_id: str = AirweaveField(..., description="The ID of the page")
+    parent_id: str = AirweaveField(description="The ID of the parent")
+    parent_type: str = AirweaveField(
         description="The type of the parent (workspace, page_id, database_id, etc.)"
     )
-    title: str = Field(..., description="The title of the page")
-    content: Optional[str] = Field(default=None, description="Full aggregated content")
-    properties: Dict[str, Any] = Field(default_factory=dict, description="Page properties")
-    property_entities: List[Any] = Field(
-        default_factory=list, description="Structured property entities"
+    title: str = AirweaveField(..., description="The title of the page", embeddable=True)
+    content: Optional[str] = AirweaveField(
+        default=None, description="Full aggregated content", embeddable=True
     )
-    files: List[Any] = Field(default_factory=list, description="Files referenced in the page")
-    icon: Optional[Dict[str, Any]] = Field(None, description="The icon of the page")
-    cover: Optional[Dict[str, Any]] = Field(None, description="The cover of the page")
-    archived: bool = Field(default=False, description="Whether the page is archived")
-    in_trash: bool = Field(default=False, description="Whether the page is in trash")
-    url: str = Field(description="The URL of the page")
-    content_blocks_count: int = Field(default=0, description="Number of blocks processed")
-    max_depth: int = Field(default=0, description="Maximum nesting depth of blocks")
-    created_time: Optional[datetime] = Field(None, description="When the page was created")
-    last_edited_time: Optional[datetime] = Field(None, description="When the page was last edited")
+    properties: Dict[str, Any] = AirweaveField(
+        default_factory=dict, description="Page properties", embeddable=True
+    )
+    property_entities: List[Any] = AirweaveField(
+        default_factory=list, description="Structured property entities", embeddable=True
+    )
+    files: List[Any] = AirweaveField(
+        default_factory=list, description="Files referenced in the page"
+    )
+    icon: Optional[Dict[str, Any]] = AirweaveField(None, description="The icon of the page")
+    cover: Optional[Dict[str, Any]] = AirweaveField(None, description="The cover of the page")
+    archived: bool = AirweaveField(default=False, description="Whether the page is archived")
+    in_trash: bool = AirweaveField(default=False, description="Whether the page is in trash")
+    url: str = AirweaveField(description="The URL of the page")
+    content_blocks_count: int = AirweaveField(default=0, description="Number of blocks processed")
+    max_depth: int = AirweaveField(default=0, description="Maximum nesting depth of blocks")
+    created_time: Optional[datetime] = AirweaveField(
+        None, description="When the page was created", is_created_at=True
+    )
+    last_edited_time: Optional[datetime] = AirweaveField(
+        None, description="When the page was last edited", is_updated_at=True
+    )
 
     def __init__(self, **data):
         """Initialize NotionPageEntity ensuring LazyEntity setup."""
@@ -86,14 +101,18 @@ class NotionPageEntity(ChunkEntity, LazyEntity):
 class NotionPropertyEntity(ChunkEntity):
     """Schema for a Notion database page property."""
 
-    property_id: str = Field(..., description="The ID of the property")
-    property_name: str = Field(..., description="The name of the property")
-    property_type: str = Field(..., description="The type of the property")
-    page_id: str = Field(..., description="The ID of the page this property belongs to")
-    database_id: str = Field(..., description="The ID of the database this property belongs to")
-    value: Optional[Any] = Field(None, description="The raw value of the property")
-    formatted_value: str = Field(
-        default="", description="The formatted/display value of the property"
+    property_id: str = AirweaveField(..., description="The ID of the property")
+    property_name: str = AirweaveField(..., description="The name of the property", embeddable=True)
+    property_type: str = AirweaveField(..., description="The type of the property", embeddable=True)
+    page_id: str = AirweaveField(..., description="The ID of the page this property belongs to")
+    database_id: str = AirweaveField(
+        ..., description="The ID of the database this property belongs to"
+    )
+    value: Optional[Any] = AirweaveField(
+        None, description="The raw value of the property", embeddable=True
+    )
+    formatted_value: str = AirweaveField(
+        default="", description="The formatted/display value of the property", embeddable=True
     )
 
 
@@ -101,15 +120,17 @@ class NotionFileEntity(FileEntity):
     """Schema for a Notion file."""
 
     # Notion-specific fields
-    file_type: str = Field(..., description="The type of file (file, external, file_upload)")
-    url: str = Field(..., description="The URL to access the file")
-    expiry_time: Optional[datetime] = Field(
+    file_type: str = AirweaveField(
+        ..., description="The type of file (file, external, file_upload)"
+    )
+    url: str = AirweaveField(..., description="The URL to access the file")
+    expiry_time: Optional[datetime] = AirweaveField(
         None, description="When the file URL expires (for Notion-hosted files)"
     )
-    caption: str = Field(default="", description="The caption of the file")
+    caption: str = AirweaveField(default="", description="The caption of the file")
 
     # Initialize metadata field to ensure it exists
-    metadata: Optional[Dict[str, Any]] = Field(
+    metadata: Optional[Dict[str, Any]] = AirweaveField(
         default_factory=dict, description="Additional metadata about the file"
     )
 
@@ -130,12 +151,12 @@ class NotionFileEntity(FileEntity):
         if getattr(self, "_hash", None):
             return self._hash
 
-        if hasattr(self, "local_path") and self.local_path:
+        if self.airweave_system_metadata.local_path:
             # If we have the actual file, compute hash from its contents
             try:
                 import hashlib
 
-                with open(self.local_path, "rb") as f:
+                with open(self.airweave_system_metadata.local_path, "rb") as f:
                     content = f.read()
                     self._hash = hashlib.sha256(content).hexdigest()
                     return self._hash

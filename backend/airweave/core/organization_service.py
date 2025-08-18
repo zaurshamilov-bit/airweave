@@ -119,7 +119,7 @@ class OrganizationService:
                     # Create system auth context for billing record creation
                     ctx = ApiContext(
                         request_id=str(uuid4()),
-                        organization_id=local_org_schema.id,
+                        organization=local_org_schema,
                         user=None,
                         auth_method="system",
                         auth_metadata={"source": "organization_creation"},
@@ -168,7 +168,7 @@ class OrganizationService:
 
                 api_key_auth = ApiContext(
                     request_id=request_id,
-                    organization_id=local_org.id,
+                    organization=organization,  # Use the full organization object
                     user=owner_user,  # Set the owner as the creator
                     auth_method="system",
                     auth_metadata={"source": "organization_creation"},

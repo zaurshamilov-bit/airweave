@@ -1,5 +1,8 @@
-<img width="1673" alt="airweave-lettermark" style="padding-bottom: 12px;" src="https://github.com/user-attachments/assets/e79a9af7-2e93-4888-9cf4-0f700f19fe05"/>
-
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="frontend/public/logo-and-lettermark-light.svg"/>
+  <source media="(prefers-color-scheme: light)" srcset="frontend/public/logo-and-lettermark.svg"/>
+  <img width="1673" alt="airweave-lettermark" style="padding-bottom: 12px;" src="frontend/public/logo-and-lettermark-light.svg"/>
+</picture>
 
 <div align="center">
 

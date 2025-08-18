@@ -1,6 +1,7 @@
 """Search service for vector database integrations."""
 
 import json
+from datetime import datetime
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -12,6 +13,7 @@ from airweave.core.config import settings
 from airweave.core.exceptions import NotFoundException
 from airweave.platform.destinations._base import BaseDestination
 from airweave.platform.embedding_models._base import BaseEmbeddingModel
+from airweave.platform.embedding_models.bm25_text2vec import BM25Text2Vec
 from airweave.platform.embedding_models.local_text2vec import LocalText2Vec
 from airweave.platform.embedding_models.openai_text2vec import OpenAIText2Vec
 from airweave.platform.locator import resource_locator
@@ -21,6 +23,7 @@ from airweave.schemas.search import (
     SearchRequest,
     SearchStatus,
 )
+from airweave.search.decay import DecayConfig
 
 
 class SearchService:
@@ -97,6 +100,8 @@ class SearchService:
                     "checksum",
                     "sync_id",
                     "sync_job_id",
+                    # Hide embeddable_text in RAW results; still available for LLM context
+                    "embeddable_text",
                 ]
                 for field in fields_to_always_remove:
                     payload.pop(field, None)
@@ -210,15 +215,21 @@ class SearchService:
         destination_class = await self._get_destination_class(db)
         destination = await destination_class.create(collection_id=collection.id, logger=ctx.logger)
 
-        # Get appropriate embedding model
+        # Get appropriate embedding models
         embedding_model = self._get_embedding_model(readable_id, collection.id, ctx)
+
+        # Load keyword indexing model if destination has/supports it
+        keyword_indexing_model = None
+        if await destination.has_keyword_index():
+            keyword_indexing_model = self._get_keyword_indexing_model(ctx)
 
         # Perform search based on query expansion strategy
         if expansion_strategy and expansion_strategy != QueryExpansionStrategy.NO_EXPANSION:
-            search_results = await self._search_with_expansion(
+            return await self._search_with_expansion(
                 query,
                 expansion_strategy,
                 embedding_model,
+                keyword_indexing_model,
                 destination,
                 ctx.logger,
                 filter=filter,
@@ -226,18 +237,18 @@ class SearchService:
                 offset=offset,
                 score_threshold=score_threshold,
             )
-        else:
-            search_results = await self._search_single_query(
-                query,
-                embedding_model,
-                destination,
-                filter=filter,
-                limit=limit,
-                offset=offset,
-                score_threshold=score_threshold,
-            )
 
-        return search_results
+        return await self._search_single_query(
+            query,
+            embedding_model,
+            keyword_indexing_model,
+            destination,
+            ctx.logger,
+            filter=filter,
+            limit=limit,
+            offset=offset,
+            score_threshold=score_threshold,
+        )
 
     async def search(
         self,
@@ -292,7 +303,9 @@ class SearchService:
 
             # Process results and generate completion
             processed_results = self._process_search_results(cleaned_results)
-            completion = await self._generate_ai_completion(query, cleaned_results)
+            # Pass embeddable_text back into context for the LLM by injecting it
+            # (the cleaned_results already have it removed; fetch raw to supply context)
+            completion = await self._generate_ai_completion(query, raw_results)
 
             return schemas.SearchResponse(
                 results=processed_results,
@@ -366,7 +379,7 @@ class SearchService:
             # Process results and generate completion
             processed_results = self._process_search_results(cleaned_results)
 
-            completion = await self._generate_ai_completion(search_request.query, cleaned_results)
+            completion = await self._generate_ai_completion(search_request.query, raw_results)
 
             return schemas.SearchResponse(
                 results=processed_results,
@@ -416,11 +429,16 @@ class SearchService:
             )
             return LocalText2Vec(logger=ctx.logger)
 
+    def _get_keyword_indexing_model(self, ctx: ApiContext) -> BaseEmbeddingModel:
+        """Get the appropriate keyword embedding model based on configuration."""
+        return BM25Text2Vec(ctx.logger)
+
     async def _search_with_expansion(
         self,
         query: str,
         expansion_strategy: QueryExpansionStrategy,
         embedding_model: BaseEmbeddingModel,
+        keyword_indexing_model: BaseEmbeddingModel | None,
         destination: BaseDestination,
         ctx: ApiContext,
         filter: Any | None = None,
@@ -429,10 +447,21 @@ class SearchService:
         score_threshold: float | None = None,
     ) -> list[dict]:
         """Perform search with query expansion."""
-        from airweave.search.query_preprocessor import query_preprocessor
+        from airweave.search.operations.query_expansion import QueryExpansion
 
-        # Expand the query
-        expanded_queries = await query_preprocessor.expand(query, strategy=expansion_strategy)
+        # Use QueryExpansion for compatibility
+        query_expander = QueryExpansion(strategy=expansion_strategy)
+
+        # Create a minimal context for the operation
+        temp_context = {
+            "query": query,
+            "config": type("Config", (), {"expansion_strategy": expansion_strategy})(),
+            "logger": ctx.logger,
+        }
+
+        # Execute the expansion
+        await query_expander.execute(temp_context)
+        expanded_queries = temp_context.get("expanded_queries", [query])
         ctx.logger.info(
             f"Expanded query '{query}' to {len(expanded_queries)} variants "
             f"using {expansion_strategy.value} strategy"
@@ -440,6 +469,9 @@ class SearchService:
 
         # Embed all expanded queries
         vectors = await embedding_model.embed_many(expanded_queries)
+        sparse_embeddings = None
+        if keyword_indexing_model:
+            sparse_embeddings = await keyword_indexing_model.embed_many(expanded_queries)
 
         # Convert filter to dict if it's a Qdrant Filter object
         filter_dict = None
@@ -459,16 +491,22 @@ class SearchService:
             score_threshold=score_threshold,
             with_payload=True,
             filter_conditions=filter_conditions,
+            sparse_vectors=list(sparse_embeddings) if sparse_embeddings else None,
+            # TODO: Determine an optimal default for this
+            search_method="hybrid",
+            decay_config=DecayConfig(
+                decay_type="linear",
+                datetime_field="created_time",
+                target_datetime=datetime.now(),
+                scale_unit="year",
+                scale_value=1.0,
+                midpoint=0.5,
+            ),
         )
-
-        # Flatten results from all queries
-        all_results = []
-        for query_results in batch_results:
-            all_results.extend(query_results)
 
         # Apply offset after merging (since bulk search doesn't support offset)
         merged_results = self._merge_search_results(
-            all_results, max_results=limit + offset, ctx=ctx
+            batch_results, max_results=limit + offset, ctx=ctx
         )
 
         # Apply offset
@@ -487,7 +525,9 @@ class SearchService:
         self,
         query: str,
         embedding_model: BaseEmbeddingModel,
+        keyword_indexing_model: BaseEmbeddingModel | None,
         destination: BaseDestination,
+        ctx: ApiContext,
         filter: Any | None = None,
         limit: int = 10,
         offset: int = 0,
@@ -495,6 +535,9 @@ class SearchService:
     ) -> list[dict]:
         """Perform search with a single query (no expansion)."""
         vector = await embedding_model.embed(query)
+        sparse_embeddings = None
+        if keyword_indexing_model:
+            sparse_embeddings = await keyword_indexing_model.embed(query)
 
         # Convert filter to dict if it's a Qdrant Filter object
         filter_dict = None
@@ -511,6 +554,7 @@ class SearchService:
             offset=offset,
             score_threshold=score_threshold,
             with_payload=True,
+            sparse_vector=list(sparse_embeddings)[0] if sparse_embeddings else None,
         )
 
     def _check_result_quality(self, results: list[dict]) -> schemas.SearchResponse | None:

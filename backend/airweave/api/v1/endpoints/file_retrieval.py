@@ -29,16 +29,16 @@ async def verify_picnic_health_access(
     PICNIC_HEALTH_ORG_ID = "9878d9b4-0fb9-4401-b2b3-15420da4eda3"
 
     # Check if the request is from Picnic Health organization by ID
-    if str(ctx.organization_id) != PICNIC_HEALTH_ORG_ID:
+    if str(ctx.organization.id) != PICNIC_HEALTH_ORG_ID:
         # Get the organization details for logging
-        organization = await crud.organization.get(db=db, id=ctx.organization_id, ctx=ctx)
+        organization = await crud.organization.get(db=db, id=ctx.organization.id, ctx=ctx)
 
         ctx.logger.warning(
             f"File access denied for organization: "
             f"{organization.name if organization else 'Unknown'} "
-            f"(ID: {ctx.organization_id})",
+            f"(ID: {ctx.organization.id})",
             extra={
-                "organization_id": ctx.organization_id,
+                "organization_id": ctx.organization.id,
                 "organization_name": organization.name if organization else None,
                 "auth_method": ctx.auth_method,
                 "expected_org_id": PICNIC_HEALTH_ORG_ID,

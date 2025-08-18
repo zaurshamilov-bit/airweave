@@ -1,6 +1,6 @@
 """API endpoints for collections."""
 
-from typing import List, Optional
+from typing import List
 
 from fastapi import BackgroundTasks, Depends, HTTPException, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,8 +21,8 @@ from airweave.core.shared_models import ActionType
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
-from airweave.schemas.search import QueryExpansionStrategy, ResponseType, SearchRequest
-from airweave.search.search_service import search_service
+from airweave.schemas.search import ResponseType, SearchRequest
+from airweave.search.search_service_v2 import search_service_v2 as search_service
 
 router = TrailingSlashRouter()
 
@@ -177,12 +177,14 @@ async def search_collection(
     ),
     limit: int = Query(20, ge=1, le=1000, description="Maximum number of results to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip for pagination"),
-    score_threshold: Optional[float] = Query(
-        None, ge=0.0, le=1.0, description="Minimum similarity score threshold"
-    ),
-    expansion_strategy: QueryExpansionStrategy = Query(
-        QueryExpansionStrategy.AUTO,
-        description="Query expansion strategy (auto, llm, or no_expansion)",
+    recency_bias: float | None = Query(
+        None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "How much to weigh recency vs similarity (0..1). "
+            "0 = no recency effect; 1 = rank by recency only."
+        ),
     ),
     db: AsyncSession = Depends(deps.get_db),
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
@@ -200,14 +202,16 @@ async def search_collection(
         f"with response_type: {response_type}, limit: {limit}, offset: {offset}"
     )
 
-    # Create a SearchRequest from the query parameters
+    # Create a SearchRequest from the query parameters.
+    # Do not override feature flags here; rely on centralized defaults in the ConfigBuilder
+    # so that behavior is defined in a single place.
     search_request = SearchRequest(
         query=query,
         response_type=response_type,
         limit=limit,
         offset=offset,
-        score_threshold=score_threshold,
-        expansion_strategy=expansion_strategy,
+        score_threshold=None,
+        recency_bias=recency_bias,
     )
 
     try:
@@ -268,7 +272,20 @@ async def search_collection_advanced(
     - Metadata filtering using Qdrant's native filter syntax
     - Pagination with offset and limit
     - Score threshold filtering
-    - Query expansion strategies
+    - Query expansion strategies (default: AUTO, generates up to 4 variations)
+    - Automatic filter extraction from natural language (default: ON)
+    - LLM-based result reranking (default: ON)
+
+    Default behavior:
+    - Query expansion: ON (AUTO strategy)
+    - Query interpretation: ON (extracts filters from natural language)
+    - Reranking: ON (improves relevance using LLM)
+    - Score threshold: None (no filtering)
+
+    To disable features, explicitly set:
+    - enable_reranking: false
+    - enable_query_interpretation: false
+    - expansion_strategy: "no_expansion"
     """
     await guard_rail.is_allowed(ActionType.QUERIES)
     ctx.logger.info(

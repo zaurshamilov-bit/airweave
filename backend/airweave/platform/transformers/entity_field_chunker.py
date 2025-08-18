@@ -1,44 +1,26 @@
-"""Entity chunker for chunking large text fields in entities."""
+"""Entity chunker for chunking large embeddable text in ChunkEntity instances."""
 
-import json
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional
 
 from chonkie import RecursiveChunker, RecursiveLevel, RecursiveRules, TokenChunker
 
 from airweave.core.logging import ContextualLogger
 from airweave.platform.decorators import transformer
-from airweave.platform.entities._base import BaseEntity
+from airweave.platform.entities._base import BaseEntity, ChunkEntity
 from airweave.platform.sync.async_helpers import run_in_thread_pool
 from airweave.platform.transformers.utils import (
     count_tokens,
 )
 
-# Fields that should never be chunked (system fields)
-NON_CHUNKABLE_FIELDS = {
-    "entity_id",
-    "breadcrumbs",
-    "db_entity_id",
-    "source_name",
-    "sync_id",
-    "sync_job_id",
-    "url",
-    "sync_metadata",
-    "parent_entity_id",
-    "parent_id",  # Add parent_id to prevent infinite loops
-    "vector",
-    "chunk_index",
-}
-
 # Cache for chunkers
 _token_chunker_cache = {}
 _recursive_chunker = None
 
-# Safe chunk size for entities considering JSON overhead
-# OpenAI's limit is 8191, but we need to account for:
-# 1. JSON stringification overhead (~20-30%)
-# 2. Other entity fields
-# 3. Safety margin
-SAFE_ENTITY_SIZE = 5000  # Conservative limit to ensure we stay under 8191
+# Token limits for embeddable text
+# OpenAI's limit is 8191 tokens, but embeddable_text is already capped at 12000 chars
+# We use a conservative token limit to ensure we stay under API limits
+SAFE_EMBEDDABLE_TOKEN_SIZE = 6000  # Conservative limit for embeddable text
+TARGET_CHUNK_TOKEN_SIZE = 3000  # Target size for each chunk when splitting
 
 
 def get_token_chunker(chunk_size: int) -> TokenChunker:
@@ -90,62 +72,75 @@ def get_recursive_chunker(chunk_size: int) -> RecursiveChunker:
     )
 
 
-def calculate_entity_string_size(entity: BaseEntity) -> int:
-    """Calculate the actual token size when entity is converted to string for embedding.
-
-    This mimics what happens in entity_processor.py:
-    str(entity.to_storage_dict())
-    """
-    # Get the storage dict and convert to string (same as in entity_processor)
-    storage_dict = entity.to_storage_dict()
-    entity_string = str(storage_dict)
-    return count_tokens(entity_string)
-
-
-def calculate_entity_size(entity_dict: Dict[str, Any]) -> Tuple[int, Dict[str, int]]:
-    """Calculate the token size of entity and its fields."""
-    total_size = 0
-    field_sizes = {}
-
-    for field_name, field_value in entity_dict.items():
-        if isinstance(field_value, str):
-            size = count_tokens(field_value)
-        elif isinstance(field_value, (dict, list)):
-            # For complex types, serialize to JSON to count tokens
-            size = count_tokens(json.dumps(field_value))
-        else:
-            # For other types, convert to string
-            size = count_tokens(str(field_value))
-
-        field_sizes[field_name] = size
-        total_size += size
-
-    return total_size, field_sizes
-
-
-def find_field_to_chunk(entity_dict: Dict, field_sizes: Dict[str, int]) -> Tuple[str, int]:
-    """Find the largest chunkable field that contributes most to entity size.
+def calculate_embeddable_text_size(entity: ChunkEntity) -> int:
+    """Calculate the token size of the embeddable text.
 
     Args:
-        entity_dict: Entity dictionary
-        field_sizes: Dictionary of field sizes
+        entity: The ChunkEntity to measure
 
     Returns:
-        Tuple of (field_name, field_size)
+        Token count of the embeddable text
     """
+    # Build the embeddable text and count its tokens
+    embeddable_text = entity.build_embeddable_text()
+    return count_tokens(embeddable_text)
+
+
+def get_embeddable_fields(entity: ChunkEntity) -> Dict[str, Any]:
+    """Get fields marked as embeddable from the entity.
+
+    Args:
+        entity: The ChunkEntity to examine
+
+    Returns:
+        Dictionary of field names to values for embeddable fields
+    """
+    embeddable_fields = {}
+
+    # Get field names marked as embeddable
+    field_names = entity._get_embeddable_fields()
+
+    # If no explicit embeddable fields, check common content fields
+    if not field_names:
+        # Check for common content fields that contribute to embeddable text
+        common_fields = ["md_content", "content", "text", "description", "summary", "notes"]
+        field_names = [f for f in common_fields if hasattr(entity, f)]
+
+    # Collect the values
+    for field_name in field_names:
+        value = getattr(entity, field_name, None)
+        if value is not None and isinstance(value, str) and value.strip():
+            embeddable_fields[field_name] = value
+
+    return embeddable_fields
+
+
+def find_largest_embeddable_field(entity: ChunkEntity) -> Optional[tuple[str, str, int]]:
+    """Find the largest embeddable field to chunk.
+
+    Args:
+        entity: The ChunkEntity to examine
+
+    Returns:
+        Tuple of (field_name, field_value, token_size) or None if no chunkable field
+    """
+    embeddable_fields = get_embeddable_fields(entity)
+
+    if not embeddable_fields:
+        return None
+
     largest_field = None
-    largest_field_size = 0
+    largest_value = None
+    largest_size = 0
 
-    for field_name, field_size in field_sizes.items():
-        if (
-            field_name not in NON_CHUNKABLE_FIELDS
-            and isinstance(entity_dict[field_name], str)
-            and field_size > largest_field_size
-        ):
+    for field_name, field_value in embeddable_fields.items():
+        size = count_tokens(field_value)
+        if size > largest_size:
             largest_field = field_name
-            largest_field_size = field_size
+            largest_value = field_value
+            largest_size = size
 
-    return largest_field, largest_field_size
+    return (largest_field, largest_value, largest_size) if largest_field else None
 
 
 def _clean_text_for_chunking(text: str, logger: ContextualLogger) -> str:
@@ -227,7 +222,7 @@ async def chunk_text_optimized(
         List of chunks
     """
     # Clean text
-    cleaned_text = _clean_text_for_chunking(text)
+    cleaned_text = _clean_text_for_chunking(text, logger)
     text_size = count_tokens(cleaned_text)
 
     logger.debug(
@@ -276,95 +271,92 @@ async def chunk_text_optimized(
 
 @transformer(name="Entity Chunker")
 async def entity_chunker(entity: BaseEntity, logger: ContextualLogger) -> List[BaseEntity]:
-    """Chunk large text fields in an entity using optimized token-based chunking.
+    """Chunk large embeddable text in ChunkEntity instances.
 
-    This transformer ensures the stringified entity stays under the embedding model's
-    token limit by:
-    1. Calculating the actual stringified entity size (not just field sizes)
-    2. Finding the largest field to chunk if needed
-    3. Using token-based chunking (no embeddings) to avoid API limits
-    4. Creating chunks small enough that the full stringified entity stays under limits
+    This transformer ensures the embeddable text stays under token limits by:
+    1. Checking if the entity is a ChunkEntity (only these have embeddable text)
+    2. Calculating the embeddable text size
+    3. If too large, chunking the largest embeddable field
+    4. Creating multiple entities with smaller chunks
 
     Args:
         entity: The BaseEntity to process
         logger: The logger to use
 
     Returns:
-        List[BaseEntity]: Multiple copies of the entity with chunks of the large field
+        List[BaseEntity]: Either the original entity or multiple chunked entities
     """
-    # Skip if already chunked
-    if getattr(entity, "chunk_index", None) is not None:
+    # Only process ChunkEntity instances (which have embeddable_text)
+    if not isinstance(entity, ChunkEntity):
+        logger.debug(f"Entity {entity.entity_id} is not a ChunkEntity, skipping chunking")
         return [entity]
 
-    # iterative safe-size enforcement ➊
-    entity_queue = [entity]
-    output: list[BaseEntity] = []
+    # Skip if already chunked
+    if getattr(entity, "chunk_index", None) is not None:
+        logger.debug(
+            f"Entity {entity.entity_id} already chunked (index: {entity.chunk_index}), skipping"
+        )
+        return [entity]
 
-    while entity_queue:
-        current = entity_queue.pop()
-        size = calculate_entity_string_size(current)
+    # Check embeddable text size
+    embeddable_size = calculate_embeddable_text_size(entity)
 
-        if size <= SAFE_ENTITY_SIZE:
-            output.append(current)
-            continue
+    logger.debug(f"Entity {entity.entity_id} embeddable text size: {embeddable_size} tokens")
 
-        # compute field sizes once
-        e_dict = current.model_dump()
-        _, f_sizes = calculate_entity_size(e_dict)
+    # If within limits, return as-is
+    if embeddable_size <= SAFE_EMBEDDABLE_TOKEN_SIZE:
+        return [entity]
 
-        # ➋ select the largest *chunk-able* field **even if we already cut body_plain**
-        target_field, f_size = find_field_to_chunk(e_dict, f_sizes)
-        if not target_field:
+    # Find the largest embeddable field to chunk
+    field_info = find_largest_embeddable_field(entity)
+
+    if not field_info:
+        logger.warning(
+            f"Entity {entity.entity_id} has large embeddable text ({embeddable_size} tokens) "
+            f"but no chunkable fields found. Returning as-is."
+        )
+        return [entity]
+
+    field_name, field_value, field_size = field_info
+
+    logger.debug(
+        f"Chunking field '{field_name}' ({field_size} tokens) in entity {entity.entity_id}"
+    )
+
+    # Chunk the field
+    chunks = await chunk_text_optimized(
+        field_value, TARGET_CHUNK_TOKEN_SIZE, field_name, entity.entity_id, logger
+    )
+
+    # Create new entities with chunked content
+    output_entities = []
+    entity_dict = entity.model_dump()
+
+    for i, chunk in enumerate(chunks):
+        # Create a copy with the chunked field
+        new_dict = {
+            **entity_dict,
+            field_name: chunk.text,
+            "chunk_index": i,
+            "entity_id": f"{entity.entity_id}_chunk_{i}",
+        }
+
+        # Create new entity instance
+        new_entity = type(entity)(**new_dict)
+
+        # Verify the new entity's embeddable text is within limits
+        new_size = calculate_embeddable_text_size(new_entity)
+        if new_size > SAFE_EMBEDDABLE_TOKEN_SIZE:
             logger.warning(
-                "Entity %s still %d tokens after chunking; "
-                "dropping remaining giant fields until safe size",
-                current.entity_id,
-                size,
+                f"Chunk {i} still exceeds limit ({new_size} tokens), may need further processing"
             )
-
-            # Sort remaining LARGE string fields by size (desc)
-            oversize_fields = sorted(
-                (
-                    (fname, fsize)
-                    for fname, fsize in f_sizes.items()
-                    if isinstance(e_dict[fname], str) and fsize > 0
-                ),
-                key=lambda t: t[1],
-                reverse=True,
-            )
-
-            if not oversize_fields:
-                # Nothing left to drop – append anyway, we tried our best
-                output.append(current)
-                continue
-
-            # Drop the biggest one and retry
-            field_to_drop, drop_size = oversize_fields[0]
-            logger.warning(
-                "Dropping field '%s' (%d tokens) from entity %s",
-                field_to_drop,
-                drop_size,
-                current.entity_id,
-            )
-            e_dict[field_to_drop] = ""
-            current = type(current)(**e_dict)
-            entity_queue.append(current)
-            continue
 
         # ➌ halve chunk size each recursion → exponential shrink
-        tgt_chunk = int(max(300, f_size / 2 / 1.5))
+        tgt_chunk = int(max(300, field_size / 2 / 1.5))
         chunks = await chunk_text_optimized(
-            e_dict[target_field], tgt_chunk, target_field, current.entity_id
+            field_value, tgt_chunk, field_name, entity.entity_id, logger
         )
 
-        # re-queue new chunks for further checking
-        for i, ch in enumerate(chunks):
-            new_data = {
-                **e_dict,
-                target_field: ch.text,
-                "chunk_index": i,
-                "entity_id": f"{current.entity_id}_{target_field}_{i}",
-            }
-            entity_queue.append(type(current)(**new_data))
+    logger.debug(f"Created {len(output_entities)} chunks from entity {entity.entity_id}")
 
-    return output
+    return output_entities

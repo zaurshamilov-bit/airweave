@@ -187,7 +187,7 @@ class OAuth2Service:
 
         except Exception as e:
             ctx.logger.error(
-                f"Token refresh failed for organization {ctx.organization_id} and "
+                f"Token refresh failed for organization {ctx.organization.id} and "
                 f"integration {integration_short_name}: {str(e)}"
             )
             raise
@@ -686,8 +686,8 @@ class OAuth2Service:
         async with UnitOfWork(db) as uow:
             # Create integration credential
             integration_credential_in = schemas.IntegrationCredentialCreate(
-                name=f"{source.name} - {ctx.organization_id}",
-                description=(f"OAuth2 credentials for {source.name} - {ctx.organization_id}"),
+                name=f"{source.name} - {ctx.organization.id}",
+                description=(f"OAuth2 credentials for {source.name} - {ctx.organization.id}"),
                 integration_short_name=source.short_name,
                 integration_type=IntegrationType.SOURCE,
                 auth_type=source.auth_type,

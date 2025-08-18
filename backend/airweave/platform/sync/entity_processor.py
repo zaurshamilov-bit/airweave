@@ -1,7 +1,9 @@
 """Module for entity processing within the sync architecture."""
 
 import asyncio
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
+
+from fastembed import SparseTextEmbedding
 
 from airweave import crud, models, schemas
 from airweave.core.exceptions import NotFoundException
@@ -17,7 +19,7 @@ class EntityProcessor:
 
     def __init__(self):
         """Initialize the entity processor with empty tracking dictionary."""
-        self._entities_encountered_count: Dict[str, Set[str]] = {}
+        self._entity_ids_encountered_by_type: Dict[str, Set[str]] = {}
 
     def initialize_tracking(self, sync_context: SyncContext) -> None:
         """Initialize entity tracking with entity types from the DAG.
@@ -25,7 +27,7 @@ class EntityProcessor:
         Args:
             sync_context: The sync context containing the DAG
         """
-        self._entities_encountered_count.clear()
+        self._entity_ids_encountered_by_type.clear()
 
         # Get all entity nodes from the DAG
         entity_nodes = [
@@ -35,7 +37,7 @@ class EntityProcessor:
         # Create a dictionary with entity names as keys and empty sets as values
         for node in entity_nodes:
             if node.name.endswith("Entity"):
-                self._entities_encountered_count[node.name] = set()
+                self._entity_ids_encountered_by_type[node.name] = set()
 
     async def process(
         self,
@@ -58,20 +60,20 @@ class EntityProcessor:
 
             # Track the current entity
             entity_type = entity.__class__.__name__
-            if entity_type not in self._entities_encountered_count:
-                self._entities_encountered_count[entity_type] = set()
+            if entity_type not in self._entity_ids_encountered_by_type:
+                self._entity_ids_encountered_by_type[entity_type] = set()
 
             # Check for duplicate processing
-            if entity.entity_id in self._entities_encountered_count[entity_type]:
+            if entity.entity_id in self._entity_ids_encountered_by_type[entity_type]:
                 sync_context.logger.debug(
                     f"⏭️  PROCESSOR_DUPLICATE [{entity_context}] Already processed, skipping"
                 )
                 return []
 
             # Update entity tracking
-            self._entities_encountered_count[entity_type].add(entity.entity_id)
+            self._entity_ids_encountered_by_type[entity_type].add(entity.entity_id)
             await sync_context.progress.update_entities_encountered_count(
-                self._entities_encountered_count
+                self._entity_ids_encountered_by_type
             )
 
             # Check if entity should be skipped (set by file_manager or source)
@@ -202,14 +204,14 @@ class EntityProcessor:
             error_message = str(e) if str(e) else "No error details available"
 
             # Log detailed error information
-            sync_context.logger.error(
+            sync_context.logger.warning(
                 f"💥 PROCESSOR_ERROR [{entity_context}] Pipeline failed after "
                 f"{pipeline_elapsed:.3f}s: {error_type}: {error_message}"
             )
 
             # For debugging empty errors
             if not str(e):
-                sync_context.logger.error(
+                sync_context.logger.warning(
                     f"🔍 PROCESSOR_ERROR_DETAILS [{entity_context}] "
                     f"Empty error of type {error_type}, repr: {repr(e)}"
                 )
@@ -224,6 +226,10 @@ class EntityProcessor:
 
     async def _enrich(self, entity: BaseEntity, sync_context: SyncContext) -> BaseEntity:
         """Enrich entity with sync metadata."""
+        from datetime import datetime, timedelta, timezone
+
+        from airweave.platform.entities._base import AirweaveSystemMetadata
+
         # Check if entity needs lazy materialization
         if hasattr(entity, "needs_materialization") and entity.needs_materialization:
             sync_context.logger.debug(
@@ -232,10 +238,31 @@ class EntityProcessor:
             )
             await entity.materialize()
 
-        entity.source_name = sync_context.source._name
-        entity.sync_id = sync_context.sync.id
-        entity.sync_job_id = sync_context.sync_job.id
-        entity.sync_metadata = sync_context.sync.sync_metadata
+        # Create or update system metadata
+        if entity.airweave_system_metadata is None:
+            entity.airweave_system_metadata = AirweaveSystemMetadata()
+
+        # Set all system metadata fields
+        entity.airweave_system_metadata.source_name = sync_context.source._short_name
+        entity.airweave_system_metadata.entity_type = entity.__class__.__name__
+        entity.airweave_system_metadata.sync_id = sync_context.sync.id
+        entity.airweave_system_metadata.sync_job_id = sync_context.sync_job.id
+        entity.airweave_system_metadata.sync_metadata = sync_context.sync.sync_metadata
+
+        # Get harmonized timestamps and use updated_at if available
+        timestamps = entity.get_harmonized_timestamps()
+        updated_at = timestamps.get("updated_at")
+        created_at = timestamps.get("created_at")
+
+        if updated_at:
+            entity.airweave_system_metadata.airweave_updated_at = updated_at
+        elif created_at:
+            entity.airweave_system_metadata.airweave_updated_at = created_at
+        else:
+            # Default to 2 weeks ago in UTC if no updated_at field
+            entity.airweave_system_metadata.airweave_updated_at = datetime.now(
+                timezone.utc
+            ) - timedelta(weeks=2)
 
         return entity
 
@@ -369,7 +396,7 @@ class EntityProcessor:
         if action == DestinationAction.KEEP:
             await self._handle_keep(sync_context)
         elif action == DestinationAction.INSERT:
-            await self._handle_insert(parent_entity, processed_entities, db_entity, sync_context)
+            await self._handle_insert(parent_entity, processed_entities, sync_context)
         elif action == DestinationAction.UPDATE:
             await self._handle_update(parent_entity, processed_entities, db_entity, sync_context)
         elif action == DestinationAction.DELETE:
@@ -401,18 +428,29 @@ class EntityProcessor:
         )
 
         try:
-            # Convert entities to dictionaries for embedding
+            # Build embeddable texts (instead of stringifying full dicts)
             sync_context.logger.debug(
-                f"📦 VECTOR_CONVERT_START [{entity_context}] Converting entities to dicts"
+                f"🧩 VECTOR_TEXT_START [{entity_context}] Building embeddable texts"
             )
             convert_start = asyncio.get_event_loop().time()
 
-            entity_dicts = await self._convert_entities_to_dicts(processed_entities, sync_context)
+            texts: list[str] = []
+            for e in processed_entities:
+                text = e.build_embeddable_text() if hasattr(e, "build_embeddable_text") else str(e)
+                # Persist for downstream destinations/UI
+                if hasattr(e, "embeddable_text"):
+                    try:
+                        e.embeddable_text = text
+                    except Exception:
+                        pass
+                texts.append(text)
 
             convert_elapsed = asyncio.get_event_loop().time() - convert_start
             sync_context.logger.debug(
-                f"📦 VECTOR_CONVERT_DONE [{entity_context}] Converted {len(entity_dicts)} entities "
-                f"in {convert_elapsed:.3f}s"
+                (
+                    f"🧩 VECTOR_TEXT_DONE [{entity_context}] Built {len(texts)} texts "
+                    f"in {convert_elapsed:.3f}s"
+                )
             )
 
             # Get embeddings from the model
@@ -421,11 +459,14 @@ class EntityProcessor:
             )
             embed_start = asyncio.get_event_loop().time()
 
-            embeddings = await self._get_embeddings(entity_dicts, sync_context, entity_context)
+            embeddings, sparse_embeddings = await self._get_embeddings(
+                texts, sync_context, entity_context
+            )
 
             embed_elapsed = asyncio.get_event_loop().time() - embed_start
             sync_context.logger.debug(
-                f"🤖 VECTOR_EMBED_DONE [{entity_context}] Got {len(embeddings)} embeddings "
+                f"🤖 VECTOR_EMBED_DONE [{entity_context}] Got {len(embeddings)} neural embeddings "
+                f"and {len(sparse_embeddings) if sparse_embeddings else 0} sparse embeddings "
                 f"in {embed_elapsed:.3f}s"
             )
 
@@ -436,7 +477,7 @@ class EntityProcessor:
             assign_start = asyncio.get_event_loop().time()
 
             processed_entities = await self._assign_vectors_to_entities(
-                processed_entities, embeddings, sync_context
+                processed_entities, embeddings, sparse_embeddings, sync_context
             )
 
             assign_elapsed = asyncio.get_event_loop().time() - assign_start
@@ -456,7 +497,7 @@ class EntityProcessor:
             return processed_entities
 
         except Exception as e:
-            sync_context.logger.error(
+            sync_context.logger.warning(
                 f"💥 VECTOR_ERROR [{entity_context}] Vectorization failed: {str(e)}"
             )
             raise
@@ -504,12 +545,12 @@ class EntityProcessor:
                     dict_length = len(entity_dict)
                     if dict_length > 30000:  # ~7500 tokens
                         entity_type = type(entity).__name__
-                        sync_context.logger.error(
+                        sync_context.logger.warning(
                             f"🚨 ENTITY_TOO_LARGE Entity {entity.entity_id} ({entity_type}) "
                             f"stringified to {dict_length} chars (~{dict_length // 4} tokens)"
                         )
                         # Log first 1000 chars
-                        sync_context.logger.error(
+                        sync_context.logger.warning(
                             f"📄 ENTITY_PREVIEW First 1000 chars of {entity.entity_id}:\n"
                             f"{entity_dict[:1000]}..."
                         )
@@ -521,7 +562,7 @@ class EntityProcessor:
                                 if isinstance(field_value, str) and len(field_value) > 1000:
                                     large_fields.append(f"{field_name}: {len(field_value)} chars")
                             if large_fields:
-                                sync_context.logger.error(
+                                sync_context.logger.warning(
                                     f"📊 LARGE_FIELDS in {entity.entity_id}: "
                                     f"{', '.join(large_fields)}"
                                 )
@@ -529,7 +570,7 @@ class EntityProcessor:
                     entity_dicts.append(entity_dict)
 
                 except Exception as e:
-                    sync_context.logger.error(f"Error converting entity to dict: {str(e)}")
+                    sync_context.logger.warning(f"Error converting entity to dict: {str(e)}")
                     # Provide a fallback empty string to maintain array alignment
                     entity_dicts.append("")
             return entity_dicts
@@ -554,8 +595,8 @@ class EntityProcessor:
         return all_dicts
 
     async def _get_embeddings(
-        self, entity_dicts: List[str], sync_context: SyncContext, entity_context: str
-    ) -> List[List[float]]:
+        self, texts: List[str], sync_context: SyncContext, entity_context: str
+    ) -> Tuple[List[List[float]], List[SparseTextEmbedding] | None]:
         """Get embeddings from the embedding model."""
         import asyncio
         import inspect
@@ -569,25 +610,38 @@ class EntityProcessor:
             # Check if the embedding model supports entity_context parameter
             embed_many_signature = inspect.signature(embedding_model.embed_many)
             if "entity_context" in embed_many_signature.parameters:
-                embeddings = await embedding_model.embed_many(
-                    entity_dicts, entity_context=entity_context
-                )
+                embeddings = await embedding_model.embed_many(texts, entity_context=entity_context)
             else:
-                embeddings = await embedding_model.embed_many(entity_dicts)
+                embeddings = await embedding_model.embed_many(texts)
         else:
-            embeddings = await embedding_model.embed_many(entity_dicts)
+            embeddings = await embedding_model.embed_many(texts)
+
+        # Some destinations might not have a BM25 index, so we need to check if we need to compute
+        # sparse embeddings.
+        calculate_sparse_embeddings = any(
+            await asyncio.gather(
+                *[destination.has_keyword_index() for destination in sync_context.destinations]
+            )
+        )
+
+        if calculate_sparse_embeddings:
+            sparse_embedder = sync_context.keyword_indexing_model
+            sparse_embeddings = list(await sparse_embedder.embed_many(texts))
+        else:
+            sparse_embeddings = None
 
         cpu_elapsed = loop.time() - cpu_start
         sync_context.logger.debug(
             f"Vector computation completed in {cpu_elapsed:.2f}s for {len(embeddings)} entities"
         )
 
-        return embeddings
+        return embeddings, sparse_embeddings
 
     async def _assign_vectors_to_entities(
         self,
         processed_entities: List[BaseEntity],
         embeddings: List[List[float]],
+        sparse_embeddings: List[SparseTextEmbedding] | None,
         sync_context: SyncContext,
     ) -> List[BaseEntity]:
         """Assign vectors to entities."""
@@ -599,27 +653,40 @@ class EntityProcessor:
             )
 
         # Assign vectors to entities in thread pool (CPU-bound operation for many entities)
-        def _assign_vectors_to_entities_sync(entities, vectors):
-            for i, (processed_entity, vector) in enumerate(zip(entities, vectors, strict=False)):
+        def _assign_vectors_to_entities_sync(entities, neural_vectors, sparse_vectors):
+            for i, (processed_entity, neural_vector) in enumerate(
+                zip(entities, neural_vectors, strict=False)
+            ):
                 try:
-                    if vector is None:
-                        sync_context.logger.warning(f"Received None vector for entity at index {i}")
+                    if neural_vector is None:
+                        sync_context.logger.warning(
+                            f"Received None vectors for entity at index {i}"
+                        )
                         continue
 
-                    vector_dim = len(vector) if vector else 0
+                    sparse_vector = sparse_vectors[i] if sparse_vectors else None
+                    vector_dim = len(neural_vector) if neural_vector else 0
                     sync_context.logger.debug(
                         f"Assigning vector of dimension {vector_dim} to "
                         f"entity {processed_entity.entity_id}"
                     )
-                    processed_entity.vector = vector
+                    # Ensure system metadata exists before setting vector
+                    if processed_entity.airweave_system_metadata is None:
+                        from airweave.platform.entities._base import AirweaveSystemMetadata
+
+                        processed_entity.airweave_system_metadata = AirweaveSystemMetadata()
+                    processed_entity.airweave_system_metadata.vectors = [
+                        neural_vector,
+                        sparse_vector,
+                    ]
                 except Exception as e:
-                    sync_context.logger.error(
+                    sync_context.logger.warning(
                         f"Error assigning vector to entity at index {i}: {str(e)}"
                     )
             return entities
 
         return await run_in_thread_pool(
-            _assign_vectors_to_entities_sync, processed_entities, embeddings
+            _assign_vectors_to_entities_sync, processed_entities, embeddings, sparse_embeddings
         )
 
     async def _handle_keep(self, sync_context: SyncContext) -> None:
@@ -665,7 +732,15 @@ class EntityProcessor:
             )
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
-        parent_entity.db_entity_id = new_db_entity.id
+        # Update system metadata with DB entity ID for parent and all processed entities
+        if parent_entity.airweave_system_metadata:
+            parent_entity.airweave_system_metadata.db_entity_id = new_db_entity.id
+
+        # CRITICAL: Set db_entity_id for all processed entities (chunks)
+        for entity in processed_entities:
+            if entity.airweave_system_metadata:
+                entity.airweave_system_metadata.db_entity_id = new_db_entity.id
+
         sync_context.logger.debug(
             f"💾 INSERT_DB_DONE [{entity_context}] Database entity created in {db_elapsed:.3f}s"
         )
@@ -746,7 +821,15 @@ class EntityProcessor:
                 return
 
         db_elapsed = asyncio.get_event_loop().time() - db_start
-        parent_entity.db_entity_id = db_entity.id
+        # Update system metadata with DB entity ID for parent and all processed entities
+        if parent_entity.airweave_system_metadata:
+            parent_entity.airweave_system_metadata.db_entity_id = db_entity.id
+
+        # CRITICAL: Set db_entity_id for all processed entities (chunks)
+        for entity in processed_entities:
+            if entity.airweave_system_metadata:
+                entity.airweave_system_metadata.db_entity_id = db_entity.id
+
         sync_context.logger.debug(
             f"💾 UPDATE_DB_DONE [{entity_context}] Database updated in {db_elapsed:.3f}s"
         )
@@ -763,6 +846,10 @@ class EntityProcessor:
             )
             await destination.bulk_delete_by_parent_id(
                 parent_entity.entity_id, sync_context.sync.id
+            )
+            await destination.bulk_delete(
+                [entity.entity_id for entity in processed_entities],
+                sync_context.sync.id,
             )
 
         delete_elapsed = asyncio.get_event_loop().time() - delete_start
@@ -858,3 +945,61 @@ class EntityProcessor:
         sync_context.logger.info(
             f"✅ DELETE_COMPLETE [{entity_context}] Delete complete in {total_elapsed:.3f}s"
         )
+
+    async def cleanup_orphaned_entities(self, sync_context: SyncContext) -> None:
+        """Clean up orphaned entities that exist in the database."""
+        sync_context.logger.info("🧹 Starting cleanup of orphaned entities")
+
+        try:
+            async with get_db_context() as db:
+                # Get all entities currently stored for this sync (by sync_id, not sync_job_id)
+                stored_entities = await crud.entity.get_by_sync_id(
+                    db=db, sync_id=sync_context.sync.id
+                )
+
+                if not stored_entities:
+                    sync_context.logger.info("🧹 No stored entities found, nothing to clean up")
+                    return
+
+                # Find orphaned entities (stored but not encountered)
+                orphaned_entities = []
+                for stored_entity in stored_entities:
+                    # Check if entity_id exists in any of the node sets
+                    entity_was_encountered = any(
+                        stored_entity.entity_id in entity_set
+                        for entity_set in self._entity_ids_encountered_by_type.values()
+                    )
+                    if not entity_was_encountered:
+                        orphaned_entities.append(stored_entity)
+
+                if not orphaned_entities:
+                    sync_context.logger.info("🧹 No orphaned entities found")
+                    return
+
+                sync_context.logger.info(
+                    f"🧹 Found {len(orphaned_entities)} orphaned entities to delete"
+                )
+
+                # TODO: wrap this in a unit of work transaction
+
+                # Extract entity IDs for bulk operations
+                orphaned_entity_ids = [entity.entity_id for entity in orphaned_entities]
+                orphaned_db_ids = [entity.id for entity in orphaned_entities]
+
+                # Delete from destinations first using bulk_delete
+                for destination in sync_context.destinations:
+                    await destination.bulk_delete(orphaned_entity_ids, sync_context.sync.id)
+
+                # Delete from database using bulk_remove
+                await crud.entity.bulk_remove(db=db, ids=orphaned_db_ids, ctx=sync_context.ctx)
+
+                # Update progress tracking
+                await sync_context.progress.increment("deleted", len(orphaned_entities))
+
+                sync_context.logger.info(
+                    f"✅ Cleanup complete: deleted {len(orphaned_entities)} orphaned entities"
+                )
+
+        except Exception as e:
+            sync_context.logger.error(f"💥 Cleanup failed: {str(e)}", exc_info=True)
+            raise e

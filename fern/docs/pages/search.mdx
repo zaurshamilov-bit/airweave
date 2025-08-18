@@ -1,0 +1,297 @@
+---
+title: Search
+description: Understanding search in Airweave
+edit-this-page-url: https://github.com/airweave-ai/airweave/blob/main/fern/docs/pages/search.mdx
+slug: search
+---
+
+Airweave’s search subsystem provides a unified query interface across heterogeneous data sources inside a collection. The pipeline transforms natural‑language queries into ranked results via a deterministic sequence of specialized operators that can be individually configured or disabled for fine‑grained control. This page summarizes each operator, its defaults, and minimal examples.
+
+## Operators
+
+### Query Expansion
+
+Query expansion mitigates vocabulary mismatch by generating semantically equivalent reformulations of the original query, improving recall across documents that express similar concepts with different terminology. Practically, the system expands the query into semantically adjacent variants, sampling a broader neighborhood in vector and keyword space.
+
+**Configuration Parameter**: `expansion_strategy`
+- `auto` (default): Dynamically selects expansion based on OpenAI API availability
+- `llm`: Generates up to 4 query variations using GPT-4o-mini
+- `no_expansion`: Disables expansion for exact query matching
+
+<CodeBlocks>
+```python title="Python"
+from airweave import AirweaveSDK
+
+client = AirweaveSDK(api_key="your-api-key")
+
+# Automatic expansion generates variations for improved recall
+results = await client.collections.search_collection_advanced(
+    readable_id="your-collection-id",
+    search_request={
+        "query": "customer churn analysis",
+        "expansion_strategy": "llm"
+    }
+)
+```
+
+```javascript title="Node.js"
+import { AirweaveSDKClient } from "@airweave/sdk";
+
+const client = new AirweaveSDKClient({ apiKey: "YOUR_API_KEY" });
+
+const response = await client.collections.searchCollectionAdvanced({
+  readableId: "your-collection-id",
+  searchRequest: {
+    query: "payment failures",
+    expansionStrategy: "llm", // up to 4 alternatives
+  },
+});
+```
+</CodeBlocks>
+
+
+
+### Embedding Generation
+
+Maps queries to dense and/or sparse representations depending on the search method. Dense embeddings permit semantic similarity; sparse embeddings approximate lexical BM25. In `hybrid` mode both representations are produced and fused downstream.
+
+**Configuration Parameter**: `search_method`
+- `hybrid` (default): Combines dense semantic vectors with sparse BM25 representations via Reciprocal Rank Fusion
+- `neural`: Utilizes transformer-based embeddings for pure semantic similarity
+- `keyword`: Employs BM25 term frequency statistics for lexical matching
+
+```python
+# Hybrid search leverages both semantic understanding and keyword precision
+results = await client.collections.search_collection_advanced(
+    readable_id="your-collection-id",
+    search_request={
+        "query": "authentication flow security vulnerabilities",
+        "search_method": "hybrid"  # Combines neural + BM25 for best results
+    }
+)
+```
+
+### Metadata Filtering
+
+Qdrant's native filtering system enables precise subsetting of the search space based on structured metadata fields. This operation applies boolean predicates to document attributes before similarity computation, ensuring efficient retrieval within constrained domains.
+
+**Configuration Parameter**: `filter` (Qdrant Filter object)
+
+```python
+from qdrant_client.http.models import Filter, FieldCondition, MatchValue, DatetimeRange, MatchAny
+from datetime import datetime, timezone, timedelta
+
+# 1. Filter by specific source (case-sensitive!)
+results = await client.collections.search_collection_advanced(
+    readable_id="your-collection-id",
+    search_request={
+        "query": "deployment issues",
+        "filter": {
+            "must": [{
+                "key": "source_name",
+                "match": {"value": "GitHub"}  # Must match exactly
+            }]
+        }
+    }
+)
+
+# 2. Multiple sources with date range
+results = await client.collections.search_collection_advanced(
+    readable_id="your-collection-id",
+    search_request={
+        "query": "customer feedback",
+        "filter": {
+            "must": [
+                {
+                    "key": "source_name",
+                    "match": {"any": ["Zendesk", "Intercom", "Slack"]}
+                },
+                {
+                    "key": "created_at",
+                    "range": {
+                        "gte": (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+                    }
+                }
+            ]
+        }
+    }
+)
+
+# 3. Exclude resolved/closed items
+results = await client.collections.search_collection_advanced(
+    readable_id="your-collection-id",
+    search_request={
+        "query": "bug reports",
+        "filter": {
+            "must_not": [{
+                "key": "status",
+                "match": {"any": ["resolved", "closed", "done"]}
+            }]
+        }
+    }
+)
+```
+
+### Query Interpretation (Beta)
+
+This advanced natural language understanding component automatically extracts structured constraints from unstructured queries. The system employs large language models to identify temporal expressions, entity references, and status indicators, dynamically generating appropriate filter predicates.
+
+**Configuration Parameter**: `enable_query_interpretation`
+- `false` (default): Disabled to prevent unintended filtering
+- `true`: Enables automatic filter extraction from natural language
+
+**Implementation Example**:
+```python
+# Query interpretation extracts structured filters from natural language
+results = await client.collections.search_collection_advanced(
+    readable_id="your-collection-id",
+    search_request={
+        "query": "open asana tickets from last week",
+        "enable_query_interpretation": True
+    }
+)
+# Automatically generates filters:
+# - source_name = "Asana"
+# - status != "completed" / "done" / "closed"
+# - created_at >= 7 days ago
+
+# Another example
+results = await client.collections.search_collection_advanced(
+    readable_id="your-collection-id",
+    search_request={
+        "query": "critical bugs from GitHub this month",
+        "enable_query_interpretation": True
+    }
+)
+# Generates: source="GitHub", priority="critical", created_at>=30d
+```
+
+<Warning>
+Query interpretation is in beta. Extracted filters may occasionally be overly restrictive, potentially excluding relevant results. Monitor result counts when using this feature.
+</Warning>
+
+### Recency Bias
+Temporal relevance scoring adjusts document rankings based on creation or modification timestamps. Internally, a decay configuration is derived from the collection’s observed time span (subject to any active filter) and composed into Qdrant formula scoring. This preserves relevance while enforcing temporal preference. The penalty is defined as:
+
+```
+final_score = similarity × (1 - recency_bias + recency_bias × recency_bias)
+```
+where `recency_bias ∈ [0,1]` maps oldest→0 and newest→1 within the observed span.
+
+**Configuration Parameter**: `recency_bias` (float: 0.0-1.0)
+- `0.3` (default): Moderate recency preference
+- `0.0`: Pure semantic similarity without temporal influence
+- `1.0`: Maximum recency weight within semantic matches
+
+
+```python
+# Email search with strong recency preference
+results = await client.collections.search_collection_advanced(
+    readable_id="your-collection-id",
+    search_request={
+        "query": "project updates",
+        "recency_bias": 0.7  # Recent emails heavily prioritized
+    }
+)
+```
+
+### Vector search
+
+The core retrieval mechanism performs approximate nearest neighbor search in high-dimensional embedding spaces. This operation orchestrates the actual database query, handling multi-vector fusion, result deduplication, and score normalization.
+
+**Pagination parameters** control result set size and navigation through large result collections:
+
+- `limit` (int: 1-1000, default: 20): Maximum documents per response
+- `offset` (int: ≥0, default: 0): Skip count for pagination
+
+
+```python
+response = await client.collections.search_collection(
+    readable_id="your-collection-id",
+    query="data retention policies",
+    limit=50,
+    offset=50, # Results 51-100
+)
+```
+
+### Score Threshold Filtering
+
+Post-retrieval filtering eliminates results below a specified similarity threshold, ensuring minimum quality standards for returned documents. This parameter acts as a quality gate rather than a separate operation.
+
+**Configuration Parameter**: `score_threshold` (float: 0.0-1.0)
+- `None` (default): No score filtering
+- `0.7`: Returns only high-confidence matches
+
+```python
+# High-precision retrieval for critical queries
+results = await client.collections.search_collection_advanced(
+    readable_id="your-collection-id",
+    search_request={
+        "query": "security vulnerability CVE-2024",
+        "score_threshold": 0.8  # Only highly relevant matches
+    }
+)
+```
+
+### Result Reranking
+
+Reranking employs large language models to perform pairwise relevance assessment between query and retrieved documents. This computationally intensive operation refines the initial ranking by considering deeper semantic relationships and contextual nuances.
+
+**Configuration Parameter**: `enable_reranking`
+- `true` (default): Applies LLM-based relevance scoring
+- `false`: Retains original vector similarity ranking
+
+<Warning>
+Reranking adds approximately 10 seconds to query latency due to LLM processing. Disable for time-sensitive applications.
+</Warning>
+
+```python
+# Disable reranking for latency-sensitive applications
+results = await client.collections.search_collection_advanced(
+    readable_id="your-collection-id",
+    search_request={
+        "query": "user authentication methods",
+        "enable_reranking": False  # Skip 10-second reranking delay
+    }
+)
+```
+
+### Response Generation
+
+Synthesizes a natural language answer from the retrieved context. The completion model is invoked only when explicitly requested and requires an OpenAI API key in the environment. Source attribution is encouraged via structured prompts.
+
+**Configuration Parameter**: `response_type`
+- `raw` (default): Returns structured JSON with document payloads
+- `completion`: Generates coherent natural language summary via LLM
+
+```python
+# Get AI-synthesized answer
+results = await client.collections.search_collection_advanced(
+    readable_id="your-collection-id",
+    search_request={
+        "query": "What are our customer refund policies?",
+        "response_type": "completion"
+    }
+)
+# Access results.completion for natural language answer
+```
+
+## API Endpoints
+
+**GET `/collections/{id}/search`**: Simple search using all operator defaults ([link](/api-reference/collections/search-collection-collections-readable-id-search-get)).
+
+**POST `/collections/{id}/search`**: Advanced search exposing all operators for full configurability. Use this when you need precise control over search behavior ([link](/api-reference/collections/search-collection-advanced-collections-readable-id-search-post)).
+
+## Default Configuration
+
+The system employs empirically optimized defaults for common use cases:
+
+| Operation | Default State | Rationale |
+|-----------|--------------|-----------|
+| Query Expansion | `auto` | Maximizes recall when LLM available |
+| Search Method | `hybrid` | Balances semantic and lexical signals |
+| Query Interpretation | **Disabled** | Prevents unintended filtering |
+| Reranking | **Enabled** | Optimizes relevance (adds ~10s) |
+| Recency Bias | `0.3` | Moderate recency preference |
+| Score Threshold | `None` | Returns all matches above zero similarity |
+| Response Type | `raw` | Provides maximum programmatic flexibility |

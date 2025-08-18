@@ -64,11 +64,18 @@ class AsanaSource(BaseSource):
     @retry(
         stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
     )
-    async def _get_with_auth(self, client: httpx.AsyncClient, url: str) -> Dict:
+    async def _get_with_auth(
+        self, client: httpx.AsyncClient, url: str, params: Optional[Dict[str, Any]] = None
+    ) -> Dict:
         """Make authenticated GET request to Asana API with token manager support.
 
         This method uses the token manager for authentication and handles
         401 errors by refreshing the token and retrying.
+
+        Args:
+            client: HTTP client to use for the request
+            url: API endpoint URL
+            params: Optional query parameters including opt_fields
         """
         # Get a valid token (will refresh if needed)
         access_token = await self.get_access_token()
@@ -78,7 +85,7 @@ class AsanaSource(BaseSource):
         headers = {"Authorization": f"Bearer {access_token}"}
 
         try:
-            response = await client.get(url, headers=headers)
+            response = await client.get(url, headers=headers, params=params)
 
             # Handle 401 Unauthorized - token might have expired
             if response.status_code == 401:
@@ -93,7 +100,7 @@ class AsanaSource(BaseSource):
 
                         # Retry the request with the new token
                         self.logger.info(f"Retrying request with refreshed token: {url}")
-                        response = await client.get(url, headers=headers)
+                        response = await client.get(url, headers=headers, params=params)
 
                     except TokenRefreshError as e:
                         self.logger.error(f"Failed to refresh token: {str(e)}")
@@ -231,8 +238,12 @@ class AsanaSource(BaseSource):
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate workspace entities."""
+        # Request all available fields for workspaces
+        workspace_fields = ["gid", "name", "is_organization", "email_domains", "resource_type"]
         workspaces_data = await self._get_with_auth(
-            client, "https://app.asana.com/api/1.0/workspaces"
+            client,
+            "https://app.asana.com/api/1.0/workspaces",
+            params={"opt_fields": ",".join(workspace_fields)},
         )
 
         for workspace in workspaces_data.get("data", []):
@@ -250,8 +261,41 @@ class AsanaSource(BaseSource):
         self, client: httpx.AsyncClient, workspace: Dict, workspace_breadcrumb: Breadcrumb
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate project entities for a workspace."""
+        # Request all available fields for projects, including timestamps
+        project_fields = [
+            "gid",
+            "name",
+            "color",
+            "archived",
+            "created_at",
+            "modified_at",
+            "current_status",
+            "current_status.text",
+            "current_status.color",
+            "default_view",
+            "due_on",
+            "html_notes",
+            "notes",
+            "public",
+            "start_on",
+            "owner",
+            "owner.name",
+            "team",
+            "team.name",
+            "members",
+            "members.name",
+            "followers",
+            "followers.name",
+            "custom_fields",
+            "custom_field_settings",
+            "default_access_level",
+            "icon",
+            "permalink_url",
+        ]
         projects_data = await self._get_with_auth(
-            client, f"https://app.asana.com/api/1.0/workspaces/{workspace['gid']}/projects"
+            client,
+            f"https://app.asana.com/api/1.0/workspaces/{workspace['gid']}/projects",
+            params={"opt_fields": ",".join(project_fields)},
         )
 
         for project in projects_data.get("data", []):
@@ -295,8 +339,12 @@ class AsanaSource(BaseSource):
         self, client: httpx.AsyncClient, project: Dict, project_breadcrumbs: List[Breadcrumb]
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate section entities for a project."""
+        # Request all available fields for sections
+        section_fields = ["gid", "name", "created_at", "projects", "projects.name"]
         sections_data = await self._get_with_auth(
-            client, f"https://app.asana.com/api/1.0/projects/{project['gid']}/sections"
+            client,
+            f"https://app.asana.com/api/1.0/projects/{project['gid']}/sections",
+            params={"opt_fields": ",".join(section_fields)},
         )
 
         for section in sections_data.get("data", []):
@@ -323,7 +371,51 @@ class AsanaSource(BaseSource):
             else f"https://app.asana.com/api/1.0/projects/{project['gid']}/tasks"
         )
 
-        tasks_data = await self._get_with_auth(client, url)
+        # Request ALL available fields for tasks, especially timestamps
+        task_fields = [
+            "gid",
+            "name",
+            "actual_time_minutes",
+            "approval_status",
+            "assignee",
+            "assignee.name",
+            "assignee_status",
+            "completed",
+            "completed_at",
+            "completed_by",
+            "completed_by.name",
+            "created_at",
+            "modified_at",  # Important timestamps
+            "dependencies",
+            "dependents",
+            "due_at",
+            "due_on",
+            "start_at",
+            "start_on",  # All date/time fields
+            "external",
+            "html_notes",
+            "notes",
+            "is_rendered_as_separator",
+            "liked",
+            "memberships",
+            "num_likes",
+            "num_subtasks",
+            "parent",
+            "parent.name",
+            "permalink_url",
+            "resource_subtype",
+            "tags",
+            "tags.name",
+            "custom_fields",
+            "followers",
+            "followers.name",
+            "workspace",
+            "workspace.name",
+        ]
+
+        tasks_data = await self._get_with_auth(
+            client, url, params={"opt_fields": ",".join(task_fields)}
+        )
 
         for task in tasks_data.get("data", []):
             # If we have a section, add it to the breadcrumbs
@@ -376,8 +468,27 @@ class AsanaSource(BaseSource):
         self, client: httpx.AsyncClient, task: Dict, task_breadcrumbs: List[Breadcrumb]
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate comment entities for a task."""
+        # Request all available fields for stories/comments
+        story_fields = [
+            "gid",
+            "created_at",
+            "created_by",
+            "created_by.name",
+            "resource_subtype",
+            "text",
+            "html_text",
+            "is_pinned",
+            "is_edited",
+            "sticker_name",
+            "num_likes",
+            "liked",
+            "type",
+            "previews",
+        ]
         stories_data = await self._get_with_auth(
-            client, f"https://app.asana.com/api/1.0/tasks/{task['gid']}/stories"
+            client,
+            f"https://app.asana.com/api/1.0/tasks/{task['gid']}/stories",
+            params={"opt_fields": ",".join(story_fields)},
         )
 
         for story in stories_data.get("data", []):
@@ -409,13 +520,35 @@ class AsanaSource(BaseSource):
         task_breadcrumbs: List[Breadcrumb],
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate file attachment entities for a task."""
+        # Request basic attachment list first
+        attachment_list_fields = ["gid", "name", "resource_type"]
         attachments_data = await self._get_with_auth(
-            client, f"https://app.asana.com/api/1.0/tasks/{task['gid']}/attachments"
+            client,
+            f"https://app.asana.com/api/1.0/tasks/{task['gid']}/attachments",
+            params={"opt_fields": ",".join(attachment_list_fields)},
         )
 
         for attachment in attachments_data.get("data", []):
+            # Request all available fields for individual attachment, including timestamps
+            attachment_fields = [
+                "gid",
+                "name",
+                "resource_type",
+                "created_at",
+                "modified_at",
+                "download_url",
+                "permanent",
+                "host",
+                "parent",
+                "parent.name",
+                "size",
+                "view_url",
+                "mime_type",
+            ]
             attachment_response = await self._get_with_auth(
-                client, f"https://app.asana.com/api/1.0/attachments/{attachment['gid']}"
+                client,
+                f"https://app.asana.com/api/1.0/attachments/{attachment['gid']}",
+                params={"opt_fields": ",".join(attachment_fields)},
             )
 
             attachment_detail = attachment_response.get("data")

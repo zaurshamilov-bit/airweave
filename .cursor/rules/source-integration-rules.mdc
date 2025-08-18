@@ -54,6 +54,7 @@ class BaseEntity(BaseModel):
     # Set in source connector
     entity_id: str = Field(
         ..., description="ID of the entity this entity represents in the source."
+
     )
     breadcrumbs: list[Breadcrumb] = Field(
         default_factory=list, description="List of breadcrumbs for this entity."
@@ -74,6 +75,32 @@ class FileEntity(BaseEntity):
     download_url: str = Field(..., description="URL to download the file")
 
 ```
+
+## AirweaveField
+
+An enhanced Pydantic Field with Airweave-specific metadata for entity processing.
+
+**Key Features:**
+1. **Embeddable fields** - Mark fields for inclusion in neural embedding with `embeddable=True`
+2. **Timestamp harmonization** - Designate creation/update timestamps with `is_created_at=True` or `is_updated_at=True`
+
+**Example:**
+```python
+name: str = AirweaveField(..., embeddable=True)
+created_at: datetime = AirweaveField(None, is_created_at=True)
+description: str = AirweaveField(.., embeddable=True)
+```
+
+**Benefits:**
+- Type-safe metadata colocated with field definitions
+- Replaces class-level `embeddable_fields` lists
+- Allows `build_embeddable_text()` to build better chunkable body of text
+
+**Helper Methods:**
+- `_get_embeddable_fields()` - Returns list of embeddable field names
+- `get_harmonized_timestamps()` - Returns standardized timestamp mapping
+
+This approach makes entity field configuration more explicit and maintainable by keeping all field metadata in one place.
 
 
 **What you will need to implement, based on the API object described in docs:**
@@ -175,7 +202,7 @@ class YourServiceSource(BaseSource):
                   response.raise_for_status()
                   return response.json()
               except Exception as e:
-                  logger.error(f"Error calling endpoint: {str(e)}")
+                  logger.warning(f"Error calling endpoint: {str(e)}")
                   raise
   ```
 
@@ -228,7 +255,7 @@ class YourServiceSource(BaseSource):
                       async for chunk in response.aiter_bytes():
                           yield chunk
               except Exception as e:
-                  logger.error(f"Error streaming file: {str(e)}")
+                  logger.warning(f"Error streaming file: {str(e)}")
                   raise
   ```
 

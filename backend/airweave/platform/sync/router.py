@@ -150,7 +150,7 @@ class SyncDAGRouter:
             )
             return RESERVED_TABLE_ENTITY_ID
 
-        # Handle dynamically created Parent/Chunk classes
+        # Handle dynamically created Parent/Chunk/UnifiedChunk classes
         entity_name = entity_type.__name__
         entity_module = entity_type.__module__
 
@@ -169,6 +169,12 @@ class SyncDAGRouter:
             self.logger.debug(
                 f"🔍 ROUTER_CHUNK_PATTERN Detected Chunk class, looking for base: {base_name}"
             )
+        elif entity_name.endswith("UnifiedChunk"):
+            base_name = entity_name.replace("UnifiedChunk", "Entity")
+            self.logger.debug(
+                f"🔍 ROUTER_UNIFIED_CHUNK_PATTERN Detected UnifiedChunk class, "
+                f"looking for base: {base_name}"
+            )
 
         if base_name:
             for cls, definition_id in self.entity_map.items():
@@ -180,7 +186,7 @@ class SyncDAGRouter:
                     self.entity_map[entity_type] = definition_id
                     return definition_id
 
-        self.logger.error(f"❌ ROUTER_NO_DEF_FOUND No entity definition found for {entity_type}")
+        self.logger.warning(f"❌ ROUTER_NO_DEF_FOUND No entity definition found for {entity_type}")
         raise ValueError(f"No entity definition found for {entity_type}")
 
     async def process_entity(self, producer_id: UUID, entity: BaseEntity) -> list[BaseEntity]:
@@ -312,7 +318,7 @@ class SyncDAGRouter:
         self.logger.debug(
             f"📄 ROUTER_FILE_CHUNK_DONE [{entity_context}] "
             f"File chunking complete in {chunk_elapsed:.3f}s "
-            f"({len(transformed_entities)} entities created)"
+            f"({len(transformed_entities)} unified chunks created)"
         )
 
         total_elapsed = asyncio.get_event_loop().time() - router_start
@@ -371,7 +377,7 @@ class SyncDAGRouter:
                 f"Found entity definition ID: {entity_definition_id}"
             )
         except ValueError as e:
-            self.logger.error(
+            self.logger.warning(
                 f"❌ ROUTER_NO_DEF [{entity_context}] No entity definition found: {str(e)}"
             )
             # Return entity as-is if no definition found
