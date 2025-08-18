@@ -109,6 +109,7 @@ class BaseSource:
         url = download_url or file_entity.download_url
         if not url:
             self.logger.warning(f"No download URL for file {file_entity.name}")
+            print("SKIPPED")
             return None
 
         # Get access token (from parameter, token manager, or instance)

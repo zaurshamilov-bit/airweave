@@ -237,6 +237,7 @@ async def _try_chunk_size(
                 "md_parent_title": file.name,
                 "md_parent_url": getattr(file, "original_url", None),
                 "metadata": chunk_metadata,
+                "parent_file_type": file.file_type,
             }
         )
         chunk = UnifiedChunkClass(**base_data)
