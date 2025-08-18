@@ -21,14 +21,8 @@ navigation:
     path: docs/pages/quickstart.mdx
   - page: Concepts
     path: docs/pages/concepts.mdx
-  - section: Search
-    contents:
-    - page: Search Concepts
-      path: docs/pages/search/concepts.mdx
-    - page: Using Filters
-      path: docs/pages/search/filters.mdx
-    - page: Examples
-      path: docs/pages/search/examples.mdx
+  - page: Search
+    path: docs/pages/search.mdx
   - page: MCP Server
     path: docs/pages/mcp-server.mdx
   - section: Auth Providers
