@@ -158,5 +158,5 @@ Airweave is released under the [MIT](LICENSE) license.
 ## 🔗 Connect
 
 - **[Discord](https://discord.com/invite/484HY9Ehxt)** - Get help and discuss features
-- **[GitHub Issues](https://github.com/airweave-ai/airweave/issues)** - Report bugs or request features
+- **[GitHub Issues](https://github.com/airweave-ai/airweave/issues)** - Report bugs or request features 
 - **[Twitter](https://x.com/airweave_ai)** - Follow for updates
