@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import JSON, DateTime, ForeignKey
+from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.models._base import OrganizationBase
@@ -28,6 +28,9 @@ class SyncCursor(OrganizationBase):
 
     # Cursor data stored as JSON
     cursor_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+
+    # Cursor field name (e.g., 'last_repository_pushed_at' for GitHub)
+    cursor_field: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Timestamp for tracking cursor updates
     last_updated: Mapped[datetime] = mapped_column(

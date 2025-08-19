@@ -104,7 +104,9 @@ from .source import (
 )
 from .source_connection import (
     SourceConnection,
+    SourceConnectionContinuousResponse,
     SourceConnectionCreate,
+    SourceConnectionCreateContinuous,
     SourceConnectionCreateWithCredential,
     SourceConnectionCreateWithWhiteLabel,
     SourceConnectionInDBBase,

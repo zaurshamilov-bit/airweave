@@ -201,9 +201,11 @@ class SyncFactory:
             logger=logger.with_context(component="guardrail"),
         )
 
-        # Load existing cursor data from database
+        # Load existing cursor data and field from database
         cursor_data = await sync_cursor_service.get_cursor_data(db=db, sync_id=sync.id, ctx=ctx)
-        cursor = SyncCursor(sync_id=sync.id, cursor_data=cursor_data)
+        cursor_field = await sync_cursor_service.get_cursor_field(db=db, sync_id=sync.id, ctx=ctx)
+
+        cursor = SyncCursor(sync_id=sync.id, cursor_data=cursor_data, cursor_field=cursor_field)
 
         # Create sync context
         sync_context = SyncContext(

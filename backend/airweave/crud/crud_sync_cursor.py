@@ -31,7 +31,7 @@ class CRUDSyncCursor(
         """
         stmt = select(models.SyncCursor).where(
             models.SyncCursor.sync_id == sync_id,
-            models.SyncCursor.organization_id == ctx.organization_id,
+            models.SyncCursor.organization_id == ctx.organization.id,
         )
         result = await db.execute(stmt)
         return result.scalar_one_or_none()

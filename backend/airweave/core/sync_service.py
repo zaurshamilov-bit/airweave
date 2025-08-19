@@ -513,8 +513,10 @@ class SyncService:
         ).model_dump(mode="json")
         user_dict = {
             "email": ctx.user.email if ctx.user else "api-key-user",
-            "organization_id": ctx.organization_id,
+            "organization": ctx.organization.model_dump(mode="json"),
+            "user": ctx.user.model_dump(mode="json") if ctx.user else None,
             "auth_method": ctx.auth_method,
+            "auth_metadata": ctx.auth_metadata,
             "request_id": ctx.request_id,
         }
 
@@ -591,8 +593,10 @@ class SyncService:
 
         user_dict = {
             "email": ctx.user.email if ctx.user else "api-key-user",
-            "organization_id": ctx.organization_id,
+            "organization": ctx.organization.model_dump(mode="json"),
+            "user": ctx.user.model_dump(mode="json") if ctx.user else None,
             "auth_method": ctx.auth_method,
+            "auth_metadata": ctx.auth_metadata,
             "request_id": ctx.request_id,
         }
 
@@ -643,8 +647,10 @@ class SyncService:
 
         user_dict = {
             "email": ctx.user.email if ctx.user else "api-key-user",
-            "organization_id": ctx.organization_id,
+            "organization": ctx.organization.model_dump(mode="json"),
+            "user": ctx.user.model_dump(mode="json") if ctx.user else None,
             "auth_method": ctx.auth_method,
+            "auth_metadata": ctx.auth_metadata,
             "request_id": ctx.request_id,
         }
 
@@ -694,8 +700,10 @@ class SyncService:
 
         user_dict = {
             "email": ctx.user.email if ctx.user else "api-key-user",
-            "organization_id": ctx.organization_id,
+            "organization": ctx.organization.model_dump(mode="json"),
+            "user": ctx.user.model_dump(mode="json") if ctx.user else None,
             "auth_method": ctx.auth_method,
+            "auth_metadata": ctx.auth_metadata,
             "request_id": ctx.request_id,
         }
 
@@ -745,8 +753,10 @@ class SyncService:
 
         user_dict = {
             "email": ctx.user.email if ctx.user else "api-key-user",
-            "organization_id": ctx.organization_id,
+            "organization": ctx.organization.model_dump(mode="json"),
+            "user": ctx.user.model_dump(mode="json") if ctx.user else None,
             "auth_method": ctx.auth_method,
+            "auth_metadata": ctx.auth_metadata,
             "request_id": ctx.request_id,
         }
 

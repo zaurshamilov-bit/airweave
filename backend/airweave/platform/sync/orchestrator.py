@@ -159,7 +159,31 @@ class SyncOrchestrator:
             await self.sync_context.progress.finalize(is_complete=(stream_error is None))
 
             # Clean up orphaned entities after all processing is complete
-            if not stream_error:
+            #
+            # ⚠️ IMPORTANT: ORPHANED ENTITY CLEANUP IS DISABLED FOR INCREMENTAL SYNCS ⚠️
+            #
+            # The orphaned entity cleanup was designed for full syncs where ALL entities
+            # from the source are processed. In incremental syncs, only CHANGED entities
+            # are yielded, so unchanged entities would incorrectly appear as "orphaned"
+            # and get deleted.
+            #
+            # For incremental syncs, deletions should only happen through:
+            # 1. Explicit deletion entities (e.g., GitHubFileDeletionEntity)
+            # 2. NOT through orphaned cleanup
+            #
+            # TODO: Future improvement could track which entities are expected to be
+            # unchanged vs. truly orphaned, allowing cleanup even in incremental syncs.
+            #
+            # Detection logic:
+            # - sync_type == "incremental" (set by Temporal schedule service)
+            # - OR minute_level_cron_schedule is set (indicates continuous/incremental sync)
+
+            is_incremental = (
+                self.sync_context.sync.sync_type == "incremental"
+                or self.sync_context.sync.minute_level_cron_schedule is not None
+            )
+
+            if not stream_error and not is_incremental:
                 try:
                     self.sync_context.logger.info("🧹 Starting orphaned entity cleanup phase")
                     await self.entity_processor.cleanup_orphaned_entities(self.sync_context)
@@ -169,6 +193,12 @@ class SyncOrchestrator:
                         exc_info=True,
                     )
                     raise cleanup_error
+            elif is_incremental:
+                self.sync_context.logger.info(
+                    "🧹 Skipping orphaned entity cleanup for incremental sync "
+                    "(only changed entities are processed, "
+                    "unchanged entities would be incorrectly deleted)"
+                )
 
             # Re-raise the error after cleanup
             if stream_error:
@@ -241,6 +271,7 @@ class SyncOrchestrator:
                     sync_id=self.sync_context.sync.id,
                     cursor_data=self.sync_context.cursor.cursor_data,
                     ctx=self.sync_context.ctx,
+                    cursor_field=self.sync_context.cursor.cursor_field,
                 )
                 self.sync_context.logger.info(
                     f"Saved cursor data for sync {self.sync_context.sync.id}"

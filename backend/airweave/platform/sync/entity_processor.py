@@ -809,7 +809,7 @@ class EntityProcessor:
                     db=db,
                     db_obj=fresh_db_entity,
                     obj_in=schemas.EntityUpdate(hash=parent_hash),
-                    auth_context=sync_context.auth_context,
+                    ctx=sync_context.ctx,
                 )
             except NotFoundException:
                 sync_context.logger.warning(

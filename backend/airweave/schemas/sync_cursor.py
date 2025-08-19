@@ -14,6 +14,9 @@ class SyncCursorBase(BaseModel):
     cursor_data: Dict[str, Any] = Field(
         default_factory=dict, description="Cursor data for incremental sync"
     )
+    cursor_field: Optional[str] = Field(
+        None, description="The field name used as cursor (e.g., 'last_repository_pushed_at')"
+    )
 
 
 class SyncCursorCreate(SyncCursorBase):
@@ -29,6 +32,9 @@ class SyncCursorUpdate(BaseModel):
     cursor_data: Optional[Dict[str, Any]] = Field(
         None, description="Cursor data for incremental sync"
     )
+    cursor_field: Optional[str] = Field(
+        None, description="The field name used as cursor (e.g., 'last_repository_pushed_at')"
+    )
 
 
 class SyncCursor(SyncCursorBase):
@@ -39,6 +45,9 @@ class SyncCursor(SyncCursorBase):
     created_at: datetime = Field(..., description="Creation timestamp")
     modified_at: datetime = Field(..., description="Last modification timestamp")
     last_updated: datetime = Field(..., description="Last cursor update timestamp")
+    cursor_field: Optional[str] = Field(
+        None, description="The field name used as cursor (e.g., 'last_repository_pushed_at')"
+    )
 
     class Config:
         """Pydantic config."""

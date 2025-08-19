@@ -33,12 +33,35 @@ class SyncCursorService:
             logger.warning(f"Failed to load cursor data for sync {sync_id}: {e}")
             return {}
 
+    async def get_cursor_field(
+        self, db: AsyncSession, sync_id: UUID, ctx: ApiContext
+    ) -> Optional[str]:
+        """Get cursor field for a sync.
+
+        Args:
+            db: Database session
+            sync_id: The sync ID
+            ctx: API context
+
+        Returns:
+            Cursor field name, None if no cursor exists or field not set
+        """
+        try:
+            cursor = await crud.sync_cursor.get_by_sync_id(db, sync_id=sync_id, ctx=ctx)
+            if cursor:
+                return cursor.cursor_field
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to load cursor field for sync {sync_id}: {e}")
+            return None
+
     async def create_or_update_cursor(
         self,
         db: AsyncSession,
         sync_id: UUID,
         cursor_data: dict,
         ctx: ApiContext,
+        cursor_field: Optional[str] = None,
     ) -> Optional[schemas.SyncCursor]:
         """Create or update cursor data for a sync.
 
@@ -47,12 +70,15 @@ class SyncCursorService:
             sync_id: The sync ID
             cursor_data: Cursor data to store
             ctx: API context
+            cursor_field: Optional cursor field name
 
         Returns:
             Created or updated sync cursor, None if operation failed
         """
         try:
-            cursor_create = schemas.SyncCursorCreate(sync_id=sync_id, cursor_data=cursor_data)
+            cursor_create = schemas.SyncCursorCreate(
+                sync_id=sync_id, cursor_data=cursor_data, cursor_field=cursor_field
+            )
 
             cursor = await crud.sync_cursor.create_or_update(
                 db=db,

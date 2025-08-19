@@ -719,6 +719,137 @@ class SourceConnection(SourceConnectionInDBBase):
         return cls.model_validate(obj_dict)
 
 
+class SourceConnectionCreateContinuous(SourceConnectionCreateBase):
+    """Schema for creating a continuously syncing source connection (BETA).
+
+    This endpoint creates a source connection that stays continuously in sync with your
+    data source. Your data will be automatically synchronized every minute, ensuring it's
+    always up-to-date without any manual intervention or sync management.
+    """
+
+    collection: Optional[str] = Field(
+        None,
+        description=(
+            "Readable ID of the collection where synced data will be stored. If not provided, "
+            "a new collection will be automatically created."
+        ),
+    )
+    auth_fields: Optional[ConfigValues] = Field(
+        None,
+        description=(
+            "Authentication credentials required to access the data source. The required fields "
+            "vary by source type. Check the documentation of a specific source (for example "
+            "[Github](https://docs.airweave.ai/docs/connectors/github)) to see what is required."
+        ),
+    )
+    auth_provider: Optional[str] = Field(
+        None,
+        description=(
+            "Unique readable ID of a connected auth provider to use for authentication instead of "
+            "providing auth_fields directly."
+        ),
+        examples=["composio"],
+    )
+    auth_provider_config: Optional[ConfigValues] = Field(
+        None,
+        description=("Configuration for the auth provider when using auth_provider field."),
+    )
+    cursor_field: Optional[str] = Field(
+        None,
+        description=(
+            "Specify which field in the entity should be used as the cursor for incremental syncs. "
+            "This field must contain a timestamp or incrementing value that indicates when records "
+            "were last modified. Required for sources without predefined entities "
+            "(e.g., databases). "
+            "If not specified, the source's default cursor field will be used if available."
+        ),
+        examples=["updated_at", "modified_timestamp", "last_modified", "created_at"],
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "GitHub - Live Repository Mirror",
+                    "description": "Continuously sync our GitHub repository",
+                    "short_name": "github",
+                    "collection": "engineering-docs",
+                    "auth_fields": {
+                        "personal_access_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                        "repo_name": "airweave-ai/airweave",
+                    },
+                    "config_fields": {"branch": "main"},
+                },
+                {
+                    "name": "Database - Live Sync",
+                    "description": "Keep database records continuously synchronized",
+                    "short_name": "postgresql",
+                    "collection": "customer-data",
+                    "auth_fields": {
+                        "host": "localhost",
+                        "port": 5432,
+                        "database": "myapp",
+                        "user": "postgres",
+                        "password": "secret",
+                        "schema": "public",
+                        "tables": "users,orders",
+                    },
+                    "cursor_field": "updated_at",
+                },
+            ]
+        }
+    )
+
+    def map_to_core_and_auxiliary_attributes(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Map the source connection create schema to core and auxiliary attributes."""
+        data = self.model_dump(exclude_unset=True)
+
+        # Handle auth provider config conversion
+        if "auth_provider_config" in data:
+            config = data["auth_provider_config"]
+            if hasattr(config, "model_dump"):
+                data["auth_provider_config"] = config.model_dump()
+
+        # Extract cursor_field - DON'T store in config_fields
+        cursor_field = data.pop("cursor_field", None)
+
+        # Auxiliary attributes for the creation process
+        auxiliary_attrs = {
+            "auth_fields": data.pop("auth_fields", None),
+            "credential_id": data.pop("credential_id", None),
+            "cron_schedule": None,  # No regular cron schedule
+            "sync_immediately": True,  # Always sync immediately
+            "minute_level_cron": "*/1 * * * *",  # Default to every minute
+            "auto_start_schedule": True,  # Always auto-start
+            "cursor_field": cursor_field,  # Pass cursor field separately
+        }
+
+        # Core attributes for the SourceConnection model
+        core_attrs = data
+
+        return core_attrs, auxiliary_attrs
+
+
+class SourceConnectionContinuousResponse(SourceConnection):
+    """Response schema for continuous source connection creation."""
+
+    minute_level_schedule: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Information about the created minute-level schedule including schedule ID, "
+            "cron expression, and current status."
+        ),
+        examples=[
+            {
+                "schedule_id": "sync_550e8400-e29b-41d4_schedule",
+                "cron_expression": "*/5 * * * *",
+                "status": "active",
+                "next_run": "2024-01-15T14:05:00Z",
+            }
+        ],
+    )
+
+
 class SourceConnectionListItem(BaseModel):
     """Simplified source connection representation for list operations."""
 
