@@ -287,6 +287,7 @@ class SyncService:
         db: AsyncSession,
         sync_id: UUID,
         ctx: ApiContext,
+        check_running: bool = True,
     ) -> tuple[schemas.Sync, schemas.SyncJob, schemas.SyncDag]:
         """Trigger a sync run.
 
@@ -299,6 +300,7 @@ class SyncService:
             db (AsyncSession): The database session.
             sync_id (UUID): The ID of the sync to run.
             ctx (ApiContext): The API context.
+            check_running (bool): Whether to check if a sync is already running.
 
         Returns:
         -------
@@ -307,10 +309,28 @@ class SyncService:
         Raises:
         ------
             SyncNotFoundException: If the sync is not found.
+            InvalidScheduleOperationException: If a sync is already running.
         """
         sync = await crud.sync.get(db=db, id=sync_id, ctx=ctx, with_connections=True)
         if not sync:
             raise SyncNotFoundException("Sync not found")
+
+        # Check if there's already a running sync job for this sync
+        if check_running:
+            running_jobs = await crud.sync_job.get_all_by_sync_id(
+                db=db,
+                sync_id=sync_id,
+                status=["PENDING", "IN_PROGRESS"],  # Database enum uses uppercase
+            )
+            if running_jobs:
+                logger.warning(
+                    f"Sync {sync_id} already has {len(running_jobs)} running jobs. "
+                    f"Skipping new job creation."
+                )
+                raise InvalidScheduleOperationException(
+                    f"Sync {sync_id} already has a running job. "
+                    f"Please wait for the current job to complete."
+                )
 
         sync_schema = schemas.Sync.model_validate(sync)
 
@@ -493,19 +513,13 @@ class SyncService:
                 f"Collection {source_connection.readable_collection_id} not found"
             )
 
-        # Create a sync job for the schedule
-        sync_job_create = schemas.SyncJobCreate(sync_id=sync_id)
-        sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_create, ctx=ctx)
-
         # Convert to dict format for Temporal
         # Only refresh SQLAlchemy models (not Pydantic schemas)
         await db.refresh(dag)
-        await db.refresh(sync_job)
         await db.refresh(collection)
         await db.refresh(source_connection)
 
         sync_dict = schemas.Sync.model_validate(sync).model_dump(mode="json")
-        sync_job_dict = schemas.SyncJob.model_validate(sync_job).model_dump(mode="json")
         dag_dict = schemas.SyncDag.model_validate(dag).model_dump(mode="json")
         collection_dict = schemas.Collection.model_validate(collection).model_dump(mode="json")
         source_connection_dict = schemas.SourceConnection.model_validate(
@@ -526,7 +540,6 @@ class SyncService:
                 sync_id=sync_id,
                 cron_expression=cron_expression,
                 sync_dict=sync_dict,
-                sync_job_dict=sync_job_dict,
                 sync_dag_dict=dag_dict,
                 collection_dict=collection_dict,
                 source_connection_dict=source_connection_dict,

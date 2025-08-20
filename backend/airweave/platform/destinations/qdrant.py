@@ -425,15 +425,17 @@ class QdrantDestination(VectorDBDestination):
         await self.client.delete(
             collection_name=self.collection_name,
             points_selector=rest.FilterSelector(
-                must=[
-                    rest.FieldCondition(
-                        key="parent_entity_id", match=rest.MatchValue(value=parent_id_str)
-                    ),
-                    rest.FieldCondition(
-                        key="airweave_system_metadata.sync_id",
-                        match=rest.MatchValue(value=sync_id_str),
-                    ),
-                ]
+                filter=rest.Filter(
+                    must=[
+                        rest.FieldCondition(
+                            key="parent_entity_id", match=rest.MatchValue(value=parent_id_str)
+                        ),
+                        rest.FieldCondition(
+                            key="airweave_system_metadata.sync_id",
+                            match=rest.MatchValue(value=sync_id_str),
+                        ),
+                    ]
+                )
             ),
             wait=True,  # Wait for operation to complete
         )

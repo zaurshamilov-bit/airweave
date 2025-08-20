@@ -68,7 +68,6 @@ class TemporalScheduleService:
         sync_id: UUID,
         cron_expression: str,
         sync_dict: dict,
-        sync_job_dict: dict,
         sync_dag_dict: dict,
         collection_dict: dict,
         source_connection_dict: dict,
@@ -135,7 +134,7 @@ class TemporalScheduleService:
                     RunSourceConnectionWorkflow.run,
                     args=[
                         sync_dict,
-                        sync_job_dict,
+                        None,  # No pre-created sync job for scheduled runs
                         sync_dag_dict,
                         collection_dict,
                         source_connection_dict,

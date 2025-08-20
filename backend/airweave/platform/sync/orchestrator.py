@@ -175,15 +175,16 @@ class SyncOrchestrator:
             # unchanged vs. truly orphaned, allowing cleanup even in incremental syncs.
             #
             # Detection logic:
-            # - sync_type == "incremental" (set by Temporal schedule service)
-            # - OR minute_level_cron_schedule is set (indicates continuous/incremental sync)
+            # - If cursor data exists, this is an incremental sync (we've synced before)
+            # - If no cursor data, this is the first/full sync
 
-            is_incremental = (
-                self.sync_context.sync.sync_type == "incremental"
-                or self.sync_context.sync.minute_level_cron_schedule is not None
+            has_cursor_data = bool(
+                hasattr(self.sync_context, "cursor")
+                and self.sync_context.cursor
+                and self.sync_context.cursor.cursor_data
             )
 
-            if not stream_error and not is_incremental:
+            if not stream_error and not has_cursor_data:
                 try:
                     self.sync_context.logger.info("🧹 Starting orphaned entity cleanup phase")
                     await self.entity_processor.cleanup_orphaned_entities(self.sync_context)
@@ -193,11 +194,10 @@ class SyncOrchestrator:
                         exc_info=True,
                     )
                     raise cleanup_error
-            elif is_incremental:
+            elif has_cursor_data:
                 self.sync_context.logger.info(
                     "🧹 Skipping orphaned entity cleanup for incremental sync "
-                    "(only changed entities are processed, "
-                    "unchanged entities would be incorrectly deleted)"
+                    "(cursor data exists, only changed entities are processed)"
                 )
 
             # Re-raise the error after cleanup

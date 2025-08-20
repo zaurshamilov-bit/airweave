@@ -437,62 +437,6 @@ async def _determine_cursor_field(
     return cursor_field
 
 
-async def _run_initial_sync(
-    source_connection: schemas.SourceConnection,
-    sync_job_initial: schemas.SyncJob,
-    ctx: ApiContext,
-    guard_rail: GuardRailService,
-    background_tasks: BackgroundTasks,
-) -> None:
-    """Run the initial sync immediately for a continuous source connection."""
-    async with get_db_context() as db:
-        from airweave import crud
-
-        sync_dag = await sync_service.get_sync_dag(
-            db=db, sync_id=source_connection.sync_id, ctx=ctx
-        )
-
-        # Get the sync object
-        sync = await crud.sync.get(db=db, id=source_connection.sync_id, ctx=ctx)
-        sync = schemas.Sync.model_validate(sync, from_attributes=True)
-        sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
-        collection = await crud.collection.get_by_readable_id(
-            db=db, readable_id=source_connection.collection, ctx=ctx
-        )
-        collection = schemas.Collection.model_validate(collection, from_attributes=True)
-
-        # Get source connection with auth_fields
-        source_connection_with_auth = await source_connection_service.get_source_connection(
-            db=db,
-            source_connection_id=source_connection.id,
-            show_auth_fields=True,
-            ctx=ctx,
-        )
-
-        # Check if Temporal is enabled
-        if await temporal_service.is_temporal_enabled():
-            await temporal_service.run_source_connection_workflow(
-                sync=sync,
-                sync_job=sync_job_initial,
-                sync_dag=sync_dag,
-                collection=collection,
-                source_connection=source_connection_with_auth,
-                ctx=ctx,
-            )
-        else:
-            background_tasks.add_task(
-                sync_service.run,
-                sync,
-                sync_job_initial,
-                sync_dag,
-                collection,
-                source_connection_with_auth,
-                ctx,
-            )
-
-        await guard_rail.increment(ActionType.SYNCS)
-
-
 @router.post("/continuous", response_model=schemas.SourceConnectionContinuousResponse)
 async def create_continuous_source_connection_BETA(
     *,
@@ -515,10 +459,10 @@ async def create_continuous_source_connection_BETA(
     - **PostgreSQL**: Database tables with custom cursor field (cursor field required)
 
     **Key Features:**
-    - Automatic minute-level synchronization
-    - Immediate initial sync (no waiting for schedule to start)
+    - Immediate initial sync to establish baseline
+    - Automatic minute-level synchronization thereafter
     - Incremental updates based on cursor field
-    - No manual sync triggering required
+    - No manual sync triggering required after setup
     - Data is always fresh and searchable
 
     **Requirements:**
@@ -557,7 +501,7 @@ async def create_continuous_source_connection_BETA(
         "auth_fields": source_connection_in.auth_fields,
         "auth_provider": source_connection_in.auth_provider,
         "auth_provider_config": source_connection_in.auth_provider_config,
-        "sync_immediately": False,  # We'll handle the initial sync ourselves
+        "sync_immediately": True,  # Run initial sync to establish baseline
         "cron_schedule": None,  # No regular cron, using minute-level instead
     }
 
@@ -565,12 +509,12 @@ async def create_continuous_source_connection_BETA(
     regular_create_data = {k: v for k, v in regular_create_data.items() if v is not None}
     regular_source_connection_in = schemas.SourceConnectionCreate(**regular_create_data)
 
-    # Create the source connection (this also creates the sync)
+    # Create the source connection (this also creates the initial sync job)
     # Use fresh connection to avoid timeout issues during debugging
     async with get_db_context() as fresh_db:
         (
             source_connection,
-            sync_job_initial,
+            sync_job_initial,  # Initial sync job (will run with cleanup since no cursor exists yet)
         ) = await source_connection_service.create_source_connection(
             db=fresh_db, source_connection_in=regular_source_connection_in, ctx=ctx
         )
@@ -580,29 +524,71 @@ async def create_continuous_source_connection_BETA(
     await guard_rail_fresh.increment(ActionType.SOURCE_CONNECTIONS)
     if creating_new_collection:
         await guard_rail_fresh.increment(ActionType.COLLECTIONS)
+    # Increment sync usage for the initial sync
+    await guard_rail_fresh.increment(ActionType.SYNCS)
 
-    # Store the cursor field in the sync cursor (create initial cursor with field)
+    # The initial sync is running now (full sync with cleanup since no cursor exists)
+    # Subsequent scheduled syncs will be incremental (cursor exists, skip cleanup)
+    logger.info(
+        f"Sync {source_connection.sync_id} created. Initial sync running to establish baseline."
+    )
+
+    # Log the cursor field that will be used
+    # The initial sync will create the cursor with baseline data
     if cursor_field:
-        try:
-            from airweave.core.sync_cursor_service import sync_cursor_service
+        logger.info(
+            f"Cursor field '{cursor_field}' will be used for sync {source_connection.sync_id}. "
+            f"Initial cursor will be created after initial sync completes."
+        )
 
-            # Use a fresh connection for cursor creation
-            async with get_db_context() as fresh_db:
-                await sync_cursor_service.create_or_update_cursor(
-                    db=fresh_db,
-                    sync_id=source_connection.sync_id,
-                    cursor_data={},  # Start with empty cursor data
-                    ctx=ctx,
-                    cursor_field=cursor_field,
-                )
-            logger.info(
-                f"Created initial cursor with field '{cursor_field}' "
-                f"for sync {source_connection.sync_id}"
+    # If job was created, start it in background (same as regular endpoint)
+    if sync_job_initial:
+        async with get_db_context() as db:
+            sync_dag = await sync_service.get_sync_dag(
+                db=db, sync_id=source_connection.sync_id, ctx=ctx
             )
-        except Exception as e:
-            logger.warning(f"Failed to create initial cursor with field: {e}")
 
-    # Now create the minute-level schedule
+            # Get the sync object
+            sync = await crud.sync.get(db=db, id=source_connection.sync_id, ctx=ctx)
+            sync = schemas.Sync.model_validate(sync, from_attributes=True)
+            sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+            collection = await crud.collection.get_by_readable_id(
+                db=db, readable_id=source_connection.collection, ctx=ctx
+            )
+            collection = schemas.Collection.model_validate(collection, from_attributes=True)
+
+            # Get source connection with auth_fields for temporal processing
+            source_connection_with_auth = await source_connection_service.get_source_connection(
+                db=db,
+                source_connection_id=source_connection.id,
+                show_auth_fields=True,  # Important: Need actual auth_fields for temporal
+                ctx=ctx,
+            )
+
+            # Check if Temporal is enabled, otherwise fall back to background tasks
+            if await temporal_service.is_temporal_enabled():
+                # Use Temporal workflow
+                await temporal_service.run_source_connection_workflow(
+                    sync=sync,
+                    sync_job=sync_job_initial,
+                    sync_dag=sync_dag,
+                    collection=collection,
+                    source_connection=source_connection_with_auth,
+                    ctx=ctx,
+                )
+            else:
+                # Fall back to background tasks
+                background_tasks.add_task(
+                    sync_service.run,
+                    sync,
+                    sync_job_initial,
+                    sync_dag,
+                    collection,
+                    source_connection_with_auth,
+                    ctx,
+                )
+
+    # Create the minute-level schedule
     schedule_response = None
     try:
         # Create the minute-level schedule using fresh connection
@@ -620,18 +606,6 @@ async def create_continuous_source_connection_BETA(
                 sync_id=source_connection.sync_id,
                 ctx=ctx,
             )
-
-            # Ensure the sync is marked as incremental
-            # (create_minute_level_schedule should do this, but being explicit)
-            sync_obj = await crud.sync.get(db=fresh_db, id=source_connection.sync_id, ctx=ctx)
-            if sync_obj and sync_obj.sync_type != "incremental":
-                await crud.sync.update(
-                    db=fresh_db,
-                    db_obj=sync_obj,
-                    obj_in={"sync_type": "incremental"},
-                    ctx=ctx,
-                )
-                logger.info(f"Marked sync {source_connection.sync_id} as incremental")
 
         schedule_response.status = "active"
 
@@ -652,16 +626,6 @@ async def create_continuous_source_connection_BETA(
             message=f"Source connection created but schedule setup failed: {str(e)}",
         )
 
-    # Run the initial sync immediately (so users don't wait a minute for first sync)
-    if sync_job_initial:
-        await _run_initial_sync(
-            source_connection=source_connection,
-            sync_job_initial=sync_job_initial,
-            ctx=ctx,
-            guard_rail=guard_rail,
-            background_tasks=background_tasks,
-        )
-
     # Create the response with schedule information
     response = schemas.SourceConnectionContinuousResponse.from_orm_with_collection_mapping(
         source_connection
@@ -673,7 +637,10 @@ async def create_continuous_source_connection_BETA(
             "schedule_id": schedule_response.schedule_id,
             "cron_expression": minute_level_cron,
             "status": schedule_response.status,
-            "message": schedule_response.message,
+            "message": (
+                f"Initial sync started and schedule created successfully. "
+                f"Incremental syncs will run every {minute_level_cron.split()[0]} minute(s)."
+            ),
         }
     elif schedule_response:
         response.minute_level_schedule = {
