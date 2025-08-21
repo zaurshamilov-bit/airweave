@@ -17,6 +17,7 @@ from typing import Any, List, Optional
 
 from airweave.platform.entities._airweave_field import AirweaveField
 from airweave.platform.entities._base import ChunkEntity, FileEntity
+from airweave.platform.entities.utils import _determine_file_type_from_mime
 
 
 class GoogleDriveDriveEntity(ChunkEntity):
@@ -93,6 +94,12 @@ class GoogleDriveFileEntity(FileEntity):
     md5_checksum: Optional[str] = AirweaveField(
         None, description="MD5 checksum for the content of the file."
     )
+
+    def __init__(self, **data):
+        """Initialize the entity and set file_type from mime_type if not provided."""
+        super().__init__(**data)
+        if not self.file_type or self.file_type == "unknown":
+            self.file_type = _determine_file_type_from_mime(self.mime_type)
 
     def model_dump(self, *args, **kwargs) -> dict[str, Any]:
         """Override model_dump to convert size to string."""
