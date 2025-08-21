@@ -951,7 +951,7 @@
           "source-connections"
         ],
         "summary": "Create Source Connection",
-        "description": "Create a new source connection to sync data into your collection.\n\n**This endpoint only works for sources that do not use OAuth2.0.**\nSources that do use OAuth2.0 like Google Drive, Slack, or HubSpot must be\nconnected through the UI where you can complete the OAuth consent flow.<br/><br/>\n\nCredentials for a source have to be provided using the `auth_fields` field.\nCurrently, it is not automatically checked if the provided credentials are valid.\nIf they are not valid, the data synchronization will fail.<br/><br/>\n\nCheck the documentation of a specific source (for example\n[Github](https://docs.airweave.ai/docs/connectors/github)) to see what kind\nof authentication is used.",
+        "description": "Create a new source connection to sync data into your collection.\n\n**This endpoint only works for sources that do not use OAuth2.0.**\nSources that do use OAuth2.0 like Google Drive, Slack, or HubSpot must be\nconnected through the UI where you can complete the OAuth consent flow\nor using Auth Providers (see [Auth Providers](/docs/auth-providers)).<br/><br/>\n\nCredentials for a source have to be provided using the `auth_fields` field.\nCurrently, it is not automatically checked if the provided credentials are valid.\nIf they are not valid, the data synchronization will fail.<br/><br/>\n\nCheck the documentation of a specific source (for example\n[Github](https://docs.airweave.ai/docs/connectors/github)) to see what kind\nof authentication is used.",
         "operationId": "create_source_connection_source_connections_post",
         "parameters": [],
         "requestBody": {
@@ -1799,7 +1799,7 @@
         ],
         "summary": "Get White Label Oauth2 Auth Url",
         "description": "Generate a branded OAuth2 authorization URL for customer authentication.\n\n<br/><br/>\nCreates the OAuth consent URL that customers should be redirected to for\nauthentication. The OAuth consent screen will display your company name and\nbranding instead of Airweave.",
-        "operationId": "get_white_label_oauth2_auth_url_white_labels__white_label_id__oauth2_auth_url_options",
+        "operationId": "get_white_label_oauth2_auth_url_white_labels__white_label_id__oauth2_auth_url_get",
         "parameters": [
           {
             "name": "white_label_id",
@@ -1821,7 +1821,7 @@
               "application/json": {
                 "schema": {
                   "type": "string",
-                  "title": "Response Get White Label Oauth2 Auth Url White Labels  White Label Id  Oauth2 Auth Url Options"
+                  "title": "Response Get White Label Oauth2 Auth Url White Labels  White Label Id  Oauth2 Auth Url Get"
                 },
                 "examples": {
                   "slack_auth_url": {
@@ -5101,6 +5101,19 @@
         ],
         "title": "MinShould"
       },
+      "MinuteLevelScheduleConfig": {
+        "properties": {
+          "cron_expression": {
+            "type": "string",
+            "title": "Cron Expression",
+            "description": "Minute-level cron expression for incremental sync (default: every minute)",
+            "default": "*/1 * * * *"
+          }
+        },
+        "type": "object",
+        "title": "MinuteLevelScheduleConfig",
+        "description": "Configuration for minute-level incremental sync schedules."
+      },
       "Nested": {
         "properties": {
           "key": {
@@ -5448,6 +5461,30 @@
         ],
         "title": "ResponseType",
         "description": "Response format options for search results."
+      },
+      "ScheduleResponse": {
+        "properties": {
+          "schedule_id": {
+            "type": "string",
+            "title": "Schedule Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schedule_id",
+          "status",
+          "message"
+        ],
+        "title": "ScheduleResponse",
+        "description": "Response for schedule operations."
       },
       "SearchRequest": {
         "properties": {
@@ -6244,6 +6281,355 @@
           }
         ]
       },
+      "SourceConnectionContinuousResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "description": "Human-readable display name for the source connection. This helps you identify the connection in the UI and should clearly describe what data it connects to (e.g., 'Production Stripe Account', 'Customer Support Database')."
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Optional additional context about the data this connection provides. Use this to document the purpose, data types, or any special considerations for this connection."
+          },
+          "config_fields": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfigValues"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source-specific configuration options that control data retrieval behavior. These vary by source type and control how data is retrieved (e.g., database queries, API filters, file paths). Check the documentation of a specific source (for example [Github](https://docs.airweave.ai/docs/connectors/github)) to see what is required.",
+            "examples": []
+          },
+          "short_name": {
+            "type": "string",
+            "title": "Short Name",
+            "description": "Technical identifier of the source type (e.g., 'github', 'stripe', 'postgresql', 'slack'). This determines which connector Airweave uses to sync data.",
+            "examples": [
+              "stripe",
+              "postgresql",
+              "slack"
+            ]
+          },
+          "white_label_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "White Label Id",
+            "description": "Identifier for custom OAuth integrations. Only present for connections created through white label OAuth flows."
+          },
+          "auth_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Provider",
+            "description": "Readable ID of the auth provider used to create this connection. Present only if the connection was created through an auth provider."
+          },
+          "auth_provider_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Provider Config",
+            "description": "Configuration used with the auth provider to create this connection. Present only if the connection was created through an auth provider."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique system identifier for this source connection. This UUID is generated automatically and used for API operations."
+          },
+          "sync_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Id",
+            "description": "Internal identifier for the sync configuration associated with this source connection. Managed automatically by the system."
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Organization Id",
+            "description": "Identifier of the organization that owns this source connection. Source connections are isolated per organization."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Timestamp when the source connection was created (ISO 8601 format)."
+          },
+          "modified_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Modified At",
+            "description": "Timestamp when the source connection was last modified (ISO 8601 format)."
+          },
+          "connection_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id",
+            "description": "Internal identifier for the underlying connection object that manages authentication and configuration."
+          },
+          "collection": {
+            "type": "string",
+            "title": "Collection",
+            "description": "Readable ID of the collection where this source connection syncs its data. This creates the link between your data source and searchable content.",
+            "examples": [
+              "finance-data-ab123",
+              "customer-support-xy789"
+            ]
+          },
+          "created_by_email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Email",
+            "description": "Email address of the user who created this source connection."
+          },
+          "modified_by_email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified By Email",
+            "description": "Email address of the user who last modified this source connection."
+          },
+          "auth_fields": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfigValues"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Fields",
+            "description": "Authentication credentials for the data source. Returns '********' by default for security."
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceConnectionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current operational status of the source connection:<br/>\u2022 **active**: Connection is healthy and ready for data synchronization<br/>\u2022 **in_progress**: Currently syncing data from the source<br/>\u2022 **failing**: Recent sync attempts have failed and require attention"
+          },
+          "latest_sync_job_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SyncJobStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Status of the most recent data synchronization job:<br/>\u2022 **completed**: Last sync finished successfully<br/>\u2022 **failed**: Last sync encountered errors<br/>\u2022 **in_progress**: Currently running a sync job<br/>\u2022 **pending**: Sync job is queued and waiting to start"
+          },
+          "latest_sync_job_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Sync Job Id",
+            "description": "Unique identifier of the most recent sync job. Use this to track sync progress or retrieve detailed job information."
+          },
+          "latest_sync_job_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Sync Job Started At",
+            "description": "Timestamp when the most recent sync job started (ISO 8601 format)."
+          },
+          "latest_sync_job_completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Sync Job Completed At",
+            "description": "Timestamp when the most recent sync job completed (ISO 8601 format). Null if the job is still running or failed."
+          },
+          "latest_sync_job_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Sync Job Error",
+            "description": "Error message from the most recent sync job if it failed. Use this to diagnose and resolve sync issues."
+          },
+          "cron_schedule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron Schedule",
+            "description": "Cron expression defining when automatic data synchronization occurs. Null if automatic syncing is disabled and syncs must be triggered manually.",
+            "examples": [
+              "0 */6 * * *",
+              "0 9,17 * * 1-5"
+            ]
+          },
+          "next_scheduled_run": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Scheduled Run",
+            "description": "Timestamp when the next automatic sync is scheduled to run (ISO 8601 format). Null if no automatic schedule is configured."
+          },
+          "minute_level_schedule": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minute Level Schedule",
+            "description": "Information about the created minute-level schedule including schedule ID, cron expression, and current status.",
+            "examples": [
+              {
+                "cron_expression": "*/5 * * * *",
+                "next_run": "2024-01-15T14:05:00Z",
+                "schedule_id": "sync_550e8400-e29b-41d4_schedule",
+                "status": "active"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "short_name",
+          "id",
+          "organization_id",
+          "created_at",
+          "modified_at",
+          "collection"
+        ],
+        "title": "SourceConnectionContinuousResponse",
+        "description": "Response schema for continuous source connection creation.",
+        "examples": [
+          {
+            "auth_fields": {
+              "personal_access_token": "********",
+              "repo_name": "airweave-ai/docs"
+            },
+            "collection": "engineering-docs-ab123",
+            "config_fields": {
+              "branch": "main"
+            },
+            "connection_id": "conn9876-5432-10fe-dcba-098765432100",
+            "created_at": "2024-01-15T09:30:00Z",
+            "created_by_email": "engineering@company.com",
+            "cron_schedule": "0 */6 * * *",
+            "description": "Sync technical documentation and code from our engineering repos",
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "latest_sync_job_completed_at": "2024-01-15T14:05:22Z",
+            "latest_sync_job_id": "987fcdeb-51a2-43d7-8f3e-1234567890ab",
+            "latest_sync_job_started_at": "2024-01-15T14:00:00Z",
+            "latest_sync_job_status": "completed",
+            "modified_at": "2024-01-15T14:22:15Z",
+            "modified_by_email": "engineering@company.com",
+            "name": "GitHub - Engineering Documentation",
+            "next_scheduled_run": "2024-01-16T02:00:00Z",
+            "organization_id": "org12345-6789-abcd-ef01-234567890abc",
+            "short_name": "github",
+            "status": "active",
+            "sync_id": "123e4567-e89b-12d3-a456-426614174000"
+          }
+        ]
+      },
       "SourceConnectionCreate": {
         "properties": {
           "name": {
@@ -6386,6 +6772,165 @@
             "name": "GitHub - Airweave Repository",
             "short_name": "github",
             "sync_immediately": true
+          }
+        ]
+      },
+      "SourceConnectionCreateContinuous": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 42,
+            "minLength": 4,
+            "title": "Name",
+            "description": "Human-readable name for the source connection. This helps you identify the connection in the UI and should clearly describe what data it connects to.",
+            "examples": [
+              "Production Stripe Account",
+              "Main PostgreSQL DB",
+              "Support Tickets API"
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Optional detailed description of what this source connection provides. Use this to document the purpose, data types, or any special considerations for this connection.",
+            "examples": [
+              "Production Stripe account for payment and subscription data",
+              "Customer support tickets from Zendesk"
+            ]
+          },
+          "config_fields": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfigValues"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source-specific configuration parameters required for data extraction. These vary by source type and control how data is retrieved (e.g., database queries, API filters, file paths). Check the documentation of a specific source (for example [Github](https://docs.airweave.ai/docs/connectors/github)) to see what is required."
+          },
+          "short_name": {
+            "type": "string",
+            "title": "Short Name",
+            "description": "Technical identifier of the source type that determines which connector to use for data synchronization.",
+            "examples": [
+              "stripe",
+              "postgresql",
+              "slack",
+              "notion"
+            ]
+          },
+          "collection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection",
+            "description": "Readable ID of the collection where synced data will be stored. If not provided, a new collection will be automatically created."
+          },
+          "auth_fields": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfigValues"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Authentication credentials required to access the data source. The required fields vary by source type. Check the documentation of a specific source (for example [Github](https://docs.airweave.ai/docs/connectors/github)) to see what is required."
+          },
+          "auth_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Provider",
+            "description": "Unique readable ID of a connected auth provider to use for authentication instead of providing auth_fields directly.",
+            "examples": [
+              "composio"
+            ]
+          },
+          "auth_provider_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfigValues"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Configuration for the auth provider when using auth_provider field."
+          },
+          "cursor_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Field",
+            "description": "Specify which field in the entity should be used as the cursor for incremental syncs. This field must contain a timestamp or incrementing value that indicates when records were last modified. Required for sources without predefined entities (e.g., databases). If not specified, the source's default cursor field will be used if available.",
+            "examples": [
+              "updated_at",
+              "modified_timestamp",
+              "last_modified",
+              "created_at"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "short_name"
+        ],
+        "title": "SourceConnectionCreateContinuous",
+        "description": "Schema for creating a continuously syncing source connection (BETA).\n\nThis endpoint creates a source connection that stays continuously in sync with your\ndata source. Your data will be automatically synchronized every minute, ensuring it's\nalways up-to-date without any manual intervention or sync management.",
+        "examples": [
+          {
+            "auth_fields": {
+              "personal_access_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+              "repo_name": "airweave-ai/airweave"
+            },
+            "collection": "engineering-docs",
+            "config_fields": {
+              "branch": "main"
+            },
+            "description": "Continuously sync our GitHub repository",
+            "name": "GitHub - Live Repository Mirror",
+            "short_name": "github"
+          },
+          {
+            "auth_fields": {
+              "database": "myapp",
+              "host": "localhost",
+              "password": "secret",
+              "port": 5432,
+              "schema": "public",
+              "tables": "users,orders",
+              "user": "postgres"
+            },
+            "collection": "customer-data",
+            "cursor_field": "updated_at",
+            "description": "Keep database records continuously synchronized",
+            "name": "Database - Live Sync",
+            "short_name": "postgresql"
           }
         ]
       },
@@ -7332,6 +7877,33 @@
             ],
             "title": "Next Scheduled Run"
           },
+          "temporal_schedule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporal Schedule Id"
+          },
+          "sync_type": {
+            "type": "string",
+            "title": "Sync Type",
+            "default": "full"
+          },
+          "minute_level_cron_schedule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minute Level Cron Schedule"
+          },
           "sync_metadata": {
             "anyOf": [
               {
@@ -7464,6 +8036,33 @@
               }
             ],
             "title": "Next Scheduled Run"
+          },
+          "temporal_schedule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporal Schedule Id"
+          },
+          "sync_type": {
+            "type": "string",
+            "title": "Sync Type",
+            "default": "full"
+          },
+          "minute_level_cron_schedule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minute Level Cron Schedule"
           },
           "sync_metadata": {
             "anyOf": [
@@ -8043,6 +8642,39 @@
                 "type": "null"
               }
             ]
+          },
+          "temporal_schedule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporal Schedule Id"
+          },
+          "sync_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Type"
+          },
+          "minute_level_cron_schedule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minute Level Cron Schedule"
           }
         },
         "type": "object",
@@ -8107,6 +8739,33 @@
               }
             ],
             "title": "Next Scheduled Run"
+          },
+          "temporal_schedule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporal Schedule Id"
+          },
+          "sync_type": {
+            "type": "string",
+            "title": "Sync Type",
+            "default": "full"
+          },
+          "minute_level_cron_schedule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minute Level Cron Schedule"
           },
           "sync_metadata": {
             "anyOf": [
