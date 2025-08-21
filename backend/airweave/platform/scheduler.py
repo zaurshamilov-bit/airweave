@@ -311,14 +311,15 @@ class PlatformScheduler:
         else:
             logger.debug(f"No previous jobs found for sync {sync.id}")
 
-        # Check if there's an active job running
-        if latest_job and latest_job.status == SyncJobStatus.IN_PROGRESS:
-            # Skip this sync as it's already running
+        # Check if there's an active job running or pending
+        if latest_job and latest_job.status in [SyncJobStatus.IN_PROGRESS, SyncJobStatus.PENDING]:
+            # Skip this sync as it's already running or queued
             logger.debug(
-                f"Sync {sync.id} ({sync.name}) already has job {latest_job.id} in progress."
+                f"Sync {sync.id} ({sync.name}) already has job {latest_job.id} in status "
+                f"{latest_job.status}."
             )
             # TODO: We must create a sync job that is autocancelled, to indicate to the user
-            # that another sync job is already running.
+            # that another sync job is already running or pending.
             return False
 
         # Get the last run time (or use epoch if never run)
@@ -333,6 +334,13 @@ class PlatformScheduler:
         now = utc_now_naive()  # Changed from utc_now() to utc_now_naive() for consistency
         cron = croniter(sync.cron_schedule, last_run_time)
         next_run = cron.get_next(datetime)  # Remove ensure_utc - keep it naive
+
+        # If the computed next_run is in the past (e.g., first run from epoch),
+        # recalculate from 'now' so we schedule in the future rather than triggering immediately
+        if next_run < now:
+            cron = croniter(sync.cron_schedule, now)
+            next_run = cron.get_next(datetime)
+
         logger.debug(
             f"Calculated next run for sync {sync.id} at {next_run.isoformat()} "
             f"(cron: {sync.cron_schedule})"
