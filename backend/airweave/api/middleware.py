@@ -345,8 +345,13 @@ async def airweave_exception_handler(request: Request, exc: AirweaveException) -
         ScheduleOperationException: 500,
     }
 
-    # Get status code from map, default to 500 for unknown exceptions
-    status_code = status_code_map.get(type(exc), 500)
+    # Get status code from map, checking for subclasses
+    # This ensures that subclasses of the mapped exceptions are properly handled
+    status_code = 500  # default
+    for exc_type, code in status_code_map.items():
+        if isinstance(exc, exc_type):
+            status_code = code
+            break
 
     return JSONResponse(status_code=status_code, content={"detail": str(exc)})
 

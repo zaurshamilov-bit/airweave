@@ -308,8 +308,10 @@ class SyncOrchestrator:
                         f"💾 Saved cursor data for sync {self.sync_context.sync.id}"
                     )
         except Exception as e:
-            self.sync_context.logger.warning(
-                f"Failed to save cursor data for sync {self.sync_context.sync.id}: {e}"
+            # Log at ERROR level since cursor save failures can affect incremental syncs
+            self.sync_context.logger.error(
+                f"Failed to save cursor data for sync {self.sync_context.sync.id}: {e}",
+                exc_info=True,
             )
 
     async def _handle_sync_failure(self, error: Exception) -> None:

@@ -1,6 +1,6 @@
 """Sync cursor model for storing incremental sync state."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import JSON, DateTime, ForeignKey, String
@@ -34,7 +34,7 @@ class SyncCursor(OrganizationBase):
 
     # Timestamp for tracking cursor updates
     last_updated: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
 
     # Relationship to Sync (one-to-one)

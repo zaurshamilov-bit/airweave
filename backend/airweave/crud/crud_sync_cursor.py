@@ -63,7 +63,11 @@ class CRUDSyncCursor(
             return await self.update(db, db_obj=existing_cursor, obj_in=obj_in, ctx=ctx)
         else:
             # Create new cursor
-            obj_in.sync_id = sync_id
+            # Handle both dict and Pydantic model inputs
+            if isinstance(obj_in, dict):
+                obj_in["sync_id"] = sync_id
+            else:
+                obj_in.sync_id = sync_id
             return await self.create(db, obj_in=obj_in, ctx=ctx)
 
     async def update_cursor_data(

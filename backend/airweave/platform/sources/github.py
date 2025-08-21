@@ -207,6 +207,11 @@ class GitHubSource(BaseSource):
             pushed_at: Repository pushed_at timestamp
             repo_name: Repository name
         """
+        # Check if cursor exists before updating
+        if not hasattr(self, "cursor") or self.cursor is None:
+            self.logger.debug("No cursor available, skipping cursor update")
+            return
+
         # Get the cursor field to use
         cursor_field = self.get_effective_cursor_field()
         if not cursor_field:

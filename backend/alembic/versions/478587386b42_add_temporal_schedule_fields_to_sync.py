@@ -28,7 +28,7 @@ def upgrade():
     # Add sync_type column to distinguish between full and incremental syncs
     op.add_column(
         "sync",
-        sa.Column("sync_type", sa.String(50), nullable=False, server_default="full")
+        sa.Column("sync_type", sa.String(50), nullable=False, server_default=sa.text("'full'"))
     )
 
     # Add minute_level_cron_schedule column for minute-level scheduling
