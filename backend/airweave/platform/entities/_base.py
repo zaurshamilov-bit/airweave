@@ -495,24 +495,35 @@ class ChunkEntity(BaseEntity):
         return used_key, f"* name: {self._clean_text(title)}"
 
     def _build_annotated_lines(self, used_title_key: Optional[str]) -> List[str]:
-        """Build annotated lines from fields marked as embeddable."""
+        """Build annotated lines from fields marked as embeddable.
+
+        If no fields are explicitly marked as embeddable, includes ALL fields
+        (except airweave_system_metadata) in the embeddable text.
+        """
         # Get embeddable fields from field metadata
         embeddable_field_names = self._get_embeddable_fields()
 
-        # If no explicit embeddable fields, use defaults
-        fields = (
-            embeddable_field_names
-            if embeddable_field_names
-            else [
-                "title",
-                "summary",
-                "description",
-                "notes",
-                "html_notes",
-                "content",
-                "text",
-            ]
-        )
+        if embeddable_field_names:
+            # Use explicitly marked embeddable fields
+            fields = embeddable_field_names
+        else:
+            # No explicit embeddable fields - include ALL fields
+            # This is important for polymorphic entities (e.g., PostgreSQL tables)
+            # where the schema is determined at runtime
+
+            # Only exclude system metadata and fields already handled elsewhere
+            excluded_fields = {
+                "airweave_system_metadata",  # System metadata should not be in embeddable text
+                "md_content",  # Handled separately in _build_content_lines
+                used_title_key,  # Already used in title line
+            }
+
+            # Get all field names from the model
+            all_fields = list(self.model_fields.keys())
+
+            # Filter out excluded fields
+            fields = [f for f in all_fields if f not in excluded_fields]
+
         lines: List[str] = []
         for field_name in fields:
             if field_name in ("md_title", used_title_key):
