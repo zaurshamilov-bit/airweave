@@ -9,7 +9,11 @@ from temporalio.worker import Worker
 from airweave.core.config import settings
 from airweave.core.logging import logger
 from airweave.platform.entities._base import ensure_file_entity_models
-from airweave.platform.temporal.activities import run_sync_activity, update_sync_job_status_activity
+from airweave.platform.temporal.activities import (
+    create_sync_job_activity,
+    run_sync_activity,
+    update_sync_job_status_activity,
+)
 from airweave.platform.temporal.client import temporal_client
 from airweave.platform.temporal.workflows import RunSourceConnectionWorkflow
 
@@ -39,7 +43,11 @@ class TemporalWorker:
                 client,
                 task_queue=task_queue,
                 workflows=[RunSourceConnectionWorkflow],
-                activities=[run_sync_activity, update_sync_job_status_activity],
+                activities=[
+                    run_sync_activity,
+                    update_sync_job_status_activity,
+                    create_sync_job_activity,
+                ],
                 workflow_runner=sandbox_config,
             )
 

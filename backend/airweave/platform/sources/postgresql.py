@@ -33,8 +33,8 @@ PG_TYPE_MAP = {
     "timestamp with time zone": datetime,
     "date": datetime,
     "time": datetime,
-    "json": Dict[str, Any],
-    "jsonb": Dict[str, Any],
+    "json": Any,  # JSON can be dict, list, or primitive
+    "jsonb": Any,  # JSONB can be dict, list, or primitive
 }
 
 
@@ -57,6 +57,7 @@ class PostgreSQLSource(BaseSource):
 
     def __init__(self):
         """Initialize the PostgreSQL source."""
+        super().__init__()  # Initialize BaseSource to get cursor support
         self.conn: Optional[asyncpg.Connection] = None
         self.entity_classes: Dict[str, Type[PolymorphicEntity]] = {}
 
@@ -80,6 +81,133 @@ class PostgreSQLSource(BaseSource):
         instance = cls()
         instance.config = credentials.model_dump()
         return instance
+
+    def get_default_cursor_field(self) -> Optional[str]:
+        """Get the default cursor field for PostgreSQL source.
+
+        PostgreSQL doesn't have a universal default cursor field since it depends
+        on the table schema. Common patterns are 'updated_at' or 'modified_at'.
+
+        Returns:
+            None - user must specify cursor field for PostgreSQL
+        """
+        # PostgreSQL requires user to specify cursor field
+        # since table schemas vary widely
+
+        # NOTE: the fact that the source does not have a default cursor field
+        # indicates that it should be set by the user
+
+        return None
+
+    def validate_cursor_field(self, cursor_field: str) -> None:
+        """Validate if the given cursor field is valid for PostgreSQL.
+
+        For PostgreSQL, we accept a JSON structure that maps tables to cursor fields.
+        Format: {"schema.table": "cursor_column", ...}
+        Or a single field name to use for all tables.
+
+        Args:
+            cursor_field: The cursor field specification to validate
+        """
+        # PostgreSQL accepts either:
+        # 1. A single column name (applies to all tables)
+        # 2. A JSON string mapping tables to columns
+        if cursor_field.startswith("{") and cursor_field.endswith("}"):
+            # Validate JSON format
+            try:
+                import json
+
+                cursor_map = json.loads(cursor_field)
+                if not isinstance(cursor_map, dict):
+                    raise ValueError(
+                        "Cursor field mapping must be a JSON object like: "
+                        '{"public.users": "updated_at", "public.orders": "modified_at"}'
+                    )
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON in cursor field mapping: {e}") from e
+        # Otherwise accept any string as a column name
+
+    def _get_cursor_data(self) -> Dict[str, Any]:
+        """Get cursor data from cursor.
+
+        Returns:
+            Cursor data dictionary, empty dict if no cursor exists
+        """
+        if self.cursor:
+            return self.cursor.cursor_data or {}
+        return {}
+
+    def _get_cursor_field_for_table(self, schema: str, table: str) -> Optional[str]:
+        """Get the cursor field to use for a specific table.
+
+        Args:
+            schema: Schema name
+            table: Table name
+
+        Returns:
+            The cursor field for this table, or None if not specified
+        """
+        cursor_field = self.get_effective_cursor_field()
+        if not cursor_field:
+            return None
+
+        # Check if cursor_field is a JSON mapping
+        if cursor_field.startswith("{") and cursor_field.endswith("}"):
+            try:
+                import json
+
+                cursor_map = json.loads(cursor_field)
+                # Try exact match first
+                table_key = f"{schema}.{table}"
+                if table_key in cursor_map:
+                    return cursor_map[table_key]
+                # Fall back to table name without schema
+                if table in cursor_map:
+                    return cursor_map[table]
+            except json.JSONDecodeError:
+                # If JSON parsing fails, treat as single field
+                pass
+
+        # Single field applies to all tables
+        return cursor_field
+
+    def _update_cursor_data(self, schema: str, table: str, cursor_value: Any):
+        """Update cursor data with the latest cursor value for a table.
+
+        Args:
+            schema: Schema name
+            table: Table name
+            cursor_value: Latest cursor value from the table
+        """
+        if not self.cursor:
+            return
+
+        # Store cursor value per table
+        cursor_key = f"{schema}.{table}"
+        if not self.cursor.cursor_data:
+            self.cursor.cursor_data = {}
+
+        # Convert datetime to ISO format string for JSON serialization
+        if isinstance(cursor_value, datetime):
+            cursor_value = cursor_value.isoformat()
+
+        # Store the maximum value seen for this table
+        existing_value = self.cursor.cursor_data.get(cursor_key)
+
+        # Handle comparison when existing value might be a string (ISO format)
+        if existing_value is not None:
+            # Convert existing string back to datetime for comparison if needed
+            if isinstance(existing_value, str) and isinstance(cursor_value, str):
+                # Both are ISO strings, compare as strings (works for ISO format)
+                should_update = cursor_value > existing_value
+            else:
+                should_update = cursor_value > existing_value
+        else:
+            should_update = True
+
+        if should_update:
+            self.cursor.cursor_data[cursor_key] = cursor_value
+            self.logger.debug(f"Updated cursor for table '{cursor_key}': {cursor_value}")
 
     async def _connect(self) -> None:
         """Establish database connection with timeout and error handling."""
@@ -271,11 +399,36 @@ class PostgreSQLSource(BaseSource):
         return processed_data
 
     async def _process_table_batch(
-        self, schema: str, table: str, entity_class: Type[PolymorphicEntity], batch: List
+        self,
+        schema: str,
+        table: str,
+        entity_class: Type[PolymorphicEntity],
+        batch: List,
+        cursor_field: Optional[str] = None,
     ) -> AsyncGenerator[ChunkEntity, None]:
-        """Process a batch of records from a table."""
+        """Process a batch of records from a table.
+
+        Args:
+            schema: Schema name
+            table: Table name
+            entity_class: Entity class for the table
+            batch: Batch of records to process
+            cursor_field: Field to track for cursor updates
+
+        Yields:
+            Entity instances
+        """
+        max_cursor_value = None
+
         for record in batch:
             data = dict(record)
+
+            # Track max cursor value if cursor field is specified
+            if cursor_field and cursor_field in data:
+                cursor_value = data[cursor_field]
+                if cursor_value is not None:
+                    if max_cursor_value is None or cursor_value > max_cursor_value:
+                        max_cursor_value = cursor_value
 
             # Simply try to convert all strings to JSON
             for key, value in data.items():
@@ -297,45 +450,156 @@ class PostgreSQLSource(BaseSource):
 
             yield entity_class(entity_id=entity_id, **processed_data)
 
+        # Update cursor with the max value from this batch
+        if cursor_field and max_cursor_value is not None:
+            self._update_cursor_data(schema, table, max_cursor_value)
+
+    def _prepare_cursor_value(self, last_cursor_value: Any) -> Any:
+        """Convert ISO string back to datetime for PostgreSQL query if needed."""
+        if last_cursor_value and isinstance(last_cursor_value, str):
+            try:
+                # Try to parse as ISO datetime string
+                from datetime import datetime
+
+                return datetime.fromisoformat(last_cursor_value)
+            except (ValueError, TypeError):
+                # If not a datetime string, use as-is (could be an integer ID, etc.)
+                pass
+        return last_cursor_value
+
+    def _log_sync_type(self, table_key: str, cursor_field: Optional[str], last_cursor_value: Any):
+        """Log the type of sync being performed for a table."""
+        if cursor_field and last_cursor_value:
+            self.logger.info(
+                f"Table {table_key}: INCREMENTAL sync using field '{cursor_field}' "
+                f"(changes after {last_cursor_value})"
+            )
+        elif cursor_field:
+            self.logger.info(
+                f"Table {table_key}: FULL sync (will track '{cursor_field}' for next sync)"
+            )
+        else:
+            self.logger.debug(f"Table {table_key}: FULL sync (no cursor field configured)")
+
+    def _build_table_query(
+        self,
+        schema: str,
+        table: str,
+        cursor_field: Optional[str],
+        last_cursor_value: Any,
+        batch_size: int,
+        offset: int,
+    ) -> tuple[str, Optional[Any]]:
+        """Build the query for fetching table data."""
+        if cursor_field and last_cursor_value:
+            # Incremental query - only get records updated after last sync
+            query = (
+                f'SELECT * FROM "{schema}"."{table}" '
+                f'WHERE "{cursor_field}" > $1 '
+                f'ORDER BY "{cursor_field}" '
+                f"LIMIT {batch_size} OFFSET {offset}"
+            )
+            return query, last_cursor_value
+        elif cursor_field:
+            # Full sync with cursor field - order by it for consistent results
+            query = (
+                f'SELECT * FROM "{schema}"."{table}" '
+                f'ORDER BY "{cursor_field}" '
+                f"LIMIT {batch_size} OFFSET {offset}"
+            )
+            return query, None
+        else:
+            # No cursor field, regular full sync
+            query = f'SELECT * FROM "{schema}"."{table}" LIMIT {batch_size} OFFSET {offset}'
+            return query, None
+
+    async def _process_table(
+        self,
+        schema: str,
+        table: str,
+        cursor_data: Dict[str, Any],
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Process a single table with incremental support.
+
+        Args:
+            schema: Schema name
+            table: Table name
+            cursor_data: Cursor data from previous syncs
+
+        Yields:
+            Entities from the table
+        """
+        # Create entity class if not already created
+        if f"{schema}.{table}" not in self.entity_classes:
+            self.entity_classes[f"{schema}.{table}"] = await self._create_entity_class(
+                schema, table
+            )
+
+        entity_class = self.entity_classes[f"{schema}.{table}"]
+        cursor_field = self._get_cursor_field_for_table(schema, table)
+        table_key = f"{schema}.{table}"
+
+        # Get and prepare last cursor value
+        last_cursor_value = cursor_data.get(table_key) if cursor_data else None
+        last_cursor_value = self._prepare_cursor_value(last_cursor_value)
+
+        # Log sync type
+        self._log_sync_type(table_key, cursor_field, last_cursor_value)
+
+        # Process table in batches
+        BATCH_SIZE = 50
+        offset = 0
+
+        while True:
+            # Build and execute query
+            query, query_param = self._build_table_query(
+                schema, table, cursor_field, last_cursor_value, BATCH_SIZE, offset
+            )
+
+            if query_param is not None:
+                records = await self.conn.fetch(query, query_param)
+            else:
+                records = await self.conn.fetch(query)
+
+            # Break if no more records
+            if not records:
+                if offset == 0 and cursor_field and last_cursor_value:
+                    self.logger.info(f"Table {table_key}: No new records since last sync")
+                break
+
+            # Process the batch with cursor tracking
+            async for entity in self._process_table_batch(
+                schema, table, entity_class, records, cursor_field
+            ):
+                yield entity
+
+            # Increment offset for next batch
+            offset += BATCH_SIZE
+
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
-        """Generate entities for all tables in specified schemas."""
+        """Generate entities for all tables in specified schemas with incremental support."""
         try:
             await self._connect()
             schema = self.config.get("schema", "public")
             tables = await self._get_table_list(schema)
 
+            # Get cursor data for incremental sync
+            cursor_data = self._get_cursor_data()
+
+            # Log sync type
+            if cursor_data:
+                self.logger.info(
+                    f"Found cursor data with {len(cursor_data)} table(s). "
+                    f"Will perform INCREMENTAL sync for changed records."
+                )
+            else:
+                self.logger.info("No cursor data found. Will perform FULL sync (first sync).")
+
             # Start a transaction
             async with self.conn.transaction():
                 for table in tables:
-                    # Create entity class if not already created
-                    if f"{schema}.{table}" not in self.entity_classes:
-                        self.entity_classes[f"{schema}.{table}"] = await self._create_entity_class(
-                            schema, table
-                        )
-
-                    entity_class = self.entity_classes[f"{schema}.{table}"]
-                    BATCH_SIZE = 50
-                    offset = 0
-
-                    while True:
-                        # Fetch records in batches using LIMIT and OFFSET
-                        batch_query = (
-                            f'SELECT * FROM "{schema}"."{table}" LIMIT {BATCH_SIZE} OFFSET {offset}'
-                        )
-                        records = await self.conn.fetch(batch_query)
-
-                        # Break if no more records
-                        if not records:
-                            break
-
-                        # Process the batch
-                        async for entity in self._process_table_batch(
-                            schema, table, entity_class, records
-                        ):
-                            yield entity
-
-                        # Increment offset for next batch
-                        offset += BATCH_SIZE
+                    async for entity in self._process_table(schema, table, cursor_data):
+                        yield entity
 
         finally:
             if self.conn:

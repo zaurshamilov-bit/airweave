@@ -46,6 +46,63 @@ class BaseSource:
         """
         self._token_manager = token_manager
 
+    def set_cursor(self, cursor) -> None:
+        """Set the cursor for this source.
+
+        Args:
+            cursor: SyncCursor instance for tracking sync progress
+        """
+        self._cursor = cursor
+
+    @property
+    def cursor(self):
+        """Get the cursor for this source."""
+        return getattr(self, "_cursor", None)
+
+    def get_default_cursor_field(self) -> Optional[str]:
+        """Get the default cursor field for this source.
+
+        Override this in subclasses to provide a default cursor field.
+        Return None if the source doesn't have a default (requires user to specify).
+
+        Returns:
+            The default cursor field name, or None if no default
+        """
+        return None
+
+    def get_effective_cursor_field(self) -> Optional[str]:
+        """Get the cursor field to use for this sync.
+
+        Returns the user-specified cursor field if available,
+        otherwise falls back to the source's default.
+
+        Returns:
+            The cursor field to use, or None if no cursor field is defined
+        """
+        # Use cursor field from cursor if specified
+        if self.cursor and hasattr(self.cursor, "cursor_field") and self.cursor.cursor_field:
+            return self.cursor.cursor_field
+
+        # Fall back to source default
+        return self.get_default_cursor_field()
+
+    def validate_cursor_field(self, cursor_field: str) -> None:
+        """Validate if the given cursor field is valid for this source.
+
+        Override this method in sources that have specific cursor field requirements.
+        By default, any cursor field is considered valid (sources like PostgreSQL
+        can use any column as cursor).
+
+        Args:
+            cursor_field: The cursor field to validate
+
+        Raises:
+            ValueError: If the cursor field is invalid for this source
+        """
+        # By default, accept any cursor field (e.g., for database sources)
+        # Sources with specific requirements should override this
+        pass
+
     async def get_access_token(self) -> Optional[str]:
         """Get a valid access token using the token manager.
 
