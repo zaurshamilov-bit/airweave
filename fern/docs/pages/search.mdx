@@ -174,7 +174,7 @@ Query interpretation is in beta. Extracted filters may occasionally be overly re
 Temporal relevance scoring adjusts document rankings based on creation or modification timestamps. Internally, a decay configuration is derived from the collection’s observed time span (subject to any active filter) and composed into Qdrant formula scoring. This preserves relevance while enforcing temporal preference. The penalty is defined as:
 
 ```
-final_score = similarity × (1 - recency_bias + recency_bias × recency_bias)
+final_score = similarity × (1 - recency_bias + recency_bias × decay)
 ```
 where `recency_bias ∈ [0,1]` maps oldest→0 and newest→1 within the observed span.
 

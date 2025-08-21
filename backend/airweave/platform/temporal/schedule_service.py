@@ -172,6 +172,97 @@ class TemporalScheduleService:
         )
         return schedule_id
 
+    async def create_daily_cleanup_schedule(
+        self,
+        sync_id: UUID,
+        cron_expression: str,  # e.g., "0 2 * * *" for 2 AM daily
+        sync_dict: dict,
+        sync_dag_dict: dict,
+        collection_dict: dict,
+        source_connection_dict: dict,
+        user_dict: dict,
+        db: AsyncSession,
+        ctx,
+        access_token: Optional[str] = None,
+    ) -> str:
+        """Create a daily cleanup schedule for full sync with deletion.
+
+        Args:
+            sync_id: The sync ID
+            cron_expression: Cron expression for daily schedule (e.g., "0 2 * * *")
+            sync_dict: The sync configuration as dict
+            sync_dag_dict: The sync DAG as dict
+            collection_dict: The collection as dict
+            source_connection_dict: The source connection as dict
+            user_dict: The current user as dict
+            db: Database session
+            ctx: Authentication context
+            access_token: Optional access token
+
+        Returns:
+            The schedule ID
+        """
+        client = await self._get_client()
+
+        # Create schedule ID using sync ID
+        schedule_id = f"daily-cleanup-{sync_id}"
+
+        # Check if schedule already exists
+        schedule_status = await self.check_schedule_exists_and_running(schedule_id)
+
+        if schedule_status["exists"]:
+            if schedule_status["running"]:
+                logger.info(
+                    f"Daily cleanup schedule {schedule_id} already exists and is running "
+                    f"for sync {sync_id}"
+                )
+                return schedule_id
+            else:
+                logger.info(
+                    f"Daily cleanup schedule {schedule_id} exists but is paused for sync {sync_id}."
+                )
+                return schedule_id
+
+        # Create schedule spec with daily cron expression
+        schedule_spec = ScheduleSpec(
+            cron_expressions=[cron_expression],
+            start_at=datetime.now(timezone.utc),
+            end_at=None,
+            jitter=timedelta(minutes=30),  # More jitter for daily runs
+        )
+
+        # Create the schedule in paused state
+        await client.create_schedule(
+            schedule_id,
+            Schedule(
+                action=ScheduleActionStartWorkflow(
+                    RunSourceConnectionWorkflow.run,
+                    args=[
+                        sync_dict,
+                        None,  # No pre-created sync job for scheduled runs
+                        sync_dag_dict,
+                        collection_dict,
+                        source_connection_dict,
+                        user_dict,
+                        access_token,
+                        True,  # force_full_sync=True for cleanup
+                    ],
+                    id=f"daily-cleanup-workflow-{sync_id}",
+                    task_queue=settings.TEMPORAL_TASK_QUEUE,
+                ),
+                spec=schedule_spec,
+                state=ScheduleState(
+                    note=f"Daily cleanup schedule for sync {sync_id} (paused initially)",
+                    paused=True,
+                ),
+            ),
+        )
+
+        logger.info(
+            f"Created daily cleanup schedule {schedule_id} for sync {sync_id} (paused initially)"
+        )
+        return schedule_id
+
     async def update_schedule(
         self,
         schedule_id: str,

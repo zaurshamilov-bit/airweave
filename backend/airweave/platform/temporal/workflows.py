@@ -53,6 +53,7 @@ class RunSourceConnectionWorkflow:
         sync_dict: Dict[str, Any],
         sync_job_dict: Optional[Dict[str, Any]],
         ctx_dict: Dict[str, Any],
+        force_full_sync: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Create sync job for scheduled runs or return existing one."""
         from airweave.platform.temporal.activities import create_sync_job_activity
@@ -61,11 +62,20 @@ class RunSourceConnectionWorkflow:
         if sync_job_dict is None:
             sync_id = sync_dict.get("id")
             try:
-                workflow.logger.info(f"Creating new sync job for scheduled run of sync {sync_id}")
+                workflow.logger.info(
+                    f"Creating new sync job for scheduled run of sync {sync_id} "
+                    f"(force_full_sync={force_full_sync})"
+                )
+                # For forced full sync (daily cleanup), use longer timeout to allow waiting
+                timeout = (
+                    timedelta(hours=1, minutes=5) if force_full_sync else timedelta(seconds=30)
+                )
+
                 sync_job_dict = await workflow.execute_activity(
                     create_sync_job_activity,
-                    args=[sync_id, ctx_dict],
-                    start_to_close_timeout=timedelta(seconds=30),
+                    args=[sync_id, ctx_dict, force_full_sync],
+                    start_to_close_timeout=timeout,
+                    heartbeat_timeout=timedelta(minutes=1) if force_full_sync else None,
                     retry_policy=RetryPolicy(
                         maximum_attempts=1,  # Don't retry if job already exists
                         initial_interval=timedelta(seconds=1),
@@ -90,6 +100,7 @@ class RunSourceConnectionWorkflow:
         source_connection_dict: Dict[str, Any],
         ctx_dict: Dict[str, Any],
         access_token: Optional[str] = None,
+        force_full_sync: bool = False,  # Force full sync with deletion
     ) -> None:
         """Run the source connection sync workflow.
 
@@ -101,11 +112,14 @@ class RunSourceConnectionWorkflow:
             source_connection_dict: The source connection as dict
             ctx_dict: The authentication context as dict
             access_token: Optional access token
+            force_full_sync: If True, forces a full sync with orphaned entity deletion
         """
         from airweave.platform.temporal.activities import run_sync_activity
 
         # Create sync job if needed (for scheduled runs)
-        sync_job_dict = await self._create_sync_job_if_needed(sync_dict, sync_job_dict, ctx_dict)
+        sync_job_dict = await self._create_sync_job_if_needed(
+            sync_dict, sync_job_dict, ctx_dict, force_full_sync
+        )
         if sync_job_dict is None:
             return  # Exit gracefully if we couldn't create a job
 
@@ -124,6 +138,7 @@ class RunSourceConnectionWorkflow:
                     source_connection_dict,
                     ctx_dict,
                     access_token,
+                    force_full_sync,
                 ],
                 start_to_close_timeout=timedelta(days=7),
                 heartbeat_timeout=timedelta(minutes=10),  # Fail if no heartbeat for 10 minutes

@@ -50,6 +50,7 @@ class SyncFactory:
         ctx: ApiContext,
         access_token: Optional[str] = None,
         max_workers: int = None,
+        force_full_sync: bool = False,
     ) -> SyncOrchestrator:
         """Create a dedicated orchestrator instance for a sync run.
 
@@ -66,6 +67,7 @@ class SyncFactory:
             ctx: The API context
             access_token: Optional token to use instead of stored credentials
             max_workers: Maximum number of concurrent workers (default: from settings)
+            force_full_sync: If True, forces a full sync with orphaned entity deletion
 
         Returns:
             A dedicated SyncOrchestrator instance
@@ -90,6 +92,7 @@ class SyncFactory:
             source_connection=source_connection,
             ctx=ctx,
             access_token=access_token,
+            force_full_sync=force_full_sync,
         )
         logger.debug(f"Sync context created in {time.time() - context_start:.2f}s")
 
@@ -131,6 +134,7 @@ class SyncFactory:
         source_connection: schemas.SourceConnection,
         ctx: ApiContext,
         access_token: Optional[str] = None,
+        force_full_sync: bool = False,
     ) -> SyncContext:
         """Create a sync context.
 
@@ -143,6 +147,7 @@ class SyncFactory:
             source_connection: The source connection
             ctx: The API context
             access_token: Optional token to use instead of stored credentials
+            force_full_sync: If True, forces a full sync with orphaned entity deletion
 
         Returns:
             SyncContext object with all required components
@@ -202,8 +207,26 @@ class SyncFactory:
         )
 
         # Load existing cursor data and field from database
-        cursor_data = await sync_cursor_service.get_cursor_data(db=db, sync_id=sync.id, ctx=ctx)
+        # IMPORTANT: When force_full_sync is True (daily cleanup), we intentionally
+        # skip loading cursor DATA (but keep the field) to force a full sync.
+        # This ensures we see ALL entities in the source, not just changed ones,
+        # for accurate orphaned entity detection. We still track and save cursor
+        # values during the sync for the next incremental sync.
+
+        # Always load the cursor field (needed for tracking)
         cursor_field = await sync_cursor_service.get_cursor_field(db=db, sync_id=sync.id, ctx=ctx)
+
+        if force_full_sync:
+            logger.info(
+                "🔄 FORCE FULL SYNC: Skipping cursor data to ensure all entities are fetched "
+                "for accurate orphaned entity cleanup. Will still track cursor for next sync."
+            )
+            cursor_data = None  # Force full sync by not providing previous cursor data
+        else:
+            # Normal incremental sync - load cursor data
+            cursor_data = await sync_cursor_service.get_cursor_data(db=db, sync_id=sync.id, ctx=ctx)
+            if cursor_data:
+                logger.info(f"📊 Incremental sync: Using cursor data for {len(cursor_data)} tables")
 
         cursor = SyncCursor(sync_id=sync.id, cursor_data=cursor_data, cursor_field=cursor_field)
 
@@ -227,6 +250,7 @@ class SyncFactory:
             logger=logger,
             guard_rail=guard_rail,
             white_label=white_label,
+            force_full_sync=force_full_sync,
         )
 
         # Set cursor on source so it can access cursor data

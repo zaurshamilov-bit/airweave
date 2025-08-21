@@ -178,15 +178,31 @@ class SyncOrchestrator:
             # - If cursor data exists, this is an incremental sync (we've synced before)
             # - If no cursor data, this is the first/full sync
 
+            # Check if we should do cleanup
+            # Cleanup happens if:
+            # 1. force_full_sync is True (daily cleanup run), OR
+            # 2. No cursor data exists (first sync or reset)
             has_cursor_data = bool(
                 hasattr(self.sync_context, "cursor")
                 and self.sync_context.cursor
                 and self.sync_context.cursor.cursor_data
             )
 
-            if not stream_error and not has_cursor_data:
+            should_cleanup = self.sync_context.force_full_sync or not has_cursor_data
+
+            if not stream_error and should_cleanup:
                 try:
-                    self.sync_context.logger.info("🧹 Starting orphaned entity cleanup phase")
+                    if self.sync_context.force_full_sync:
+                        self.sync_context.logger.info(
+                            "🧹 Starting orphaned entity cleanup phase (FORCED FULL SYNC - "
+                            "daily cleanup schedule). All source entities were fetched to "
+                            "accurately identify orphaned entities."
+                        )
+                    else:
+                        self.sync_context.logger.info(
+                            "🧹 Starting orphaned entity cleanup phase "
+                            "(first sync - no cursor data)"
+                        )
                     await self.entity_processor.cleanup_orphaned_entities(self.sync_context)
                 except Exception as cleanup_error:
                     self.sync_context.logger.error(
@@ -194,9 +210,9 @@ class SyncOrchestrator:
                         exc_info=True,
                     )
                     raise cleanup_error
-            elif has_cursor_data:
+            elif has_cursor_data and not self.sync_context.force_full_sync:
                 self.sync_context.logger.info(
-                    "🧹 Skipping orphaned entity cleanup for incremental sync "
+                    "⏩ Skipping orphaned entity cleanup for INCREMENTAL sync "
                     "(cursor data exists, only changed entities are processed)"
                 )
 
@@ -260,8 +276,17 @@ class SyncOrchestrator:
         )
 
     async def _save_cursor_data(self) -> None:
-        """Save cursor data to database if it exists (for incremental syncs)."""
+        """Save cursor data to database if it exists.
+
+        Even for forced full syncs, we save the cursor data so the next
+        incremental sync knows where to start from.
+        """
         if not hasattr(self.sync_context, "cursor") or not self.sync_context.cursor.cursor_data:
+            if self.sync_context.force_full_sync:
+                self.sync_context.logger.info(
+                    "📝 No cursor data to save from forced full sync "
+                    "(source may not support cursor tracking)"
+                )
             return
 
         try:
@@ -273,9 +298,15 @@ class SyncOrchestrator:
                     ctx=self.sync_context.ctx,
                     cursor_field=self.sync_context.cursor.cursor_field,
                 )
-                self.sync_context.logger.info(
-                    f"Saved cursor data for sync {self.sync_context.sync.id}"
-                )
+                if self.sync_context.force_full_sync:
+                    self.sync_context.logger.info(
+                        f"💾 Saved cursor data from forced full sync for sync "
+                        f"{self.sync_context.sync.id} - next incremental sync will start from here"
+                    )
+                else:
+                    self.sync_context.logger.info(
+                        f"💾 Saved cursor data for sync {self.sync_context.sync.id}"
+                    )
         except Exception as e:
             self.sync_context.logger.warning(
                 f"Failed to save cursor data for sync {self.sync_context.sync.id}: {e}"

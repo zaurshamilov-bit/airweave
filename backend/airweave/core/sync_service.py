@@ -75,6 +75,7 @@ class SyncService:
         source_connection: schemas.Connection,
         ctx: ApiContext,
         access_token: Optional[str] = None,
+        force_full_sync: bool = False,
     ) -> schemas.Sync:
         """Run a sync.
 
@@ -88,6 +89,7 @@ class SyncService:
             ctx (ApiContext): The API context.
             access_token (Optional[str]): Optional access token to use
                 instead of stored credentials.
+            force_full_sync (bool): If True, forces a full sync with orphaned entity deletion.
 
         Returns:
         -------
@@ -105,6 +107,7 @@ class SyncService:
                     source_connection=source_connection,
                     ctx=ctx,
                     access_token=access_token,
+                    force_full_sync=force_full_sync,
                 )
         except Exception as e:
             logger.error(f"Error during sync orchestrator creation: {e}")

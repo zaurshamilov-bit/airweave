@@ -57,6 +57,7 @@ class SyncContext:
     logger: ContextualLogger
 
     white_label: Optional[schemas.WhiteLabel] = None
+    force_full_sync: bool = False
 
     def __init__(
         self,
@@ -78,6 +79,7 @@ class SyncContext:
         guard_rail: GuardRailService,
         logger: ContextualLogger,
         white_label: Optional[schemas.WhiteLabel] = None,
+        force_full_sync: bool = False,
     ):
         """Initialize the sync context."""
         self.source = source
@@ -98,3 +100,4 @@ class SyncContext:
         self.guard_rail = guard_rail
         self.white_label = white_label
         self.logger = logger
+        self.force_full_sync = force_full_sync
