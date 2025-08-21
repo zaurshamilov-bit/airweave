@@ -81,27 +81,28 @@ def show_backend_logs(lines: int = 50) -> None:
 
         # First check what containers are running
         ps_result = subprocess.run(
-            ["docker", "ps", "--format", "{{.Names}}"],
-            capture_output=True,
-            text=True,
-            timeout=5
+            ["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True, timeout=5
         )
 
         if ps_result.returncode == 0:
-            containers = ps_result.stdout.strip().split('\n')
+            containers = ps_result.stdout.strip().split("\n")
             backend_container = None
 
             # Look for backend container (might have different names)
             for container in containers:
-                if 'backend' in container.lower() and 'airweave' in container.lower():
+                if "backend" in container.lower() and "airweave" in container.lower():
                     backend_container = container
                     break
 
             if not backend_container:
                 # Fallback to default name
                 backend_container = "airweave-backend"
-                print(f"⚠️  Backend container not found in running containers, trying default name: {backend_container}")
-                print(f"   Running containers: {', '.join(containers) if containers[0] else 'none'}")
+                print(
+                    f"⚠️  Backend container not found in running containers, trying default name: {backend_container}"
+                )
+                print(
+                    f"   Running containers: {', '.join(containers) if containers[0] else 'none'}"
+                )
         else:
             backend_container = "airweave-backend"
             print("⚠️  Could not list containers, using default name")
@@ -133,9 +134,15 @@ def show_backend_logs(lines: int = 50) -> None:
             # Check container status specifically
             print(f"\n🔍 Checking status of {backend_container}:")
             inspect_result = subprocess.run(
-                ["docker", "inspect", backend_container, "--format", "{{.State.Status}} - Exit Code: {{.State.ExitCode}} - Error: {{.State.Error}}"],
+                [
+                    "docker",
+                    "inspect",
+                    backend_container,
+                    "--format",
+                    "{{.State.Status}} - Exit Code: {{.State.ExitCode}} - Error: {{.State.Error}}",
+                ],
                 capture_output=True,
-                text=True
+                text=True,
             )
             if inspect_result.returncode == 0:
                 print(f"Container state: {inspect_result.stdout.strip()}")
@@ -143,10 +150,7 @@ def show_backend_logs(lines: int = 50) -> None:
             # Try to get logs anyway, even if container is in error state
             print(f"\n📋 Attempting to force get logs from {backend_container}:")
             force_logs = subprocess.run(
-                ["docker", "logs", backend_container],
-                capture_output=True,
-                text=True,
-                timeout=10
+                ["docker", "logs", backend_container], capture_output=True, text=True, timeout=10
             )
             if force_logs.stdout or force_logs.stderr:
                 if force_logs.stdout:
@@ -160,8 +164,11 @@ def show_backend_logs(lines: int = 50) -> None:
 
             # Check all containers
             print("\n🔍 All container statuses:")
-            all_ps = subprocess.run(["docker", "ps", "-a", "--format", "table {{.Names}}\t{{.Status}}\t{{.Image}}"],
-                                  capture_output=True, text=True)
+            all_ps = subprocess.run(
+                ["docker", "ps", "-a", "--format", "table {{.Names}}\t{{.Status}}\t{{.Image}}"],
+                capture_output=True,
+                text=True,
+            )
             if all_ps.returncode == 0:
                 print(all_ps.stdout)
 
@@ -188,7 +195,7 @@ def wait_for_health(url: str, timeout: int = 300, show_logs_interval: int = 30) 
     last_log_time = 0
 
     # Check if we're in CI environment
-    is_ci = os.environ.get('GITHUB_ACTIONS') == 'true' or os.environ.get('CI') == 'true'
+    is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
     if is_ci:
         print("🔍 Running in CI environment - will show logs more frequently")
         show_logs_interval = 15  # Show logs more frequently in CI
@@ -293,7 +300,7 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
 
         # Monitor output
         services_started = False
-        is_ci = os.environ.get('GITHUB_ACTIONS') == 'true' or os.environ.get('CI') == 'true'
+        is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
 
         # In CI, show more detailed output
         if is_ci:
@@ -309,11 +316,16 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
                 break
 
             # Check for various error indicators
-            if any(err in line.lower() for err in ["error:", "failed", "exception", "cannot", "unable", "unhealthy"]):
+            if any(
+                err in line.lower()
+                for err in ["error:", "failed", "exception", "cannot", "unable", "unhealthy"]
+            ):
                 print(f"⚠️  Potential error detected: {line.strip()}")
 
                 # If backend container failed, immediately try to get its logs
-                if "airweave-backend" in line and any(err in line.lower() for err in ["error", "unhealthy", "failed"]):
+                if "airweave-backend" in line and any(
+                    err in line.lower() for err in ["error", "unhealthy", "failed"]
+                ):
                     print("\n🚨 Backend container error detected - getting logs immediately:")
                     show_backend_logs(lines=100)
 
@@ -324,20 +336,23 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
                             ["docker", "inspect", "airweave-backend"],
                             capture_output=True,
                             text=True,
-                            timeout=5
+                            timeout=5,
                         )
                         if inspect_result.returncode == 0:
                             import json
+
                             container_data = json.loads(inspect_result.stdout)[0]
                             state = container_data.get("State", {})
                             print(f"  Status: {state.get('Status', 'unknown')}")
                             print(f"  Running: {state.get('Running', False)}")
                             print(f"  Exit Code: {state.get('ExitCode', 'N/A')}")
                             print(f"  Error: {state.get('Error', 'None')}")
-                            print(f"  Health Status: {state.get('Health', {}).get('Status', 'N/A')}")
+                            print(
+                                f"  Health Status: {state.get('Health', {}).get('Status', 'N/A')}"
+                            )
 
                             # Show last health check log if available
-                            health_log = state.get('Health', {}).get('Log', [])
+                            health_log = state.get("Health", {}).get("Log", [])
                             if health_log:
                                 print(f"  Last health check: {health_log[-1].get('Output', 'N/A')}")
                     except Exception as e:
@@ -351,7 +366,7 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
                         ["docker", "ps", "--format", "table {{.Names}}\t{{.Status}}"],
                         capture_output=True,
                         text=True,
-                        timeout=5
+                        timeout=5,
                     )
                     if docker_ps.returncode == 0:
                         print("\n📊 Current container status:")
@@ -376,7 +391,7 @@ def start_local_services(openai_api_key: Optional[str] = None) -> bool:
                     ["docker", "ps", "-a", "--format", "table {{.Names}}\t{{.Status}}\t{{.Image}}"],
                     capture_output=True,
                     text=True,
-                    timeout=5
+                    timeout=5,
                 )
                 if ps_result.returncode == 0:
                     print(ps_result.stdout)
@@ -431,7 +446,7 @@ def setup_environment(env: str, openai_api_key: Optional[str] = None) -> Optiona
     api_url = get_api_url(env)
 
     # Debug info for CI
-    is_ci = os.environ.get('GITHUB_ACTIONS') == 'true' or os.environ.get('CI') == 'true'
+    is_ci = os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
     if is_ci:
         print("\n🔍 CI Environment Debug Info:")
         print(f"  - Running in GitHub Actions: {os.environ.get('GITHUB_ACTIONS', 'false')}")
@@ -441,7 +456,9 @@ def setup_environment(env: str, openai_api_key: Optional[str] = None) -> Optiona
         try:
             docker_version = subprocess.run(["docker", "--version"], capture_output=True, text=True)
             print(f"    {docker_version.stdout.strip()}")
-            docker_compose_version = subprocess.run(["docker", "compose", "version"], capture_output=True, text=True)
+            docker_compose_version = subprocess.run(
+                ["docker", "compose", "version"], capture_output=True, text=True
+            )
             print(f"    {docker_compose_version.stdout.strip()}")
         except Exception as e:
             print(f"    Error checking Docker: {e}")
@@ -814,7 +831,6 @@ def test_source_connections(
         "collection": collection_id,
         "sync_immediately": False,
         "auth_fields": {"api_key": stripe_api_key},
-        "cron_schedule": "0 */6 * * *",  # Every 6 hours
     }
 
     # Use correct endpoint with hyphen
@@ -871,7 +887,7 @@ def test_source_connections(
 
     conn_detail = response.json()
     assert conn_detail["auth_fields"] == "********", "Auth fields should be hidden by default"
-    assert conn_detail["cron_schedule"] == "0 */6 * * *", "Cron schedule mismatch"
+    assert conn_detail["cron_schedule"] is None, "Cron schedule mismatch"
     assert "next_scheduled_run" in conn_detail, "Missing next_scheduled_run field"
 
     print("  ✓ Source connection retrieved with hidden auth fields")
