@@ -242,6 +242,31 @@ class GoogleDriveSource(BaseSource):
             f"{page_count} pages ({context})\n\n"
         )
 
+    def _get_export_format_and_extension(self, mime_type: str) -> tuple[str, str]:
+        """Get the appropriate export MIME type and file extension for Google native files.
+
+        Returns:
+            tuple: (export_mime_type, file_extension)
+        """
+        # Mapping of Google MIME types to their corresponding export formats
+        google_export_map = {
+            "application/vnd.google-apps.document": (
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".docx",
+            ),
+            "application/vnd.google-apps.spreadsheet": (
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ".xlsx",
+            ),
+            "application/vnd.google-apps.presentation": (
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                ".pptx",
+            ),
+        }
+
+        # Return the specific format if available, otherwise fallback to PDF
+        return google_export_map.get(mime_type, ("application/pdf", ".pdf"))
+
     def _build_file_entity(self, file_obj: Dict) -> Optional[GoogleDriveFileEntity]:
         """Helper to build a GoogleDriveFileEntity from a file API response object.
 
@@ -254,12 +279,17 @@ class GoogleDriveSource(BaseSource):
         file_name = file_obj.get("name", "Untitled")
 
         if file_obj.get("mimeType", "").startswith("application/vnd.google-apps."):
-            # For Google native files, need export URL
-            download_url = f"https://www.googleapis.com/drive/v3/files/{file_obj['id']}/export?mimeType=application/pdf"
+            # For Google native files, get the appropriate export format
+            export_mime_type, file_extension = self._get_export_format_and_extension(
+                file_obj.get("mimeType", "")
+            )
 
-            # Add .pdf extension if it's not already there for Google native files
-            if not file_name.lower().endswith(".pdf"):
-                file_name = f"{file_name}.pdf"
+            # Create export URL with the appropriate MIME type
+            download_url = f"https://www.googleapis.com/drive/v3/files/{file_obj['id']}/export?mimeType={export_mime_type}"
+
+            # Add the appropriate extension if it's not already there
+            if not file_name.lower().endswith(file_extension):
+                file_name = f"{file_name}{file_extension}"
 
         elif not file_obj.get("trashed", False):
             # For regular files, use direct download or webContentLink
@@ -327,6 +357,7 @@ class GoogleDriveSource(BaseSource):
                     if file_entity.download_url:
                         # Note: process_file_entity now uses the token manager automatically
                         processed_entity = await self.process_file_entity(file_entity=file_entity)
+                        print(processed_entity)
 
                         # Yield the entity even if skipped - the entity processor will handle it
                         if processed_entity:

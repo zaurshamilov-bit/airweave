@@ -763,6 +763,10 @@ class FileEntity(BaseEntity):
     metadata: Optional[Dict[str, Any]] = Field(
         default_factory=dict, description="Additional metadata about the file"
     )
+    file_type: Optional[str] = Field(
+        None,
+        description="Human-readable file type (e.g., google_doc, google_slides, pdf, etc.)",
+    )
 
     # Override to use FileSystemMetadata
     airweave_system_metadata: Optional[FileSystemMetadata] = Field(
@@ -862,6 +866,10 @@ class FileEntity(BaseEntity):
                 Optional[str],
                 Field(None, description="URL of the parent document if available"),
             ),
+            "parent_file_type": (
+                Optional[str],
+                Field(None, description="File type of the parent document if available"),
+            ),
         }
 
         chunk_model = create_model(
@@ -924,6 +932,10 @@ class FileEntity(BaseEntity):
             "md_parent_url": (
                 Optional[str],
                 Field(None, description="URL of the parent document if available"),
+            ),
+            "parent_file_type": (
+                Optional[str],
+                Field(None, description="File type of the parent document if available"),
             ),
         }
 
