@@ -4,6 +4,7 @@ name: Build Application and Push Docker Image
 on:
   push:
     branches: ["main"]
+    tags: ["v*"]
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME_BACKEND: ${{ github.repository }}-backend
@@ -35,8 +36,6 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
         id: push-backend
@@ -52,8 +51,6 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
         id: push-frontend
