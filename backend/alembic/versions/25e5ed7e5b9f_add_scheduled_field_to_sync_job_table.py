@@ -22,10 +22,11 @@ def upgrade():
 
     op.drop_index(op.f("ix_sync_sync_type"), table_name="sync")
     op.drop_index(op.f("ix_sync_temporal_schedule_id"), table_name="sync")
-    # Add column as nullable first, set default for existing rows, then make it non-nullable
-    op.add_column("sync_job", sa.Column("scheduled", sa.Boolean(), nullable=True))
-    op.execute("UPDATE sync_job SET scheduled = FALSE WHERE scheduled IS NULL")
-    op.alter_column("sync_job", "scheduled", nullable=False, server_default=sa.text("FALSE"))
+    # Add column with server_default to ensure no NULLs during migration
+    op.add_column(
+        "sync_job",
+        sa.Column("scheduled", sa.Boolean(), nullable=False, server_default=sa.text("FALSE")),
+    )
     # ### end Alembic commands ###
 
 
