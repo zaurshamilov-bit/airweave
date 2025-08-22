@@ -20,6 +20,7 @@ from airweave.models.integration_credential import IntegrationType
 from airweave.platform.auth.schemas import AuthType, OAuth2TokenResponse
 from airweave.platform.auth.services import oauth2_service
 from airweave.platform.auth.settings import integration_settings
+from airweave.platform.auth.state import make_state
 from airweave.platform.configs.auth import OAuth2AuthConfig, OAuth2BYOCAuthConfig
 from airweave.platform.locator import resource_locator
 
@@ -1152,8 +1153,13 @@ class SourceConnectionService:
                 detail=f"Source {source_short_name} does not support OAuth2 authentication",
             )
 
+        # Add source shortname in state
+        state = make_state(
+            {"short_name": source_short_name}
+        )  # add anything else you want to round-trip
+
         # Generate the authorization URL
-        auth_url = await oauth2_service.generate_auth_url(oauth2_settings, client_id)
+        auth_url = await oauth2_service.generate_auth_url(oauth2_settings, client_id, state)
 
         # Return as schema
         return schemas.OAuth2AuthUrl(url=auth_url)
