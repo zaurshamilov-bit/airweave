@@ -24,8 +24,15 @@ Usage:
 import sys
 import os
 
-# Add the current directory to Python path to enable imports
+# Add both the current directory and backend directory to Python path
 current_dir = os.path.dirname(os.path.abspath(__file__))
+backend_dir = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
+
+# Add backend directory first (for tests.helpers imports)
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
+# Add current directory (for public_api_tests imports)
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 

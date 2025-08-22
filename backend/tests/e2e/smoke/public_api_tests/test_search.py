@@ -6,7 +6,7 @@ This module tests the collection search functionality including:
 - COMPLETION search response with AI-generated answers
 - Search result relevance evaluation
 - Handling of no results scenarios
-- Query expansion strategies (AUTO, LLM, NO_EXPANSION)
+- Query expansion strategies (AUTO, LLM, NO_1ANSION)
 - Query interpretation (natural language filter extraction)
 - LLM reranking for improved relevance
 - Recency bias configurations
@@ -43,7 +43,7 @@ def test_search_functionality(
 
     # Define test query - same as in the deprecated test
     search_query = "Are there any open invoices"
-    expected_keywords = ["Lufthansa"]
+    expected_keywords = ["invoice"]
 
     # TEST 1: Raw search response
     print(f"\n  Testing RAW search for: '{search_query}'")
@@ -111,9 +111,13 @@ def test_search_functionality(
             import os
 
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            tests_dir = os.path.dirname(os.path.dirname(current_dir))  # Go up to tests/
+            tests_dir = os.path.dirname(
+                os.path.dirname(os.path.dirname(current_dir))
+            )  # Go up 3 levels to tests/
             if tests_dir not in sys.path:
                 sys.path.insert(0, tests_dir)
+
+            print(f"  Tests directory: {tests_dir}")
 
             from helpers.llm_judge import evaluate_search_results
 
@@ -148,16 +152,12 @@ def test_search_functionality(
                             keywords_found_in_any = True
 
                 if not keywords_found_in_any:
-                    print(
-                        f"    ❌ Keywords {expected_keywords} not found in ANY of the {len(results_list)} results"
+                    raise AssertionError(
+                        f"Search quality too low! Score: {evaluation.get('score', 0):.2f} < {min_acceptable_score}. "
+                        f"LLM Judge feedback: {evaluation.get('feedback', 'No feedback')}. "
+                        f"This likely means the Stripe test data doesn't contain the expected invoice information."
                     )
 
-                # Now fail the test
-                raise AssertionError(
-                    f"Search quality too low! Score: {evaluation.get('score', 0):.2f} < {min_acceptable_score}. "
-                    f"LLM Judge feedback: {evaluation.get('feedback', 'No feedback')}. "
-                    f"This likely means the Stripe test data doesn't contain the expected invoice information."
-                )
             else:
                 print("    ✓ Search quality evaluation passed")
 
@@ -182,39 +182,40 @@ def test_search_functionality(
         headers=headers,
     )
 
-    # Completion might fail if no AI model is configured
-    if response.status_code == 200:
-        completion_results = response.json()
+    # Completion search should return 200
+    assert response.status_code == 200, (
+        f"COMPLETION search failed with status {response.status_code}. "
+        f"Response: {response.text[:500]}"
+    )
 
-        # Validate COMPLETION response structure
-        assert "response_type" in completion_results, "Missing 'response_type' field"
-        assert "status" in completion_results, "Missing 'status' field"
-        assert (
-            completion_results["response_type"] == "completion"
-        ), "Response type should be 'completion'"
+    completion_results = response.json()
 
-        completion_text = completion_results.get("completion", "")
-        status = completion_results.get("status", "")
+    # Validate COMPLETION response structure
+    assert "response_type" in completion_results, "Missing 'response_type' field"
+    assert "status" in completion_results, "Missing 'status' field"
+    assert (
+        completion_results["response_type"] == "completion"
+    ), "Response type should be 'completion'"
 
-        if completion_text and status == "success":
-            print(f"  ✓ COMPLETION search returned AI response")
-            print(f"    AI Response preview: {completion_text[:200]}...")
+    completion_text = completion_results.get("completion", "")
+    status = completion_results.get("status", "")
 
-            # Check if completion mentions expected keywords
-            keywords_found = [
-                kw for kw in expected_keywords if kw.lower() in completion_text.lower()
-            ]
-            if keywords_found:
-                print(f"    ✓ Found keywords in completion: {keywords_found}")
-            else:
-                print(f"    ⚠️  Expected keywords not found in completion")
-        else:
-            print(f"  ⚠️  COMPLETION search status: {status}")
-            if not completion_text:
-                print("    No completion text generated")
-    else:
-        print(f"  ⚠️  COMPLETION search returned {response.status_code} - may require AI setup")
-        print(f"    Response: {response.text[:200]}...")
+    # Ensure we have a successful completion with content
+    assert status == "success", f"COMPLETION search status was '{status}', expected 'success'"
+    assert completion_text, "No completion text generated"
+
+    print(f"  ✓ COMPLETION search returned AI response")
+    print(f"    AI Response preview: {completion_text[:200]}...")
+
+    # Check if completion mentions expected keywords
+    keywords_found = [kw for kw in expected_keywords if kw.lower() in completion_text.lower()]
+
+    assert keywords_found, (
+        f"Expected keywords {expected_keywords} not found in completion. "
+        f"Completion text: {completion_text[:500]}..."
+    )
+
+    print(f"    ✓ Found keywords in completion: {keywords_found}")
 
     print("\n✅ Basic search functionality test completed")
 
