@@ -84,19 +84,47 @@ def test_query_expansion_strategies(api_url: str, headers: dict, collection_id: 
             headers=headers,
         )
 
-        if response.status_code == 200:
-            results = response.json()
-            num_results = len(results.get("results", []))
-            print(f"      ✓ {strategy}: {num_results} results returned")
+        # Assert successful response
+        assert (
+            response.status_code == 200
+        ), f"Search failed for {strategy}: {response.status_code} - {response.text}"
 
-            # AUTO and LLM should generally return more diverse results
-            if strategy in ["auto", "llm"] and num_results > 0:
-                # Check if results have varied scores (indicating query expansion worked)
-                scores = [r.get("score", 0) for r in results.get("results", [])]
-                score_variance = max(scores) - min(scores) if scores else 0
-                print(f"      Score variance: {score_variance:.4f}")
-        else:
-            print(f"      ⚠️  {strategy} returned {response.status_code}: {response.text[:100]}")
+        results = response.json()
+
+        # Assert response structure
+        assert "results" in results, f"Missing 'results' field for {strategy}"
+        assert "response_type" in results, f"Missing 'response_type' field for {strategy}"
+        assert "status" in results, f"Missing 'status' field for {strategy}"
+        assert results["response_type"] == "raw", f"Wrong response_type for {strategy}"
+
+        num_results = len(results.get("results", []))
+        print(f"      ✓ {strategy}: {num_results} results returned")
+
+        # For strategies that should work, assert we get some results (unless data is empty)
+        if strategy in ["auto", "llm"] and num_results > 0:
+            # Check if results have varied scores (indicating query expansion worked)
+            scores = [r.get("score", 0) for r in results.get("results", [])]
+            assert len(scores) > 0, f"No scores returned for {strategy}"
+
+            score_variance = max(scores) - min(scores) if scores else 0
+            print(f"      Score variance: {score_variance:.4f}")
+
+            # For expansion strategies, we expect some score variance (not all identical)
+            if len(scores) > 1:
+                # Allow for some tolerance in score variance for expansion strategies
+                # This is a soft assertion - expansion may not always create variance
+                if score_variance == 0:
+                    print(
+                        f"      Note: No score variance for {strategy} - expansion may not have been effective"
+                    )
+
+        # Assert each result has required fields
+        for i, result in enumerate(results.get("results", [])):
+            assert "payload" in result, f"Result {i} missing 'payload' field for {strategy}"
+            assert "score" in result, f"Result {i} missing 'score' field for {strategy}"
+            assert isinstance(
+                result["score"], (int, float)
+            ), f"Score is not numeric for {strategy} result {i}"
 
 
 def test_query_interpretation(api_url: str, headers: dict, collection_id: str) -> None:
@@ -139,31 +167,57 @@ def test_query_interpretation(api_url: str, headers: dict, collection_id: str) -
             headers=headers,
         )
 
-        if response.status_code == 200:
-            results = response.json()
-            num_results = len(results.get("results", []))
-            status = results.get("status", "")
-            print(
-                f"      ✓ Interpretation {'ON' if test_case['enable_query_interpretation'] else 'OFF'}: "
-            )
-            print(f"        {num_results} results, status: {status}")
+        # Assert successful response
+        assert (
+            response.status_code == 200
+        ), f"Query interpretation test failed: {response.status_code} - {response.text}"
 
-            # When interpretation is on, results should be more focused
-            if num_results > 0 and test_case["enable_query_interpretation"]:
-                # Check if Lufthansa appears in results when searching for it
-                if "Lufthansa" in test_case["query"]:
-                    lufthansa_found = any(
-                        "lufthansa" in json.dumps(r.get("payload", {})).lower()
-                        for r in results.get("results", [])
-                    )
-                    if lufthansa_found:
-                        print("        ✓ Found Lufthansa-related results (filter likely applied)")
-                    else:
-                        print(
-                            "        ⚠️  No Lufthansa results (filter may not have been extracted)"
-                        )
-        else:
-            print(f"      ⚠️  Request failed: {response.status_code}")
+        results = response.json()
+
+        # Assert response structure
+        assert "results" in results, "Missing 'results' field in query interpretation response"
+        assert (
+            "response_type" in results
+        ), "Missing 'response_type' field in query interpretation response"
+        assert "status" in results, "Missing 'status' field in query interpretation response"
+        assert (
+            results["response_type"] == "raw"
+        ), "Wrong response_type in query interpretation response"
+
+        num_results = len(results.get("results", []))
+        status = results.get("status", "")
+        print(
+            f"      ✓ Interpretation {'ON' if test_case['enable_query_interpretation'] else 'OFF'}: "
+        )
+        print(f"        {num_results} results, status: {status}")
+
+        # Assert status is valid
+        valid_statuses = ["success", "no_results", "no_relevant_results"]
+        assert (
+            status in valid_statuses
+        ), f"Invalid status '{status}' in query interpretation response"
+
+        # Assert each result has required structure
+        for i, result in enumerate(results.get("results", [])):
+            assert "payload" in result, f"Query interpretation result {i} missing 'payload' field"
+            assert "score" in result, f"Query interpretation result {i} missing 'score' field"
+            assert isinstance(
+                result["score"], (int, float)
+            ), f"Query interpretation score is not numeric for result {i}"
+
+        # When interpretation is on, results should be more focused
+        if num_results > 0 and test_case["enable_query_interpretation"]:
+            # Check if Lufthansa appears in results when searching for it
+            if "Lufthansa" in test_case["query"]:
+                lufthansa_found = any(
+                    "lufthansa" in json.dumps(r.get("payload", {})).lower()
+                    for r in results.get("results", [])
+                )
+                if lufthansa_found:
+                    print("        ✓ Found Lufthansa-related results (filter likely applied)")
+                else:
+                    print("        ⚠️  No Lufthansa results (filter may not have been extracted)")
+                    # This is not a hard failure since the data may not contain Lufthansa
 
 
 def test_reranking(api_url: str, headers: dict, collection_id: str) -> None:
@@ -189,28 +243,62 @@ def test_reranking(api_url: str, headers: dict, collection_id: str) -> None:
             headers=headers,
         )
 
-        if response.status_code == 200:
-            results = response.json()
-            result_list = results.get("results", [])
-            num_results = len(result_list)
+        # Assert successful response
+        assert (
+            response.status_code == 200
+        ), f"Reranking test failed: {response.status_code} - {response.text}"
 
-            if num_results > 0:
-                # Get scores to check if reranking changed the order
-                scores = [r.get("score", 0) for r in result_list]
-                avg_score = sum(scores) / len(scores) if scores else 0
+        results = response.json()
 
-                print(f"      ✓ {num_results} results returned")
-                print(f"      Average score: {avg_score:.4f}")
-                print(f"      Score range: {min(scores):.4f} - {max(scores):.4f}")
+        # Assert response structure
+        assert "results" in results, "Missing 'results' field in reranking response"
+        assert "response_type" in results, "Missing 'response_type' field in reranking response"
+        assert "status" in results, "Missing 'status' field in reranking response"
+        assert results["response_type"] == "raw", "Wrong response_type in reranking response"
 
-                # With reranking, top results should be more relevant
-                if enable_reranking and num_results >= 3:
-                    top_3_avg = sum(scores[:3]) / 3
-                    print(f"      Top 3 average score: {top_3_avg:.4f}")
-            else:
-                print(f"      ⚠️  No results returned")
-        else:
-            print(f"      ⚠️  Request failed: {response.status_code}")
+        result_list = results.get("results", [])
+        num_results = len(result_list)
+
+        # Assert status is valid
+        status = results.get("status", "")
+        valid_statuses = ["success", "no_results", "no_relevant_results"]
+        assert status in valid_statuses, f"Invalid status '{status}' in reranking response"
+
+        if num_results > 0:
+            # Get scores to check if reranking changed the order
+            scores = [r.get("score", 0) for r in result_list]
+            assert len(scores) == num_results, "Number of scores doesn't match number of results"
+
+            # Assert all scores are numeric
+            for i, score in enumerate(scores):
+                assert isinstance(
+                    score, (int, float)
+                ), f"Score {i} is not numeric in reranking test"
+                assert (
+                    0 <= score <= 1
+                ), f"Score {i} ({score}) is out of expected range [0,1] in reranking test"
+
+            avg_score = sum(scores) / len(scores) if scores else 0
+
+            print(f"      ✓ {num_results} results returned")
+            print(f"      Average score: {avg_score:.4f}")
+            print(f"      Score range: {min(scores):.4f} - {max(scores):.4f}")
+
+            # Assert scores are in descending order (highest relevance first)
+            for i in range(len(scores) - 1):
+                assert (
+                    scores[i] >= scores[i + 1]
+                ), f"Results not ordered by score: {scores[i]} < {scores[i + 1]} at position {i}"
+
+            # With reranking, top results should be more relevant
+            if enable_reranking and num_results >= 3:
+                top_3_avg = sum(scores[:3]) / 3
+                print(f"      Top 3 average score: {top_3_avg:.4f}")
+
+        # Assert each result has required structure
+        for i, result in enumerate(result_list):
+            assert "payload" in result, f"Reranking result {i} missing 'payload' field"
+            assert "score" in result, f"Reranking result {i} missing 'score' field"
 
 
 def test_recency_bias(api_url: str, headers: dict, collection_id: str) -> None:
@@ -236,31 +324,81 @@ def test_recency_bias(api_url: str, headers: dict, collection_id: str) -> None:
             headers=headers,
         )
 
-        if response.status_code == 200:
-            results = response.json()
-            result_list = results.get("results", [])
+        # Assert successful response
+        assert (
+            response.status_code == 200
+        ), f"Recency bias test failed for bias={bias}: {response.status_code} - {response.text}"
 
-            if result_list:
-                # Check if results are ordered differently based on recency
-                scores = [r.get("score", 0) for r in result_list]
-                print(f"      ✓ {len(result_list)} results")
-                print(f"      Scores: {[f'{s:.3f}' for s in scores[:3]]}...")
+        results = response.json()
 
-                # Try to extract dates from results to verify recency ordering
-                # (This is approximate since we don't know exact data structure)
-                for i, result in enumerate(result_list[:2]):
-                    payload = result.get("payload", {})
-                    # Look for date fields
-                    for key in ["created_at", "updated_at", "date", "timestamp"]:
-                        if key in payload:
-                            print(
-                                f"      Result {i+1} {key}: {payload[key][:10] if isinstance(payload[key], str) else payload[key]}"
-                            )
-                            break
-            else:
-                print(f"      ⚠️  No results returned")
-        else:
-            print(f"      ⚠️  Request failed: {response.status_code}")
+        # Assert response structure
+        assert (
+            "results" in results
+        ), f"Missing 'results' field in recency bias response for bias={bias}"
+        assert (
+            "response_type" in results
+        ), f"Missing 'response_type' field in recency bias response for bias={bias}"
+        assert (
+            "status" in results
+        ), f"Missing 'status' field in recency bias response for bias={bias}"
+        assert (
+            results["response_type"] == "raw"
+        ), f"Wrong response_type in recency bias response for bias={bias}"
+
+        result_list = results.get("results", [])
+        status = results.get("status", "")
+
+        # Assert status is valid
+        valid_statuses = ["success", "no_results", "no_relevant_results"]
+        assert (
+            status in valid_statuses
+        ), f"Invalid status '{status}' in recency bias response for bias={bias}"
+
+        if result_list:
+            # Check if results are ordered differently based on recency
+            scores = [r.get("score", 0) for r in result_list]
+            assert len(scores) == len(
+                result_list
+            ), f"Number of scores doesn't match results for bias={bias}"
+
+            # Assert all scores are numeric and in valid range
+            for i, score in enumerate(scores):
+                assert isinstance(
+                    score, (int, float)
+                ), f"Score {i} is not numeric in recency bias test for bias={bias}"
+                assert (
+                    0 <= score <= 1
+                ), f"Score {i} ({score}) is out of expected range [0,1] for bias={bias}"
+
+            print(f"      ✓ {len(result_list)} results")
+            print(f"      Scores: {[f'{s:.3f}' for s in scores[:3]]}...")
+
+            # Assert scores are in descending order
+            for i in range(len(scores) - 1):
+                assert (
+                    scores[i] >= scores[i + 1]
+                ), f"Results not ordered by score for bias={bias}: {scores[i]} < {scores[i + 1]} at position {i}"
+
+            # Try to extract dates from results to verify recency ordering
+            # (This is approximate since we don't know exact data structure)
+            for i, result in enumerate(result_list[:2]):
+                payload = result.get("payload", {})
+                # Look for date fields
+                for key in ["created_at", "updated_at", "date", "timestamp"]:
+                    if key in payload:
+                        print(
+                            f"      Result {i+1} {key}: {payload[key][:10] if isinstance(payload[key], str) else payload[key]}"
+                        )
+                        break
+
+        # Assert each result has required structure
+        for i, result in enumerate(result_list):
+            assert (
+                "payload" in result
+            ), f"Recency bias result {i} missing 'payload' field for bias={bias}"
+            assert (
+                "score" in result
+            ), f"Recency bias result {i} missing 'score' field for bias={bias}"
 
 
 def test_search_methods(api_url: str, headers: dict, collection_id: str) -> None:
@@ -286,30 +424,67 @@ def test_search_methods(api_url: str, headers: dict, collection_id: str) -> None
             headers=headers,
         )
 
-        if response.status_code == 200:
-            results = response.json()
-            result_list = results.get("results", [])
-            num_results = len(result_list)
+        # Assert successful response
+        assert (
+            response.status_code == 200
+        ), f"Search method test failed for {method}: {response.status_code} - {response.text}"
 
-            if num_results > 0:
-                scores = [r.get("score", 0) for r in result_list]
-                avg_score = sum(scores) / len(scores)
-                print(f"      ✓ {method}: {num_results} results")
-                print(f"      Average score: {avg_score:.4f}")
+        results = response.json()
 
-                # Check if keyword search finds exact matches
-                if method == "keyword":
-                    # Check if Lufthansa appears in top results
-                    lufthansa_in_top = any(
-                        "lufthansa" in json.dumps(r.get("payload", {})).lower()
-                        for r in result_list[:2]
-                    )
-                    if lufthansa_in_top:
-                        print("      ✓ Keyword search found exact match")
-            else:
-                print(f"      ⚠️  No results for {method} search")
-        else:
-            print(f"      ⚠️  {method} search failed: {response.status_code}")
+        # Assert response structure
+        assert "results" in results, f"Missing 'results' field in {method} search response"
+        assert (
+            "response_type" in results
+        ), f"Missing 'response_type' field in {method} search response"
+        assert "status" in results, f"Missing 'status' field in {method} search response"
+        assert results["response_type"] == "raw", f"Wrong response_type in {method} search response"
+
+        result_list = results.get("results", [])
+        num_results = len(result_list)
+        status = results.get("status", "")
+
+        # Assert status is valid
+        valid_statuses = ["success", "no_results", "no_relevant_results"]
+        assert status in valid_statuses, f"Invalid status '{status}' in {method} search response"
+
+        if num_results > 0:
+            scores = [r.get("score", 0) for r in result_list]
+            assert (
+                len(scores) == num_results
+            ), f"Number of scores doesn't match results for {method} search"
+
+            # Assert all scores are numeric and in valid range
+            for i, score in enumerate(scores):
+                assert isinstance(
+                    score, (int, float)
+                ), f"Score {i} is not numeric in {method} search"
+                assert (
+                    0 <= score <= 1
+                ), f"Score {i} ({score}) is out of expected range [0,1] in {method} search"
+
+            avg_score = sum(scores) / len(scores)
+            print(f"      ✓ {method}: {num_results} results")
+            print(f"      Average score: {avg_score:.4f}")
+
+            # Assert scores are in descending order
+            for i in range(len(scores) - 1):
+                assert (
+                    scores[i] >= scores[i + 1]
+                ), f"Results not ordered by score in {method} search: {scores[i]} < {scores[i + 1]} at position {i}"
+
+            # Check if keyword search finds exact matches
+            if method == "keyword":
+                # Check if Lufthansa appears in top results
+                lufthansa_in_top = any(
+                    "lufthansa" in json.dumps(r.get("payload", {})).lower() for r in result_list[:2]
+                )
+                if lufthansa_in_top:
+                    print("      ✓ Keyword search found exact match")
+
+        # Assert each result has required structure
+        for i, result in enumerate(result_list):
+            assert "payload" in result, f"{method} search result {i} missing 'payload' field"
+            assert "score" in result, f"{method} search result {i} missing 'score' field"
 
 
 def test_qdrant_filters(api_url: str, headers: dict, collection_id: str) -> None:
@@ -349,21 +524,61 @@ def test_qdrant_filters(api_url: str, headers: dict, collection_id: str) -> None
             headers=headers,
         )
 
-        if response.status_code == 200:
-            results = response.json()
-            num_results = len(results.get("results", []))
-            print(f"      ✓ Filter applied: {num_results} results")
+        # Assert successful response (or expected error for invalid filter)
+        if response.status_code == 422:
+            # Invalid filter format is acceptable - some filters may not match the data structure
+            print(f"      ⚠️  Filter format may not match data structure: {response.status_code}")
+            error_detail = response.json().get("detail", "")
+            print(f"      Error: {str(error_detail)[:200]}")
+            continue
 
-            # Check if filter was effective
-            if num_results > 0:
-                # Verify results match filter criteria
-                first_result = results["results"][0]
-                payload = first_result.get("payload", {})
-                print(f"      First result source: {payload.get('source_name', 'unknown')}")
-        else:
-            print(f"      ⚠️  Filter test failed: {response.status_code}")
-            if response.status_code == 422:
-                print(f"      Invalid filter format: {response.text[:200]}")
+        assert (
+            response.status_code == 200
+        ), f"Qdrant filter test failed: {response.status_code} - {response.text}"
+
+        results = response.json()
+
+        # Assert response structure
+        assert "results" in results, "Missing 'results' field in Qdrant filter response"
+        assert "response_type" in results, "Missing 'response_type' field in Qdrant filter response"
+        assert "status" in results, "Missing 'status' field in Qdrant filter response"
+        assert results["response_type"] == "raw", "Wrong response_type in Qdrant filter response"
+
+        num_results = len(results.get("results", []))
+        status = results.get("status", "")
+
+        # Assert status is valid
+        valid_statuses = ["success", "no_results", "no_relevant_results"]
+        assert status in valid_statuses, f"Invalid status '{status}' in Qdrant filter response"
+
+        print(f"      ✓ Filter applied: {num_results} results")
+
+        # Check if filter was effective
+        if num_results > 0:
+            result_list = results.get("results", [])
+
+            # Assert each result has required structure
+            for i, result in enumerate(result_list):
+                assert "payload" in result, f"Qdrant filter result {i} missing 'payload' field"
+                assert "score" in result, f"Qdrant filter result {i} missing 'score' field"
+                assert isinstance(
+                    result["score"], (int, float)
+                ), f"Qdrant filter score {i} is not numeric"
+                assert (
+                    0 <= result["score"] <= 1
+                ), f"Qdrant filter score {i} ({result['score']}) is out of expected range [0,1]"
+
+            # Verify results match filter criteria
+            first_result = results["results"][0]
+            payload = first_result.get("payload", {})
+            print(f"      First result source: {payload.get('source_name', 'unknown')}")
+
+            # Assert scores are in descending order
+            scores = [r.get("score", 0) for r in result_list]
+            for i in range(len(scores) - 1):
+                assert (
+                    scores[i] >= scores[i + 1]
+                ), f"Qdrant filter results not ordered by score: {scores[i]} < {scores[i + 1]} at position {i}"
 
 
 def test_score_threshold(api_url: str, headers: dict, collection_id: str) -> None:
@@ -389,27 +604,79 @@ def test_score_threshold(api_url: str, headers: dict, collection_id: str) -> Non
             headers=headers,
         )
 
-        if response.status_code == 200:
-            results = response.json()
-            result_list = results.get("results", [])
-            num_results = len(result_list)
+        # Assert successful response
+        assert (
+            response.status_code == 200
+        ), f"Score threshold test failed for threshold={threshold}: {response.status_code} - {response.text}"
 
-            if num_results > 0:
-                scores = [r.get("score", 0) for r in result_list]
-                min_score = min(scores) if scores else 0
-                print(f"      ✓ {num_results} results (min score: {min_score:.4f})")
+        results = response.json()
 
-                # Verify all scores are above threshold
-                if threshold is not None:
-                    below_threshold = [s for s in scores if s < threshold]
-                    if below_threshold:
-                        print(f"      ⚠️  Found {len(below_threshold)} scores below threshold!")
-                    else:
-                        print(f"      ✓ All scores above threshold {threshold}")
-            else:
-                print(f"      No results (all filtered out or no matches)")
+        # Assert response structure
+        assert (
+            "results" in results
+        ), f"Missing 'results' field in score threshold response for threshold={threshold}"
+        assert (
+            "response_type" in results
+        ), f"Missing 'response_type' field in score threshold response for threshold={threshold}"
+        assert (
+            "status" in results
+        ), f"Missing 'status' field in score threshold response for threshold={threshold}"
+        assert (
+            results["response_type"] == "raw"
+        ), f"Wrong response_type in score threshold response for threshold={threshold}"
+
+        result_list = results.get("results", [])
+        num_results = len(result_list)
+        status = results.get("status", "")
+
+        # Assert status is valid
+        valid_statuses = ["success", "no_results", "no_relevant_results"]
+        assert (
+            status in valid_statuses
+        ), f"Invalid status '{status}' in score threshold response for threshold={threshold}"
+
+        if num_results > 0:
+            scores = [r.get("score", 0) for r in result_list]
+            assert (
+                len(scores) == num_results
+            ), f"Number of scores doesn't match results for threshold={threshold}"
+
+            # Assert all scores are numeric and in valid range
+            for i, score in enumerate(scores):
+                assert isinstance(
+                    score, (int, float)
+                ), f"Score {i} is not numeric in score threshold test for threshold={threshold}"
+                assert (
+                    0 <= score <= 1
+                ), f"Score {i} ({score}) is out of expected range [0,1] for threshold={threshold}"
+
+            min_score = min(scores) if scores else 0
+            print(f"      ✓ {num_results} results (min score: {min_score:.4f})")
+
+            # Assert scores are in descending order
+            for i in range(len(scores) - 1):
+                assert (
+                    scores[i] >= scores[i + 1]
+                ), f"Results not ordered by score for threshold={threshold}: {scores[i]} < {scores[i + 1]} at position {i}"
+
+            # Verify all scores are above threshold
+            if threshold is not None:
+                below_threshold = [s for s in scores if s < threshold]
+                assert (
+                    len(below_threshold) == 0
+                ), f"Found {len(below_threshold)} scores below threshold {threshold}: {below_threshold}"
+                print(f"      ✓ All scores above threshold {threshold}")
         else:
-            print(f"      ⚠️  Request failed: {response.status_code}")
+            print(f"      No results (all filtered out or no matches)")
+
+        # Assert each result has required structure
+        for i, result in enumerate(result_list):
+            assert (
+                "payload" in result
+            ), f"Score threshold result {i} missing 'payload' field for threshold={threshold}"
+            assert (
+                "score" in result
+            ), f"Score threshold result {i} missing 'score' field for threshold={threshold}"
 
 
 def test_pagination(api_url: str, headers: dict, collection_id: str) -> None:
@@ -425,11 +692,15 @@ def test_pagination(api_url: str, headers: dict, collection_id: str) -> None:
         headers=headers,
     )
 
-    if response.status_code != 200:
-        print(f"    ⚠️  Initial search failed: {response.status_code}")
-        return
+    # Assert initial search succeeds
+    assert (
+        response.status_code == 200
+    ), f"Initial pagination search failed: {response.status_code} - {response.text}"
 
-    total_results = len(response.json().get("results", []))
+    initial_results = response.json()
+    assert "results" in initial_results, "Missing 'results' field in initial pagination response"
+
+    total_results = len(initial_results.get("results", []))
     print(f"    Total available results: {total_results}")
 
     # Test pagination
@@ -457,26 +728,75 @@ def test_pagination(api_url: str, headers: dict, collection_id: str) -> None:
             headers=headers,
         )
 
-        if response.status_code == 200:
-            results = response.json()
-            result_list = results.get("results", [])
-            num_results = len(result_list)
+        # Assert successful response
+        assert (
+            response.status_code == 200
+        ), f"Pagination test failed for {test['description']}: {response.status_code} - {response.text}"
 
-            print(f"      ✓ Returned {num_results} results")
+        results = response.json()
 
-            # Check for duplicate results across pages
-            for result in result_list:
-                # Use payload content as ID since we might not have explicit IDs
-                result_id = json.dumps(result.get("payload", {}))[:100]
-                if result_id in result_ids_seen:
-                    print(f"      ⚠️  Duplicate result found across pages!")
-                result_ids_seen.add(result_id)
+        # Assert response structure
+        assert (
+            "results" in results
+        ), f"Missing 'results' field in pagination response for {test['description']}"
+        assert (
+            "response_type" in results
+        ), f"Missing 'response_type' field in pagination response for {test['description']}"
+        assert (
+            "status" in results
+        ), f"Missing 'status' field in pagination response for {test['description']}"
+        assert (
+            results["response_type"] == "raw"
+        ), f"Wrong response_type in pagination response for {test['description']}"
 
-            # Verify we don't get more than requested
-            if num_results > test["limit"]:
-                print(f"      ⚠️  Got {num_results} results but limit was {test['limit']}")
-        else:
-            print(f"      ⚠️  Request failed: {response.status_code}")
+        result_list = results.get("results", [])
+        num_results = len(result_list)
+        status = results.get("status", "")
+
+        # Assert status is valid
+        valid_statuses = ["success", "no_results", "no_relevant_results"]
+        assert (
+            status in valid_statuses
+        ), f"Invalid status '{status}' in pagination response for {test['description']}"
+
+        print(f"      ✓ Returned {num_results} results")
+
+        # Verify we don't get more than requested
+        assert (
+            num_results <= test["limit"]
+        ), f"Got {num_results} results but limit was {test['limit']} for {test['description']}"
+
+        # Assert each result has required structure
+        for i, result in enumerate(result_list):
+            assert (
+                "payload" in result
+            ), f"Pagination result {i} missing 'payload' field for {test['description']}"
+            assert (
+                "score" in result
+            ), f"Pagination result {i} missing 'score' field for {test['description']}"
+            assert isinstance(
+                result["score"], (int, float)
+            ), f"Pagination score {i} is not numeric for {test['description']}"
+            assert (
+                0 <= result["score"] <= 1
+            ), f"Pagination score {i} ({result['score']}) is out of expected range [0,1] for {test['description']}"
+
+        # Check for duplicate results across pages
+        for result in result_list:
+            # Use payload content as ID since we might not have explicit IDs
+            result_id = json.dumps(result.get("payload", {}))[:100]
+            if result_id in result_ids_seen:
+                # This is a warning, not a hard failure, since some search strategies may not guarantee unique pagination
+                print(f"      ⚠️  Duplicate result found across pages for {test['description']}!")
+            result_ids_seen.add(result_id)
+
+        # Assert scores are in descending order within each page
+        if num_results > 1:
+            scores = [r.get("score", 0) for r in result_list]
+            for i in range(len(scores) - 1):
+                assert (
+                    scores[i] >= scores[i + 1]
+                ), f"Results not ordered by score in pagination for {test['description']}: {scores[i]} < {scores[i + 1]} at position {i}"
 
 
 def test_edge_cases(api_url: str, headers: dict, collection_id: str) -> None:
@@ -539,16 +859,26 @@ def test_edge_cases(api_url: str, headers: dict, collection_id: str) -> None:
             headers=headers,
         )
 
-        if response.status_code == test_case["expected_status"]:
-            print(f"      ✓ Got expected status {response.status_code}")
-            if response.status_code == 422:
-                # Check for validation error details
-                try:
-                    error_detail = response.json().get("detail", "")
-                    if error_detail:
-                        print(f"      Validation error: {str(error_detail)[:100]}...")
-                except:
-                    pass
-        else:
-            print(f"      ⚠️  Expected {test_case['expected_status']}, got {response.status_code}")
-            print(f"      Response: {response.text[:200]}")
+        # Assert expected status code
+        assert response.status_code == test_case["expected_status"], (
+            f"Expected status {test_case['expected_status']} for '{test_case['description']}', "
+            f"got {response.status_code}. Response: {response.text[:200]}"
+        )
+
+        print(f"      ✓ Got expected status {response.status_code}")
+
+        if response.status_code == 422:
+            # Assert validation error structure for 422 responses
+            try:
+                error_response = response.json()
+                assert (
+                    "detail" in error_response
+                ), f"Missing 'detail' field in 422 response for '{test_case['description']}'"
+                error_detail = error_response.get("detail", "")
+                assert (
+                    error_detail
+                ), f"Empty error detail in 422 response for '{test_case['description']}'"
+                print(f"      Validation error: {str(error_detail)[:100]}...")
+            except json.JSONDecodeError:
+                # Some validation errors might not return JSON
+                print(f"      Non-JSON validation error response: {response.text[:100]}...")
