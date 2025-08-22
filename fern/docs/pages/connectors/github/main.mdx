@@ -175,6 +175,21 @@ References:
 | encoding | Optional[str] | Indicates the encoding of the content (e.g., 'base64'). |
 
 </Accordion>
+<Accordion title="GitHubFileDeletionEntity">
+
+Schema for GitHub file deletion entity.
+
+This entity is used to signal that a file has been removed from the repository
+and should be deleted from the destination.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| file_path | str | Path of the deleted file within the repository |
+| repo_name | str | Name of the repository containing the deleted file |
+| repo_owner | str | Owner of the repository |
+| deletion_status | str | Status indicating the file was removed |
+
+</Accordion>
 
 
 

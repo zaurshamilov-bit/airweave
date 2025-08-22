@@ -16,10 +16,21 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from airweave.core.config import settings
 from airweave.core.exceptions import (
+    AirweaveException,
+    CollectionNotFoundException,
+    ImmutableFieldError,
+    InvalidScheduleOperationException,
     InvalidStateError,
+    MinuteLevelScheduleException,
     NotFoundException,
     PaymentRequiredException,
     PermissionException,
+    ScheduleNotExistsException,
+    ScheduleOperationException,
+    SyncDagNotFoundException,
+    SyncJobNotFoundException,
+    SyncNotFoundException,
+    TokenRefreshError,
     UsageLimitExceededException,
     unpack_validation_error,
 )
@@ -298,6 +309,51 @@ async def not_found_exception_handler(request: Request, exc: NotFoundException) 
 
     """
     return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+async def airweave_exception_handler(request: Request, exc: AirweaveException) -> JSONResponse:
+    """Generic exception handler for all AirweaveException types.
+
+    Maps different exception types to appropriate HTTP status codes based on their semantic meaning.
+
+    Args:
+    ----
+        request (Request): The incoming request that triggered the exception.
+        exc (AirweaveException): The exception object that was raised.
+
+    Returns:
+    -------
+        JSONResponse: HTTP response with appropriate status code and error details.
+    """
+    # Map exception types to HTTP status codes
+    status_code_map = {
+        # 404 Not Found - Resource doesn't exist
+        SyncNotFoundException: 404,
+        SyncJobNotFoundException: 404,
+        SyncDagNotFoundException: 404,
+        CollectionNotFoundException: 404,
+        # 400 Bad Request - Client error
+        InvalidScheduleOperationException: 400,
+        ScheduleNotExistsException: 400,
+        ImmutableFieldError: 400,
+        # 401 Unauthorized - Authentication issues
+        TokenRefreshError: 401,
+        # 403 Forbidden - Permission issues (already handled by permission_exception_handler)
+        PermissionException: 403,
+        # 500 Internal Server Error - Server/operation failures
+        MinuteLevelScheduleException: 500,
+        ScheduleOperationException: 500,
+    }
+
+    # Get status code from map, checking for subclasses
+    # This ensures that subclasses of the mapped exceptions are properly handled
+    status_code = 500  # default
+    for exc_type, code in status_code_map.items():
+        if isinstance(exc, exc_type):
+            status_code = code
+            break
+
+    return JSONResponse(status_code=status_code, content={"detail": str(exc)})
 
 
 async def payment_required_exception_handler(

@@ -41,6 +41,7 @@ async def _run_sync_task(
     source_connection,
     ctx,
     access_token,
+    force_full_sync=False,
 ):
     """Run the actual sync service."""
     from airweave.core.sync_service import sync_service
@@ -53,6 +54,7 @@ async def _run_sync_task(
         source_connection=source_connection,
         ctx=ctx,
         access_token=access_token,
+        force_full_sync=force_full_sync,
     )
 
 
@@ -117,6 +119,7 @@ async def run_sync_activity(
     source_connection_dict: Dict[str, Any],
     ctx_dict: Dict[str, Any],
     access_token: Optional[str] = None,
+    force_full_sync: bool = False,
 ) -> None:
     """Activity to run a sync job.
 
@@ -130,6 +133,7 @@ async def run_sync_activity(
         source_connection_dict: The source connection as dict
         ctx_dict: The API context as dict
         access_token: Optional access token
+        force_full_sync: If True, forces a full sync with orphaned entity deletion
     """
     # Import here to avoid Temporal sandboxing issues
     from airweave import schemas
@@ -188,6 +192,7 @@ async def run_sync_activity(
                 source_connection,
                 ctx,
                 access_token,
+                force_full_sync,
             )
         )
 
@@ -204,6 +209,144 @@ async def run_sync_activity(
         raise
     finally:
         await _cleanup_tasks(heartbeat_task, sync_task, should_heartbeat_flag)
+
+
+@activity.defn
+async def create_sync_job_activity(
+    sync_id: str,
+    ctx_dict: Dict[str, Any],
+    force_full_sync: bool = False,
+) -> Dict[str, Any]:
+    """Create a new sync job for the given sync.
+
+    This activity creates a new sync job in the database, checking first
+    if there's already a running job for this sync.
+
+    Args:
+        sync_id: The sync ID to create a job for
+        ctx_dict: The API context as dict
+        force_full_sync: If True (daily cleanup), wait for running jobs to complete
+
+    Returns:
+        The created sync job as a dict
+
+    Raises:
+        Exception: If a sync job is already running and force_full_sync is False
+    """
+    from uuid import UUID
+
+    from airweave import crud, schemas
+    from airweave.api.context import ApiContext
+    from airweave.core.logging import LoggerConfigurator
+    from airweave.db.session import get_db_context
+
+    # Reconstruct organization and user from the dictionary
+    organization = schemas.Organization(**ctx_dict["organization"])
+    user = schemas.User(**ctx_dict["user"]) if ctx_dict.get("user") else None
+
+    ctx = ApiContext(
+        request_id=ctx_dict["request_id"],
+        organization=organization,
+        user=user,
+        auth_method=ctx_dict["auth_method"],
+        auth_metadata=ctx_dict.get("auth_metadata"),
+        logger=LoggerConfigurator.configure_logger(
+            "airweave.temporal.activity.create_sync_job",
+            dimensions={
+                "sync_id": sync_id,
+                "organization_id": str(organization.id),
+                "organization_name": organization.name,
+            },
+        ),
+    )
+
+    activity.logger.info(
+        f"Creating sync job for sync {sync_id} (force_full_sync={force_full_sync})"
+    )
+
+    async with get_db_context() as db:
+        # Check if there's already a running sync job for this sync
+        running_jobs = await crud.sync_job.get_all_by_sync_id(
+            db=db,
+            sync_id=UUID(sync_id),
+            status=["PENDING", "IN_PROGRESS"],  # Database enum uses uppercase, no CREATED status
+        )
+
+        if running_jobs:
+            if force_full_sync:
+                # For daily cleanup, wait for running jobs to complete
+                activity.logger.info(
+                    f"🔄 Daily cleanup sync for {sync_id}: "
+                    f"Found {len(running_jobs)} running job(s). "
+                    f"Waiting for them to complete before starting cleanup..."
+                )
+
+                # Wait for running jobs to complete (check every 30 seconds)
+                import asyncio
+
+                max_wait_time = 60 * 60  # 1 hour max wait
+                wait_interval = 30  # Check every 30 seconds
+                total_waited = 0
+
+                while total_waited < max_wait_time:
+                    # Send heartbeat to prevent timeout
+                    activity.heartbeat(f"Waiting for running jobs to complete ({total_waited}s)")
+
+                    # Wait before checking again
+                    await asyncio.sleep(wait_interval)
+                    total_waited += wait_interval
+
+                    # Check if jobs are still running
+                    async with get_db_context() as check_db:
+                        still_running = await crud.sync_job.get_all_by_sync_id(
+                            db=check_db,
+                            sync_id=UUID(sync_id),
+                            status=["PENDING", "IN_PROGRESS"],
+                        )
+
+                        if not still_running:
+                            activity.logger.info(
+                                f"✅ Running jobs completed. "
+                                f"Proceeding with cleanup sync for {sync_id}"
+                            )
+                            break
+                else:
+                    # Timeout reached
+                    activity.logger.error(
+                        f"❌ Timeout waiting for running jobs to complete for sync {sync_id}. "
+                        f"Skipping cleanup sync."
+                    )
+                    raise Exception(
+                        f"Timeout waiting for running jobs to complete after {max_wait_time}s"
+                    )
+            else:
+                # For regular incremental syncs, skip if job is running
+                activity.logger.warning(
+                    f"Sync {sync_id} already has {len(running_jobs)} running jobs. "
+                    f"Skipping new job creation."
+                )
+                raise Exception(
+                    f"Sync {sync_id} already has a running job. "
+                    f"Skipping this scheduled run to avoid conflicts."
+                )
+
+        # Create the new sync job
+        sync_job_in = schemas.SyncJobCreate(sync_id=UUID(sync_id))
+        sync_job = await crud.sync_job.create(db=db, obj_in=sync_job_in, ctx=ctx)
+
+        # Access the ID before commit to avoid lazy loading issues
+        sync_job_id = sync_job.id
+
+        await db.commit()
+
+        # Refresh the object to ensure all attributes are loaded
+        await db.refresh(sync_job)
+
+        activity.logger.info(f"Created sync job {sync_job_id} for sync {sync_id}")
+
+        # Convert to dict for return
+        sync_job_schema = schemas.SyncJob.model_validate(sync_job)
+        return sync_job_schema.model_dump(mode="json")
 
 
 @activity.defn
@@ -248,6 +391,9 @@ async def update_sync_job_status_activity(
             "organization_name": organization.name,
         },
     )
+
+    # Reconstruct user if present
+    user = schemas.User(**ctx_dict["user"]) if ctx_dict.get("user") else None
 
     ctx = ApiContext(
         request_id=ctx_dict["request_id"],
