@@ -431,7 +431,7 @@ export function AuthCallback() {
     };
 
     processCallback();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [searchParams, auth.isReady, auth.isAuthenticated]);
 
   // For the small UI text, try to show the provider short name based on state/fallback
