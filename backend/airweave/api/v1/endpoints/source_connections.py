@@ -439,7 +439,7 @@ async def _determine_cursor_field(
 
 async def _validate_continuous_source_by_short_name(short_name: str) -> None:
     """Validate that the source supports continuous sync (by short_name)."""
-    SUPPORTED_CONTINUOUS_SOURCES = ["github", "postgresql", "google_drive"]
+    SUPPORTED_CONTINUOUS_SOURCES = ["github", "postgresql", "google_drive", "gmail"]
 
     if short_name not in SUPPORTED_CONTINUOUS_SOURCES:
         raise HTTPException(
