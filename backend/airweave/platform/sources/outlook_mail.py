@@ -282,6 +282,93 @@ class OutlookMailSource(BaseSource):
                 )
                 # Continue with other folders even if one fails
 
+    async def _init_and_store_message_delta_for_folder(
+        self, client: httpx.AsyncClient, folder_entity: OutlookMailFolderEntity
+    ) -> None:
+        """Initialize the per-folder message delta link and store it in the cursor."""
+        try:
+            delta_url = (
+                f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_entity.entity_id}/messages/delta"
+            )
+            self.logger.debug(f"Calling delta endpoint: {delta_url}")
+            delta_data = await self._get_with_auth(client, delta_url)
+
+            attempts = 0
+            max_attempts = 1000
+            while attempts < max_attempts:
+                attempts += 1
+                if isinstance(delta_data, dict) and "@odata.deltaLink" in delta_data:
+                    delta_link = delta_data["@odata.deltaLink"]
+                    self.logger.info(f"Storing delta link for folder: {folder_entity.display_name}")
+                    self._update_cursor_data(
+                        delta_link, folder_entity.entity_id, folder_entity.display_name
+                    )
+                    break
+
+                next_link = (
+                    delta_data.get("@odata.nextLink") if isinstance(delta_data, dict) else None
+                )
+                if next_link:
+                    self.logger.debug(
+                        f"Following delta pagination nextLink for folder "
+                        f"{folder_entity.display_name}"
+                    )
+                    delta_data = await self._get_with_auth(client, next_link)
+                else:
+                    self.logger.warning(
+                        f"No deltaLink or nextLink received for folder "
+                        f"{folder_entity.display_name} while initializing delta."
+                    )
+                    break
+        except Exception as e:
+            self.logger.warning(
+                f"Failed to get delta token for folder {folder_entity.display_name}: {str(e)}"
+            )
+
+    async def _process_single_folder_tree(
+        self,
+        client: httpx.AsyncClient,
+        folder: Dict[str, Any],
+        parent_breadcrumbs: List[Breadcrumb],
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Yield the folder entity, its messages, initialize delta, then recurse children."""
+        folder_entity = OutlookMailFolderEntity(
+            entity_id=folder["id"],
+            breadcrumbs=parent_breadcrumbs,
+            display_name=folder["displayName"],
+            parent_folder_id=folder.get("parentFolderId"),
+            child_folder_count=folder.get("childFolderCount", 0),
+            total_item_count=folder.get("totalItemCount", 0),
+            unread_item_count=folder.get("unreadItemCount", 0),
+            well_known_name=folder.get("wellKnownName"),
+        )
+
+        self.logger.info(
+            f"Processing folder: {folder_entity.display_name} "
+            f"(ID: {folder_entity.entity_id}, Items: {folder_entity.total_item_count})"
+        )
+        yield folder_entity
+
+        folder_breadcrumb = Breadcrumb(
+            entity_id=folder_entity.entity_id,
+            name=folder_entity.display_name,
+            type="folder",
+        )
+
+        # Process messages in this folder
+        async for entity in self._process_folder_messages(client, folder_entity, folder_breadcrumb):
+            yield entity
+
+        # Initialize message delta link for this folder if it has items
+        if folder_entity.total_item_count > 0:
+            await self._init_and_store_message_delta_for_folder(client, folder_entity)
+
+        # Recurse into child folders
+        async for child_entity in self._process_child_folders(
+            client, folder_entity, parent_breadcrumbs, folder_breadcrumb
+        ):
+            yield child_entity
+
     async def _generate_folder_entities(
         self,
         client: httpx.AsyncClient,
@@ -312,92 +399,10 @@ class OutlookMailSource(BaseSource):
                 self.logger.info(f"Retrieved {len(folders)} folders")
 
                 for folder in folders:
-                    # Create and yield folder entity
-                    folder_entity = OutlookMailFolderEntity(
-                        entity_id=folder["id"],
-                        breadcrumbs=parent_breadcrumbs,
-                        display_name=folder["displayName"],
-                        parent_folder_id=folder.get("parentFolderId"),
-                        child_folder_count=folder.get("childFolderCount", 0),
-                        total_item_count=folder.get("totalItemCount", 0),
-                        unread_item_count=folder.get("unreadItemCount", 0),
-                        well_known_name=folder.get("wellKnownName"),
-                    )
-
-                    self.logger.info(
-                        f"Processing folder: {folder_entity.display_name} "
-                        f"(ID: {folder_entity.entity_id}, Items: {folder_entity.total_item_count})"
-                    )
-                    yield folder_entity
-
-                    # Build breadcrumb for this folder
-                    folder_breadcrumb = Breadcrumb(
-                        entity_id=folder_entity.entity_id,
-                        name=folder_entity.display_name,
-                        type="folder",
-                    )
-
-                    # Process messages in this folder
-                    async for entity in self._process_folder_messages(
-                        client, folder_entity, folder_breadcrumb
+                    async for entity in self._process_single_folder_tree(
+                        client, folder, parent_breadcrumbs
                     ):
                         yield entity
-
-                    # After processing messages, get delta link for this folder for future incremental syncs
-                    if folder_entity.total_item_count > 0:
-                        try:
-                            # Per Microsoft Graph docs, call the delta endpoint and follow @odata.nextLink
-                            # until an @odata.deltaLink is returned, then store that URL for future syncs.
-                            delta_url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_entity.entity_id}/messages/delta"
-                            self.logger.debug(f"Calling delta endpoint: {delta_url}")
-                            delta_data = await self._get_with_auth(client, delta_url)
-
-                            attempts = 0
-                            max_attempts = 1000  # safety cap to avoid infinite loops
-                            while attempts < max_attempts:
-                                attempts += 1
-                                if (
-                                    isinstance(delta_data, dict)
-                                    and "@odata.deltaLink" in delta_data
-                                ):
-                                    delta_link = delta_data["@odata.deltaLink"]
-                                    self.logger.info(
-                                        f"Storing delta link for folder: {folder_entity.display_name}"
-                                    )
-                                    self._update_cursor_data(
-                                        delta_link,
-                                        folder_entity.entity_id,
-                                        folder_entity.display_name,
-                                    )
-                                    break
-
-                                next_link = (
-                                    delta_data.get("@odata.nextLink")
-                                    if isinstance(delta_data, dict)
-                                    else None
-                                )
-                                if next_link:
-                                    self.logger.debug(
-                                        f"Following delta pagination nextLink for folder "
-                                        f"{folder_entity.display_name}"
-                                    )
-                                    delta_data = await self._get_with_auth(client, next_link)
-                                else:
-                                    self.logger.warning(
-                                        f"No deltaLink or nextLink received for folder "
-                                        f"{folder_entity.display_name} while initializing delta."
-                                    )
-                                    break
-                        except Exception as e:
-                            self.logger.warning(
-                                f"Failed to get delta token for folder {folder_entity.display_name}: {str(e)}"
-                            )
-
-                    # Process child folders recursively
-                    async for child_entity in self._process_child_folders(
-                        client, folder_entity, parent_breadcrumbs, folder_breadcrumb
-                    ):
-                        yield child_entity
 
                 # Handle pagination
                 next_link = data.get("@odata.nextLink")
@@ -762,44 +767,13 @@ class OutlookMailSource(BaseSource):
                 self.logger.info(f"Found {len(changes)} changes in delta response")
 
                 for change in changes:
-                    change_type = change.get("@odata.type", "")
-
-                    if "@removed" in change:
-                        # Message was removed
-                        message_id = change.get("id")
-                        if message_id:
-                            deletion_entity = OutlookMessageDeletionEntity(
-                                entity_id=message_id,
-                                message_id=message_id,
-                                deletion_status="removed",
-                            )
-                            yield deletion_entity
-                        continue
-
-                    if "#microsoft.graph.message" in change_type:
-                        # Handle message changes
-                        if "deleted" in change:
-                            # Message was deleted
-                            self.logger.info(
-                                f"Message {change.get('id')} was deleted from {folder_name}"
-                            )
-                            # For now, just log deletions - could implement soft delete handling later
-                        else:
-                            # Message was added or updated
-                            self.logger.debug(f"Processing changed message: {change.get('id')}")
-
-                            # Create folder breadcrumb for this message
-                            folder_breadcrumb = Breadcrumb(
-                                entity_id=folder_id,
-                                name=folder_name,
-                                type="folder",
-                            )
-
-                            # Process the message and yield entities
-                            async for entity in self._process_message(
-                                client, change, folder_name, folder_breadcrumb
-                            ):
-                                yield entity
+                    async for entity in self._yield_message_change_entities(
+                        client=client,
+                        change=change,
+                        folder_id=folder_id,
+                        folder_name=folder_name,
+                    ):
+                        yield entity
 
                 # Update cursor with new delta token for next sync
                 new_delta_token = data.get("@odata.deltaLink")
@@ -817,6 +791,39 @@ class OutlookMailSource(BaseSource):
         except Exception as e:
             self.logger.error(f"Error processing delta changes for folder {folder_name}: {str(e)}")
             raise
+
+    async def _yield_message_change_entities(
+        self,
+        client: httpx.AsyncClient,
+        change: Dict[str, Any],
+        folder_id: str,
+        folder_name: str,
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Yield entities for a single message change item from Graph delta."""
+        change_type = change.get("@odata.type", "")
+
+        # Deletion indicated via @removed
+        if "@removed" in change:
+            message_id = change.get("id")
+            if message_id:
+                deletion_entity = OutlookMessageDeletionEntity(
+                    entity_id=message_id,
+                    message_id=message_id,
+                    deletion_status="removed",
+                )
+                yield deletion_entity
+            return
+
+        if "#microsoft.graph.message" in change_type or change.get("id"):
+            folder_breadcrumb = Breadcrumb(
+                entity_id=folder_id,
+                name=folder_name,
+                type="folder",
+            )
+            async for entity in self._process_message(
+                client, change, folder_name, folder_breadcrumb
+            ):
+                yield entity
 
     async def _initialize_folders_delta_link(self, client: httpx.AsyncClient) -> None:
         """Initialize and store the delta link for the mailFolders collection."""
@@ -854,6 +861,82 @@ class OutlookMailSource(BaseSource):
         Also ensures per-folder message delta links are initialized for new folders
         and removes stored links for deleted folders.
         """
+
+        async def _emit_folder_add_or_update(
+            folder: Dict[str, Any],
+        ) -> AsyncGenerator[ChunkEntity, None]:
+            folder_id = folder.get("id")
+            display_name = folder.get("displayName", "")
+            parent_folder_id = folder.get("parentFolderId")
+            child_folder_count = folder.get("childFolderCount", 0)
+            total_item_count = folder.get("totalItemCount", 0)
+            unread_item_count = folder.get("unreadItemCount", 0)
+            well_known_name = folder.get("wellKnownName")
+
+            folder_entity = OutlookMailFolderEntity(
+                entity_id=folder_id,
+                breadcrumbs=[],
+                display_name=display_name,
+                parent_folder_id=parent_folder_id,
+                child_folder_count=child_folder_count,
+                total_item_count=total_item_count,
+                unread_item_count=unread_item_count,
+                well_known_name=well_known_name,
+            )
+            yield folder_entity
+
+            # Ensure per-folder message delta link is initialized
+            try:
+                msg_delta_url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages/delta"
+                msg_delta_data = await self._get_with_auth(client, msg_delta_url)
+
+                safety_counter = 0
+                while isinstance(msg_delta_data, dict) and safety_counter < 1000:
+                    safety_counter += 1
+
+                    messages = msg_delta_data.get("value", [])
+                    folder_breadcrumb = Breadcrumb(
+                        entity_id=folder_id,
+                        name=display_name or folder_id,
+                        type="folder",
+                    )
+                    for change in messages:
+                        if "@removed" in change:
+                            message_id = change.get("id")
+                            if message_id:
+                                deletion_entity = OutlookMessageDeletionEntity(
+                                    entity_id=message_id,
+                                    message_id=message_id,
+                                    deletion_status="removed",
+                                )
+                                yield deletion_entity
+                            continue
+                        async for entity in self._process_message(
+                            client, change, display_name or folder_id, folder_breadcrumb
+                        ):
+                            yield entity
+
+                    delta_link = msg_delta_data.get("@odata.deltaLink")
+                    if delta_link:
+                        if hasattr(self, "cursor") and self.cursor:
+                            folder_links = self.cursor.cursor_data.setdefault(
+                                "folder_delta_links", {}
+                            )
+                            folder_names = self.cursor.cursor_data.setdefault("folder_names", {})
+                            folder_links[folder_id] = delta_link
+                            folder_names[folder_id] = display_name or folder_id
+                        break
+
+                    next_link = msg_delta_data.get("@odata.nextLink")
+                    if next_link:
+                        msg_delta_data = await self._get_with_auth(client, next_link)
+                    else:
+                        break
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to initialize message delta for folder {folder_id}: {e}"
+                )
+
         cursor_data = self._get_cursor_data()
         delta_url = cursor_data.get("folders_delta_link")
         if not delta_url:
@@ -861,133 +944,135 @@ class OutlookMailSource(BaseSource):
             return
 
         try:
-            url = delta_url
-            while url:
-                self.logger.debug(f"Fetching folders delta changes from: {url}")
-                data = await self._get_with_auth(client, url)
-
+            async for data in self._iterate_delta_pages(client, delta_url):
                 changes = data.get("value", [])
                 self.logger.info(f"Found {len(changes)} folder changes in delta response")
 
-                for folder in changes:
-                    folder_id = folder.get("id")
-                    if not folder_id:
-                        continue
+                async for entity in self._yield_folder_changes(client, changes):
+                    yield entity
 
-                    # Deletion of folder
-                    if "@removed" in folder:
-                        self.logger.info(f"Folder removed: {folder_id}")
-                        deletion_entity = OutlookMailFolderDeletionEntity(
-                            entity_id=folder_id,
-                            folder_id=folder_id,
-                            deletion_status="removed",
-                        )
-                        # Remove stored per-folder links and names
-                        if hasattr(self, "cursor") and self.cursor:
-                            folder_links = self.cursor.cursor_data.get("folder_delta_links", {})
-                            folder_names = self.cursor.cursor_data.get("folder_names", {})
-                            folder_links.pop(folder_id, None)
-                            folder_names.pop(folder_id, None)
-                            self.cursor.cursor_data["folder_delta_links"] = folder_links
-                            self.cursor.cursor_data["folder_names"] = folder_names
-                        yield deletion_entity
-                        continue
-
-                    # Added or updated folder
-                    display_name = folder.get("displayName", "")
-                    parent_folder_id = folder.get("parentFolderId")
-                    child_folder_count = folder.get("childFolderCount", 0)
-                    total_item_count = folder.get("totalItemCount", 0)
-                    unread_item_count = folder.get("unreadItemCount", 0)
-                    well_known_name = folder.get("wellKnownName")
-
-                    folder_entity = OutlookMailFolderEntity(
-                        entity_id=folder_id,
-                        breadcrumbs=[],
-                        display_name=display_name,
-                        parent_folder_id=parent_folder_id,
-                        child_folder_count=child_folder_count,
-                        total_item_count=total_item_count,
-                        unread_item_count=unread_item_count,
-                        well_known_name=well_known_name,
-                    )
-                    yield folder_entity
-
-                    # Ensure per-folder message delta link is initialized
-                    try:
-                        msg_delta_url = (
-                            f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages/delta"
-                        )
-                        msg_delta_data = await self._get_with_auth(client, msg_delta_url)
-
-                        # Follow nextLink until deltaLink; yield messages encountered on the way
-                        safety_counter = 0
-                        while isinstance(msg_delta_data, dict) and safety_counter < 1000:
-                            safety_counter += 1
-
-                            messages = msg_delta_data.get("value", [])
-                            folder_breadcrumb = Breadcrumb(
-                                entity_id=folder_id,
-                                name=display_name or folder_id,
-                                type="folder",
-                            )
-                            for change in messages:
-                                if "@removed" in change:
-                                    message_id = change.get("id")
-                                    if message_id:
-                                        deletion_entity = OutlookMessageDeletionEntity(
-                                            entity_id=message_id,
-                                            message_id=message_id,
-                                            deletion_status="removed",
-                                        )
-                                        yield deletion_entity
-                                    continue
-                                async for entity in self._process_message(
-                                    client, change, display_name or folder_id, folder_breadcrumb
-                                ):
-                                    yield entity
-
-                            delta_link = msg_delta_data.get("@odata.deltaLink")
-                            if delta_link:
-                                # Store per-folder message delta link
-                                if hasattr(self, "cursor") and self.cursor:
-                                    folder_links = self.cursor.cursor_data.setdefault(
-                                        "folder_delta_links", {}
-                                    )
-                                    folder_names = self.cursor.cursor_data.setdefault(
-                                        "folder_names", {}
-                                    )
-                                    folder_links[folder_id] = delta_link
-                                    folder_names[folder_id] = display_name or folder_id
-                                break
-
-                            next_link = msg_delta_data.get("@odata.nextLink")
-                            if next_link:
-                                msg_delta_data = await self._get_with_auth(client, next_link)
-                            else:
-                                break
-                    except Exception as e:
-                        self.logger.warning(
-                            f"Failed to initialize message delta for folder {folder_id}: {e}"
-                        )
-
-                # Update folders_delta_link for next round
                 new_delta_link = data.get("@odata.deltaLink")
-                if new_delta_link:
-                    if hasattr(self, "cursor") and self.cursor:
-                        self.cursor.cursor_data["folders_delta_link"] = new_delta_link
+                if new_delta_link and hasattr(self, "cursor") and self.cursor:
+                    self.cursor.cursor_data["folders_delta_link"] = new_delta_link
                     self.logger.debug("Updated folders_delta_link for next incremental run")
-
-                # Continue pagination if needed
-                next_link = data.get("@odata.nextLink")
-                if next_link:
-                    url = next_link
-                    continue
-
-                break
 
         except Exception as e:
             self.logger.error(f"Error processing folders delta changes: {e}")
+
+    async def _iterate_delta_pages(
+        self, client: httpx.AsyncClient, start_url: str
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Iterate delta/next pages starting from a delta or nextLink URL."""
+        url = start_url
+        while url:
+            self.logger.debug(f"Fetching folders delta changes from: {url}")
+            data = await self._get_with_auth(client, url)
+            yield data
+            url = data.get("@odata.nextLink")
+
+    async def _yield_folder_changes(
+        self, client: httpx.AsyncClient, changes: List[Dict[str, Any]]
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Yield entities for a batch of folder changes from Graph delta."""
+        for folder in changes:
+            folder_id = folder.get("id")
+            if not folder_id:
+                continue
+
+            if "@removed" in folder:
+                async for e in self._emit_folder_removal(folder_id):
+                    yield e
+                continue
+
+            async for e in self._emit_folder_add_or_update(client, folder):
+                yield e
+
+    async def _emit_folder_removal(self, folder_id: str) -> AsyncGenerator[ChunkEntity, None]:
+        """Emit a folder deletion entity and clean up stored links/names."""
+        self.logger.info(f"Folder removed: {folder_id}")
+        deletion_entity = OutlookMailFolderDeletionEntity(
+            entity_id=folder_id, folder_id=folder_id, deletion_status="removed"
+        )
+        if hasattr(self, "cursor") and self.cursor:
+            folder_links = self.cursor.cursor_data.get("folder_delta_links", {})
+            folder_names = self.cursor.cursor_data.get("folder_names", {})
+            folder_links.pop(folder_id, None)
+            folder_names.pop(folder_id, None)
+            self.cursor.cursor_data["folder_delta_links"] = folder_links
+            self.cursor.cursor_data["folder_names"] = folder_names
+        yield deletion_entity
+
+    async def _emit_folder_add_or_update(
+        self, client: httpx.AsyncClient, folder: Dict[str, Any]
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Emit folder entity and ensure per-folder message delta is initialized."""
+        folder_id = folder.get("id")
+        display_name = folder.get("displayName", "")
+        parent_folder_id = folder.get("parentFolderId")
+        child_folder_count = folder.get("childFolderCount", 0)
+        total_item_count = folder.get("totalItemCount", 0)
+        unread_item_count = folder.get("unreadItemCount", 0)
+        well_known_name = folder.get("wellKnownName")
+
+        folder_entity = OutlookMailFolderEntity(
+            entity_id=folder_id,
+            breadcrumbs=[],
+            display_name=display_name,
+            parent_folder_id=parent_folder_id,
+            child_folder_count=child_folder_count,
+            total_item_count=total_item_count,
+            unread_item_count=unread_item_count,
+            well_known_name=well_known_name,
+        )
+        yield folder_entity
+
+        # Ensure per-folder message delta link is initialized
+        try:
+            msg_delta_url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages/delta"
+            msg_delta_data = await self._get_with_auth(client, msg_delta_url)
+
+            safety_counter = 0
+            while isinstance(msg_delta_data, dict) and safety_counter < 1000:
+                safety_counter += 1
+
+                messages = msg_delta_data.get("value", [])
+                folder_breadcrumb = Breadcrumb(
+                    entity_id=folder_id,
+                    name=display_name or folder_id,
+                    type="folder",
+                )
+                for change in messages:
+                    if "@removed" in change:
+                        message_id = change.get("id")
+                        if message_id:
+                            deletion_entity = OutlookMessageDeletionEntity(
+                                entity_id=message_id,
+                                message_id=message_id,
+                                deletion_status="removed",
+                            )
+                            yield deletion_entity
+                        continue
+                    async for entity in self._process_message(
+                        client, change, display_name or folder_id, folder_breadcrumb
+                    ):
+                        yield entity
+
+                delta_link = msg_delta_data.get("@odata.deltaLink")
+                if delta_link:
+                    if hasattr(self, "cursor") and self.cursor:
+                        folder_links = self.cursor.cursor_data.setdefault("folder_delta_links", {})
+                        folder_names = self.cursor.cursor_data.setdefault("folder_names", {})
+                        folder_links[folder_id] = delta_link
+                        folder_names[folder_id] = display_name or folder_id
+                    break
+
+                next_link = msg_delta_data.get("@odata.nextLink")
+                if next_link:
+                    msg_delta_data = await self._get_with_auth(client, next_link)
+                else:
+                    break
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize message delta for folder {folder_id}: {e}")
 
     async def _process_delta_changes_url(
         self,
