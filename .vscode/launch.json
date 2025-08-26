@@ -72,7 +72,7 @@
             "cwd": "${workspaceFolder}/backend",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/backend",
-                "AIRWEAVE_DEBUGPY_WORKER_PORT": "7233"
+                "AIRWEAVE_DEBUGPY_WORKER_PORT": "7233" // TODO: update this to match the port in the .env file
             },
             "envFile": "${workspaceFolder}/.env",
             "justMyCode": false,
@@ -84,7 +84,7 @@
             "request": "attach",
             "connect": {
                 "host": "127.0.0.1",
-                "port": 7233
+                "port": 7233 // TODO: update this to match the port in the .env file
             }
         },
         {
