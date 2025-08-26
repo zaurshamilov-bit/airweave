@@ -39,12 +39,12 @@
         "editor.formatOnType": false,
         "editor.defaultFormatter": null
     },
-    "files.watcherExclude": {
-        "**/fern/**": true
-    },
     "[jsonc]": {
         "editor.defaultFormatter": "vscode.json-language-features",
         "editor.tabSize": 4,
         "editor.detectIndentation": false
+    },
+    "files.watcherExclude": {
+        "**/fern/**": true
     }
 }
