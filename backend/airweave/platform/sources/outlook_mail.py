@@ -49,56 +49,136 @@ class OutlookMailSource(BaseSource):
     def get_default_cursor_field(self) -> Optional[str]:
         """Get the default cursor field for Outlook Mail source.
 
-        Outlook uses 'lastModifiedDateTime' and delta tokens for incremental sync.
+        Outlook Mail uses 'deltaToken' to track changes since last sync.
+
+        Returns:
+            The default cursor field name
         """
-        return "lastModifiedDateTime"
+        return "deltaToken"
 
     def validate_cursor_field(self, cursor_field: str) -> None:
-        """Validate if the given cursor field is valid for Outlook Mail."""
-        valid_fields = ["lastModifiedDateTime", "deltaToken"]
+        """Validate if the given cursor field is valid for Outlook Mail.
 
-        if cursor_field not in valid_fields:
+        Args:
+            cursor_field: The cursor field to validate
+
+        Raises:
+            ValueError: If the cursor field is invalid
+        """
+        # Outlook Mail only supports its specific cursor field
+        valid_field = self.get_default_cursor_field()
+
+        if cursor_field != valid_field:
             error_msg = (
                 f"Invalid cursor field '{cursor_field}' for Outlook Mail source. "
-                f"Valid fields: {', '.join(valid_fields)}"
+                f"Outlook Mail requires '{valid_field}' as the cursor field. "
+                f"Outlook Mail tracks changes using delta tokens, not entity fields. "
+                f"Please use the default cursor field or omit it entirely."
             )
             self.logger.error(error_msg)
             raise ValueError(error_msg)
 
-    def _prepare_sync_context(
-        self,
-    ) -> tuple[str, Optional[str], Optional[str]]:
-        """Prepare sync context and return cursor field, delta token, and last modified timestamp.
+    def _get_cursor_data(self) -> Dict[str, Any]:
+        """Get cursor data from cursor.
 
         Returns:
-            Tuple of (cursor_field, delta_token, last_modified)
+            Cursor data dictionary, empty dict if no cursor exists
         """
-        # Clean up expired tokens first
-        self._cleanup_expired_tokens()
+        if hasattr(self, "cursor") and self.cursor:
+            return getattr(self.cursor, "cursor_data", {})
+        return {}
+
+    def _update_cursor_data(self, delta_token: str, folder_id: str, folder_name: str):
+        """Update cursor data with delta token and folder information.
+
+        Args:
+            delta_token: Delta token for next sync
+            folder_id: Folder ID being synced
+            folder_name: Folder name being synced
+        """
+        # Check if cursor exists before updating
+        if not hasattr(self, "cursor") or self.cursor is None:
+            self.logger.debug("No cursor available, skipping cursor update")
+            return
+
+        # Ensure cursor field is set to our default
+        cursor_field = self._ensure_cursor_field_set()
+
+        # Maintain legacy single-token fields for backward compatibility
+        self.cursor.cursor_data.update(
+            {
+                cursor_field: delta_token,
+                "folder_id": folder_id,
+                "folder_name": folder_name,
+                "last_sync": datetime.utcnow().isoformat(),
+            }
+        )
+
+        # Preferred: store per-folder delta links and names
+        folder_links = self.cursor.cursor_data.setdefault("folder_delta_links", {})
+        folder_names = self.cursor.cursor_data.setdefault("folder_names", {})
+        per_folder_last_sync = self.cursor.cursor_data.setdefault("folder_last_sync", {})
+
+        folder_links[folder_id] = delta_token
+        folder_names[folder_id] = folder_name
+        per_folder_last_sync[folder_id] = datetime.utcnow().isoformat()
+        self.logger.debug(
+            f"Updated cursor data with field '{cursor_field}': {self.cursor.cursor_data}"
+        )
+
+    def _ensure_cursor_field_set(self) -> str:
+        """Ensure the cursor field is set to our default value.
+
+        This method ensures that if we have a cursor but no cursor_field set,
+        we set it to our default value.
+
+        Returns:
+            The cursor field name to use
+        """
+        cursor_field = self.get_default_cursor_field()
+
+        # Debug logging to understand cursor state
+        if hasattr(self, "cursor") and self.cursor:
+            current_cursor_field = getattr(self.cursor, "cursor_field", None)
+            self.logger.debug(
+                f"Cursor exists: cursor_field={current_cursor_field}, "
+                f"default={cursor_field}, cursor_data={getattr(self.cursor, 'cursor_data', {})}"
+            )
+
+            # If we have a cursor but no cursor_field set, set it to our default
+            if not current_cursor_field:
+                self.logger.info(f"Setting cursor field to default: {cursor_field}")
+                self.cursor.cursor_field = cursor_field
+        else:
+            self.logger.debug("No cursor available yet")
+
+        return cursor_field
+
+    def _prepare_sync_context(self) -> tuple[str, Optional[str]]:
+        """Prepare sync context and return cursor field and delta token.
+
+        Returns:
+            Tuple of (cursor_field, delta_token)
+        """
+        # Ensure cursor field is set to our default
+        cursor_field = self._ensure_cursor_field_set()
 
         # Get cursor data for incremental sync
         cursor_data = self._get_cursor_data()
-        cursor_field = self.get_effective_cursor_field()
-        if not cursor_field:
-            cursor_field = self.get_default_cursor_field()
 
         # Validate the cursor field - will raise ValueError if invalid
         if cursor_field != self.get_default_cursor_field():
             self.validate_cursor_field(cursor_field)
 
-        # Extract sync tokens
-        delta_token = cursor_data.get("deltaToken")
-        last_modified = cursor_data.get("lastModifiedDateTime")
+        # IMPORTANT: This determines incremental vs full sync
+        # - If cursor_data[cursor_field] is None/missing: FULL SYNC (first time)
+        # - If cursor_field has a value: INCREMENTAL SYNC (subsequent syncs)
+        delta_token = cursor_data.get(cursor_field)
 
         if delta_token:
             self.logger.info(
-                f"Found delta token for field '{cursor_field}'. "
-                f"Will perform DELTA sync using Microsoft Graph delta query."
-            )
-        elif last_modified:
-            self.logger.info(
-                f"Found cursor data for field '{cursor_field}': {last_modified}. "
-                f"Will perform INCREMENTAL sync using date filtering."
+                f"Found cursor data for field '{cursor_field}': {delta_token[:100]}... "
+                f"Will perform INCREMENTAL sync."
             )
         else:
             self.logger.info(
@@ -106,7 +186,7 @@ class OutlookMailSource(BaseSource):
                 f"Will perform FULL sync (first sync or cursor reset)."
             )
 
-        return cursor_field, delta_token, last_modified
+        return cursor_field, delta_token
 
     @classmethod
     async def create(
@@ -119,121 +199,8 @@ class OutlookMailSource(BaseSource):
         logger.info(f"OutlookMailSource instance created with config: {config}")
         return instance
 
-    async def _setup_initial_delta_sync(
-        self,
-        client: httpx.AsyncClient,
-        folder_entity: OutlookMailFolderEntity,
-        folder_breadcrumb: Breadcrumb,
-    ) -> Optional[str]:
-        """Set up initial delta sync by making a delta request without a token.
-
-        This is needed to get the first delta token for future incremental syncs.
-
-        Returns:
-            Delta token if successful, None otherwise
-        """
-        folder_name = folder_entity.display_name
-        self.logger.info(f"Setting up initial delta sync for folder: {folder_name}")
-
-        try:
-            # Make initial delta request to get the delta token
-            url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_entity.entity_id}/messages/delta"
-            params = {"$top": 1}  # Just get one message to establish the delta link
-
-            data = await self._get_with_auth(client, url, params=params)
-
-            # Extract delta token from the response
-            if "@odata.deltaLink" in data:
-                delta_link = data["@odata.deltaLink"]
-                if "deltatoken=" in delta_link:
-                    delta_token = delta_link.split("deltatoken=")[1].split("&")[0]
-                    self.logger.info(
-                        f"Successfully obtained initial delta token for folder {folder_name}"
-                    )
-
-                    # Store the delta token in cursor data
-                    if data.get("value"):
-                        last_message = data["value"][0]
-                        last_modified = last_message.get("lastModifiedDateTime", "")
-                        if last_modified:
-                            self._update_cursor_data(
-                                delta_token, last_modified, folder_entity.entity_id
-                            )
-                            self.logger.info(
-                                f"Updated cursor with initial delta token for folder {folder_name}"
-                            )
-
-                    return delta_token
-
-            self.logger.warning(
-                f"Could not extract delta token from response for folder {folder_name}"
-            )
-            return None
-
-        except Exception as e:
-            self.logger.error(
-                f"Error setting up initial delta sync for folder {folder_name}: {str(e)}"
-            )
-            return None
-
-    def _update_cursor_data(self, delta_token: str, last_modified: str, folder_id: str):
-        """Update cursor with delta token and last modified timestamp."""
-        if not hasattr(self, "cursor") or self.cursor is None:
-            self.logger.debug("No cursor available, skipping cursor update")
-            return
-
-        cursor_field = self.get_effective_cursor_field()
-        if not cursor_field:
-            cursor_field = self.get_default_cursor_field()
-
-        self.cursor.cursor_data.update(
-            {
-                "deltaToken": delta_token,
-                "lastModifiedDateTime": last_modified,
-                "folderId": folder_id,
-                "lastSyncTime": datetime.utcnow().isoformat(),
-            }
-        )
-
-        self.logger.debug(f"Updated cursor data: {self.cursor.cursor_data}")
-
-    def _get_cursor_data(self) -> Dict[str, Any]:
-        """Get cursor data for incremental sync."""
-        if hasattr(self, "cursor") and self.cursor:
-            return getattr(self.cursor, "cursor_data", {})
-        return {}
-
-    def _validate_delta_token(self, delta_token: str) -> bool:
-        """Validate if a delta token is still valid.
-
-        This is a basic validation - the actual validation happens when using the token.
-        """
-        if not delta_token:
-            return False
-
-        # Basic format validation (delta tokens are typically long strings)
-        if len(delta_token) < 10:
-            return False
-
-        return True
-
-    def _cleanup_expired_tokens(self):
-        """Clean up expired or invalid delta tokens from cursor data."""
-        cursor_data = self._get_cursor_data()
-        delta_token = cursor_data.get("deltaToken")
-
-        if delta_token and not self._validate_delta_token(delta_token):
-            self.logger.info("Cleaning up invalid delta token")
-            cursor_data.pop("deltaToken", None)
-
-            # Keep the last modified time for fallback
-            if "lastModifiedDateTime" in cursor_data:
-                self.logger.info("Keeping lastModifiedDateTime for fallback sync")
-
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        reraise=True,
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True
     )
     async def _get_with_auth(
         self, client: httpx.AsyncClient, url: str, params: Optional[dict] = None
@@ -374,6 +341,56 @@ class OutlookMailSource(BaseSource):
                     ):
                         yield entity
 
+                    # After processing messages, get delta link for this folder for future incremental syncs
+                    if folder_entity.total_item_count > 0:
+                        try:
+                            # Per Microsoft Graph docs, call the delta endpoint and follow @odata.nextLink
+                            # until an @odata.deltaLink is returned, then store that URL for future syncs.
+                            delta_url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_entity.entity_id}/messages/delta"
+                            self.logger.debug(f"Calling delta endpoint: {delta_url}")
+                            delta_data = await self._get_with_auth(client, delta_url)
+
+                            attempts = 0
+                            max_attempts = 1000  # safety cap to avoid infinite loops
+                            while attempts < max_attempts:
+                                attempts += 1
+                                if (
+                                    isinstance(delta_data, dict)
+                                    and "@odata.deltaLink" in delta_data
+                                ):
+                                    delta_link = delta_data["@odata.deltaLink"]
+                                    self.logger.info(
+                                        f"Storing delta link for folder: {folder_entity.display_name}"
+                                    )
+                                    self._update_cursor_data(
+                                        delta_link,
+                                        folder_entity.entity_id,
+                                        folder_entity.display_name,
+                                    )
+                                    break
+
+                                next_link = (
+                                    delta_data.get("@odata.nextLink")
+                                    if isinstance(delta_data, dict)
+                                    else None
+                                )
+                                if next_link:
+                                    self.logger.debug(
+                                        f"Following delta pagination nextLink for folder "
+                                        f"{folder_entity.display_name}"
+                                    )
+                                    delta_data = await self._get_with_auth(client, next_link)
+                                else:
+                                    self.logger.warning(
+                                        f"No deltaLink or nextLink received for folder "
+                                        f"{folder_entity.display_name} while initializing delta."
+                                    )
+                                    break
+                        except Exception as e:
+                            self.logger.warning(
+                                f"Failed to get delta token for folder {folder_entity.display_name}: {str(e)}"
+                            )
+
                     # Process child folders recursively
                     async for child_entity in self._process_child_folders(
                         client, folder_entity, parent_breadcrumbs, folder_breadcrumb
@@ -390,284 +407,6 @@ class OutlookMailSource(BaseSource):
             self.logger.error(f"Error fetching folders: {str(e)}")
             raise
 
-    def _build_url_and_params(
-        self, folder_id: str, delta_token: Optional[str], since_timestamp: Optional[datetime]
-    ) -> tuple[str, Optional[dict]]:
-        """Build the URL and parameters for the message request."""
-        if delta_token:
-            url = (
-                f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages/delta"
-                f"?$deltatoken={delta_token}"
-            )
-            return url, None
-        elif since_timestamp:
-            url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages"
-            params = {
-                "$filter": f"lastModifiedDateTime gt {since_timestamp.isoformat()}Z",
-                "$top": 50,
-            }
-            return url, params
-        else:
-            url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages"
-            return url, {"$top": 50}
-
-    def _log_sync_mode(
-        self, folder_name: str, delta_token: Optional[str], since_timestamp: Optional[datetime]
-    ):
-        """Log the sync mode being used."""
-        if delta_token:
-            self.logger.info(f"Using delta token for incremental sync in folder: {folder_name}")
-        elif since_timestamp:
-            self.logger.info(
-                f"Using date filter for incremental sync since {since_timestamp} "
-                f"in folder {folder_name}"
-            )
-        else:
-            self.logger.info(f"Performing full sync in folder: {folder_name}")
-
-    def _extract_delta_token(self, data: dict) -> Optional[str]:
-        """Extract delta token from API response."""
-        if "@odata.deltaLink" in data:
-            delta_link = data["@odata.deltaLink"]
-            if "deltatoken=" in delta_link:
-                return delta_link.split("deltatoken=")[1].split("&")[0]
-        return None
-
-    def _handle_delta_token_error(
-        self, data: dict, delta_token: str, folder_entity, folder_breadcrumb
-    ):
-        """Handle delta token errors and return True if error was handled."""
-        if delta_token and "error" in data:
-            error_code = data["error"].get("code", "")
-            if error_code in [
-                "InvalidAuthenticationToken",
-                "DeltaTokenExpired",
-                "InvalidDeltaToken",
-            ]:
-                self.logger.warning(f"Delta token error: {error_code}, handling expiration")
-                return True
-        return False
-
-    async def _process_message_batch(
-        self,
-        client: httpx.AsyncClient,
-        messages: list,
-        folder_name: str,
-        folder_breadcrumb: Breadcrumb,
-        folder_entity: OutlookMailFolderEntity,
-    ) -> AsyncGenerator[ChunkEntity, None]:
-        """Process a batch of messages and yield entities."""
-        for msg_idx, message_data in enumerate(messages):
-            message_id = message_data.get("id", "unknown")
-            self.logger.debug(
-                f"Processing message #{msg_idx + 1}/{len(messages)} (ID: {message_id}) "
-                f"in folder {folder_name}"
-            )
-
-            # Check if this is a deletion (delta query specific)
-            if message_data.get("@removed"):
-                self.logger.info(f"Message {message_id} was deleted, creating deletion entity")
-                deletion_entity = self._create_deletion_entity(message_data, folder_breadcrumb)
-                if deletion_entity:
-                    yield deletion_entity
-                continue
-
-            # If message doesn't have full data, fetch it
-            if "body" not in message_data:
-                self.logger.debug(f"Fetching full message details for {message_id}")
-                message_url = f"{self.GRAPH_BASE_URL}/me/messages/{message_id}"
-                message_data = await self._get_with_auth(client, message_url)
-
-            # Process the message
-            try:
-                async for entity in self._process_message(
-                    client, message_data, folder_name, folder_breadcrumb
-                ):
-                    yield entity
-            except Exception as e:
-                self.logger.error(f"Error processing message {message_id}: {str(e)}")
-                # Continue with other messages even if one fails
-
-    async def _get_messages_delta(
-        self,
-        client: httpx.AsyncClient,
-        folder_entity: OutlookMailFolderEntity,
-        folder_breadcrumb: Breadcrumb,
-        delta_token: Optional[str] = None,
-        since_timestamp: Optional[datetime] = None,
-    ) -> AsyncGenerator[ChunkEntity, None]:
-        """Get messages using delta query for incremental sync."""
-        folder_name = folder_entity.display_name
-        folder_id = folder_entity.entity_id
-
-        # Build URL and parameters
-        url, params = self._build_url_and_params(folder_id, delta_token, since_timestamp)
-        self._log_sync_mode(folder_name, delta_token, since_timestamp)
-
-        page_count = 0
-        message_count = 0
-        next_delta_token = None
-
-        try:
-            while url:
-                page_count += 1
-                self.logger.info(
-                    f"Fetching message list page #{page_count} for folder {folder_name}"
-                )
-
-                data = await self._get_with_auth(client, url, params=params)
-                messages = data.get("value", [])
-                self.logger.info(
-                    f"Found {len(messages)} messages on page {page_count} in folder {folder_name}"
-                )
-
-                # Extract delta token if available
-                next_delta_token = self._extract_delta_token(data)
-
-                # Check for delta token errors
-                if self._handle_delta_token_error(
-                    data, delta_token, folder_entity, folder_breadcrumb
-                ):
-                    async for entity in self._handle_delta_token_expiration(
-                        client, folder_entity, folder_breadcrumb, delta_token
-                    ):
-                        yield entity
-                    return
-
-                # Process messages
-                async for entity in self._process_message_batch(
-                    client, messages, folder_name, folder_breadcrumb, folder_entity
-                ):
-                    yield entity
-                    message_count += 1
-
-                # Handle pagination
-                url = data.get("@odata.nextLink")
-                if url:
-                    self.logger.debug("Following pagination to next page")
-                    params = None  # params are included in the nextLink
-                else:
-                    self.logger.info(
-                        f"Completed folder {folder_name}. "
-                        f"Processed {message_count} messages in {page_count} pages."
-                    )
-                    break
-
-            # Update cursor with delta token if we have one
-            if next_delta_token and messages:
-                # Get the last modified time from the last message processed
-                last_message = messages[-1]  # Get the last message from the batch
-                if not last_message.get("@removed"):
-                    last_modified = last_message.get("lastModifiedDateTime", "")
-                    if last_modified:
-                        self._update_cursor_data(
-                            next_delta_token, last_modified, folder_entity.entity_id
-                        )
-                        self.logger.info(
-                            f"Updated cursor with delta token for folder {folder_name}"
-                        )
-
-        except Exception as e:
-            self.logger.error(
-                f"Error processing messages in folder {folder_entity.display_name}: {str(e)}"
-            )
-            raise
-
-    def _should_skip_folder(self, folder_entity: OutlookMailFolderEntity) -> bool:
-        """Check if folder should be skipped due to no messages."""
-        if folder_entity.total_item_count == 0:
-            self.logger.debug(f"Skipping folder {folder_entity.display_name} - no messages")
-            return True
-        return False
-
-    def _log_folder_start(self, folder_entity: OutlookMailFolderEntity):
-        """Log the start of message generation for a folder."""
-        self.logger.info(
-            f"Starting message generation for folder: {folder_entity.display_name} "
-            f"({folder_entity.total_item_count} items)"
-        )
-
-    def _get_sync_tokens(self) -> tuple[Optional[str], Optional[str]]:
-        """Get delta token and last modified timestamp from cursor data."""
-        cursor_data = self._get_cursor_data()
-        return cursor_data.get("deltaToken"), cursor_data.get("lastModifiedDateTime")
-
-    async def _sync_with_delta_token(
-        self,
-        client: httpx.AsyncClient,
-        folder_entity: OutlookMailFolderEntity,
-        folder_breadcrumb: Breadcrumb,
-        delta_token: str,
-    ) -> AsyncGenerator[ChunkEntity, None]:
-        """Sync messages using delta token."""
-        self.logger.info(
-            f"Using delta token for incremental sync in folder {folder_entity.display_name}"
-        )
-        async for entity in self._get_messages_delta(
-            client, folder_entity, folder_breadcrumb, delta_token=delta_token
-        ):
-            yield entity
-
-    async def _sync_with_date_filter(
-        self,
-        client: httpx.AsyncClient,
-        folder_entity: OutlookMailFolderEntity,
-        folder_breadcrumb: Breadcrumb,
-        last_modified: str,
-    ) -> AsyncGenerator[ChunkEntity, None]:
-        """Sync messages using date filtering."""
-        try:
-            since_timestamp = datetime.fromisoformat(last_modified.replace("Z", "+00:00"))
-            self.logger.info(
-                f"Using date filter for incremental sync since {since_timestamp} "
-                f"in folder {folder_entity.display_name}"
-            )
-
-            # First, try to set up delta sync for future runs
-            new_delta_token = await self._setup_initial_delta_sync(
-                client, folder_entity, folder_breadcrumb
-            )
-            if new_delta_token:
-                self.logger.info(
-                    f"Successfully set up delta sync for future runs in folder "
-                    f"{folder_entity.display_name}"
-                )
-
-            # Then perform the current sync using date filtering
-            async for entity in self._get_messages_delta(
-                client, folder_entity, folder_breadcrumb, since_timestamp=since_timestamp
-            ):
-                yield entity
-        except (ValueError, TypeError) as e:
-            self.logger.warning(
-                f"Error parsing last modified timestamp {last_modified}: {str(e)}, "
-                f"falling back to full sync"
-            )
-            async for entity in self._get_messages_delta(client, folder_entity, folder_breadcrumb):
-                yield entity
-
-    async def _sync_with_full_sync(
-        self,
-        client: httpx.AsyncClient,
-        folder_entity: OutlookMailFolderEntity,
-        folder_breadcrumb: Breadcrumb,
-    ) -> AsyncGenerator[ChunkEntity, None]:
-        """Sync messages using full sync."""
-        self.logger.info(f"Performing full sync in folder {folder_entity.display_name}")
-
-        # Try to set up delta sync for future runs
-        new_delta_token = await self._setup_initial_delta_sync(
-            client, folder_entity, folder_breadcrumb
-        )
-        if new_delta_token:
-            self.logger.info(
-                f"Successfully set up delta sync for future runs in folder "
-                f"{folder_entity.display_name}"
-            )
-
-        async for entity in self._get_messages_delta(client, folder_entity, folder_breadcrumb):
-            yield entity
-
     async def _generate_message_entities(
         self,
         client: httpx.AsyncClient,
@@ -676,132 +415,76 @@ class OutlookMailSource(BaseSource):
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Generate OutlookMessageEntity objects and their attachments for a given folder."""
         # Skip folders with no messages
-        if self._should_skip_folder(folder_entity):
+        if folder_entity.total_item_count == 0:
+            self.logger.debug(f"Skipping folder {folder_entity.display_name} - no messages")
             return
 
-        self._log_folder_start(folder_entity)
-
-        # Get sync tokens
-        delta_token, last_modified = self._get_sync_tokens()
-
-        # Determine sync mode and execute
-        if delta_token:
-            async for entity in self._sync_with_delta_token(
-                client, folder_entity, folder_breadcrumb, delta_token
-            ):
-                yield entity
-        elif last_modified:
-            async for entity in self._sync_with_date_filter(
-                client, folder_entity, folder_breadcrumb, last_modified
-            ):
-                yield entity
-        else:
-            async for entity in self._sync_with_full_sync(client, folder_entity, folder_breadcrumb):
-                yield entity
-
-    async def _handle_delta_token_expiration(
-        self,
-        client: httpx.AsyncClient,
-        folder_entity: OutlookMailFolderEntity,
-        folder_breadcrumb: Breadcrumb,
-        expired_token: str,
-    ) -> AsyncGenerator[ChunkEntity, None]:
-        """Handle expired delta token by falling back to date filtering.
-
-        This is called when a delta token expires or becomes invalid.
-        """
-        self.logger.warning(
-            f"Delta token expired for folder {folder_entity.display_name}, "
-            "falling back to date filtering"
+        self.logger.info(
+            f"Starting message generation for folder: {folder_entity.display_name} "
+            f"({folder_entity.total_item_count} items)"
         )
 
-        # Clear the expired delta token
-        cursor_data = self._get_cursor_data()
-        if cursor_data.get("deltaToken") == expired_token:
-            cursor_data.pop("deltaToken", None)
-            self.logger.info(f"Cleared expired delta token for folder {folder_entity.display_name}")
+        url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_entity.entity_id}/messages"
+        params = {"$top": 50}  # Fetch 50 messages at a time
 
-        # Try to get last modified time for fallback
-        last_modified = cursor_data.get("lastModifiedDateTime")
-        if last_modified:
-            try:
-                since_timestamp = datetime.fromisoformat(last_modified.replace("Z", "+00:00"))
+        page_count = 0
+        message_count = 0
+
+        try:
+            while url:
+                page_count += 1
                 self.logger.info(
-                    f"Using date filter fallback since {since_timestamp} "
-                    f"for folder {folder_entity.display_name}"
+                    f"Fetching message list page #{page_count} for folder "
+                    f"{folder_entity.display_name}"
+                )
+                data = await self._get_with_auth(client, url, params=params)
+                messages = data.get("value", [])
+                self.logger.info(
+                    f"Found {len(messages)} messages on page {page_count} in folder "
+                    f"{folder_entity.display_name}"
                 )
 
-                # Set up new delta sync for future runs
-                new_delta_token = await self._setup_initial_delta_sync(
-                    client, folder_entity, folder_breadcrumb
-                )
-                if new_delta_token:
-                    self.logger.info(
-                        f"Successfully set up new delta sync after token expiration "
-                        f"for folder {folder_entity.display_name}"
+                for msg_idx, message_data in enumerate(messages):
+                    message_count += 1
+                    message_id = message_data.get("id", "unknown")
+                    self.logger.debug(
+                        f"Processing message #{msg_idx + 1}/{len(messages)} (ID: {message_id}) "
+                        f"in folder {folder_entity.display_name}"
                     )
 
-                # Perform sync using date filtering
-                async for entity in self._get_messages_delta(
-                    client, folder_entity, folder_breadcrumb, since_timestamp=since_timestamp
-                ):
-                    yield entity
-                return
-            except (ValueError, TypeError) as e:
-                self.logger.warning(
-                    f"Error parsing last modified timestamp {last_modified}: {str(e)}"
-                )
+                    # If message doesn't have full data, fetch it
+                    if "body" not in message_data:
+                        self.logger.debug(f"Fetching full message details for {message_id}")
+                        message_url = f"{self.GRAPH_BASE_URL}/me/messages/{message_id}"
+                        message_data = await self._get_with_auth(client, message_url)
 
-        # Final fallback to full sync
-        self.logger.info(f"Performing full sync fallback for folder {folder_entity.display_name}")
-        async for entity in self._get_messages_delta(client, folder_entity, folder_breadcrumb):
-            yield entity
+                    # Process the message
+                    try:
+                        async for entity in self._process_message(
+                            client, message_data, folder_entity.display_name, folder_breadcrumb
+                        ):
+                            yield entity
+                    except Exception as e:
+                        self.logger.error(f"Error processing message {message_id}: {str(e)}")
+                        # Continue with other messages even if one fails
 
-    def _create_deletion_entity(
-        self, message_data: Dict, folder_breadcrumb: Breadcrumb
-    ) -> Optional[ChunkEntity]:
-        """Create a deletion entity for a removed message.
-
-        This is used when delta queries return @removed messages.
-        """
-        try:
-            message_id = message_data.get("id")
-            if not message_id:
-                return None
-
-            # Create a deletion entity to track removed messages
-            deletion_entity = OutlookMessageEntity(
-                entity_id=f"{message_id}_deleted",
-                breadcrumbs=[folder_breadcrumb],
-                folder_name=folder_breadcrumb.name,
-                subject=message_data.get("subject", "Deleted Message"),
-                sender=None,
-                to_recipients=[],
-                cc_recipients=[],
-                sent_date=None,
-                received_date=None,
-                body_preview="",
-                body_content="",
-                is_read=False,
-                is_draft=False,
-                importance=None,
-                has_attachments=False,
-                internet_message_id=None,
-                # Add deletion metadata
-                metadata={
-                    "deletion_status": "removed",
-                    "original_message_id": message_id,
-                    "deletion_detected_at": datetime.utcnow().isoformat(),
-                    "source": "outlook_mail_delta",
-                },
-            )
-
-            self.logger.info(f"Created deletion entity for removed message {message_id}")
-            return deletion_entity
+                # Handle pagination
+                url = data.get("@odata.nextLink")
+                if url:
+                    self.logger.debug("Following pagination to next page")
+                    params = None  # params are included in the nextLink
+                else:
+                    self.logger.info(
+                        f"Completed folder {folder_entity.display_name}. "
+                        f"Processed {message_count} messages in {page_count} pages."
+                    )
+                    break
 
         except Exception as e:
-            self.logger.error(f"Error creating deletion entity: {str(e)}")
-            return None
+            self.logger.error(
+                f"Error processing messages in folder {folder_entity.display_name}: {str(e)}"
+            )
+            raise
 
     async def _process_message(
         self,
@@ -1045,26 +728,230 @@ class OutlookMailSource(BaseSource):
             self.logger.error(f"Error processing attachments for message {message_id}: {str(e)}")
             # Don't re-raise - continue with other messages even if attachments fail
 
+    async def _process_delta_changes(
+        self,
+        client: httpx.AsyncClient,
+        delta_token: str,
+        folder_id: str,
+        folder_name: str,
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Process delta changes for a specific folder using Microsoft Graph delta API.
+
+        Args:
+            client: HTTP client for API requests
+            delta_token: Delta token for fetching changes
+            folder_id: ID of the folder being synced
+            folder_name: Name of the folder being synced
+
+        Yields:
+            ChunkEntity objects for changed messages and attachments
+        """
+        self.logger.info(f"Processing delta changes for folder: {folder_name}")
+
+        try:
+            # Construct the delta URL using the token
+            url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages/delta?$deltatoken={delta_token}"
+            while url:
+                self.logger.debug(f"Fetching delta changes from: {url}")
+                data = await self._get_with_auth(client, url)
+
+                # Process changes
+                changes = data.get("value", [])
+                self.logger.info(f"Found {len(changes)} changes in delta response")
+
+                for change in changes:
+                    change_type = change.get("@odata.type", "")
+
+                    if "#microsoft.graph.message" in change_type:
+                        # Handle message changes
+                        if "deleted" in change:
+                            # Message was deleted
+                            self.logger.info(
+                                f"Message {change.get('id')} was deleted from {folder_name}"
+                            )
+                            # For now, just log deletions - could implement soft delete handling later
+                        else:
+                            # Message was added or updated
+                            self.logger.debug(f"Processing changed message: {change.get('id')}")
+
+                            # Create folder breadcrumb for this message
+                            folder_breadcrumb = Breadcrumb(
+                                entity_id=folder_id,
+                                name=folder_name,
+                                type="folder",
+                            )
+
+                            # Process the message and yield entities
+                            async for entity in self._process_message(
+                                client, change, folder_name, folder_breadcrumb
+                            ):
+                                yield entity
+
+                # Update cursor with new delta token for next sync
+                new_delta_token = data.get("@odata.deltaLink")
+                if new_delta_token:
+                    self.logger.debug("Updating cursor with new delta token")
+                    self._update_cursor_data(new_delta_token, folder_id, folder_name)
+                else:
+                    self.logger.warning("No new delta token received - this may indicate an issue")
+
+                # Handle pagination for delta responses
+                url = data.get("@odata.nextLink")
+                if url:
+                    self.logger.debug("Following delta pagination")
+
+        except Exception as e:
+            self.logger.error(f"Error processing delta changes for folder {folder_name}: {str(e)}")
+            raise
+
+    async def _process_delta_changes_url(
+        self,
+        client: httpx.AsyncClient,
+        delta_url: str,
+        folder_id: str,
+        folder_name: str,
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Process delta changes starting from a delta or nextLink URL (opaque state).
+
+        Reuses the URL returned by Microsoft Graph and follows @odata.nextLink until
+        an @odata.deltaLink is returned, which is then stored for the next round.
+        """
+        self.logger.info(f"Processing delta changes (URL) for folder: {folder_name}")
+
+        try:
+            url = delta_url
+            while url:
+                self.logger.debug(f"Fetching delta changes from: {url}")
+                data = await self._get_with_auth(client, url)
+
+                changes = data.get("value", [])
+                self.logger.info(f"Found {len(changes)} changes in delta response")
+
+                for change in changes:
+                    change_type = change.get("@odata.type", "")
+
+                    # Deletions can be indicated via @removed in Graph delta
+                    if "@removed" in change:
+                        self.logger.info(
+                            f"Message {change.get('id')} was removed from {folder_name}"
+                        )
+                        continue
+
+                    if "#microsoft.graph.message" in change_type or change.get("id"):
+                        folder_breadcrumb = Breadcrumb(
+                            entity_id=folder_id,
+                            name=folder_name,
+                            type="folder",
+                        )
+                        async for entity in self._process_message(
+                            client, change, folder_name, folder_breadcrumb
+                        ):
+                            yield entity
+
+                next_link = data.get("@odata.nextLink")
+                if next_link:
+                    self.logger.debug("Following delta pagination nextLink")
+                    url = next_link
+                    continue
+
+                delta_link = data.get("@odata.deltaLink")
+                if delta_link:
+                    self.logger.debug("Updating cursor with new delta link")
+                    self._update_cursor_data(delta_link, folder_id, folder_name)
+                else:
+                    self.logger.warning(
+                        "No nextLink or deltaLink in delta response; ending this delta cycle"
+                    )
+                break
+
+        except Exception as e:
+            self.logger.error(
+                f"Error processing delta changes (URL) for folder {folder_name}: {str(e)}"
+            )
+            raise
+
+    async def _generate_folder_entities_incremental(
+        self,
+        client: httpx.AsyncClient,
+        delta_token: str,
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Generate entities for incremental sync using delta token.
+
+        Args:
+            client: HTTP client for API requests
+            delta_token: Delta token for fetching changes
+
+        Yields:
+            ChunkEntity objects for changed messages and attachments
+        """
+        self.logger.info("Starting incremental sync")
+
+        # Prefer per-folder delta links (opaque URLs) if available
+        cursor_data = self._get_cursor_data()
+        folder_links = cursor_data.get("folder_delta_links", {}) or {}
+        folder_names = cursor_data.get("folder_names", {}) or {}
+
+        if folder_links:
+            for folder_id, delta_link in folder_links.items():
+                folder_name = folder_names.get(folder_id, folder_id)
+                async for entity in self._process_delta_changes_url(
+                    client, delta_link, folder_id, folder_name
+                ):
+                    yield entity
+            return
+
+        # Legacy fallback: use single token + folder_id/name if present
+        folder_id = cursor_data.get("folder_id")
+        folder_name = cursor_data.get("folder_name", "Unknown Folder")
+        if not folder_id:
+            self.logger.warning("No folder_id in cursor data for legacy delta token; skipping")
+            return
+        async for entity in self._process_delta_changes(
+            client, delta_token, folder_id, folder_name
+        ):
+            yield entity
+
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
-        """Generate all Outlook mail entities: Folders, Messages and Attachments incrementally."""
+        """Generate all Outlook mail entities: Folders, Messages and Attachments.
+
+        Supports both full sync (first run) and incremental sync (subsequent runs)
+        using Microsoft Graph delta API.
+        """
         self.logger.info("===== STARTING OUTLOOK MAIL ENTITY GENERATION =====")
         entity_count = 0
 
-        # Prepare sync context
-        cursor_field, delta_token, last_modified = self._prepare_sync_context()
-
         try:
+            # Determine sync type and get delta token if available
+            cursor_field, delta_token = self._prepare_sync_context()
+
             async with httpx.AsyncClient() as client:
                 self.logger.info("HTTP client created, starting entity generation")
 
-                # Start with top-level folders and recursively process all folders and contents
-                async for entity in self._generate_folder_entities(client):
-                    entity_count += 1
-                    entity_type = type(entity).__name__
-                    self.logger.info(
-                        f"Yielding entity #{entity_count}: {entity_type} with ID {entity.entity_id}"
-                    )
-                    yield entity
+                cursor_data = self._get_cursor_data()
+                has_folder_links = bool(cursor_data.get("folder_delta_links"))
+
+                if has_folder_links or delta_token:
+                    # INCREMENTAL SYNC: Prefer per-folder delta links; fall back to legacy token
+                    self.logger.info("Performing INCREMENTAL sync")
+                    async for entity in self._generate_folder_entities_incremental(
+                        client, delta_token
+                    ):
+                        entity_count += 1
+                        entity_type = type(entity).__name__
+                        self.logger.info(
+                            f"Yielding delta entity #{entity_count}: {entity_type} with ID {entity.entity_id}"
+                        )
+                        yield entity
+                else:
+                    # FULL SYNC: Process all folders and messages
+                    self.logger.info("Performing FULL sync (first sync or cursor reset)")
+                    async for entity in self._generate_folder_entities(client):
+                        entity_count += 1
+                        entity_type = type(entity).__name__
+                        self.logger.info(
+                            f"Yielding full sync entity #{entity_count}: {entity_type} with ID {entity.entity_id}"
+                        )
+                        yield entity
 
         except Exception as e:
             self.logger.error(f"Error in entity generation: {str(e)}", exc_info=True)
