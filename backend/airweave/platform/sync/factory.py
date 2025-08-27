@@ -350,7 +350,7 @@ class SyncFactory:
                 )
         except Exception:
             # Non-fatal: older sources may ignore this
-            pass
+            logger.debug("Skipping set_sync_identifiers due to exception; source may not support it")
 
         # Step 5: Setup token manager if needed
         # The _setup_token_manager method will check if this source needs a token manager
