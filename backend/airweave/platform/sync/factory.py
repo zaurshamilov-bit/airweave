@@ -339,6 +339,19 @@ class SyncFactory:
         if hasattr(source, "set_logger"):
             source.set_logger(logger)
 
+        # Step 4.1: Pass sync identifiers to the source for scoped helpers
+        try:
+            organization_id = ctx.organization.id
+            source_connection_obj = source_connection_data.get("source_connection_obj")
+            if hasattr(source, "set_sync_identifiers") and source_connection_obj:
+                source.set_sync_identifiers(
+                    organization_id=str(organization_id),
+                    source_connection_id=str(source_connection_obj.id),
+                )
+        except Exception:
+            # Non-fatal: older sources may ignore this
+            pass
+
         # Step 5: Setup token manager if needed
         # The _setup_token_manager method will check if this source needs a token manager
         # based on whether its auth config inherits from OAuth2AuthConfig
