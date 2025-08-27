@@ -1,4 +1,4 @@
-"""Core test runner that orchestrates the entire testing process."""
+"""Core test runner that orchestrates the entire testing process (fixed duration calc)."""
 
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
@@ -11,11 +11,31 @@ from monke.utils.logging import get_logger
 @dataclass
 class TestResult:
     """Result of a test execution."""
+
     success: bool
     duration: float
     metrics: Dict[str, Any]
     errors: List[str]
     warnings: List[str]
+
+
+def _compute_duration(metrics: Dict[str, Any]) -> float:
+    """
+    Prefer a single wall-clock measurement if present; otherwise sum only per-step durations.
+    Avoid double counting and ignore non-numeric / boolean values.
+    """
+    wall = metrics.get("total_duration_wall_clock")
+    if isinstance(wall, (int, float)):
+        return float(wall)
+
+    # Fallback: sum per-step durations only (keys ending with "_duration")
+    total = 0.0
+    for k, v in metrics.items():
+        if not isinstance(v, (int, float)) or isinstance(v, bool):
+            continue
+        if k.endswith("_duration"):
+            total += float(v)
+    return total
 
 
 class TestRunner:
@@ -37,31 +57,30 @@ class TestRunner:
         self.logger.info(f"📝 Description: {self.config.description}")
         self.logger.info(f"🔗 Connector: {self.config.connector.type}")
 
-        test_flow = None
+        test_flow: Optional[TestFlow] = None
         try:
-            # Use the new TestFlow system for all connectors, including GitHub
-            # This ensures the YAML test_flow steps are properly executed step-by-step
+            # Create and set up the flow
             test_flow = TestFlow.create(self.config, run_id=self.run_id)
-
-            # Set up the test environment
             if not await test_flow.setup():
                 raise Exception("Failed to setup test environment")
 
-            # Execute the test flow
+            # Execute flow
             await test_flow.execute()
 
-            # Clean up the test environment
+            # Clean up
             await test_flow.cleanup()
 
-            # Create test result
+            # Build result with corrected duration
+            metrics = test_flow.get_metrics()
+            duration = _compute_duration(metrics)
+
             result = TestResult(
                 success=True,
-                duration=sum(test_flow.get_metrics().values()),
-                metrics=test_flow.get_metrics(),
+                duration=duration,
+                metrics=metrics,
                 errors=[],
-                warnings=test_flow.get_warnings()
+                warnings=test_flow.get_warnings(),
             )
-
             return [result]
 
         except Exception as e:
@@ -81,7 +100,6 @@ class TestRunner:
                 duration=0.0,
                 metrics={},
                 errors=[str(e)],
-                warnings=[]
+                warnings=[],
             )
-
             return [result]

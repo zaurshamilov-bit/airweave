@@ -31,7 +31,8 @@ class GmailBongo(BaseBongo):
 
         # Configuration from kwargs
         self.entity_count = kwargs.get("entity_count", 10)
-        self.openai_model = kwargs.get("openai_model", "gpt-5")
+        self.openai_model = kwargs.get("openai_model", "gpt-4.1")  # sensible default for JSON mode
+        self.llm_max_concurrency = int(kwargs.get("llm_max_concurrency", 8))
 
         # Test data tracking
         self.test_emails = []
@@ -44,23 +45,28 @@ class GmailBongo(BaseBongo):
         self.logger = get_logger("gmail_bongo")
 
     async def create_entities(self) -> List[Dict[str, Any]]:
-        """Create test emails in Gmail."""
+        """Create test emails in Gmail (LLM generation done concurrently)."""
         self.logger.info(f"🥁 Creating {self.entity_count} test emails in Gmail")
-        entities = []
+        entities: List[Dict[str, Any]] = []
 
-        # Create emails based on configuration
         from monke.generation.gmail import generate_gmail_artifact
 
-        # Get the authenticated user's email
+        # Who we're emailing
         user_email = await self._get_user_email()
 
-        for i in range(self.entity_count):
-            # Short unique token used in subject and body for verification
-            token = str(uuid.uuid4())[:8]
+        # Prepare tokens and run all LLM generations concurrently (bounded)
+        tokens = [str(uuid.uuid4())[:8] for _ in range(self.entity_count)]
+        sem = asyncio.Semaphore(self.llm_max_concurrency)
 
-            subject, body = await generate_gmail_artifact(self.openai_model, token)
+        async def gen_one(tok: str):
+            async with sem:
+                subject, body = await generate_gmail_artifact(self.openai_model, tok)
+                return tok, subject, body
 
-            # Create email
+        gen_results = await asyncio.gather(*[gen_one(t) for t in tokens])
+
+        # Send the emails sequentially (gentle on Gmail limits)
+        for tok, subject, body in gen_results:
             email_data = await self._create_test_email(user_email, subject, body)
             entities.append(
                 {
@@ -68,60 +74,60 @@ class GmailBongo(BaseBongo):
                     "id": email_data["id"],
                     "thread_id": email_data["threadId"],
                     "subject": subject,
-                    "token": token,
-                    "expected_content": token,
+                    "token": tok,
+                    "expected_content": tok,
                 }
             )
-
             self.logger.info(f"📧 Created test email: {email_data['id']}")
 
-            # Rate limiting
             if self.entity_count > 10:
                 await asyncio.sleep(0.5)
 
-        self.test_emails = entities  # Store for later operations
+        self.test_emails = entities
         return entities
 
     async def update_entities(self) -> List[Dict[str, Any]]:
-        """Update test entities in Gmail."""
+        """Update test emails in Gmail (LLM generation done concurrently)."""
         self.logger.info("🥁 Updating test emails in Gmail")
-        updated_entities = []
+        updated_entities: List[Dict[str, Any]] = []
 
-        # Update a subset of emails based on configuration
         from monke.generation.gmail import generate_gmail_artifact
 
-        emails_to_update = min(3, self.entity_count)  # Update max 3 emails for any test size
+        emails_to_update = min(3, self.entity_count)
+        if not self.test_emails:
+            return updated_entities
 
-        for i in range(emails_to_update):
-            if i < len(self.test_emails):
-                email_info = self.test_emails[i]
-                token = email_info.get("token") or str(uuid.uuid4())[:8]
+        selected = self.test_emails[:emails_to_update]
+        sem = asyncio.Semaphore(self.llm_max_concurrency)
 
-                # Generate new content with same token
+        async def gen_update(email_info: Dict[str, Any]):
+            token = email_info.get("token") or str(uuid.uuid4())[:8]
+            async with sem:
                 subject, body = await generate_gmail_artifact(
                     self.openai_model, token, is_update=True
                 )
+                return email_info, token, subject, body
 
-                # Update email by adding a label
-                await self._add_label_to_email(email_info["id"], "IMPORTANT")
+        gen_results = await asyncio.gather(*[gen_update(e) for e in selected])
 
-                updated_entities.append(
-                    {
-                        "type": "message",
-                        "id": email_info["id"],
-                        "thread_id": email_info["thread_id"],
-                        "subject": email_info["subject"],
-                        "token": token,
-                        "expected_content": token,
-                        "updated": True,
-                    }
-                )
+        # Apply label updates sequentially (stay inside Gmail rate limits)
+        for email_info, token, subject, body in gen_results:
+            await self._add_label_to_email(email_info["id"], "IMPORTANT")
+            updated_entities.append(
+                {
+                    "type": "message",
+                    "id": email_info["id"],
+                    "thread_id": email_info["thread_id"],
+                    "subject": email_info["subject"],
+                    "token": token,
+                    "expected_content": token,
+                    "updated": True,
+                }
+            )
+            self.logger.info(f"📝 Updated test email: {email_info['id']}")
 
-                self.logger.info(f"📝 Updated test email: {email_info['id']}")
-
-                # Rate limiting
-                if self.entity_count > 10:
-                    await asyncio.sleep(0.5)
+            if self.entity_count > 10:
+                await asyncio.sleep(0.5)
 
         return updated_entities
 

@@ -1,4 +1,4 @@
-"""Gmail-specific generation adapter: email generator."""
+"""Gmail-specific generation adapter: email generator using JSON mode."""
 
 from typing import Tuple
 
@@ -6,32 +6,30 @@ from monke.generation.schemas.gmail import GmailArtifact
 from monke.client.llm import LLMClient
 
 
-async def generate_gmail_artifact(model: str, token: str, is_update: bool = False) -> Tuple[str, str]:
-    """Generate a Gmail email via LLM.
-
-    Returns (subject, body). The token must be embedded in the output by instruction.
+async def generate_gmail_artifact(
+    model: str, token: str, is_update: bool = False
+) -> Tuple[str, str]:
+    """
+    Returns (subject, body). The literal token must appear in the body.
+    Uses JSON mode (response_format: json_object) under the hood.
     """
     llm = LLMClient(model_override=model)
 
     if is_update:
         instruction = (
-            "You are generating an updated email for a test Gmail inbox. "
-            "Create a follow-up email to a synthetic tech product announcement. "
-            "Include the literal token '{token}' somewhere in the body. "
-            "Keep it professional but synthetic."
+            "Create a concise follow-up email about a (synthetic) tech product update. "
+            f"Include the EXACT literal token '{token}' somewhere in the body text. "
+            "Return JSON with fields: subject (string), body (string)."
         )
     else:
         instruction = (
-            "You are generating an email for a test Gmail inbox. "
-            "Create a synthetic email about a new tech product announcement. "
-            "Include the literal token '{token}' somewhere in the body. "
-            "Keep it professional but synthetic."
+            "Create a concise (synthetic) email announcing a new tech product. "
+            f"Include the EXACT literal token '{token}' somewhere in the body text. "
+            "Return JSON with fields: subject (string), body (string)."
         )
 
-    instruction = instruction.format(token=token)
     artifact = await llm.generate_structured(GmailArtifact, instruction)
 
-    # Add token to body if not already present
     body = artifact.body
     if token not in body:
         body += f"\n\nReference: {token}"

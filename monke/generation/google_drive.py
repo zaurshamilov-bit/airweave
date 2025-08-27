@@ -13,9 +13,31 @@ def get_mime_type(file_type: str) -> str:
         "spreadsheet": "application/vnd.google-apps.spreadsheet",
         "pdf": "application/pdf",
         "text": "text/plain",
-        "markdown": "text/markdown"
+        "markdown": "text/markdown",
     }
     return mime_types.get(file_type, "text/plain")
+
+
+def get_media_content_type(file_type: str, target_mime: str) -> str:
+    """
+    Content-Type of the *media bytes* you upload.
+    For Google-native targets we must upload something importable.
+    """
+    if target_mime == "application/vnd.google-apps.document":
+        # Upload text (or HTML) that Docs can import.
+        return "text/plain"  # or "text/html"
+    if target_mime == "application/vnd.google-apps.spreadsheet":
+        # Upload CSV so Sheets can import to a Sheet.
+        return "text/csv"
+
+    # Non-Google-native: just use the file's own content type.
+    # (If you don't know, text/plain is fine for your generated strings.)
+    fallback_by_type = {
+        "pdf": "application/pdf",
+        "text": "text/plain",
+        "markdown": "text/markdown",
+    }
+    return fallback_by_type.get(file_type, target_mime or "application/octet-stream")
 
 
 def render_body(artifact: GoogleDriveArtifact, file_type: str) -> str:
@@ -24,9 +46,9 @@ def render_body(artifact: GoogleDriveArtifact, file_type: str) -> str:
         # For spreadsheets, create CSV-like content
         rows = [
             "Title,Description,Token,Created",
-            f'"{artifact.title}","{artifact.description}","{artifact.token}","{artifact.created_at}"'
+            f'"{artifact.title}","{artifact.description}","{artifact.token}","{artifact.created_at}"',
         ]
-        if hasattr(artifact, 'rows') and artifact.rows:
+        if hasattr(artifact, "rows") and artifact.rows:
             rows.extend(artifact.rows)
         return "\n".join(rows)
     elif file_type == "pdf":
@@ -35,8 +57,10 @@ def render_body(artifact: GoogleDriveArtifact, file_type: str) -> str:
     else:
         # For documents and text files
         parts = [f"# {artifact.title}", artifact.description, f"Token: {artifact.token}"]
-        if hasattr(artifact, 'sections') and artifact.sections:
-            parts.extend([f"\n## {s.get('heading', '')}\n{s.get('body', '')}" for s in artifact.sections])
+        if hasattr(artifact, "sections") and artifact.sections:
+            parts.extend(
+                [f"\n## {s.get('heading', '')}\n{s.get('body', '')}" for s in artifact.sections]
+            )
         return "\n\n".join(parts)
 
 
@@ -73,13 +97,17 @@ async def generate_google_drive_artifact(
             "Generate a markdown file documenting a synthetic API specification. "
             "Include the literal token '{token}' somewhere in the content. "
             "Use proper markdown formatting."
-        )
+        ),
     }
 
     if is_update:
-        instruction = f"Type: {file_type} (UPDATED VERSION)\n" + instructions.get(file_type, instructions["text"]).format(token=token)
+        instruction = f"Type: {file_type} (UPDATED VERSION)\n" + instructions.get(
+            file_type, instructions["text"]
+        ).format(token=token)
     else:
-        instruction = f"Type: {file_type}\n" + instructions.get(file_type, instructions["text"]).format(token=token)
+        instruction = f"Type: {file_type}\n" + instructions.get(
+            file_type, instructions["text"]
+        ).format(token=token)
 
     artifact = await llm.generate_structured(GoogleDriveArtifact, instruction)
 

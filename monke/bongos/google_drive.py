@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 
 import httpx
 from monke.bongos.base_bongo import BaseBongo
+from monke.generation.google_drive import get_media_content_type
 from monke.utils.logging import get_logger
 
 
@@ -29,9 +30,9 @@ class GoogleDriveBongo(BaseBongo):
         self.access_token = credentials["access_token"]
 
         # Configuration from kwargs
-        self.entity_count = kwargs.get('entity_count', 10)
-        self.file_types = kwargs.get('file_types', ["document", "spreadsheet", "pdf"])
-        self.openai_model = kwargs.get('openai_model', 'gpt-5')
+        self.entity_count = kwargs.get("entity_count", 10)
+        self.file_types = kwargs.get("file_types", ["document", "spreadsheet", "pdf"])
+        self.openai_model = kwargs.get("openai_model", "gpt-5")
 
         # Test data tracking
         self.test_files = []
@@ -63,26 +64,26 @@ class GoogleDriveBongo(BaseBongo):
             title, content, mime_type = await generate_google_drive_artifact(
                 file_type, self.openai_model, token
             )
-            filename = f"{title}-{token}"
+
+            filename = self._filename_with_extension(f"{title}-{token}", file_type)
 
             # Create file
             file_data = await self._create_test_file(
-                self.test_folder_id,
-                filename,
-                content,
-                mime_type
+                self.test_folder_id, filename, content, mime_type
             )
 
-            entities.append({
-                "type": "file",
-                "id": file_data["id"],
-                "name": file_data["name"],
-                "folder_id": self.test_folder_id,
-                "file_type": file_type,
-                "mime_type": mime_type,
-                "token": token,
-                "expected_content": token,
-            })
+            entities.append(
+                {
+                    "type": "file",
+                    "id": file_data["id"],
+                    "name": file_data["name"],
+                    "folder_id": self.test_folder_id,
+                    "file_type": file_type,
+                    "mime_type": mime_type,
+                    "token": token,
+                    "expected_content": token,
+                }
+            )
 
             self.logger.info(f"📄 Created test file: {file_data['name']}")
 
@@ -100,6 +101,7 @@ class GoogleDriveBongo(BaseBongo):
 
         # Update a subset of files based on configuration
         from monke.generation.google_drive import generate_google_drive_artifact
+
         files_to_update = min(3, self.entity_count)  # Update max 3 files for any test size
 
         for i in range(files_to_update):
@@ -114,23 +116,21 @@ class GoogleDriveBongo(BaseBongo):
                 )
 
                 # Update file content
-                updated_file = await self._update_test_file(
-                    file_info["id"],
-                    content,
-                    mime_type
-                )
+                updated_file = await self._update_test_file(file_info["id"], content, mime_type)
 
-                updated_entities.append({
-                    "type": "file",
-                    "id": file_info["id"],
-                    "name": updated_file["name"],
-                    "folder_id": self.test_folder_id,
-                    "file_type": file_type,
-                    "mime_type": mime_type,
-                    "token": token,
-                    "expected_content": token,
-                    "updated": True,
-                })
+                updated_entities.append(
+                    {
+                        "type": "file",
+                        "id": file_info["id"],
+                        "name": updated_file["name"],
+                        "folder_id": self.test_folder_id,
+                        "file_type": file_type,
+                        "mime_type": mime_type,
+                        "token": token,
+                        "expected_content": token,
+                        "updated": True,
+                    }
+                )
 
                 self.logger.info(f"📝 Updated test file: {updated_file['name']}")
 
@@ -163,7 +163,9 @@ class GoogleDriveBongo(BaseBongo):
                     deleted_ids.append(test_file["id"])
                     self.logger.info(f"🗑️ Deleted test file: {test_file['name']}")
                 else:
-                    self.logger.warning(f"⚠️ Could not find test file for entity: {entity.get('id')}")
+                    self.logger.warning(
+                        f"⚠️ Could not find test file for entity: {entity.get('id')}"
+                    )
 
                 # Rate limiting
                 if len(entities) > 10:
@@ -217,120 +219,214 @@ class GoogleDriveBongo(BaseBongo):
                 "https://www.googleapis.com/drive/v3/files",
                 headers={
                     "Authorization": f"Bearer {self.access_token}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
                 json={
                     "name": folder_name,
                     "mimeType": "application/vnd.google-apps.folder",
-                    "description": "Temporary folder for Monke testing"
-                }
+                    "description": "Temporary folder for Monke testing",
+                },
             )
 
             if response.status_code != 200:
-                raise Exception(f"Failed to create folder: {response.status_code} - {response.text}")
+                raise Exception(
+                    f"Failed to create folder: {response.status_code} - {response.text}"
+                )
 
             result = response.json()
             self.test_folder_id = result["id"]
             self.logger.info(f"📁 Created test folder: {self.test_folder_id}")
 
     async def _create_test_file(
-        self,
-        folder_id: str,
-        filename: str,
-        content: str,
-        mime_type: str
+        self, folder_id: str, filename: str, content: str, mime_type: str
     ) -> Dict[str, Any]:
-        """Create a test file via Google Drive API."""
+        """Create a test file via Google Drive API (resumable)."""
         await self._rate_limit()
 
-        # First create the file metadata
-        metadata = {
-            "name": filename,
-            "parents": [folder_id]
-        }
-
-        # For Google Docs/Sheets, we need to use specific mime types
-        if mime_type in ["application/vnd.google-apps.document", "application/vnd.google-apps.spreadsheet"]:
+        # Metadata
+        metadata = {"name": filename, "parents": [folder_id]}
+        # Only set Google-native types in metadata; others can be inferred from media.
+        if mime_type in (
+            "application/vnd.google-apps.document",
+            "application/vnd.google-apps.spreadsheet",
+        ):
             metadata["mimeType"] = mime_type
 
-        # Create file with resumable upload
+        content_bytes = content.encode("utf-8")
+        # Infer the *media* type we are uploading (critical for import to Docs/Sheets)
+        media_type = get_media_content_type(
+            file_type=(
+                "document"
+                if mime_type == "application/vnd.google-apps.document"
+                else (
+                    "spreadsheet"
+                    if mime_type == "application/vnd.google-apps.spreadsheet"
+                    else (
+                        "pdf"
+                        if mime_type == "application/pdf"
+                        else "markdown" if mime_type == "text/markdown" else "text"
+                    )
+                )
+            ),
+            target_mime=mime_type,
+        )
+
         async with httpx.AsyncClient() as client:
-            # Step 1: Initialize resumable upload
+            # 1) INIT RESUMABLE SESSION
             init_response = await client.post(
                 "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable",
                 headers={
                     "Authorization": f"Bearer {self.access_token}",
-                    "Content-Type": "application/json"
+                    # Required when sending metadata:
+                    # https://developers.google.com/workspace/drive/api/guides/manage-uploads
+                    "Content-Type": "application/json",
+                    # Tell Drive what media type is coming so it doesn't default to octet-stream
+                    # (Docs: X-Upload-Content-Type optional, but critical for import)
+                    "X-Upload-Content-Type": media_type,
+                    "X-Upload-Content-Length": str(len(content_bytes)),
                 },
-                json=metadata
+                json=metadata,
             )
-
             if init_response.status_code != 200:
-                raise Exception(f"Failed to initialize upload: {init_response.status_code} - {init_response.text}")
+                raise Exception(
+                    f"Failed to initialize upload: {init_response.status_code} - {init_response.text}"
+                )
 
             upload_url = init_response.headers.get("Location")
+            if not upload_url:
+                raise Exception("Resumable upload URL not returned in Location header")
 
-            # Step 2: Upload content
-            content_bytes = content.encode('utf-8')
+            # 2) UPLOAD MEDIA (single request)
             upload_response = await client.put(
                 upload_url,
                 headers={
-                    "Content-Length": str(len(content_bytes))
+                    "Content-Type": media_type,
+                    "Content-Length": str(len(content_bytes)),
                 },
-                content=content_bytes
+                content=content_bytes,
             )
 
-            if upload_response.status_code not in [200, 201]:
-                raise Exception(f"Failed to upload content: {upload_response.status_code} - {upload_response.text}")
+            if upload_response.status_code not in (200, 201):
+                raise Exception(
+                    f"Failed to upload content: {upload_response.status_code} - {upload_response.text}"
+                )
 
             result = upload_response.json()
 
             # Track created file
-            self.created_entities.append({
-                "id": result["id"],
-                "name": result["name"]
-            })
+            self.created_entities.append({"id": result["id"], "name": result["name"]})
 
             return result
 
-    async def _update_test_file(
-        self,
-        file_id: str,
-        content: str,
-        mime_type: str
-    ) -> Dict[str, Any]:
-        """Update a test file via Google Drive API."""
+    @staticmethod
+    def _filename_with_extension(filename: str, file_type: str) -> str:
+        """
+        Ensure files that need real extensions have them.
+        We keep Google-native types extensionless; add for pdf/text/markdown.
+        """
+        ext_map = {
+            "pdf": ".pdf",
+            "text": ".txt",
+            "markdown": ".md",
+        }
+        ext = ext_map.get(file_type)
+        if ext and not filename.lower().endswith(ext):
+            return f"{filename}{ext}"
+        return filename
+
+    async def _ensure_drive_name_extension(self, file_id: str, file_type: str):
+        """
+        If an existing Drive file is missing the expected extension, rename it.
+        Safe no-op for Google-native types (Docs/Sheets).
+        """
+        ext_map = {
+            "pdf": ".pdf",
+            "text": ".txt",
+            "markdown": ".md",
+        }
+        desired_ext = ext_map.get(file_type)
+        if not desired_ext:
+            return  # Docs/Sheets or unsupported -> nothing to do
+
+        async with httpx.AsyncClient() as client:
+            # Fetch current name
+            meta_resp = await client.get(
+                f"https://www.googleapis.com/drive/v3/files/{file_id}?fields=name",
+                headers={"Authorization": f"Bearer {self.access_token}"},
+            )
+            if meta_resp.status_code != 200:
+                return
+
+            name = meta_resp.json().get("name", "")
+            if name and not name.lower().endswith(desired_ext):
+                await client.patch(
+                    f"https://www.googleapis.com/drive/v3/files/{file_id}",
+                    headers={
+                        "Authorization": f"Bearer {self.access_token}",
+                        "Content-Type": "application/json",
+                    },
+                    json={"name": f"{name}{desired_ext}"},
+                )
+
+    async def _update_test_file(self, file_id: str, content: str, mime_type: str) -> Dict[str, Any]:
+        """Update a test file via Google Drive API (resumable)."""
         await self._rate_limit()
 
-        # Update file content using resumable upload
+        content_bytes = content.encode("utf-8")
+        # Infer the media type from the target mime
+        media_type = get_media_content_type(
+            # infer a file_type-ish hint from the target mime
+            file_type=(
+                "document"
+                if mime_type == "application/vnd.google-apps.document"
+                else (
+                    "spreadsheet"
+                    if mime_type == "application/vnd.google-apps.spreadsheet"
+                    else (
+                        "pdf"
+                        if mime_type == "application/pdf"
+                        else "markdown" if mime_type == "text/markdown" else "text"
+                    )
+                )
+            ),
+            target_mime=mime_type,
+        )
+
         async with httpx.AsyncClient() as client:
-            # Initialize resumable upload for update
+            # INIT RESUMABLE SESSION for update (PATCH per docs)
             init_response = await client.patch(
                 f"https://www.googleapis.com/upload/drive/v3/files/{file_id}?uploadType=resumable",
                 headers={
                     "Authorization": f"Bearer {self.access_token}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "X-Upload-Content-Type": media_type,
+                    "X-Upload-Content-Length": str(len(content_bytes)),
                 },
-                json={}  # Empty metadata for content-only update
+                json={},  # content-only update
             )
-
             if init_response.status_code != 200:
-                raise Exception(f"Failed to initialize update: {init_response.status_code} - {init_response.text}")
+                raise Exception(
+                    f"Failed to initialize update: {init_response.status_code} - {init_response.text}"
+                )
 
             upload_url = init_response.headers.get("Location")
+            if not upload_url:
+                raise Exception("Resumable upload URL not returned in Location header")
 
-            # Upload new content
-            content_bytes = content.encode('utf-8')
+            # UPLOAD MEDIA
             upload_response = await client.put(
                 upload_url,
                 headers={
-                    "Content-Length": str(len(content_bytes))
+                    "Content-Type": media_type,
+                    "Content-Length": str(len(content_bytes)),
                 },
-                content=content_bytes
+                content=content_bytes,
             )
 
-            if upload_response.status_code != 200:
-                raise Exception(f"Failed to update content: {upload_response.status_code} - {upload_response.text}")
+            if upload_response.status_code not in (200, 201):
+                raise Exception(
+                    f"Failed to update content: {upload_response.status_code} - {upload_response.text}"
+                )
 
             return upload_response.json()
 
@@ -341,9 +437,7 @@ class GoogleDriveBongo(BaseBongo):
         async with httpx.AsyncClient() as client:
             response = await client.delete(
                 f"https://www.googleapis.com/drive/v3/files/{file_id}",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                }
+                headers={"Authorization": f"Bearer {self.access_token}"},
             )
 
             if response.status_code != 204:
@@ -355,9 +449,7 @@ class GoogleDriveBongo(BaseBongo):
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"https://www.googleapis.com/drive/v3/files/{file_id}",
-                    headers={
-                        "Authorization": f"Bearer {self.access_token}"
-                    }
+                    headers={"Authorization": f"Bearer {self.access_token}"},
                 )
 
                 if response.status_code == 404:
@@ -369,7 +461,9 @@ class GoogleDriveBongo(BaseBongo):
                     return data.get("trashed", False)
                 else:
                     # Unexpected response
-                    self.logger.warning(f"⚠️ Unexpected response checking {file_id}: {response.status_code}")
+                    self.logger.warning(
+                        f"⚠️ Unexpected response checking {file_id}: {response.status_code}"
+                    )
                     return False
 
         except Exception as e:
@@ -386,15 +480,15 @@ class GoogleDriveBongo(BaseBongo):
             async with httpx.AsyncClient() as client:
                 response = await client.delete(
                     f"https://www.googleapis.com/drive/v3/files/{file_id}?supportsAllDrives=true",
-                    headers={
-                        "Authorization": f"Bearer {self.access_token}"
-                    }
+                    headers={"Authorization": f"Bearer {self.access_token}"},
                 )
 
                 if response.status_code == 204:
                     self.logger.info(f"🧹 Force deleted file: {file_id}")
                 else:
-                    self.logger.warning(f"⚠️ Force delete failed for {file_id}: {response.status_code}")
+                    self.logger.warning(
+                        f"⚠️ Force delete failed for {file_id}: {response.status_code}"
+                    )
         except Exception as e:
             self.logger.warning(f"Could not force delete {file_id}: {e}")
 
@@ -405,13 +499,13 @@ class GoogleDriveBongo(BaseBongo):
         async with httpx.AsyncClient() as client:
             response = await client.delete(
                 f"https://www.googleapis.com/drive/v3/files/{folder_id}",
-                headers={
-                    "Authorization": f"Bearer {self.access_token}"
-                }
+                headers={"Authorization": f"Bearer {self.access_token}"},
             )
 
             if response.status_code != 204:
-                raise Exception(f"Failed to delete folder: {response.status_code} - {response.text}")
+                raise Exception(
+                    f"Failed to delete folder: {response.status_code} - {response.text}"
+                )
 
     async def _rate_limit(self):
         """Implement rate limiting for Google Drive API."""

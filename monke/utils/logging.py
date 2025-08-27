@@ -30,17 +30,11 @@ def get_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     # Create rich handler
     console = Console()
     rich_handler = RichHandler(
-        console=console,
-        show_time=True,
-        show_path=False,
-        markup=True,
-        rich_tracebacks=True
+        console=console, show_time=True, show_path=False, markup=True, rich_tracebacks=True
     )
 
     # Set formatter
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     rich_handler.setFormatter(formatter)
 
     # Add handler
