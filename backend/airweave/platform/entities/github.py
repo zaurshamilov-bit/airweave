@@ -10,7 +10,7 @@ References:
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from airweave.platform.entities._airweave_field import AirweaveField
 from airweave.platform.entities._base import ChunkEntity, CodeFileEntity, ParentEntity
@@ -152,3 +152,27 @@ class GithubContentEntity(ChunkEntity):
     encoding: Optional[str] = AirweaveField(
         None, description="Indicates the encoding of the content (e.g., 'base64')."
     )
+
+
+class GitHubFileDeletionEntity(ChunkEntity):
+    """Schema for GitHub file deletion entity.
+
+    This entity is used to signal that a file has been removed from the repository
+    and should be deleted from the destination.
+    """
+
+    file_path: str = AirweaveField(
+        ..., description="Path of the deleted file within the repository"
+    )
+    repo_name: str = AirweaveField(
+        ..., description="Name of the repository containing the deleted file"
+    )
+    repo_owner: str = AirweaveField(..., description="Owner of the repository")
+    deletion_status: str = AirweaveField(..., description="Status indicating the file was removed")
+
+    def to_storage_dict(self, exclude_fields: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Override to include deletion metadata for proper handling."""
+        data = super().to_storage_dict(exclude_fields)
+        data["_deletion_entity"] = True
+        data["_deletion_target"] = self.entity_id
+        return data

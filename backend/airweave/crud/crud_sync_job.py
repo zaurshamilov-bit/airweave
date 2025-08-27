@@ -37,13 +37,20 @@ class CRUDSyncJob(CRUDBaseOrganization[SyncJob, SyncJobCreate, SyncJobUpdate]):
         self,
         db: AsyncSession,
         sync_id: UUID,
+        status: Optional[list[str]] = None,
     ) -> list[SyncJob]:
-        """Get all jobs for a specific sync."""
+        """Get all jobs for a specific sync, optionally filtered by status."""
         stmt = (
             select(SyncJob, Sync.name.label("sync_name"))
             .join(Sync, SyncJob.sync_id == Sync.id)
             .where(SyncJob.sync_id == sync_id)
         )
+
+        # Add status filter if provided
+        if status:
+            # Database enum already uses uppercase values
+            stmt = stmt.where(SyncJob.status.in_(status))
+
         result = await db.execute(stmt)
         jobs = []
         for job, sync_name in result:

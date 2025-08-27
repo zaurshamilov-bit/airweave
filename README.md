@@ -44,6 +44,10 @@ The search interface is exposed via REST API or MCP. When using MCP, Airweave es
 
 ## 🚀 Quick Start
 
+### Managed Service: [Airweave Cloud](https://app.airweave.ai/)
+
+### Self-hosted:
+
 Make sure docker and docker-compose are installed, then...
 
 ```bash

@@ -8,7 +8,9 @@ from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.exceptions import PaymentRequiredException, UsageLimitExceededException
 from airweave.core.guard_rail_service import ActionType
 from airweave.core.shared_models import SyncJobStatus
+from airweave.core.sync_cursor_service import sync_cursor_service
 from airweave.core.sync_job_service import sync_job_service
+from airweave.db.session import get_db_context
 from airweave.platform.sync.context import SyncContext
 from airweave.platform.sync.entity_processor import EntityProcessor
 from airweave.platform.sync.stream import AsyncSourceStream
@@ -157,9 +159,50 @@ class SyncOrchestrator:
             await self.sync_context.progress.finalize(is_complete=(stream_error is None))
 
             # Clean up orphaned entities after all processing is complete
-            if not stream_error:
+            #
+            # ⚠️ IMPORTANT: ORPHANED ENTITY CLEANUP IS DISABLED FOR INCREMENTAL SYNCS ⚠️
+            #
+            # The orphaned entity cleanup was designed for full syncs where ALL entities
+            # from the source are processed. In incremental syncs, only CHANGED entities
+            # are yielded, so unchanged entities would incorrectly appear as "orphaned"
+            # and get deleted.
+            #
+            # For incremental syncs, deletions should only happen through:
+            # 1. Explicit deletion entities (e.g., GitHubFileDeletionEntity)
+            # 2. NOT through orphaned cleanup
+            #
+            # TODO: Future improvement could track which entities are expected to be
+            # unchanged vs. truly orphaned, allowing cleanup even in incremental syncs.
+            #
+            # Detection logic:
+            # - If cursor data exists, this is an incremental sync (we've synced before)
+            # - If no cursor data, this is the first/full sync
+
+            # Check if we should do cleanup
+            # Cleanup happens if:
+            # 1. force_full_sync is True (daily cleanup run), OR
+            # 2. No cursor data exists (first sync or reset)
+            has_cursor_data = bool(
+                hasattr(self.sync_context, "cursor")
+                and self.sync_context.cursor
+                and self.sync_context.cursor.cursor_data
+            )
+
+            should_cleanup = self.sync_context.force_full_sync or not has_cursor_data
+
+            if not stream_error and should_cleanup:
                 try:
-                    self.sync_context.logger.info("🧹 Starting orphaned entity cleanup phase")
+                    if self.sync_context.force_full_sync:
+                        self.sync_context.logger.info(
+                            "🧹 Starting orphaned entity cleanup phase (FORCED FULL SYNC - "
+                            "daily cleanup schedule). All source entities were fetched to "
+                            "accurately identify orphaned entities."
+                        )
+                    else:
+                        self.sync_context.logger.info(
+                            "🧹 Starting orphaned entity cleanup phase "
+                            "(first sync - no cursor data)"
+                        )
                     await self.entity_processor.cleanup_orphaned_entities(self.sync_context)
                 except Exception as cleanup_error:
                     self.sync_context.logger.error(
@@ -167,6 +210,11 @@ class SyncOrchestrator:
                         exc_info=True,
                     )
                     raise cleanup_error
+            elif has_cursor_data and not self.sync_context.force_full_sync:
+                self.sync_context.logger.info(
+                    "⏩ Skipping orphaned entity cleanup for INCREMENTAL sync "
+                    "(cursor data exists, only changed entities are processed)"
+                )
 
             # Re-raise the error after cleanup
             if stream_error:
@@ -212,6 +260,9 @@ class SyncOrchestrator:
         """Mark sync job as completed with final statistics."""
         stats = getattr(self.sync_context.progress, "stats", None)
 
+        # Save cursor data if it exists (for incremental syncs)
+        await self._save_cursor_data()
+
         await sync_job_service.update_status(
             sync_job_id=self.sync_context.sync_job.id,
             status=SyncJobStatus.COMPLETED,
@@ -223,6 +274,45 @@ class SyncOrchestrator:
         self.sync_context.logger.info(
             f"Completed sync job {self.sync_context.sync_job.id} successfully. Stats: {stats}"
         )
+
+    async def _save_cursor_data(self) -> None:
+        """Save cursor data to database if it exists.
+
+        Even for forced full syncs, we save the cursor data so the next
+        incremental sync knows where to start from.
+        """
+        if not hasattr(self.sync_context, "cursor") or not self.sync_context.cursor.cursor_data:
+            if self.sync_context.force_full_sync:
+                self.sync_context.logger.info(
+                    "📝 No cursor data to save from forced full sync "
+                    "(source may not support cursor tracking)"
+                )
+            return
+
+        try:
+            async with get_db_context() as db:
+                await sync_cursor_service.create_or_update_cursor(
+                    db=db,
+                    sync_id=self.sync_context.sync.id,
+                    cursor_data=self.sync_context.cursor.cursor_data,
+                    ctx=self.sync_context.ctx,
+                    cursor_field=self.sync_context.cursor.cursor_field,
+                )
+                if self.sync_context.force_full_sync:
+                    self.sync_context.logger.info(
+                        f"💾 Saved cursor data from forced full sync for sync "
+                        f"{self.sync_context.sync.id} - next incremental sync will start from here"
+                    )
+                else:
+                    self.sync_context.logger.info(
+                        f"💾 Saved cursor data for sync {self.sync_context.sync.id}"
+                    )
+        except Exception as e:
+            # Log at ERROR level since cursor save failures can affect incremental syncs
+            self.sync_context.logger.error(
+                f"Failed to save cursor data for sync {self.sync_context.sync.id}: {e}",
+                exc_info=True,
+            )
 
     async def _handle_sync_failure(self, error: Exception) -> None:
         """Handle sync failure by updating job status with error details."""
