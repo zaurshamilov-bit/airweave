@@ -330,8 +330,7 @@ async def connect_or_update_auth_provider(
                 connection_update_data = {
                     "name": auth_provider_connection_in.name,
                     "description": (
-                        "Auth provider connection for ",
-                        "{auth_provider_connection_in.name}",
+                        "Auth provider connection for {auth_provider_connection_in.name}"
                     ),
                 }
 

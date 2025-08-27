@@ -37,6 +37,10 @@ from rich.table import Table
 from test import run_test  # noqa: E402
 from monke.core import events  # noqa: E402
 
+from monke.utils.composio_polyfill import connect_composio_provider_polyfill
+
+import os
+
 
 @dataclass
 class RunState:
@@ -215,6 +219,12 @@ async def main() -> None:
     if not config_paths:
         print("❌ No valid configs provided")
         sys.exit(1)
+
+    _connect_response = await connect_composio_provider_polyfill(
+        os.getenv("DM_AUTH_PROVIDER_API_KEY")
+    )
+
+    os.environ["DM_AUTH_PROVIDER_ID"] = _connect_response["readable_id"]
 
     # Build per-run state
     runs: Dict[str, RunState] = {}
