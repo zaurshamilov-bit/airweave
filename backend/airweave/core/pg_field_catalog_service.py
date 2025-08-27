@@ -39,7 +39,7 @@ async def overwrite_catalog(
     existing_ids = await db.scalars(
         select(PgFieldCatalogTable.id).where(
             PgFieldCatalogTable.organization_id == organization_id,
-            PgFieldCatalogTable.source_connection_id == str(source_connection_id),
+            PgFieldCatalogTable.source_connection_id == source_connection_id,
         )
     )
     ids = list(existing_ids)
@@ -51,7 +51,7 @@ async def overwrite_catalog(
     for table in snapshot:
         table_row = PgFieldCatalogTable(
             organization_id=organization_id,
-            source_connection_id=str(source_connection_id),
+            source_connection_id=source_connection_id,
             schema_name=table["schema_name"],
             table_name=table["table_name"],
             recency_column=table.get("recency_column"),
@@ -65,7 +65,7 @@ async def overwrite_catalog(
             db.add(
                 PgFieldCatalogColumn(
                     organization_id=organization_id,
-                    table_id=str(table_row.id),
+                    table_id=table_row.id,
                     column_name=col["column_name"],
                     data_type=col.get("data_type"),
                     udt_name=col.get("udt_name"),

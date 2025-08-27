@@ -19,11 +19,11 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "pg_field_catalog_table",
-        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("modified_at", sa.DateTime(), nullable=False),
-        sa.Column("organization_id", sa.Uuid(), nullable=False),
-        sa.Column("source_connection_id", sa.Uuid(), nullable=False),
+        sa.Column("organization_id", sa.UUID(), nullable=False),
+        sa.Column("source_connection_id", sa.UUID(), nullable=False),
         sa.Column("schema_name", sa.String(), nullable=False),
         sa.Column("table_name", sa.String(), nullable=False),
         sa.Column("recency_column", sa.String(), nullable=True),
@@ -43,11 +43,11 @@ def upgrade() -> None:
 
     op.create_table(
         "pg_field_catalog_column",
-        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("modified_at", sa.DateTime(), nullable=False),
-        sa.Column("organization_id", sa.Uuid(), nullable=False),
-        sa.Column("table_id", sa.Uuid(), nullable=False),
+        sa.Column("organization_id", sa.UUID(), nullable=False),
+        sa.Column("table_id", sa.UUID(), nullable=False),
         sa.Column("column_name", sa.String(), nullable=False),
         sa.Column("data_type", sa.String(), nullable=True),
         sa.Column("udt_name", sa.String(), nullable=True),

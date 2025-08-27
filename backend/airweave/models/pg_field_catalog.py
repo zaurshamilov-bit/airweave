@@ -1,6 +1,6 @@
 """Models for per-source-connection PostgreSQL field catalog."""
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, UUID, Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.models._base import OrganizationBase
@@ -16,8 +16,8 @@ class PgFieldCatalogTable(OrganizationBase):
     __tablename__ = "pg_field_catalog_table"
 
     # Link back to the source connection that owns this schema snapshot
-    source_connection_id: Mapped[str] = mapped_column(
-        ForeignKey("source_connection.id", ondelete="CASCADE"), nullable=False
+    source_connection_id: Mapped[UUID] = mapped_column(
+        UUID, ForeignKey("source_connection.id", ondelete="CASCADE"), nullable=False
     )
 
     schema_name: Mapped[str] = mapped_column(String, nullable=False)
@@ -56,8 +56,8 @@ class PgFieldCatalogColumn(OrganizationBase):
 
     __tablename__ = "pg_field_catalog_column"
 
-    table_id: Mapped[str] = mapped_column(
-        ForeignKey("pg_field_catalog_table.id", ondelete="CASCADE"), nullable=False
+    table_id: Mapped[UUID] = mapped_column(
+        UUID, ForeignKey("pg_field_catalog_table.id", ondelete="CASCADE"), nullable=False
     )
 
     column_name: Mapped[str] = mapped_column(String, nullable=False)
