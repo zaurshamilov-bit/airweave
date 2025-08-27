@@ -57,6 +57,4 @@ jobs:
         run: |
           echo "Cleaning up Docker containers..."
           docker compose down -v || true
-          echo "Removing test images..."
-          docker rmi test-backend:latest test-frontend:latest || true
           docker system prune -f || true
