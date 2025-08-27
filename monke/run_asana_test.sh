@@ -9,7 +9,7 @@ echo "  2. Provider auth: export DM_AUTH_PROVIDER=composio DM_AUTH_PROVIDER_API_
 echo ""
 
 # Optional: Set Airweave API URL if not using localhost:8000
-# export AIRWEAVE_API_URL=http://localhost:8000
+# export AIRWEAVE_API_URL=http://localhost:8001
 
 # Run the test
 python test_asana_integration.py

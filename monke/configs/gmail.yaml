@@ -5,8 +5,8 @@ description: "End-to-end test of Gmail connector sync functionality with increme
 connector:
   name: "gmail_test"
   type: "gmail"
-  auth_fields:
-    access_token: "${GMAIL_ACCESS_TOKEN}"
+  auth_fields: {}
+    # access_token: "${GMAIL_ACCESS_TOKEN}"
   config_fields:
     openai_model: "gpt-5"
     # post_create_sleep_seconds: 7  # Optional: wait N seconds after creation before first sync

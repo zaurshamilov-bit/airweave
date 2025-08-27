@@ -8,6 +8,7 @@ from monke.core.test_steps import TestStepFactory
 from monke.utils.logging import get_logger
 from monke.core import events
 
+
 class TestFlow:
     """Executes a test flow based on configuration."""
 
@@ -48,10 +49,7 @@ class TestFlow:
                     await self._execute_step(step_name)
                 except Exception as e:
                     self.logger.error(f"❌ Step {step_name} failed: {e}")
-                    await self._emit_event(
-                        "flow_failed",
-                        extra={"error": str(e)}
-                    )
+                    await self._emit_event("flow_failed", extra={"error": str(e)})
                     raise
 
             self.logger.info(f"✅ Test flow completed: {self.config.name}")
@@ -80,8 +78,7 @@ class TestFlow:
             self.metrics[f"{step_name}_duration"] = duration
             self.logger.info(f"✅ Step {step_name} completed in {duration:.2f}s")
             await self._emit_event(
-                "step_completed",
-                extra={"step": step_name, "duration": duration}
+                "step_completed", extra={"step": step_name, "duration": duration}
             )
 
         except Exception as e:
@@ -89,8 +86,7 @@ class TestFlow:
             self.metrics[f"{step_name}_duration"] = duration
             self.metrics[f"{step_name}_failed"] = True
             await self._emit_event(
-                "step_failed",
-                extra={"step": step_name, "duration": duration, "error": str(e)}
+                "step_failed", extra={"step": step_name, "duration": duration, "error": str(e)}
             )
             raise
 
@@ -120,7 +116,7 @@ class TestFlow:
                 self.config.connector.type,
                 resolved_creds,
                 entity_count=self.config.entity_count,
-                **self.config.connector.config_fields
+                **self.config.connector.config_fields,
             )
 
             # Store bongo in config for steps to access
@@ -129,8 +125,9 @@ class TestFlow:
             # Create Airweave SDK client (requires `pip install airweave-sdk`)
             from airweave import AirweaveSDK
             import os as _os
+
             airweave_client = AirweaveSDK(
-                base_url=_os.getenv("AIRWEAVE_API_URL", "http://localhost:8000"),
+                base_url=_os.getenv("AIRWEAVE_API_URL", "http://localhost:8001"),
                 api_key=_os.getenv("AIRWEAVE_API_KEY"),
             )
             self.config._airweave_client = airweave_client
@@ -163,7 +160,9 @@ class TestFlow:
         use_provider = os.getenv("DM_AUTH_PROVIDER") is not None and not has_explicit_auth
 
         if has_explicit_auth:
-            self.logger.info(f"🔑 Using explicit auth fields from config for {self.config.connector.type}")
+            self.logger.info(
+                f"🔑 Using explicit auth fields from config for {self.config.connector.type}"
+            )
         elif use_provider:
             self.logger.info(f"🔐 Using auth provider: {os.getenv('DM_AUTH_PROVIDER')}")
         else:
@@ -173,12 +172,23 @@ class TestFlow:
         if use_provider:
             auth_provider_id = os.getenv("DM_AUTH_PROVIDER_ID")
             if not auth_provider_id:
-                self.logger.warning("Auth provider requested but AIRWEAVE_AUTH_PROVIDER_ID not set; falling back to explicit auth_fields if provided")
+                self.logger.warning(
+                    "Auth provider requested but AIRWEAVE_AUTH_PROVIDER_ID not set; falling back to explicit auth_fields if provided"
+                )
+
+                print("WE ARE NOT HERE")
+                print(kwargs)
+                exit()
+
                 source_connection = airweave_client.source_connections.create_source_connection(
                     name=f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
                     short_name=self.config.connector.type,
                     collection=self.config._collection_readable_id,
-                    auth_fields=bongo.credentials if hasattr(bongo, 'credentials') else self.config.connector.auth_fields,
+                    auth_fields=(
+                        bongo.credentials
+                        if hasattr(bongo, "credentials")
+                        else self.config.connector.auth_fields
+                    ),
                     config_fields=self.config.connector.config_fields,
                 )
             else:
@@ -187,7 +197,10 @@ class TestFlow:
                 account_id = os.getenv(f"{src_upper}_AUTH_PROVIDER_ACCOUNT_ID")
                 auth_provider_config = None
                 if auth_config_id and account_id:
-                    auth_provider_config = {"auth_config_id": auth_config_id, "account_id": account_id}
+                    auth_provider_config = {
+                        "auth_config_id": auth_config_id,
+                        "account_id": account_id,
+                    }
 
                 kwargs = dict(
                     name=f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
@@ -198,8 +211,14 @@ class TestFlow:
                 if auth_provider_config:
                     kwargs["auth_provider_config"] = auth_provider_config
 
-                source_connection = airweave_client.source_connections.create_source_connection(**kwargs)
+                source_connection = airweave_client.source_connections.create_source_connection(
+                    **kwargs
+                )
         else:
+            print("WE ARE THERE")
+            print(kwargs)
+            exit()
+
             source_connection = airweave_client.source_connections.create_source_connection(
                 name=f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
                 short_name=self.config.connector.type,
@@ -217,14 +236,18 @@ class TestFlow:
             self.logger.info("🧹 Cleaning up test environment")
             await self._emit_event("cleanup_started")
 
-            if hasattr(self.config, '_source_connection_id'):
+            if hasattr(self.config, "_source_connection_id"):
                 # Delete source connection
-                self.config._airweave_client.source_connections.delete_source_connection(self.config._source_connection_id)
+                self.config._airweave_client.source_connections.delete_source_connection(
+                    self.config._source_connection_id
+                )
                 self.logger.info("✅ Deleted source connection")
 
-            if hasattr(self.config, '_collection_readable_id'):
+            if hasattr(self.config, "_collection_readable_id"):
                 # Delete collection
-                self.config._airweave_client.collections.delete_collection(self.config._collection_readable_id)
+                self.config._airweave_client.collections.delete_collection(
+                    self.config._collection_readable_id
+                )
                 self.logger.info("✅ Deleted test collection")
 
             self.logger.info("✅ Test environment cleanup completed")

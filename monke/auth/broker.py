@@ -59,7 +59,10 @@ class ComposioBroker(BaseAuthBroker):
     async def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             r = await client.get(
-                f"{self.BASE_URL}{path}", headers={"x-api-key": self.api_key}, params=params, timeout=30.0
+                f"{self.BASE_URL}{path}",
+                headers={"x-api-key": self.api_key},
+                params=params,
+                timeout=30.0,
             )
             r.raise_for_status()
             return r.json()
@@ -79,7 +82,10 @@ class ComposioBroker(BaseAuthBroker):
         selected = None
         if self.auth_config_id and self.account_id:
             for a in matching:
-                if a.get("auth_config", {}).get("id") == self.auth_config_id and a.get("id") == self.account_id:
+                if (
+                    a.get("auth_config", {}).get("id") == self.auth_config_id
+                    and a.get("id") == self.account_id
+                ):
                     selected = a
                     break
             if not selected:

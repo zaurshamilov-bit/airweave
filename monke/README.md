@@ -246,7 +246,7 @@ services:
   monke:
     build: ./monke
     environment:
-      - AIRWEAVE_API_URL=http://airweave-backend:8000
+      - AIRWEAVE_API_URL=http://airweave-backend:8001
     depends_on:
       - airweave-backend
 ```

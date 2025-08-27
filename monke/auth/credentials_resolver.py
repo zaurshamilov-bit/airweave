@@ -25,10 +25,7 @@ def _make_broker(source_short_name: str) -> Optional[BaseAuthBroker]:
 
         # If source-specific IDs exist, use them
         if account_id and auth_config_id:
-            return ComposioBroker(
-                account_id=account_id,
-                auth_config_id=auth_config_id
-            )
+            return ComposioBroker(account_id=account_id, auth_config_id=auth_config_id)
         # Otherwise use default broker
         return ComposioBroker()
     raise ValueError(f"Unsupported auth provider: {provider}")
@@ -50,6 +47,7 @@ async def resolve_credentials(
         return provided_auth_fields
 
     broker = _make_broker(connector_short_name)
+
     if broker:
         return await broker.get_credentials(connector_short_name)
 

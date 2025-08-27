@@ -14,17 +14,14 @@ class AirweaveClient:
         """Initialize the Airweave client.
 
         Args:
-            base_url: Base URL for Airweave API (default: from env or localhost:8000)
+            base_url: Base URL for Airweave API (default: from env or localhost:8001)
         """
-        self.base_url = base_url or os.getenv("AIRWEAVE_API_URL", "http://localhost:8000")
+        self.base_url = base_url or os.getenv("AIRWEAVE_API_URL", "http://localhost:8001")
         self.logger = get_logger("airweave_client")
 
         # For now, we'll use system authentication (local development)
         # In production, this would use proper API keys or OAuth
-        self.headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
+        self.headers = {"Content-Type": "application/json", "Accept": "application/json"}
 
         self.logger.info(f"🔗 Initialized Airweave client for {self.base_url}")
 
@@ -33,7 +30,7 @@ class AirweaveClient:
         method: str,
         endpoint: str,
         data: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None
+        params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Make a request to the Airweave API.
 
@@ -63,7 +60,7 @@ class AirweaveClient:
                     headers=self.headers,
                     json=data,
                     params=params,
-                    timeout=30.0
+                    timeout=30.0,
                 )
 
                 self.logger.debug(f"📥 Response status: {response.status_code}")

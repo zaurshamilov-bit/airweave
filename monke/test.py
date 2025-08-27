@@ -31,7 +31,6 @@ async def run_test(config_path: str, run_id: str | None = None):
 
     logger.info(f"🚀 Running test with config: {config_path}")
 
-
     # Create test runner
     runner = TestRunner(config_path, run_id=run_id)
 
@@ -58,17 +57,13 @@ def main():
     parser.add_argument(
         "--config",
         required=True,
-        help="Path to test configuration file (e.g., configs/notion.yaml)"
+        help="Path to test configuration file (e.g., configs/notion.yaml)",
     )
     parser.add_argument(
-        "--run-id",
-        required=False,
-        help="Optional run identifier to correlate UI/metrics"
+        "--run-id", required=False, help="Optional run identifier to correlate UI/metrics"
     )
     parser.add_argument(
-        "--env",
-        default="env.test",
-        help="Path to environment file (default: env.test)"
+        "--env", default="env.test", help="Path to environment file (default: env.test)"
     )
 
     args = parser.parse_args()
@@ -77,7 +72,7 @@ def main():
     if load_dotenv:
         env_path = Path(__file__).parent / args.env
         if env_path.exists():
-            load_dotenv(env_path)
+            load_dotenv(env_path, override=True)
             print(f"✅ Loaded environment from {env_path}")
         else:
             print(f"⚠️  No environment file at {env_path}, using system environment")
@@ -103,6 +98,7 @@ def main():
     except Exception as e:
         print(f"❌ Error: {str(e)}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
