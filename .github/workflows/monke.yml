@@ -1,4 +1,4 @@
-name: Monke Gmail + Drive (matrix, bake v6, cached)
+name: Monke Gmail + Drive (matrix, cached, no-bake)
 
 on:
   workflow_dispatch:
@@ -7,6 +7,8 @@ on:
       - 'monke/**'
       - '.github/workflows/**'
       - 'docker/**'
+      - 'backend/**'
+      - 'frontend/**'
       - 'start.sh'
   push:
     branches: [ main, feat/monke ]
@@ -16,68 +18,69 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Build images ONCE, cache layers to repo cache, export as an artifact
   prep_images:
     runs-on: ubuntu-latest
     env:
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
       TEMPORAL_WORKER_TAG: airweave-temporal-worker:ci-${{ github.sha }}
-      BUILDX_CACHE_DIR: /tmp/.buildx-cache
+      BACKEND_CACHE_DIR: /tmp/.buildx-cache-backend
+      FRONTEND_CACHE_DIR: /tmp/.buildx-cache-frontend
     steps:
       - uses: actions/checkout@v5
-
-      # 👇 Compose needs ../.env at parse-time. Make an empty placeholder (no secrets).
-      - name: Create empty .env placeholder (for Compose parser)
-        run: |
-          if [ ! -f .env ]; then
-            printf '# CI placeholder .env; real values come from GH Secrets\n' > .env
-          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Restore Buildx cache
+      - name: Restore backend build cache
         uses: actions/cache@v4
         with:
-          path: ${{ env.BUILDX_CACHE_DIR }}
-          key: buildx-${{ runner.os }}-${{ hashFiles('docker/**','start.sh') }}
+          path: ${{ env.BACKEND_CACHE_DIR }}
+          key: buildx-backend-${{ runner.os }}-${{ hashFiles('backend/**','backend/Dockerfile') }}
           restore-keys: |
-            buildx-${{ runner.os }}-
+            buildx-backend-${{ runner.os }}-
 
-      # Optional: also add a BUILD-TIME override that clears env_file
-      - name: Create build-time compose override (remove env_file)
-        run: |
-          mkdir -p docker
-          cat > docker/docker-compose.ci.build.yml <<'YAML'
-          services:
-            backend:
-              env_file: []
-            temporal-worker:
-              env_file: []
-          YAML
-
-      - name: Bake build from compose (load into daemon)
-        uses: docker/bake-action@v6
+      - name: Restore frontend build cache
+        uses: actions/cache@v4
         with:
-          source: .
-          files: |
-            docker/docker-compose.yml
-            docker/docker-compose.ci.build.yml
-          targets: |
-            backend
-            frontend
-            temporal-worker
+          path: ${{ env.FRONTEND_CACHE_DIR }}
+          key: buildx-frontend-${{ runner.os }}-${{ hashFiles('frontend/**','frontend/Dockerfile') }}
+          restore-keys: |
+            buildx-frontend-${{ runner.os }}-
+
+      # Build backend image (single-platform so we can --load)
+      - name: Build backend (cached, load into daemon)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64
+          push: false
           load: true
-          set: |
-            *.platform=linux/amd64
-            *.cache-from=type=local,src=${{ env.BUILDX_CACHE_DIR }}
-            *.cache-to=type=local,dest=${{ env.BUILDX_CACHE_DIR }},mode=max
-            backend.tags=${{ env.BACKEND_TAG }}
-            frontend.tags=${{ env.FRONTEND_TAG }}
-            temporal-worker.tags=${{ env.TEMPORAL_WORKER_TAG }}
+          tags: ${{ env.BACKEND_TAG }}
+          cache-from: type=local,src=${{ env.BACKEND_CACHE_DIR }}
+          cache-to: type=local,dest=${{ env.BACKEND_CACHE_DIR }},mode=max
+
+      # temporal-worker uses the same Dockerfile/context as backend — re-tag the same image
+      - name: Tag backend as temporal-worker
+        run: docker tag "${BACKEND_TAG}" "${TEMPORAL_WORKER_TAG}"
+
+      # Build frontend image
+      - name: Build frontend (cached, load into daemon)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ env.FRONTEND_TAG }}
+          cache-from: type=local,src=${{ env.FRONTEND_CACHE_DIR }}
+          cache-to: type=local,dest=${{ env.FRONTEND_CACHE_DIR }},mode=max
 
       - name: Export images as artifact
-        run: docker save "$BACKEND_TAG" "$FRONTEND_TAG" "$TEMPORAL_WORKER_TAG" -o /tmp/monke-images.tar
+        run: docker save "$BACKEND_TAG" "$TEMPORAL_WORKER_TAG" "$FRONTEND_TAG" -o /tmp/monke-images.tar
 
       - name: Upload images tar
         uses: actions/upload-artifact@v4
@@ -86,6 +89,7 @@ jobs:
           path: /tmp/monke-images.tar
           retention-days: 7
 
+  # Matrix: each leg loads prebuilt images, starts stack, runs its connector tests
   connectors:
     needs: prep_images
     runs-on: ubuntu-latest
@@ -102,6 +106,8 @@ jobs:
             log_file: logs/drive.rich.log
     env:
       AIRWEAVE_API_URL: http://localhost:8001
+
+      # your secrets/env
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
       DM_AUTH_PROVIDER: composio
@@ -110,19 +116,14 @@ jobs:
       GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID }}
       GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID }}
       GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID }}
+
+      # tags must match prep job
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
       TEMPORAL_WORKER_TAG: airweave-temporal-worker:ci-${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v5
-
-      # Not strictly needed (start.sh makes one), but avoid any parse-time flake.
-      - name: Ensure empty .env exists (for Compose parser)
-        run: |
-          if [ ! -f .env ]; then
-            printf '# CI placeholder .env; real values come from GH Secrets\n' > .env
-          fi
 
       - name: Set up Python 3.11 (with pip cache)
         uses: actions/setup-python@v5
@@ -143,7 +144,8 @@ jobs:
       - name: Load images
         run: docker load -i ./_images/monke-images.tar
 
-      - name: Compose override for CI (use prebuilt images + pass secrets)
+      # CI override so Compose uses the prebuilt images (not rebuild) + pass secrets
+      - name: Compose override for CI
         run: |
           mkdir -p docker
           cat > docker/docker-compose.ci.yml <<'YAML'
@@ -155,10 +157,6 @@ jobs:
               environment:
                 - OPENAI_API_KEY=${OPENAI_API_KEY}
                 - MISTRAL_API_KEY=${MISTRAL_API_KEY}
-            frontend:
-              image: ${FRONTEND_TAG}
-              pull_policy: never
-              build: null
             temporal-worker:
               image: ${TEMPORAL_WORKER_TAG}
               pull_policy: never
@@ -166,14 +164,21 @@ jobs:
               environment:
                 - OPENAI_API_KEY=${OPENAI_API_KEY}
                 - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+            frontend:
+              image: ${FRONTEND_TAG}
+              pull_policy: never
+              build: null
           YAML
 
-      - name: Start Airweave (non-interactive)
+      # Your start.sh is interactive by default; feed "n\nn\n" and add the override compose file
+      - name: Start Airweave (non-interactive, with override)
         env:
-          CI: "true"
-          NONINTERACTIVE: "1"
           CI_COMPOSE_OVERRIDE: docker/docker-compose.ci.yml
-        run: ./start.sh
+        run: |
+          # If your start.sh supports CI_COMPOSE_OVERRIDE (see below), this just works:
+          # printf 'n\nn\n' | ./start.sh
+          # If not yet updated, we’ll export the var and still pipe "no" answers:
+          printf 'n\nn\n' | ./start.sh
 
       - name: Wait for Airweave backend health
         run: |
