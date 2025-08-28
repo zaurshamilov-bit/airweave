@@ -27,10 +27,7 @@ wheels/
 *.egg
 backend/venv/
 backend/.venv/
-monke/venv/
 venv
-
-logs/
 
 # Node
 node_modules/
@@ -77,3 +74,6 @@ coverage.xml
 
 # Local storage folder
 local_storage/
+
+monke/venv/
+logs/
