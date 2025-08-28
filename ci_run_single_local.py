@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 CI runner for a single Monke config that:
-- assumes env vars are already present in the process (no .env loading),
-- disables console logging by default,
+- loads env vars from monke/env.test via python-dotenv,
+- disables console logging,
 - writes Rich-formatted logs to a file,
 - runs exactly one config (perfect for matrix legs).
 
@@ -22,8 +22,23 @@ from pathlib import Path
 
 from monke.utils.composio_polyfill import connect_composio_provider_polyfill
 
-# --- No .env loading ----------------------------------------------------------
-# Environment variables are expected to be provided by the CI environment.
+# --- Load environment BEFORE importing any monke modules ----------------------
+# We want env vars available to any monke imports/initializers.
+ENV_PATH = (Path(__file__).parent / "monke" / "env.test").resolve()
+try:
+    from dotenv import load_dotenv  # type: ignore
+
+    if ENV_PATH.exists():
+        # Do not override already-set env vars by default (safer in CI).
+        load_dotenv(dotenv_path=ENV_PATH, override=False)
+    else:
+        print(f"[ci_run_single] Warning: env file not found at {ENV_PATH}", file=sys.stderr)
+except ImportError:
+    print(
+        "[ci_run_single] Warning: python-dotenv not installed; skipping env loading.\n"
+        "Install with: pip install python-dotenv",
+        file=sys.stderr,
+    )
 
 # --- Configure logging BEFORE importing monke modules -------------------------
 from rich.console import Console
