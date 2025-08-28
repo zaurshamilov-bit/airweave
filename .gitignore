@@ -77,3 +77,4 @@ local_storage/
 
 monke/venv/
 logs/
+monke/.runs/
