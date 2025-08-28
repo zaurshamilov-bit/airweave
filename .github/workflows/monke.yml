@@ -1,4 +1,4 @@
-name: Monke Gmail + Drive (matrix, single prep)
+name: Monke Gmail + Drive (matrix, compose-aware)
 
 on:
   workflow_dispatch:
@@ -16,70 +16,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Build the images ONCE with repo-scoped caches, export them as an artifact.
+  # Build images ONCE (from docker/docker-compose.yml), cache layers in repo, export tar.
   prep_images:
     runs-on: ubuntu-latest
     env:
+      # Tags we’ll use everywhere (no registry involved)
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
-      BACKEND_CACHE_DIR: /tmp/.buildx-cache-backend
-      FRONTEND_CACHE_DIR: /tmp/.buildx-cache-frontend
+      BUILDX_CACHE_DIR: /tmp/.buildx-cache
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Restore backend build cache
+      - name: Restore Buildx cache
         uses: actions/cache@v4
         with:
-          path: ${{ env.BACKEND_CACHE_DIR }}
-          key: buildx-backend-${{ runner.os }}-${{ hashFiles('docker/backend/**','docker/backend/Dockerfile') }}
+          path: ${{ env.BUILDX_CACHE_DIR }}
+          key: buildx-${{ runner.os }}-${{ hashFiles('docker/**','start.sh') }}
           restore-keys: |
-            buildx-backend-${{ runner.os }}-
+            buildx-${{ runner.os }}-
 
-      - name: Restore frontend build cache
-        uses: actions/cache@v4
+      # Build using the COMPOSE FILE (no hard-coded paths). Targets must match your service names.
+      # If your services are named differently, change the targets and tag lines below.
+      - name: Bake build from docker-compose.yml (load into daemon)
+        uses: docker/bake-action@v4
         with:
-          path: ${{ env.FRONTEND_CACHE_DIR }}
-          key: buildx-frontend-${{ runner.os }}-${{ hashFiles('docker/frontend/**','docker/frontend/Dockerfile') }}
-          restore-keys: |
-            buildx-frontend-${{ runner.os }}-
-
-      - name: Build backend (cached, load into daemon)
-        run: |
-          mkdir -p "$BACKEND_CACHE_DIR"
-          docker buildx build \
-            --load \
-            --platform=linux/amd64 \
-            --cache-from type=local,src="$BACKEND_CACHE_DIR" \
-            --cache-to   type=local,dest="$BACKEND_CACHE_DIR",mode=max \
-            -t "$BACKEND_TAG" \
-            -f docker/backend/Dockerfile docker/backend
-
-      - name: Build frontend (cached, load into daemon)
-        run: |
-          mkdir -p "$FRONTEND_CACHE_DIR"
-          docker buildx build \
-            --load \
-            --platform=linux/amd64 \
-            --cache-from type=local,src="$FRONTEND_CACHE_DIR" \
-            --cache-to   type=local,dest="$FRONTEND_CACHE_DIR",mode=max \
-            -t "$FRONTEND_TAG" \
-            -f docker/frontend/Dockerfile docker/frontend
+          files: |
+            docker/docker-compose.yml
+          targets: |
+            airweave-backend
+            airweave-frontend
+          set: |
+            *.platform=linux/amd64
+            *.cache-from=type=local,src=${{ env.BUILDX_CACHE_DIR }}
+            *.cache-to=type=local,dest=${{ env.BUILDX_CACHE_DIR }},mode=max
+            airweave-backend.tags=${{ env.BACKEND_TAG }}
+            airweave-frontend.tags=${{ env.FRONTEND_TAG }}
+          # equivalent of --load so images are in the local daemon
+          load: true
 
       - name: Export images as artifact
         run: docker save "$BACKEND_TAG" "$FRONTEND_TAG" -o /tmp/monke-images.tar
 
-      - name: Upload image tar
+      - name: Upload images tar
         uses: actions/upload-artifact@v4
         with:
           name: monke-images
           path: /tmp/monke-images.tar
-          if-no-files-found: error
           retention-days: 7
 
-  # Parallel acceptance tests; each leg loads the prebuilt images and starts its own stack fast.
+  # Parallel acceptance tests; each leg uses the prebuilt images and starts its own stack quickly.
   connectors:
     needs: prep_images
     runs-on: ubuntu-latest
@@ -97,7 +85,7 @@ jobs:
     env:
       AIRWEAVE_API_URL: http://localhost:8001
 
-      # Auth/env secrets you already use:
+      # your existing secrets/env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       DM_AUTH_PROVIDER: composio
       DM_AUTH_PROVIDER_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
@@ -106,9 +94,10 @@ jobs:
       GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID }}
       GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID }}
 
-      # image tags must match the prep job
+      # must match prep job
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -131,7 +120,7 @@ jobs:
       - name: Load images
         run: docker load -i ./_images/monke-images.tar
 
-      - name: Compose override to force prebuilt images (no rebuilds)
+      - name: Compose override to use prebuilt images (no rebuilds)
         run: |
           mkdir -p docker
           cat > docker/docker-compose.ci.yml <<'YAML'
@@ -157,21 +146,16 @@ jobs:
         run: |
           for i in {1..60}; do
             if curl -fsS http://localhost:8001/health >/dev/null; then
-              echo "✅ Airweave backend is healthy"
-              exit 0
+              echo "✅ Airweave backend is healthy"; exit 0
             fi
-            echo "Waiting for Airweave backend... ($i/60)"
-            sleep 2
+            echo "Waiting for backend... ($i/60)"; sleep 2
           done
-          echo "❌ Airweave backend failed to become healthy"
-          exit 1
+          echo "❌ Backend not healthy in time"; exit 1
 
       - name: Run Monke ${{ matrix.connector }} test
         run: |
           mkdir -p logs
-          python ci_run_single.py \
-            --config "${{ matrix.config }}" \
-            --log-file "${{ matrix.log_file }}"
+          python ci_run_single.py --config "${{ matrix.config }}" --log-file "${{ matrix.log_file }}"
 
       - name: Upload logs
         if: always()

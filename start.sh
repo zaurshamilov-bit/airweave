@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Debug if you want: set -x
-
 # -------------------------------
-# CLI flags (all optional)
+# Optional flags/env
 # -------------------------------
 NONINTERACTIVE="${NONINTERACTIVE:-}"
 CI_COMPOSE_OVERRIDE="${CI_COMPOSE_OVERRIDE:-}"
@@ -17,15 +15,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# -------------------------------
-# Helpers
-# -------------------------------
 die() { echo "❌ $*" >&2; exit 1; }
-
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 # -------------------------------
-# .env setup (backwards compatible)
+# .env handling (unchanged defaults)
 # -------------------------------
 if [[ ! -f .env ]]; then
   echo "Creating .env file from example..."
@@ -33,15 +27,12 @@ if [[ ! -f .env ]]; then
   echo ".env file created"
 fi
 
-# get var from .env (simple parser)
 get_env_val() {
   local key="$1"
   grep -E "^${key}=" .env 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/^"//; s/"$//' | tr -d ' '
 }
-
 set_env_val() {
   local key="$1" val="$2"
-  # remove existing line
   grep -v -E "^${key}=" .env > .env.tmp 2>/dev/null || true
   mv .env.tmp .env
   echo "${key}=\"${val}\"" >> .env
@@ -62,7 +53,6 @@ if ! grep -q "^SKIP_AZURE_STORAGE=" .env; then
   echo "Added SKIP_AZURE_STORAGE=true for faster startup"
 fi
 
-# OPENAI / MISTRAL keys (prompt unless NONINTERACTIVE or env present)
 maybe_set_key() {
   local key="$1" envval="${!1:-}" existing
   existing="$(get_env_val "$key" || true)"
@@ -70,13 +60,11 @@ maybe_set_key() {
     echo "$key already present in .env (hidden)."
     return
   fi
-
   if [[ -n "$envval" ]]; then
     set_env_val "$key" "$envval"
     echo "Set $key from environment."
     return
   fi
-
   if [[ -z "$NONINTERACTIVE" ]]; then
     echo ""
     echo "$key is required for certain functionality."
@@ -100,7 +88,7 @@ maybe_set_key OPENAI_API_KEY
 maybe_set_key MISTRAL_API_KEY
 
 # -------------------------------
-# Select compose command/engine
+# Engines & compose picker
 # -------------------------------
 if have_cmd docker && docker info >/dev/null 2>&1; then
   CONTAINER_CMD="docker"
@@ -117,7 +105,7 @@ elif have_cmd docker-compose; then
 elif have_cmd podman-compose; then
   COMPOSE_CMD="podman-compose"
 else
-  die "No compose tool found. Install Docker Compose v2 (preferred) or docker-compose."
+  die "No compose tool found. Install Docker Compose v2 or docker-compose."
 fi
 
 echo "Using: ${CONTAINER_CMD} + ${COMPOSE_CMD}"
@@ -131,7 +119,6 @@ if [[ -n "$EXISTING_CONTAINERS" ]]; then
   if [[ -n "$NONINTERACTIVE" ]]; then
     echo "NONINTERACTIVE: removing existing containers..."
     $CONTAINER_CMD rm -f $EXISTING_CONTAINERS >/dev/null 2>&1 || true
-    # also remove the database volume if present
     $CONTAINER_CMD volume rm airweave_postgres_data >/dev/null 2>&1 || true
   else
     read -p "Would you like to remove them before starting? (y/n): " REMOVE_CONTAINERS || true
@@ -166,13 +153,12 @@ RC=$?
 set -e
 if [[ $RC -ne 0 ]]; then
   echo "❌ Failed to start Docker services"
-  echo "Check the error messages above and try:"
+  echo "Check:"
   echo "  ${CONTAINER_CMD} logs airweave-backend"
   echo "  ${CONTAINER_CMD} logs airweave-frontend"
   exit 1
 fi
 
-# Give services a few seconds
 echo ""
 echo "Waiting for services to initialize..."
 sleep 10
@@ -183,27 +169,19 @@ sleep 10
 echo "Checking backend health..."
 MAX_RETRIES=30
 RETRY_COUNT=0
-BACKEND_HEALTHY=false
-
 while [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; do
   if curl -f http://localhost:8001/health >/dev/null 2>&1; then
     echo "✅ Backend is healthy!"
-    BACKEND_HEALTHY=true
     break
-  else
-    echo "⏳ Backend is still starting... (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)"
-    RETRY_COUNT=$((RETRY_COUNT + 1))
-    sleep 5
   fi
+  echo "⏳ Backend is still starting... (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)"
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  sleep 5
 done
 
-if [[ "$BACKEND_HEALTHY" != "true" ]]; then
+if [[ $RETRY_COUNT -ge $MAX_RETRIES ]]; then
   echo "❌ Backend failed to start after $MAX_RETRIES attempts"
   echo "Check backend logs with: ${CONTAINER_CMD} logs airweave-backend"
-  echo "Common issues:"
-  echo "  - Database connection problems"
-  echo "  - Missing environment variables"
-  echo "  - Platform sync errors"
 fi
 
 FRONTEND_STATUS="$($CONTAINER_CMD inspect airweave-frontend --format='{{.State.Status}}' 2>/dev/null || true)"
