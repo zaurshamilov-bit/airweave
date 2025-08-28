@@ -1,4 +1,4 @@
-name: Monke Gmail + Drive (matrix, cached, no-bake)
+name: Monke – single runner (build once, run all)
 
 on:
   workflow_dispatch:
@@ -18,18 +18,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Build images ONCE, cache layers to repo cache, export as an artifact
-  prep_images:
+  all_connectors_one_runner:
     runs-on: ubuntu-latest
+    environment: dev
+
     env:
+      # Tags for locally built images (no registry)
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
       TEMPORAL_WORKER_TAG: airweave-temporal-worker:ci-${{ github.sha }}
       BACKEND_CACHE_DIR: /tmp/.buildx-cache-backend
       FRONTEND_CACHE_DIR: /tmp/.buildx-cache-frontend
+
+      # Your existing env/secrets
+      AIRWEAVE_API_URL: http://localhost:8001
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      DM_AUTH_PROVIDER: composio
+      DM_AUTH_PROVIDER_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
+      GMAIL_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_ACCOUNT_ID }}
+      GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID }}
+      GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID }}
+      GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID }}
+
     steps:
       - uses: actions/checkout@v5
 
+      # Build images ONCE on this runner (with repo-scoped local layer caches)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -49,103 +64,36 @@ jobs:
           restore-keys: |
             buildx-frontend-${{ runner.os }}-
 
-      # Build backend image (single-platform so we can --load)
       - name: Build backend (cached, load into daemon)
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
           platforms: linux/amd64
-          push: false
           load: true
+          push: false
           tags: ${{ env.BACKEND_TAG }}
           cache-from: type=local,src=${{ env.BACKEND_CACHE_DIR }}
           cache-to: type=local,dest=${{ env.BACKEND_CACHE_DIR }},mode=max
 
-      # temporal-worker uses the same Dockerfile/context as backend — re-tag the same image
+      # temporal-worker uses the same Dockerfile/context as backend — re-tag
       - name: Tag backend as temporal-worker
         run: docker tag "${BACKEND_TAG}" "${TEMPORAL_WORKER_TAG}"
 
-      # Build frontend image
       - name: Build frontend (cached, load into daemon)
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
           platforms: linux/amd64
-          push: false
           load: true
+          push: false
           tags: ${{ env.FRONTEND_TAG }}
           cache-from: type=local,src=${{ env.FRONTEND_CACHE_DIR }}
           cache-to: type=local,dest=${{ env.FRONTEND_CACHE_DIR }},mode=max
 
-      - name: Export images as artifact
-        run: docker save "$BACKEND_TAG" "$TEMPORAL_WORKER_TAG" "$FRONTEND_TAG" -o /tmp/monke-images.tar
-
-      - name: Upload images tar
-        uses: actions/upload-artifact@v4
-        with:
-          name: monke-images
-          path: /tmp/monke-images.tar
-          retention-days: 7
-
-  # Matrix: each leg loads prebuilt images, starts stack, runs its connector tests
-  connectors:
-    needs: prep_images
-    runs-on: ubuntu-latest
-    environment: dev
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - connector: gmail
-            config: monke/configs/gmail.yaml
-            log_file: logs/gmail.rich.log
-          - connector: google_drive
-            config: monke/configs/google_drive.yaml
-            log_file: logs/drive.rich.log
-    env:
-      AIRWEAVE_API_URL: http://localhost:8001
-
-      # your secrets/env
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-      DM_AUTH_PROVIDER: composio
-      DM_AUTH_PROVIDER_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
-      GMAIL_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_ACCOUNT_ID }}
-      GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID }}
-      GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID }}
-      GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID }}
-
-      # tags must match prep job
-      BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
-      FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
-      TEMPORAL_WORKER_TAG: airweave-temporal-worker:ci-${{ github.sha }}
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Set up Python 3.11 (with pip cache)
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-          cache-dependency-path: monke/requirements.txt
-
-      - name: Install Python deps
-        run: pip install -r monke/requirements.txt
-
-      - name: Download prebuilt images
-        uses: actions/download-artifact@v4
-        with:
-          name: monke-images
-          path: ./_images
-
-      - name: Load images
-        run: docker load -i ./_images/monke-images.tar
-
-      # CI override so Compose uses the prebuilt images (not rebuild) + pass secrets
-      - name: Compose override for CI
+      # Force Compose to use the prebuilt images (no rebuild) + pass secrets
+      - name: Compose override (use prebuilt images + env)
         run: |
           mkdir -p docker
           cat > docker/docker-compose.ci.yml <<'YAML'
@@ -170,17 +118,26 @@ jobs:
               build: null
           YAML
 
-      # Your start.sh is interactive by default; feed "n\nn\n" and add the override compose file
-      - name: Start Airweave (non-interactive, with override)
+      # Python deps (cached)
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: monke/requirements.txt
+
+      - name: Install Python deps
+        run: pip install -r monke/requirements.txt
+
+      # Start the stack ONCE on this runner (override merged with base compose)
+      - name: Start Airweave (single stack)
         env:
           CI_COMPOSE_OVERRIDE: docker/docker-compose.ci.yml
         run: |
-          # If your start.sh supports CI_COMPOSE_OVERRIDE (see below), this just works:
-          # printf 'n\nn\n' | ./start.sh
-          # If not yet updated, we’ll export the var and still pipe "no" answers:
+          # your script is interactive by default; feed "no" answers:
           printf 'n\nn\n' | ./start.sh
 
-      - name: Wait for Airweave backend health
+      - name: Wait for backend health
         run: |
           for i in {1..60}; do
             if curl -fsS http://localhost:8001/health >/dev/null; then
@@ -190,14 +147,25 @@ jobs:
           done
           echo "❌ Backend not healthy in time"; exit 1
 
-      - name: Run Monke ${{ matrix.connector }} test
+      # Run BOTH connectors concurrently (same stack, same runner)
+      - name: Run acceptance tests (gmail + google_drive in parallel)
         run: |
+          set -e
           mkdir -p logs
-          python ci_run_single.py --config "${{ matrix.config }}" --log-file "${{ matrix.log_file }}"
+          python ci_run_single.py --config monke/configs/gmail.yaml        --log-file logs/gmail.rich.log &
+          PID1=$!
+          python ci_run_single.py --config monke/configs/google_drive.yaml --log-file logs/drive.rich.log &
+          PID2=$!
+          wait $PID1; S1=$?
+          wait $PID2; S2=$?
+          if [ $S1 -ne 0 ] || [ $S2 -ne 0 ]; then
+            echo "One or more connectors failed: gmail=$S1 drive=$S2"
+            exit 1
+          fi
 
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: monke-${{ matrix.connector }}-logs
+          name: monke-logs
           path: logs/**

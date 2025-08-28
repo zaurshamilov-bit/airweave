@@ -1,0 +1,117 @@
+{
+  "id": "2d5f6ee6-01ff-4b8e-a67f-7b7770028b3a",
+  "config_path": "/Users/balaji/airweave/monke/configs/gmail.yaml",
+  "connector": "gmail",
+  "status": "failed",
+  "started_at": null,
+  "ended_at": 1756357596.113176,
+  "progress": 0.0,
+  "asset_logo": "icons/gmail.svg",
+  "asset_gif": null,
+  "steps": [
+    {
+      "name": "create",
+      "index": 0,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "sync",
+      "index": 1,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "verify",
+      "index": 2,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "update",
+      "index": 3,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "sync",
+      "index": 4,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "verify",
+      "index": 5,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "partial_delete",
+      "index": 6,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "sync",
+      "index": 7,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "verify_partial_deletion",
+      "index": 8,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "verify_remaining_entities",
+      "index": 9,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "complete_delete",
+      "index": 10,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "sync",
+      "index": 11,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    },
+    {
+      "name": "verify_complete_deletion",
+      "index": 12,
+      "status": "pending",
+      "started_at": null,
+      "ended_at": null,
+      "duration": null
+    }
+  ]
+}
