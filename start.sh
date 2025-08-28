@@ -1,7 +1,9 @@
-#!/usr/bin/env bash
+#!/bin/bash
+
+set -x  # Enable debug mode to see what's happening
 set -euo pipefail
 
-# Optional flags/env
+# ---- Optional flags/env (do not change default behavior) ---------------------
 NONINTERACTIVE="${NONINTERACTIVE:-}"
 CI_COMPOSE_OVERRIDE="${CI_COMPOSE_OVERRIDE:-}"
 
@@ -13,168 +15,233 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-die() { echo "❌ $*" >&2; exit 1; }
+# ---- Helpers -----------------------------------------------------------------
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
-# .env bootstrap (backward compatible)
-if [[ ! -f .env ]]; then
-  echo "Creating .env file from example..."
-  cp .env.example .env || touch .env
-  echo ".env file created"
+# ---- .env handling (backward compatible) -------------------------------------
+# Check if .env exists, if not create it from example
+if [ ! -f .env ]; then
+    echo "Creating .env file from example..."
+    cp .env.example .env
+    echo ".env file created"
 fi
 
-get_env_val() { grep -E "^${1}=" .env 2>/dev/null | head -1 | cut -d'=' -f2- | sed 's/^"//; s/"$//' | tr -d ' '; }
-set_env_val() {
-  local key="$1" val="$2"
-  grep -v -E "^${key}=" .env > .env.tmp 2>/dev/null || true
-  mv .env.tmp .env
-  echo "${key}=\"${val}\"" >> .env
-}
+# Check if ENCRYPTION_KEY exists AND has a non-empty value in .env
+EXISTING_KEY=$(grep "^ENCRYPTION_KEY=" .env 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d ' ')
 
-EXISTING_KEY="$(get_env_val ENCRYPTION_KEY || true)"
-if [[ -n "${EXISTING_KEY:-}" ]]; then
-  echo "Encryption key already exists in .env (hidden)."
+if [ -n "$EXISTING_KEY" ]; then
+    echo "Encryption key already exists in .env file, skipping generation."
+    echo "Current ENCRYPTION_KEY value: ********"
 else
-  echo "No valid encryption key found. Generating new encryption key..."
-  NEW_KEY="$(openssl rand -base64 32)"
-  set_env_val ENCRYPTION_KEY "$NEW_KEY"
-  echo "Added new ENCRYPTION_KEY to .env file"
+    echo "No valid encryption key found. Generating new encryption key..."
+    NEW_KEY=$(openssl rand -base64 32)
+    echo "Generated key: $NEW_KEY"
+
+    # Remove any existing empty ENCRYPTION_KEY line
+    grep -v "^ENCRYPTION_KEY=" .env > .env.tmp 2>/dev/null || true
+    mv .env.tmp .env
+
+    # Add the new encryption key at the end of the file
+    echo "ENCRYPTION_KEY=\"$NEW_KEY\"" >> .env
+    echo "Added new ENCRYPTION_KEY to .env file"
 fi
 
+# Add SKIP_AZURE_STORAGE for faster local startup
 if ! grep -q "^SKIP_AZURE_STORAGE=" .env; then
-  echo "SKIP_AZURE_STORAGE=true" >> .env
-  echo "Added SKIP_AZURE_STORAGE=true for faster startup"
+    echo "SKIP_AZURE_STORAGE=true" >> .env
+    echo "Added SKIP_AZURE_STORAGE=true for faster startup"
 fi
 
-maybe_set_key() {
-  local key="$1" envval="${!1:-}" existing
-  existing="$(get_env_val "$key" || true)"
-  if [[ -n "$existing" ]]; then
-    echo "$key already present in .env (hidden)."; return
-  fi
-  if [[ -n "$envval" ]]; then
-    set_env_val "$key" "$envval"; echo "Set $key from environment."; return
-  fi
-  if [[ -z "$NONINTERACTIVE" ]]; then
-    echo ""; echo "$key is required for certain functionality."
-    read -p "Would you like to add your $key now? (y/n): " ADD_KEY || true
-    if [[ "$ADD_KEY" =~ ^[Yy]$ ]]; then
-      read -p "Enter your $key: " INPUT || true
-      if [[ -n "$INPUT" ]]; then set_env_val "$key" "$INPUT"; echo "$key added to .env file."; fi
-    else
-      echo "You can add $key later by editing the .env file."
-      echo "$key=\"your-api-key-here\""
-    fi
+# Ask for OpenAI API key (skip in NONINTERACTIVE)
+if [ -z "${NONINTERACTIVE}" ]; then
+  echo ""
+  echo "OpenAI API key is required for files and natural language search functionality."
+  read -p "Would you like to add your OPENAI_API_KEY now? You can also do this later by editing the .env file manually. (y/n): " ADD_OPENAI_KEY
+
+  if [ "$ADD_OPENAI_KEY" = "y" ] || [ "$ADD_OPENAI_KEY" = "Y" ]; then
+      read -p "Enter your OpenAI API key: " OPENAI_KEY
+
+      # Remove any existing OPENAI_API_KEY line
+      grep -v "^OPENAI_API_KEY=" .env > .env.tmp
+      mv .env.tmp .env
+
+      # Add the new OpenAI API key
+      echo "OPENAI_API_KEY=\"$OPENAI_KEY\"" >> .env
+      echo "OpenAI API key added to .env file."
   else
-    echo "NONINTERACTIVE: Skipping prompt for $key (not set)."
+      echo "You can add your OPENAI_API_KEY later by editing the .env file manually."
+      echo "Add the following line to your .env file:"
+      echo "OPENAI_API_KEY=\"your-api-key-here\""
   fi
-}
-maybe_set_key OPENAI_API_KEY
-maybe_set_key MISTRAL_API_KEY
-
-# Engine & compose
-if have_cmd docker && docker info >/dev/null 2>&1; then
-  CONTAINER_CMD="docker"
-elif have_cmd podman && podman info >/dev/null 2>&1; then
-  CONTAINER_CMD="podman"
 else
-  die "Neither Docker nor Podman daemon is running. Please start one and retry."
+  echo "NONINTERACTIVE=1: Skipping OPENAI_API_KEY prompt."
 fi
 
-if have_cmd docker && docker compose version >/dev/null 2>&1; then
+# Ask for Mistral API key (skip in NONINTERACTIVE)
+if [ -z "${NONINTERACTIVE}" ]; then
+  echo ""
+  echo "Mistral API key is required for certain AI functionality."
+  read -p "Would you like to add your MISTRAL_API_KEY now? You can also do this later by editing the .env file manually. (y/n): " ADD_MISTRAL_KEY
+
+  if [ "$ADD_MISTRAL_KEY" = "y" ] || [ "$ADD_MISTRAL_KEY" = "Y" ]; then
+      read -p "Enter your Mistral API key: " MISTRAL_KEY
+
+      # Remove any existing MISTRAL_API_KEY line
+      grep -v "^MISTRAL_API_KEY=" .env > .env.tmp
+      mv .env.tmp .env
+
+      # Add the new Mistral API key
+      echo "MISTRAL_API_KEY=\"$MISTRAL_KEY\"" >> .env
+      echo "Mistral API key added to .env file."
+  else
+      echo "You can add your MISTRAL_API_KEY later by editing the .env file manually."
+      echo "Add the following line to your .env file:"
+      echo "MISTRAL_API_KEY=\"your-api-key-here\""
+  fi
+else
+  echo "NONINTERACTIVE=1: Skipping MISTRAL_API_KEY prompt."
+fi
+
+# ---- Compose tool selection ---------------------------------------------------
+# Check if "docker compose" is available (Docker Compose v2)
+if docker compose version >/dev/null 2>&1; then
   COMPOSE_CMD="docker compose"
-elif have_cmd docker-compose; then
+# Else, fall back to "docker-compose" (Docker Compose v1)
+elif docker-compose --version >/dev/null 2>&1; then
   COMPOSE_CMD="docker-compose"
-elif have_cmd podman-compose; then
+elif podman-compose --version > /dev/null 2>&1; then
   COMPOSE_CMD="podman-compose"
 else
-  die "No compose tool found. Install Docker Compose v2 or docker-compose."
-fi
-
-echo "Using: ${CONTAINER_CMD} + ${COMPOSE_CMD}"
-
-# Clean up existing containers
-EXISTING_CONTAINERS="$($CONTAINER_CMD ps -a --filter "name=airweave" --format "{{.Names}}" | tr '\n' ' ' || true)"
-if [[ -n "$EXISTING_CONTAINERS" ]]; then
-  echo "Found existing airweave containers: $EXISTING_CONTAINERS"
-  if [[ -n "$NONINTERACTIVE" ]]; then
-    echo "NONINTERACTIVE: removing existing containers..."
-    $CONTAINER_CMD rm -f $EXISTING_CONTAINERS >/dev/null 2>&1 || true
-    $CONTAINER_CMD volume rm airweave_postgres_data >/dev/null 2>&1 || true
-  else
-    read -p "Remove them before starting? (y/n): " REMOVE_CONTAINERS || true
-    if [[ "$REMOVE_CONTAINERS" =~ ^[Yy]$ ]]; then
-      echo "Removing existing containers..."
-      $CONTAINER_CMD rm -f $EXISTING_CONTAINERS || true
-      echo "Removing database volume..."
-      $CONTAINER_CMD volume rm airweave_postgres_data || true
-    else
-      echo "Warning: Starting with existing containers may cause conflicts."
-    fi
-  fi
-fi
-
-# Compose files
-COMPOSE_FILES="-f docker/docker-compose.yml"
-if [[ -n "${CI_COMPOSE_OVERRIDE:-}" && -f "$CI_COMPOSE_OVERRIDE" ]]; then
-  COMPOSE_FILES="$COMPOSE_FILES -f $CI_COMPOSE_OVERRIDE"
-fi
-
-# Start services
-echo ""; echo "Starting Docker services..."
-set +e
-$COMPOSE_CMD $COMPOSE_FILES up -d
-RC=$?
-set -e
-if [[ $RC -ne 0 ]]; then
-  echo "❌ Failed to start Docker services"
-  echo "Check: ${CONTAINER_CMD} logs airweave-backend  |  ${CONTAINER_CMD} logs airweave-frontend"
+  echo "Neither 'docker compose', 'docker-compose', nor 'podman-compose' found. Please install Docker Compose."
   exit 1
 fi
 
-echo ""; echo "Waiting for services to initialize..."
+# Add this block: Check if Docker daemon is running
+if docker info > /dev/null 2>&1; then
+    CONTAINER_CMD="docker"
+elif have_cmd podman && podman info > /dev/null 2>&1; then
+    CONTAINER_CMD="podman"
+else
+    echo "Error: Docker daemon is not running. Please start Docker and try again."
+    exit 1
+fi
+
+echo "Using commands: ${CONTAINER_CMD} and ${COMPOSE_CMD}"
+
+# Check for existing airweave containers
+EXISTING_CONTAINERS=$(${CONTAINER_CMD} ps -a --filter "name=airweave" --format "{{.Names}}" | tr '\n' ' ')
+
+if [ -n "$EXISTING_CONTAINERS" ]; then
+  echo "Found existing airweave containers: $EXISTING_CONTAINERS"
+  if [ -z "${NONINTERACTIVE}" ]; then
+    read -p "Would you like to remove them before starting? (y/n): " REMOVE_CONTAINERS
+    if [ "$REMOVE_CONTAINERS" = "y" ] || [ "$REMOVE_CONTAINERS" = "Y" ]; then
+      echo "Removing existing containers..."
+      ${CONTAINER_CMD} rm -f $EXISTING_CONTAINERS || true
+      echo "Removing database volume..."
+      ${CONTAINER_CMD} volume rm airweave_postgres_data || true
+      echo "Containers and volumes removed."
+    else
+      echo "Warning: Starting with existing containers may cause conflicts."
+    fi
+  else
+    echo "NONINTERACTIVE=1: Removing existing containers and volume..."
+    ${CONTAINER_CMD} rm -f $EXISTING_CONTAINERS || true
+    ${CONTAINER_CMD} volume rm airweave_postgres_data || true
+  fi
+fi
+
+# Now run the appropriate Docker Compose command with optional override
+COMPOSE_FILES="-f docker/docker-compose.yml"
+if [ -n "${CI_COMPOSE_OVERRIDE:-}" ] && [ -f "$CI_COMPOSE_OVERRIDE" ]; then
+  COMPOSE_FILES="$COMPOSE_FILES -f $CI_COMPOSE_OVERRIDE"
+fi
+
+echo ""
+echo "Starting Docker services..."
+if ! $COMPOSE_CMD $COMPOSE_FILES up -d; then
+    echo "❌ Failed to start Docker services"
+    echo "Check the error messages above and try running:"
+    echo "  docker logs airweave-backend"
+    echo "  docker logs airweave-frontend"
+    exit 1
+fi
+
+# Wait a moment for services to initialize
+echo ""
+echo "Waiting for services to initialize..."
 sleep 10
 
-# Health checks
+# Check if backend is healthy (with retries)
 echo "Checking backend health..."
 MAX_RETRIES=30
 RETRY_COUNT=0
-while [[ $RETRY_COUNT -lt $MAX_RETRIES ]]; do
-  if curl -f http://localhost:8001/health >/dev/null 2>&1; then
-    echo "✅ Backend is healthy!"; break
+BACKEND_HEALTHY=false
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  if ${CONTAINER_CMD} exec airweave-backend curl -f http://localhost:8001/health >/dev/null 2>&1; then
+    echo "✅ Backend is healthy!"
+    BACKEND_HEALTHY=true
+    break
+  else
+    echo "⏳ Backend is still starting... (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)"
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    sleep 5
   fi
-  echo "⏳ Backend is still starting... (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)"
-  RETRY_COUNT=$((RETRY_COUNT + 1)); sleep 5
 done
 
-if [[ $RETRY_COUNT -ge $MAX_RETRIES ]]; then
+if [ "$BACKEND_HEALTHY" = false ]; then
   echo "❌ Backend failed to start after $MAX_RETRIES attempts"
-  echo "Check backend logs with: ${CONTAINER_CMD} logs airweave-backend"
+  echo "Check backend logs with: docker logs airweave-backend"
+  echo "Common issues:"
+  echo "  - Database connection problems"
+  echo "  - Missing environment variables"
+  echo "  - Platform sync errors"
 fi
 
-FRONTEND_STATUS="$($CONTAINER_CMD inspect airweave-frontend --format='{{.State.Status}}' 2>/dev/null || true)"
-if [[ "$FRONTEND_STATUS" == "created" || "$FRONTEND_STATUS" == "exited" ]]; then
+# Check if frontend needs to be started manually
+FRONTEND_STATUS=$(${CONTAINER_CMD} inspect airweave-frontend --format='{{.State.Status}}' 2>/dev/null || true)
+if [ "$FRONTEND_STATUS" = "created" ] || [ "$FRONTEND_STATUS" = "exited" ]; then
   echo "Starting frontend container..."
-  $CONTAINER_CMD start airweave-frontend || true
+  ${CONTAINER_CMD} start airweave-frontend || true
   sleep 5
 fi
 
-echo ""; echo "🚀 Airweave Status:"; echo "=================="
-if curl -f http://localhost:8001/health >/dev/null 2>&1; then
+# Final status check
+echo ""
+echo "🚀 Airweave Status:"
+echo "=================="
+
+SERVICES_HEALTHY=true
+
+# Check each service
+if ${CONTAINER_CMD} exec airweave-backend curl -f http://localhost:8001/health >/dev/null 2>&1; then
   echo "✅ Backend API:    http://localhost:8001"
 else
-  echo "❌ Backend API:    Not responding (check: ${CONTAINER_CMD} logs airweave-backend)"
+  echo "❌ Backend API:    Not responding (check logs with: docker logs airweave-backend)"
+  SERVICES_HEALTHY=false
 fi
 
 if curl -f http://localhost:8080 >/dev/null 2>&1; then
   echo "✅ Frontend UI:    http://localhost:8080"
 else
-  echo "❌ Frontend UI:    Not responding (check: ${CONTAINER_CMD} logs airweave-frontend)"
+  echo "❌ Frontend UI:    Not responding (check logs with: docker logs airweave-frontend)"
+  SERVICES_HEALTHY=false
 fi
 
-echo ""; echo "Other services:"
+echo ""
+echo "Other services:"
 echo "📊 Temporal UI:    http://localhost:8088"
 echo "🗄️  PostgreSQL:    localhost:5432"
 echo "🔍 Qdrant:        http://localhost:6333"
-echo ""; echo "To view logs: ${CONTAINER_CMD} logs <container-name>"
-echo "To stop:      ${COMPOSE_CMD} $COMPOSE_FILES down"; echo ""
+echo ""
+echo "To view logs: docker logs <container-name>"
+echo "To stop all services: docker compose -f docker/docker-compose.yml down"
+echo ""
+
+if [ "$SERVICES_HEALTHY" = true ]; then
+  echo "🎉 All services started successfully!"
+else
+  echo "⚠️  Some services failed to start properly. Check the logs above for details."
+  exit 1
+fi

@@ -1,4 +1,4 @@
-name: Monke Gmail + Drive (matrix, compose-aware, v6)
+name: Monke Gmail + Drive (matrix, compose-aware, cached)
 
 on:
   workflow_dispatch:
@@ -16,15 +16,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Build images ONCE from docker/docker-compose.yml, cache layers (repo-scoped), export tar
+  # Build images ONCE from docker/docker-compose.yml, cache layers, export as tar artifact
   prep_images:
     runs-on: ubuntu-latest
     env:
+      # Tags (local-only; no registry)
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
+      TEMPORAL_WORKER_TAG: airweave-temporal-worker:ci-${{ github.sha }}
       BUILDX_CACHE_DIR: /tmp/.buildx-cache
     steps:
       - uses: actions/checkout@v5
+
+      # Compose references ../.env; create a tiny placeholder so Bake/Compose don’t fail parsing.
+      - name: Create CI placeholder .env (for Compose parsing only)
+        run: |
+          if [ ! -f .env ]; then
+            printf '# CI placeholder .env; real values come from job env/secrets\n' > .env
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -37,24 +46,28 @@ jobs:
           restore-keys: |
             buildx-${{ runner.os }}-
 
-      - name: Bake build from docker-compose.yml (load into daemon)
+      # Build directly from your Compose file with Bake (v6), and load into the local daemon.
+      - name: Bake build from docker/docker-compose.yml (load into daemon)
         uses: docker/bake-action@v6
         with:
           source: .
           files: docker/docker-compose.yml
+          # service names from your compose:
           targets: |
-            airweave-backend
-            airweave-frontend
+            backend
+            frontend
+            temporal-worker
           load: true
           set: |
             *.platform=linux/amd64
             *.cache-from=type=local,src=${{ env.BUILDX_CACHE_DIR }}
             *.cache-to=type=local,dest=${{ env.BUILDX_CACHE_DIR }},mode=max
-            airweave-backend.tags=${{ env.BACKEND_TAG }}
-            airweave-frontend.tags=${{ env.FRONTEND_TAG }}
+            backend.tags=${{ env.BACKEND_TAG }}
+            frontend.tags=${{ env.FRONTEND_TAG }}
+            temporal-worker.tags=${{ env.TEMPORAL_WORKER_TAG }}
 
       - name: Export images as artifact
-        run: docker save "$BACKEND_TAG" "$FRONTEND_TAG" -o /tmp/monke-images.tar
+        run: docker save "$BACKEND_TAG" "$FRONTEND_TAG" "$TEMPORAL_WORKER_TAG" -o /tmp/monke-images.tar
 
       - name: Upload images tar
         uses: actions/upload-artifact@v4
@@ -63,7 +76,7 @@ jobs:
           path: /tmp/monke-images.tar
           retention-days: 7
 
-  # Parallel acceptance tests; each leg loads prebuilt images and starts its own stack quickly
+  # Parallel acceptance tests; each leg uses the prebuilt images and starts its own stack quickly
   connectors:
     needs: prep_images
     runs-on: ubuntu-latest
@@ -81,8 +94,9 @@ jobs:
     env:
       AIRWEAVE_API_URL: http://localhost:8001
 
-      # existing secrets/env:
+      # your existing secrets/env (available to the job AND passed to containers via override below)
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
       DM_AUTH_PROVIDER: composio
       DM_AUTH_PROVIDER_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
       GMAIL_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_ACCOUNT_ID }}
@@ -90,9 +104,10 @@ jobs:
       GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID }}
       GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID }}
 
-      # match the tags from prep job
+      # must match prep job
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
+      TEMPORAL_WORKER_TAG: airweave-temporal-worker:ci-${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v5
@@ -116,19 +131,30 @@ jobs:
       - name: Load images
         run: docker load -i ./_images/monke-images.tar
 
-      - name: Compose override to use prebuilt images (no rebuilds)
+      # Force Compose to use the prebuilt images, and pass in secrets via environment.
+      - name: Compose override for CI (use prebuilt images + pass secrets)
         run: |
           mkdir -p docker
           cat > docker/docker-compose.ci.yml <<'YAML'
           services:
-            airweave-backend:
+            backend:
               image: ${BACKEND_TAG}
               pull_policy: never
               build: null
-            airweave-frontend:
+              environment:
+                - OPENAI_API_KEY=${OPENAI_API_KEY}
+                - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+            frontend:
               image: ${FRONTEND_TAG}
               pull_policy: never
               build: null
+            temporal-worker:
+              image: ${TEMPORAL_WORKER_TAG}
+              pull_policy: never
+              build: null
+              environment:
+                - OPENAI_API_KEY=${OPENAI_API_KEY}
+                - MISTRAL_API_KEY=${MISTRAL_API_KEY}
           YAML
 
       - name: Start Airweave (non-interactive)
