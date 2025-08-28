@@ -16,24 +16,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Build images ONCE from docker/docker-compose.yml, cache layers, export as tar artifact
   prep_images:
     runs-on: ubuntu-latest
     env:
-      # Tags (local-only; no registry)
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
       TEMPORAL_WORKER_TAG: airweave-temporal-worker:ci-${{ github.sha }}
       BUILDX_CACHE_DIR: /tmp/.buildx-cache
     steps:
       - uses: actions/checkout@v5
-
-      # Compose references ../.env; create a tiny placeholder so Bake/Compose don’t fail parsing.
-      - name: Create CI placeholder .env (for Compose parsing only)
-        run: |
-          if [ ! -f .env ]; then
-            printf '# CI placeholder .env; real values come from job env/secrets\n' > .env
-          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -46,13 +37,26 @@ jobs:
           restore-keys: |
             buildx-${{ runner.os }}-
 
-      # Build directly from your Compose file with Bake (v6), and load into the local daemon.
-      - name: Bake build from docker/docker-compose.yml (load into daemon)
+      # 👇 Build-time override to REMOVE env_file so Bake doesn't require ../.env
+      - name: Create build-time compose override (remove env_file)
+        run: |
+          mkdir -p docker
+          cat > docker/docker-compose.ci.build.yml <<'YAML'
+          services:
+            backend:
+              env_file: []
+            temporal-worker:
+              env_file: []
+          YAML
+
+      # Build from compose using Bake v6; pass both files (base + override)
+      - name: Bake build from compose (load into daemon)
         uses: docker/bake-action@v6
         with:
           source: .
-          files: docker/docker-compose.yml
-          # service names from your compose:
+          files: |
+            docker/docker-compose.yml
+            docker/docker-compose.ci.build.yml
           targets: |
             backend
             frontend
@@ -76,7 +80,6 @@ jobs:
           path: /tmp/monke-images.tar
           retention-days: 7
 
-  # Parallel acceptance tests; each leg uses the prebuilt images and starts its own stack quickly
   connectors:
     needs: prep_images
     runs-on: ubuntu-latest
@@ -93,8 +96,7 @@ jobs:
             log_file: logs/drive.rich.log
     env:
       AIRWEAVE_API_URL: http://localhost:8001
-
-      # your existing secrets/env (available to the job AND passed to containers via override below)
+      # your existing secrets/env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
       DM_AUTH_PROVIDER: composio
@@ -103,8 +105,7 @@ jobs:
       GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID }}
       GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID }}
       GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID }}
-
-      # must match prep job
+      # image tags must match prep job
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
       TEMPORAL_WORKER_TAG: airweave-temporal-worker:ci-${{ github.sha }}
@@ -131,7 +132,7 @@ jobs:
       - name: Load images
         run: docker load -i ./_images/monke-images.tar
 
-      # Force Compose to use the prebuilt images, and pass in secrets via environment.
+      # Force Compose to use the prebuilt images, and pass in secrets via environment
       - name: Compose override for CI (use prebuilt images + pass secrets)
         run: |
           mkdir -p docker
