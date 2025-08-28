@@ -1,4 +1,4 @@
-name: Monke Gmail + Drive (matrix, compose-aware)
+name: Monke Gmail + Drive (matrix, compose-aware, v6)
 
 on:
   workflow_dispatch:
@@ -16,16 +16,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Build images ONCE (from docker/docker-compose.yml), cache layers in repo, export tar.
+  # Build images ONCE from docker/docker-compose.yml, cache layers (repo-scoped), export tar
   prep_images:
     runs-on: ubuntu-latest
     env:
-      # Tags we’ll use everywhere (no registry involved)
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
       BUILDX_CACHE_DIR: /tmp/.buildx-cache
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -38,24 +37,21 @@ jobs:
           restore-keys: |
             buildx-${{ runner.os }}-
 
-      # Build using the COMPOSE FILE (no hard-coded paths). Targets must match your service names.
-      # If your services are named differently, change the targets and tag lines below.
       - name: Bake build from docker-compose.yml (load into daemon)
-        uses: docker/bake-action@v4
+        uses: docker/bake-action@v6
         with:
-          files: |
-            docker/docker-compose.yml
+          source: .
+          files: docker/docker-compose.yml
           targets: |
             airweave-backend
             airweave-frontend
+          load: true
           set: |
             *.platform=linux/amd64
             *.cache-from=type=local,src=${{ env.BUILDX_CACHE_DIR }}
             *.cache-to=type=local,dest=${{ env.BUILDX_CACHE_DIR }},mode=max
             airweave-backend.tags=${{ env.BACKEND_TAG }}
             airweave-frontend.tags=${{ env.FRONTEND_TAG }}
-          # equivalent of --load so images are in the local daemon
-          load: true
 
       - name: Export images as artifact
         run: docker save "$BACKEND_TAG" "$FRONTEND_TAG" -o /tmp/monke-images.tar
@@ -67,7 +63,7 @@ jobs:
           path: /tmp/monke-images.tar
           retention-days: 7
 
-  # Parallel acceptance tests; each leg uses the prebuilt images and starts its own stack quickly.
+  # Parallel acceptance tests; each leg loads prebuilt images and starts its own stack quickly
   connectors:
     needs: prep_images
     runs-on: ubuntu-latest
@@ -85,7 +81,7 @@ jobs:
     env:
       AIRWEAVE_API_URL: http://localhost:8001
 
-      # your existing secrets/env:
+      # existing secrets/env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       DM_AUTH_PROVIDER: composio
       DM_AUTH_PROVIDER_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
@@ -94,12 +90,12 @@ jobs:
       GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID }}
       GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID }}
 
-      # must match prep job
+      # match the tags from prep job
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python 3.11 (with pip cache)
         uses: actions/setup-python@v5
