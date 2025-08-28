@@ -1,4 +1,4 @@
-name: Monke Gmail + Drive (matrix, compose-aware, cached)
+name: Monke Gmail + Drive (matrix, bake v6, cached)
 
 on:
   workflow_dispatch:
@@ -26,6 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # 👇 Compose needs ../.env at parse-time. Make an empty placeholder (no secrets).
+      - name: Create empty .env placeholder (for Compose parser)
+        run: |
+          if [ ! -f .env ]; then
+            printf '# CI placeholder .env; real values come from GH Secrets\n' > .env
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -37,7 +44,7 @@ jobs:
           restore-keys: |
             buildx-${{ runner.os }}-
 
-      # 👇 Build-time override to REMOVE env_file so Bake doesn't require ../.env
+      # Optional: also add a BUILD-TIME override that clears env_file
       - name: Create build-time compose override (remove env_file)
         run: |
           mkdir -p docker
@@ -49,7 +56,6 @@ jobs:
               env_file: []
           YAML
 
-      # Build from compose using Bake v6; pass both files (base + override)
       - name: Bake build from compose (load into daemon)
         uses: docker/bake-action@v6
         with:
@@ -96,7 +102,6 @@ jobs:
             log_file: logs/drive.rich.log
     env:
       AIRWEAVE_API_URL: http://localhost:8001
-      # your existing secrets/env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
       DM_AUTH_PROVIDER: composio
@@ -105,13 +110,19 @@ jobs:
       GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID }}
       GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID }}
       GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID }}
-      # image tags must match prep job
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
       TEMPORAL_WORKER_TAG: airweave-temporal-worker:ci-${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v5
+
+      # Not strictly needed (start.sh makes one), but avoid any parse-time flake.
+      - name: Ensure empty .env exists (for Compose parser)
+        run: |
+          if [ ! -f .env ]; then
+            printf '# CI placeholder .env; real values come from GH Secrets\n' > .env
+          fi
 
       - name: Set up Python 3.11 (with pip cache)
         uses: actions/setup-python@v5
@@ -132,7 +143,6 @@ jobs:
       - name: Load images
         run: docker load -i ./_images/monke-images.tar
 
-      # Force Compose to use the prebuilt images, and pass in secrets via environment
       - name: Compose override for CI (use prebuilt images + pass secrets)
         run: |
           mkdir -p docker
