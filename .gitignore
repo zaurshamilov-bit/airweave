@@ -30,6 +30,8 @@ backend/.venv/
 monke/venv/
 venv
 
+logs/
+
 # Node
 node_modules/
 npm-debug.log
