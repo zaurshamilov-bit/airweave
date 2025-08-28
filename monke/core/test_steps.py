@@ -82,17 +82,19 @@ class SyncStep(TestStep):
         self.logger.info("🔄 Syncing data to Airweave")
         client = self._get_airweave_client()
 
-        # If a job is already running, wait for it instead of trying to start a new one.
+        # If a job is already running, wait for it, BUT ALWAYS launch our own sync afterwards
         active_job_id = self._find_active_job_id(client)
         if active_job_id:
             self.logger.info(
                 f"🟡 A sync is already in progress (job {active_job_id}); waiting for it to complete."
             )
             await self._wait_for_sync_completion(client, target_job_id=active_job_id)
-            self.logger.info("✅ Sync completed")
-            return
+            self.logger.info(
+                "🧭 Previous sync finished; launching a fresh sync to capture recent changes"
+            )
 
-        # Try to start a new sync. If the server says one is already running, wait for that one.
+        # Try to start a new sync. If the server says one is already running, wait for that one,
+        # then START OUR OWN sync and wait for it too.
         target_job_id = None
         try:
             run_resp = client.source_connections.run_source_connection(
@@ -109,15 +111,24 @@ class SyncStep(TestStep):
                 self.logger.warning("⚠️ Sync already running; discovering and waiting for that job.")
                 active_job_id = self._find_active_job_id(client) or self._latest_job_id(client)
                 if not active_job_id:
-                    # Last resort: poll until we see any job
+                    # Last resort: brief wait then re-check
                     await asyncio.sleep(0.5)
                     active_job_id = self._find_active_job_id(client) or self._latest_job_id(client)
                 if not active_job_id:
                     raise  # nothing to wait on; re-raise original error
                 await self._wait_for_sync_completion(client, target_job_id=active_job_id)
-                self.logger.info("✅ Sync completed")
-                return
-            raise  # unknown error
+
+                # IMPORTANT: after the previous job completes, start *our* job
+                run_resp = client.source_connections.run_source_connection(
+                    self.config._source_connection_id
+                )
+                target_job_id = (
+                    getattr(run_resp, "id", None)
+                    or getattr(run_resp, "job_id", None)
+                    or getattr(run_resp, "sync_job_id", None)
+                )
+            else:
+                raise  # unknown error
 
         await self._wait_for_sync_completion(client, target_job_id=target_job_id)
         self.logger.info("✅ Sync completed")
@@ -370,7 +381,40 @@ class VerifyStep(TestStep):
             )
             return entity, ok
 
-        results = await asyncio.gather(*[verify_one(e) for e in self.config._created_entities])
+        # Retry support + optional one-time rescue resync
+        attempts = int(self.config.verification_config.get("retries", 5))
+        backoff = float(self.config.verification_config.get("retry_backoff_seconds", 1.0))
+        resync_on_miss = bool(self.config.verification_config.get("resync_on_miss", True))
+
+        resync_lock = asyncio.Lock()
+        resync_triggered = False
+
+        async def verify_with_retries(e: Dict[str, Any]):
+            nonlocal resync_triggered
+
+            for i in range(max(1, attempts)):
+                entity, ok = await verify_one(e)
+                if ok:
+                    return entity, True
+                await asyncio.sleep(backoff)
+
+            if resync_on_miss:
+                async with resync_lock:
+                    if not resync_triggered:
+                        resync_triggered = True
+                        self.logger.info(
+                            "🔁 Miss detected during verify; triggering an extra sync …"
+                        )
+                        # Reuse the same SyncStep logic to avoid duplication
+                        await SyncStep(self.config).execute()
+                # Final check after resync
+                return await verify_one(e)
+
+            return e, False
+
+        results = await asyncio.gather(
+            *[verify_with_retries(e) for e in self.config._created_entities]
+        )
 
         errors = []
         for entity, ok in results:

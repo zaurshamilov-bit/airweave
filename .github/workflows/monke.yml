@@ -1,18 +1,60 @@
-name: Run Monke Tests
+name: Monke Gmail + Drive (matrix)
 
 on:
+  workflow_dispatch:
   pull_request:
+    paths:
+      - 'monke/**'
+      - '.github/workflows/monke-matrix.yml'
   push:
-    branches: [main]
+    branches: [ main, feat/monke ]
 
 jobs:
-  run-tests:
-    name: Run Monke Tests
+  monke:
+    # Two parallel runners — one per connector
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        connector: [ gmail, google_drive ]
+        include:
+          - connector: gmail
+            config: monke/configs/gmail.yaml
+            log_file: logs/gmail.rich.log
+          - connector: google_drive
+            config: monke/configs/google_drive.yaml
+            log_file: logs/drive.rich.log
 
+    # Common env (adjust to your auth setup)
+    env:
+      AIRWEAVE_API_URL: http://localhost:8001
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      # If you use Composio broker (recommended for gmail/drive in these configs):
+      DM_AUTH_PROVIDER: composio
+      DM_AUTH_PROVIDER_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
+      # Optional: per-connector account/config IDs (uncomment + set secrets if needed)
+      GMAIL_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_ACCOUNT_ID }}
+      GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID }}
+      GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID }}
+      GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: monke/requirements.txt
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r monke/requirements.txt
+
+      # ── Airweave backend prerequisite you provided ─────────────────────────────
       - name: Start Airweave backend
         run: |
           printf 'n\nn\n' | ./start.sh
@@ -29,94 +71,19 @@ jobs:
           done
           echo "❌ Airweave backend failed to become healthy"
           exit 1
+      # ───────────────────────────────────────────────────────────────────────────
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Create logs dir
+        run: mkdir -p logs
 
-      - name: Install dependencies
+      - name: Run Monke ${{ matrix.connector }} test (log file only)
         run: |
-          cd monke
-          pip install -r requirements.txt
+          python ci_run_single.py --config "${{ matrix.config }}" --log-file "${{ matrix.log_file }}"
 
-      - name: Run Asana test
-        id: asana
-        continue-on-error: true
-        run: |
-          echo "🧪 Running Asana test..."
-          cd monke
-          python test.py --config configs/asana.yaml
-
-      - name: Run GitHub test
-        id: github
-        continue-on-error: true
-        run: |
-          echo "🧪 Running GitHub test..."
-          cd monke
-          python test.py --config configs/github.yaml
-
-      - name: Run Todoist test
-        id: todoist
-        continue-on-error: true
-        run: |
-          echo "🧪 Running Todoist test..."
-          cd monke
-          python test.py --config configs/todoist.yaml
-
-      - name: Collect logs on failure
-        if: failure()
-        run: |
-          echo "=== Airweave Backend Logs ==="
-          docker logs airweave-backend || true
-
-      - name: Report test results
+      - name: Upload artifacts (logs)
         if: always()
-        run: |
-          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Check Asana test
-          if [ "${{ steps.asana.outcome }}" == "success" ]; then
-            echo "✅ **Asana test**: PASSED" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Asana test**: FAILED" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          # Check GitHub test
-          if [ "${{ steps.github.outcome }}" == "success" ]; then
-            echo "✅ **GitHub test**: PASSED" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **GitHub test**: FAILED" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          # Check Todoist test
-          if [ "${{ steps.todoist.outcome }}" == "success" ]; then
-            echo "✅ **Todoist test**: PASSED" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ **Todoist test**: FAILED" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          # Overall status
-          if [ "${{ steps.asana.outcome }}" == "success" ] && \
-             [ "${{ steps.github.outcome }}" == "success" ] && \
-             [ "${{ steps.todoist.outcome }}" == "success" ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "🎉 **All tests passed!**" >> $GITHUB_STEP_SUMMARY
-            exit 0
-          else
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "💥 **Some tests failed!**" >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          TODOIST_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.TODOIST_AUTH_PROVIDER_ACCOUNT_ID }}
-          TODOIST_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.TODOIST_AUTH_PROVIDER_AUTH_CONFIG_ID }}
-          ASANA_AUTH_PROVIDER_ACCOUNT_ID: ${{ vars.ASANA_AUTH_PROVIDER_ACCOUNT_ID }}
-          ASANA_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ vars.ASANA_AUTH_PROVIDER_AUTH_CONFIG_ID }}
-          DM_AUTH_PROVIDER: ${{ vars.DM_AUTH_PROVIDER }}
-          DM_AUTH_PROVIDER_API_KEY: ${{ vars.DM_AUTH_PROVIDER_API_KEY }}
-          DM_AUTH_PROVIDER_ID: ${{ vars.DM_AUTH_PROVIDER_ID }}
-          NOTION_AUTH_PROVIDER_ACCOUNT_ID: ${{ vars.NOTION_AUTH_PROVIDER_ACCOUNT_ID }}
-          NOTION_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ vars.NOTION_AUTH_PROVIDER_AUTH_CONFIG_ID }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: monke-${{ matrix.connector }}-logs
+          path: |
+            logs/**

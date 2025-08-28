@@ -1,0 +1,325 @@
+[08/27/25 23:00:20] INFO     🚀 Running test with config: /Users/balaji/airweave/monke/configs/gmail.yaml
+                    INFO     🚀 Starting test run: Gmail Connector Test
+                    INFO     📝 Description: End-to-end test of Gmail connector sync functionality with incremental deletion testing
+                    INFO     🔗 Connector: gmail
+                    INFO     🔧 Setting up test environment
+[08/27/25 23:00:21] INFO     HTTP Request: GET https://backend.composio.dev/api/v3/connected_accounts "HTTP/1.1 200 OK"
+                    INFO     Resolved credentials from Composio for slug='gmail' (fields: ['status', 'access_token', 'id_token',
+                             'token_type', 'refresh_token', 'expires_in', 'scope', 'code_verifier', 'redirectUrl', 'callback_url',
+                             'finalRedirectUri', 'refresh_token_expires_in'])
+                    INFO     ✅ Registered bongo: asana
+                    INFO     ✅ Registered bongo: bitbucket
+                    INFO     ✅ Registered bongo: confluence
+                    INFO     ✅ Registered bongo: dropbox
+                    INFO     ✅ Registered bongo: github
+                    INFO     ✅ Registered bongo: gmail
+                    INFO     ✅ Registered bongo: google_calendar
+                    INFO     ✅ Registered bongo: google_drive
+                    INFO     ✅ Registered bongo: jira
+                    INFO     ✅ Registered bongo: notion
+                    INFO     ✅ Registered bongo: stripe
+                    INFO     ✅ Registered bongo: todoist
+[08/27/25 23:00:22] INFO     HTTP Request: POST http://localhost:8001/collections "HTTP/1.1 200 OK"
+                    INFO     🔐 Using auth provider: composio
+                    INFO     HTTP Request: POST http://localhost:8001/source-connections "HTTP/1.1 200 OK"
+                    INFO     ✅ Test environment setup completed
+                    INFO     🚀 Executing test flow: Gmail Connector Test
+                    INFO     🔄 Test flow steps: ['create', 'sync', 'verify', 'update', 'sync', 'verify', 'partial_delete', 'sync',
+                             'verify_partial_deletion', 'verify_remaining_entities', 'complete_delete', 'sync', 'verify_complete_deletion']
+                    INFO     🔄 Executing step: create
+                    INFO     🥁 Creating test entities
+                    INFO     🥁 Creating 3 test emails in Gmail
+                    INFO     HTTP Request: GET https://gmail.googleapis.com/gmail/v1/users/me/profile "HTTP/1.1 200 OK"
+[08/27/25 23:00:24] INFO     HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+[08/27/25 23:00:25] INFO     HTTP Request: POST https://gmail.googleapis.com/gmail/v1/users/me/messages/send "HTTP/1.1 200 OK"
+                    INFO     📧 Created test email: 198ee9e8e14ba35a
+[08/27/25 23:00:26] INFO     HTTP Request: POST https://gmail.googleapis.com/gmail/v1/users/me/messages/send "HTTP/1.1 200 OK"
+                    INFO     📧 Created test email: 198ee9e91fd49333
+                    INFO     HTTP Request: POST https://gmail.googleapis.com/gmail/v1/users/me/messages/send "HTTP/1.1 200 OK"
+                    INFO     📧 Created test email: 198ee9e9260bf529
+                    INFO     ✅ Created 3 test entities
+                    INFO     ✅ Step create completed in 4.80s
+                    INFO     🔄 Executing step: sync
+                    INFO     🔄 Syncing data to Airweave
+[08/27/25 23:00:27] INFO     HTTP Request: GET http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: POST http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/run "HTTP/1.1
+                             200 OK"
+                    INFO     ⏳ Waiting for sync to complete...
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/3d268033-5442-4870-a6a0-6d35
+                             cf6beea7 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 3d268033-5442-4870-a6a0-6d35cf6beea7 status=pending, complete=False
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/3d268033-5442-4870-a6a0-6d35
+                             cf6beea7 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 3d268033-5442-4870-a6a0-6d35cf6beea7 status=in_progress, complete=False
+[08/27/25 23:00:28] INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/3d268033-5442-4870-a6a0-6d35
+                             cf6beea7 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 3d268033-5442-4870-a6a0-6d35cf6beea7 status=in_progress, complete=False
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/3d268033-5442-4870-a6a0-6d35
+                             cf6beea7 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 3d268033-5442-4870-a6a0-6d35cf6beea7 status=in_progress, complete=False
+[08/27/25 23:00:29] INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/3d268033-5442-4870-a6a0-6d35
+                             cf6beea7 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 3d268033-5442-4870-a6a0-6d35cf6beea7 status=in_progress, complete=False
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/3d268033-5442-4870-a6a0-6d35
+                             cf6beea7 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 3d268033-5442-4870-a6a0-6d35cf6beea7 status=completed, complete=False
+                    INFO     ✅ Sync completed successfully (confirmed by is_complete/completed_at)
+                    INFO     ✅ Sync completed
+                    INFO     ✅ Step sync completed in 2.71s
+                    INFO     🔄 Executing step: verify
+                    INFO     🔍 Verifying entities in Qdrant
+[08/27/25 23:00:40] INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=395927ab&limit=50 "HTTP/1.1 200
+                             OK"
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=071c6bfe&limit=50 "HTTP/1.1 200
+                             OK"
+[08/27/25 23:00:41] INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=26d502b6&limit=50 "HTTP/1.1 200
+                             OK"
+                    INFO     ✅ Entity 198ee9e8e14ba35a verified in Qdrant
+                    INFO     ✅ Entity 198ee9e91fd49333 verified in Qdrant
+                    INFO     ✅ Entity 198ee9e9260bf529 verified in Qdrant
+                    INFO     ✅ All entities verified in Qdrant
+                    INFO     ✅ Step verify completed in 11.47s
+                    INFO     🔄 Executing step: update
+                    INFO     📝 Updating test entities
+                    INFO     🥁 Updating test emails in Gmail
+[08/27/25 23:00:43] INFO     HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+                    INFO     HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 200 OK"
+[08/27/25 23:00:44] INFO     HTTP Request: POST https://gmail.googleapis.com/gmail/v1/users/me/messages/198ee9e8e14ba35a/modify "HTTP/1.1
+                             200 OK"
+                    INFO     📝 Updated test email: 198ee9e8e14ba35a
+                    INFO     HTTP Request: POST https://gmail.googleapis.com/gmail/v1/users/me/messages/198ee9e91fd49333/modify "HTTP/1.1
+                             200 OK"
+                    INFO     📝 Updated test email: 198ee9e91fd49333
+[08/27/25 23:00:45] INFO     HTTP Request: POST https://gmail.googleapis.com/gmail/v1/users/me/messages/198ee9e9260bf529/modify "HTTP/1.1
+                             200 OK"
+                    INFO     📝 Updated test email: 198ee9e9260bf529
+                    INFO     ✅ Updated 3 test entities
+                    INFO     ✅ Step update completed in 4.22s
+                    INFO     🔄 Executing step: sync
+                    INFO     🔄 Syncing data to Airweave
+                    INFO     HTTP Request: GET http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: POST http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/run "HTTP/1.1
+                             200 OK"
+                    INFO     ⏳ Waiting for sync to complete...
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/2e02b334-c30a-4f1c-a0a7-0066
+                             80ca9819 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 2e02b334-c30a-4f1c-a0a7-006680ca9819 status=pending, complete=False
+[08/27/25 23:00:46] INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/2e02b334-c30a-4f1c-a0a7-0066
+                             80ca9819 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 2e02b334-c30a-4f1c-a0a7-006680ca9819 status=pending, complete=False
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/2e02b334-c30a-4f1c-a0a7-0066
+                             80ca9819 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 2e02b334-c30a-4f1c-a0a7-006680ca9819 status=in_progress, complete=False
+[08/27/25 23:00:47] INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/2e02b334-c30a-4f1c-a0a7-0066
+                             80ca9819 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 2e02b334-c30a-4f1c-a0a7-006680ca9819 status=in_progress, complete=False
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/2e02b334-c30a-4f1c-a0a7-0066
+                             80ca9819 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 2e02b334-c30a-4f1c-a0a7-006680ca9819 status=in_progress, complete=False
+[08/27/25 23:00:48] INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/2e02b334-c30a-4f1c-a0a7-0066
+                             80ca9819 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 2e02b334-c30a-4f1c-a0a7-006680ca9819 status=completed, complete=False
+                    INFO     ✅ Sync completed successfully (confirmed by is_complete/completed_at)
+                    INFO     ✅ Sync completed
+                    INFO     ✅ Step sync completed in 2.74s
+                    INFO     🔄 Executing step: verify
+                    INFO     🔍 Verifying entities in Qdrant
+[08/27/25 23:00:59] INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=395927ab&limit=50 "HTTP/1.1 200
+                             OK"
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=071c6bfe&limit=50 "HTTP/1.1 200
+                             OK"
+[08/27/25 23:01:00] INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=26d502b6&limit=50 "HTTP/1.1 200
+                             OK"
+                    INFO     ✅ Entity 198ee9e8e14ba35a verified in Qdrant
+                    INFO     ✅ Entity 198ee9e91fd49333 verified in Qdrant
+                    INFO     ✅ Entity 198ee9e9260bf529 verified in Qdrant
+                    INFO     ✅ All entities verified in Qdrant
+                    INFO     ✅ Step verify completed in 12.21s
+                    INFO     🔄 Executing step: partial_delete
+                    INFO     🗑️ Executing partial deletion
+                    INFO     🗑️ Deleting 1 entities: ['198ee9e8e14ba35a']
+                    INFO     💾 Keeping 2 entities: ['198ee9e91fd49333', '198ee9e9260bf529']
+                    INFO     🥁 Deleting 1 specific emails from Gmail
+                    INFO     HTTP Request: POST https://gmail.googleapis.com/gmail/v1/users/me/messages/198ee9e8e14ba35a/trash "HTTP/1.1 200
+                             OK"
+                    INFO     🗑️ Deleted test email: 198ee9e8e14ba35a
+                    INFO     🔍 VERIFYING: Checking if emails are actually deleted from Gmail
+[08/27/25 23:01:01] INFO     HTTP Request: GET https://gmail.googleapis.com/gmail/v1/users/me/messages/198ee9e8e14ba35a "HTTP/1.1 200 OK"
+                    INFO     ✅ Email 198ee9e8e14ba35a confirmed deleted from Gmail
+                    INFO     ✅ Partial deletion completed: 1 entities deleted
+                    INFO     ✅ Step partial_delete completed in 0.87s
+                    INFO     🔄 Executing step: sync
+                    INFO     🔄 Syncing data to Airweave
+                    INFO     HTTP Request: GET http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: POST http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/run "HTTP/1.1
+                             200 OK"
+                    INFO     ⏳ Waiting for sync to complete...
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/860fd4b6-0eca-45f8-b034-4f4d
+                             977fe476 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 860fd4b6-0eca-45f8-b034-4f4d977fe476 status=pending, complete=False
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/860fd4b6-0eca-45f8-b034-4f4d
+                             977fe476 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 860fd4b6-0eca-45f8-b034-4f4d977fe476 status=pending, complete=False
+[08/27/25 23:01:02] INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/860fd4b6-0eca-45f8-b034-4f4d
+                             977fe476 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 860fd4b6-0eca-45f8-b034-4f4d977fe476 status=in_progress, complete=False
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/860fd4b6-0eca-45f8-b034-4f4d
+                             977fe476 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 860fd4b6-0eca-45f8-b034-4f4d977fe476 status=in_progress, complete=False
+[08/27/25 23:01:03] INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/860fd4b6-0eca-45f8-b034-4f4d
+                             977fe476 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 860fd4b6-0eca-45f8-b034-4f4d977fe476 status=in_progress, complete=False
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/860fd4b6-0eca-45f8-b034-4f4d
+                             977fe476 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 860fd4b6-0eca-45f8-b034-4f4d977fe476 status=in_progress, complete=False
+[08/27/25 23:01:04] INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/860fd4b6-0eca-45f8-b034-4f4d
+                             977fe476 "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 860fd4b6-0eca-45f8-b034-4f4d977fe476 status=completed, complete=False
+                    INFO     ✅ Sync completed successfully (confirmed by is_complete/completed_at)
+                    INFO     ✅ Sync completed
+                    INFO     ✅ Step sync completed in 3.31s
+                    INFO     🔄 Executing step: verify_partial_deletion
+                    INFO     🔍 Verifying partial deletion
+                    INFO     🔍 Expecting these entities to be deleted:
+                    INFO        - 198ee9e8e14ba35a (token: 071c6bfe)
+[08/27/25 23:01:13] INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=071c6bfe&limit=50 "HTTP/1.1 200
+                             OK"
+                    INFO     ✅ Entity 198ee9e8e14ba35a confirmed removed from Qdrant
+                    INFO     ✅ Partial deletion verification completed
+                    INFO     ✅ Step verify_partial_deletion completed in 8.69s
+                    INFO     🔄 Executing step: verify_remaining_entities
+                    INFO     🔍 Verifying remaining entities are still present
+[08/27/25 23:01:22] INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=26d502b6&limit=50 "HTTP/1.1 200
+                             OK"
+[08/27/25 23:01:23] INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=395927ab&limit=50 "HTTP/1.1 200
+                             OK"
+                    INFO     ✅ Entity 198ee9e91fd49333 confirmed still present in Qdrant
+                    INFO     ✅ Entity 198ee9e9260bf529 confirmed still present in Qdrant
+                    INFO     ✅ Remaining entities verification completed
+                    INFO     ✅ Step verify_remaining_entities completed in 9.84s
+                    INFO     🔄 Executing step: complete_delete
+                    INFO     🗑️ Executing complete deletion
+                    INFO     🗑️ Deleting remaining 2 entities
+                    INFO     🥁 Deleting 2 specific emails from Gmail
+                    INFO     HTTP Request: POST https://gmail.googleapis.com/gmail/v1/users/me/messages/198ee9e91fd49333/trash "HTTP/1.1 200
+                             OK"
+                    INFO     🗑️ Deleted test email: 198ee9e91fd49333
+[08/27/25 23:01:24] INFO     HTTP Request: POST https://gmail.googleapis.com/gmail/v1/users/me/messages/198ee9e9260bf529/trash "HTTP/1.1 200
+                             OK"
+                    INFO     🗑️ Deleted test email: 198ee9e9260bf529
+                    INFO     🔍 VERIFYING: Checking if emails are actually deleted from Gmail
+                    INFO     HTTP Request: GET https://gmail.googleapis.com/gmail/v1/users/me/messages/198ee9e91fd49333 "HTTP/1.1 200 OK"
+                    INFO     ✅ Email 198ee9e91fd49333 confirmed deleted from Gmail
+                    INFO     HTTP Request: GET https://gmail.googleapis.com/gmail/v1/users/me/messages/198ee9e9260bf529 "HTTP/1.1 200 OK"
+                    INFO     ✅ Email 198ee9e9260bf529 confirmed deleted from Gmail
+                    INFO     ✅ Complete deletion completed: 2 entities deleted
+                    INFO     ✅ Step complete_delete completed in 1.66s
+                    INFO     🔄 Executing step: sync
+                    INFO     🔄 Syncing data to Airweave
+                    INFO     HTTP Request: GET http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: POST http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/run "HTTP/1.1
+                             200 OK"
+                    INFO     ⏳ Waiting for sync to complete...
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/59a8b12d-622b-4613-bcf1-b148
+                             7bd3815c "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 59a8b12d-622b-4613-bcf1-b1487bd3815c status=pending, complete=False
+[08/27/25 23:01:25] INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/59a8b12d-622b-4613-bcf1-b148
+                             7bd3815c "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 59a8b12d-622b-4613-bcf1-b1487bd3815c status=pending, complete=False
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/59a8b12d-622b-4613-bcf1-b148
+                             7bd3815c "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 59a8b12d-622b-4613-bcf1-b1487bd3815c status=in_progress, complete=False
+[08/27/25 23:01:26] INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/59a8b12d-622b-4613-bcf1-b148
+                             7bd3815c "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 59a8b12d-622b-4613-bcf1-b1487bd3815c status=in_progress, complete=False
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/59a8b12d-622b-4613-bcf1-b148
+                             7bd3815c "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 59a8b12d-622b-4613-bcf1-b1487bd3815c status=in_progress, complete=False
+[08/27/25 23:01:27] INFO     HTTP Request: GET
+                             http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662/jobs/59a8b12d-622b-4613-bcf1-b148
+                             7bd3815c "HTTP/1.1 200 OK"
+                    INFO     🔍 Job 59a8b12d-622b-4613-bcf1-b1487bd3815c status=completed, complete=False
+                    INFO     ✅ Sync completed successfully (confirmed by is_complete/completed_at)
+                    INFO     ✅ Sync completed
+                    INFO     ✅ Step sync completed in 2.71s
+                    INFO     🔄 Executing step: verify_complete_deletion
+                    INFO     🔍 Verifying complete deletion
+[08/27/25 23:01:34] INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=071c6bfe&limit=50 "HTTP/1.1 200
+                             OK"
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=26d502b6&limit=50 "HTTP/1.1 200
+                             OK"
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=395927ab&limit=50 "HTTP/1.1 200
+                             OK"
+                    INFO     ✅ Entity 198ee9e8e14ba35a confirmed removed from Qdrant
+                    INFO     ✅ Entity 198ee9e91fd49333 confirmed removed from Qdrant
+                    INFO     ✅ Entity 198ee9e9260bf529 confirmed removed from Qdrant
+[08/27/25 23:01:41] INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=monke-test&limit=25 "HTTP/1.1
+                             200 OK"
+                    INFO     HTTP Request: GET
+                             http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx/search?query=Monke+Test&limit=25 "HTTP/1.1
+                             200 OK"
+                    INFO     🔍 Found 9 results for pattern 'monke-test'
+                    INFO        - Unknown (score: 0.49999934)
+                    INFO        - Unknown (score: 0.33333334)
+                    INFO        - Unknown (score: 0.3333329)
+                    INFO     🔍 Found 9 results for pattern 'Monke Test'
+                    INFO        - Unknown (score: 0.49999934)
+                    INFO        - Unknown (score: 0.3333329)
+                    INFO        - Unknown (score: 0.25)
+                    WARNING  ⚠️ Found 18 test data results in collection
+                    WARNING  ⚠️ Qdrant collection still contains some data (may be metadata entities)
+                    INFO     ✅ Complete deletion verification completed
+                    INFO     ✅ Step verify_complete_deletion completed in 14.44s
+                    INFO     ✅ Test flow completed: Gmail Connector Test
+                    INFO     🧹 Cleaning up test environment
+[08/27/25 23:01:42] INFO     HTTP Request: DELETE http://localhost:8001/source-connections/3693db56-51ea-48dc-a49a-ed94787fd662 "HTTP/1.1
+                             200 OK"
+                    INFO     ✅ Deleted source connection
+                    INFO     HTTP Request: DELETE http://localhost:8001/collections/monkegmailtest1756350021-gc2ghx "HTTP/1.1 200 OK"
+                    INFO     ✅ Deleted test collection
+                    INFO     ✅ Test environment cleanup completed
+                    INFO     ✅ Test passed | Duration: 79.71s

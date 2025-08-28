@@ -53,6 +53,7 @@ class TestFlow:
             self.metrics["total_duration_wall_clock"] = time.time() - flow_start
             try:
                 await self.cleanup()
+                pass
             except Exception as cleanup_error:
                 self.logger.error(f"❌ Cleanup failed after test failure: {cleanup_error}")
             raise
