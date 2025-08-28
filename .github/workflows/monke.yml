@@ -1,25 +1,92 @@
-name: Monke Gmail + Drive (matrix)
+name: Monke Gmail + Drive (matrix, single prep)
 
 on:
   workflow_dispatch:
   pull_request:
     paths:
       - 'monke/**'
-      - '.github/workflows/monke-matrix.yml'
+      - '.github/workflows/**'
+      - 'docker/**'
+      - 'start.sh'
   push:
     branches: [ main, feat/monke ]
 
+concurrency:
+  group: monke-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  monke:
-    # Two parallel runners — one per connector
+  # Build the images ONCE with repo-scoped caches, export them as an artifact.
+  prep_images:
+    runs-on: ubuntu-latest
+    env:
+      BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
+      FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
+      BACKEND_CACHE_DIR: /tmp/.buildx-cache-backend
+      FRONTEND_CACHE_DIR: /tmp/.buildx-cache-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Restore backend build cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.BACKEND_CACHE_DIR }}
+          key: buildx-backend-${{ runner.os }}-${{ hashFiles('docker/backend/**','docker/backend/Dockerfile') }}
+          restore-keys: |
+            buildx-backend-${{ runner.os }}-
+
+      - name: Restore frontend build cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FRONTEND_CACHE_DIR }}
+          key: buildx-frontend-${{ runner.os }}-${{ hashFiles('docker/frontend/**','docker/frontend/Dockerfile') }}
+          restore-keys: |
+            buildx-frontend-${{ runner.os }}-
+
+      - name: Build backend (cached, load into daemon)
+        run: |
+          mkdir -p "$BACKEND_CACHE_DIR"
+          docker buildx build \
+            --load \
+            --platform=linux/amd64 \
+            --cache-from type=local,src="$BACKEND_CACHE_DIR" \
+            --cache-to   type=local,dest="$BACKEND_CACHE_DIR",mode=max \
+            -t "$BACKEND_TAG" \
+            -f docker/backend/Dockerfile docker/backend
+
+      - name: Build frontend (cached, load into daemon)
+        run: |
+          mkdir -p "$FRONTEND_CACHE_DIR"
+          docker buildx build \
+            --load \
+            --platform=linux/amd64 \
+            --cache-from type=local,src="$FRONTEND_CACHE_DIR" \
+            --cache-to   type=local,dest="$FRONTEND_CACHE_DIR",mode=max \
+            -t "$FRONTEND_TAG" \
+            -f docker/frontend/Dockerfile docker/frontend
+
+      - name: Export images as artifact
+        run: docker save "$BACKEND_TAG" "$FRONTEND_TAG" -o /tmp/monke-images.tar
+
+      - name: Upload image tar
+        uses: actions/upload-artifact@v4
+        with:
+          name: monke-images
+          path: /tmp/monke-images.tar
+          if-no-files-found: error
+          retention-days: 7
+
+  # Parallel acceptance tests; each leg loads the prebuilt images and starts its own stack fast.
+  connectors:
+    needs: prep_images
     runs-on: ubuntu-latest
     environment: dev
-
     strategy:
       fail-fast: false
-      max-parallel: 2
       matrix:
-        connector: [ gmail, google_drive ]
         include:
           - connector: gmail
             config: monke/configs/gmail.yaml
@@ -27,24 +94,25 @@ jobs:
           - connector: google_drive
             config: monke/configs/google_drive.yaml
             log_file: logs/drive.rich.log
-
-    # Common env (adjust to your auth setup)
     env:
       AIRWEAVE_API_URL: http://localhost:8001
+
+      # Auth/env secrets you already use:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      # If you use Composio broker (recommended for gmail/drive in these configs):
       DM_AUTH_PROVIDER: composio
       DM_AUTH_PROVIDER_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
-      # Optional: per-connector account/config IDs (uncomment + set secrets if needed)
       GMAIL_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_ACCOUNT_ID }}
       GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID }}
       GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID }}
       GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID }}
 
+      # image tags must match the prep job
+      BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
+      FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.11 (with pip cache)
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -52,14 +120,38 @@ jobs:
           cache-dependency-path: monke/requirements.txt
 
       - name: Install Python deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r monke/requirements.txt
+        run: pip install -r monke/requirements.txt
 
-      # ── Airweave backend prerequisite you provided ─────────────────────────────
-      - name: Start Airweave backend
+      - name: Download prebuilt images
+        uses: actions/download-artifact@v4
+        with:
+          name: monke-images
+          path: ./_images
+
+      - name: Load images
+        run: docker load -i ./_images/monke-images.tar
+
+      - name: Compose override to force prebuilt images (no rebuilds)
         run: |
-          printf 'n\nn\n' | ./start.sh
+          mkdir -p docker
+          cat > docker/docker-compose.ci.yml <<'YAML'
+          services:
+            airweave-backend:
+              image: ${BACKEND_TAG}
+              pull_policy: never
+              build: null
+            airweave-frontend:
+              image: ${FRONTEND_TAG}
+              pull_policy: never
+              build: null
+          YAML
+
+      - name: Start Airweave (non-interactive)
+        env:
+          CI: "true"
+          NONINTERACTIVE: "1"
+          CI_COMPOSE_OVERRIDE: docker/docker-compose.ci.yml
+        run: ./start.sh
 
       - name: Wait for Airweave backend health
         run: |
@@ -73,19 +165,17 @@ jobs:
           done
           echo "❌ Airweave backend failed to become healthy"
           exit 1
-      # ───────────────────────────────────────────────────────────────────────────
 
-      - name: Create logs dir
-        run: mkdir -p logs
-
-      - name: Run Monke ${{ matrix.connector }} test (log file only)
+      - name: Run Monke ${{ matrix.connector }} test
         run: |
-          python ci_run_single.py --config "${{ matrix.config }}" --log-file "${{ matrix.log_file }}"
+          mkdir -p logs
+          python ci_run_single.py \
+            --config "${{ matrix.config }}" \
+            --log-file "${{ matrix.log_file }}"
 
-      - name: Upload artifacts (logs)
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: monke-${{ matrix.connector }}-logs
-          path: |
-            logs/**
+          path: logs/**
