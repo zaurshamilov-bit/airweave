@@ -5,11 +5,11 @@ description: "End-to-end test of Jira connector sync functionality with incremen
 connector:
   name: "jira_test"
   type: "jira"
-  auth_fields:
-    access_token: "${JIRA_ACCESS_TOKEN}"
+  auth_fields: {}
+    # access_token: "${JIRA_ACCESS_TOKEN}"
   config_fields:
     cloud_id: "${JIRA_CLOUD_ID}"  # Optional, will be auto-discovered if not provided
-    openai_model: "gpt-5"
+    openai_model: "gpt-4.1-mini"
     # post_create_sleep_seconds: 7  # Optional: wait N seconds after creation before first sync
 
 test_flow:

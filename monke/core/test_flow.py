@@ -49,6 +49,8 @@ class TestFlow:
             self.metrics["total_duration_wall_clock"] = time.time() - flow_start
             await self._emit_event("flow_completed")
         except Exception as e:
+            # print(e)
+            # raise e
             self.logger.error(f"❌ Test flow execution failed: {e}")
             self.metrics["total_duration_wall_clock"] = time.time() - flow_start
             try:

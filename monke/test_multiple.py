@@ -220,6 +220,8 @@ async def main() -> None:
         print("❌ No valid configs provided")
         sys.exit(1)
 
+    print(os.getenv("DM_AUTH_PROVIDER_API_KEY"))
+
     _connect_response = await connect_composio_provider_polyfill(
         os.getenv("DM_AUTH_PROVIDER_API_KEY")
     )

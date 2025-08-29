@@ -84,6 +84,7 @@ class TestRunner:
             return [result]
 
         except Exception as e:
+            raise e
             self.logger.error(f"❌ Test execution failed: {e}")
 
             # Ensure cleanup happens even on failure

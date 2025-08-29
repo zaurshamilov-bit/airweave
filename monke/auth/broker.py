@@ -71,10 +71,12 @@ class ComposioBroker(BaseAuthBroker):
         self, source_short_name: str, required_fields: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         # Default mapping: slug == short_name. If exceptions arise, we can internalize a mapping here.
-        slug = source_short_name
 
-        if source_short_name == "google_drive":
-            slug = "googledrive"
+        # composio removes _ , eg. google_drive becomes googledrive
+        if "_" in source_short_name:
+            slug = "".join(source_short_name.split("_"))
+        else:
+            slug = source_short_name
 
         accounts = (await self._get("/connected_accounts")).get("items", [])
         matching = [a for a in accounts if a.get("toolkit", {}).get("slug") == slug]
