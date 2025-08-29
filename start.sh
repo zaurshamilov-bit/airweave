@@ -125,6 +125,15 @@ fi
 
 # Now run the appropriate Docker Compose command with the new path
 echo ""
+
+# Show which images will be used
+if [ -n "$BACKEND_IMAGE" ] || [ -n "$FRONTEND_IMAGE" ]; then
+    echo "Using custom Docker images:"
+    echo "  Backend:  ${BACKEND_IMAGE:-ghcr.io/airweave-ai/airweave-backend:latest}"
+    echo "  Frontend: ${FRONTEND_IMAGE:-ghcr.io/airweave-ai/airweave-frontend:latest}"
+    echo ""
+fi
+
 echo "Starting Docker services..."
 if ! $COMPOSE_CMD -f docker/docker-compose.yml up -d; then
     echo "❌ Failed to start Docker services"
