@@ -59,7 +59,8 @@
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/backend",
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/backend"
+                "PYTHONPATH": "${workspaceFolder}/backend",
+                "LOG_LEVEL": "DEBUG"
             },
             "justMyCode": false,
             "envFile": "${workspaceFolder}/.env"

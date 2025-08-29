@@ -717,6 +717,17 @@ class EntityProcessor:
 
         parent_hash = await compute_entity_hash_async(parent_entity)
 
+        # Get entity definition ID from the entity map
+        entity_type = type(parent_entity)
+        entity_definition_id = sync_context.entity_map.get(entity_type)
+        if not entity_definition_id:
+            sync_context.logger.warning(
+                f"⚠️  INSERT_NO_DEF [{entity_context}] No entity definition found for "
+                f"type {entity_type.__name__}"
+            )
+            await sync_context.progress.increment("skipped", 1)
+            return
+
         # Create a new database session just for this insert
         async with get_db_context() as db:
             new_db_entity = await crud.entity.create(
@@ -725,6 +736,7 @@ class EntityProcessor:
                     sync_job_id=sync_context.sync_job.id,
                     sync_id=sync_context.sync.id,
                     entity_id=parent_entity.entity_id,
+                    entity_definition_id=entity_definition_id,
                     hash=parent_hash,
                 ),
                 ctx=sync_context.ctx,
