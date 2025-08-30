@@ -137,7 +137,7 @@ const EntityGridItem: React.FC<{
     <button
       onClick={onClick}
       className={cn(
-        "group relative w-full rounded-md px-3 py-2 transition-all duration-300",
+        "group relative w-full min-w-[120px] rounded-md px-3 py-2 transition-all duration-300",
         "text-left focus:outline-none",
         // Disabled state for empty entities
         entity.count === 0
@@ -161,12 +161,15 @@ const EntityGridItem: React.FC<{
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <span className={cn(
-            "text-xs font-medium truncate transition-colors duration-300",
-            isExpanded
-              ? isDark ? "text-blue-400" : "text-blue-600"
-              : isDark ? "text-gray-300" : "text-gray-700"
-          )}>
+          <span
+            className={cn(
+              "text-[11px] font-medium truncate transition-colors duration-300 block",
+              isExpanded
+                ? isDark ? "text-blue-400" : "text-blue-600"
+                : isDark ? "text-gray-300" : "text-gray-700"
+            )}
+            title={entity.name}
+          >
             {entity.name}
           </span>
           {/* Always visible indicator for expandable items */}
@@ -198,7 +201,7 @@ const EntityGridItem: React.FC<{
           count={entity.count}
           isDark={isDark}
           className={cn(
-            "text-sm font-semibold tabular-nums",
+            "text-xs font-semibold tabular-nums flex-shrink-0",
             entity.count === 0 && "opacity-30"
           )}
         />
@@ -517,6 +520,64 @@ const EntityDetailView: React.FC<{
   );
 };
 
+// Custom hook for smooth height transitions
+const useHeightTransition = (isOpen: boolean) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number>(0);
+  const [shouldRender, setShouldRender] = useState(false);
+  const measureTimeoutRef = useRef<NodeJS.Timeout>();
+
+  useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true);
+      // Measure height after render
+      measureTimeoutRef.current = setTimeout(() => {
+        if (containerRef.current) {
+          const contentElement = containerRef.current.firstElementChild as HTMLElement;
+          if (contentElement) {
+            const newHeight = contentElement.scrollHeight;
+            setHeight(newHeight);
+          }
+        }
+      }, 10);
+    } else {
+      setHeight(0);
+      // Delay unmounting to allow close animation
+      const timer = setTimeout(() => setShouldRender(false), 300);
+      return () => clearTimeout(timer);
+    }
+
+    return () => {
+      if (measureTimeoutRef.current) {
+        clearTimeout(measureTimeoutRef.current);
+      }
+    };
+  }, [isOpen]);
+
+  // Re-measure on content changes
+  useEffect(() => {
+    if (isOpen && shouldRender && containerRef.current) {
+      const resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const newHeight = entry.contentRect.height;
+          if (newHeight > 0) {
+            setHeight(newHeight);
+          }
+        }
+      });
+
+      const contentElement = containerRef.current.firstElementChild as HTMLElement;
+      if (contentElement) {
+        resizeObserver.observe(contentElement);
+      }
+
+      return () => resizeObserver.disconnect();
+    }
+  }, [isOpen, shouldRender]);
+
+  return { containerRef, height, shouldRender };
+};
+
 export const EntityStateList: React.FC<EntityStateListProps> = ({
   state,
   sourceShortName,
@@ -607,18 +668,49 @@ export const EntityStateList: React.FC<EntityStateListProps> = ({
   }, [combinedEntities]);
 
   const handleEntityClick = (entityName: string) => {
+    console.log('EntityClick:', entityName, 'Current expanded:', expandedEntity);
+
     if (expandedEntity === entityName) {
       // Closing the same entity
       setExpandedEntity(null);
-    } else if (expandedEntity) {
-      // Switching to a different entity - smooth transition
-      setExpandedEntity(null);
-      setTimeout(() => setExpandedEntity(entityName), 150);
     } else {
-      // Opening a new entity
-      setExpandedEntity(entityName);
+      // Check if entity exists before expanding
+      const entity = combinedEntities.find(e => e.name === entityName);
+      console.log('Found entity:', entity);
+
+      if (entity) {
+        // Opening a new entity or switching - direct transition
+        setExpandedEntity(entityName);
+
+        // Smooth scroll to show the expanded content after a brief delay
+        setTimeout(() => {
+          const element = document.getElementById('entity-detail-view');
+          if (element) {
+            element.scrollIntoView({
+              behavior: 'smooth',
+              block: 'nearest',
+              inline: 'nearest'
+            });
+          }
+        }, 100);
+      }
     }
   };
+
+  // Use height transition for detail view
+  const expandedEntityData = expandedEntity ? combinedEntities.find(e => e.name === expandedEntity) : null;
+
+  console.log('Expanded state:', { expandedEntity, expandedEntityData, combinedEntitiesCount: combinedEntities.length });
+
+  // If expandedEntity is set but data not found, clear it
+  useEffect(() => {
+    if (expandedEntity && !combinedEntities.find(e => e.name === expandedEntity)) {
+      console.log('Clearing orphaned expanded entity:', expandedEntity);
+      setExpandedEntity(null);
+    }
+  }, [expandedEntity, combinedEntities]);
+
+  const { containerRef, height, shouldRender } = useHeightTransition(!!expandedEntityData);
 
   return (
     <div className="space-y-3">
@@ -694,14 +786,14 @@ export const EntityStateList: React.FC<EntityStateListProps> = ({
             </div>
           </div>
         ) : (
-          /* Compact Entity Grid */
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
+          /* Compact Entity Grid - Optimized for readability */
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5">
             {combinedEntities.map((entity) => (
               <EntityGridItem
                 key={entity.name}
                 entity={entity}
                 isDark={isDark}
-                isExpanded={expandedEntity === entity.name}
+                isExpanded={expandedEntityData?.name === entity.name}
                 onClick={() => handleEntityClick(entity.name)}
               />
             ))}
@@ -710,16 +802,29 @@ export const EntityStateList: React.FC<EntityStateListProps> = ({
         </CardContent>
       </Card>
 
-      {/* Separated Detail View with smooth transition */}
-      {expandedEntity && (
-        <div className="animate-in slide-in-from-top-2 fade-in duration-300">
-          <EntityDetailView
-            entity={combinedEntities.find(e => e.name === expandedEntity)!}
-            isDark={isDark}
-            onClose={() => setExpandedEntity(null)}
-          />
-        </div>
-      )}
+      {/* Separated Detail View with smooth height transition */}
+      <div
+        id="entity-detail-view"
+        ref={containerRef}
+        style={{
+          height: `${height}px`,
+          transition: 'height 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+          overflow: 'hidden'
+        }}
+      >
+        {shouldRender && expandedEntityData && (
+          <div className={cn(
+            "transition-opacity duration-200",
+            expandedEntityData ? "opacity-100" : "opacity-0"
+          )}>
+            <EntityDetailView
+              entity={expandedEntityData}
+              isDark={isDark}
+              onClose={() => setExpandedEntity(null)}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 };

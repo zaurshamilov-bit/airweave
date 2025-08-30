@@ -55,8 +55,6 @@ function App() {
           <Route path={protectedPaths.dashboard} element={<Dashboard />} />
           <Route path={protectedPaths.collections} element={<CollectionsView />} />
           <Route path={protectedPaths.collectionDetail} element={<CollectionDetailView />} />
-          {/* Development tool for testing entity state UI */}
-          <Route path="/simulator" element={<EntityStateSimulatorView />} />
           <Route path={protectedPaths.apiKeys} />
           <Route path={protectedPaths.authProviders} element={<AuthProviders />} />
           <Route path={protectedPaths.whiteLabel} element={<WhiteLabel />} />
