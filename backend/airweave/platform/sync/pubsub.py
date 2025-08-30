@@ -2,31 +2,22 @@
 
 import asyncio
 import platform
+from datetime import datetime
+from typing import Dict, List, Optional
 from uuid import UUID
 
 import redis.asyncio as redis
-from pydantic import BaseModel
 
 from airweave.core.config import settings
 from airweave.core.logging import ContextualLogger, logger
 from airweave.core.redis_client import redis_client
-
-
-class SyncProgressUpdate(BaseModel):
-    """Sync progress update data structure.
-
-    This is sent over the pubsub channel to subscribers
-    """
-
-    inserted: int = 0
-    updated: int = 0
-    deleted: int = 0
-    kept: int = 0
-    skipped: int = 0
-    entities_encountered: dict[str, int] = {}
-    is_complete: bool = False
-    is_failed: bool = False
-
+from airweave.core.shared_models import SyncJobStatus
+from airweave.schemas.entity_count import EntityCountWithDefinition
+from airweave.schemas.sync_pubsub import (
+    EntityStateUpdate,
+    SyncCompleteMessage,
+    SyncProgressUpdate,
+)
 
 PUBLISH_THRESHOLD = 3
 
@@ -114,6 +105,57 @@ class SyncPubSub:
         await pubsub.subscribe(channel)
 
         logger.debug(f"Created new pubsub subscription for sync job {job_id}")
+        return pubsub
+
+    async def subscribe_entity_state(self, job_id: UUID) -> redis.client.PubSub:
+        """Create a new pubsub instance and subscribe to entity state updates.
+
+        Args:
+            job_id: The sync job ID to subscribe to.
+
+        Returns:
+            redis.client.PubSub: A new Redis pubsub instance subscribed to the entity state channel.
+        """
+        channel = f"sync_job_state:{job_id}"
+
+        # Get socket keepalive options based on OS
+        if platform.system() == "Darwin":
+            socket_keepalive_options = {}
+        else:
+            # Use the correct Linux TCP keepalive constants
+            import socket
+
+            if hasattr(socket, "TCP_KEEPIDLE"):
+                socket_keepalive_options = {
+                    socket.TCP_KEEPIDLE: 60,  # Start keepalive after 60s idle
+                    socket.TCP_KEEPINTVL: 10,  # Interval between keepalive probes
+                    socket.TCP_KEEPCNT: 6,  # Number of keepalive probes
+                }
+            else:
+                socket_keepalive_options = {}
+
+        # Build Redis URL with authentication
+        if settings.REDIS_PASSWORD:
+            redis_url = f"redis://:{settings.REDIS_PASSWORD}@{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
+        else:
+            redis_url = f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
+
+        # Create a new Redis client directly for pubsub to avoid connection pool issues
+        pubsub_redis = await redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_keepalive=True,
+            socket_connect_timeout=5,
+            socket_keepalive_options=socket_keepalive_options,
+        )
+
+        # Create pubsub instance
+        pubsub = pubsub_redis.pubsub()
+
+        # Subscribe to the entity state channel
+        await pubsub.subscribe(channel)
+
+        logger.debug(f"Created new entity state subscription for sync job {job_id}")
         return pubsub
 
 
@@ -260,6 +302,257 @@ class SyncProgress:
             f"Deleted: {self.stats.deleted} | Kept: {self.stats.kept} | "
             f"Skipped: {self.stats.skipped}{rate_info}{entity_info}"
         )
+
+
+class SyncEntityStateTracker:
+    """Tracks total entity counts during sync, publishing absolute values.
+
+    This tracker maintains the total count of entities per type during a sync,
+    publishing updates to Redis for real-time monitoring. Unlike the differential
+    progress tracker, this publishes absolute totals.
+    """
+
+    def __init__(
+        self,
+        job_id: UUID,
+        sync_id: UUID,
+        initial_counts: List[EntityCountWithDefinition],
+        logger: ContextualLogger,
+    ):
+        """Initialize the entity state tracker.
+
+        Args:
+            job_id: The sync job ID
+            sync_id: The sync ID
+            initial_counts: Initial entity counts from the database
+            logger: Contextual logger for debugging
+        """
+        self.job_id = job_id
+        self.sync_id = sync_id
+        self.logger = logger
+
+        # Initialize with database counts
+        self.entity_counts: Dict[UUID, int] = {
+            count.entity_definition_id: count.count for count in initial_counts
+        }
+
+        # Track entity definition metadata for name resolution
+        self.entity_metadata: Dict[UUID, Dict] = {}
+        for count in initial_counts:
+            self.entity_metadata[count.entity_definition_id] = {
+                "name": count.entity_definition_name,
+                "type": count.entity_definition_type,
+                "description": count.entity_definition_description,
+            }
+            self.logger.info(
+                f"📚 Loaded metadata for {count.entity_definition_id}: "
+                f"{count.entity_definition_name} (count={count.count})"
+            )
+
+        # Publishing control
+        self._lock = asyncio.Lock()
+        self._last_published = datetime.utcnow()
+        self._publish_interval = 0.5  # Publish every 500ms max
+        self.channel = f"sync_job_state:{job_id}"
+
+        # Track the total operations for debugging
+        self._total_operations = 0
+
+    async def update_entity_count(
+        self,
+        entity_definition_id: UUID,
+        action: str,  # 'insert', 'update', 'delete'
+        delta: int = 1,
+        entity_name: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        entity_description: Optional[str] = None,
+    ) -> None:
+        """Update entity count based on action.
+
+        Args:
+            entity_definition_id: The entity definition ID
+            action: The action performed ('insert', 'update', 'delete')
+            delta: The number of entities affected (default: 1)
+            entity_name: The entity definition name (for new entity types)
+            entity_type: The entity definition type (for new entity types)
+            entity_description: The entity definition description (for new entity types)
+        """
+        async with self._lock:
+            # Initialize count if this is a new entity type
+            if entity_definition_id not in self.entity_counts:
+                self.entity_counts[entity_definition_id] = 0
+                self.logger.info(
+                    f"🆕 New entity type encountered: {entity_definition_id}, name={entity_name}"
+                )
+
+            # Always update or register metadata if entity_name is provided
+            # This handles cases where initial_counts might be empty or incomplete
+            if entity_name and entity_definition_id not in self.entity_metadata:
+                self.entity_metadata[entity_definition_id] = {
+                    "name": entity_name,
+                    "type": entity_type or "unknown",
+                    "description": entity_description or "",
+                }
+                self.logger.info(
+                    f"📝 Registered metadata for entity {entity_definition_id}: {entity_name}"
+                )
+
+            # Log the action for debugging
+            old_count = self.entity_counts[entity_definition_id]
+
+            # Update count based on action
+            # Note: 'update' actions don't change the total count
+            if action == "insert":
+                self.entity_counts[entity_definition_id] += delta
+                self._total_operations += 1
+            elif action == "delete":
+                self.entity_counts[entity_definition_id] = max(
+                    0, self.entity_counts[entity_definition_id] - delta
+                )
+                self._total_operations += 1
+            elif action == "update":
+                # Updates don't change the count, just track the operation
+                self._total_operations += 1
+
+            new_count = self.entity_counts[entity_definition_id]
+            entity_name = self.entity_metadata.get(entity_definition_id, {}).get(
+                "name", str(entity_definition_id)
+            )
+            self.logger.debug(
+                f"🔢 Entity count update: {entity_name} - action={action}, "
+                f"count: {old_count} → {new_count}, total_ops={self._total_operations}"
+            )
+
+            # Check if we should publish based on time interval
+            now = datetime.utcnow()
+            if (now - self._last_published).total_seconds() >= self._publish_interval:
+                await self._publish_state()
+                self._last_published = now
+
+    async def _publish_state(self) -> None:
+        """Publish current total state to Redis."""
+        # Debug log the current state
+        self.logger.debug(
+            f"📊 Publishing state - entity_counts has {len(self.entity_counts)} types, "
+            f"metadata has {len(self.entity_metadata)} types"
+        )
+
+        # Build entity counts with clean names
+        entity_counts_named = {}
+        for def_id, count in self.entity_counts.items():
+            if def_id in self.entity_metadata:
+                name = self.entity_metadata[def_id]["name"]
+                # Clean entity name (remove "Entity" suffix if present)
+                clean_name = name.replace("Entity", "").strip()
+                if clean_name:  # Only add if name is not empty
+                    entity_counts_named[clean_name] = count
+            else:
+                # If we don't have metadata, use the UUID as a fallback
+                # This ensures ALL entities are counted in the breakdown
+                self.logger.warning(
+                    f"⚠️ No metadata for entity {def_id} (count={count}), using ID as name"
+                )
+                entity_counts_named[str(def_id)] = count
+
+        # Calculate total entities
+        total_entities = sum(self.entity_counts.values())
+
+        # Create properly typed state update
+        state_update = EntityStateUpdate(
+            job_id=self.job_id,
+            sync_id=self.sync_id,
+            entity_counts=entity_counts_named,
+            total_entities=total_entities,
+            job_status=SyncJobStatus.IN_PROGRESS,  # Always IN_PROGRESS during updates
+        )
+
+        try:
+            # Log the channel and message for debugging
+            self.logger.info(
+                f"📡 Publishing entity state to channel '{self.channel}': "
+                f"{len(entity_counts_named)} types, {total_entities} total entities"
+            )
+
+            # Publish the Pydantic model as JSON
+            subscribers = await redis_client.publish(self.channel, state_update.model_dump_json())
+
+            self.logger.info(
+                f"✅ Published entity state to {subscribers} subscribers: {entity_counts_named}"
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to publish entity state: {e}")
+
+    async def finalize(self, is_complete: bool = True) -> None:
+        """Publish final state with completion flag.
+
+        Args:
+            is_complete: Whether the sync completed successfully
+        """
+        async with self._lock:
+            # Always publish final state
+            await self._publish_state()
+
+            # Build final counts with names for the completion message
+            final_counts_named = {}
+            for def_id, count in self.entity_counts.items():
+                if def_id in self.entity_metadata:
+                    name = self.entity_metadata[def_id]["name"]
+                    clean_name = name.replace("Entity", "").strip()
+                    if clean_name:
+                        final_counts_named[clean_name] = count
+                else:
+                    # Include entities without metadata using UUID as name
+                    final_counts_named[str(def_id)] = count
+
+            # Send completion message with proper status
+            final_status = SyncJobStatus.COMPLETED if is_complete else SyncJobStatus.FAILED
+
+            completion_msg = SyncCompleteMessage(
+                job_id=self.job_id,
+                sync_id=self.sync_id,
+                is_complete=is_complete,
+                is_failed=not is_complete,
+                final_counts=final_counts_named,
+                total_entities=sum(self.entity_counts.values()),
+                total_operations=self._total_operations,
+                final_status=final_status,
+            )
+
+            try:
+                await redis_client.publish(self.channel, completion_msg.model_dump_json())
+
+                self.logger.info(
+                    f"Sync finalized: {'completed' if is_complete else 'failed'}, "
+                    f"{sum(self.entity_counts.values())} total entities, "
+                    f"{self._total_operations} operations"
+                )
+            except Exception as e:
+                self.logger.error(f"Failed to publish completion message: {e}")
+
+    def get_current_state(self) -> Dict:
+        """Get the current state snapshot.
+
+        Returns:
+            Dictionary with current entity counts and metadata
+        """
+        entity_counts_named = {}
+        for def_id, count in self.entity_counts.items():
+            if def_id in self.entity_metadata:
+                name = self.entity_metadata[def_id]["name"]
+                clean_name = name.replace("Entity", "").strip()
+                if clean_name:
+                    entity_counts_named[clean_name] = count
+            else:
+                # Include entities without metadata using UUID as name
+                entity_counts_named[str(def_id)] = count
+
+        return {
+            "entity_counts": entity_counts_named,
+            "total_entities": sum(self.entity_counts.values()),
+            "total_operations": self._total_operations,
+            "job_id": str(self.job_id),
+            "sync_id": str(self.sync_id),
+        }
 
 
 # Create a global instance for the entire app
