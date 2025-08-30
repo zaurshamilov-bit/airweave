@@ -215,6 +215,13 @@ export class EntityStateMediator {
           } else if (data.type === 'sync_complete') {
             const completeMsg = data as SyncCompleteMessage;
 
+            console.log('[EntityStateMediator] Sync completion message received:', {
+              is_failed: completeMsg.is_failed,
+              final_status: completeMsg.final_status,
+              error: completeMsg.error,
+              final_counts: completeMsg.final_counts
+            });
+
             // IMMEDIATELY update status to reflect completion
             const currentState = this.stateStore.getEntityState(this.connectionId);
             if (currentState) {
@@ -222,6 +229,13 @@ export class EntityStateMediator {
               const finalStatus = completeMsg.final_status || (completeMsg.is_failed ? 'failed' : 'completed');
               const finalCounts = completeMsg.final_counts || currentState.entityCounts;
               const finalTotal = completeMsg.total_entities ?? currentState.totalEntities;
+              const errorMessage = completeMsg.error || (completeMsg.is_failed ? 'Sync failed' : undefined);
+
+              console.log('[EntityStateMediator] Updating state with:', {
+                finalStatus,
+                errorMessage,
+                isSyncing: false
+              });
 
               this.stateStore.setEntityState(this.connectionId, {
                 ...currentState,
@@ -230,7 +244,7 @@ export class EntityStateMediator {
                 syncStatus: finalStatus,
                 currentJobId: undefined, // Clear job ID
                 lastUpdated: new Date(),
-                error: completeMsg.error || (completeMsg.is_failed ? 'Sync failed' : undefined)
+                error: errorMessage
               });
             }
 

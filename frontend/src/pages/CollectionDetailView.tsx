@@ -990,6 +990,13 @@ const Collections = () => {
                             <SourceConnectionStateView
                                 key={selectedConnection.id}
                                 sourceConnectionId={selectedConnection.id}
+                                onConnectionDeleted={() => {
+                                    // Clear selection and reload connections
+                                    setSelectedConnection(null);
+                                    if (collection?.readable_id) {
+                                        fetchSourceConnections(collection.readable_id);
+                                    }
+                                }}
                             />
                         </div>
                     )}

@@ -482,11 +482,12 @@ class SyncEntityStateTracker:
         except Exception as e:
             self.logger.error(f"Failed to publish entity state: {e}")
 
-    async def finalize(self, is_complete: bool = True) -> None:
+    async def finalize(self, is_complete: bool = True, error: Optional[str] = None) -> None:
         """Publish final state with completion flag.
 
         Args:
             is_complete: Whether the sync completed successfully
+            error: Error message if the sync failed
         """
         async with self._lock:
             # Always publish final state
@@ -516,6 +517,7 @@ class SyncEntityStateTracker:
                 total_entities=sum(self.entity_counts.values()),
                 total_operations=self._total_operations,
                 final_status=final_status,
+                error=error,  # Include the error message
             )
 
             try:

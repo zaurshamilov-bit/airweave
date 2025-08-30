@@ -516,6 +516,7 @@ class SourceConnectionService:
                 source_connection.latest_sync_job_id = sync_job.id
                 source_connection.latest_sync_job_started_at = sync_job.started_at
                 source_connection.latest_sync_job_completed_at = sync_job.completed_at
+                source_connection.latest_sync_job_error = sync_job.error if sync_job.error else None
             else:
                 # No sync job created (sync_immediately=False)
                 source_connection.status = SourceConnectionStatus.ACTIVE
