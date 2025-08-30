@@ -1,5 +1,6 @@
 """Service for managing source connections."""
 
+import secrets
 from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import UUID
 
@@ -11,11 +12,14 @@ from airweave.api.context import ApiContext
 from airweave.core import credentials
 from airweave.core.auth_provider_service import auth_provider_service
 from airweave.core.collection_service import collection_service
+from airweave.core.config import settings as core_settings
 from airweave.core.constants.native_connections import NATIVE_QDRANT_UUID, NATIVE_TEXT2VEC_UUID
 from airweave.core.logging import logger
 from airweave.core.shared_models import ConnectionStatus, SourceConnectionStatus, SyncStatus
 from airweave.core.sync_service import sync_service
+from airweave.crud import connection_init_session
 from airweave.db.unit_of_work import UnitOfWork
+from airweave.models.connection_init_session import ConnectionInitSession, ConnectionInitStatus
 from airweave.models.integration_credential import IntegrationType
 from airweave.platform.auth.schemas import AuthType, OAuth2TokenResponse
 from airweave.platform.auth.services import oauth2_service
@@ -1395,6 +1399,427 @@ class SourceConnectionService:
             raise HTTPException(
                 status_code=400, detail="Failed to exchange authorization code for token"
             ) from e
+
+    async def initiate_connection(  # noqa: C901
+        self,
+        db: AsyncSession,
+        source_connection_in: schemas.SourceConnectionInitiate,
+        ctx: ApiContext,
+    ) -> Tuple[
+        Optional[UUID], Optional[str], Optional[schemas.SourceConnection], Optional[schemas.SyncJob]
+    ]:
+        """Unified initiation method.
+
+        - If non-OAuth (or token injection), create everything immediately.
+        - If OAuth, create a short-lived session and return an authentication URL.
+
+        Returns:
+            (connection_init_id, authentication_url, source_connection, sync_job)
+        """
+        # Resolve source meta
+        source = await crud.source.get_by_short_name(db, short_name=source_connection_in.short_name)
+        if not source:
+            raise HTTPException(
+                status_code=404, detail=f"Source not found: {source_connection_in.short_name}"
+            )
+
+        auth_type: AuthType = source.auth_type
+        is_oauth = auth_type in (
+            AuthType.oauth2,
+            AuthType.oauth2_with_refresh,
+            AuthType.oauth2_with_refresh_rotating,
+        )
+
+        # Overrides decide auth mode
+        client_id = source_connection_in.client_id
+        client_secret = source_connection_in.client_secret
+        access_token = source_connection_in.access_token
+        refresh_token = source_connection_in.refresh_token
+        final_redirect_url = source_connection_in.redirect_url  # post-completion landing
+
+        # If auth_provider is supplied, reuse existing immediate flow
+        if source_connection_in.auth_provider:
+            core_like_dict = source_connection_in.model_dump(
+                exclude={
+                    "client_id",
+                    "client_secret",
+                    "access_token",
+                    "refresh_token",
+                    "redirect_url",
+                },
+                exclude_none=True,
+            )
+            core_like = schemas.SourceConnectionCreate(**core_like_dict)
+            sc, sync_job = await self.create_source_connection(
+                db=db, source_connection_in=core_like, ctx=ctx
+            )
+            return None, None, sc, sync_job
+
+        # Token injection path (immediate) if access_token present
+        if access_token:
+            # Validate config fields first
+            cfg = source_connection_in.config_fields
+            config_fields = await self._validate_config_fields(
+                db=db,
+                source_short_name=source_connection_in.short_name,
+                config_fields=(cfg.model_dump() if hasattr(cfg, "model_dump") else cfg),
+            )
+
+            # Create encrypted credentials (include BYOC client creds if given)
+            creds: dict[str, Any] = {"access_token": access_token}
+            if refresh_token:
+                creds["refresh_token"] = refresh_token
+            if client_id:
+                creds["client_id"] = client_id
+            if client_secret:
+                creds["client_secret"] = client_secret
+
+            encrypted = credentials.encrypt(creds)
+
+            async with UnitOfWork(db) as uow:
+                # Create integration credential
+                integration_cred_in = schemas.IntegrationCredentialCreateEncrypted(
+                    name=f"{source.name} - {ctx.organization.id}",
+                    description=f"Credentials for {source.name} - {ctx.organization.id}",
+                    integration_short_name=source.short_name,
+                    integration_type=IntegrationType.SOURCE,
+                    auth_type=auth_type,
+                    encrypted_credentials=encrypted,
+                    auth_config_class=source.auth_config_class,
+                )
+                integration_credential = await crud.integration_credential.create(
+                    uow.session, obj_in=integration_cred_in, ctx=ctx, uow=uow
+                )
+                await uow.session.flush()
+
+                # Create connection
+                connection_create = schemas.ConnectionCreate(
+                    name=source_connection_in.name,
+                    integration_type=IntegrationType.SOURCE,
+                    integration_credential_id=integration_credential.id,
+                    status=ConnectionStatus.ACTIVE,
+                    short_name=source.short_name,
+                )
+                connection = await crud.connection.create(
+                    db=uow.session, obj_in=connection_create, ctx=ctx, uow=uow
+                )
+                await uow.session.flush()
+                connection_id = connection.id
+
+                # Get or create collection
+                if source_connection_in.collection:
+                    collection = await crud.collection.get_by_readable_id(
+                        db=uow.session, readable_id=source_connection_in.collection, ctx=ctx
+                    )
+                    if not collection:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Collection '{source_connection_in.collection}' not found",
+                        )
+                else:
+                    collection_create = schemas.CollectionCreate(
+                        name=f"Collection for {source_connection_in.name}",
+                        description=f"Auto-generated collection for {source_connection_in.name}",
+                    )
+                    collection = await collection_service.create(
+                        db=uow.session, collection_in=collection_create, ctx=ctx, uow=uow
+                    )
+
+                # Create sync
+                sync_in = schemas.SyncCreate(
+                    name=f"Sync for {source_connection_in.name}",
+                    description=f"Auto-generated sync for {source_connection_in.name}",
+                    source_connection_id=connection_id,
+                    embedding_model_connection_id=NATIVE_TEXT2VEC_UUID,
+                    destination_connection_ids=[NATIVE_QDRANT_UUID],
+                    cron_schedule=source_connection_in.cron_schedule,
+                    status=SyncStatus.ACTIVE,
+                    run_immediately=source_connection_in.sync_immediately,
+                )
+                sync, sync_job = await sync_service.create_and_run_sync(
+                    db=uow.session, sync_in=sync_in, ctx=ctx, uow=uow
+                )
+
+                # Create source_connection row
+                source_connection_create = {
+                    "name": source_connection_in.name,
+                    "description": source_connection_in.description,
+                    "short_name": source.short_name,
+                    "config_fields": config_fields,
+                    "connection_id": connection_id,
+                    "readable_collection_id": collection.readable_id,
+                    "sync_id": sync.id,
+                    "white_label_id": None,
+                    "readable_auth_provider_id": None,
+                    "auth_provider_config": None,
+                }
+                sc_row = await crud.source_connection.create(
+                    db=uow.session, obj_in=source_connection_create, ctx=ctx, uow=uow
+                )
+                await uow.session.flush()
+
+                # Build response schema
+                source_connection = schemas.SourceConnection.from_orm_with_collection_mapping(
+                    sc_row
+                )
+                if sync_job is not None:
+                    sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
+                    source_connection.status = SourceConnectionStatus.IN_PROGRESS
+                    source_connection.latest_sync_job_status = sync_job.status
+                    source_connection.latest_sync_job_id = sync_job.id
+                    source_connection.latest_sync_job_started_at = sync_job.started_at
+                    source_connection.latest_sync_job_completed_at = sync_job.completed_at
+                else:
+                    source_connection.status = SourceConnectionStatus.ACTIVE
+
+                # Hide auth fields by default
+                source_connection.auth_fields = "********"
+
+                await uow.commit()
+
+            return None, None, source_connection, sync_job
+
+        # OAuth path — create init session and return URL
+        if not is_oauth:
+            # Non-OAuth but no tokens/auth_fields provided => require auth_fields/credential
+            raise HTTPException(
+                status_code=422,
+                detail="Non-OAuth sources require 'auth_fields' or an existing credential.",
+            )
+
+        # Build API callback redirect and state
+        api_callback = f"{core_settings.api_url}/source-connections/callback/{source.short_name}"
+        state = secrets.token_urlsafe(24)
+
+        # Load settings to build auth URL
+        oauth2_settings = await integration_settings.get_by_short_name(source.short_name)
+        if not oauth2_settings:
+            raise HTTPException(
+                status_code=404, detail=f"Settings not found for source: {source.short_name}"
+            )
+
+        auth_url = await oauth2_service.generate_auth_url_with_redirect(
+            oauth2_settings,
+            redirect_uri=api_callback,
+            client_id=client_id,
+            state=state,
+        )
+
+        # Persist session
+        payload = source_connection_in.model_dump(
+            exclude={"client_id", "client_secret", "access_token", "refresh_token", "redirect_url"},
+            exclude_none=True,
+        )
+        overrides = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_url": final_redirect_url,
+            "oauth_redirect_uri": api_callback,  # must match for token exchange
+        }
+
+        ttl_minutes = getattr(core_settings, "CONNECTION_INIT_TTL_MINUTES", 30)
+        expires_at = ConnectionInitSession.default_expires_at(minutes=ttl_minutes)
+
+        async with UnitOfWork(db) as uow:
+            init_obj = await connection_init_session.create(
+                uow.session,
+                obj_in={
+                    "organization_id": ctx.organization.id,
+                    "short_name": source.short_name,
+                    "payload": payload,
+                    "overrides": overrides,
+                    "state": state,
+                    "status": ConnectionInitStatus.PENDING,
+                    "expires_at": expires_at,
+                },
+                ctx=ctx,
+                uow=uow,
+            )
+
+            # IMPORTANT: capture ID BEFORE COMMIT to avoid MissingGreenlet on expired attributes
+            init_id = init_obj.id
+
+            await uow.commit()
+
+        return init_id, auth_url, None, None
+
+    async def complete_connection_from_oauth_callback(
+        self,
+        db: AsyncSession,
+        *,
+        state: str,
+        code: str,
+        ctx: ApiContext,
+    ) -> Tuple[schemas.SourceConnection, str]:
+        """Handle OAuth redirect callback.
+
+        - Look up init session by state
+        - Exchange code
+        - Create IntegrationCredential + Connection + SourceConnection (+ Sync)
+        - Return (source_connection, final_redirect_url)
+
+        IMPORTANT: Build the schema BEFORE commit to avoid MissingGreenlet caused by
+        expire-on-commit + attribute access outside a greenlet context.
+        """
+        # 1) Load init session
+        session_obj = await connection_init_session.get_by_state(db, state=state, ctx=ctx)
+        if not session_obj:
+            raise HTTPException(status_code=404, detail="Init session not found or expired")
+        if session_obj.status != ConnectionInitStatus.PENDING:
+            raise HTTPException(status_code=400, detail=f"Session status is {session_obj.status}")
+
+        source_short_name = session_obj.short_name
+        payload = session_obj.payload or {}
+        overrides = session_obj.overrides or {}
+
+        oauth_redirect_uri = overrides.get("oauth_redirect_uri")
+        final_redirect_url = overrides.get("redirect_url") or core_settings.app_url
+
+        # 2) Exchange code (respect BYOC overrides)
+        sc_source = await crud.source.get_by_short_name(db, short_name=source_short_name)
+        if not sc_source:
+            raise HTTPException(status_code=404, detail=f"Source not found: {source_short_name}")
+
+        token_response = await oauth2_service.exchange_authorization_code_for_token_with_redirect(
+            ctx=ctx,
+            source_short_name=source_short_name,
+            code=code,
+            redirect_uri=oauth_redirect_uri,
+            client_id=overrides.get("client_id"),
+            client_secret=overrides.get("client_secret"),
+        )
+
+        # 3) Prepare/validate auth fields
+        auth_fields = token_response.model_dump()
+        if overrides.get("client_id"):
+            auth_fields["client_id"] = overrides["client_id"]
+        if overrides.get("client_secret"):
+            auth_fields["client_secret"] = overrides["client_secret"]
+
+        validated_auth = await self._validate_auth_fields(
+            db=db, source_short_name=source_short_name, auth_fields=auth_fields
+        )
+
+        # 4) Validate config fields
+        raw_config = payload.get("config_fields")
+        config_fields = await self._validate_config_fields(
+            db=db,
+            source_short_name=source_short_name,
+            config_fields=(
+                raw_config.model_dump() if hasattr(raw_config, "model_dump") else raw_config
+            ),
+        )
+
+        # 5) Create everything inside a UoW
+        async with UnitOfWork(db) as uow:
+            # Credential
+            encrypted = credentials.encrypt(validated_auth)
+            cred_in = schemas.IntegrationCredentialCreateEncrypted(
+                name=f"{sc_source.name} OAuth2 Credential",
+                description=f"OAuth2 credentials for {sc_source.name}",
+                integration_short_name=source_short_name,
+                integration_type=IntegrationType.SOURCE,
+                auth_type=sc_source.auth_type,
+                encrypted_credentials=encrypted,
+                auth_config_class=sc_source.auth_config_class,
+            )
+            integration_cred = await crud.integration_credential.create(
+                uow.session, obj_in=cred_in, ctx=ctx, uow=uow
+            )
+            await uow.session.flush()
+
+            # Connection
+            conn_in = schemas.ConnectionCreate(
+                name=payload.get("name", f"Connection to {sc_source.name}"),
+                integration_type=IntegrationType.SOURCE,
+                status=ConnectionStatus.ACTIVE,
+                integration_credential_id=integration_cred.id,
+                short_name=source_short_name,
+            )
+            connection = await crud.connection.create(uow.session, obj_in=conn_in, ctx=ctx, uow=uow)
+            await uow.session.flush()
+
+            # Collection
+            collection_id_readable = payload.get("collection")
+            if collection_id_readable:
+                collection = await crud.collection.get_by_readable_id(
+                    db=uow.session, readable_id=collection_id_readable, ctx=ctx
+                )
+                if not collection:
+                    raise HTTPException(
+                        status_code=404, detail=f"Collection '{collection_id_readable}' not found"
+                    )
+            else:
+                collection = await collection_service.create(
+                    db=uow.session,
+                    collection_in=schemas.CollectionCreate(
+                        name=f"Collection for {payload.get('name') or sc_source.name}",
+                        description=(
+                            f"Auto-generated collection for {payload.get('name') or sc_source.name}"
+                        ),
+                    ),
+                    ctx=ctx,
+                    uow=uow,
+                )
+
+            # Sync
+            sync_in = schemas.SyncCreate(
+                name=f"Sync for {payload.get('name') or sc_source.name}",
+                description=f"Auto-generated sync for {payload.get('name') or sc_source.name}",
+                source_connection_id=connection.id,
+                embedding_model_connection_id=NATIVE_TEXT2VEC_UUID,
+                destination_connection_ids=[NATIVE_QDRANT_UUID],
+                cron_schedule=payload.get("cron_schedule"),
+                status=SyncStatus.ACTIVE,
+                run_immediately=payload.get("sync_immediately", True),
+            )
+            sync, sync_job = await sync_service.create_and_run_sync(
+                db=uow.session, sync_in=sync_in, ctx=ctx, uow=uow
+            )
+
+            # SourceConnection row
+            sc_create = {
+                "name": payload.get("name"),
+                "description": payload.get("description"),
+                "short_name": source_short_name,
+                "config_fields": config_fields,
+                "connection_id": connection.id,
+                "readable_collection_id": collection.readable_id,
+                "sync_id": sync.id,
+                "white_label_id": payload.get("white_label_id"),
+                "readable_auth_provider_id": None,
+                "auth_provider_config": None,
+            }
+            sc_row = await crud.source_connection.create(
+                db=uow.session, obj_in=sc_create, ctx=ctx, uow=uow
+            )
+            await uow.session.flush()
+
+            # 6) Build schema BEFORE COMMIT to avoid MissingGreenlet
+            sc_schema = schemas.SourceConnection.from_orm_with_collection_mapping(sc_row)
+
+            if sync_job is not None:
+                sj = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
+                sc_schema.status = SourceConnectionStatus.IN_PROGRESS
+                sc_schema.latest_sync_job_status = sj.status
+                sc_schema.latest_sync_job_id = sj.id
+                sc_schema.latest_sync_job_started_at = sj.started_at
+                sc_schema.latest_sync_job_completed_at = sj.completed_at
+            else:
+                sc_schema.status = SourceConnectionStatus.ACTIVE
+
+            sc_schema.auth_fields = "********"
+
+            # Mark session complete (still inside UoW)
+            await connection_init_session.mark_completed(
+                uow.session, session_id=session_obj.id, final_connection_id=connection.id, ctx=ctx
+            )
+
+            # Commit AFTER we've materialized sc_schema
+            await uow.commit()
+
+        # Return the Pydantic schema (detached from session) and redirect URL
+        return sc_schema, final_redirect_url
 
 
 # Singleton instance

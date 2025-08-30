@@ -110,6 +110,8 @@ from .source_connection import (
     SourceConnectionCreateWithCredential,
     SourceConnectionCreateWithWhiteLabel,
     SourceConnectionInDBBase,
+    SourceConnectionInitiate,
+    SourceConnectionInitiateResponse,
     SourceConnectionListItem,
     SourceConnectionUpdate,
 )

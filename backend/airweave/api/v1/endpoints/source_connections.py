@@ -1,9 +1,11 @@
 """API endpoints for managing source connections."""
 
+import urllib.parse
 from typing import List, Optional
 from uuid import UUID
 
 from fastapi import BackgroundTasks, Body, Depends, HTTPException, Path, Query
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
@@ -24,6 +26,10 @@ from airweave.core.sync_job_service import sync_job_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
 from airweave.db.session import get_db_context
+from airweave.schemas.source_connection import (
+    SourceConnectionInitiate,
+    SourceConnectionInitiateResponse,
+)
 
 router = TrailingSlashRouter()
 
@@ -1092,3 +1098,133 @@ async def create_credentials_from_authorization_code(
         client_secret=client_secret,
         ctx=ctx,
     )
+
+
+@router.post("/initiate", response_model=SourceConnectionInitiateResponse)
+async def initiate_source_connection(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    source_connection_in: SourceConnectionInitiate = Body(...),
+    ctx: ApiContext = Depends(deps.get_context),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
+    background_tasks: BackgroundTasks,
+) -> SourceConnectionInitiateResponse:
+    """Unified initiation endpoint.
+
+    - If non-OAuth or token injection ⇒ create now and return the SourceConnection
+    - If OAuth ⇒ create a short-lived session and return an authentication_url (pending)
+    """
+    # Guard rails similar to create
+    await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
+    creating_new_collection = source_connection_in.collection is None
+
+    (
+        init_id,
+        auth_url,
+        source_connection,
+        sync_job,
+    ) = await source_connection_service.initiate_connection(
+        db=db, source_connection_in=source_connection_in, ctx=ctx
+    )
+
+    if source_connection:
+        # Immediate creation path (non-OAuth or token injection)
+        await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
+        if creating_new_collection:
+            await guard_rail.increment(ActionType.COLLECTIONS)
+
+        if sync_job and source_connection_in.sync_immediately:
+            async with get_db_context() as db2:
+                sync_dag = await sync_service.get_sync_dag(
+                    db=db2, sync_id=source_connection.sync_id, ctx=ctx
+                )
+
+                sync = await crud.sync.get(db=db2, id=source_connection.sync_id, ctx=ctx)
+                sync = schemas.Sync.model_validate(sync, from_attributes=True)
+                sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+                collection = await crud.collection.get_by_readable_id(
+                    db=db2, readable_id=source_connection.collection, ctx=ctx
+                )
+                collection = schemas.Collection.model_validate(collection, from_attributes=True)
+
+                source_connection_with_auth = await source_connection_service.get_source_connection(
+                    db=db2,
+                    source_connection_id=source_connection.id,
+                    show_auth_fields=True,
+                    ctx=ctx,
+                )
+
+                if await temporal_service.is_temporal_enabled():
+                    await temporal_service.run_source_connection_workflow(
+                        sync=sync,
+                        sync_job=sync_job,
+                        sync_dag=sync_dag,
+                        collection=collection,
+                        source_connection=source_connection_with_auth,
+                        ctx=ctx,
+                    )
+                else:
+                    background_tasks.add_task(
+                        sync_service.run,
+                        sync,
+                        sync_job,
+                        sync_dag,
+                        collection,
+                        source_connection_with_auth,
+                        ctx,
+                    )
+
+                await guard_rail.increment(ActionType.SYNCS)
+
+        return SourceConnectionInitiateResponse(
+            connection_init_id=None,
+            authentication_url=None,
+            status="created",
+            source_connection=source_connection,
+        )
+
+    # OAuth pending path
+    return SourceConnectionInitiateResponse(
+        connection_init_id=init_id,
+        authentication_url=auth_url,
+        status="pending",
+        source_connection=None,
+    )
+
+
+@router.get("/callback/{source_short_name}")
+async def complete_source_connection_callback(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    source_short_name: str = Path(
+        ..., description="The source type identifier (e.g., 'google_drive', 'slack')"
+    ),
+    code: str = Query(..., description="Authorization code returned by provider"),
+    state: str = Query(..., description="State value returned by provider"),
+    ctx: ApiContext = Depends(deps.get_context),
+):
+    """OAuth2 callback endpoint for the unified flow.
+
+    Completes the connection and redirects to the final landing URL.
+    """
+    (
+        source_connection,
+        final_redirect_url,
+    ) = await source_connection_service.complete_connection_from_oauth_callback(
+        db=db, state=state, code=code, ctx=ctx
+    )
+
+    # Build redirect with some context (optional)
+    qs = urllib.parse.urlencode(
+        {
+            "status": "success",
+            "source_connection_id": str(source_connection.id),
+            "collection": source_connection.collection,
+        }
+    )
+    target = (
+        f"{final_redirect_url}?{qs}"
+        if "?" not in final_redirect_url
+        else f"{final_redirect_url}&{qs}"
+    )
+    return RedirectResponse(url=target, status_code=302)
