@@ -1931,7 +1931,7 @@
         ],
         "summary": "Exchange White Label Oauth2 Code",
         "description": "Complete the OAuth flow and create a source connection.\n\n<br/><br/>\n**This is the core endpoint that converts OAuth authorization codes into working\nsource connections.**<br/><br/>The OAuth credentials are obtained automatically\nfrom the authorization code - you do not need to provide auth_fields. The white\nlabel integration is automatically linked to the created source connection for\ntracking and branding purposes.",
-        "operationId": "exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options",
+        "operationId": "exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post",
         "parameters": [
           {
             "name": "white_label_id",
@@ -1951,7 +1951,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options"
+                "$ref": "#/components/schemas/Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post"
               }
             }
           }
@@ -2630,7 +2630,7 @@
         "type": "object",
         "title": "Body_create_credentials_from_authorization_code_source_connections__source_short_name__code_to_token_credentials_post"
       },
-      "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options": {
+      "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post": {
         "properties": {
           "code": {
             "type": "string",
@@ -2656,7 +2656,7 @@
         "required": [
           "code"
         ],
-        "title": "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options"
+        "title": "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post"
       },
       "Body_run_source_connection_source_connections__source_connection_id__run_post": {
         "properties": {
