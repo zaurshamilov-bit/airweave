@@ -27,14 +27,12 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import SourceConnectionDetailView from "@/components/collection/SourceConnectionDetailView";
+import SourceConnectionStateView from "@/components/collection/SourceConnectionStateView";
 import { emitCollectionEvent, onCollectionEvent, COLLECTION_DELETED, SOURCE_CONNECTION_UPDATED } from "@/lib/events";
 import { QueryToolAndLiveDoc } from '@/components/collection/QueryToolAndLiveDoc';
 import { DialogFlow } from '@/components/shared';
 import { protectedPaths } from "@/constants/paths";
-import { useSyncStateStore } from "@/stores/syncStateStore";
-import { syncStorageService } from "@/services/syncStorageService";
-import { deriveSyncStatus, getSyncStatusColorClass } from "@/utils/syncStatus";
+import { useEntityStateStore } from "@/stores/entityStateStore";
 import { redirectWithError } from "@/lib/error-utils";
 import { ActionCheckResponse } from "@/types";
 
@@ -163,9 +161,8 @@ const Collections = () => {
     const [searchParams] = useSearchParams();
     const isFromOAuthSuccess = searchParams.get("connected") === "success";
 
-    // Sync state store
-    const syncStateStore = useSyncStateStore();
-    const { subscribe, cleanup, activeSubscriptions } = syncStateStore;
+    // Entity state store for new architecture
+    const entityStateStore = useEntityStateStore();
 
     // Page state
     const [isLoading, setIsLoading] = useState(true);
@@ -282,15 +279,7 @@ const Collections = () => {
 
                 setSourceConnections(detailedConnections);
 
-                // Check for active sync jobs and subscribe to them
-                detailedConnections.forEach(connection => {
-                    if ((connection.latest_sync_job_status === 'pending' ||
-                        connection.latest_sync_job_status === 'in_progress') &&
-                        connection.latest_sync_job_id) {
-                        console.log(`🔄 Found active sync job for ${connection.name}, subscribing...`);
-                        subscribe(connection.latest_sync_job_id, connection.id);
-                    }
-                });
+                // Entity state mediator will handle subscriptions automatically
 
                 // Always select the first connection when loading a new collection
                 if (detailedConnections.length > 0) {
@@ -504,22 +493,7 @@ const Collections = () => {
         }
     };
 
-    // Restore sync state from session storage on mount
-    useEffect(() => {
-        const storedState = syncStorageService.getStoredState();
-        console.log("Restoring sync state from session storage:", storedState);
-
-        // We'll check and re-subscribe to active jobs after source connections are loaded
-        // This is handled in fetchSourceConnections
-    }, []);
-
-    // Cleanup subscriptions on unmount
-    useEffect(() => {
-        return () => {
-            console.log("CollectionDetailView unmounting, cleaning up subscriptions");
-            cleanup();
-        };
-    }, [cleanup]);
+    // Entity state mediator handles its own cleanup
 
     // Listen for source connection updates
     useEffect(() => {
@@ -572,13 +546,7 @@ const Collections = () => {
                 const sourceIds = jobs.map(job => job.source_connection_id);
                 setRefreshingSourceIds(sourceIds);
 
-                // Subscribe to all new sync jobs
-                jobs.forEach(job => {
-                    if (job.id && job.source_connection_id) {
-                        console.log(`Subscribing to sync job ${job.id} for source ${job.source_connection_id}`);
-                        subscribe(job.id, job.source_connection_id);
-                    }
-                });
+                // Entity state mediator will handle subscriptions automatically
 
                 toast({
                     title: "Success",
@@ -650,26 +618,33 @@ const Collections = () => {
         });
     }, [selectedConnection?.id]);
 
-    // Show sync job status for consistency with SourceConnectionDetailView
+    // Get connection status indicator based on entity state
     const getConnectionStatusIndicator = (connection: SourceConnection) => {
-        // Check if we have live progress for this connection
-        const liveProgress = syncStateStore.getProgressForSource(connection.id);
-        const hasActiveSubscription = syncStateStore.hasActiveSubscription(connection.id);
+        const entityState = entityStateStore.getEntityState(connection.id);
 
-        // Use shared utility to derive status
-        const statusValue = deriveSyncStatus(
-            liveProgress,
-            hasActiveSubscription,
-            connection.latest_sync_job_status
-        );
+        let colorClass = "bg-gray-400";
+        let status = "unknown";
 
-        // Use shared utility to get color class
-        const colorClass = getSyncStatusColorClass(statusValue);
+        if (entityState) {
+            if (entityState.syncStatus === 'pending') {
+                colorClass = "bg-yellow-500 animate-pulse";
+                status = "pending";
+            } else if (entityState.syncStatus === 'in_progress') {
+                colorClass = "bg-blue-500 animate-pulse";
+                status = "running";
+            } else if (entityState.syncStatus === 'failed') {
+                colorClass = "bg-red-500";
+                status = "error";
+            } else if (entityState.syncStatus === 'completed') {
+                colorClass = "bg-green-500";
+                status = "healthy";
+            }
+        }
 
         return (
             <span
                 className={`inline-flex h-2.5 w-2.5 rounded-full ${colorClass} opacity-80`}
-                title={statusValue}
+                title={status}
             />
         );
     };
@@ -1009,46 +984,21 @@ const Collections = () => {
                         )}
                     </div>
 
-                    {/* Render SourceConnectionDetailView when a connection is selected */}
+                    {/* NEW: Render SourceConnectionStateView instead of the old DAG view */}
                     {selectedConnection && (
-                        selectedConnection.short_name === "postgresql" ? (
-                            <div className={cn(
-                                "mt-6 p-8 rounded-lg border text-center",
-                                isDark ? "border-gray-700/50 bg-gray-800/30" : "border-gray-200 bg-gray-50"
-                            )}>
-                                <AlertCircle className={cn(
-                                    "h-12 w-12 mx-auto mb-4",
-                                    isDark ? "text-gray-400" : "text-gray-500"
-                                )} />
-                                <p className={cn(
-                                    "text-lg font-medium",
-                                    isDark ? "text-gray-300" : "text-gray-700"
-                                )}>
-                                    PostgreSQL sync visualization not yet supported
-                                </p>
-                                <p className={cn(
-                                    "text-sm mt-2 max-w-md mx-auto",
-                                    isDark ? "text-gray-400" : "text-gray-500"
-                                )}>
-                                    Entity graph and progress tracking for PostgreSQL sources is coming soon.
-                                    You can still run syncs and query your data - the sync will complete in the background.
-                                </p>
-                                <div className={cn(
-                                    "mt-4 p-3 rounded-md text-sm text-left max-w-sm mx-auto",
-                                    isDark ? "bg-gray-700/50 text-gray-300" : "bg-gray-100 text-gray-600"
-                                )}>
-                                    <p className="font-medium mb-1">💡 Tip:</p>
-                                    <p>Check the sync status badge in the source connection list above to see if your sync is running.</p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="mt-10">
-                                <SourceConnectionDetailView
-                                    key={selectedConnection.id}
-                                    sourceConnectionId={selectedConnection.id}
-                                />
-                            </div>
-                        )
+                        <div className="mt-10">
+                            <SourceConnectionStateView
+                                key={selectedConnection.id}
+                                sourceConnectionId={selectedConnection.id}
+                                onConnectionDeleted={() => {
+                                    // Clear selection and reload connections
+                                    setSelectedConnection(null);
+                                    if (collection?.readable_id) {
+                                        fetchSourceConnections(collection.readable_id);
+                                    }
+                                }}
+                            />
+                        </div>
                     )}
 
                     {/* Delete Collection Dialog */}
@@ -1073,14 +1023,7 @@ const Collections = () => {
                             onComplete={async (newSourceConnection?: any) => {
                                 setShowAddSourceDialog(false);
 
-                                // If we have a new source connection with an active sync job, subscribe to it
-                                if (newSourceConnection &&
-                                    (newSourceConnection.latest_sync_job_status === 'pending' ||
-                                        newSourceConnection.latest_sync_job_status === 'in_progress') &&
-                                    newSourceConnection.latest_sync_job_id) {
-                                    console.log(`New source connection created, subscribing to sync job ${newSourceConnection.latest_sync_job_id}`);
-                                    subscribe(newSourceConnection.latest_sync_job_id, newSourceConnection.id);
-                                }
+                                // Entity state mediator will handle subscriptions automatically
 
                                 // Reload to get the new source connection in the list
                                 await reloadData();

@@ -158,6 +158,13 @@ class SyncOrchestrator:
             await self._wait_for_remaining_tasks(pending_tasks)
             await self.sync_context.progress.finalize(is_complete=(stream_error is None))
 
+            # NEW: Finalize entity state tracker if present
+            if self.sync_context.entity_state_tracker:
+                error_message = get_error_message(stream_error) if stream_error else None
+                await self.sync_context.entity_state_tracker.finalize(
+                    is_complete=(stream_error is None), error=error_message
+                )
+
             # Clean up orphaned entities after all processing is complete
             #
             # ⚠️ IMPORTANT: ORPHANED ENTITY CLEANUP IS DISABLED FOR INCREMENTAL SYNCS ⚠️

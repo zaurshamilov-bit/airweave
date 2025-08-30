@@ -8,6 +8,7 @@ import Dashboard from '@/pages/Dashboard';
 import CollectionDetailView from "@/pages/CollectionDetailView";
 import CollectionNewView from "@/search/CollectionNewView";
 import CollectionsView from "@/pages/CollectionsView";
+import EntityStateSimulatorView from "@/pages/EntityStateSimulatorView";
 
 import AuthProviders from '@/pages/AuthProviders';
 import WhiteLabel from '@/pages/WhiteLabel';

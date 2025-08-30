@@ -634,14 +634,16 @@ const DashboardLayout = () => {
         </div>
       </GradientCard>
 
-      {/* DialogFlow for creating a new collection starting with source selection */}
-      <DialogFlow
-        isOpen={showCreateCollectionFlow}
-        onOpenChange={setShowCreateCollectionFlow}
-        mode="create-collection"
-        dialogId="dashboard-layout-create-collection"
-        onComplete={handleCreateCollectionComplete}
-      />
+      {/* Conditionally render DialogFlow to unmount when not in use */}
+      {showCreateCollectionFlow && (
+        <DialogFlow
+          isOpen={showCreateCollectionFlow}
+          onOpenChange={setShowCreateCollectionFlow}
+          mode="create-collection"
+          dialogId="dashboard-layout-create-collection"
+          onComplete={handleCreateCollectionComplete}
+        />
+      )}
     </GradientBackground>
   );
 };
