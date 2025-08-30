@@ -25,21 +25,21 @@ from airweave.core.config import settings
 from airweave.core.redis_client import redis_client
 
 
-def make_channel(namespace: str, id_str: str) -> str:
-    """Build a Redis channel name as ``<namespace>:<id>``.
-
-    Args:
-        namespace: Logical namespace (e.g., "search", "sync_job")
-        id_str: Identifier as a string (UUID, ULID, etc.)
-
-    Returns:
-        Channel name suitable for Redis pubsub
-    """
-    return f"{namespace}:{id_str}"
-
-
 class CorePubSub:
     """Unified pubsub helper for publishing and subscribing to channels."""
+
+    @staticmethod
+    def make_channel(namespace: str, id_str: str) -> str:
+        """Build a Redis channel name as ``<namespace>:<id>``.
+
+        Args:
+            namespace: Logical namespace (e.g., "search", "sync_job")
+            id_str: Identifier as a string (UUID, ULID, etc.)
+
+        Returns:
+            Channel name suitable for Redis pubsub
+        """
+        return f"{namespace}:{id_str}"
 
     async def publish(self, namespace: str, id_value: Any, data: Any) -> int:
         """Publish a message to a namespaced channel.
@@ -52,7 +52,7 @@ class CorePubSub:
         Returns:
             Number of subscribers that received the message
         """
-        channel = make_channel(namespace, str(id_value))
+        channel = self.make_channel(namespace, str(id_value))
         message = data if isinstance(data, str) else json.dumps(data)
         return await redis_client.publish(channel, message)
 
@@ -69,7 +69,7 @@ class CorePubSub:
         Returns:
             A Redis ``PubSub`` instance subscribed to the channel
         """
-        channel = make_channel(namespace, str(id_value))
+        channel = self.make_channel(namespace, str(id_value))
 
         # Build Redis URL with authentication
         if settings.REDIS_PASSWORD:

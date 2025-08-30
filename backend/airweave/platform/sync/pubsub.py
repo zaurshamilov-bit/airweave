@@ -1,4 +1,4 @@
-"""Pubsub for sync jobs using Redis backend."""
+"""Sync progress tracking and Redis pubsub integration."""
 
 import asyncio
 from uuid import UUID
@@ -171,6 +171,3 @@ class SyncProgress:
             f"Deleted: {self.stats.deleted} | Kept: {self.stats.kept} | "
             f"Skipped: {self.stats.skipped}{rate_info}{entity_info}"
         )
-
-
-# No module-level pubsub instance is needed; use core_pubsub directly
