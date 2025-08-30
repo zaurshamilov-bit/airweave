@@ -27,7 +27,7 @@ class QueryInterpretation(SearchOperation):
         Refined query: "tickets"
     """
 
-    def __init__(self, model: str = "gpt-4o-mini", confidence_threshold: float = 0.75):
+    def __init__(self, model: str = "gpt-5", confidence_threshold: float = 0.75):
         """Initialize query interpretation.
 
         Args:
@@ -198,7 +198,6 @@ class QueryInterpretation(SearchOperation):
                 {"role": "user", "content": user_prompt},
             ],
             response_format=ExtractedFilters,
-            temperature=0.3,
         )
 
         if response.choices[0].message.parsed:

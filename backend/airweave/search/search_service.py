@@ -30,7 +30,7 @@ class SearchService:
     """Service for handling vector database searches."""
 
     # OpenAI configuration constants
-    DEFAULT_MODEL = "gpt-4o"
+    DEFAULT_MODEL = "gpt-5"
     DEFAULT_MODEL_SETTINGS = {
         "temperature": 0.7,
         "max_tokens": 1000,

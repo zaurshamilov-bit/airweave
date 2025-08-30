@@ -14,8 +14,8 @@ from airweave.api import deps
 from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
 from airweave.core.logging import logger
+from airweave.core.pubsub import core_pubsub
 from airweave.core.sync_service import sync_service
-from airweave.platform.sync.pubsub import sync_pubsub
 
 router = TrailingSlashRouter()
 
@@ -268,7 +268,7 @@ async def subscribe_sync_job(
     connection_id = f"{ctx}:{job_id}:{asyncio.get_event_loop().time()}"
 
     # Get a new pubsub instance subscribed to this job
-    pubsub = await sync_pubsub.subscribe(job_id)
+    pubsub = await core_pubsub.subscribe("sync_job", job_id)
 
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
@@ -345,7 +345,10 @@ async def subscribe_entity_state(
     logger.info(f"📡 Subscribing to Redis channel: {channel}")
 
     # Get a new pubsub instance subscribed to entity state for this job
-    pubsub = await sync_pubsub.subscribe_entity_state(job_id)
+    # Using the new core_pubsub with "sync_job_state" namespace
+    from airweave.core.pubsub import core_pubsub
+
+    pubsub = await core_pubsub.subscribe("sync_job_state", job_id)
 
     async def event_stream() -> AsyncGenerator[str, None]:
         try:

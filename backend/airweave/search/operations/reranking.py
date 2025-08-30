@@ -17,7 +17,7 @@ class LLMReranking(SearchOperation):
     relevant results appear at the top.
     """
 
-    def __init__(self, model: str = "gpt-4o-mini"):
+    def __init__(self, model: str = "gpt-5"):
         """Initialize LLM reranking.
 
         Args:
@@ -139,7 +139,6 @@ Please rerank these results from most to least relevant to the query."""
                     {"role": "user", "content": user_prompt},
                 ],
                 response_format=RerankedResults,
-                temperature=0.3,
             )
 
             if response.choices[0].message.parsed:

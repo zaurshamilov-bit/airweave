@@ -194,12 +194,11 @@ class QueryExpansion(SearchOperation):
         try:
             # Use structured outputs with the parse method
             completion = await self.openai_client.beta.chat.completions.parse(
-                model="gpt-4o-mini",
+                model="gpt-5",
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message},
                 ],
-                temperature=0.7,
                 max_tokens=200,
                 response_format=QueryExpansions,  # Use Pydantic model for structured output
             )
