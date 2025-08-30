@@ -26,6 +26,7 @@ from airweave.core.shared_models import ActionType
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
+from airweave.db.session import AsyncSessionLocal
 from airweave.schemas.search import ResponseType, SearchRequest
 from airweave.search.search_service_v2 import search_service_v2 as search_service
 
@@ -488,13 +489,14 @@ async def stream_search_collection_advanced(
     search_request: SearchRequest = ...,
     db: AsyncSession = Depends(deps.get_db),
     ctx: ApiContext = Depends(deps.get_context),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
 ) -> StreamingResponse:
     """Server-Sent Events (SSE) streaming endpoint for advanced search.
 
-    This endpoint initializes a streaming session for a search request, subscribes to
-    a Redis Pub/Sub channel scoped by a generated request ID, and relays events to
-    the client. A small dummy publisher is started to emit test events including a
-    final "done" signal so the client can verify streaming locally.
+    This endpoint initializes a streaming session for a search request,
+    subscribes to a Redis Pub/Sub channel scoped by a generated request ID,
+    and relays events to the client. It concurrently runs the real search
+    pipeline, which will publish lifecycle and data events to the same channel.
     """
     # Use the request ID from ApiContext for end-to-end tracing
     request_id = ctx.request_id
@@ -502,54 +504,34 @@ async def stream_search_collection_advanced(
         f"[SearchStream] Starting stream for collection '{readable_id}' id={request_id}"
     )
 
+    # Ensure the organization is allowed to perform queries
+    await guard_rail.is_allowed(ActionType.QUERIES)
+
     # Subscribe to the search:<request_id> channel
     pubsub = await core_pubsub.subscribe("search", request_id)
 
-    # Dummy publisher to emit a few test events and a final done event
-    async def _publish_dummy_events() -> None:
+    # Start real search in the background; it will publish to Redis
+    async def _run_search() -> None:
         try:
-            await core_pubsub.publish(
-                "search", request_id, {"type": "start", "request_id": request_id}
-            )
-            await asyncio.sleep(0.1)
-            await core_pubsub.publish(
-                "search", request_id, {"type": "operator_start", "name": "embedding"}
-            )
-            await asyncio.sleep(0.1)
-            await core_pubsub.publish(
-                "search", request_id, {"type": "operator_end", "name": "embedding", "ms": 25}
-            )
-            await asyncio.sleep(0.1)
-            # Minimal plausible results payload for testing consumers
+            # Use a dedicated DB session for the background task to avoid
+            # sharing the request-scoped session across tasks
+            async with AsyncSessionLocal() as search_db:
+                await search_service.search_with_request(
+                    search_db,
+                    readable_id=readable_id,
+                    search_request=search_request,
+                    ctx=ctx,
+                    request_id=request_id,
+                )
+        except Exception as e:
+            # Emit error to stream so clients get notified
             await core_pubsub.publish(
                 "search",
                 request_id,
-                {
-                    "type": "results",
-                    "results": [
-                        {
-                            "score": 0.91,
-                            "payload": {
-                                "source_name": "Dummy",
-                                "entity_id": "demo_1",
-                                "md_content": "This is a dummy result for streaming test.",
-                            },
-                        }
-                    ],
-                },
-            )
-            await asyncio.sleep(0.1)
-            await core_pubsub.publish(
-                "search", request_id, {"type": "summary", "timings": {"total_ms": 123}}
-            )
-        finally:
-            # Always signal completion so the client can close the stream
-            await core_pubsub.publish(
-                "search", request_id, {"type": "done", "request_id": request_id}
+                {"type": "error", "message": str(e)},
             )
 
-    # Kick off the dummy publisher in the background
-    dummy_task = asyncio.create_task(_publish_dummy_events())
+    search_task = asyncio.create_task(_run_search())
 
     async def event_stream():
         try:
@@ -580,6 +562,11 @@ async def stream_search_collection_advanced(
                                 f"[SearchStream] Done event received for search:{request_id}. "
                                 "Closing stream"
                             )
+                            # Increment usage upon completion
+                            try:
+                                await guard_rail.increment(ActionType.QUERIES)
+                            except Exception:
+                                pass
                             break
                     except Exception:
                         # Non-JSON payloads are ignored for termination logic
@@ -595,10 +582,10 @@ async def stream_search_collection_advanced(
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
         finally:
             # Ensure background task is cancelled if still running
-            if not dummy_task.done():
-                dummy_task.cancel()
+            if not search_task.done():
+                search_task.cancel()
                 try:
-                    await dummy_task
+                    await search_task
                 except Exception:
                     pass
             # Clean up pubsub connection
