@@ -1,8 +1,12 @@
 """API endpoints for collections."""
 
-from typing import List
+import asyncio
+import json
+from typing import Any, Dict, List
 
 from fastapi import BackgroundTasks, Depends, HTTPException, Path, Query
+from fastapi.responses import StreamingResponse
+from qdrant_client.http.models import Filter as QdrantFilter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
@@ -17,6 +21,7 @@ from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
 from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import ContextualLogger
+from airweave.core.pubsub import core_pubsub
 from airweave.core.shared_models import ActionType
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
@@ -451,3 +456,168 @@ async def refresh_all_source_connections(
             await guard_rail.increment(ActionType.SYNCS)
 
     return sync_jobs
+
+
+@router.get("/internal/filter-schema")
+async def get_filter_schema() -> Dict[str, Any]:
+    """Get the JSON schema for Qdrant filter validation.
+
+    This endpoint returns the JSON schema that can be used to validate
+    filter objects in the frontend.
+    """
+    # Get the Pydantic model's JSON schema
+    schema = QdrantFilter.model_json_schema()
+
+    # Simplify the schema to make it more frontend-friendly
+    # Remove some internal fields that might confuse the validator
+    if "$defs" in schema:
+        # Keep definitions but clean them up
+        for _def_name, def_schema in schema.get("$defs", {}).items():
+            # Remove discriminator fields that might cause issues
+            if "discriminator" in def_schema:
+                del def_schema["discriminator"]
+
+    return schema
+
+
+@router.post("/{readable_id}/search/stream")
+async def stream_search_collection_advanced(
+    readable_id: str = Path(
+        ..., description="The unique readable identifier of the collection to search"
+    ),
+    search_request: SearchRequest = ...,
+    db: AsyncSession = Depends(deps.get_db),
+    ctx: ApiContext = Depends(deps.get_context),
+) -> StreamingResponse:
+    """Server-Sent Events (SSE) streaming endpoint for advanced search.
+
+    This endpoint initializes a streaming session for a search request, subscribes to
+    a Redis Pub/Sub channel scoped by a generated request ID, and relays events to
+    the client. A small dummy publisher is started to emit test events including a
+    final "done" signal so the client can verify streaming locally.
+    """
+    # Use the request ID from ApiContext for end-to-end tracing
+    request_id = ctx.request_id
+    ctx.logger.info(
+        f"[SearchStream] Starting stream for collection '{readable_id}' id={request_id}"
+    )
+
+    # Subscribe to the search:<request_id> channel
+    pubsub = await core_pubsub.subscribe("search", request_id)
+
+    # Dummy publisher to emit a few test events and a final done event
+    async def _publish_dummy_events() -> None:
+        try:
+            await core_pubsub.publish(
+                "search", request_id, {"type": "start", "request_id": request_id}
+            )
+            await asyncio.sleep(0.1)
+            await core_pubsub.publish(
+                "search", request_id, {"type": "operator_start", "name": "embedding"}
+            )
+            await asyncio.sleep(0.1)
+            await core_pubsub.publish(
+                "search", request_id, {"type": "operator_end", "name": "embedding", "ms": 25}
+            )
+            await asyncio.sleep(0.1)
+            # Minimal plausible results payload for testing consumers
+            await core_pubsub.publish(
+                "search",
+                request_id,
+                {
+                    "type": "results",
+                    "results": [
+                        {
+                            "score": 0.91,
+                            "payload": {
+                                "source_name": "Dummy",
+                                "entity_id": "demo_1",
+                                "md_content": "This is a dummy result for streaming test.",
+                            },
+                        }
+                    ],
+                },
+            )
+            await asyncio.sleep(0.1)
+            await core_pubsub.publish(
+                "search", request_id, {"type": "summary", "timings": {"total_ms": 123}}
+            )
+        finally:
+            # Always signal completion so the client can close the stream
+            await core_pubsub.publish(
+                "search", request_id, {"type": "done", "request_id": request_id}
+            )
+
+    # Kick off the dummy publisher in the background
+    dummy_task = asyncio.create_task(_publish_dummy_events())
+
+    async def event_stream():
+        try:
+            # Initial connected event with request_id
+            yield f"data: {json.dumps({'type': 'connected', 'request_id': request_id})}\n\n"
+
+            # Heartbeat every 30 seconds to keep the connection alive
+            last_heartbeat = asyncio.get_event_loop().time()
+            heartbeat_interval = 30
+
+            async for message in pubsub.listen():
+                # Heartbeat
+                now = asyncio.get_event_loop().time()
+                if now - last_heartbeat > heartbeat_interval:
+                    yield 'data: {"type": "heartbeat"}\n\n'
+                    last_heartbeat = now
+
+                if message["type"] == "message":
+                    data = message["data"]
+                    # Relay the raw pubsub payload
+                    yield f"data: {data}\n\n"
+
+                    # If a done event arrives, stop streaming
+                    try:
+                        parsed = json.loads(data)
+                        if isinstance(parsed, dict) and parsed.get("type") == "done":
+                            ctx.logger.info(
+                                f"[SearchStream] Done event received for search:{request_id}. "
+                                "Closing stream"
+                            )
+                            break
+                    except Exception:
+                        # Non-JSON payloads are ignored for termination logic
+                        pass
+
+                elif message["type"] == "subscribe":
+                    ctx.logger.info(f"[SearchStream] Subscribed to channel search:{request_id}")
+
+        except asyncio.CancelledError:
+            ctx.logger.info(f"[SearchStream] Cancelled stream id={request_id}")
+        except Exception as e:
+            ctx.logger.error(f"[SearchStream] Error id={request_id}: {str(e)}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            # Ensure background task is cancelled if still running
+            if not dummy_task.done():
+                dummy_task.cancel()
+                try:
+                    await dummy_task
+                except Exception:
+                    pass
+            # Clean up pubsub connection
+            try:
+                await pubsub.close()
+                ctx.logger.info(
+                    f"[SearchStream] Closed pubsub subscription for search:{request_id}"
+                )
+            except Exception:
+                pass
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "Content-Type": "text/event-stream",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )

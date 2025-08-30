@@ -1,15 +1,12 @@
 """Pubsub for sync jobs using Redis backend."""
 
 import asyncio
-import platform
 from uuid import UUID
 
-import redis.asyncio as redis
 from pydantic import BaseModel
 
-from airweave.core.config import settings
-from airweave.core.logging import ContextualLogger, logger
-from airweave.core.redis_client import redis_client
+from airweave.core.logging import ContextualLogger
+from airweave.core.pubsub import core_pubsub
 
 
 class SyncProgressUpdate(BaseModel):
@@ -29,92 +26,6 @@ class SyncProgressUpdate(BaseModel):
 
 
 PUBLISH_THRESHOLD = 3
-
-
-class SyncPubSub:
-    """Manages sync job pubsub using Redis."""
-
-    def _channel_name(self, job_id: UUID) -> str:
-        """Generate channel name for a sync job.
-
-        Args:
-            job_id: The sync job ID.
-
-        Returns:
-            str: The channel name.
-        """
-        return f"sync_job:{job_id}"
-
-    async def publish(self, job_id: UUID, update: SyncProgressUpdate) -> None:
-        """Publish an update to a sync job channel.
-
-        Note: Redis channels are created on-demand when someone subscribes.
-        Publishing to a non-existent channel (no subscribers) is a no-op.
-
-        Args:
-            job_id: The sync job ID.
-            update: The progress update to publish.
-        """
-        channel = self._channel_name(job_id)
-        message = update.model_dump_json()
-
-        subscribers = await redis_client.publish(channel, message)
-
-        if subscribers > 0:
-            logger.debug(f"Published update to {subscribers} subscribers for job {job_id}")
-
-    async def subscribe(self, job_id: UUID) -> redis.client.PubSub:
-        """Create a new pubsub instance and subscribe to a sync job's updates.
-
-        Args:
-            job_id: The sync job ID to subscribe to.
-
-        Returns:
-            redis.client.PubSub: A new Redis pubsub instance subscribed to this job's channel.
-        """
-        channel = self._channel_name(job_id)
-
-        # Get socket keepalive options based on OS
-        if platform.system() == "Darwin":
-            socket_keepalive_options = {}
-        else:
-            # Use the correct Linux TCP keepalive constants
-            import socket
-
-            if hasattr(socket, "TCP_KEEPIDLE"):
-                socket_keepalive_options = {
-                    socket.TCP_KEEPIDLE: 60,  # Start keepalive after 60s idle
-                    socket.TCP_KEEPINTVL: 10,  # Interval between keepalive probes
-                    socket.TCP_KEEPCNT: 6,  # Number of keepalive probes
-                }
-            else:
-                socket_keepalive_options = {}
-
-        # Build Redis URL with authentication
-        if settings.REDIS_PASSWORD:
-            redis_url = f"redis://:{settings.REDIS_PASSWORD}@{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
-        else:
-            redis_url = f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
-
-        # Create a new Redis client directly for pubsub to avoid connection pool issues
-        # This is a workaround for async pubsub issues in Docker environments
-        pubsub_redis = await redis.from_url(
-            redis_url,
-            decode_responses=True,
-            socket_keepalive=True,
-            socket_connect_timeout=5,
-            # Don't set socket_timeout for pubsub connections - they need to stay open
-            socket_keepalive_options=socket_keepalive_options,
-        )
-
-        # Create pubsub instance
-        pubsub = pubsub_redis.pubsub()
-
-        # Subscribe to the specific channel
-        await pubsub.subscribe(channel)
-
-        logger.debug(f"Created new pubsub subscription for sync job {job_id}")
-        return pubsub
 
 
 class SyncProgress:
@@ -176,7 +87,7 @@ class SyncProgress:
 
     async def _publish(self) -> None:
         """Publish current progress."""
-        await sync_pubsub.publish(self.job_id, self.stats)
+        await core_pubsub.publish("sync_job", self.job_id, self.stats.model_dump())
 
     async def finalize(self, is_complete: bool = True) -> None:
         """Publish final progress."""
@@ -262,5 +173,4 @@ class SyncProgress:
         )
 
 
-# Create a global instance for the entire app
-sync_pubsub = SyncPubSub()
+# No module-level pubsub instance is needed; use core_pubsub directly
