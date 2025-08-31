@@ -79,3 +79,5 @@ monke/venv/
 logs/
 monke/.runs/
 monke/env.test
+
+throwaway/

@@ -472,7 +472,7 @@ class SourceConnectionUpdate(BaseModel):
             "with your own branding."
         ),
     )
-    auth_provider: Optional[str] = Field(
+    auth_provider: Optional[UUID] = Field(
         None,
         description=(
             "Updated auth provider readable ID. "
@@ -945,31 +945,176 @@ class SourceConnectionListItem(BaseModel):
     )
 
 
+# -----------------------------
+# New token injection container
+# -----------------------------
+class TokenInject(BaseModel):
+    """Structured container for directly injecting OAuth2 tokens.
+
+    Used with ``auth_mode='oauth2'`` to create a connection without a browser redirect.
+    All fields are treated as write-only and are never returned by the API.
+    """
+
+    access_token: str = Field(
+        ...,
+        description="Bearer/OAuth2 access token",
+        json_schema_extra={"writeOnly": True},
+    )
+    refresh_token: Optional[str] = Field(
+        None,
+        description="OAuth2 refresh token",
+        json_schema_extra={"writeOnly": True},
+    )
+    token_type: Optional[str] = Field(None, description="e.g., 'Bearer'")
+    expires_at: Optional[datetime] = Field(None, description="Absolute expiry time (if known)")
+    extra: Optional[Dict[str, Any]] = Field(
+        None, description="Provider-specific token fields (optional)"
+    )
+
+
 class SourceConnectionInitiate(SourceConnectionCreate):
     """Unified initiation schema.
 
-    Accepts all fields of SourceConnectionCreate, plus optional overrides that define
-    the auth mode.
-      - No overrides => platform-managed OAuth (if source is OAuth)
-      - client_id + client_secret => BYOC
-      - access_token (+ refresh_token) => token injection (immediate)
-      - redirect_url => where to redirect the user AFTER completion (final landing)
+    `auth_mode` defines the flow and allowed fields:
+
+    - `"oauth2"`: managed/BYOC browser flow, or zero-redirect if `token_inject` supplied.
+        * allowed: `client_id`, `client_secret`, `token_inject`, `redirect_url`
+        * forbidden: `auth_fields`, `auth_provider`, `auth_provider_config`
+
+    - `"direct_auth"`: non-OAuth credentials via `auth_fields`.
+        * required: `auth_fields`
+        * forbidden: `client_id`, `client_secret`, `token_inject`, `auth_provider(_config)`
+
+    - `"external_provider"`: brokered provider flow (e.g., Composio) via `auth_provider` (+ config).
+        * required: `auth_provider` (and optionally `auth_provider_config`)
+        * forbidden: `auth_fields`, `client_id`, `client_secret`, `token_inject`
     """
 
-    client_id: Optional[str] = Field(None, description="Override OAuth client ID (BYOC).")
-    client_secret: Optional[str] = Field(None, description="Override OAuth client secret (BYOC).")
-    access_token: Optional[str] = Field(
-        None,
-        description=(
-            "Token injection: supply an access token to create immediately without OAuth redirect."
-        ),
+    auth_mode: Literal["oauth2", "direct_auth", "external_provider"] = Field(
+        ..., description="Which auth flow to use"
     )
-    refresh_token: Optional[str] = Field(
-        None, description="Optional refresh token for token injection."
+
+    # BYOC/managed OAuth options
+    client_id: Optional[str] = Field(None, description="Override OAuth client ID (BYOC).")
+    client_secret: Optional[str] = Field(
+        None,
+        description="Override OAuth client secret (BYOC).",
+        json_schema_extra={"writeOnly": True},
     )
     redirect_url: Optional[str] = Field(
         None, description="Final landing URL after the server completes the OAuth exchange."
     )
+
+    # New: move tokens under a structured container
+    token_inject: Optional[TokenInject] = Field(
+        None,
+        description=(
+            "If provided with auth_mode='oauth2', creates immediately without browser redirect."
+        ),
+        json_schema_extra={"writeOnly": True},
+    )
+
+    # Back-compat shim (deprecated). If present, will be packed into token_inject.
+    access_token: Optional[str] = Field(
+        None,
+        description="[DEPRECATED] use token_inject.access_token",
+        json_schema_extra={"deprecated": True, "writeOnly": True},
+    )
+    refresh_token: Optional[str] = Field(
+        None,
+        description="[DEPRECATED] use token_inject.refresh_token",
+        json_schema_extra={"deprecated": True, "writeOnly": True},
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _pack_legacy_tokens(cls, data):
+        """Allow legacy callers to pass access_token/refresh_token; pack into token_inject."""
+        if isinstance(data, dict) and (data.get("access_token") or data.get("refresh_token")):
+            ti = data.get("token_inject") or {}
+            if "access_token" not in ti and data.get("access_token"):
+                ti["access_token"] = data["access_token"]
+            if "refresh_token" not in ti and data.get("refresh_token"):
+                ti["refresh_token"] = data["refresh_token"]
+            data["token_inject"] = ti
+        return data
+
+    @model_validator(mode="after")
+    def _validate_field_combinations(self):
+        mode = self.auth_mode
+
+        # Presence map for simple checks.
+        present = {
+            "auth_fields": bool(self.auth_fields),
+            "auth_provider": bool(self.auth_provider),
+            "auth_provider_config": bool(self.auth_provider_config),
+            "client_id": bool(self.client_id),
+            "client_secret": bool(self.client_secret),
+            "token_inject": bool(self.token_inject),
+        }
+
+        # Per-mode constraints. Keep messages aligned with previous behavior.
+        constraints = {
+            "external_provider": {
+                "required": ["auth_provider"],
+                "forbidden": ["auth_fields", "token_inject"],
+                "forbidden_any": [
+                    (
+                        ["client_id", "client_secret"],
+                        "client_id/client_secret are not allowed for auth_mode='external_provider'",
+                    ),
+                ],
+            },
+            "direct_auth": {
+                "required": ["auth_fields"],
+                "forbidden": ["token_inject"],
+                "forbidden_any": [
+                    (
+                        ["auth_provider", "auth_provider_config"],
+                        "auth_provider(_config) are not allowed for auth_mode='direct_auth'",
+                    ),
+                    (
+                        ["client_id", "client_secret"],
+                        "client_id/client_secret are not allowed for auth_mode='direct_auth'",
+                    ),
+                ],
+            },
+            "oauth2": {
+                "required": [],
+                "forbidden": ["auth_fields"],
+                "forbidden_any": [
+                    (
+                        ["auth_provider", "auth_provider_config"],
+                        "auth_provider(_config) are not allowed for "
+                        "auth_mode='oauth2' "
+                        "(use auth_mode='external_provider' instead)",
+                    ),
+                ],
+            },
+        }
+
+        if mode not in constraints:
+            raise ValueError(f"Unknown auth_mode: {mode}")
+
+        rule = constraints[mode]
+
+        # Check required fields.
+        for field in rule.get("required", []):
+            if not present[field]:
+                raise ValueError(f"auth_mode='{mode}' requires {field}")
+
+        # Check individually forbidden fields (generic messaging is fine here).
+        for field in rule.get("forbidden", []):
+            if present[field]:
+                raise ValueError(f"{field} is not allowed for auth_mode='{mode}'")
+
+        # Check grouped 'any present' forbiddances with custom messages.
+        for fields, message in rule.get("forbidden_any", []):
+            if any(present[f] for f in fields):
+                raise ValueError(message)
+
+        # Valid combination.
+        return self
 
 
 class SourceConnectionInitiateResponse(BaseModel):

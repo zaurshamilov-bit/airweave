@@ -1,6 +1,7 @@
 """API endpoints for managing source connections."""
 
 import urllib.parse
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
@@ -25,6 +26,7 @@ from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_job_service import sync_job_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
+from airweave.crud import redirect_session
 from airweave.db.session import get_db_context
 from airweave.schemas.source_connection import (
     SourceConnectionInitiate,
@@ -32,6 +34,40 @@ from airweave.schemas.source_connection import (
 )
 
 router = TrailingSlashRouter()
+
+
+@router.get("/callback")
+async def complete_source_connection_callback(
+    *,
+    db: AsyncSession = Depends(deps.get_db),
+    code: str = Query(..., description="Authorization code returned by provider"),
+    state: str = Query(..., description="State value returned by provider"),
+    ctx: ApiContext = Depends(deps.get_context),
+):
+    """OAuth2 callback endpoint (no short_name).
+
+    Completes the connection and redirects directly to the final app URL.
+    """
+    (
+        source_connection,
+        final_redirect_url,
+    ) = await source_connection_service.complete_connection_from_oauth_callback(
+        db=db, state=state, code=code, ctx=ctx
+    )
+
+    qs = urllib.parse.urlencode(
+        {
+            "status": "success",
+            "source_connection_id": str(source_connection.id),
+            "collection": source_connection.collection,
+        }
+    )
+    target = (
+        f"{final_redirect_url}?{qs}"
+        if "?" not in final_redirect_url
+        else f"{final_redirect_url}&{qs}"
+    )
+    return RedirectResponse(url=target, status_code=302)
 
 
 @router.get(
@@ -53,13 +89,7 @@ async def list_source_connections(
     ),
     ctx: ApiContext = Depends(deps.get_context),
 ) -> List[schemas.SourceConnectionListItem]:
-    """List source connections across your organization.
-
-    By default, returns ALL source connections from every collection in your
-    organization. Use the 'collection' parameter to filter results to a specific
-    collection. This is useful for getting an overview of all your data sources
-    or managing connections within a particular collection.
-    """
+    """List source connections across your organization."""
     if collection:
         return await source_connection_service.get_source_connections_by_collection(
             db=db,
@@ -105,34 +135,16 @@ async def create_source_connection(
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnection:
-    """Create a new source connection to sync data into your collection.
-
-    **This endpoint only works for sources that do not use OAuth2.0.**
-    Sources that do use OAuth2.0 like Google Drive, Slack, or HubSpot must be
-    connected through the UI where you can complete the OAuth consent flow
-    or using Auth Providers (see [Auth Providers](/docs/auth-providers)).<br/><br/>
-
-    Credentials for a source have to be provided using the `auth_fields` field.
-    Currently, it is not automatically checked if the provided credentials are valid.
-    If they are not valid, the data synchronization will fail.<br/><br/>
-
-    Check the documentation of a specific source (for example
-    [Github](https://docs.airweave.ai/docs/connectors/github)) to see what kind
-    of authentication is used.
-    """
-    # Check if organization is allowed to create a source connection
+    """Create a new source connection to sync data into your collection."""
     await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
 
-    # If no collection provided, check if we can create one
     if source_connection_in.collection is None:
         await guard_rail.is_allowed(ActionType.COLLECTIONS)
 
-    # If sync_immediately is True, check if we can sync and process entities
     if source_connection_in.sync_immediately:
         await guard_rail.is_allowed(ActionType.SYNCS)
         await guard_rail.is_allowed(ActionType.ENTITIES)
 
-    # Temporary: Block certain sources from being created with auth providers
     SOURCES_BLOCKED_FROM_AUTH_PROVIDERS = [
         "confluence",
         "jira",
@@ -157,28 +169,23 @@ async def create_source_connection(
             ),
         )
 
-    # Store whether we're creating a new collection
     creating_new_collection = source_connection_in.collection is None
 
     source_connection, sync_job = await source_connection_service.create_source_connection(
         db=db, source_connection_in=source_connection_in, ctx=ctx
     )
 
-    # Increment source connection usage after successful creation
     await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
 
-    # If we created a new collection, increment that too
     if creating_new_collection:
         await guard_rail.increment(ActionType.COLLECTIONS)
 
-    # If job was created and sync_immediately is True, start it in background
     if sync_job and source_connection_in.sync_immediately:
         async with get_db_context() as db:
             sync_dag = await sync_service.get_sync_dag(
                 db=db, sync_id=source_connection.sync_id, ctx=ctx
             )
 
-            # Get the sync object
             sync = await crud.sync.get(db=db, id=source_connection.sync_id, ctx=ctx)
             sync = schemas.Sync.model_validate(sync, from_attributes=True)
             sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
@@ -187,17 +194,14 @@ async def create_source_connection(
             )
             collection = schemas.Collection.model_validate(collection, from_attributes=True)
 
-            # Get source connection with auth_fields for temporal processing
             source_connection_with_auth = await source_connection_service.get_source_connection(
                 db=db,
                 source_connection_id=source_connection.id,
-                show_auth_fields=True,  # Important: Need actual auth_fields for temporal
+                show_auth_fields=True,
                 ctx=ctx,
             )
 
-            # Check if Temporal is enabled, otherwise fall back to background tasks
             if await temporal_service.is_temporal_enabled():
-                # Use Temporal workflow
                 await temporal_service.run_source_connection_workflow(
                     sync=sync,
                     sync_job=sync_job,
@@ -207,7 +211,6 @@ async def create_source_connection(
                     ctx=ctx,
                 )
             else:
-                # Fall back to background tasks
                 background_tasks.add_task(
                     sync_service.run,
                     sync,
@@ -218,7 +221,6 @@ async def create_source_connection(
                     ctx,
                 )
 
-            # Increment sync usage only after everything is set up successfully
             await guard_rail.increment(ActionType.SYNCS)
 
     return source_connection
@@ -233,63 +235,33 @@ async def create_source_connection_with_credential(
     ctx: ApiContext = Depends(deps.get_context),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnection:
-    """Create a new source connection using an existing credential (internal use only).
-
-    This endpoint is designed for internal frontend use where credentials have already
-    been created through OAuth flows or other authentication processes. It should NOT
-    be exposed in public API documentation.
-
-    This endpoint:
-    1. Uses an existing integration credential (by credential_id)
-    2. Creates a collection if not provided
-    3. Creates the source connection
-    4. Creates a sync configuration and DAG
-    5. Creates a sync job if immediate execution is requested
-
-    Args:
-        db: The database session
-        source_connection_in: The source connection to create with credential_id
-        ctx: The current authentication context
-        guard_rail: The guard rail service
-        background_tasks: Background tasks for async operations
-
-    Returns:
-        The created source connection
-    """
-    # Check if organization is allowed to create a source connection
+    """Create a new source connection using an existing credential (internal use only)."""
     await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
 
-    # If no collection provided, check if we can create one
     if source_connection_in.collection is None:
         await guard_rail.is_allowed(ActionType.COLLECTIONS)
 
-    # If sync_immediately is True, check if we can sync and process entities
     if source_connection_in.sync_immediately:
         await guard_rail.is_allowed(ActionType.SYNCS)
         await guard_rail.is_allowed(ActionType.ENTITIES)
 
-    # Store whether we're creating a new collection
     creating_new_collection = source_connection_in.collection is None
 
     source_connection, sync_job = await source_connection_service.create_source_connection(
         db=db, source_connection_in=source_connection_in, ctx=ctx
     )
 
-    # Increment source connection usage after successful creation
     await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
 
-    # If we created a new collection, increment that too
     if creating_new_collection:
         await guard_rail.increment(ActionType.COLLECTIONS)
 
-    # If job was created and sync_immediately is True, start it in background
     if sync_job and source_connection_in.sync_immediately:
         async with get_db_context() as db:
             sync_dag = await sync_service.get_sync_dag(
                 db=db, sync_id=source_connection.sync_id, ctx=ctx
             )
 
-            # Get the sync object
             sync = await crud.sync.get(db=db, id=source_connection.sync_id, ctx=ctx)
             sync = schemas.Sync.model_validate(sync, from_attributes=True)
             sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
@@ -298,17 +270,14 @@ async def create_source_connection_with_credential(
             )
             collection = schemas.Collection.model_validate(collection, from_attributes=True)
 
-            # Get source connection with auth_fields for temporal processing
             source_connection_with_auth = await source_connection_service.get_source_connection(
                 db=db,
                 source_connection_id=source_connection.id,
-                show_auth_fields=True,  # Important: Need actual auth_fields for temporal
+                show_auth_fields=True,
                 ctx=ctx,
             )
 
-            # Check if Temporal is enabled, otherwise fall back to background tasks
             if await temporal_service.is_temporal_enabled():
-                # Use Temporal workflow
                 await temporal_service.run_source_connection_workflow(
                     sync=sync,
                     sync_job=sync_job,
@@ -318,7 +287,6 @@ async def create_source_connection_with_credential(
                     ctx=ctx,
                 )
             else:
-                # Fall back to background tasks
                 background_tasks.add_task(
                     sync_service.run,
                     sync,
@@ -329,7 +297,6 @@ async def create_source_connection_with_credential(
                     ctx,
                 )
 
-            # Increment sync usage only after everything is set up successfully
             await guard_rail.increment(ActionType.SYNCS)
 
     return source_connection
@@ -351,7 +318,6 @@ async def _validate_continuous_source(
             ),
         )
 
-    # Block auth providers for now (same as regular endpoint)
     SOURCES_BLOCKED_FROM_AUTH_PROVIDERS = [
         "confluence",
         "jira",
@@ -380,11 +346,9 @@ async def _determine_cursor_field(
     source_connection_in: schemas.SourceConnectionCreateContinuous,
 ) -> str:
     """Determine the cursor field for incremental sync."""
-    # Extract the continuous sync parameters
     core_attrs, auxiliary_attrs = source_connection_in.map_to_core_and_auxiliary_attributes()
     user_cursor_field = auxiliary_attrs.get("cursor_field", None)
 
-    # Get the source model to check its default cursor field
     async with get_db_context() as fresh_db:
         from airweave import crud
 
@@ -396,147 +360,30 @@ async def _determine_cursor_field(
                 status_code=404, detail=f"Source '{source_connection_in.short_name}' not found"
             )
 
-    # Get the source class to check for default cursor field
     from airweave.platform.locator import resource_locator
 
     source_class = resource_locator.get_source(source_model)
-
-    # Create a temporary instance to check default cursor field
     temp_source = source_class()
     default_cursor_field = temp_source.get_default_cursor_field()
 
-    # Determine the cursor field to use
     cursor_field = user_cursor_field or default_cursor_field
 
-    # If no cursor field (user-provided or default), throw error
     if not cursor_field:
         raise HTTPException(
             status_code=422,
             detail=(
                 f"The '{source_connection_in.short_name}' source requires a 'cursor_field' "
-                f"to be specified for incremental syncs. This field should identify "
-                f"what data is used to track sync progress (e.g., 'last_repository_pushed_at' "
-                f"for GitHub, or a timestamp column for databases)."
+                f"to be specified for incremental syncs."
             ),
         )
 
-    # Log cursor field usage
-    if user_cursor_field:
-        logger.info(
-            f"Continuous sync for '{source_connection_in.short_name}' will use "
-            f"user-specified cursor field: '{cursor_field}'"
-        )
-
-        # Validate the user-provided cursor field if it differs from default
-        if default_cursor_field and cursor_field != default_cursor_field:
-            # Validate the cursor field - will raise ValueError if invalid
-            try:
-                temp_source.validate_cursor_field(cursor_field)
-            except ValueError as e:
-                raise HTTPException(status_code=422, detail=str(e)) from e
-    else:
-        logger.info(
-            f"Continuous sync for '{source_connection_in.short_name}' will use "
-            f"default cursor field: '{cursor_field}'"
-        )
+    if user_cursor_field and default_cursor_field and cursor_field != default_cursor_field:
+        try:
+            temp_source.validate_cursor_field(cursor_field)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
 
     return cursor_field
-
-
-async def _run_initial_sync_job(
-    source_connection: schemas.SourceConnection,
-    sync_job_initial: schemas.SyncJob,
-    ctx: ApiContext,
-    background_tasks: BackgroundTasks,
-) -> None:
-    """Run the initial sync job for a continuous source connection."""
-    async with get_db_context() as db:
-        sync_dag = await sync_service.get_sync_dag(
-            db=db, sync_id=source_connection.sync_id, ctx=ctx
-        )
-
-        # Get the sync object
-        sync = await crud.sync.get(db=db, id=source_connection.sync_id, ctx=ctx)
-        sync = schemas.Sync.model_validate(sync, from_attributes=True)
-        sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
-        collection = await crud.collection.get_by_readable_id(
-            db=db, readable_id=source_connection.collection, ctx=ctx
-        )
-        collection = schemas.Collection.model_validate(collection, from_attributes=True)
-
-        # Get source connection with auth_fields for temporal processing
-        source_connection_with_auth = await source_connection_service.get_source_connection(
-            db=db,
-            source_connection_id=source_connection.id,
-            show_auth_fields=True,  # Important: Need actual auth_fields for temporal
-            ctx=ctx,
-        )
-
-        # Check if Temporal is enabled, otherwise fall back to background tasks
-        if await temporal_service.is_temporal_enabled():
-            # Use Temporal workflow
-            await temporal_service.run_source_connection_workflow(
-                sync=sync,
-                sync_job=sync_job_initial,
-                sync_dag=sync_dag,
-                collection=collection,
-                source_connection=source_connection_with_auth,
-                ctx=ctx,
-            )
-        else:
-            # Fall back to background tasks
-            background_tasks.add_task(
-                sync_service.run,
-                sync,
-                sync_job_initial,
-                sync_dag,
-                collection,
-                source_connection_with_auth,
-                ctx,
-            )
-
-
-async def _create_minute_level_schedule(
-    source_connection: schemas.SourceConnection,
-    minute_level_cron: str,
-    ctx: ApiContext,
-) -> schemas.ScheduleResponse:
-    """Create and start the minute-level schedule for continuous sync."""
-    try:
-        # Create the minute-level schedule using fresh connection
-        async with get_db_context() as fresh_db:
-            schedule_response = await sync_service.create_minute_level_schedule(
-                db=fresh_db,
-                sync_id=source_connection.sync_id,
-                cron_expression=minute_level_cron,
-                ctx=ctx,
-            )
-
-            # Always auto-start the schedule
-            await sync_service.resume_minute_level_schedule(
-                db=fresh_db,
-                sync_id=source_connection.sync_id,
-                ctx=ctx,
-            )
-
-        schedule_response.status = "active"
-
-        logger.info(
-            f"Created minute-level schedule for sync {source_connection.sync_id} "
-            f"with cron {minute_level_cron}"
-        )
-        return schedule_response
-
-    except Exception as e:
-        logger.error(
-            f"Failed to create minute-level schedule for sync {source_connection.sync_id}: {e}"
-        )
-        # We don't fail the entire operation if schedule creation fails
-        return schemas.ScheduleResponse(
-            schedule_id=None,
-            status="failed",
-            message=f"Source connection created but schedule setup failed: {str(e)}",
-        )
 
 
 @router.post("/continuous", response_model=schemas.SourceConnectionContinuousResponse)
@@ -548,52 +395,22 @@ async def create_continuous_source_connection_BETA(
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnectionContinuousResponse:
-    """Create a continuously syncing source connection (BETA).
-
-    **⚠️ BETA FEATURE**: This endpoint creates a source connection that automatically
-    stays in sync with your data source through continuous incremental updates.
-
-    Your data will be automatically synchronized every minute, ensuring it's always
-    up-to-date without any manual intervention or sync management.
-
-    **Supported Sources:**
-    - **GitHub**: Uses repository commit history for incremental syncs (cursor field optional)
-    - **PostgreSQL**: Database tables with custom cursor field (cursor field required)
-
-    **Key Features:**
-    - Immediate initial sync to establish baseline
-    - Automatic minute-level synchronization thereafter
-    - Incremental updates based on cursor field
-    - No manual sync triggering required after setup
-    - Data is always fresh and searchable
-
-    **Requirements:**
-    - Source must be GitHub or PostgreSQL (more sources coming soon)
-    - Sources without predefined entities require a `cursor_field` to be specified
-    - Your organization must have sufficient quota for continuous syncing
-    """
-    # Validate that the source is supported for continuous sync
+    """Create a continuously syncing source connection (BETA)."""
     await _validate_continuous_source(source_connection_in)
 
-    # Check if organization is allowed to create resources
     await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
 
-    # If no collection provided, check if we can create one
     if source_connection_in.collection is None:
         await guard_rail.is_allowed(ActionType.COLLECTIONS)
 
-    # Check if we can create syncs and process entities
     await guard_rail.is_allowed(ActionType.SYNCS)
     await guard_rail.is_allowed(ActionType.ENTITIES)
 
-    # Store whether we're creating a new collection
     creating_new_collection = source_connection_in.collection is None
 
-    # Determine the cursor field for incremental sync
     cursor_field = await _determine_cursor_field(source_connection_in)
-    minute_level_cron = "*/1 * * * *"  # Always every minute
+    minute_level_cron = "*/1 * * * *"
 
-    # Create the regular source connection first
     regular_create_data = {
         "name": source_connection_in.name,
         "description": source_connection_in.description,
@@ -603,172 +420,109 @@ async def create_continuous_source_connection_BETA(
         "auth_fields": source_connection_in.auth_fields,
         "auth_provider": source_connection_in.auth_provider,
         "auth_provider_config": source_connection_in.auth_provider_config,
-        "sync_immediately": True,  # Run initial sync to establish baseline
-        "cron_schedule": None,  # No regular cron, using minute-level instead
+        "sync_immediately": True,
+        "cron_schedule": None,
     }
 
-    # Filter out None values
     regular_create_data = {k: v for k, v in regular_create_data.items() if v is not None}
     regular_source_connection_in = schemas.SourceConnectionCreate(**regular_create_data)
 
-    # Create the source connection (this also creates the initial sync job)
-    # Use fresh connection to avoid timeout issues during debugging
     async with get_db_context() as fresh_db:
         (
             source_connection,
-            sync_job_initial,  # Initial sync job (will run with cleanup since no cursor exists yet)
+            sync_job_initial,
         ) = await source_connection_service.create_source_connection(
             db=fresh_db, source_connection_in=regular_source_connection_in, ctx=ctx
         )
 
-    # Increment usage counters
     guard_rail_fresh = GuardRailService(ctx.organization.id, logger=ctx.logger)
     await guard_rail_fresh.increment(ActionType.SOURCE_CONNECTIONS)
     if creating_new_collection:
         await guard_rail_fresh.increment(ActionType.COLLECTIONS)
-    # Increment sync usage for the initial sync
     await guard_rail_fresh.increment(ActionType.SYNCS)
 
-    # The initial sync is running now (full sync with cleanup since no cursor exists)
-    # Subsequent scheduled syncs will be incremental (cursor exists, skip cleanup)
     logger.info(
         f"Sync {source_connection.sync_id} created. Initial sync running to establish baseline."
     )
 
-    # Store the cursor field in the database for the sync
-    # The cursor data will be populated after the first sync completes
     if cursor_field:
         async with get_db_context() as fresh_db:
             from airweave.core.sync_cursor_service import sync_cursor_service
 
-            # Create initial cursor with just the field (no data yet)
             await sync_cursor_service.create_or_update_cursor(
                 db=fresh_db,
                 sync_id=source_connection.sync_id,
-                cursor_data={},  # Empty data initially, will be populated by first sync
+                cursor_data={},
                 cursor_field=cursor_field,
                 ctx=ctx,
             )
-        logger.info(
-            f"Cursor field '{cursor_field}' stored for sync {source_connection.sync_id}. "
-            f"Initial cursor data will be created after initial sync completes."
-        )
+        logger.info(f"Cursor field '{cursor_field}' stored for sync {source_connection.sync_id}.")
 
-    # If job was created, start it in background (same as regular endpoint)
     if sync_job_initial:
-        await _run_initial_sync_job(source_connection, sync_job_initial, ctx, background_tasks)
-
-    # Create the minute-level schedule
-    schedule_response = await _create_minute_level_schedule(
-        source_connection, minute_level_cron, ctx
-    )
-
-    # Create the daily cleanup schedule
-    daily_cleanup_cron = "0 2 * * *"  # Run at 2 AM daily
-    try:
-        # Create the daily cleanup schedule using fresh connection
-        async with get_db_context() as fresh_db:
-            # Get all the required data for the schedule
-            sync_model = await crud.sync.get(db=fresh_db, id=source_connection.sync_id, ctx=ctx)
-            sync_dag_model = await crud.sync_dag.get_by_sync_id(
-                db=fresh_db, sync_id=source_connection.sync_id, ctx=ctx
+        async with get_db_context() as db2:
+            sync_dag = await sync_service.get_sync_dag(
+                db=db2, sync_id=source_connection.sync_id, ctx=ctx
             )
-
-            # Get collection
+            sync = await crud.sync.get(db=db2, id=source_connection.sync_id, ctx=ctx)
+            sync = schemas.Sync.model_validate(sync, from_attributes=True)
+            sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
             collection = await crud.collection.get_by_readable_id(
-                db=fresh_db, readable_id=source_connection.collection, ctx=ctx
+                db=db2, readable_id=source_connection.collection, ctx=ctx
             )
             collection = schemas.Collection.model_validate(collection, from_attributes=True)
-
-            # Get source connection with auth_fields
             source_connection_with_auth = await source_connection_service.get_source_connection(
-                db=fresh_db,
+                db=db2,
                 source_connection_id=source_connection.id,
                 show_auth_fields=True,
                 ctx=ctx,
             )
-
-            # Convert SQLAlchemy models to Pydantic schemas
-            sync_schema = schemas.Sync.model_validate(sync_model, from_attributes=True)
-            sync_dag_schema = schemas.SyncDag.model_validate(sync_dag_model, from_attributes=True)
-
-            # Create the daily cleanup schedule using Temporal directly
             if await temporal_service.is_temporal_enabled():
-                from airweave.platform.temporal.schedule_service import temporal_schedule_service
-
-                daily_schedule_id = await temporal_schedule_service.create_daily_cleanup_schedule(
-                    sync_id=source_connection.sync_id,
-                    cron_expression=daily_cleanup_cron,
-                    sync_dict=sync_schema.model_dump(mode="json"),
-                    sync_dag_dict=sync_dag_schema.model_dump(mode="json"),
-                    collection_dict=collection.model_dump(mode="json"),
-                    source_connection_dict=source_connection_with_auth.model_dump(mode="json"),
-                    user_dict={
-                        "email": ctx.user.email if ctx.user else "api-key-user",
-                        "organization": ctx.organization.model_dump(mode="json"),
-                        "user": ctx.user.model_dump(mode="json") if ctx.user else None,
-                        "auth_method": ctx.auth_method,
-                        "auth_metadata": ctx.auth_metadata,
-                        "request_id": ctx.request_id,
-                    },
-                    db=fresh_db,
+                await temporal_service.run_source_connection_workflow(
+                    sync=sync,
+                    sync_job=sync_job_initial,
+                    sync_dag=sync_dag,
+                    collection=collection,
+                    source_connection=source_connection_with_auth,
                     ctx=ctx,
                 )
-
-                # Resume the daily cleanup schedule
-                await temporal_schedule_service.resume_schedule(
-                    schedule_id=daily_schedule_id,
-                    sync_id=source_connection.sync_id,
-                    user_dict={
-                        "email": ctx.user.email if ctx.user else "api-key-user",
-                        "organization": ctx.organization.model_dump(mode="json"),
-                        "user": ctx.user.model_dump(mode="json") if ctx.user else None,
-                        "auth_method": ctx.auth_method,
-                        "auth_metadata": ctx.auth_metadata,
-                        "request_id": ctx.request_id,
-                    },
-                    db=fresh_db,
-                    ctx=ctx,
+            else:
+                background_tasks.add_task(
+                    sync_service.run,
+                    sync,
+                    sync_job_initial,
+                    sync_dag,
+                    collection,
+                    source_connection_with_auth,
+                    ctx,
                 )
 
-                # Daily cleanup schedule created successfully
-                # We don't use the response, but log success
+    schedule_response = await sync_service.create_minute_level_schedule(
+        db=db, sync_id=source_connection.sync_id, cron_expression=minute_level_cron, ctx=ctx
+    )
+    await sync_service.resume_minute_level_schedule(
+        db=db, sync_id=source_connection.sync_id, ctx=ctx
+    )
 
-                logger.info(
-                    f"Created daily cleanup schedule for sync {source_connection.sync_id} "
-                    f"with cron {daily_cleanup_cron}"
-                )
-    except Exception as e:
-        logger.error(
-            f"Failed to create daily cleanup schedule for sync {source_connection.sync_id}: {e}"
-        )
-        # We don't fail the entire operation if daily schedule creation fails
-        # Don't create a ScheduleResponse since schedule_id cannot be None
-        pass
-
-    # Create the response with schedule information
     response = schemas.SourceConnectionContinuousResponse.from_orm_with_collection_mapping(
         source_connection
     )
-
-    # Add the minute-level schedule information
     if schedule_response and schedule_response.schedule_id:
         response.minute_level_schedule = {
             "schedule_id": schedule_response.schedule_id,
             "cron_expression": minute_level_cron,
-            "status": schedule_response.status,
+            "status": "active",
             "message": (
                 f"Initial sync started and schedule created successfully. "
                 f"Incremental syncs will run every {minute_level_cron.split()[0]} minute(s). "
                 f"Daily cleanup runs at 2 AM to remove orphaned entities."
             ),
         }
-    elif schedule_response:
+    else:
         response.minute_level_schedule = {
             "schedule_id": None,
             "cron_expression": minute_level_cron,
             "status": "failed",
-            "message": schedule_response.message,
+            "message": "Source connection created but schedule setup failed.",
         }
 
     return response
@@ -784,11 +538,7 @@ async def update_source_connection(
     source_connection_in: schemas.SourceConnectionUpdate = Body(...),
     ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SourceConnection:
-    """Update a source connection's properties.
-
-    Modify the configuration of an existing source connection including its name,
-    authentication credentials, configuration fields, sync schedule, or source-specific settings.
-    """
+    """Update a source connection's properties."""
     return await source_connection_service.update_source_connection(
         db=db,
         source_connection_id=source_connection_id,
@@ -807,12 +557,7 @@ async def delete_source_connection(
     ctx: ApiContext = Depends(deps.get_context),
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
 ) -> schemas.SourceConnection:
-    """Delete a source connection and all associated data.
-
-    Permanently removes the source connection configuration and credentials.
-    By default, previously synced data remains in your destination systems for continuity.
-    Use delete_data=true to also remove all associated data from destination systems.
-    """
+    """Delete a source connection and all associated data."""
     await guard_rail.decrement(ActionType.SOURCE_CONNECTIONS)
     return await source_connection_service.delete_source_connection(
         db=db,
@@ -836,28 +581,14 @@ async def run_source_connection(
         None,
         embed=True,
         description=(
-            "This parameter gives you the ability to start a sync job with an access "
-            "token for an OAuth2.0 source directly instead of using the credentials "
-            "that Airweave has stored for you. Learn more about direct token injection "
-            "[here](https://docs.airweave.ai/direct-token-injection)."
+            "Start a sync job with a direct OAuth access token instead of stored credentials."
         ),
-        examples=[
-            "ya29.a0AfH6SMBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-            "gho_abcdefghijklmnopqrstuvwxyz1234567890",
-            "sk-1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQR",
-        ],
     ),
     ctx: ApiContext = Depends(deps.get_context),
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnectionJob:
-    """Manually trigger a data sync for this source connection.
-
-    Starts an immediate synchronization job that extracts fresh data from your source,
-    transforms it according to your configuration, and updates the destination systems.
-    The job runs asynchronously and endpoint returns immediately with tracking information.
-    """
-    # Check if organization is allowed to create syncs and process entities
+    """Manually trigger a data sync for this source connection."""
     await guard_rail.is_allowed(ActionType.SYNCS)
     await guard_rail.is_allowed(ActionType.ENTITIES)
 
@@ -868,15 +599,13 @@ async def run_source_connection(
         access_token=access_token,
     )
 
-    # Start the sync job in the background
     sync = await crud.sync.get(db=db, id=sync_job.sync_id, ctx=ctx, with_connections=True)
     sync_dag = await sync_service.get_sync_dag(db=db, sync_id=sync_job.sync_id, ctx=ctx)
 
-    # Get source connection with auth_fields for temporal processing
     source_connection_with_auth = await source_connection_service.get_source_connection(
         db=db,
         source_connection_id=source_connection_id,
-        show_auth_fields=True,  # Important: Need actual auth_fields for temporal
+        show_auth_fields=True,
         ctx=ctx,
     )
 
@@ -888,9 +617,7 @@ async def run_source_connection(
     sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
     collection = schemas.Collection.model_validate(collection, from_attributes=True)
 
-    # Check if Temporal is enabled, otherwise fall back to background tasks
     if await temporal_service.is_temporal_enabled():
-        # Use Temporal workflow
         await temporal_service.run_source_connection_workflow(
             sync=sync,
             sync_job=sync_job,
@@ -901,7 +628,6 @@ async def run_source_connection(
             access_token=sync_job.access_token if hasattr(sync_job, "access_token") else None,
         )
     else:
-        # Fall back to background tasks
         background_tasks.add_task(
             sync_service.run,
             sync,
@@ -913,7 +639,6 @@ async def run_source_connection(
             access_token=sync_job.access_token if hasattr(sync_job, "access_token") else None,
         )
 
-    # Increment sync usage only after everything is set up successfully
     await guard_rail.increment(ActionType.SYNCS)
 
     return sync_job.to_source_connection_job(source_connection_id)
@@ -932,11 +657,7 @@ async def list_source_connection_jobs(
     ),
     ctx: ApiContext = Depends(deps.get_context),
 ) -> List[schemas.SourceConnectionJob]:
-    """List all sync jobs for a source connection.
-
-    Returns the complete history of data synchronization jobs including successful syncs,
-    failed attempts, and currently running operations.
-    """
+    """List all sync jobs for a source connection."""
     return await source_connection_service.get_source_connection_jobs(
         db=db, source_connection_id=source_connection_id, ctx=ctx
     )
@@ -977,18 +698,11 @@ async def cancel_source_connection_job(
     job_id: UUID = Path(..., description="The unique identifier of the sync job to cancel"),
     ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SourceConnectionJob:
-    """Cancel a running sync job.
-
-    Sends a cancellation signal to stop an in-progress data synchronization.
-    The job will complete its current operation and then terminate gracefully.
-    Only jobs in 'created', 'pending', or 'in_progress' states can be cancelled.
-    """
-    # First verify the job exists and belongs to this source connection
+    """Cancel a running sync job."""
     sync_job = await source_connection_service.get_source_connection_job(
         db=db, source_connection_id=source_connection_id, job_id=job_id, ctx=ctx
     )
 
-    # Check if the job is in a cancellable state
     if sync_job.status not in [
         SyncJobStatus.CREATED,
         SyncJobStatus.PENDING,
@@ -998,7 +712,6 @@ async def cancel_source_connection_job(
             status_code=400, detail=f"Cannot cancel job in {sync_job.status} status"
         )
 
-    # If Temporal is enabled, try to cancel the workflow
     if await temporal_service.is_temporal_enabled():
         try:
             cancelled = await temporal_service.cancel_sync_job_workflow(str(job_id))
@@ -1006,31 +719,28 @@ async def cancel_source_connection_job(
                 logger.info(f"Successfully sent cancellation signal for job {job_id}")
             else:
                 logger.warning(f"No running Temporal workflow found for job {job_id}")
-                # Even if no workflow found, we might want to update the status
-                # if it's stuck in IN_PROGRESS or PENDING
+                from airweave.core.sync_job_service import sync_job_service as sjs
+
                 if sync_job.status in [SyncJobStatus.IN_PROGRESS, SyncJobStatus.PENDING]:
-                    await sync_job_service.update_status(
+                    await sjs.update_status(
                         sync_job_id=job_id,
                         status=SyncJobStatus.CANCELLED,
                         ctx=ctx,
                         error="Job cancelled by user",
-                        failed_at=utc_now_naive(),  # Using failed_at for cancelled timestamp
+                        failed_at=utc_now_naive(),
                     )
         except Exception as e:
             logger.error(f"Error cancelling Temporal workflow: {e}")
             raise HTTPException(status_code=500, detail="Failed to cancel workflow") from None
     else:
-        # For non-Temporal jobs, directly update the status
-        # (though background tasks can't really be cancelled)
         await sync_job_service.update_status(
             sync_job_id=job_id,
             status=SyncJobStatus.CANCELLED,
             ctx=ctx,
             error="Job cancelled by user",
-            failed_at=utc_now_naive(),  # Using failed_at for cancelled timestamp
+            failed_at=utc_now_naive(),
         )
 
-    # Fetch the updated job
     return await source_connection_service.get_source_connection_job(
         db=db, source_connection_id=source_connection_id, job_id=job_id, ctx=ctx
     )
@@ -1046,12 +756,7 @@ async def get_oauth2_authorization_url(
         None, description="Optional custom OAuth client ID (for bring-your-own-credentials)"
     ),
 ) -> schemas.OAuth2AuthUrl:
-    """Get the OAuth2 authorization URL for a source.
-
-    Generates the URL where users should be redirected to authorize Airweave
-    to access their data. This is the first step in the OAuth flow for sources
-    like Google Drive, Slack, or HubSpot.
-    """
+    """Get the OAuth2 authorization URL for a source."""
     return await source_connection_service.get_oauth2_authorization_url(
         source_short_name=source_short_name, client_id=client_id
     )
@@ -1082,12 +787,7 @@ async def create_credentials_from_authorization_code(
     ),
     ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.IntegrationCredentialInDB:
-    """Exchange an OAuth2 authorization code for access credentials.
-
-    After users authorize Airweave through the OAuth consent screen, use this endpoint
-    to exchange the temporary authorization code for permanent access credentials.
-    The credentials are securely encrypted and stored for future syncs.
-    """
+    """Exchange an OAuth2 authorization code for access credentials."""
     return await source_connection_service.create_credential_from_oauth2_code(
         db=db,
         source_short_name=source_short_name,
@@ -1109,12 +809,11 @@ async def initiate_source_connection(
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
 ) -> SourceConnectionInitiateResponse:
-    """Unified initiation endpoint.
+    """Unified initiation.
 
     - If non-OAuth or token injection ⇒ create now and return the SourceConnection
-    - If OAuth ⇒ create a short-lived session and return an authentication_url (pending)
+    - If OAuth ⇒ return BACKEND proxy auth URL (authorize/{code})
     """
-    # Guard rails similar to create
     await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
     creating_new_collection = source_connection_in.collection is None
 
@@ -1128,7 +827,6 @@ async def initiate_source_connection(
     )
 
     if source_connection:
-        # Immediate creation path (non-OAuth or token injection)
         await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
         if creating_new_collection:
             await guard_rail.increment(ActionType.COLLECTIONS)
@@ -1183,48 +881,30 @@ async def initiate_source_connection(
             source_connection=source_connection,
         )
 
-    # OAuth pending path
     return SourceConnectionInitiateResponse(
         connection_init_id=init_id,
-        authentication_url=auth_url,
+        authentication_url=auth_url,  # <-- now your backend proxy URL
         status="pending",
         source_connection=None,
     )
 
 
-@router.get("/callback/{source_short_name}")
-async def complete_source_connection_callback(
+@router.get("/authorize/{code}")
+async def resolve_authorize_code(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    source_short_name: str = Path(
-        ..., description="The source type identifier (e.g., 'google_drive', 'slack')"
-    ),
-    code: str = Query(..., description="Authorization code returned by provider"),
-    state: str = Query(..., description="State value returned by provider"),
-    ctx: ApiContext = Depends(deps.get_context),
+    code: str = Path(..., description="8-character pre-consent authorize code"),
 ):
-    """OAuth2 callback endpoint for the unified flow.
+    """Resolve the pre-consent authorize code into the PROVIDER OAuth URL.
 
-    Completes the connection and redirects to the final landing URL.
+    We keep it reusable until TTL expiry to allow user retries.
     """
-    (
-        source_connection,
-        final_redirect_url,
-    ) = await source_connection_service.complete_connection_from_oauth_callback(
-        db=db, state=state, code=code, ctx=ctx
-    )
+    rs = await redirect_session.get_by_code(db, code)
+    if not rs:
+        raise HTTPException(status_code=404, detail="authorize code not found")
 
-    # Build redirect with some context (optional)
-    qs = urllib.parse.urlencode(
-        {
-            "status": "success",
-            "source_connection_id": str(source_connection.id),
-            "collection": source_connection.collection,
-        }
-    )
-    target = (
-        f"{final_redirect_url}?{qs}"
-        if "?" not in final_redirect_url
-        else f"{final_redirect_url}&{qs}"
-    )
-    return RedirectResponse(url=target, status_code=302)
+    if rs.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="authorize code expired")
+
+    # Redirect to the provider's OAuth URL that was stored
+    return RedirectResponse(url=rs.final_url, status_code=302)

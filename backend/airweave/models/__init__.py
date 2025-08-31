@@ -15,6 +15,7 @@ from .entity_relation import EntityRelation
 from .integration_credential import IntegrationCredential
 from .organization import Organization
 from .organization_billing import OrganizationBilling
+from .redirect_session import RedirectSession
 from .source import Source
 from .source_connection import SourceConnection
 from .sync import Sync
@@ -44,6 +45,7 @@ __all__ = [
     "IntegrationCredential",
     "Organization",
     "OrganizationBilling",
+    "RedirectSession",
     "Source",
     "SourceConnection",
     "Sync",

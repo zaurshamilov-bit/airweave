@@ -14,6 +14,7 @@ from .crud_entity_definition import entity_definition
 from .crud_integration_credential import integration_credential
 from .crud_organization import organization
 from .crud_organization_billing import organization_billing
+from .crud_redirect_session import redirect_session
 from .crud_source import source
 from .crud_source_connection import source_connection
 from .crud_sync import sync
@@ -39,6 +40,7 @@ __all__ = [
     "integration_credential",
     "organization",
     "organization_billing",
+    "redirect_session",
     "source",
     "source_connection",
     "sync",
