@@ -322,7 +322,8 @@ class GoogleDriveSource(BaseSource):
             "mimeType != 'application/vnd.google-apps.folder' and trashed = false"
         )
         if name_token:
-            q = f"{base_q} and name contains '{name_token}'"
+            safe_token = name_token.replace("'", "\\'")
+            q = f"{base_q} and name contains '{safe_token}'"
         else:
             q = base_q
 
@@ -476,9 +477,10 @@ class GoogleDriveSource(BaseSource):
                 for pid in parent_ids:
                     # List child folders with exact name under pid
                     url = "https://www.googleapis.com/drive/v3/files"
+                    safe_name = name.replace("'", "\\'")
                     q = (
                         f"'{pid}' in parents and mimeType = 'application/vnd.google-apps.folder' "
-                        f"and name = '{name}' and trashed = false"
+                        f"and name = '{safe_name}' and trashed = false"
                     )
                     params = {
                         "pageSize": 100,
@@ -510,9 +512,10 @@ class GoogleDriveSource(BaseSource):
             else:
                 # Search folders by exact name anywhere in scope
                 url = "https://www.googleapis.com/drive/v3/files"
+                safe_name = name.replace("'", "\\'")
                 q = (
                     "mimeType = 'application/vnd.google-apps.folder' and "
-                    f"name = '{name}' and trashed = false"
+                    f"name = '{safe_name}' and trashed = false"
                 )
                 params = {
                     "pageSize": 100,
