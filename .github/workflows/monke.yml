@@ -152,9 +152,9 @@ jobs:
         run: |
           set -e
           mkdir -p logs
-          python ci_run_single.py --config monke/configs/gmail.yaml        --log-file logs/gmail.rich.log &
+          python monke/ci_run_single.py --config monke/configs/gmail.yaml        --log-file logs/gmail.rich.log &
           PID1=$!
-          python ci_run_single.py --config monke/configs/google_drive.yaml --log-file logs/drive.rich.log &
+          python monke/ci_run_single.py --config monke/configs/google_drive.yaml --log-file logs/drive.rich.log &
           PID2=$!
           wait $PID1; S1=$?
           wait $PID2; S2=$?
