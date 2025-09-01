@@ -1331,14 +1331,14 @@ class SourceConnectionService:
         state: str,
         code: str,
         ctx: ApiContext,
-    ) -> Tuple[schemas.SourceConnection, str]:
+    ) -> Tuple[schemas.SourceConnection, str, Optional[schemas.SyncJob], Dict[str, Any]]:
         """Handle OAuth redirect callback.
 
         Steps:
         - Look up init session by state.
         - Exchange the code for a token.
-        - Create IntegrationCredential + Connection + SourceConnection (+ Sync).
-        - Return (source_connection, final_redirect_url).
+        - Create IntegrationCredential + Connection + SourceConnection (+ Sync/Job).
+        - Return (source_connection, final_redirect_url, sync_job, meta).
         """
         session_obj = await connection_init_session.get_by_state(db, state=state, ctx=ctx)
         if not session_obj:
@@ -1385,6 +1385,9 @@ class SourceConnectionService:
             ),
         )
 
+        sync_job = None
+        created_new_collection = False
+
         async with UnitOfWork(db) as uow:
             encrypted = credentials.encrypt(validated_auth)
             cred_in = schemas.IntegrationCredentialCreateEncrypted(
@@ -1411,6 +1414,7 @@ class SourceConnectionService:
             connection = await crud.connection.create(uow.session, obj_in=conn_in, ctx=ctx, uow=uow)
             await uow.session.flush()
 
+            # Collection (create if absent)
             collection_id_readable = payload.get("collection")
             if collection_id_readable:
                 collection = await crud.collection.get_by_readable_id(
@@ -1425,13 +1429,14 @@ class SourceConnectionService:
                     db=uow.session,
                     collection_in=schemas.CollectionCreate(
                         name=f"Collection for {payload.get('name') or sc_source.name}",
-                        description=(
-                            f"Auto-generated collection for {payload.get('name') or sc_source.name}"
-                        ),
+                        description=f"Auto-generated collection for {
+                            payload.get('name') or sc_source.name
+                        }",
                     ),
                     ctx=ctx,
                     uow=uow,
                 )
+                created_new_collection = True
 
             sync_in = schemas.SyncCreate(
                 name=f"Sync for {payload.get('name') or sc_source.name}",
@@ -1443,8 +1448,13 @@ class SourceConnectionService:
                 status=SyncStatus.ACTIVE,
                 run_immediately=payload.get("sync_immediately", True),
             )
-            sync, sync_job = await sync_service.create_and_run_sync(
+            sync, sync_job_obj = await sync_service.create_and_run_sync(
                 db=uow.session, sync_in=sync_in, ctx=ctx, uow=uow
+            )
+            sync_job = (
+                schemas.SyncJob.model_validate(sync_job_obj, from_attributes=True)
+                if sync_job_obj
+                else None
             )
 
             sc_create = {
@@ -1465,14 +1475,12 @@ class SourceConnectionService:
             await uow.session.flush()
 
             sc_schema = schemas.SourceConnection.from_orm_with_collection_mapping(sc_row)
-
-            if sync_job is not None:
-                sj = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
+            if sync_job:
                 sc_schema.status = SourceConnectionStatus.IN_PROGRESS
-                sc_schema.latest_sync_job_status = sj.status
-                sc_schema.latest_sync_job_id = sj.id
-                sc_schema.latest_sync_job_started_at = sj.started_at
-                sc_schema.latest_sync_job_completed_at = sj.completed_at
+                sc_schema.latest_sync_job_status = sync_job.status
+                sc_schema.latest_sync_job_id = sync_job.id
+                sc_schema.latest_sync_job_started_at = sync_job.started_at
+                sc_schema.latest_sync_job_completed_at = sync_job.completed_at
             else:
                 sc_schema.status = SourceConnectionStatus.ACTIVE
 
@@ -1483,7 +1491,11 @@ class SourceConnectionService:
             )
             await uow.commit()
 
-        return sc_schema, final_redirect_url
+        meta = {
+            "sync_immediately": payload.get("sync_immediately", True),
+            "creating_new_collection": created_new_collection,
+        }
+        return sc_schema, final_redirect_url, sync_job, meta
 
 
 # Singleton instance

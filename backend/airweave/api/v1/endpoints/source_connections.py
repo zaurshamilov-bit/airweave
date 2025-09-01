@@ -43,25 +43,84 @@ async def complete_source_connection_callback(
     code: str = Query(..., description="Authorization code returned by provider"),
     state: str = Query(..., description="State value returned by provider"),
     ctx: ApiContext = Depends(deps.get_context),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
+    background_tasks: BackgroundTasks,
 ):
     """OAuth2 callback endpoint (no short_name).
 
-    Completes the connection and redirects directly to the final app URL.
+    Completes the connection, kicks off the initial sync if requested,
+    and redirects to the final app URL.
     """
     (
         source_connection,
         final_redirect_url,
+        sync_job,
+        meta,
     ) = await source_connection_service.complete_connection_from_oauth_callback(
         db=db, state=state, code=code, ctx=ctx
     )
+    meta = meta or {}
 
-    qs = urllib.parse.urlencode(
-        {
-            "status": "success",
-            "source_connection_id": str(source_connection.id),
-            "collection": source_connection.collection,
-        }
-    )
+    # Guard-rail increments for the newly created connection (parity with non-OAuth path)
+    await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
+    if meta.get("creating_new_collection"):
+        await guard_rail.increment(ActionType.COLLECTIONS)
+
+    # If a job was created and sync_immediately is on, dispatch it now (Temporal or background)
+    sync_job_id = None
+    if sync_job and meta.get("sync_immediately", True):
+        sync_dag = await sync_service.get_sync_dag(db=db, sync_id=sync_job.sync_id, ctx=ctx)
+        sync = await crud.sync.get(db=db, id=sync_job.sync_id, ctx=ctx)
+        sync = schemas.Sync.model_validate(sync, from_attributes=True)
+        sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+
+        collection = await crud.collection.get_by_readable_id(
+            db=db, readable_id=source_connection.collection, ctx=ctx
+        )
+        collection = schemas.Collection.model_validate(collection, from_attributes=True)
+
+        source_connection_with_auth = await source_connection_service.get_source_connection(
+            db=db,
+            source_connection_id=source_connection.id,
+            show_auth_fields=True,
+            ctx=ctx,
+        )
+
+        if await temporal_service.is_temporal_enabled():
+            await temporal_service.run_source_connection_workflow(
+                sync=sync,
+                sync_job=sync_job,
+                sync_dag=sync_dag,
+                collection=collection,
+                source_connection=source_connection_with_auth,
+                ctx=ctx,
+                access_token=getattr(sync_job, "access_token", None),
+            )
+        else:
+            background_tasks.add_task(
+                sync_service.run,
+                sync,
+                sync_job,
+                sync_dag,
+                collection,
+                source_connection_with_auth,
+                ctx,
+                access_token=getattr(sync_job, "access_token", None),
+            )
+
+        await guard_rail.increment(ActionType.SYNCS)
+        sync_job_id = str(sync_job.id)
+
+    # Redirect with useful context for the app
+    params = {
+        "status": "sync_started" if sync_job_id else "success",
+        "source_connection_id": str(source_connection.id),
+        "collection": source_connection.collection,
+    }
+    if sync_job_id:
+        params["sync_job_id"] = sync_job_id
+
+    qs = urllib.parse.urlencode(params)
     target = (
         f"{final_redirect_url}?{qs}"
         if "?" not in final_redirect_url
@@ -814,9 +873,40 @@ async def initiate_source_connection(
     - If non-OAuth or token injection ⇒ create now and return the SourceConnection
     - If OAuth ⇒ return BACKEND proxy auth URL (authorize/{code})
     """
+    # ---- Parity with create_source_connection: preflight checks
     await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
     creating_new_collection = source_connection_in.collection is None
+    if creating_new_collection:
+        await guard_rail.is_allowed(ActionType.COLLECTIONS)
 
+    if source_connection_in.sync_immediately:
+        await guard_rail.is_allowed(ActionType.SYNCS)
+        await guard_rail.is_allowed(ActionType.ENTITIES)
+
+    # ---- Same provider blocklist behavior as create_source_connection
+    SOURCES_BLOCKED_FROM_AUTH_PROVIDERS = [
+        "confluence",
+        "jira",
+        "bitbucket",
+        "github",
+        "ctti",
+        "monday",
+        "postgresql",
+    ]
+    if (
+        source_connection_in.auth_provider
+        and source_connection_in.short_name in SOURCES_BLOCKED_FROM_AUTH_PROVIDERS
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"The {source_connection_in.short_name.title()} source cannot currently be created"
+                f" using auth providers. Please provide credentials directly using the "
+                f" 'auth_fields' parameter instead."
+            ),
+        )
+
+    # ---- Service performs either immediate create or returns an auth URL + initiation id
     (
         init_id,
         auth_url,
@@ -826,11 +916,13 @@ async def initiate_source_connection(
         db=db, source_connection_in=source_connection_in, ctx=ctx
     )
 
+    # ---- Immediate creation path (direct credentials or token injection for OAuth)
     if source_connection:
         await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
         if creating_new_collection:
             await guard_rail.increment(ActionType.COLLECTIONS)
 
+        # Kick off initial sync now if requested (same as create_source_connection)
         if sync_job and source_connection_in.sync_immediately:
             async with get_db_context() as db2:
                 sync_dag = await sync_service.get_sync_dag(
@@ -881,9 +973,10 @@ async def initiate_source_connection(
             source_connection=source_connection,
         )
 
+    # ---- OAuth browser flow path: settings have been persisted by the service
     return SourceConnectionInitiateResponse(
         connection_init_id=init_id,
-        authentication_url=auth_url,  # <-- now your backend proxy URL
+        authentication_url=auth_url,  # <-- backend proxy URL
         status="pending",
         source_connection=None,
     )
