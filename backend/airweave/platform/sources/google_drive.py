@@ -63,7 +63,7 @@ class GoogleDriveSource(BaseSource):
         retry=retry_if_exception_type((httpx.ConnectTimeout, httpx.ReadTimeout)),
         reraise=True,
     )
-    async def _get_with_auth(
+    async def _get_with_auth(  # noqa: C901
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict] = None
     ) -> Dict:
         """Make an authenticated GET request to the Google Drive API with retry logic.
@@ -255,7 +255,10 @@ class GoogleDriveSource(BaseSource):
         drive_id: Optional[str],
         parent_id: Optional[str],
     ) -> AsyncGenerator[Dict, None]:
-        """List folders under a given parent (or all folders matching name when parent_id is None)."""
+        """List folders under a given parent.
+
+        If parent_id is None, returns all folders matching name in the scope.
+        """
         url = "https://www.googleapis.com/drive/v3/files"
         params = {
             "pageSize": 100,
@@ -267,7 +270,10 @@ class GoogleDriveSource(BaseSource):
 
         # Base folder query
         if parent_id:
-            q = f"'{parent_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            q = (
+                f"'{parent_id}' in parents and "
+                "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            )
         else:
             q = "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         params["q"] = q
@@ -276,7 +282,10 @@ class GoogleDriveSource(BaseSource):
             params["driveId"] = drive_id
 
         self.logger.info(
-            f"List folders start: parent_id={parent_id}, corpora={corpora}, drive_id={drive_id}, q={q}"
+            (
+                "List folders start: parent_id=%s, corpora=%s, drive_id=%s, q=%s"
+                % (parent_id, corpora, drive_id, q)
+            )
         )
 
         while url:
@@ -303,9 +312,15 @@ class GoogleDriveSource(BaseSource):
         parent_id: str,
         name_token: Optional[str] = None,
     ) -> AsyncGenerator[Dict, None]:
-        """List files directly under a given folder, optionally coarse filtered by name contains."""
+        """List files directly under a given folder.
+
+        Optionally coarse filtered by a "name contains" token.
+        """
         url = "https://www.googleapis.com/drive/v3/files"
-        base_q = f"'{parent_id}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false"
+        base_q = (
+            f"'{parent_id}' in parents and "
+            "mimeType != 'application/vnd.google-apps.folder' and trashed = false"
+        )
         if name_token:
             q = f"{base_q} and name contains '{name_token}'"
         else:
@@ -317,7 +332,12 @@ class GoogleDriveSource(BaseSource):
             "includeItemsFromAllDrives": str(include_all_drives).lower(),
             "supportsAllDrives": "true",
             "q": q,
-            "fields": "nextPageToken, files(id, name, mimeType, description, starred, trashed, explicitlyTrashed, parents, shared, webViewLink, iconLink, createdTime, modifiedTime, size, md5Checksum, webContentLink)",
+            "fields": (
+                "nextPageToken, files("
+                "id, name, mimeType, description, starred, trashed, "
+                "explicitlyTrashed, parents, shared, webViewLink, iconLink, "
+                "createdTime, modifiedTime, size, md5Checksum, webContentLink)"
+            ),
         }
         if drive_id:
             params["driveId"] = drive_id
@@ -330,7 +350,10 @@ class GoogleDriveSource(BaseSource):
             data = await self._get_with_auth(client, url, params=params)
             files_in_page = data.get("files", [])
             self.logger.info(
-                f"List files-in-folder page: parent_id={parent_id}, returned {len(files_in_page)} files"
+                (
+                    "List files-in-folder page: parent_id=%s, returned %d files"
+                    % (parent_id, len(files_in_page))
+                )
             )
             for f in files_in_page:
                 yield f
@@ -365,7 +388,10 @@ class GoogleDriveSource(BaseSource):
         filename_glob: Optional[str],
         context: str,
     ) -> AsyncGenerator[Dict, None]:
-        """BFS traversal from start_folder_ids yielding file objects; final match by filename glob."""
+        """BFS traversal from start folders yielding file objects.
+
+        Final match is performed by filename glob.
+        """
         import fnmatch
         from collections import deque
 
@@ -409,7 +435,7 @@ class GoogleDriveSource(BaseSource):
                 )
                 queue.append(subfolder["id"])
 
-    async def _resolve_pattern_to_roots(
+    async def _resolve_pattern_to_roots(  # noqa: C901
         self,
         client: httpx.AsyncClient,
         corpora: str,
@@ -442,7 +468,9 @@ class GoogleDriveSource(BaseSource):
             f"Pattern segments: folders={folder_segments}, filename_glob={filename_glob}"
         )
 
-        async def find_folders_by_name(parent_ids: Optional[List[str]], name: str) -> List[str]:
+        async def find_folders_by_name(  # noqa: C901
+            parent_ids: Optional[List[str]], name: str
+        ) -> List[str]:
             found: List[str] = []
             if parent_ids:
                 for pid in parent_ids:
@@ -474,7 +502,10 @@ class GoogleDriveSource(BaseSource):
                         params["pageToken"] = npt
                         url_iter = url
                 self.logger.info(
-                    f"find_folders_by_name: name='{name}' under {len(parent_ids)} parents -> {len(found)} matches"
+                    (
+                        "find_folders_by_name: name='%s' under %d parents -> %d matches"
+                        % (name, len(parent_ids), len(found))
+                    )
                 )
             else:
                 # Search folders by exact name anywhere in scope
@@ -651,7 +682,7 @@ class GoogleDriveSource(BaseSource):
             self.logger.error(f"Critical exception in _generate_file_entities: {str(e)}")
             # Don't re-raise - let the generator complete
 
-    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:  # noqa: C901
         """Generate all Google Drive entities.
 
         Yields entities in the following order:
@@ -751,7 +782,8 @@ class GoogleDriveSource(BaseSource):
                                 name = file_obj.get("name", "")
                                 matched = _fn.fnmatch(name, pat)
                                 self.logger.info(
-                                    f"Encountered file: {name} ({file_obj.get('id')}) matched={matched} "
+                                    f"Encountered file: {name} ({file_obj.get('id')}) "
+                                    f"matched={matched} "
                                     f"pattern={pat}"
                                 )
                                 if matched:
