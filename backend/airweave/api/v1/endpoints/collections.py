@@ -338,7 +338,7 @@ async def search_advanced(
 
 @router.post(
     "/{readable_id}/refresh_all",
-    response_model=list[schemas.SourceConnectionJob],
+    response_model=List[schemas.SourceConnectionJob],
     responses=create_job_list_response(["completed"], "Multiple sync jobs triggered"),
 )
 async def refresh_all_source_connections(
@@ -351,7 +351,7 @@ async def refresh_all_source_connections(
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
     logger: ContextualLogger = Depends(deps.get_logger),
-) -> list[schemas.SourceConnectionJob]:
+) -> List[schemas.SourceConnectionJob]:
     """Trigger data synchronization for all source connections in the collection.
 
     The sync jobs run asynchronously in the background, so this endpoint

@@ -1,5 +1,7 @@
 """The API module that contains the endpoints for sources."""
 
+from typing import List
+
 from fastapi import Depends, HTTPException, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,7 +99,7 @@ async def read(
 
 @router.get(
     "/list",
-    response_model=list[schemas.Source],
+    response_model=List[schemas.Source],
     responses=create_source_list_response(
         ["github"], "List of all available data source connectors"
     ),
@@ -106,7 +108,7 @@ async def list(
     *,
     db: AsyncSession = Depends(deps.get_db),
     ctx: ApiContext = Depends(deps.get_context),
-) -> list[schemas.Source]:
+) -> List[schemas.Source]:
     """List all available data source connectors.
 
     <br/><br/>
