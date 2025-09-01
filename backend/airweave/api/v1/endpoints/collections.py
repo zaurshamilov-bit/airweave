@@ -535,8 +535,15 @@ async def stream_search_collection_advanced(
 
     async def event_stream():
         try:
-            # Initial connected event with request_id
-            yield f"data: {json.dumps({'type': 'connected', 'request_id': request_id})}\n\n"
+            # Initial connected event with request_id and timestamp
+            import datetime as _dt
+
+            connected_event = {
+                "type": "connected",
+                "request_id": request_id,
+                "ts": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+            }
+            yield f"data: {json.dumps(connected_event)}\n\n"
 
             # Heartbeat every 30 seconds to keep the connection alive
             last_heartbeat = asyncio.get_event_loop().time()
@@ -546,7 +553,13 @@ async def stream_search_collection_advanced(
                 # Heartbeat
                 now = asyncio.get_event_loop().time()
                 if now - last_heartbeat > heartbeat_interval:
-                    yield 'data: {"type": "heartbeat"}\n\n'
+                    import datetime as _dt
+
+                    heartbeat_event = {
+                        "type": "heartbeat",
+                        "ts": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                    }
+                    yield f"data: {json.dumps(heartbeat_event)}\n\n"
                     last_heartbeat = now
 
                 if message["type"] == "message":
@@ -579,7 +592,14 @@ async def stream_search_collection_advanced(
             ctx.logger.info(f"[SearchStream] Cancelled stream id={request_id}")
         except Exception as e:
             ctx.logger.error(f"[SearchStream] Error id={request_id}: {str(e)}")
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            import datetime as _dt
+
+            error_event = {
+                "type": "error",
+                "message": str(e),
+                "ts": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+            }
+            yield f"data: {json.dumps(error_event)}\n\n"
         finally:
             # Ensure background task is cancelled if still running
             if not search_task.done():

@@ -41,6 +41,7 @@ class QdrantFilterOperation(SearchOperation):
             - filter: Processed Qdrant filter for vector search
         """
         logger = context["logger"]
+        emitter = context.get("emit")
 
         if self.filter_dict:
             logger.info("[QdrantFilter] Applying user-provided Qdrant filter")
@@ -50,6 +51,16 @@ class QdrantFilterOperation(SearchOperation):
 
             if logger.isEnabledFor(10):  # DEBUG level
                 logger.debug(f"[QdrantFilter] Filter: {self.filter_dict}")
+            # Emit applied filter minimal snapshot
+            if callable(emitter):
+                try:
+                    await emitter(
+                        "filter_applied",
+                        {"filter": self.filter_dict, "source": "user"},
+                        op_name=self.name,
+                    )
+                except Exception:
+                    pass
         else:
             logger.debug("[QdrantFilter] No user filter provided")
             # Don't set filter in context if none provided

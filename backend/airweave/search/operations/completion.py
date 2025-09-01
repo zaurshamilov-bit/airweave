@@ -4,7 +4,7 @@ This operation generates natural language answers from search
 results using large language models.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from airweave.search.operations.base import SearchOperation
 
@@ -155,7 +155,7 @@ class CompletionGeneration(SearchOperation):
                 f"Context length: {len(formatted_context)} chars"
             )
 
-            # Prepare messages
+            # Prepare messages (shared for streaming and non-streaming)
             messages = [
                 {"role": "system", "content": CONTEXT_PROMPT.format(context=formatted_context)},
                 {"role": "user", "content": query},
@@ -166,38 +166,81 @@ class CompletionGeneration(SearchOperation):
             estimated_tokens = total_chars / 4  # Rough estimate: 1 token ≈ 4 chars
             logger.info(f"[CompletionGeneration] Estimated input tokens: ~{estimated_tokens:.0f}")
 
-            # Generate completion
+            # Streaming or non-streaming completion
+            request_id: Optional[str] = context.get("request_id")
             api_start = time.time()
             logger.info(f"[CompletionGeneration] Calling OpenAI API with model {model}...")
 
-            response = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_completion_tokens=self.max_tokens,
-                top_p=1,
-                frequency_penalty=0,
-                presence_penalty=0,
-            )
+            if request_id:
+                emitter = context.get("emit")
+                if callable(emitter):
+                    await emitter("completion_start", {"model": model}, op_name=self.name)
 
-            api_time = (time.time() - api_start) * 1000
-            logger.info(f"[CompletionGeneration] OpenAI API call completed in {api_time:.2f}ms")
+                full_text_parts: List[str] = []
+                stream = await client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_completion_tokens=self.max_tokens,
+                    top_p=1,
+                    frequency_penalty=0,
+                    presence_penalty=0,
+                    stream=True,
+                )
+                async for chunk in stream:  # type: ignore
+                    try:
+                        delta = chunk.choices[0].delta.content  # type: ignore[attr-defined]
+                    except Exception:
+                        delta = None
+                    if isinstance(delta, str) and delta:
+                        full_text_parts.append(delta)
+                        emitter = context.get("emit")
+                        if callable(emitter):
+                            try:
+                                await emitter(
+                                    "completion_delta", {"text": delta}, op_name=self.name
+                                )
+                            except Exception:
+                                pass
 
-            # Extract completion text
-            if response.choices and response.choices[0].message.content:
-                context["completion"] = response.choices[0].message.content
-                total_time = (time.time() - start_time) * 1000
+                final_text = "".join(full_text_parts)
+                context["completion"] = final_text
+                emitter = context.get("emit")
+                if callable(emitter):
+                    await emitter("completion_done", {"text": final_text}, op_name=self.name)
+                api_time = (time.time() - api_start) * 1000
                 logger.info(
-                    f"[CompletionGeneration] Successfully generated completion. "
-                    f"Total time: {total_time:.2f}ms (API: {api_time:.2f}ms, "
-                    f"formatting: {format_time:.2f}ms)"
+                    f"[CompletionGeneration] OpenAI streaming completed in {api_time:.2f}ms"
                 )
             else:
-                context["completion"] = "Unable to generate completion from the search results."
-                logger.warning("[CompletionGeneration] OpenAI returned empty completion")
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_completion_tokens=self.max_tokens,
+                    top_p=1,
+                    frequency_penalty=0,
+                    presence_penalty=0,
+                )
+
+                api_time = (time.time() - api_start) * 1000
+                logger.info(f"[CompletionGeneration] OpenAI API call completed in {api_time:.2f}ms")
+
+                # Extract completion text
+                if response.choices and response.choices[0].message.content:
+                    context["completion"] = response.choices[0].message.content
+                    total_time = (time.time() - start_time) * 1000
+                    logger.info(
+                        f"[CompletionGeneration] Successfully generated completion. "
+                        f"Total time: {total_time:.2f}ms (API: {api_time:.2f}ms, "
+                        f"formatting: {format_time:.2f}ms)"
+                    )
+                else:
+                    context["completion"] = "Unable to generate completion from the search results."
+                    logger.warning("[CompletionGeneration] OpenAI returned empty completion")
 
         except Exception as e:
             logger.error(f"[CompletionGeneration] Failed: {e}", exc_info=True)
-            context["completion"] = f"Error generating completion: {str(e)}"
+            # Propagate to fail the search per policy
+            raise
 
     def _format_results(self, results: List[Dict]) -> str:
         """Format search results for LLM context.

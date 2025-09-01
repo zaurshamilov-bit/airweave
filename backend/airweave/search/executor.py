@@ -5,7 +5,9 @@ order based on their dependencies, handling errors, and managing timeouts.
 """
 
 # import asyncio  # Will be used for parallel execution
+import asyncio
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,6 +71,8 @@ class SearchExecutor:
         # Attach request id for streaming (if present)
         if request_id:
             context["request_id"] = request_id
+            # In streaming mode, any operator failure should fail the entire search
+            context["streaming_required"] = True
 
         # Log configuration summary
         try:
@@ -89,9 +93,43 @@ class SearchExecutor:
         except Exception:
             pass
 
+        # Centralized emitter: installs an async emit() on context used by all operators
+        op_sequences: Dict[str, int] = {}
+        global_sequence: int = 0
+        emit_lock = asyncio.Lock()
+
+        async def emit(
+            event_type: str, data: Dict[str, Any], op_name: Optional[str] = None
+        ) -> None:
+            nonlocal global_sequence
+            if not request_id:
+                return
+            try:
+                async with emit_lock:
+                    global_sequence += 1
+                    seq = global_sequence
+                    op_seq_val = None
+                    if op_name:
+                        op_sequences[op_name] = op_sequences.get(op_name, 0) + 1
+                        op_seq_val = op_sequences[op_name]
+
+                payload: Dict[str, Any] = {
+                    "type": event_type,
+                    "seq": seq,
+                    "op": op_name,
+                    "op_seq": op_seq_val,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    **data,
+                }
+                await core_pubsub.publish("search", request_id, payload)
+            except Exception:
+                # Never fail pipeline due to streaming issues
+                pass
+
+        context["emit"] = emit
+
         # Emit start lifecycle event
-        await self._emit(
-            context,
+        await emit(
             "start",
             {
                 "request_id": request_id,
@@ -125,7 +163,7 @@ class SearchExecutor:
                 for op in ready:
                     try:
                         # Emit operator_start
-                        await self._emit(context, "operator_start", {"name": op.name})
+                        await emit("operator_start", {"name": op.name}, op_name=op.name)
                         # Execute with timing
                         op_start = time.time()
                         await op.execute(context)
@@ -139,7 +177,9 @@ class SearchExecutor:
                         )
 
                         # Emit operator_end
-                        await self._emit(context, "operator_end", {"name": op.name, "ms": op_time})
+                        await emit(
+                            "operator_end", {"name": op.name, "ms": op_time}, op_name=op.name
+                        )
 
                         # Log intermediate state snapshot for key artifacts
                         try:
@@ -164,36 +204,24 @@ class SearchExecutor:
                             pass
 
                     except Exception as e:
-                        # Log the error
+                        # Log the error and always fail the search
                         ctx.logger.error(
                             f"[SearchExecutor] Operation {op.name} failed: {e}", exc_info=True
                         )
                         context["errors"].append({"operation": op.name, "error": str(e)})
 
-                        # If operation is not optional, propagate the error
-                        if not op.optional:
-                            # Stream error event
-                            await self._emit(
-                                context, "error", {"operation": op.name, "message": str(e)}
-                            )
-                            raise
-
-                        # Mark as executed even if failed (to unblock dependencies)
-                        executed.add(op.name)
-                        ctx.logger.info(
-                            "[SearchExecutor] Continuing after optional operation %s failed",
-                            op.name,
+                        # Emit error event if streaming emitter is present
+                        await emit(
+                            "error", {"operation": op.name, "message": str(e)}, op_name=op.name
                         )
+                        # Propagate failure (both streaming and non-streaming)
+                        raise
 
             # Ensure we have final results
             self._finalize_context(context)
 
             # Emit results (raw as produced by pipeline)
-            await self._emit(
-                context,
-                "results",
-                {"results": context.get("final_results", [])},
-            )
+            await emit("results", {"results": context.get("final_results", [])})
 
             # Log execution summary
             total_time = (time.time() - start_time) * 1000
@@ -203,8 +231,7 @@ class SearchExecutor:
             )
 
             # Emit summary
-            await self._emit(
-                context,
+            await emit(
                 "summary",
                 {
                     "timings": context.get("timings", {}),
@@ -214,7 +241,7 @@ class SearchExecutor:
             )
         finally:
             # Always emit done so clients can close streams reliably
-            await self._emit(context, "done", {"request_id": request_id})
+            await emit("done", {"request_id": request_id})
 
         return context
 
@@ -375,21 +402,9 @@ class SearchExecutor:
         }
 
     async def _emit(self, context: Dict[str, Any], event_type: str, data: Dict[str, Any]) -> None:
-        """Publish a streaming event if request_id is present in context.
-
-        Args:
-            context: Execution context (may include request_id)
-            event_type: Semantic event name (start, operator_start, ...)
-            data: Event payload (will be JSON-encoded by core_pubsub)
-        """
-        request_id = context.get("request_id")
-        if not request_id:
-            return
-        try:
-            payload = {"type": event_type, **data}
-            await core_pubsub.publish("search", request_id, payload)
-        except Exception:
-            # Best-effort: never fail the pipeline due to streaming issues
-            pass
+        """Compatibility shim: use centralized emitter if available."""
+        emitter = context.get("emit")
+        if callable(emitter):
+            await emitter(event_type, data)
 
     # Note: cleaning of results is handled at response-building level, not during streaming
