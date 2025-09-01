@@ -11,9 +11,9 @@
         "tags": [
           "sources"
         ],
-        "summary": "Read Source",
+        "summary": "Read",
         "description": "Get detailed information about a specific data source connector.",
-        "operationId": "read_source_sources_detail__short_name__get",
+        "operationId": "read_sources_detail__short_name__get",
         "parameters": [
           {
             "name": "short_name",
@@ -102,9 +102,9 @@
         "tags": [
           "sources"
         ],
-        "summary": "Read Sources",
+        "summary": "List",
         "description": "List all available data source connectors.\n\n<br/><br/>\nReturns the complete catalog of source types that Airweave can connect to.",
-        "operationId": "read_sources_sources_list_get",
+        "operationId": "list_sources_list_get",
         "parameters": [],
         "responses": {
           "200": {
@@ -116,7 +116,7 @@
                   "items": {
                     "$ref": "#/components/schemas/Source"
                   },
-                  "title": "Response Read Sources Sources List Get"
+                  "title": "Response List Sources List Get"
                 },
                 "examples": {
                   "available_sources": {
@@ -187,9 +187,9 @@
         "tags": [
           "collections"
         ],
-        "summary": "List Collections",
+        "summary": "List",
         "description": "List all collections that belong to your organization.",
-        "operationId": "list_collections_collections_get",
+        "operationId": "list_collections_get",
         "parameters": [
           {
             "name": "skip",
@@ -228,7 +228,7 @@
                   "items": {
                     "$ref": "#/components/schemas/Collection"
                   },
-                  "title": "Response List Collections Collections Get"
+                  "title": "Response List Collections Get"
                 },
                 "examples": {
                   "collections_list": {
@@ -272,9 +272,9 @@
         "tags": [
           "collections"
         ],
-        "summary": "Create Collection",
+        "summary": "Create",
         "description": "Create a new collection.\n\nThe newly created collection is initially empty and does not contain any data\nuntil you explicitly add source connections to it.",
-        "operationId": "create_collection_collections_post",
+        "operationId": "create_collections_post",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -320,9 +320,9 @@
         "tags": [
           "collections"
         ],
-        "summary": "Get Collection",
+        "summary": "Get",
         "description": "Retrieve a specific collection by its readable ID.",
-        "operationId": "get_collection_collections__readable_id__get",
+        "operationId": "get_collections__readable_id__get",
         "parameters": [
           {
             "name": "readable_id",
@@ -368,9 +368,9 @@
         "tags": [
           "collections"
         ],
-        "summary": "Update Collection",
+        "summary": "Update",
         "description": "Update a collection's properties.\n\nModifies the display name of an existing collection.\nNote that the readable ID cannot be changed after creation to maintain stable\nAPI endpoints and preserve any existing integrations or bookmarks.",
-        "operationId": "update_collection_collections__readable_id__put",
+        "operationId": "update_collections__readable_id__put",
         "parameters": [
           {
             "name": "readable_id",
@@ -426,9 +426,9 @@
         "tags": [
           "collections"
         ],
-        "summary": "Delete Collection",
+        "summary": "Delete",
         "description": "Delete a collection and all associated data.\n\nPermanently removes a collection from your organization including all synced data\nfrom the destination systems. All source connections within this collection\nwill also be deleted as part of the cleanup process. This action cannot be undone.",
-        "operationId": "delete_collection_collections__readable_id__delete",
+        "operationId": "delete_collections__readable_id__delete",
         "parameters": [
           {
             "name": "readable_id",
@@ -476,9 +476,9 @@
         "tags": [
           "collections"
         ],
-        "summary": "Search Collection",
+        "summary": "Search",
         "description": "Search across all data sources within the specified collection.\n\nThis GET endpoint provides basic search functionality. For advanced filtering\nand options, use the POST /search endpoint.",
-        "operationId": "search_collection_collections__readable_id__search_get",
+        "operationId": "search_collections__readable_id__search_get",
         "parameters": [
           {
             "name": "readable_id",
@@ -656,9 +656,9 @@
         "tags": [
           "collections"
         ],
-        "summary": "Search Collection Advanced",
+        "summary": "Search Advanced",
         "description": "Advanced search with comprehensive filtering and options.\n\nThis endpoint supports:\n- Metadata filtering using Qdrant's native filter syntax\n- Pagination with offset and limit\n- Score threshold filtering\n- Query expansion strategies (default: AUTO, generates up to 4 variations)\n- Automatic filter extraction from natural language (default: ON)\n- LLM-based result reranking (default: ON)\n\nDefault behavior:\n- Query expansion: ON (AUTO strategy)\n- Query interpretation: ON (extracts filters from natural language)\n- Reranking: ON (improves relevance using LLM)\n- Score threshold: None (no filtering)\n\nTo disable features, explicitly set:\n- enable_reranking: false\n- enable_query_interpretation: false\n- expansion_strategy: \"no_expansion\"",
-        "operationId": "search_collection_advanced_collections__readable_id__search_post",
+        "operationId": "search_advanced_collections__readable_id__search_post",
         "parameters": [
           {
             "name": "readable_id",
@@ -847,9 +847,9 @@
         "tags": [
           "source-connections"
         ],
-        "summary": "List Source Connections",
+        "summary": "List",
         "description": "List source connections across your organization.\n\nBy default, returns ALL source connections from every collection in your\norganization. Use the 'collection' parameter to filter results to a specific\ncollection. This is useful for getting an overview of all your data sources\nor managing connections within a particular collection.",
-        "operationId": "list_source_connections_source_connections_get",
+        "operationId": "list_source_connections_get",
         "parameters": [
           {
             "name": "collection",
@@ -906,7 +906,7 @@
                   "items": {
                     "$ref": "#/components/schemas/SourceConnectionListItem"
                   },
-                  "title": "Response List Source Connections Source Connections Get"
+                  "title": "Response List Source Connections Get"
                 },
                 "examples": {
                   "source_connections_list": {
@@ -950,9 +950,9 @@
         "tags": [
           "source-connections"
         ],
-        "summary": "Create Source Connection",
+        "summary": "Create",
         "description": "Create a new source connection to sync data into your collection.\n\n**This endpoint only works for sources that do not use OAuth2.0.**\nSources that do use OAuth2.0 like Google Drive, Slack, or HubSpot must be\nconnected through the UI where you can complete the OAuth consent flow\nor using Auth Providers (see [Auth Providers](/docs/auth-providers)).<br/><br/>\n\nCredentials for a source have to be provided using the `auth_fields` field.\nCurrently, it is not automatically checked if the provided credentials are valid.\nIf they are not valid, the data synchronization will fail.<br/><br/>\n\nCheck the documentation of a specific source (for example\n[Github](https://docs.airweave.ai/docs/connectors/github)) to see what kind\nof authentication is used.",
-        "operationId": "create_source_connection_source_connections_post",
+        "operationId": "create_source_connections_post",
         "parameters": [],
         "requestBody": {
           "required": true,
@@ -998,9 +998,9 @@
         "tags": [
           "source-connections"
         ],
-        "summary": "Get Source Connection",
+        "summary": "Get",
         "description": "Retrieve a specific source connection by its ID.",
-        "operationId": "get_source_connection_source_connections__source_connection_id__get",
+        "operationId": "get_source_connections__source_connection_id__get",
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1059,9 +1059,9 @@
         "tags": [
           "source-connections"
         ],
-        "summary": "Update Source Connection",
+        "summary": "Update",
         "description": "Update a source connection's properties.\n\nModify the configuration of an existing source connection including its name,\nauthentication credentials, configuration fields, sync schedule, or source-specific settings.",
-        "operationId": "update_source_connection_source_connections__source_connection_id__put",
+        "operationId": "update_source_connections__source_connection_id__put",
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1118,9 +1118,9 @@
         "tags": [
           "source-connections"
         ],
-        "summary": "Delete Source Connection",
+        "summary": "Delete",
         "description": "Delete a source connection and all associated data.\n\nPermanently removes the source connection configuration and credentials.\nBy default, previously synced data remains in your destination systems for continuity.\nUse delete_data=true to also remove all associated data from destination systems.",
-        "operationId": "delete_source_connection_source_connections__source_connection_id__delete",
+        "operationId": "delete_source_connections__source_connection_id__delete",
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1169,9 +1169,9 @@
         "tags": [
           "source-connections"
         ],
-        "summary": "Run Source Connection",
+        "summary": "Run",
         "description": "Manually trigger a data sync for this source connection.\n\nStarts an immediate synchronization job that extracts fresh data from your source,\ntransforms it according to your configuration, and updates the destination systems.\nThe job runs asynchronously and endpoint returns immediately with tracking information.",
-        "operationId": "run_source_connection_source_connections__source_connection_id__run_post",
+        "operationId": "run_source_connections__source_connection_id__run_post",
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1190,7 +1190,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_run_source_connection_source_connections__source_connection_id__run_post"
+                "$ref": "#/components/schemas/Body_run_source_connections__source_connection_id__run_post"
               }
             }
           }
@@ -1258,9 +1258,9 @@
         "tags": [
           "source-connections"
         ],
-        "summary": "List Source Connection Jobs",
+        "summary": "List Jobs",
         "description": "List all sync jobs for a source connection.\n\nReturns the complete history of data synchronization jobs including successful syncs,\nfailed attempts, and currently running operations.",
-        "operationId": "list_source_connection_jobs_source_connections__source_connection_id__jobs_get",
+        "operationId": "list_jobs_source_connections__source_connection_id__jobs_get",
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1285,7 +1285,7 @@
                   "items": {
                     "$ref": "#/components/schemas/SourceConnectionJob"
                   },
-                  "title": "Response List Source Connection Jobs Source Connections  Source Connection Id  Jobs Get"
+                  "title": "Response List Jobs Source Connections  Source Connection Id  Jobs Get"
                 },
                 "examples": {
                   "sync_job_history": {
@@ -1344,9 +1344,9 @@
         "tags": [
           "source-connections"
         ],
-        "summary": "Get Source Connection Job",
+        "summary": "Get Job",
         "description": "Get detailed information about a specific sync job.",
-        "operationId": "get_source_connection_job_source_connections__source_connection_id__jobs__job_id__get",
+        "operationId": "get_job_source_connections__source_connection_id__jobs__job_id__get",
         "parameters": [
           {
             "name": "source_connection_id",
@@ -1436,9 +1436,9 @@
         "tags": [
           "source-connections"
         ],
-        "summary": "Cancel Source Connection Job",
+        "summary": "Cancel Job",
         "description": "Cancel a running sync job.\n\nSends a cancellation signal to stop an in-progress data synchronization.\nThe job will complete its current operation and then terminate gracefully.\nOnly jobs in 'created', 'pending', or 'in_progress' states can be cancelled.",
-        "operationId": "cancel_source_connection_job_source_connections__source_connection_id__jobs__job_id__cancel_post",
+        "operationId": "cancel_job_source_connections__source_connection_id__jobs__job_id__cancel_post",
         "parameters": [
           {
             "name": "source_connection_id",
@@ -2658,7 +2658,7 @@
         ],
         "title": "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post"
       },
-      "Body_run_source_connection_source_connections__source_connection_id__run_post": {
+      "Body_run_source_connections__source_connection_id__run_post": {
         "properties": {
           "access_token": {
             "anyOf": [
@@ -2679,7 +2679,7 @@
           }
         },
         "type": "object",
-        "title": "Body_run_source_connection_source_connections__source_connection_id__run_post"
+        "title": "Body_run_source_connections__source_connection_id__run_post"
       },
       "CancelSubscriptionRequest": {
         "properties": {},
