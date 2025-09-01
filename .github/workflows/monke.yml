@@ -23,14 +23,14 @@ jobs:
     environment: dev
 
     env:
-      # Tags for locally built images (no registry)
+      # Local image tags (no registry)
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
       TEMPORAL_WORKER_TAG: airweave-temporal-worker:ci-${{ github.sha }}
       BACKEND_CACHE_DIR: /tmp/.buildx-cache-backend
       FRONTEND_CACHE_DIR: /tmp/.buildx-cache-frontend
 
-      # Your existing env/secrets
+      # Secrets / CI env
       AIRWEAVE_API_URL: http://localhost:8001
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
@@ -44,7 +44,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Build images ONCE on this runner (with repo-scoped local layer caches)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -76,7 +75,6 @@ jobs:
           cache-from: type=local,src=${{ env.BACKEND_CACHE_DIR }}
           cache-to: type=local,dest=${{ env.BACKEND_CACHE_DIR }},mode=max
 
-      # temporal-worker uses the same Dockerfile/context as backend — re-tag
       - name: Tag backend as temporal-worker
         run: docker tag "${BACKEND_TAG}" "${TEMPORAL_WORKER_TAG}"
 
@@ -92,7 +90,6 @@ jobs:
           cache-from: type=local,src=${{ env.FRONTEND_CACHE_DIR }}
           cache-to: type=local,dest=${{ env.FRONTEND_CACHE_DIR }},mode=max
 
-      # Force Compose to use the prebuilt images (no rebuild) + pass secrets
       - name: Compose override (use prebuilt images + env)
         run: |
           mkdir -p docker
@@ -118,7 +115,6 @@ jobs:
               build: null
           YAML
 
-      # Python deps (installed at repo root)
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -129,12 +125,14 @@ jobs:
       - name: Install Python deps
         run: pip install -r monke/requirements.txt
 
-      # Start the stack ONCE at repo root (./start.sh lives here)
+      # 🔧 Start the stack at repo root; export image vars to satisfy set -u in start.sh
       - name: Start Airweave (single stack)
         env:
           CI_COMPOSE_OVERRIDE: docker/docker-compose.ci.yml
+          BACKEND_IMAGE: ${{ env.BACKEND_TAG }}
+          TEMPORAL_WORKER_IMAGE: ${{ env.TEMPORAL_WORKER_TAG }}
+          FRONTEND_IMAGE: ${{ env.FRONTEND_TAG }}
         run: |
-          # your script is interactive by default; feed "no" answers:
           printf 'n\nn\n' | ./start.sh
 
       - name: Wait for backend health
@@ -147,7 +145,7 @@ jobs:
           done
           echo "❌ Backend not healthy in time"; exit 1
 
-      # Run ALL connector tests from inside monke/
+      # ✅ Run ALL connector tests from monke/
       - name: Run acceptance tests (from monke/)
         working-directory: monke
         run: |
