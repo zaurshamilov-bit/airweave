@@ -67,6 +67,7 @@ class AsanaBongo(BaseBongo):
         semaphore = asyncio.Semaphore(self.max_concurrency)
 
         async with httpx.AsyncClient() as client:
+
             async def create_one() -> Optional[Dict[str, Any]]:
                 async with semaphore:
                     try:
@@ -97,8 +98,12 @@ class AsanaBongo(BaseBongo):
                                 error_data = error_json
                             except Exception:
                                 pass
-                            self.logger.error(f"Failed to create task: {resp.status_code} - {error_data}")
-                            self.logger.error(f"Request data: name='{title[:50]}...', notes='{notes[:50]}...', project={self._project_gid}")
+                            self.logger.error(
+                                f"Failed to create task: {resp.status_code} - {error_data}"
+                            )
+                            self.logger.error(
+                                f"Request data: name='{title[:50]}...', notes='{notes[:50]}...', project={self._project_gid}"
+                            )
 
                         resp.raise_for_status()
                         task = resp.json()["data"]
@@ -144,7 +149,9 @@ class AsanaBongo(BaseBongo):
                 elif result:
                     entities.append(result)
                     self._tasks.append(result)
-                    self.logger.info(f"✅ Created task {i+1}/{self.entity_count}: {result['name'][:50]}...")
+                    self.logger.info(
+                        f"✅ Created task {i+1}/{self.entity_count}: {result['name'][:50]}..."
+                    )
 
         self.created_entities = entities
         return entities
@@ -230,14 +237,40 @@ class AsanaBongo(BaseBongo):
     async def _ensure_project(self):
         if self._project_gid:
             return
+
         name = f"monke-asana-test-{str(uuid.uuid4())[:6]}"
         async with httpx.AsyncClient() as client:
-            r = await client.post(
-                f"{self.API_BASE}/projects",
-                headers=self._headers(),
-                json={"data": {"name": name, "workspace": self._workspace_gid}},
-            )
+            # Try to find a team in the chosen workspace (orgs require this)
+            team_gid = None
+            try:
+                tr = await client.get(
+                    f"{self.API_BASE}/workspaces/{self._workspace_gid}/teams",
+                    headers=self._headers(),
+                )
+                tr.raise_for_status()
+                teams = tr.json().get("data", [])
+                if teams:
+                    team_gid = teams[0]["gid"]
+            except Exception as e:
+                self.logger.warning(
+                    f"Could not list teams for workspace {self._workspace_gid}: {e}"
+                )
+
+            # Prefer the team endpoint if we found one; otherwise fall back to workspace create
+            if team_gid:
+                url = f"{self.API_BASE}/teams/{team_gid}/projects"
+                payload = {"data": {"name": name}}
+            else:
+                url = f"{self.API_BASE}/projects"
+                payload = {"data": {"name": name, "workspace": self._workspace_gid}}
+
+            r = await client.post(url, headers=self._headers(), json=payload)
+
+            if r.status_code not in (200, 201):
+                # Log server's error body so failures are self-explanatory
+                self.logger.error(f"Project create failed {r.status_code}: {r.text}")
             r.raise_for_status()
+
             self._project_gid = r.json()["data"]["gid"]
             self.logger.info(f"Created project {name} ({self._project_gid})")
 

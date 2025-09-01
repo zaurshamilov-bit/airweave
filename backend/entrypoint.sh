@@ -48,7 +48,8 @@ except Exception as e:
 
 # Run migrations using our existing Alembic setup
 echo "Running database migrations..."
-cd /app && poetry run alembic upgrade head
+# cd /app && poetry run alembic upgrade head
+cd /app #dev time to not rerun alembic on conflicting branches
 
 # Start application
 echo "Starting application..."

@@ -4,7 +4,6 @@ This module sets up the FastAPI application and the middleware to log incoming r
 and unhandled exceptions.
 """
 
-import subprocess
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -51,7 +50,7 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
         if settings.RUN_ALEMBIC_MIGRATIONS:
             logger.info("Running alembic migrations...")
-            subprocess.run(["alembic", "upgrade", "head"], check=True)
+            # subprocess.run(["alembic", "upgrade", "head"], check=True)
         if settings.RUN_DB_SYNC:
             # Ensure all FileEntity subclasses have their parent and chunk models created
             ensure_file_entity_models()
