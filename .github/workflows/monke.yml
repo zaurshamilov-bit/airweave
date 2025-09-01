@@ -118,7 +118,7 @@ jobs:
               build: null
           YAML
 
-      # Python deps (cached)
+      # Python deps (installed at repo root)
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -129,7 +129,7 @@ jobs:
       - name: Install Python deps
         run: pip install -r monke/requirements.txt
 
-      # Start the stack ONCE on this runner (override merged with base compose)
+      # Start the stack ONCE at repo root (./start.sh lives here)
       - name: Start Airweave (single stack)
         env:
           CI_COMPOSE_OVERRIDE: docker/docker-compose.ci.yml
@@ -147,8 +147,8 @@ jobs:
           done
           echo "❌ Backend not healthy in time"; exit 1
 
-      # 👉 Run ALL configs, from inside monke/, sequentially; write logs in ../logs
-      - name: Run acceptance tests (all configs from monke/)
+      # Run ALL connector tests from inside monke/
+      - name: Run acceptance tests (from monke/)
         working-directory: monke
         run: |
           mkdir -p ../logs
