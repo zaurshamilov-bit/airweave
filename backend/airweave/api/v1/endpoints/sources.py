@@ -22,7 +22,7 @@ router = TrailingSlashRouter()
         "github", "Source details with authentication and configuration schemas"
     ),
 )
-async def read_source(
+async def read(
     *,
     db: AsyncSession = Depends(deps.get_db),
     short_name: str = Path(
@@ -102,7 +102,7 @@ async def read_source(
         ["github"], "List of all available data source connectors"
     ),
 )
-async def read_sources(
+async def list(
     *,
     db: AsyncSession = Depends(deps.get_db),
     ctx: ApiContext = Depends(deps.get_context),
