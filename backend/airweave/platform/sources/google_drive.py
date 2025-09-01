@@ -718,7 +718,7 @@ class GoogleDriveSource(BaseSource):
                                 pattern=p,
                             )
                             if roots:
-                                async for fo in self._traverse_and_yield_files(
+                                async for file_obj in self._traverse_and_yield_files(
                                     client,
                                     corpora="drive",
                                     include_all_drives=True,
@@ -727,7 +727,7 @@ class GoogleDriveSource(BaseSource):
                                     filename_glob=fname_glob,
                                     context=f"drive {drive_id}",
                                 ):
-                                    file_entity = self._build_file_entity(fo)
+                                    file_entity = self._build_file_entity(file_obj)
                                     if not file_entity:
                                         continue
                                     processed_entity = await self.process_file_entity(
@@ -741,21 +741,21 @@ class GoogleDriveSource(BaseSource):
                         import fnmatch as _fn
 
                         for pat in filename_only_patterns:
-                            async for fo in self._list_files(
+                            async for file_obj in self._list_files(
                                 client,
                                 corpora="drive",
                                 include_all_drives=True,
                                 drive_id=drive_id,
                                 context=f"drive {drive_id}",
                             ):
-                                name = fo.get("name", "")
+                                name = file_obj.get("name", "")
                                 matched = _fn.fnmatch(name, pat)
                                 self.logger.info(
-                                    f"Encountered file: {name} ({fo.get('id')}) matched={matched} "
+                                    f"Encountered file: {name} ({file_obj.get('id')}) matched={matched} "
                                     f"pattern={pat}"
                                 )
                                 if matched:
-                                    file_entity = self._build_file_entity(fo)
+                                    file_entity = self._build_file_entity(file_obj)
                                     if not file_entity:
                                         continue
                                     processed_entity = await self.process_file_entity(
@@ -778,7 +778,7 @@ class GoogleDriveSource(BaseSource):
                             pattern=p,
                         )
                         if roots:
-                            async for fo in self._traverse_and_yield_files(
+                            async for file_obj in self._traverse_and_yield_files(
                                 client,
                                 corpora="user",
                                 include_all_drives=False,
@@ -787,7 +787,7 @@ class GoogleDriveSource(BaseSource):
                                 filename_glob=fname_glob,
                                 context="MY DRIVE",
                             ):
-                                file_entity = self._build_file_entity(fo)
+                                file_entity = self._build_file_entity(file_obj)
                                 if not file_entity:
                                     continue
                                 processed_entity = await self.process_file_entity(
@@ -800,16 +800,16 @@ class GoogleDriveSource(BaseSource):
                     import fnmatch as _fn
 
                     for pat in filename_only_patterns:
-                        async for fo in self._list_files(
+                        async for file_obj in self._list_files(
                             client,
                             corpora="user",
                             include_all_drives=False,
                             drive_id=None,
                             context="MY DRIVE",
                         ):
-                            name = fo.get("name", "")
+                            name = file_obj.get("name", "")
                             if _fn.fnmatch(name, pat):
-                                file_entity = self._build_file_entity(fo)
+                                file_entity = self._build_file_entity(file_obj)
                                 if not file_entity:
                                     continue
                                 processed_entity = await self.process_file_entity(
