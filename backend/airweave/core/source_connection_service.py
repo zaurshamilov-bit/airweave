@@ -1429,9 +1429,9 @@ class SourceConnectionService:
                     db=uow.session,
                     collection_in=schemas.CollectionCreate(
                         name=f"Collection for {payload.get('name') or sc_source.name}",
-                        description=f"Auto-generated collection for {
-                            payload.get('name') or sc_source.name
-                        }",
+                        description=f"""Auto-generated collection for {
+                            payload.get("name") or sc_source.name
+                        }""",
                     ),
                     ctx=ctx,
                     uow=uow,
