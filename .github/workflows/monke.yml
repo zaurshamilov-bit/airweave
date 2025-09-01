@@ -147,21 +147,50 @@ jobs:
           done
           echo "❌ Backend not healthy in time"; exit 1
 
-      # Run BOTH connectors concurrently (same stack, same runner)
-      - name: Run acceptance tests (gmail + google_drive in parallel)
+      # 👉 Run ALL configs, from inside monke/, sequentially; write logs in ../logs
+      - name: Run acceptance tests (all configs from monke/)
+        working-directory: monke
         run: |
-          set -e
-          mkdir -p logs
-          python monke/ci_run_single.py --config monke/configs/gmail.yaml        --log-file logs/gmail.rich.log &
-          PID1=$!
-          python monke/ci_run_single.py --config monke/configs/google_drive.yaml --log-file logs/drive.rich.log &
-          PID2=$!
-          wait $PID1; S1=$?
-          wait $PID2; S2=$?
-          if [ $S1 -ne 0 ] || [ $S2 -ne 0 ]; then
-            echo "One or more connectors failed: gmail=$S1 drive=$S2"
+          mkdir -p ../logs
+          set +e
+
+          CONFIGS=(
+            asana.yaml
+            bitbucket.yaml
+            confluence.yaml
+            dropbox.yaml
+            github.yaml
+            gmail.yaml
+            google_calendar.yaml
+            google_drive.yaml
+            hubspot.yaml
+            jira.yaml
+            linear.yaml
+            monday.yaml
+            notion.yaml
+            outlook_calendar.yaml
+            outlook_mail.yaml
+            stripe.yaml
+            todoist.yaml
+          )
+
+          FAIL=0
+          for cfg in "${CONFIGS[@]}"; do
+            echo "==== RUNNING $cfg ===="
+            python ci_run_single.py --config "configs/$cfg" --log-file "../logs/${cfg%.yaml}.rich.log"
+            RC=$?
+            if [ $RC -ne 0 ]; then
+              echo "$cfg failed with status $RC" | tee -a ../logs/_failures.txt
+              FAIL=1
+            fi
+          done
+
+          if [ $FAIL -ne 0 ]; then
+            echo "One or more connectors failed:"
+            cat ../logs/_failures.txt
             exit 1
           fi
+          echo "✅ All connector tests passed."
 
       - name: Upload logs
         if: always()
