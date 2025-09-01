@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogPortal, DialogOverlay } from "@/components
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { CreateCollectionView } from "./views/CreateCollectionView";
-import { SourceSelectorView } from "./views/SourceSelectorView";
+import { SourceSelectorView } from "./views/panel/SourceSelectorView";
 import { ConfigureSourceView } from "./views/ConfigureSourceView";
 import { ConfigureAuthProviderView } from "./views/ConfigureAuthProviderView";
 import { AuthProviderDetailView } from "./views/AuthProviderDetailView";
