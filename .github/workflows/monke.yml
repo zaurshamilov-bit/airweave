@@ -23,14 +23,14 @@ jobs:
     environment: dev
 
     env:
-      # Local image tags (no registry)
+      # Tags for locally built images (no registry)
       BACKEND_TAG: airweave-backend:ci-${{ github.sha }}
       FRONTEND_TAG: airweave-frontend:ci-${{ github.sha }}
       TEMPORAL_WORKER_TAG: airweave-temporal-worker:ci-${{ github.sha }}
       BACKEND_CACHE_DIR: /tmp/.buildx-cache-backend
       FRONTEND_CACHE_DIR: /tmp/.buildx-cache-frontend
 
-      # Secrets / CI env
+      # Your existing env/secrets
       AIRWEAVE_API_URL: http://localhost:8001
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
@@ -44,6 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Build images ONCE on this runner (with repo-scoped local layer caches)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -75,6 +76,7 @@ jobs:
           cache-from: type=local,src=${{ env.BACKEND_CACHE_DIR }}
           cache-to: type=local,dest=${{ env.BACKEND_CACHE_DIR }},mode=max
 
+      # temporal-worker uses the same Dockerfile/context as backend — re-tag
       - name: Tag backend as temporal-worker
         run: docker tag "${BACKEND_TAG}" "${TEMPORAL_WORKER_TAG}"
 
@@ -90,6 +92,7 @@ jobs:
           cache-from: type=local,src=${{ env.FRONTEND_CACHE_DIR }}
           cache-to: type=local,dest=${{ env.FRONTEND_CACHE_DIR }},mode=max
 
+      # Force Compose to use the prebuilt images (no rebuild) + pass secrets
       - name: Compose override (use prebuilt images + env)
         run: |
           mkdir -p docker
@@ -102,6 +105,12 @@ jobs:
               environment:
                 - OPENAI_API_KEY=${OPENAI_API_KEY}
                 - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+                - DM_AUTH_PROVIDER=${DM_AUTH_PROVIDER}
+                - DM_AUTH_PROVIDER_API_KEY=${DM_AUTH_PROVIDER_API_KEY}
+                - GMAIL_AUTH_PROVIDER_ACCOUNT_ID=${GMAIL_AUTH_PROVIDER_ACCOUNT_ID}
+                - GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID=${GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID}
+                - GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID=${GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID}
+                - GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID=${GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID}
             temporal-worker:
               image: ${TEMPORAL_WORKER_TAG}
               pull_policy: never
@@ -109,12 +118,19 @@ jobs:
               environment:
                 - OPENAI_API_KEY=${OPENAI_API_KEY}
                 - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+                - DM_AUTH_PROVIDER=${DM_AUTH_PROVIDER}
+                - DM_AUTH_PROVIDER_API_KEY=${DM_AUTH_PROVIDER_API_KEY}
+                - GMAIL_AUTH_PROVIDER_ACCOUNT_ID=${GMAIL_AUTH_PROVIDER_ACCOUNT_ID}
+                - GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID=${GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID}
+                - GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID=${GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID}
+                - GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID=${GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID}
             frontend:
               image: ${FRONTEND_TAG}
               pull_policy: never
               build: null
           YAML
 
+      # Python deps (cached)
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -125,14 +141,12 @@ jobs:
       - name: Install Python deps
         run: pip install -r monke/requirements.txt
 
-      # 🔧 Start the stack at repo root; export image vars to satisfy set -u in start.sh
+      # Start the stack ONCE on this runner (override merged with base compose)
       - name: Start Airweave (single stack)
         env:
           CI_COMPOSE_OVERRIDE: docker/docker-compose.ci.yml
-          BACKEND_IMAGE: ${{ env.BACKEND_TAG }}
-          TEMPORAL_WORKER_IMAGE: ${{ env.TEMPORAL_WORKER_TAG }}
-          FRONTEND_IMAGE: ${{ env.FRONTEND_TAG }}
         run: |
+          # your script is interactive by default; feed "no" answers:
           printf 'n\nn\n' | ./start.sh
 
       - name: Wait for backend health
@@ -145,14 +159,14 @@ jobs:
           done
           echo "❌ Backend not healthy in time"; exit 1
 
-      # ✅ Run ALL connector tests from monke/
-      - name: Run acceptance tests (from monke/)
-        working-directory: monke
+      # Run ALL connectors (sequential; logs under ./logs)
+      - name: Run acceptance tests (all connectors)
         run: |
+          set -u -o pipefail
+          cd monke
           mkdir -p ../logs
-          set +e
 
-          CONFIGS=(
+          configs=(
             asana.yaml
             bitbucket.yaml
             confluence.yaml
@@ -172,23 +186,24 @@ jobs:
             todoist.yaml
           )
 
-          FAIL=0
-          for cfg in "${CONFIGS[@]}"; do
-            echo "==== RUNNING $cfg ===="
-            python ci_run_single.py --config "configs/$cfg" --log-file "../logs/${cfg%.yaml}.rich.log"
-            RC=$?
-            if [ $RC -ne 0 ]; then
-              echo "$cfg failed with status $RC" | tee -a ../logs/_failures.txt
-              FAIL=1
+          failures=()
+          for cfg in "${configs[@]}"; do
+            base="${cfg%.yaml}"
+            echo ""
+            echo "▶️  Running ${cfg} ..."
+            if python ci_run_single.py --config "configs/${cfg}" --log-file "../logs/${base}.rich.log"; then
+              echo "✅ ${base} passed"
+            else
+              echo "❌ ${base} FAILED"
+              failures+=("${base}")
             fi
           done
 
-          if [ $FAIL -ne 0 ]; then
-            echo "One or more connectors failed:"
-            cat ../logs/_failures.txt
+          if [ ${#failures[@]} -gt 0 ]; then
+            echo ""
+            echo "One or more connectors failed: ${failures[*]}"
             exit 1
           fi
-          echo "✅ All connector tests passed."
 
       - name: Upload logs
         if: always()
