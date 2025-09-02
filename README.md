@@ -103,7 +103,7 @@ client = AirweaveSDK(
     api_key="YOUR_API_KEY",
     base_url="http://localhost:8001"
 )
-client.collections.create_collection(
+client.collections.create(
     name="name",
 )
 ```
@@ -122,7 +122,7 @@ const client = new AirweaveSDKClient({
     apiKey: "YOUR_API_KEY",
     environment: AirweaveSDKEnvironment.Local
 });
-await client.collections.createCollection({
+await client.collections.create({
     name: "name",
 });
 ```
