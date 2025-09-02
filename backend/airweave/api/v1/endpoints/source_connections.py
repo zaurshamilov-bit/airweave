@@ -28,6 +28,15 @@ from airweave.db.session import get_db_context
 router = TrailingSlashRouter()
 
 
+# Single source of truth for continuous sync support across creation and conversion paths
+SUPPORTED_CONTINUOUS_SOURCES = [
+    "github",
+    "google_drive",
+    "outlook_mail",
+    "postgresql",
+]
+
+
 @router.get(
     "/",
     response_model=List[schemas.SourceConnectionListItem],
@@ -333,8 +342,6 @@ async def _validate_continuous_source(
     source_connection_in: schemas.SourceConnectionCreateContinuous,
 ) -> None:
     """Validate that the source supports continuous sync."""
-    SUPPORTED_CONTINUOUS_SOURCES = ["github", "postgresql"]
-
     if source_connection_in.short_name not in SUPPORTED_CONTINUOUS_SOURCES:
         raise HTTPException(
             status_code=422,
@@ -439,13 +446,6 @@ async def _determine_cursor_field(
 
 async def _validate_continuous_source_by_short_name(short_name: str) -> None:
     """Validate that the source supports continuous sync (by short_name)."""
-    SUPPORTED_CONTINUOUS_SOURCES = [
-        "github",
-        "google_drive",
-        "outlook_mail",
-        "postgresql",
-    ]
-
     if short_name not in SUPPORTED_CONTINUOUS_SOURCES:
         raise HTTPException(
             status_code=422,
