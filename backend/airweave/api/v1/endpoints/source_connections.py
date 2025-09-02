@@ -185,12 +185,8 @@ async def get_source_connection(
     )
 
 
-@router.post(
-    "/create_deprecated",
-    response_model=schemas.SourceConnection,
-    deprecated=True,
-)
-async def create_source_connection_deprecated(
+@router.post("/", response_model=schemas.SourceConnection)
+async def create_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_in: schemas.SourceConnectionCreate = Body(...),
@@ -198,7 +194,7 @@ async def create_source_connection_deprecated(
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
 ) -> schemas.SourceConnection:
-    """[DEPRECATED] Create a new source connection to sync data into your collection."""
+    """Create a new source connection to sync data into your collection."""
     await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
 
     if source_connection_in.collection is None:
@@ -287,132 +283,6 @@ async def create_source_connection_deprecated(
             await guard_rail.increment(ActionType.SYNCS)
 
     return source_connection
-
-
-@router.post("/create", response_model=SourceConnectionInitiateResponse)
-async def create_source_connection(
-    *,
-    db: AsyncSession = Depends(deps.get_db),
-    source_connection_in: SourceConnectionInitiate = Body(...),
-    ctx: ApiContext = Depends(deps.get_context),
-    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
-    background_tasks: BackgroundTasks,
-) -> SourceConnectionInitiateResponse:
-    """Unified creation.
-
-    - If non-OAuth or token injection ⇒ create now and return the SourceConnection
-    - If OAuth ⇒ return BACKEND proxy auth URL (authorize/{code})
-    """
-    # ---- Parity with create_source_connection_initiate: preflight checks
-    await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
-    creating_new_collection = source_connection_in.collection is None
-    if creating_new_collection:
-        await guard_rail.is_allowed(ActionType.COLLECTIONS)
-
-    if source_connection_in.sync_immediately:
-        await guard_rail.is_allowed(ActionType.SYNCS)
-        await guard_rail.is_allowed(ActionType.ENTITIES)
-
-    # ---- Same provider blocklist behavior as old create_source_connection
-    SOURCES_BLOCKED_FROM_AUTH_PROVIDERS = [
-        "confluence",
-        "jira",
-        "bitbucket",
-        "github",
-        "ctti",
-        "monday",
-        "postgresql",
-    ]
-    if (
-        source_connection_in.auth_provider
-        and source_connection_in.short_name in SOURCES_BLOCKED_FROM_AUTH_PROVIDERS
-    ):
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"The {source_connection_in.short_name.title()} source cannot currently be created"
-                f" using auth providers. Please provide credentials directly using the "
-                f" 'auth_fields' parameter instead."
-            ),
-        )
-
-    # ---- Service performs either immediate create or returns an auth URL + initiation id
-    (
-        init_id,
-        auth_url,
-        source_connection,
-        sync_job,
-    ) = await source_connection_service.initiate_connection(
-        db=db, source_connection_in=source_connection_in, ctx=ctx
-    )
-
-    # ---- OAuth browser flow path: an auth_url was generated and a shell was created.
-    # Guard rail increments for this flow will happen in the /callback endpoint.
-    if auth_url:
-        return SourceConnectionInitiateResponse(
-            connection_init_id=init_id,
-            authentication_url=auth_url,
-            status="pending",
-            source_connection=source_connection,  # Return the newly created shell
-        )
-
-    # ---- Immediate creation path: no auth_url, but a final connection object was created.
-    elif source_connection:
-        await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
-        if creating_new_collection:
-            await guard_rail.increment(ActionType.COLLECTIONS)
-
-        # Kick off initial sync now if requested (same as create_source_connection_deprecated)
-        if sync_job and source_connection_in.sync_immediately:
-            async with get_db_context() as db2:
-                sync_dag = await sync_service.get_sync_dag(
-                    db=db2, sync_id=source_connection.sync_id, ctx=ctx
-                )
-
-                sync = await crud.sync.get(db=db2, id=source_connection.sync_id, ctx=ctx)
-                sync = schemas.Sync.model_validate(sync, from_attributes=True)
-                sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
-                collection = await crud.collection.get_by_readable_id(
-                    db=db2, readable_id=source_connection.collection, ctx=ctx
-                )
-                collection = schemas.Collection.model_validate(collection, from_attributes=True)
-
-                source_connection_with_auth = await source_connection_service.get_source_connection(
-                    db=db2,
-                    source_connection_id=source_connection.id,
-                    show_auth_fields=True,
-                    ctx=ctx,
-                )
-
-                if await temporal_service.is_temporal_enabled():
-                    await temporal_service.run_source_connection_workflow(
-                        sync=sync,
-                        sync_dag=sync_dag,
-                        collection=collection,
-                        source_connection=source_connection_with_auth,
-                    )
-                else:
-                    background_tasks.add_task(
-                        sync_service.run,
-                        sync,
-                        sync_job,
-                        sync_dag,
-                        collection,
-                        source_connection_with_auth,
-                        ctx,
-                    )
-
-                await guard_rail.increment(ActionType.SYNCS)
-
-        return SourceConnectionInitiateResponse(
-            connection_init_id=init_id,
-            authentication_url=auth_url,
-            status="created",
-            source_connection=source_connection,
-        )
-
-    # Fallback in case something unexpected happens where no auth_url and no source_connection exist
-    raise HTTPException(status_code=500, detail="Could not create source connection.")
 
 
 @router.post("/internal/", response_model=schemas.SourceConnection)
@@ -989,7 +859,7 @@ async def create_credentials_from_authorization_code(
     )
 
 
-@router.post("/initiate", response_model=SourceConnectionInitiateResponse, deprecated=True)
+@router.post("/initiate", response_model=SourceConnectionInitiateResponse)
 async def initiate_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
@@ -998,14 +868,121 @@ async def initiate_source_connection(
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
 ) -> SourceConnectionInitiateResponse:
-    """[DEPRECATED] Use POST /create. This route forwards to the new unified create."""
-    return await create_source_connection(
-        db=db,
-        source_connection_in=source_connection_in,
-        ctx=ctx,
-        guard_rail=guard_rail,
-        background_tasks=background_tasks,
+    """Unified initiation.
+
+    - If non-OAuth or token injection ⇒ create now and return the SourceConnection
+    - If OAuth ⇒ return BACKEND proxy auth URL (authorize/{code})
+    """
+    # ---- Parity with create_source_connection: preflight checks
+    await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
+    creating_new_collection = source_connection_in.collection is None
+    if creating_new_collection:
+        await guard_rail.is_allowed(ActionType.COLLECTIONS)
+
+    if source_connection_in.sync_immediately:
+        await guard_rail.is_allowed(ActionType.SYNCS)
+        await guard_rail.is_allowed(ActionType.ENTITIES)
+
+    # ---- Same provider blocklist behavior as create_source_connection
+    SOURCES_BLOCKED_FROM_AUTH_PROVIDERS = [
+        "confluence",
+        "jira",
+        "bitbucket",
+        "github",
+        "ctti",
+        "monday",
+        "postgresql",
+    ]
+    if (
+        source_connection_in.auth_provider
+        and source_connection_in.short_name in SOURCES_BLOCKED_FROM_AUTH_PROVIDERS
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"The {source_connection_in.short_name.title()} source cannot currently be created"
+                f" using auth providers. Please provide credentials directly using the "
+                f" 'auth_fields' parameter instead."
+            ),
+        )
+
+    # ---- Service performs either immediate create or returns an auth URL + initiation id
+    (
+        init_id,
+        auth_url,
+        source_connection,
+        sync_job,
+    ) = await source_connection_service.initiate_connection(
+        db=db, source_connection_in=source_connection_in, ctx=ctx
     )
+
+    # ---- OAuth browser flow path: an auth_url was generated and a shell was created.
+    # Guard rail increments for this flow will happen in the /callback endpoint.
+    if auth_url:
+        return SourceConnectionInitiateResponse(
+            connection_init_id=init_id,
+            authentication_url=auth_url,
+            status="pending",
+            source_connection=source_connection,  # Return the newly created shell
+        )
+
+    # ---- Immediate creation path: no auth_url, but a final connection object was created.
+    elif source_connection:
+        await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
+        if creating_new_collection:
+            await guard_rail.increment(ActionType.COLLECTIONS)
+
+        # Kick off initial sync now if requested (same as create_source_connection)
+        if sync_job and source_connection_in.sync_immediately:
+            async with get_db_context() as db2:
+                sync_dag = await sync_service.get_sync_dag(
+                    db=db2, sync_id=source_connection.sync_id, ctx=ctx
+                )
+
+                sync = await crud.sync.get(db=db2, id=source_connection.sync_id, ctx=ctx)
+                sync = schemas.Sync.model_validate(sync, from_attributes=True)
+                sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+                collection = await crud.collection.get_by_readable_id(
+                    db=db2, readable_id=source_connection.collection, ctx=ctx
+                )
+                collection = schemas.Collection.model_validate(collection, from_attributes=True)
+
+                source_connection_with_auth = await source_connection_service.get_source_connection(
+                    db=db2,
+                    source_connection_id=source_connection.id,
+                    show_auth_fields=True,
+                    ctx=ctx,
+                )
+
+                if await temporal_service.is_temporal_enabled():
+                    await temporal_service.run_source_connection_workflow(
+                        sync=sync,
+                        sync_dag=sync_dag,
+                        collection=collection,
+                        source_connection=source_connection_with_auth,
+                    )
+                else:
+                    background_tasks.add_task(
+                        sync_service.run,
+                        sync,
+                        sync_job,
+                        sync_dag,
+                        collection,
+                        source_connection_with_auth,
+                        ctx,
+                    )
+
+                await guard_rail.increment(ActionType.SYNCS)
+
+        return SourceConnectionInitiateResponse(
+            connection_init_id=init_id,
+            authentication_url=auth_url,
+            status="created",
+            source_connection=source_connection,
+        )
+
+    # Fallback in case something unexpected happens where no auth_url and no source_connection exist
+    raise HTTPException(status_code=500, detail="Could not initiate source connection.")
 
 
 @router.get("/authorize/{code}")
