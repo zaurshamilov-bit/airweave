@@ -80,7 +80,7 @@ class GoogleDriveSource(BaseSource):
 
         try:
             try:
-                self.logger.info(f"API GET {url} params={params if params else {}}")
+                self.logger.debug(f"API GET {url} params={params if params else {}}")
             except Exception:
                 pass
             # Add a longer timeout (30 seconds)
@@ -144,7 +144,7 @@ class GoogleDriveSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url, params=params)
             drives = data.get("drives", [])
-            self.logger.info(f"List drives page: returned {len(drives)} drives")
+            self.logger.debug(f"List drives page: returned {len(drives)} drives")
             for drive_obj in drives:
                 yield drive_obj
 
@@ -205,7 +205,7 @@ class GoogleDriveSource(BaseSource):
         if drive_id:
             params["driveId"] = drive_id
 
-        self.logger.info(
+        self.logger.debug(
             f"List files start: corpora={corpora}, include_all_drives={include_all_drives}, "
             f"drive_id={drive_id}, base_q={params['q']}, context={context}"
         )
@@ -226,7 +226,7 @@ class GoogleDriveSource(BaseSource):
             total_files_from_api += files_count
 
             # Log how many files the API returned in this page
-            self.logger.info(
+            self.logger.debug(
                 f"\n\nGoogle Drive API returned {files_count} files in page {page_count} "
                 f"({context})\n\n"
             )
@@ -242,7 +242,7 @@ class GoogleDriveSource(BaseSource):
             url = "https://www.googleapis.com/drive/v3/files"
 
         # Log total count when done
-        self.logger.info(
+        self.logger.debug(
             f"\n\nGoogle Drive API returned {total_files_from_api} total files across "
             f"{page_count} pages ({context})\n\n"
         )
@@ -281,7 +281,7 @@ class GoogleDriveSource(BaseSource):
         if drive_id:
             params["driveId"] = drive_id
 
-        self.logger.info(
+        self.logger.debug(
             (
                 "List folders start: parent_id=%s, corpora=%s, drive_id=%s, q=%s"
                 % (parent_id, corpora, drive_id, q)
@@ -291,7 +291,7 @@ class GoogleDriveSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url, params=params)
             folders = data.get("files", [])
-            self.logger.info(
+            self.logger.debug(
                 f"List folders page: parent_id={parent_id}, returned {len(folders)} folders"
             )
             for folder in folders:
@@ -343,14 +343,14 @@ class GoogleDriveSource(BaseSource):
         if drive_id:
             params["driveId"] = drive_id
 
-        self.logger.info(
+        self.logger.debug(
             f"List files-in-folder start: parent_id={parent_id}, name_token={name_token}, q={q}"
         )
 
         while url:
             data = await self._get_with_auth(client, url, params=params)
             files_in_page = data.get("files", [])
-            self.logger.info(
+            self.logger.debug(
                 (
                     "List files-in-folder page: parent_id=%s, returned %d files"
                     % (parent_id, len(files_in_page))
@@ -398,7 +398,7 @@ class GoogleDriveSource(BaseSource):
 
         name_token = self._extract_name_token_from_glob(filename_glob) if filename_glob else None
 
-        self.logger.info(
+        self.logger.debug(
             f"Traverse start: roots={len(start_folder_ids)}, filename_glob={filename_glob}, "
             f"name_token={name_token}"
         )
@@ -407,7 +407,7 @@ class GoogleDriveSource(BaseSource):
         while queue:
             folder_id = queue.popleft()
 
-            self.logger.info(f"Scanning folder: {folder_id}")
+            self.logger.debug(f"Scanning folder: {folder_id}")
             # Files directly in this folder
             async for file_obj in self._list_files_in_folder(
                 client, corpora, include_all_drives, drive_id, folder_id, name_token
@@ -415,14 +415,14 @@ class GoogleDriveSource(BaseSource):
                 file_name = file_obj.get("name", "")
                 if filename_glob:
                     matched = fnmatch.fnmatch(file_name, filename_glob)
-                    self.logger.info(
+                    self.logger.debug(
                         f"Encountered file: {file_name} ({file_obj.get('id')}) "
                         f"matched={matched} pattern={filename_glob}"
                     )
                     if matched:
                         yield file_obj
                 else:
-                    self.logger.info(
+                    self.logger.debug(
                         f"Encountered file: {file_name} ({file_obj.get('id')}) matched=True"
                     )
                     yield file_obj
@@ -431,7 +431,7 @@ class GoogleDriveSource(BaseSource):
             async for subfolder in self._list_folders(
                 client, corpora, include_all_drives, drive_id, folder_id
             ):
-                self.logger.info(
+                self.logger.debug(
                     f"Enqueue subfolder: {subfolder.get('name')} ({subfolder.get('id')})"
                 )
                 queue.append(subfolder["id"])
@@ -451,7 +451,7 @@ class GoogleDriveSource(BaseSource):
         The last segment may be a filename glob; if omitted, includes all files recursively.
         """
         # Normalize pattern and split
-        self.logger.info(f"Resolve pattern: '{pattern}'")
+        self.logger.debug(f"Resolve pattern: '{pattern}'")
         norm = pattern.strip().strip("/")
         segments = norm.split("/") if norm else []
 
@@ -465,7 +465,7 @@ class GoogleDriveSource(BaseSource):
         if "." in last or "*" in last or "?" in last:
             filename_glob = last
             folder_segments = segments[:-1]
-        self.logger.info(
+        self.logger.debug(
             f"Pattern segments: folders={folder_segments}, filename_glob={filename_glob}"
         )
 
@@ -503,7 +503,7 @@ class GoogleDriveSource(BaseSource):
                             break
                         params["pageToken"] = npt
                         url_iter = url
-                self.logger.info(
+                self.logger.debug(
                     (
                         "find_folders_by_name: name='%s' under %d parents -> %d matches"
                         % (name, len(parent_ids), len(found))
@@ -538,7 +538,7 @@ class GoogleDriveSource(BaseSource):
                         break
                     params["pageToken"] = npt
                     url_iter = url
-                self.logger.info(
+                self.logger.debug(
                     f"find_folders_by_name: global name='{name}' -> {len(found)} matches"
                 )
             return found
@@ -553,7 +553,7 @@ class GoogleDriveSource(BaseSource):
         # If no folder segments (pattern was just filename glob) return empty roots
         if not folder_segments:
             return [], filename_glob or "*"
-        self.logger.info(
+        self.logger.debug(
             f"Resolved roots: count={len(parent_ids or [])}, filename_glob={filename_glob}"
         )
         return parent_ids or [], filename_glob
@@ -661,11 +661,11 @@ class GoogleDriveSource(BaseSource):
                     # Process the entity if it has a download URL
                     if file_entity.download_url:
                         # Note: process_file_entity now uses the token manager automatically
-                        self.logger.info(
+                        self.logger.debug(
                             f"Processing file entity: {file_entity.file_id} '{file_entity.name}'"
                         )
                         processed_entity = await self.process_file_entity(file_entity=file_entity)
-                        self.logger.info(
+                        self.logger.debug(
                             f"Processed result: {'yielded' if processed_entity else 'skipped'}"
                         )
 
@@ -696,7 +696,7 @@ class GoogleDriveSource(BaseSource):
         try:
             async with httpx.AsyncClient() as client:
                 patterns: List[str] = getattr(self, "include_patterns", []) or []
-                self.logger.info(f"Include patterns: {patterns}")
+                self.logger.debug(f"Include patterns: {patterns}")
 
                 # 1) Always yield shared drives as entities
                 try:
@@ -784,7 +784,7 @@ class GoogleDriveSource(BaseSource):
                             ):
                                 name = file_obj.get("name", "")
                                 matched = _fn.fnmatch(name, pat)
-                                self.logger.info(
+                                self.logger.debug(
                                     f"Encountered file: {name} ({file_obj.get('id')}) "
                                     f"matched={matched} "
                                     f"pattern={pat}"

@@ -31,7 +31,7 @@ async def get_cpu_executor() -> ThreadPoolExecutor:
             _cpu_executor = ThreadPoolExecutor(
                 max_workers=max_workers, thread_name_prefix="airweave-cpu"
             )
-            logger.info(
+            logger.debug(
                 f"🔧 CPU_EXECUTOR_INIT Created shared CPU executor with {max_workers} workers"
             )
 
@@ -130,11 +130,13 @@ async def compute_entity_hash_async(entity: Any) -> str:
                     else None
                 )
                 if local_path and os.path.exists(local_path):
-                    logger.info(f"🔢 HASH_FILE Branch: Using file content hash | path={local_path}")
+                    logger.debug(
+                        f"HASH_FILE Branch: Using file content hash | path={local_path}"
+                    )
                     content_hash = await compute_file_hash_async(local_path)
                     # Cache the content hash in system metadata for reuse in this run
                     entity.airweave_system_metadata.hash = content_hash
-                    logger.info(
+                    logger.debug(
                         f"🔢 HASH_FILE Result: sha256={content_hash} | "
                         f"size={getattr(entity.airweave_system_metadata, 'total_size', 'n/a')}"
                     )
@@ -147,18 +149,22 @@ async def compute_entity_hash_async(entity: Any) -> str:
                     else None
                 )
                 if checksum:
-                    logger.info("🔢 HASH_FILE Fallback: using cached checksum from system metadata")
+                    logger.debug(
+                        "🔢 HASH_FILE Fallback: using cached checksum from system metadata"
+                    )
                     content_hash = checksum
 
             if content_hash is None:
                 md5 = getattr(entity, "md5_checksum", None)
                 if md5:
-                    logger.info("🔢 HASH_FILE Fallback: using md5_checksum field from entity")
+                    logger.debug("🔢 HASH_FILE Fallback: using md5_checksum field from entity")
                     content_hash = md5
 
             # Last-resort content hash when nothing else available
             if content_hash is None:
-                logger.info("🔢 HASH_FILE Fallback: no content data; using pseudo-content sentinel")
+                logger.debug(
+                    "🔢 HASH_FILE Fallback: no content data; using pseudo-content sentinel"
+                )
                 content_hash = "no-content"
 
             # Compose a final action hash from content hash PLUS selected stable metadata
@@ -177,7 +183,7 @@ async def compute_entity_hash_async(entity: Any) -> str:
 
             import json as _json
 
-            logger.info(
+            logger.debug(
                 "🔢 HASH_FILE_COMPOSITE Using content hash + metadata subset: "
                 f"keys={list(composite.keys())}"
             )
@@ -232,7 +238,7 @@ async def compute_entity_hash_async(entity: Any) -> str:
         try:
             import json as _json
 
-            logger.info(
+            logger.debug(
                 "\n\n🔢 HASH_FIELDS "
                 f"all={sorted(all_fields)} "
                 f"excluded_meta={sorted(all_fields & metadata_fields)} "
@@ -244,9 +250,9 @@ async def compute_entity_hash_async(entity: Any) -> str:
                 "airweave_system_metadata" not in content_data
                 and "airweave_system_metadata" in data
             ):
-                logger.info("🔢 HASH_NESTED_EXCLUDED airweave_system_metadata excluded from hash")
+                logger.debug("🔢 HASH_NESTED_EXCLUDED airweave_system_metadata excluded from hash")
 
-            logger.info(
+            logger.debug(
                 "\n\n🔢 HASH_CONTENT_DATA "
                 f"payload={_json.dumps(content_data, sort_keys=True, default=str)}\n\n"
             )
@@ -261,7 +267,7 @@ async def compute_entity_hash_async(entity: Any) -> str:
 
         digest = hashlib.sha256(json_str.encode()).hexdigest()
         try:
-            logger.info(
+            logger.debug(
                 f"🔢 HASH_JSON len={len(json_str)} sha256={digest} "
                 f"preview={json_str[:500]}{'...' if len(json_str) > 500 else ''}"
             )
