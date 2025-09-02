@@ -130,9 +130,7 @@ async def compute_entity_hash_async(entity: Any) -> str:
                     else None
                 )
                 if local_path and os.path.exists(local_path):
-                    logger.debug(
-                        f"HASH_FILE Branch: Using file content hash | path={local_path}"
-                    )
+                    logger.debug(f"HASH_FILE Branch: Using file content hash | path={local_path}")
                     content_hash = await compute_file_hash_async(local_path)
                     # Cache the content hash in system metadata for reuse in this run
                     entity.airweave_system_metadata.hash = content_hash
