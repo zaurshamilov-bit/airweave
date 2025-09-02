@@ -15,6 +15,7 @@ MONKE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/monke" && pwd)"
 VENV_DIR="${MONKE_DIR}/venv"
 LOGS_DIR="${MONKE_DIR}/logs"
 AIRWEAVE_API_URL="${AIRWEAVE_API_URL:-http://localhost:8001}"
+AZURE_KEY_VAULT_URL="${AZURE_KEY_VAULT_URL:-}"
 
 # Usage function
 usage() {
@@ -36,6 +37,7 @@ ${BOLD}Examples:${NC}
 
 ${BOLD}Environment:${NC}
     AIRWEAVE_API_URL                    Backend URL (default: http://localhost:8001)
+    AZURE_KEY_VAULT_URL                 Azure Key Vault URL (optional, for secret management)
     MONKE_MAX_PARALLEL                  Max parallel tests (default: 5)
     MONKE_ENV_FILE                      Environment file (default: monke/env.test)
     MONKE_NO_VENV                       Skip venv setup (if set)
@@ -101,9 +103,22 @@ setup_venv() {
         log_step "Installing dependencies..."
         pip install --quiet --upgrade pip
         pip install --quiet -r "${MONKE_DIR}/requirements.txt"
+
+        # Install Azure dependencies if Key Vault is configured
+        if [[ -n "$AZURE_KEY_VAULT_URL" ]]; then
+            log_step "Installing Azure Key Vault dependencies..."
+            pip install --quiet azure-keyvault-secrets azure-identity
+        fi
+
         log_success "Dependencies installed"
     else
         log_info "Dependencies already installed"
+
+        # Check Azure dependencies if Key Vault is configured
+        if [[ -n "$AZURE_KEY_VAULT_URL" ]] && ! python -c "import azure.keyvault.secrets" 2>/dev/null; then
+            log_step "Installing Azure Key Vault dependencies..."
+            pip install --quiet azure-keyvault-secrets azure-identity
+        fi
     fi
 }
 

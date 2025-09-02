@@ -23,6 +23,7 @@ except ImportError:
 from monke.core import events
 from monke.core.runner import TestRunner
 from monke.utils.logging import get_logger
+from monke.auth.keyvault_adapter import load_secrets_from_keyvault
 
 # Check if we're in CI environment
 IS_CI = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
@@ -308,8 +309,16 @@ Examples:
 
     args = parser.parse_args()
 
-    # Load environment variables
-    if load_dotenv and not IS_CI:
+    # Load secrets from Azure Key Vault first (if configured)
+    if os.getenv("AZURE_KEY_VAULT_URL"):
+        print("🔐 Azure Key Vault URL detected, loading secrets...")
+        if load_secrets_from_keyvault():
+            print("✅ Successfully loaded secrets from Azure Key Vault")
+        else:
+            print("⚠️  Failed to load secrets from Key Vault, falling back to environment")
+
+    # Load environment variables (if not in CI and not using Key Vault)
+    if load_dotenv and not IS_CI and not os.getenv("AZURE_KEY_VAULT_URL"):
         env_path = Path(__file__).parent / args.env
         if env_path.exists():
             load_dotenv(env_path, override=True)
