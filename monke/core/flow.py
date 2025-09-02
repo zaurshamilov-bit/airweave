@@ -213,15 +213,38 @@ class TestFlow:
             self.logger.info("🧹 Cleaning up test environment")
             await self._emit_event("cleanup_started")
 
+            # Try to delete source connection if it exists
+            # Note: It may already be deleted if the collection was deleted first
             if hasattr(self.config, "_source_connection_id"):
-                self.config._airweave_client.source_connections.delete(
-                    self.config._source_connection_id
-                )
-                self.logger.info("✅ Deleted source connection")
+                try:
+                    self.config._airweave_client.source_connections.delete(
+                        self.config._source_connection_id
+                    )
+                    self.logger.info("✅ Deleted source connection")
+                except Exception as e:
+                    # Check if it's a 404 error (already deleted)
+                    if "404" in str(e) or "not found" in str(e).lower():
+                        self.logger.info(
+                            "ℹ️  Source connection already deleted (likely with collection)"
+                        )
+                    else:
+                        # Re-raise if it's a different error
+                        raise
 
+            # Try to delete collection if it exists
             if hasattr(self.config, "_collection_readable_id"):
-                self.config._airweave_client.collections.delete(self.config._collection_readable_id)
-                self.logger.info("✅ Deleted test collection")
+                try:
+                    self.config._airweave_client.collections.delete(
+                        self.config._collection_readable_id
+                    )
+                    self.logger.info("✅ Deleted test collection")
+                except Exception as e:
+                    # Check if it's a 404 error (already deleted)
+                    if "404" in str(e) or "not found" in str(e).lower():
+                        self.logger.info("ℹ️  Collection already deleted")
+                    else:
+                        # Re-raise if it's a different error
+                        raise
 
             self.logger.info("✅ Test environment cleanup completed")
             await self._emit_event("cleanup_completed")
