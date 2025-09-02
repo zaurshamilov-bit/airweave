@@ -1,6 +1,5 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from typing import Dict, Any
 
@@ -16,11 +15,6 @@ app.add_middleware(
 )
 
 manager = RunManager()
-
-# Serve static assets (logos, gifs) if present
-_static = Path(__file__).parent / "static"
-if _static.exists():
-    app.mount("/", StaticFiles(directory=str(_static), html=False), name="static")
 
 
 def _list_configs() -> Dict[str, Any]:
@@ -49,6 +43,7 @@ async def list_runs():
             "started_at": r.started_at,
             "ended_at": r.ended_at,
         }
+
     return {"runs": [to_summary(r) for r in manager.list_runs()]}
 
 
@@ -120,6 +115,7 @@ async def ws_runs(ws: WebSocket):
     await ws.accept()
     # Send initial snapshot so UI updates immediately
     try:
+
         def to_summary(r):
             return {
                 "id": r.id,
@@ -131,7 +127,10 @@ async def ws_runs(ws: WebSocket):
                 "started_at": r.started_at,
                 "ended_at": r.ended_at,
             }
-        await ws.send_json({"bootstrap": True, "runs": [to_summary(r) for r in manager.list_runs()]})
+
+        await ws.send_json(
+            {"bootstrap": True, "runs": [to_summary(r) for r in manager.list_runs()]}
+        )
     except Exception:
         pass
     # Local run-state events only

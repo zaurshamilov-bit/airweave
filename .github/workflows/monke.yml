@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'monke/**'
-      - '.github/workflows/**'
-      - 'docker/**'
-      - 'backend/**'
-      - 'frontend/**'
-      - 'start.sh'
+      - "monke/**"
+      - ".github/workflows/**"
+      - "docker/**"
+      - "backend/**"
+      - "frontend/**"
+      - "start.sh"
   push:
-    branches: [ main, feat/monke ]
+    branches: [main, feat/monke]
 
 concurrency:
   group: monke-${{ github.ref }}
@@ -101,7 +101,6 @@ jobs:
             backend:
               image: ${BACKEND_TAG}
               pull_policy: never
-              build: null
               environment:
                 - OPENAI_API_KEY=${OPENAI_API_KEY}
                 - MISTRAL_API_KEY=${MISTRAL_API_KEY}
@@ -114,7 +113,6 @@ jobs:
             temporal-worker:
               image: ${TEMPORAL_WORKER_TAG}
               pull_policy: never
-              build: null
               environment:
                 - OPENAI_API_KEY=${OPENAI_API_KEY}
                 - MISTRAL_API_KEY=${MISTRAL_API_KEY}
@@ -127,15 +125,14 @@ jobs:
             frontend:
               image: ${FRONTEND_TAG}
               pull_policy: never
-              build: null
           YAML
 
       # Python deps (cached)
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
           cache-dependency-path: monke/requirements.txt
 
       - name: Install Python deps

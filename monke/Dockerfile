@@ -11,6 +11,8 @@ WORKDIR /ui
 COPY monke/frontend/package.json monke/frontend/package-lock.json* ./
 RUN npm install --no-audit --no-fund
 COPY monke/frontend ./
+# Copy icons from main Airweave frontend
+COPY frontend/src/components/icons/apps ./public/icons
 RUN npm run build
 
 # Final image

@@ -73,3 +73,6 @@ coverage.xml
 *.temp
 temp/
 tmp/
+
+# Frontend icons (copied from main Airweave frontend)
+frontend/public/icons/
