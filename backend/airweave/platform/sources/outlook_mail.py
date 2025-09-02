@@ -757,7 +757,10 @@ class OutlookMailSource(BaseSource):
 
         try:
             # Construct the delta URL using the token
-            url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages/delta?$deltatoken={delta_token}"
+            url = (
+                f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages/delta?"
+                f"$deltatoken={delta_token}"
+            )
             while url:
                 self.logger.debug(f"Fetching delta changes from: {url}")
                 data = await self._get_with_auth(client, url)
@@ -1138,7 +1141,10 @@ class OutlookMailSource(BaseSource):
                         entity_count += 1
                         entity_type = type(entity).__name__
                         self.logger.info(
-                            f"Yielding delta entity #{entity_count}: {entity_type} with ID {entity.entity_id}"
+                            (
+                                f"Yielding delta entity #{entity_count}: {entity_type} "
+                                f"with ID {entity.entity_id}"
+                            )
                         )
                         yield entity
                 else:
@@ -1151,7 +1157,10 @@ class OutlookMailSource(BaseSource):
                         entity_count += 1
                         entity_type = type(entity).__name__
                         self.logger.info(
-                            f"Yielding full sync entity #{entity_count}: {entity_type} with ID {entity.entity_id}"
+                            (
+                                f"Yielding full sync entity #{entity_count}: {entity_type} "
+                                f"with ID {entity.entity_id}"
+                            )
                         )
                         yield entity
 
