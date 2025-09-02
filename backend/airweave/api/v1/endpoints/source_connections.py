@@ -30,7 +30,6 @@ from airweave.crud import redirect_session
 from airweave.db.session import get_db_context
 from airweave.schemas.source_connection import (
     SourceConnectionInitiate,
-    SourceConnectionInitiateResponse,
 )
 
 router = TrailingSlashRouter()
@@ -859,7 +858,7 @@ async def create_credentials_from_authorization_code(
     )
 
 
-@router.post("/initiate", response_model=SourceConnectionInitiateResponse)
+@router.post("/initiate", response_model=schemas.SourceConnection)
 async def initiate_source_connection(
     *,
     db: AsyncSession = Depends(deps.get_db),
@@ -867,19 +866,24 @@ async def initiate_source_connection(
     ctx: ApiContext = Depends(deps.get_context),
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
-) -> SourceConnectionInitiateResponse:
+) -> schemas.SourceConnection:
     """Unified initiation.
 
-    - If non-OAuth or token injection ⇒ create now and return the SourceConnection
-    - If OAuth ⇒ return BACKEND proxy auth URL (authorize/{code})
+    - Always returns a SourceConnection.
+      * OAuth2 (no tokens): returns a shell with is_authenticated=false + auth_url
+      * All other flows: returns a fully-authenticated SourceConnection
     """
-    # ---- Parity with create_source_connection: preflight checks
+    # ---- Preflight checks (lighter for OAuth shells)
     await guard_rail.is_allowed(ActionType.SOURCE_CONNECTIONS)
     creating_new_collection = source_connection_in.collection is None
     if creating_new_collection:
         await guard_rail.is_allowed(ActionType.COLLECTIONS)
 
-    if source_connection_in.sync_immediately:
+    # Only require SYNCS/ENTITIES if we know we'll run immediately
+    will_run_now = source_connection_in.auth_mode in {"direct_auth", "external_provider"} or (
+        source_connection_in.auth_mode == "oauth2" and source_connection_in.token_inject is not None
+    )
+    if will_run_now and source_connection_in.sync_immediately:
         await guard_rail.is_allowed(ActionType.SYNCS)
         await guard_rail.is_allowed(ActionType.ENTITIES)
 
@@ -894,7 +898,7 @@ async def initiate_source_connection(
         "postgresql",
     ]
     if (
-        source_connection_in.auth_provider
+        source_connection_in.auth_mode == "external_provider"
         and source_connection_in.short_name in SOURCES_BLOCKED_FROM_AUTH_PROVIDERS
     ):
         raise HTTPException(
@@ -906,80 +910,61 @@ async def initiate_source_connection(
             ),
         )
 
-    # ---- Service performs either immediate create or returns an auth URL + initiation id
-    (
-        init_id,
-        auth_url,
-        source_connection,
-        sync_job,
-    ) = await source_connection_service.initiate_connection(
+    # ---- Initiate
+    source_connection, sync_job = await source_connection_service.initiate_connection(
         db=db, source_connection_in=source_connection_in, ctx=ctx
     )
 
-    # ---- Immediate creation path (direct credentials or token injection for OAuth)
-    if source_connection:
-        await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
-        if creating_new_collection:
-            await guard_rail.increment(ActionType.COLLECTIONS)
+    # ---- Guard-rail increments
+    await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
+    if creating_new_collection:
+        await guard_rail.increment(ActionType.COLLECTIONS)
 
-        # Kick off initial sync now if requested (same as create_source_connection)
-        if sync_job and source_connection_in.sync_immediately:
-            async with get_db_context() as db2:
-                sync_dag = await sync_service.get_sync_dag(
-                    db=db2, sync_id=source_connection.sync_id, ctx=ctx
-                )
+    # ---- If we actually created credentials/connection/sync and should run now, dispatch it
+    if sync_job and will_run_now and source_connection_in.sync_immediately:
+        async with get_db_context() as db2:
+            sync_dag = await sync_service.get_sync_dag(
+                db=db2, sync_id=source_connection.sync_id, ctx=ctx
+            )
 
-                sync = await crud.sync.get(db=db2, id=source_connection.sync_id, ctx=ctx)
-                sync = schemas.Sync.model_validate(sync, from_attributes=True)
-                sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
-                collection = await crud.collection.get_by_readable_id(
-                    db=db2, readable_id=source_connection.collection, ctx=ctx
-                )
-                collection = schemas.Collection.model_validate(collection, from_attributes=True)
+            sync = await crud.sync.get(db=db2, id=source_connection.sync_id, ctx=ctx)
+            sync = schemas.Sync.model_validate(sync, from_attributes=True)
+            sync_dag = schemas.SyncDag.model_validate(sync_dag, from_attributes=True)
+            collection = await crud.collection.get_by_readable_id(
+                db=db2, readable_id=source_connection.collection, ctx=ctx
+            )
+            collection = schemas.Collection.model_validate(collection, from_attributes=True)
 
-                source_connection_with_auth = await source_connection_service.get_source_connection(
-                    db=db2,
-                    source_connection_id=source_connection.id,
-                    show_auth_fields=True,
+            sc_with_auth = await source_connection_service.get_source_connection(
+                db=db2,
+                source_connection_id=source_connection.id,
+                show_auth_fields=True,
+                ctx=ctx,
+            )
+
+            if await temporal_service.is_temporal_enabled():
+                await temporal_service.run_source_connection_workflow(
+                    sync=sync,
+                    sync_job=sync_job,
+                    sync_dag=sync_dag,
+                    collection=collection,
+                    source_connection=sc_with_auth,
                     ctx=ctx,
                 )
+            else:
+                background_tasks.add_task(
+                    sync_service.run,
+                    sync,
+                    sync_job,
+                    sync_dag,
+                    collection,
+                    sc_with_auth,
+                    ctx,
+                )
 
-                if await temporal_service.is_temporal_enabled():
-                    await temporal_service.run_source_connection_workflow(
-                        sync=sync,
-                        sync_job=sync_job,
-                        sync_dag=sync_dag,
-                        collection=collection,
-                        source_connection=source_connection_with_auth,
-                        ctx=ctx,
-                    )
-                else:
-                    background_tasks.add_task(
-                        sync_service.run,
-                        sync,
-                        sync_job,
-                        sync_dag,
-                        collection,
-                        source_connection_with_auth,
-                        ctx,
-                    )
+            await guard_rail.increment(ActionType.SYNCS)
 
-                await guard_rail.increment(ActionType.SYNCS)
-
-        return SourceConnectionInitiateResponse(
-            connection_init_id=None,
-            authentication_url=None,
-            status="created",
-            source_connection=source_connection,
-        )
-
-    # ---- OAuth browser flow path: settings have been persisted by the service
-    return SourceConnectionInitiateResponse(
-        connection_init_id=init_id,
-        authentication_url=auth_url,  # <-- backend proxy URL
-        status="pending",
-        source_connection=None,
-    )
+    return source_connection
 
 
 @router.get("/authorize/{code}")

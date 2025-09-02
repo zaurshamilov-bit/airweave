@@ -111,7 +111,6 @@ from .source_connection import (
     SourceConnectionCreateWithWhiteLabel,
     SourceConnectionInDBBase,
     SourceConnectionInitiate,
-    SourceConnectionInitiateResponse,
     SourceConnectionListItem,
     SourceConnectionUpdate,
 )

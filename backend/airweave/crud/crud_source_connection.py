@@ -342,5 +342,17 @@ class CRUDSourceConnection(
 
         return source_connections
 
+    # NEW: used by OAuth callback to locate the pending shell
+    async def get_by_oauth_state(
+        self, db: AsyncSession, *, state: str, ctx: ApiContext
+    ) -> Optional[SourceConnection]:
+        """Fetch a SourceConnection by OAuth state, scoped to the caller's org."""
+        query = select(self.model).where(
+            self.model.oauth_state == state,
+            self.model.organization_id == ctx.organization.id,
+        )
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
 
 source_connection = CRUDSourceConnection(SourceConnection)

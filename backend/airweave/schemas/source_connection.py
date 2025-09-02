@@ -663,6 +663,14 @@ class SourceConnection(SourceConnectionInDBBase):
             "Null if no automatic schedule is configured."
         ),
     )
+    # NEW: unified-init response shape
+    is_authenticated: bool = Field(
+        default=False, description="True if OAuth/credentials are present."
+    )
+    auth_url: Optional[str] = Field(
+        default=None,
+        description="When not authenticated, a backend proxy URL to start OAuth. Null otherwise.",
+    )
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -1115,16 +1123,3 @@ class SourceConnectionInitiate(SourceConnectionCreate):
 
         # Valid combination.
         return self
-
-
-class SourceConnectionInitiateResponse(BaseModel):
-    """Response for initiate endpoint.
-
-    - If 'created': source_connection is present and authentication_url is null.
-    - If 'pending': authentication_url is present (visit to authorize).
-    """
-
-    connection_init_id: Optional[UUID] = None
-    authentication_url: Optional[str] = None
-    status: Literal["created", "pending"]
-    source_connection: Optional[SourceConnection] = None
