@@ -359,9 +359,8 @@ class OutlookMailSource(BaseSource):
         async for entity in self._process_folder_messages(client, folder_entity, folder_breadcrumb):
             yield entity
 
-        # Initialize message delta link for this folder if it has items
-        if folder_entity.total_item_count > 0:
-            await self._init_and_store_message_delta_for_folder(client, folder_entity)
+        # Initialize message delta link for this folder regardless of item count
+        await self._init_and_store_message_delta_for_folder(client, folder_entity)
 
         # Recurse into child folders
         async for child_entity in self._process_child_folders(
