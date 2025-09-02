@@ -1,16 +1,12 @@
-# backend/airweave/models/source_connection.py
-
 """Source connection model."""
 
-from datetime import datetime
 from time import sleep
-from typing import TYPE_CHECKING, ClassVar, Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String, Text, event
+from sqlalchemy import JSON, ForeignKey, String, Text, event
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
-from airweave.core.shared_models import SourceConnectionStatus, SyncJobStatus
 from airweave.models._base import OrganizationBase, UserMixin
 
 if TYPE_CHECKING:
@@ -29,8 +25,6 @@ class SourceConnection(OrganizationBase, UserMixin):
     """
 
     __tablename__ = "source_connection"
-    # allow unmapped (non-Mapped[] / ClassVar) attributes without SQLAlchemy trying to map them
-    __allow_unmapped__ = True
 
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -59,27 +53,6 @@ class SourceConnection(OrganizationBase, UserMixin):
         ForeignKey("white_label.id", ondelete="SET NULL"), nullable=True
     )
     # Status is now ephemeral - removed from database model
-
-    # --- authentication + OAuth persisted columns for the flow ---
-    is_authenticated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-
-    # Stored only for OAuth2 browser flows (never returned to clients)
-    oauth_state: Mapped[Optional[str]] = mapped_column(
-        String, unique=True, index=True, nullable=True
-    )
-    oauth_expires_at: Mapped[Optional["datetime"]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    oauth_redirect_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    final_redirect_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # BYOC overrides (temp) — temp_client_secret_enc should be encrypted at rest
-    temp_client_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    temp_client_secret_enc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # Desired sync settings captured at initiate-time (used after callback)
-    pending_sync_immediately: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    pending_cron_schedule: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     # Relationships
     sync: Mapped[Optional["Sync"]] = relationship(
@@ -114,111 +87,6 @@ class SourceConnection(OrganizationBase, UserMixin):
         viewonly=True,
         lazy="noload",
     )
-
-    # ---------------------------------------------------------------------
-    # Ephemeral runtime-only backing fields (NOT DB columns)
-    # Using ClassVar here prevents SQLAlchemy from trying to map them.
-    # They are defaults; when you set them on an instance, Python creates
-    # an instance attribute that shadows the class attribute.
-    # ---------------------------------------------------------------------
-    _status_ephemeral: ClassVar[Optional[SourceConnectionStatus]] = None
-    _latest_sync_job_status_ephemeral: ClassVar[Optional[SyncJobStatus]] = None
-    _latest_sync_job_id_ephemeral: ClassVar[Optional[UUID]] = None
-    _latest_sync_job_started_at_ephemeral: ClassVar[Optional[datetime]] = None
-    _latest_sync_job_completed_at_ephemeral: ClassVar[Optional[datetime]] = None
-    _latest_sync_job_error_ephemeral: ClassVar[Optional[str]] = None
-    _cron_schedule_ephemeral: ClassVar[Optional[str]] = None
-    _next_scheduled_run_ephemeral: ClassVar[Optional[datetime]] = None
-    _auth_url_ephemeral: ClassVar[Optional[str]] = None  # convenience for API layer if used
-
-    # Properties to access the ephemeral fields safely
-    @property
-    def status(self) -> SourceConnectionStatus:
-        """Ephemeral status; defaults to ACTIVE if not explicitly set."""
-        return getattr(self, "_status_ephemeral", None) or SourceConnectionStatus.ACTIVE
-
-    @status.setter
-    def status(self, value: Optional[SourceConnectionStatus]) -> None:
-        self._status_ephemeral = value
-
-    @property
-    def latest_sync_job_status(self) -> Optional[SyncJobStatus]:
-        """Ephemeral: status of the most recent sync job, if known."""
-        return getattr(self, "_latest_sync_job_status_ephemeral", None)
-
-    @latest_sync_job_status.setter
-    def latest_sync_job_status(self, value: Optional[SyncJobStatus]) -> None:
-        self._latest_sync_job_status_ephemeral = value
-
-    @property
-    def latest_sync_job_id(self) -> Optional[UUID]:
-        """Ephemeral: ID of the most recent sync job, if known."""
-        return getattr(self, "_latest_sync_job_id_ephemeral", None)
-
-    @latest_sync_job_id.setter
-    def latest_sync_job_id(self, value: Optional[UUID]) -> None:
-        self._latest_sync_job_id_ephemeral = value
-
-    @property
-    def latest_sync_job_started_at(self) -> Optional[datetime]:
-        """Ephemeral: start time of the most recent sync job, if known."""
-        return getattr(self, "_latest_sync_job_started_at_ephemeral", None)
-
-    @latest_sync_job_started_at.setter
-    def latest_sync_job_started_at(self, value: Optional[datetime]) -> None:
-        self._latest_sync_job_started_at_ephemeral = value
-
-    @property
-    def latest_sync_job_completed_at(self) -> Optional[datetime]:
-        """Ephemeral: completion time of the most recent sync job, if known."""
-        return getattr(self, "_latest_sync_job_completed_at_ephemeral", None)
-
-    @latest_sync_job_completed_at.setter
-    def latest_sync_job_completed_at(self, value: Optional[datetime]) -> None:
-        self._latest_sync_job_completed_at_ephemeral = value
-
-    @property
-    def latest_sync_job_error(self) -> Optional[str]:
-        """Ephemeral: error message from the most recent sync job, if any."""
-        return getattr(self, "_latest_sync_job_error_ephemeral", None)
-
-    @latest_sync_job_error.setter
-    def latest_sync_job_error(self, value: Optional[str]) -> None:
-        self._latest_sync_job_error_ephemeral = value
-
-    @property
-    def cron_schedule(self) -> Optional[str]:
-        """Ephemeral: cron expression used for scheduled syncs, if set."""
-        return getattr(self, "_cron_schedule_ephemeral", None)
-
-    @cron_schedule.setter
-    def cron_schedule(self, value: Optional[str]) -> None:
-        self._cron_schedule_ephemeral = value
-
-    @property
-    def next_scheduled_run(self) -> Optional[datetime]:
-        """Ephemeral: next scheduled run time computed from the cron, if known."""
-        return getattr(self, "_next_scheduled_run_ephemeral", None)
-
-    @next_scheduled_run.setter
-    def next_scheduled_run(self, value: Optional[datetime]) -> None:
-        self._next_scheduled_run_ephemeral = value
-
-    @property
-    def auth_url(self) -> Optional[str]:
-        """Ephemeral: authorization URL used by the API layer, if applicable."""
-        return getattr(self, "_auth_url_ephemeral", None)
-
-    @auth_url.setter
-    def auth_url(self, value: Optional[str]) -> None:
-        self._auth_url_ephemeral = value
-
-
-# Ensure a sensible default whenever a row is loaded (belt & suspenders)
-@event.listens_for(SourceConnection, "load")
-def _sc_set_defaults_on_load(target, context):
-    if getattr(target, "_status_ephemeral", None) is None:
-        target._status_ephemeral = SourceConnectionStatus.ACTIVE
 
 
 # Event to delete parent Sync when SourceConnection is deleted
