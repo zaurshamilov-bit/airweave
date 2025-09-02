@@ -35,8 +35,8 @@ class TestFlowConfig:
 
     steps: List[str] = field(
         default_factory=lambda: [
-            "collection_cleanup",  # Clean up old collections at the beginning
-            "cleanup",  # Clean up source workspace at the beginning
+            "collection_cleanup",
+            "cleanup",
             "create",
             "sync",
             "verify",
@@ -50,8 +50,8 @@ class TestFlowConfig:
             "complete_delete",
             "sync",
             "verify_complete_deletion",
-            "cleanup",  # Clean up source workspace at the end
-            "collection_cleanup",  # Clean up collections at the end
+            "cleanup",
+            "collection_cleanup",
         ]
     )
     custom_steps: Dict[str, Dict[str, Any]] = field(default_factory=dict)

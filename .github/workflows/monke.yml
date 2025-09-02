@@ -156,50 +156,45 @@ jobs:
           done
           echo "❌ Backend not healthy in time"; exit 1
 
-      # Run ALL connectors (sequential; logs under ./logs)
-      - name: Run acceptance tests (all connectors)
+      # Run tests using unified runner
+      - name: Run acceptance tests
+        env:
+          CI: true # Tells runner to use simple output
+          MONKE_MAX_PARALLEL: 5
+          AIRWEAVE_API_URL: http://localhost:8001
+
+          # Core dependencies
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+
+          # Composio auth provider
+          DM_AUTH_PROVIDER: composio
+          DM_AUTH_PROVIDER_API_KEY: ${{ secrets.COMPOSIO_API_KEY }}
+
+          # Connector-specific Composio configs
+          GITHUB_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GITHUB_AUTH_PROVIDER_ACCOUNT_ID }}
+          GITHUB_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GITHUB_AUTH_PROVIDER_AUTH_CONFIG_ID }}
+          GMAIL_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_ACCOUNT_ID }}
+          GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GMAIL_AUTH_PROVIDER_AUTH_CONFIG_ID }}
+          GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_ACCOUNT_ID }}
+          GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_DRIVE_AUTH_PROVIDER_AUTH_CONFIG_ID }}
+          GOOGLE_CALENDAR_AUTH_PROVIDER_ACCOUNT_ID: ${{ secrets.GOOGLE_CALENDAR_AUTH_PROVIDER_ACCOUNT_ID }}
+          GOOGLE_CALENDAR_AUTH_PROVIDER_AUTH_CONFIG_ID: ${{ secrets.GOOGLE_CALENDAR_AUTH_PROVIDER_AUTH_CONFIG_ID }}
+
+          # Add other connector configs as needed...
         run: |
-          set -u -o pipefail
           cd monke
-          mkdir -p ../logs
 
-          configs=(
-            asana.yaml
-            bitbucket.yaml
-            confluence.yaml
-            dropbox.yaml
-            github.yaml
-            gmail.yaml
-            google_calendar.yaml
-            google_drive.yaml
-            hubspot.yaml
-            jira.yaml
-            linear.yaml
-            monday.yaml
-            notion.yaml
-            outlook_calendar.yaml
-            outlook_mail.yaml
-            stripe.yaml
-            todoist.yaml
-          )
+          # The runner will automatically connect to Composio using DM_AUTH_PROVIDER_API_KEY
+          # and set DM_AUTH_PROVIDER_ID for use by all tests
 
-          failures=()
-          for cfg in "${configs[@]}"; do
-            base="${cfg%.yaml}"
-            echo ""
-            echo "▶️  Running ${cfg} ..."
-            if python ci_run_single.py --config "configs/${cfg}" --log-file "../logs/${base}.rich.log"; then
-              echo "✅ ${base} passed"
-            else
-              echo "❌ ${base} FAILED"
-              failures+=("${base}")
-            fi
-          done
-
-          if [ ${#failures[@]} -gt 0 ]; then
-            echo ""
-            echo "One or more connectors failed: ${failures[*]}"
-            exit 1
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # On PRs, run a subset of tests for speed
+            # TODO: Add change detection to run only affected connectors
+            python runner.py github gmail
+          else
+            # On main/feat branches, run all tests in parallel
+            python runner.py --all --max-concurrency 5
           fi
 
       - name: Upload logs
