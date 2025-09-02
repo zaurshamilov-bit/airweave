@@ -41,7 +41,7 @@ router = TrailingSlashRouter()
         "Finance data collection",
     ),
 )
-async def list_collections(
+async def list(
     skip: int = Query(0, description="Number of collections to skip for pagination"),
     limit: int = Query(
         100, description="Maximum number of collections to return (1-1000)", le=1000, ge=1
@@ -61,7 +61,7 @@ async def list_collections(
 
 
 @router.post("/", response_model=schemas.Collection)
-async def create_collection(
+async def create(
     collection: schemas.CollectionCreate,
     db: AsyncSession = Depends(deps.get_db),
     ctx: ApiContext = Depends(deps.get_context),
@@ -85,7 +85,7 @@ async def create_collection(
 
 
 @router.get("/{readable_id}", response_model=schemas.Collection)
-async def get_collection(
+async def get(
     readable_id: str = Path(
         ...,
         description="The unique readable identifier of the collection (e.g., 'finance-data-ab123')",
@@ -101,7 +101,7 @@ async def get_collection(
 
 
 @router.put("/{readable_id}", response_model=schemas.Collection)
-async def update_collection(
+async def update(
     collection: schemas.CollectionUpdate,
     readable_id: str = Path(
         ..., description="The unique readable identifier of the collection to update"
@@ -122,7 +122,7 @@ async def update_collection(
 
 
 @router.delete("/{readable_id}", response_model=schemas.Collection)
-async def delete_collection(
+async def delete(
     readable_id: str = Path(
         ..., description="The unique readable identifier of the collection to delete"
     ),
@@ -164,7 +164,7 @@ async def delete_collection(
     response_model=schemas.SearchResponse,
     responses=create_search_response("raw_results", "Raw search results with metadata"),
 )
-async def search_collection(
+async def search(
     readable_id: str = Path(
         ..., description="The unique readable identifier of the collection to search"
     ),
@@ -263,7 +263,7 @@ async def search_collection(
     response_model=schemas.SearchResponse,
     responses=create_search_response("completion_response", "Search with AI-generated completion"),
 )
-async def search_collection_advanced(
+async def search_advanced(
     readable_id: str = Path(
         ..., description="The unique readable identifier of the collection to search"
     ),
@@ -344,7 +344,7 @@ async def search_collection_advanced(
 
 @router.post(
     "/{readable_id}/refresh_all",
-    response_model=list[schemas.SourceConnectionJob],
+    response_model=List[schemas.SourceConnectionJob],
     responses=create_job_list_response(["completed"], "Multiple sync jobs triggered"),
 )
 async def refresh_all_source_connections(
@@ -357,7 +357,7 @@ async def refresh_all_source_connections(
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
     logger: ContextualLogger = Depends(deps.get_logger),
-) -> list[schemas.SourceConnectionJob]:
+) -> List[schemas.SourceConnectionJob]:
     """Trigger data synchronization for all source connections in the collection.
 
     The sync jobs run asynchronously in the background, so this endpoint
