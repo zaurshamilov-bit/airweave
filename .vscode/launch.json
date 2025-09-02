@@ -67,12 +67,12 @@
             "name": "Temporal Worker (hot reload)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/backend/dev/run_worker_reload.py",
+            "program": "${workspaceFolder}/.vscode/run_worker_reload.py",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/backend",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}/backend",
-                "AIRWEAVE_DEBUGPY_WORKER_PORT": "7233" // TODO: update this to match the port in the .env file
+                "AIRWEAVE_DEBUGPY_WORKER_PORT": "7233"
             },
             "envFile": "${workspaceFolder}/.env",
             "justMyCode": false,
@@ -84,7 +84,7 @@
             "request": "attach",
             "connect": {
                 "host": "127.0.0.1",
-                "port": 7233 // TODO: update this to match the port in the .env file
+                "port": 7233
             }
         },
         {
