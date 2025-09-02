@@ -3,7 +3,7 @@
   "info": {
     "title": "Airweave",
     "version": "0.1.0",
-    "description": "\n\n## API Groups\nThis API spec only includes the following API groups:\n- **Sources**: API endpoints for discovering available data source connectors and their configuration requirements\n- **Collections**: API endpoints for managing collections - logical groups of data sources that provide unified search capabilities\n- **Source Connections**: API endpoints for managing live connections to data sources. Source connections are the actual configured instances that Airweave uses to sync data from your apps and databases, transforming it into searchable, structured information within collections\n- **White Labels**: API endpoints for managing custom OAuth2 integrations with your own branding and credentials\n"
+    "description": "\n\n## API Groups\nThis API spec only includes the following API groups:\n- **Sources**: API endpoints for discovering available data source connectors and their configuration requirements\n- **Collections**: API endpoints for managing collections - logical groups of data sources that provide unified search capabilities\n- **Source Connections**: API endpoints for managing live connections to data sources. Source connections are the actual configured instances that Airweave uses to sync data from your apps and databases, transforming it into searchable, structured information within collections\n- **Auth Providers**: API endpoints for managing authentication provider connections and credentials\n- **White Labels**: API endpoints for managing custom OAuth2 integrations with your own branding and credentials\n"
   },
   "paths": {
     "/sources/detail/{short_name}": {
@@ -160,6 +160,102 @@
                       }
                     ]
                   }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/auth-providers/connect": {
+      "put": {
+        "tags": [
+          "auth-providers"
+        ],
+        "summary": "Connect Or Update Auth Provider",
+        "description": "Create or update an auth provider connection.\n\nIf a connection for this auth provider already exists for the organization,\nit will be updated with the new credentials and fields.\nIf no connection exists, a new one will be created.\n\nArgs:\n-----\n    db: The database session\n    ctx: The current authentication context\n    auth_provider_connection_in: The auth provider connection data\n\nReturns:\n--------\n    schemas.AuthProviderConnection: The created or updated connection",
+        "operationId": "connect_or_update_auth_provider_auth_providers_connect_put",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthProviderConnectionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthProviderConnection"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/auth-providers/detail/{short_name}": {
+      "get": {
+        "tags": [
+          "auth-providers"
+        ],
+        "summary": "Get Auth Provider",
+        "description": "Get details of a specific auth provider.\n\nArgs:\n-----\n    db: The database session\n    short_name: The short name of the auth provider\n    ctx: The current authentication context\n\nReturns:\n--------\n    schemas.AuthProvider: The auth provider details",
+        "operationId": "get_auth_provider_auth_providers_detail__short_name__get",
+        "parameters": [
+          {
+            "name": "short_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Short Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthProvider"
                 }
               }
             }
@@ -1799,7 +1895,7 @@
         ],
         "summary": "Get White Label Oauth2 Auth Url",
         "description": "Generate a branded OAuth2 authorization URL for customer authentication.\n\n<br/><br/>\nCreates the OAuth consent URL that customers should be redirected to for\nauthentication. The OAuth consent screen will display your company name and\nbranding instead of Airweave.",
-        "operationId": "get_white_label_oauth2_auth_url_white_labels__white_label_id__oauth2_auth_url_get",
+        "operationId": "get_white_label_oauth2_auth_url_white_labels__white_label_id__oauth2_auth_url_options",
         "parameters": [
           {
             "name": "white_label_id",
@@ -1821,7 +1917,7 @@
               "application/json": {
                 "schema": {
                   "type": "string",
-                  "title": "Response Get White Label Oauth2 Auth Url White Labels  White Label Id  Oauth2 Auth Url Get"
+                  "title": "Response Get White Label Oauth2 Auth Url White Labels  White Label Id  Oauth2 Auth Url Options"
                 },
                 "examples": {
                   "slack_auth_url": {
@@ -1931,7 +2027,7 @@
         ],
         "summary": "Exchange White Label Oauth2 Code",
         "description": "Complete the OAuth flow and create a source connection.\n\n<br/><br/>\n**This is the core endpoint that converts OAuth authorization codes into working\nsource connections.**<br/><br/>The OAuth credentials are obtained automatically\nfrom the authorization code - you do not need to provide auth_fields. The white\nlabel integration is automatically linked to the created source connection for\ntracking and branding purposes.",
-        "operationId": "exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options",
+        "operationId": "exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post",
         "parameters": [
           {
             "name": "white_label_id",
@@ -1951,7 +2047,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options"
+                "$ref": "#/components/schemas/Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post"
               }
             }
           }
@@ -2630,7 +2726,7 @@
         "type": "object",
         "title": "Body_create_credentials_from_authorization_code_source_connections__source_short_name__code_to_token_credentials_post"
       },
-      "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options": {
+      "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post": {
         "properties": {
           "code": {
             "type": "string",
@@ -2656,7 +2752,7 @@
         "required": [
           "code"
         ],
-        "title": "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_options"
+        "title": "Body_exchange_white_label_oauth2_code_white_labels__white_label_id__oauth2_code_post"
       },
       "Body_run_source_connections__source_connection_id__run_post": {
         "properties": {
