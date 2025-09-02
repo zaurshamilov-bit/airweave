@@ -160,7 +160,7 @@ fi
 echo ""
 
 # Show which images will be used
-if [ -n "$BACKEND_IMAGE" ] || [ -n "$FRONTEND_IMAGE" ]; then
+if [ -n "${BACKEND_IMAGE:-}" ] || [ -n "${FRONTEND_IMAGE:-}" ]; then
     echo "Using custom Docker images:"
     echo "  Backend:  ${BACKEND_IMAGE:-ghcr.io/airweave-ai/airweave-backend:latest}"
     echo "  Frontend: ${FRONTEND_IMAGE:-ghcr.io/airweave-ai/airweave-frontend:latest}"
