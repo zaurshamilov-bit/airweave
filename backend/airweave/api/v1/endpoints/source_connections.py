@@ -35,7 +35,7 @@ router = TrailingSlashRouter()
         ["engineering_docs"], "Multiple source connections across collections"
     ),
 )
-async def list_source_connections(
+async def list(
     *,
     db: AsyncSession = Depends(deps.get_db),
     collection: Optional[str] = Query(
@@ -69,7 +69,7 @@ async def list_source_connections(
 
 
 @router.get("/{source_connection_id}", response_model=schemas.SourceConnection)
-async def get_source_connection(
+async def get(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID = Path(
@@ -91,7 +91,7 @@ async def get_source_connection(
 
 
 @router.post("/", response_model=schemas.SourceConnection)
-async def create_source_connection(
+async def create(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_in: schemas.SourceConnectionCreate = Body(...),
@@ -219,7 +219,7 @@ async def create_source_connection(
 
 
 @router.post("/internal/", response_model=schemas.SourceConnection)
-async def create_source_connection_with_credential(
+async def create_with_credential(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_in: schemas.SourceConnectionCreateWithCredential = Body(...),
@@ -743,7 +743,7 @@ async def _run_new_sync_job_for_connection(
 
 
 @router.post("/continuous", response_model=schemas.SourceConnectionContinuousResponse)
-async def create_continuous_source_connection_BETA(
+async def create_continuous_BETA(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_in: schemas.SourceConnectionCreateContinuous = Body(...),
@@ -895,7 +895,7 @@ async def create_continuous_source_connection_BETA(
 
 
 @router.put("/{source_connection_id}", response_model=schemas.SourceConnection)
-async def update_source_connection(
+async def update(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID = Path(
@@ -918,7 +918,7 @@ async def update_source_connection(
 
 
 @router.delete("/{source_connection_id}", response_model=schemas.SourceConnection)
-async def delete_source_connection(
+async def delete(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID = Path(
@@ -946,7 +946,7 @@ async def delete_source_connection(
     response_model=schemas.SourceConnectionJob,
     responses=create_single_job_response("completed", "Sync job successfully triggered"),
 )
-async def run_source_connection(
+async def run(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID = Path(
@@ -1044,7 +1044,7 @@ async def run_source_connection(
     response_model=List[schemas.SourceConnectionJob],
     responses=create_job_list_response(["completed"], "Complete sync job history"),
 )
-async def list_source_connection_jobs(
+async def list_jobs(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID = Path(
@@ -1067,7 +1067,7 @@ async def list_source_connection_jobs(
     response_model=schemas.SourceConnectionJob,
     responses=create_single_job_response("completed", "Detailed sync job information"),
 )
-async def get_source_connection_job(
+async def get_job(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID = Path(
@@ -1088,7 +1088,7 @@ async def get_source_connection_job(
     response_model=schemas.SourceConnectionJob,
     responses=create_single_job_response("cancelled", "Successfully cancelled sync job"),
 )
-async def cancel_source_connection_job(
+async def cancel_job(
     *,
     db: AsyncSession = Depends(deps.get_db),
     source_connection_id: UUID = Path(

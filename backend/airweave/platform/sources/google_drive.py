@@ -14,7 +14,7 @@ References:
     https://developers.google.com/drive/api/v3/reference/files  (Files)
 """
 
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -25,7 +25,6 @@ from airweave.platform.decorators import source
 from airweave.platform.entities._base import ChunkEntity
 from airweave.platform.entities.google_drive import (
     GoogleDriveDriveEntity,
-    GoogleDriveFileDeletionEntity,
     GoogleDriveFileEntity,
 )
 from airweave.platform.sources._base import BaseSource
@@ -56,13 +55,8 @@ class GoogleDriveSource(BaseSource):
         instance = cls()
         instance.access_token = access_token
 
-        instance.exclude_patterns = config.get("exclude_patterns", [])
-
-        # Performance option to skip expensive path lookups
-        instance.skip_file_paths = config.get("skip_file_paths", True)
-
-        # Initialize cache for parent folder lookups
-        instance._parent_folder_cache = {}
+        config = config or {}
+        instance.include_patterns = config.get("include_patterns", [])
 
         return instance
 
@@ -108,7 +102,7 @@ class GoogleDriveSource(BaseSource):
         retry=retry_if_exception_type((httpx.ConnectTimeout, httpx.ReadTimeout)),
         reraise=True,
     )
-    async def _get_with_auth(
+    async def _get_with_auth(  # noqa: C901
         self, client: httpx.AsyncClient, url: str, params: Optional[Dict] = None
     ) -> Dict:
         """Make an authenticated GET request to the Google Drive API with retry logic.
@@ -124,6 +118,10 @@ class GoogleDriveSource(BaseSource):
         headers = {"Authorization": f"Bearer {access_token}"}
 
         try:
+            try:
+                self.logger.debug(f"API GET {url} params={params if params else {}}")
+            except Exception:
+                pass
             # Add a longer timeout (30 seconds)
             resp = await client.get(url, headers=headers, params=params, timeout=30.0)
 
@@ -185,6 +183,7 @@ class GoogleDriveSource(BaseSource):
         while url:
             data = await self._get_with_auth(client, url, params=params)
             drives = data.get("drives", [])
+            self.logger.debug(f"List drives page: returned {len(drives)} drives")
             for drive_obj in drives:
                 yield drive_obj
 
@@ -299,6 +298,11 @@ class GoogleDriveSource(BaseSource):
         if drive_id:
             params["driveId"] = drive_id
 
+        self.logger.debug(
+            f"List files start: corpora={corpora}, include_all_drives={include_all_drives}, "
+            f"drive_id={drive_id}, base_q={params['q']}, context={context}"
+        )
+
         total_files_from_api = 0  # Track total files returned by API
         page_count = 0
 
@@ -315,7 +319,7 @@ class GoogleDriveSource(BaseSource):
             total_files_from_api += files_count
 
             # Log how many files the API returned in this page
-            self.logger.info(
+            self.logger.debug(
                 f"\n\nGoogle Drive API returned {files_count} files in page {page_count} "
                 f"({context})\n\n"
             )
@@ -331,10 +335,321 @@ class GoogleDriveSource(BaseSource):
             url = "https://www.googleapis.com/drive/v3/files"
 
         # Log total count when done
-        self.logger.info(
+        self.logger.debug(
             f"\n\nGoogle Drive API returned {total_files_from_api} total files across "
             f"{page_count} pages ({context})\n\n"
         )
+
+    async def _list_folders(
+        self,
+        client: httpx.AsyncClient,
+        corpora: str,
+        include_all_drives: bool,
+        drive_id: Optional[str],
+        parent_id: Optional[str],
+    ) -> AsyncGenerator[Dict, None]:
+        """List folders under a given parent.
+
+        If parent_id is None, returns all folders matching name in the scope.
+        """
+        url = "https://www.googleapis.com/drive/v3/files"
+        params = {
+            "pageSize": 100,
+            "corpora": corpora,
+            "includeItemsFromAllDrives": str(include_all_drives).lower(),
+            "supportsAllDrives": "true",
+            "fields": "nextPageToken, files(id, name, parents)",
+        }
+
+        # Base folder query
+        if parent_id:
+            q = (
+                f"'{parent_id}' in parents and "
+                "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            )
+        else:
+            q = "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        params["q"] = q
+
+        if drive_id:
+            params["driveId"] = drive_id
+
+        self.logger.debug(
+            (
+                "List folders start: parent_id=%s, corpora=%s, drive_id=%s, q=%s"
+                % (parent_id, corpora, drive_id, q)
+            )
+        )
+
+        while url:
+            data = await self._get_with_auth(client, url, params=params)
+            folders = data.get("files", [])
+            self.logger.debug(
+                f"List folders page: parent_id={parent_id}, returned {len(folders)} folders"
+            )
+            for folder in folders:
+                yield folder
+
+            next_page_token = data.get("nextPageToken")
+            if not next_page_token:
+                break
+            params["pageToken"] = next_page_token
+            url = "https://www.googleapis.com/drive/v3/files"
+
+    async def _list_files_in_folder(
+        self,
+        client: httpx.AsyncClient,
+        corpora: str,
+        include_all_drives: bool,
+        drive_id: Optional[str],
+        parent_id: str,
+        name_token: Optional[str] = None,
+    ) -> AsyncGenerator[Dict, None]:
+        """List files directly under a given folder.
+
+        Optionally coarse filtered by a "name contains" token.
+        """
+        url = "https://www.googleapis.com/drive/v3/files"
+        base_q = (
+            f"'{parent_id}' in parents and "
+            "mimeType != 'application/vnd.google-apps.folder' and trashed = false"
+        )
+        if name_token:
+            safe_token = name_token.replace("'", "\\'")
+            q = f"{base_q} and name contains '{safe_token}'"
+        else:
+            q = base_q
+
+        params = {
+            "pageSize": 100,
+            "corpora": corpora,
+            "includeItemsFromAllDrives": str(include_all_drives).lower(),
+            "supportsAllDrives": "true",
+            "q": q,
+            "fields": (
+                "nextPageToken, files("
+                "id, name, mimeType, description, starred, trashed, "
+                "explicitlyTrashed, parents, shared, webViewLink, iconLink, "
+                "createdTime, modifiedTime, size, md5Checksum, webContentLink)"
+            ),
+        }
+        if drive_id:
+            params["driveId"] = drive_id
+
+        self.logger.debug(
+            f"List files-in-folder start: parent_id={parent_id}, name_token={name_token}, q={q}"
+        )
+
+        while url:
+            data = await self._get_with_auth(client, url, params=params)
+            files_in_page = data.get("files", [])
+            self.logger.debug(
+                (
+                    "List files-in-folder page: parent_id=%s, returned %d files"
+                    % (parent_id, len(files_in_page))
+                )
+            )
+            for f in files_in_page:
+                yield f
+
+            next_page_token = data.get("nextPageToken")
+            if not next_page_token:
+                break
+            params["pageToken"] = next_page_token
+            url = "https://www.googleapis.com/drive/v3/files"
+
+    def _extract_name_token_from_glob(self, pattern: str) -> Optional[str]:
+        """Extract a coarse token for name contains from a glob (best-effort)."""
+        import re
+
+        # '*.pdf' -> '.pdf', 'report*' -> 'report'
+        if pattern.startswith("*."):
+            return pattern[1:]
+        m = re.match(r"([^*?]+)[*?].*", pattern)
+        if m:
+            return m.group(1)
+        if "*" not in pattern and "?" not in pattern and pattern:
+            return pattern
+        return None
+
+    async def _traverse_and_yield_files(
+        self,
+        client: httpx.AsyncClient,
+        corpora: str,
+        include_all_drives: bool,
+        drive_id: Optional[str],
+        start_folder_ids: List[str],
+        filename_glob: Optional[str],
+        context: str,
+    ) -> AsyncGenerator[Dict, None]:
+        """BFS traversal from start folders yielding file objects.
+
+        Final match is performed by filename glob.
+        """
+        import fnmatch
+        from collections import deque
+
+        name_token = self._extract_name_token_from_glob(filename_glob) if filename_glob else None
+
+        self.logger.debug(
+            f"Traverse start: roots={len(start_folder_ids)}, filename_glob={filename_glob}, "
+            f"name_token={name_token}"
+        )
+
+        queue = deque(start_folder_ids)
+        while queue:
+            folder_id = queue.popleft()
+
+            self.logger.debug(f"Scanning folder: {folder_id}")
+            # Files directly in this folder
+            async for file_obj in self._list_files_in_folder(
+                client, corpora, include_all_drives, drive_id, folder_id, name_token
+            ):
+                file_name = file_obj.get("name", "")
+                if filename_glob:
+                    matched = fnmatch.fnmatch(file_name, filename_glob)
+                    self.logger.debug(
+                        f"Encountered file: {file_name} ({file_obj.get('id')}) "
+                        f"matched={matched} pattern={filename_glob}"
+                    )
+                    if matched:
+                        yield file_obj
+                else:
+                    self.logger.debug(
+                        f"Encountered file: {file_name} ({file_obj.get('id')}) matched=True"
+                    )
+                    yield file_obj
+
+            # Subfolders
+            async for subfolder in self._list_folders(
+                client, corpora, include_all_drives, drive_id, folder_id
+            ):
+                self.logger.debug(
+                    f"Enqueue subfolder: {subfolder.get('name')} ({subfolder.get('id')})"
+                )
+                queue.append(subfolder["id"])
+
+    async def _resolve_pattern_to_roots(  # noqa: C901
+        self,
+        client: httpx.AsyncClient,
+        corpora: str,
+        include_all_drives: bool,
+        drive_id: Optional[str],
+        pattern: str,
+    ) -> Tuple[List[str], Optional[str]]:
+        """Resolve a simple path-like include pattern to starting folder IDs and a filename glob.
+
+        Supports patterns like: 'Folder/*', 'Folder/Sub/file.pdf'.
+        Folder segments are treated as exact names.
+        The last segment may be a filename glob; if omitted, includes all files recursively.
+        """
+        # Normalize pattern and split
+        self.logger.debug(f"Resolve pattern: '{pattern}'")
+        norm = pattern.strip().strip("/")
+        segments = norm.split("/") if norm else []
+
+        if not segments:
+            return [], None
+
+        # Determine if last segment is a file glob (has '.' or wildcard) -> treat as filename glob
+        last = segments[-1]
+        filename_glob: Optional[str] = None
+        folder_segments = segments
+        if "." in last or "*" in last or "?" in last:
+            filename_glob = last
+            folder_segments = segments[:-1]
+        self.logger.debug(
+            f"Pattern segments: folders={folder_segments}, filename_glob={filename_glob}"
+        )
+
+        async def find_folders_by_name(  # noqa: C901
+            parent_ids: Optional[List[str]], name: str
+        ) -> List[str]:
+            found: List[str] = []
+            if parent_ids:
+                for pid in parent_ids:
+                    # List child folders with exact name under pid
+                    url = "https://www.googleapis.com/drive/v3/files"
+                    safe_name = name.replace("'", "\\'")
+                    q = (
+                        f"'{pid}' in parents and mimeType = 'application/vnd.google-apps.folder' "
+                        f"and name = '{safe_name}' and trashed = false"
+                    )
+                    params = {
+                        "pageSize": 100,
+                        "corpora": corpora,
+                        "includeItemsFromAllDrives": str(include_all_drives).lower(),
+                        "supportsAllDrives": "true",
+                        "q": q,
+                        "fields": "nextPageToken, files(id)",
+                    }
+                    if drive_id:
+                        params["driveId"] = drive_id
+
+                    url_iter = url
+                    while url_iter:
+                        data = await self._get_with_auth(client, url_iter, params=params)
+                        for f in data.get("files", []):
+                            found.append(f["id"])
+                        npt = data.get("nextPageToken")
+                        if not npt:
+                            break
+                        params["pageToken"] = npt
+                        url_iter = url
+                self.logger.debug(
+                    (
+                        "find_folders_by_name: name='%s' under %d parents -> %d matches"
+                        % (name, len(parent_ids), len(found))
+                    )
+                )
+            else:
+                # Search folders by exact name anywhere in scope
+                url = "https://www.googleapis.com/drive/v3/files"
+                safe_name = name.replace("'", "\\'")
+                q = (
+                    "mimeType = 'application/vnd.google-apps.folder' and "
+                    f"name = '{safe_name}' and trashed = false"
+                )
+                params = {
+                    "pageSize": 100,
+                    "corpora": corpora,
+                    "includeItemsFromAllDrives": str(include_all_drives).lower(),
+                    "supportsAllDrives": "true",
+                    "q": q,
+                    "fields": "nextPageToken, files(id)",
+                }
+                if drive_id:
+                    params["driveId"] = drive_id
+
+                url_iter = url
+                while url_iter:
+                    data = await self._get_with_auth(client, url_iter, params=params)
+                    for f in data.get("files", []):
+                        found.append(f["id"])
+                    npt = data.get("nextPageToken")
+                    if not npt:
+                        break
+                    params["pageToken"] = npt
+                    url_iter = url
+                self.logger.debug(
+                    f"find_folders_by_name: global name='{name}' -> {len(found)} matches"
+                )
+            return found
+
+        parent_ids: Optional[List[str]] = None
+        for seg in folder_segments:
+            ids = await find_folders_by_name(parent_ids, seg)
+            parent_ids = ids
+            if not parent_ids:
+                break
+
+        # If no folder segments (pattern was just filename glob) return empty roots
+        if not folder_segments:
+            return [], filename_glob or "*"
+        self.logger.debug(
+            f"Resolved roots: count={len(parent_ids or [])}, filename_glob={filename_glob}"
+        )
+        return parent_ids or [], filename_glob
 
     def _get_export_format_and_extension(self, mime_type: str) -> tuple[str, str]:
         """Get the appropriate export MIME type and file extension for Google native files.
@@ -429,17 +744,6 @@ class GoogleDriveSource(BaseSource):
                 client, corpora, include_all_drives, drive_id, context
             ):
                 try:
-                    # Check if file should be included based on exclusion patterns
-                    try:
-                        should_include = await self._should_include_file(client, file_obj)
-                    except Exception as e:
-                        self.logger.error(f"Error checking if file should be included: {str(e)}")
-                        # Skip this file if we can't check inclusion
-                        continue
-
-                    if not should_include:
-                        continue  # Skip this file
-
                     # Get file entity (might be None for trashed files)
                     file_entity = self._build_file_entity(file_obj)
 
@@ -450,7 +754,13 @@ class GoogleDriveSource(BaseSource):
                     # Process the entity if it has a download URL
                     if file_entity.download_url:
                         # Note: process_file_entity now uses the token manager automatically
+                        self.logger.debug(
+                            f"Processing file entity: {file_entity.file_id} '{file_entity.name}'"
+                        )
                         processed_entity = await self.process_file_entity(file_entity=file_entity)
+                        self.logger.debug(
+                            f"Processed result: {'yielded' if processed_entity else 'skipped'}"
+                        )
 
                         # Yield the entity even if skipped - the entity processor will handle it
                         if processed_entity:
@@ -468,8 +778,8 @@ class GoogleDriveSource(BaseSource):
             self.logger.error(f"Critical exception in _generate_file_entities: {str(e)}")
             # Don't re-raise - let the generator complete
 
-    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
-        """Generate Google Drive entities with incremental support via Changes API.
+    async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:  # noqa: C901
+        """Generate all Google Drive entities.
 
         Behavior:
         - If no cursor token exists: perform a FULL sync (shared drives + files), then store
@@ -479,210 +789,166 @@ class GoogleDriveSource(BaseSource):
         """
         try:
             async with httpx.AsyncClient() as client:
-                cursor_field, last_token = await self._resolve_cursor_and_token()
-                if last_token:
-                    async for entity in self._run_incremental_sync(
-                        client, last_token, cursor_field
-                    ):
-                        yield entity
-                else:
-                    async for entity in self._run_full_sync(client):
-                        yield entity
+                patterns: List[str] = getattr(self, "include_patterns", []) or []
+                self.logger.debug(f"Include patterns: {patterns}")
+
+                # 1) Always yield shared drives as entities
+                try:
+                    async for drive_entity in self._generate_drive_entities(client):
+                        yield drive_entity
+                except Exception as e:
+                    self.logger.error(f"Error generating drive entities: {str(e)}")
+
+                # Prepare shared drive IDs for file processing
+                drive_ids: List[str] = []
+                try:
+                    async for drive_obj in self._list_drives(client):
+                        drive_ids.append(drive_obj["id"])
+                except Exception as e:
+                    self.logger.error(f"Error listing shared drives: {str(e)}")
+
+                # If no include patterns: default behavior (all files in drives + My Drive)
+                if not patterns:
+                    for drive_id in drive_ids:
+                        try:
+                            async for file_entity in self._generate_file_entities(
+                                client,
+                                corpora="drive",
+                                include_all_drives=True,
+                                drive_id=drive_id,
+                                context=f"drive {drive_id}",
+                            ):
+                                yield file_entity
+                        except Exception as e:
+                            self.logger.error(f"Error processing shared drive {drive_id}: {str(e)}")
+                            continue
+
+                    try:
+                        async for mydrive_file_entity in self._generate_file_entities(
+                            client, corpora="user", include_all_drives=False, context="MY DRIVE"
+                        ):
+                            yield mydrive_file_entity
+                    except Exception as e:
+                        self.logger.error(f"Error processing My Drive files: {str(e)}")
+                    return
+
+                # INCLUDE MODE: Resolve patterns and traverse only matched subtrees
+                # Shared drives first
+                for drive_id in drive_ids:
+                    try:
+                        # Resolve and traverse per pattern to keep logic simple and precise
+                        for p in patterns:
+                            roots, fname_glob = await self._resolve_pattern_to_roots(
+                                client,
+                                corpora="drive",
+                                include_all_drives=True,
+                                drive_id=drive_id,
+                                pattern=p,
+                            )
+                            if roots:
+                                async for file_obj in self._traverse_and_yield_files(
+                                    client,
+                                    corpora="drive",
+                                    include_all_drives=True,
+                                    drive_id=drive_id,
+                                    start_folder_ids=list(set(roots)),
+                                    filename_glob=fname_glob,
+                                    context=f"drive {drive_id}",
+                                ):
+                                    file_entity = self._build_file_entity(file_obj)
+                                    if not file_entity:
+                                        continue
+                                    processed_entity = await self.process_file_entity(
+                                        file_entity=file_entity
+                                    )
+                                    if processed_entity:
+                                        yield processed_entity
+
+                        # Filename-only patterns (no folder segments) -> global name search
+                        filename_only_patterns = [p for p in patterns if "/" not in p]
+                        import fnmatch as _fn
+
+                        for pat in filename_only_patterns:
+                            async for file_obj in self._list_files(
+                                client,
+                                corpora="drive",
+                                include_all_drives=True,
+                                drive_id=drive_id,
+                                context=f"drive {drive_id}",
+                            ):
+                                name = file_obj.get("name", "")
+                                matched = _fn.fnmatch(name, pat)
+                                self.logger.debug(
+                                    f"Encountered file: {name} ({file_obj.get('id')}) "
+                                    f"matched={matched} "
+                                    f"pattern={pat}"
+                                )
+                                if matched:
+                                    file_entity = self._build_file_entity(file_obj)
+                                    if not file_entity:
+                                        continue
+                                    processed_entity = await self.process_file_entity(
+                                        file_entity=file_entity
+                                    )
+                                    if processed_entity:
+                                        yield processed_entity
+
+                    except Exception as e:
+                        self.logger.error(f"Include mode error for drive {drive_id}: {str(e)}")
+
+                # My Drive include patterns
+                try:
+                    for p in patterns:
+                        roots, fname_glob = await self._resolve_pattern_to_roots(
+                            client,
+                            corpora="user",
+                            include_all_drives=False,
+                            drive_id=None,
+                            pattern=p,
+                        )
+                        if roots:
+                            async for file_obj in self._traverse_and_yield_files(
+                                client,
+                                corpora="user",
+                                include_all_drives=False,
+                                drive_id=None,
+                                start_folder_ids=list(set(roots)),
+                                filename_glob=fname_glob,
+                                context="MY DRIVE",
+                            ):
+                                file_entity = self._build_file_entity(file_obj)
+                                if not file_entity:
+                                    continue
+                                processed_entity = await self.process_file_entity(
+                                    file_entity=file_entity
+                                )
+                                if processed_entity:
+                                    yield processed_entity
+
+                    filename_only_patterns = [p for p in patterns if "/" not in p]
+                    import fnmatch as _fn
+
+                    for pat in filename_only_patterns:
+                        async for file_obj in self._list_files(
+                            client,
+                            corpora="user",
+                            include_all_drives=False,
+                            drive_id=None,
+                            context="MY DRIVE",
+                        ):
+                            name = file_obj.get("name", "")
+                            if _fn.fnmatch(name, pat):
+                                file_entity = self._build_file_entity(file_obj)
+                                if not file_entity:
+                                    continue
+                                processed_entity = await self.process_file_entity(
+                                    file_entity=file_entity
+                                )
+                                if processed_entity:
+                                    yield processed_entity
+
+                except Exception as e:
+                    self.logger.error(f"Include mode error for My Drive: {str(e)}")
+
         except Exception as e:
             self.logger.error(f"Critical error in generate_entities: {str(e)}")
-
-    async def _resolve_cursor_and_token(self) -> tuple[Optional[str], Optional[str]]:
-        """Resolve effective cursor field and last token from cursor data."""
-        cursor_field = self.get_effective_cursor_field() or self.get_default_cursor_field()
-        if cursor_field and cursor_field != self.get_default_cursor_field():
-            self.validate_cursor_field(cursor_field)
-        cursor_data = self._get_cursor_data()
-        last_token = cursor_data.get(cursor_field) if cursor_field else None
-        return cursor_field, last_token
-
-    async def _run_incremental_sync(
-        self, client: httpx.AsyncClient, last_token: str, cursor_field: Optional[str]
-    ) -> AsyncGenerator[ChunkEntity, None]:
-        """Execute the incremental sync flow using the Changes API."""
-        self.logger.info(f"Google Drive incremental sync using token field '{cursor_field}'")
-        self._latest_new_start_page_token = None
-        async for change in self._iterate_changes(client, last_token):
-            try:
-                if change.get("changeType") == "drive":
-                    continue
-                if change.get("removed", False):
-                    file_id = change.get("fileId")
-                    if not file_id:
-                        continue
-                    yield GoogleDriveFileDeletionEntity(
-                        entity_id=file_id, file_id=file_id, deletion_status="removed"
-                    )
-                    continue
-                file_obj = change.get("file")
-                if not file_obj:
-                    continue
-                file_entity = self._build_file_entity(file_obj)
-                if not file_entity:
-                    continue
-                processed_entity = await self.process_file_entity(file_entity=file_entity)
-                if processed_entity:
-                    yield processed_entity
-            except Exception as e:
-                self.logger.error(f"Error processing change: {str(e)}")
-                continue
-
-        new_token = getattr(self, "_latest_new_start_page_token", None)
-        if new_token:
-            self._update_cursor_data(new_token)
-            self.logger.info("Updated cursor with newStartPageToken for next run")
-        else:
-            self.logger.info("No newStartPageToken returned; cursor unchanged")
-
-    async def _run_full_sync(self, client: httpx.AsyncClient) -> AsyncGenerator[ChunkEntity, None]:
-        """Execute the initial full sync flow (drives + files) and store start token."""
-        self.logger.info("Google Drive FULL sync (no cursor token found)")
-        try:
-            async for drive_entity in self._generate_drive_entities(client):
-                yield drive_entity
-
-            drive_ids = []
-            async for drive_obj in self._list_drives(client):
-                drive_ids.append(drive_obj["id"])
-
-            for drive_id in drive_ids:
-                try:
-                    async for file_entity in self._generate_file_entities(
-                        client,
-                        corpora="drive",
-                        include_all_drives=True,
-                        drive_id=drive_id,
-                        context=f"drive {drive_id}",
-                    ):
-                        yield file_entity
-                except Exception as e:
-                    self.logger.error(f"Error processing shared drive {drive_id}: {str(e)}")
-                    continue
-        except Exception as e:
-            self.logger.error(f"Error in shared drives phase: {str(e)}")
-
-        try:
-            async for mydrive_file_entity in self._generate_file_entities(
-                client, corpora="user", include_all_drives=False, context="MY DRIVE"
-            ):
-                yield mydrive_file_entity
-        except Exception as e:
-            self.logger.error(f"Error processing My Drive files: {str(e)}")
-
-        try:
-            start_token = await self._get_start_page_token(client)
-            self._update_cursor_data(start_token)
-            self.logger.info("Stored startPageToken after full sync for next incremental run")
-        except Exception as e:
-            self.logger.error(f"Failed to fetch and store startPageToken after full sync: {e}")
-
-    async def _get_file_path(self, client: httpx.AsyncClient, file_obj: Dict) -> str:
-        """Get full path of file by recursively fetching parent folders."""
-        path_parts = [file_obj.get("name", "")]
-
-        # Get parents from file object
-        parents = file_obj.get("parents", [])
-        if not parents:
-            return path_parts[0]
-
-        # Start with the first parent
-        current_parent_id = parents[0]
-
-        # Limit recursion depth to avoid potential infinite loops
-        max_depth = 20
-        depth = 0
-
-        while current_parent_id and depth < max_depth:
-            depth += 1
-
-            # Check cache first
-            if (
-                hasattr(self, "_parent_folder_cache")
-                and current_parent_id in self._parent_folder_cache
-            ):
-                cached_data = self._parent_folder_cache[current_parent_id]
-                path_parts.insert(0, cached_data["name"])
-                current_parent_id = cached_data["parent_id"]
-                continue
-
-            try:
-                # Get folder information
-                folder_url = f"https://www.googleapis.com/drive/v3/files/{current_parent_id}"
-                folder_params = {"fields": "id,name,parents,mimeType"}
-
-                folder_data = await self._get_with_auth(client, folder_url, params=folder_params)
-
-                # Cache the folder data
-                if hasattr(self, "_parent_folder_cache"):
-                    parent_list = folder_data.get("parents", [])
-                    self._parent_folder_cache[current_parent_id] = {
-                        "name": folder_data.get("name", "") or "My Drive",
-                        "parent_id": parent_list[0] if parent_list else None,
-                    }
-
-                # If this is the root folder or My Drive, stop recursion
-                if folder_data.get("id") == "root" or not folder_data.get("parents"):
-                    path_parts.insert(0, folder_data.get("name", "") or "My Drive")
-                    break
-
-                # Add folder name to path
-                folder_name = folder_data.get("name", "")
-                path_parts.insert(0, folder_name)
-
-                # Move to parent folder
-                parents = folder_data.get("parents", [])
-                current_parent_id = parents[0] if parents else None
-
-            except httpx.HTTPStatusError as e:
-                self.logger.error(
-                    f"HTTP error retrieving parent folder {current_parent_id}: "
-                    f"Status {e.response.status_code}"
-                )
-                # Stop path building on error but return what we have
-                break
-            except Exception as e:
-                self.logger.error(f"Error retrieving parent folder {current_parent_id}: {str(e)}")
-                # Stop path building on error but return what we have
-                break
-
-        # Build path string
-        return "/".join(path_parts)
-
-    async def _should_include_file(self, client: httpx.AsyncClient, file_obj: Dict) -> bool:
-        """Determine if a file should be included based on exclusion patterns."""
-        file_name = file_obj.get("name", "unknown")
-
-        # If skip_file_paths is enabled, skip path-based filtering
-        if hasattr(self, "skip_file_paths") and self.skip_file_paths:
-            # If no exclusion patterns or patterns don't apply without paths, include everything
-            if not self.exclude_patterns:
-                return True
-            # Only check filename patterns
-            for pattern in self.exclude_patterns:
-                if self._path_matches_pattern(file_name, pattern):
-                    return False
-            return True
-
-        # Get the full file path with async call
-        file_path = await self._get_file_path(client, file_obj)
-
-        # If no exclusion patterns, include everything
-        if not self.exclude_patterns:
-            return True
-
-        # Check against each exclusion pattern
-        for pattern in self.exclude_patterns:
-            if self._path_matches_pattern(file_path, pattern):
-                return False
-
-        return True
-
-    def _path_matches_pattern(self, path: str, pattern: str) -> bool:
-        """Check if a path matches a pattern using glob-style matching."""
-        import fnmatch
-
-        return fnmatch.fnmatch(path, pattern)
