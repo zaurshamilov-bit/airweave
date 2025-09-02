@@ -756,14 +756,14 @@ class OutlookMailSource(BaseSource):
         self.logger.info(f"Processing delta changes for folder: {folder_name}")
 
         try:
-            # Construct the delta URL using the token
-            url = (
-                f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages/delta?"
-                f"$deltatoken={delta_token}"
-            )
+            # Construct the delta URL using the token (pass via params to ensure proper encoding)
+            url = f"{self.GRAPH_BASE_URL}/me/mailFolders/{folder_id}/messages/delta"
+            params = {"$deltatoken": delta_token}
             while url:
                 self.logger.debug(f"Fetching delta changes from: {url}")
-                data = await self._get_with_auth(client, url)
+                data = await self._get_with_auth(client, url, params=params)
+                # Clear params after the first call; nextLink is a fully-formed URL
+                params = None
 
                 # Process changes
                 changes = data.get("value", [])
