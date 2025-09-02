@@ -16,10 +16,10 @@ import {
     Braces,
     Copy,
     Check,
-    BrainCircuit,
     FileJson2,
     ExternalLink
 } from 'lucide-react';
+import { FiMessageSquare } from 'react-icons/fi';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -64,6 +64,27 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
     const completion = searchResponse?.completion || '';
     const results = searchResponse?.results || [];
     const hasError = searchResponse?.error;
+
+    // Debug logging
+    useEffect(() => {
+        console.log('[SearchResponseDisplay] State changed:', {
+            isSearching,
+            responseType,
+            hasSearchResponse: !!searchResponse,
+            searchResponseStatus: searchResponse?.status,
+            completionLength: completion?.length,
+            completionPreview: completion?.substring(0, 50) + (completion?.length > 50 ? '...' : ''),
+            resultsCount: results?.length,
+            searchStatus,
+            hasError,
+            activeTab,
+            willReturnNull: !searchResponse && !isSearching
+        });
+
+        if (!searchResponse && !isSearching) {
+            console.warn('[SearchResponseDisplay] Component will return NULL on next render!');
+        }
+    }, [isSearching, responseType, searchResponse, completion, results, searchStatus, hasError, activeTab]);
 
     // Memoize expensive style objects
     const syntaxStyle = useMemo(() => isDark ? materialOceanic : oneLight, [isDark]);
@@ -147,6 +168,8 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
         if (!status) return "bg-gray-400";
 
         switch (status) {
+            case 'in_progress':
+                return isDark ? "bg-blue-400" : "bg-blue-600";
             case 'success':
                 return isDark ? "bg-green-400" : "bg-green-500";
             case 'no_relevant_results':
@@ -240,7 +263,12 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
     }, [results, isDark]);
 
     // Don't show anything if no response and not loading
+    // This should only happen before the first search
     if (!searchResponse && !isSearching) {
+        console.log('[SearchResponseDisplay] RETURNING NULL - no response and not searching', {
+            searchResponse,
+            isSearching
+        });
         return null;
     }
 
@@ -251,30 +279,33 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
             isDark ? "ring-1 ring-gray-800" : "ring-1 ring-gray-200",
             className
         )}>
-            {/* Status Ribbon */}
-            {isSearching ? (
-                <div className="h-1.5 w-full relative overflow-hidden">
+            {/* Status Ribbon - Always same height */}
+            <div className="h-1.5 w-full relative overflow-hidden">
+                {isSearching ? (
+                    <>
+                        <div className={cn(
+                            "absolute inset-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-500"
+                        )}></div>
+                        <div className={cn(
+                            "absolute inset-0 h-1.5 bg-gradient-to-r from-transparent via-white/30 to-transparent",
+                            "animate-pulse"
+                        )}></div>
+                    </>
+                ) : (
                     <div className={cn(
-                        "absolute inset-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-500"
+                        "absolute inset-0 h-1.5 bg-gradient-to-r",
+                        hasError
+                            ? "from-red-500 to-red-600"
+                            : searchStatus === 'in_progress'
+                                ? "from-blue-500 to-indigo-500"
+                                : searchStatus === 'success'
+                                    ? "from-green-500 to-emerald-500"
+                                    : searchStatus === 'no_relevant_results'
+                                        ? "from-amber-400 to-amber-500"
+                                        : "from-gray-400 to-gray-500"
                     )}></div>
-                    <div className={cn(
-                        "absolute inset-0 h-1.5 bg-gradient-to-r from-transparent via-white/30 to-transparent",
-                        "animate-pulse"
-                    )}
-                    ></div>
-                </div>
-            ) : (
-                <div className={cn(
-                    "h-1.5 w-full bg-gradient-to-r",
-                    hasError
-                        ? "from-red-500 to-red-600"
-                        : searchStatus === 'success'
-                            ? "from-green-500 to-emerald-500"
-                            : searchStatus === 'no_relevant_results'
-                                ? "from-amber-400 to-amber-500"
-                                : "from-gray-400 to-gray-500"
-                )}></div>
-            )}
+                )}
+            </div>
 
             {/* Metadata Bar */}
             <div className={cn(
@@ -386,7 +417,7 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                                                 )}
                                             >
                                                 <div className="flex items-center gap-1.5 opacity-60">
-                                                    <BrainCircuit className="h-3 w-3" strokeWidth={1.5} />
+                                                    <FiMessageSquare className="h-3 w-3" />
                                                     Answer
                                                 </div>
                                             </button>
@@ -403,7 +434,7 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                                             onMouseLeave={() => handleTooltipContentMouseLeave("answerTab")}
                                         >
                                             <div className="flex items-start gap-1.5">
-                                                <BrainCircuit className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-white/80" />
+                                                <FiMessageSquare className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-white/80" />
                                                 <p className="text-xs text-white/90 leading-relaxed">
                                                     To get an answer to your question, turn on "Generate answer" when searching.
                                                 </p>
@@ -428,7 +459,7 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                                         )}
                                     >
                                         <div className="flex items-center gap-1.5">
-                                            <BrainCircuit className="h-3 w-3" strokeWidth={1.5} />
+                                            <FiMessageSquare className="h-3 w-3" />
                                             Answer
                                         </div>
                                         {activeTab === 'answer' && (
@@ -479,28 +510,51 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                         {/* Answer Tab Content - Always rendered but hidden when not active */}
                         {responseType === 'completion' && (completion || isSearching) && (
                             <div style={{ display: activeTab === 'answer' ? 'block' : 'none' }}>
-                                {!isSearching && completion && (
-                                    <div className={cn(
-                                        "flex items-center justify-end px-0 py-0 border-b",
-                                        isDark ? "border-gray-800/50" : "border-gray-200/50"
-                                    )}>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="text-[10px] gap-1 h-5 px-1 hover:bg-muted"
-                                            onClick={handleCopyCompletion}
-                                        >
-                                            {copiedCompletion ? <Check className="h-1 w-1" strokeWidth={1.5} /> : <Copy className="h-1 w-1" strokeWidth={1.5} />}
-                                            Copy
-                                        </Button>
-                                    </div>
-                                )}
+                                {/* Copy button area - always visible */}
+                                <div className={cn(
+                                    "flex items-center justify-end px-0 py-0 border-b h-[21px]",
+                                    isDark ? "border-gray-800/50" : "border-gray-200/50"
+                                )}>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className={cn(
+                                            "text-[10px] gap-1 h-5 px-1",
+                                            isSearching || !completion
+                                                ? "opacity-50 cursor-not-allowed"
+                                                : "hover:bg-muted"
+                                        )}
+                                        onClick={isSearching || !completion ? undefined : handleCopyCompletion}
+                                        disabled={isSearching || !completion}
+                                    >
+                                        {copiedCompletion ? <Check className="h-1 w-1" strokeWidth={1.5} /> : <Copy className="h-1 w-1" strokeWidth={1.5} />}
+                                        Copy
+                                    </Button>
+                                </div>
 
                                 <div className={cn(
                                     "px-1.5 py-1 overflow-auto max-h-[438px] text-[11px] leading-relaxed",
                                     isDark ? "bg-gray-900 text-gray-200" : "bg-white text-gray-800"
                                 )}>
-                                    {isSearching ? (
+                                    {(() => {
+                                        const showingSkeleton = isSearching && !completion;
+                                        const showingCompletion = !!completion;
+                                        const showingCursor = isSearching && completion;
+
+                                        console.log('[SearchResponseDisplay] Completion rendering logic:', {
+                                            isSearching,
+                                            hasCompletion: !!completion,
+                                            completionLength: completion?.length,
+                                            showingSkeleton,
+                                            showingCompletion,
+                                            showingCursor,
+                                            completionSource: isSearching ? 'STREAMING' : 'FINAL'
+                                        });
+
+                                        return null; // This return is just for the IIFE
+                                    })()}
+                                    {isSearching && !completion ? (
+                                        // Show skeleton only if we're searching but have no completion yet
                                         <div className="animate-pulse h-32 w-full">
                                             <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2.5"></div>
                                             <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full mb-2.5"></div>
@@ -508,7 +562,8 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                                             <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3 mb-2.5"></div>
                                             <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
                                         </div>
-                                    ) : (
+                                    ) : completion ? (
+                                        // Show the actual completion (streaming or final)
                                         <ReactMarkdown
                                             remarkPlugins={[remarkGfm]}
                                             components={{
@@ -682,7 +737,7 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                                         >
                                             {completion}
                                         </ReactMarkdown>
-                                    )}
+                                    ) : null}
                                 </div>
                             </div>
                         )}
@@ -690,22 +745,27 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                         {/* Entities Tab Content - Always rendered but hidden when not active */}
                         {(results.length > 0 || isSearching) && (
                             <div style={{ display: activeTab === 'entities' ? 'block' : 'none' }}>
-                                {!isSearching && results.length > 0 && (
-                                    <div className={cn(
-                                        "flex items-center justify-end px-0 py-0 border-b",
-                                        isDark ? "border-gray-800/50" : "border-gray-200/50"
-                                    )}>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="text-[10px] gap-1 h-5 px-1 hover:bg-muted"
-                                            onClick={handleCopyCompletion}
-                                        >
-                                            {copiedCompletion ? <Check className="h-1 w-1" strokeWidth={1.5} /> : <Copy className="h-1 w-1" strokeWidth={1.5} />}
-                                            Copy
-                                        </Button>
-                                    </div>
-                                )}
+                                {/* Copy button area - always visible */}
+                                <div className={cn(
+                                    "flex items-center justify-end px-0 py-0 border-b h-[21px]",
+                                    isDark ? "border-gray-800/50" : "border-gray-200/50"
+                                )}>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className={cn(
+                                            "text-[10px] gap-1 h-5 px-1",
+                                            isSearching || results.length === 0
+                                                ? "opacity-50 cursor-not-allowed"
+                                                : "hover:bg-muted"
+                                        )}
+                                        onClick={isSearching || results.length === 0 ? undefined : handleCopyJson}
+                                        disabled={isSearching || results.length === 0}
+                                    >
+                                        {copiedJson ? <Check className="h-1 w-1" strokeWidth={1.5} /> : <Copy className="h-1 w-1" strokeWidth={1.5} />}
+                                        Copy
+                                    </Button>
+                                </div>
                                 <div className={cn(
                                     "overflow-auto max-h-[438px]",
                                     isDark ? "bg-gray-900" : "bg-white"

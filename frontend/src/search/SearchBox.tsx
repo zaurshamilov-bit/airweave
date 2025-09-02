@@ -8,24 +8,13 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-    ArrowUp,
-    CodeXml,
-    X,
-    Loader2,
-    Merge,
-    ChevronsLeftRightEllipsis,
-    RectangleEllipsis,
-    Split,
-    Filter,
-    CalendarClock,
-    ArrowUpWideNarrow,
-    BrainCircuit
-} from "lucide-react";
+import { ArrowUp, CodeXml, X, Loader2 } from "lucide-react";
+import { FiGitMerge, FiType, FiLayers, FiFilter, FiSliders, FiClock, FiList, FiMessageSquare, FiBox } from "react-icons/fi";
 import { ApiIntegrationDoc } from "@/search/CodeBlock";
 import { JsonFilterEditor } from "@/search/JsonFilterEditor";
 import { RecencyBiasSlider } from "@/search/RecencyBiasSlider";
 import { apiClient } from "@/lib/api";
+import type { SearchEvent, PartialStreamUpdate, StreamPhase } from "@/search/types";
 
 // Search method types
 type SearchMethod = "hybrid" | "neural" | "keyword";
@@ -55,9 +44,13 @@ export interface SearchConfig {
 interface SearchBoxProps {
     collectionId: string;
     onSearch: (response: any, responseType: 'raw' | 'completion', responseTime: number) => void;
-    onSearchStart?: () => void;
+    onSearchStart?: (responseType: 'raw' | 'completion') => void;
     onSearchEnd?: () => void;
     className?: string;
+    // Streaming callbacks (Milestone 3)
+    onStreamEvent?: (event: SearchEvent) => void;
+    onStreamUpdate?: (partial: PartialStreamUpdate) => void;
+    onCancel?: () => void;
 }
 
 /**
@@ -77,6 +70,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     onSearch,
     onSearchStart,
     onSearchEnd,
+    onStreamEvent: onStreamEventProp,
+    onStreamUpdate: onStreamUpdateProp,
+    onCancel,
     className
 }) => {
     const { resolvedTheme } = useTheme();
@@ -163,17 +159,31 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
     const hasQuery = query.trim().length > 0;
 
+    // Streaming controls
+    const abortRef = useRef<AbortController | null>(null);
+    const searchSeqRef = useRef(0);
+
     // Main search handler
     const handleSendQuery = useCallback(async () => {
         if (!hasQuery || !collectionId || isSearching) return;
 
-        setIsSearching(true);
-        onSearchStart?.();
+        // Abort previous stream if any
+        if (abortRef.current) {
+            abortRef.current.abort();
+            abortRef.current = null;
+        }
 
-        const startTime = performance.now();
+        const mySeq = ++searchSeqRef.current;
+        const abortController = new AbortController();
+        abortRef.current = abortController;
 
         // Store the response type being used for this search
         const currentResponseType = toggles.answer ? "completion" : "raw";
+
+        setIsSearching(true);
+        onSearchStart?.(currentResponseType);
+
+        const startTime = performance.now();
 
         try {
             // Parse filter if enabled and valid
@@ -187,13 +197,27 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                 }
             }
 
+            // Determine the recency bias value to send
+            // IMPORTANT: Always send a number (0 or the slider value), never null
+            // If we send null, the backend applies DEFAULT_RECENCY_BIAS = 0.3
+            const recencyBiasToSend = toggles.recencyBias ? recencyBiasValue : 0;
+
+            console.log('[SearchBox] Recency bias logic:', {
+                toggleState: toggles.recencyBias,
+                sliderValue: recencyBiasValue,
+                valueToSend: recencyBiasToSend,
+                explanation: toggles.recencyBias
+                    ? `Toggle ON, sending slider value: ${recencyBiasValue}`
+                    : `Toggle OFF, sending 0 (not null to avoid default 0.3)`
+            });
+
             // Build request body with all parameters
             const requestBody: any = {
                 query: query,
                 search_method: searchMethod,
                 expansion_strategy: toggles.queryExpansion ? "auto" : "no_expansion",
                 enable_query_interpretation: toggles.queryInterpretation,
-                recency_bias: toggles.recencyBias ? recencyBiasValue : null,
+                recency_bias: recencyBiasToSend,  // Always a number, never null
                 enable_reranking: toggles.reRanking,
                 response_type: currentResponseType,
                 score_threshold: null,
@@ -208,52 +232,143 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
             console.log("Sending search request:", requestBody);
 
-            // Make the API call
+            // Make the streaming API call
             const response = await apiClient.post(
-                `/collections/${collectionId}/search`,
-                requestBody
+                `/collections/${collectionId}/search/stream`,
+                requestBody,
+                { signal: abortController.signal, extraHeaders: {} }
             );
 
-            const endTime = performance.now();
-            const responseTime = Math.round(endTime - startTime);
+            if (!response.ok || !response.body) {
+                const errorText = await response.text().catch(() => "");
+                throw new Error(errorText || `Stream failed: ${response.status} ${response.statusText}`);
+            }
 
-            if (response.ok) {
-                const data = await response.json();
-                console.log("Search response:", data);
-                onSearch(data, currentResponseType, responseTime);
-            } else {
-                // Handle error response
-                const errorText = await response.text();
-                let errorMessage = `Search failed: ${response.status} ${response.statusText}`;
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
 
+            // Aggregates
+            let aggregatedCompletion = "";
+            let latestResults: any[] = [];
+            let requestId: string | null = null;
+            let phase: StreamPhase = "searching";
+
+            const emitEvent = (event: SearchEvent) => {
+                try { onStreamEventProp?.(event); } catch { void 0; }
+            };
+            const emitUpdate = () => {
                 try {
-                    const errorJson = JSON.parse(errorText);
-                    if (errorJson.detail) {
-                        errorMessage = errorJson.detail;
+                    onStreamUpdateProp?.({ requestId, streamingCompletion: aggregatedCompletion, results: latestResults, status: phase });
+                } catch { void 0; }
+            };
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                if (searchSeqRef.current !== mySeq) break; // stale stream
+
+                buffer += decoder.decode(value, { stream: true });
+                const frames = buffer.split('\n\n');
+                buffer = frames.pop() || "";
+
+                for (const frame of frames) {
+                    const dataLines = frame
+                        .split('\n')
+                        .filter((l) => l.startsWith('data:'))
+                        .map((l) => l.slice(5).trim());
+                    if (dataLines.length === 0) continue;
+                    const payloadStr = dataLines.join('\n');
+                    let event: any;
+                    try {
+                        event = JSON.parse(payloadStr);
+                    } catch {
+                        continue; // non-JSON heartbeat or noise
                     }
-                } catch {
-                    // If not JSON, use the text as-is
-                    if (errorText) {
-                        errorMessage = errorText;
+
+                    emitEvent(event as SearchEvent);
+
+                    switch (event.type as SearchEvent['type']) {
+                        case 'connected':
+                            requestId = event.request_id || requestId;
+                            emitUpdate();
+                            break;
+                        case 'completion_start':
+                            phase = 'answering';
+                            emitUpdate();
+                            break;
+                        case 'completion_delta':
+                            phase = 'answering';
+                            if (typeof event.text === 'string') {
+                                aggregatedCompletion += event.text;
+                            }
+                            emitUpdate();
+                            break;
+                        case 'completion_done':
+                            // Keep aggregatedCompletion as the source of truth
+                            emitUpdate();
+                            break;
+                        case 'results':
+                            if (Array.isArray(event.results)) {
+                                latestResults = event.results;
+                            }
+                            emitUpdate();
+                            break;
+                        case 'error': {
+                            const endTime = performance.now();
+                            const responseTime = Math.round(endTime - startTime);
+                            onSearch({ error: event.message || 'Streaming error', status: 0 }, currentResponseType, responseTime);
+                            throw new Error(event.message || 'Streaming error');
+                        }
+                        case 'done': {
+                            const endTime = performance.now();
+                            const responseTime = Math.round(endTime - startTime);
+                            const finalResponse = {
+                                status: 'success',
+                                completion: aggregatedCompletion || null,
+                                results: latestResults || [],
+                                responseTime,
+                            };
+                            console.log('[SearchBox] Done event - sending final response:', {
+                                hasCompletion: !!aggregatedCompletion,
+                                completionLength: aggregatedCompletion?.length,
+                                responseType: currentResponseType,
+                                resultsCount: latestResults?.length
+                            });
+                            onSearch(finalResponse, currentResponseType, responseTime);
+                            break;
+                        }
+                        default:
+                            // Forward all other events; no aggregate change
+                            break;
                     }
                 }
-
-                console.error("Search error:", errorMessage);
-                onSearch({ error: errorMessage, status: response.status }, currentResponseType, responseTime);
             }
         } catch (error) {
-            const endTime = performance.now();
-            const responseTime = Math.round(endTime - startTime);
-            console.error("Search request failed:", error);
-            onSearch({
-                error: error instanceof Error ? error.message : "An unexpected error occurred",
-                status: 0
-            }, currentResponseType, responseTime);
+            // Ignore AbortError from cancellations
+            const err = error as any;
+            if (err && (err.name === 'AbortError' || err.message === 'AbortError')) {
+                // noop
+            } else {
+                const endTime = performance.now();
+                const responseTime = Math.round(endTime - startTime);
+                console.error("Search stream failed:", error);
+                onSearch({
+                    error: error instanceof Error ? error.message : "An unexpected error occurred",
+                    status: 0
+                }, currentResponseType, responseTime);
+            }
         } finally {
-            setIsSearching(false);
-            onSearchEnd?.();
+            // Only end if this is still the active stream
+            if (searchSeqRef.current === mySeq) {
+                setIsSearching(false);
+                onSearchEnd?.();
+                if (abortRef.current === abortController) {
+                    abortRef.current = null;
+                }
+            }
         }
-    }, [hasQuery, collectionId, query, searchMethod, toggles, filterJson, isFilterValid, recencyBiasValue, isSearching, onSearch, onSearchStart, onSearchEnd]);
+    }, [hasQuery, collectionId, query, searchMethod, toggles, filterJson, isFilterValid, recencyBiasValue, isSearching, onSearch, onSearchStart, onSearchEnd, onStreamEventProp, onStreamUpdateProp]);
 
     // Handle search method change
     const handleMethodChange = useCallback((newMethod: SearchMethod) => {
@@ -264,6 +379,13 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     const handleToggle = useCallback((name: keyof SearchToggles, displayName: string) => {
         // Special handling for recency bias
         if (name === 'recencyBias') {
+            const newToggleState = !toggles.recencyBias;
+            console.log('[SearchBox] Recency toggle clicked:', {
+                currentToggle: toggles.recencyBias,
+                newToggle: newToggleState,
+                currentSliderValue: recencyBiasValue
+            });
+
             // If turning off manually, keep the slider value
             setToggles(prev => ({
                 ...prev,
@@ -275,17 +397,23 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                 [name]: !prev[name]
             }));
         }
-    }, []);
+    }, [toggles.recencyBias, recencyBiasValue]);
 
     // Handle recency bias slider changes
     const handleRecencyBiasChange = useCallback((value: number) => {
+        console.log('[SearchBox] Recency slider changed:', {
+            newValue: value,
+            currentToggle: toggles.recencyBias,
+            willAutoToggle: value > 0
+        });
+
         setRecencyBiasValue(value);
         // Auto-toggle on when value > 0, off when value = 0
         setToggles(prev => ({
             ...prev,
             recencyBias: value > 0
         }));
-    }, []);
+    }, [toggles.recencyBias]);
 
     // Tooltip management helpers
     const handleTooltipMouseEnter = useCallback((tooltipId: string) => {
@@ -401,7 +529,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                     )}
                                                     title="Hybrid search"
                                                 >
-                                                    <Merge className="h-4 w-4" strokeWidth={1.5} />
+                                                    <FiGitMerge className="h-4 w-4" />
                                                 </button>
                                             </TooltipTrigger>
                                             <TooltipContent
@@ -450,7 +578,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                     )}
                                                     title="Neural search"
                                                 >
-                                                    <ChevronsLeftRightEllipsis className="h-4 w-4" strokeWidth={1.5} />
+                                                    <FiBox className="h-4 w-4" />
                                                 </button>
                                             </TooltipTrigger>
                                             <TooltipContent
@@ -499,7 +627,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                     )}
                                                     title="Keyword search"
                                                 >
-                                                    <RectangleEllipsis className="h-4 w-4" strokeWidth={1.5} />
+                                                    <FiType className="h-4 w-4" />
                                                 </button>
                                             </TooltipTrigger>
                                             <TooltipContent
@@ -556,7 +684,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <Split className="h-4 w-4" strokeWidth={1.5} />
+                                                <FiLayers className="h-4 w-4" />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
@@ -615,7 +743,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <Filter className="h-4 w-4" strokeWidth={1.5} />
+                                                <FiSliders className="h-4 w-4" />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
@@ -684,7 +812,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <Filter className="h-4 w-4" strokeWidth={1.5} />
+                                                <FiFilter className="h-4 w-4" />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
@@ -743,7 +871,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <CalendarClock className="h-4 w-4" strokeWidth={1.5} />
+                                                <FiClock className="h-4 w-4" />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
@@ -802,7 +930,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <ArrowUpWideNarrow className="h-4 w-4" strokeWidth={1.5} />
+                                                <FiList className="h-4 w-4" />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
@@ -855,7 +983,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <BrainCircuit className="h-4 w-4" strokeWidth={1.5} />
+                                                <FiMessageSquare className="h-4 w-4" />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
