@@ -916,8 +916,18 @@ async def initiate_source_connection(
         db=db, source_connection_in=source_connection_in, ctx=ctx
     )
 
-    # ---- Immediate creation path (direct credentials or token injection for OAuth)
-    if source_connection:
+    # ---- OAuth browser flow path: an auth_url was generated and a shell was created.
+    # Guard rail increments for this flow will happen in the /callback endpoint.
+    if auth_url:
+        return SourceConnectionInitiateResponse(
+            connection_init_id=init_id,
+            authentication_url=auth_url,
+            status="pending",
+            source_connection=source_connection,  # Return the newly created shell
+        )
+
+    # ---- Immediate creation path: no auth_url, but a final connection object was created.
+    elif source_connection:
         await guard_rail.increment(ActionType.SOURCE_CONNECTIONS)
         if creating_new_collection:
             await guard_rail.increment(ActionType.COLLECTIONS)
@@ -947,11 +957,9 @@ async def initiate_source_connection(
                 if await temporal_service.is_temporal_enabled():
                     await temporal_service.run_source_connection_workflow(
                         sync=sync,
-                        sync_job=sync_job,
                         sync_dag=sync_dag,
                         collection=collection,
                         source_connection=source_connection_with_auth,
-                        ctx=ctx,
                     )
                 else:
                     background_tasks.add_task(
@@ -967,19 +975,14 @@ async def initiate_source_connection(
                 await guard_rail.increment(ActionType.SYNCS)
 
         return SourceConnectionInitiateResponse(
-            connection_init_id=None,
-            authentication_url=None,
+            connection_init_id=init_id,
+            authentication_url=auth_url,
             status="created",
             source_connection=source_connection,
         )
 
-    # ---- OAuth browser flow path: settings have been persisted by the service
-    return SourceConnectionInitiateResponse(
-        connection_init_id=init_id,
-        authentication_url=auth_url,  # <-- backend proxy URL
-        status="pending",
-        source_connection=None,
-    )
+    # Fallback in case something unexpected happens where no auth_url and no source_connection exist
+    raise HTTPException(status_code=500, detail="Could not initiate source connection.")
 
 
 @router.get("/authorize/{code}")

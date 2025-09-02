@@ -120,6 +120,15 @@ class CRUDSourceConnection(
 
         # Attach the latest sync job info to each source connection
         for sc in source_connections:
+            # If the connection is a shell pending authentication, set
+            # status and skip sync job logic
+            if not sc.is_authenticated:
+                sc.status = SourceConnectionStatus.PENDING
+                # Also null out other sync-related fields for consistency
+                sc.latest_sync_job_id = None
+                sc.latest_sync_job_status = None
+                continue
+
             sc_id = str(sc.id) if hasattr(sc, "id") else "unknown"
             if sc.sync_id and sc.sync_id in sync_job_info:
                 job_info = sync_job_info[sc.sync_id]

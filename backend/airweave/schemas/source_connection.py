@@ -571,6 +571,19 @@ class SourceConnectionInDBBase(SourceConnectionBase):
         description="Email address of the user who last modified this source connection.",
     )
 
+    is_authenticated: bool = Field(
+        False,
+        description=(
+            "Indicates if the connection has been successfully authenticated. "
+            "Will be 'false' for connections pending completion of an OAuth flow."
+        ),
+    )
+
+    connection_init_session_id: Optional[UUID] = Field(
+        None,
+        description="The internal ID of the initiation session used to create this connection.",
+    )
+
     @model_validator(mode="before")
     @classmethod
     def map_collection_field(cls, data: Any) -> Any:
@@ -881,9 +894,10 @@ class SourceConnectionListItem(BaseModel):
         ...,
         description="When the source connection was last modified (ISO 8601 format).",
     )
-    sync_id: UUID = Field(
+    sync_id: Optional[UUID] = Field(
         ...,
-        description="Internal identifier for the sync configuration.",
+        description="Internal identifier for the sync configuration. "
+        "Will be null for pending connections.",
     )
     collection: str = Field(
         ...,
@@ -893,6 +907,15 @@ class SourceConnectionListItem(BaseModel):
     white_label_id: Optional[UUID] = Field(
         None,
         description="Identifier for custom OAuth integrations, if applicable.",
+    )
+
+    is_authenticated: bool = Field(
+        ..., description="Indicates if the connection has valid, active credentials."
+    )
+
+    connection_init_session_id: Optional[UUID] = Field(
+        None,
+        description="Internal ID of the session that initiated this connection, if applicable.",
     )
 
     @model_validator(mode="after")

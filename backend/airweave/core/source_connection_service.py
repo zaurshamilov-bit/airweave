@@ -380,6 +380,7 @@ class SourceConnectionService:
                 "white_label_id": core_attrs.get("white_label_id"),
                 "readable_auth_provider_id": core_attrs.get("auth_provider"),
                 "auth_provider_config": core_attrs.get("auth_provider_config"),
+                "is_authenticated": True,
             }
 
             source_connection = await crud.source_connection.create(
@@ -498,6 +499,11 @@ class SourceConnectionService:
                 db=db, id=source_connection.connection_id, ctx=ctx
             )
 
+        if source_connection.connection_id:
+            connection = await crud.connection.get(
+                db=db, id=source_connection.connection_id, ctx=ctx
+            )
+
             if connection and connection.integration_credential_id:
                 integration_credential = await crud.integration_credential.get(
                     db=db, id=connection.integration_credential_id, ctx=ctx
@@ -561,6 +567,7 @@ class SourceConnectionService:
                 modified_at=sc.modified_at,
                 sync_id=sc.sync_id,
                 collection=sc.readable_collection_id,
+                is_authenticated=sc.is_authenticated,
                 white_label_id=sc.white_label_id,
             )
             for sc in source_connections
@@ -599,6 +606,7 @@ class SourceConnectionService:
                 modified_at=sc.modified_at,
                 sync_id=sc.sync_id,
                 collection=sc.readable_collection_id,
+                is_authenticated=sc.is_authenticated,
                 white_label_id=sc.white_label_id,
             )
             for sc in source_connections
@@ -1056,9 +1064,7 @@ class SourceConnectionService:
         source: Any,
         source_connection_in: schemas.SourceConnectionInitiate,
         auth_type: AuthType,
-    ) -> Tuple[
-        Optional[UUID], Optional[str], Optional[schemas.SourceConnection], Optional[schemas.SyncJob]
-    ]:
+    ) -> Tuple[Optional[UUID], Optional[str], schemas.SourceConnection, Optional[schemas.SyncJob]]:
         """Create connection immediately using injected OAuth tokens."""
         cfg = source_connection_in.config_fields
         config_fields = await self._validate_config_fields(
@@ -1160,6 +1166,7 @@ class SourceConnectionService:
                 "white_label_id": None,
                 "readable_auth_provider_id": None,
                 "auth_provider_config": None,
+                "is_authenticated": True,
             }
             sc_row = await crud.source_connection.create(
                 db=uow.session, obj_in=source_connection_create, ctx=ctx, uow=uow
@@ -1190,9 +1197,7 @@ class SourceConnectionService:
         ctx: ApiContext,
         source: Any,
         source_connection_in: schemas.SourceConnectionInitiate,
-    ) -> Tuple[
-        Optional[UUID], Optional[str], Optional[schemas.SourceConnection], Optional[schemas.SyncJob]
-    ]:
+    ) -> Tuple[Optional[UUID], Optional[str], schemas.SourceConnection, Optional[schemas.SyncJob]]:
         """Start a short-lived init session and return a proxy URL for provider consent."""
         api_callback = f"{core_settings.api_url}/source-connections/callback"
         state = secrets.token_urlsafe(24)
@@ -1233,6 +1238,24 @@ class SourceConnectionService:
         expires_at = ConnectionInitSession.default_expires_at(minutes=ttl_minutes)
 
         async with UnitOfWork(db) as uow:
+            # 1. Create the shell SourceConnection first
+            shell_create = {
+                "name": source_connection_in.name,
+                "description": source_connection_in.description,
+                "short_name": source.short_name,
+                "is_authenticated": False,
+                # Safely get white_label_id if it exists, otherwise use None
+                "white_label_id": getattr(source_connection_in, "white_label_id", None),
+                "readable_collection_id": source_connection_in.collection,
+            }
+            sc_shell_obj = await crud.source_connection.create(
+                uow.session, obj_in=shell_create, ctx=ctx, uow=uow
+            )
+
+            await uow.session.flush()
+            await uow.session.refresh(sc_shell_obj)
+
+            # 2. Create the ConnectionInitSession, linking it to the shell
             init_obj = await connection_init_session.create(
                 uow.session,
                 obj_in={
@@ -1243,12 +1266,24 @@ class SourceConnectionService:
                     "state": state,
                     "status": ConnectionInitStatus.PENDING,
                     "expires_at": expires_at,
+                    # No back-ref needed, the shell points to the session
                 },
                 ctx=ctx,
                 uow=uow,
             )
+
             init_id = init_obj.id
+            await uow.session.flush()
+
+            # 3. Update shell with the session ID
+            sc_shell_obj.connection_init_session_id = init_id
+            uow.session.add(sc_shell_obj)
+
             await uow.commit()
+            await uow.session.refresh(sc_shell_obj)
+
+        sc_shell_schema = schemas.SourceConnection.from_orm_with_collection_mapping(sc_shell_obj)
+        print("herer bab girl aa")
 
         # PRE-CONSENT PROXY: generate 8-char code that redirects to provider OAuth URL
         proxy_ttl = int(getattr(core_settings, "REDIRECT_SESSION_TTL_MINUTES", 5))
@@ -1262,8 +1297,11 @@ class SourceConnectionService:
             ctx=ctx,
         )
 
+        print("herer bab girl aabb")
+
         proxy_url = f"{core_settings.api_url}/source-connections/authorize/{code8}"
-        return init_id, proxy_url, None, None
+        print(init_id, proxy_url, sc_shell_schema, None)
+        return init_id, proxy_url, sc_shell_schema, None
 
     async def initiate_connection(
         self,
@@ -1346,6 +1384,14 @@ class SourceConnectionService:
         if session_obj.status != ConnectionInitStatus.PENDING:
             raise HTTPException(status_code=400, detail=f"Session status is {session_obj.status}")
 
+        # Find the associated source connection shell using the new CRUD method
+        source_connection_shell = await crud.source_connection.get_by_query_and_org(
+            db,
+            ctx=ctx,
+            connection_init_session_id=session_obj.id,
+        )
+        if not source_connection_shell:
+            raise HTTPException(status_code=404, detail="Source connection shell not found")
         source_short_name = session_obj.short_name
         payload = session_obj.payload or {}
         overrides = session_obj.overrides or {}
@@ -1457,20 +1503,23 @@ class SourceConnectionService:
                 else None
             )
 
-            sc_create = {
+            # Update the existing shell instead of creating a new record
+            sc_update_data = {
                 "name": payload.get("name"),
                 "description": payload.get("description"),
-                "short_name": source_short_name,
                 "config_fields": config_fields,
                 "connection_id": connection.id,
                 "readable_collection_id": collection.readable_id,
                 "sync_id": sync.id,
                 "white_label_id": payload.get("white_label_id"),
-                "readable_auth_provider_id": None,
-                "auth_provider_config": None,
+                "is_authenticated": True,
             }
-            sc_row = await crud.source_connection.create(
-                db=uow.session, obj_in=sc_create, ctx=ctx, uow=uow
+            sc_row = await crud.source_connection.update(
+                db=uow.session,
+                db_obj=source_connection_shell,
+                obj_in=sc_update_data,
+                ctx=ctx,
+                uow=uow,
             )
             await uow.session.flush()
 

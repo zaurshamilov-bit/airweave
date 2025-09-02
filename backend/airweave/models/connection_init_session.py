@@ -1,13 +1,16 @@
 """Ephemeral session model for unified source-connection initiation flow."""
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import JSON, DateTime, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from airweave.models._base import OrganizationBase
+
+if TYPE_CHECKING:
+    from airweave.models.source_connection import SourceConnection
 
 
 class ConnectionInitStatus:
@@ -53,6 +56,10 @@ class ConnectionInitSession(OrganizationBase):
     # Set when finalized (optional)
     final_connection_id: Mapped[Optional[UUID]] = mapped_column(
         ForeignKey("connection.id", ondelete="SET NULL"), nullable=True
+    )
+
+    source_connection: Mapped[Optional["SourceConnection"]] = relationship(
+        back_populates="connection_init_session"
     )
 
     @staticmethod
