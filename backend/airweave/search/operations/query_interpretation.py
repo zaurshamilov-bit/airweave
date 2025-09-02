@@ -285,8 +285,8 @@ class QueryInterpretation(SearchOperation):
                 logger.debug(f"[{self.name}] Dropping condition with unknown key: {key}")
                 continue
 
-            # Special handling for source_name field
-            if key == "source_name":
+            # Special handling for source_name field (accept both plain and namespaced keys)
+            if key in ("source_name", "airweave_system_metadata.source_name"):
                 fc = self._validate_source_name(fc, allowed_sources, logger)
                 if not fc:
                     continue
@@ -318,20 +318,64 @@ class QueryInterpretation(SearchOperation):
             candidates = [str(v) for v in match_obj["any"]]
 
         # Only keep candidates that match available sources exactly
-        filtered = [v for v in candidates if v in allowed_sources]
+        filtered = self._filter_candidates_against_sources(candidates, allowed_sources)
+        # Try basic normalization (display -> short_name style): lowercase, spaces -> underscores
+        if not filtered:
+            norm_candidates = [self._safe_lower_underscore(v) for v in candidates]
+            filtered = self._filter_candidates_against_sources(norm_candidates, allowed_sources)
+
         if not filtered:
             logger.debug(
                 f"[{self.name}] Dropping source_name condition with unknown sources: {candidates}"
             )
             return None
 
-        # Rewrite match to preserved filtered values
-        if len(filtered) == 1:
-            condition["match"] = {"value": filtered[0]}
+        # Canonicalize to lowercase short_names when available and de-duplicate
+        canonical = self._canonicalize_source_values(filtered, allowed_sources)
+
+        # Rewrite match with canonicalized values
+        if len(canonical) == 1:
+            condition["match"] = {"value": canonical[0]}
         else:
-            condition["match"] = {"any": filtered}
+            condition["match"] = {"any": canonical}
 
         return condition
+
+    def _safe_lower_underscore(self, value: str) -> str:
+        """Lowercase and replace spaces with underscores; fallback to original on error."""
+        try:
+            return value.strip().lower().replace(" ", "_")
+        except Exception:
+            return value
+
+    def _filter_candidates_against_sources(
+        self, candidates: List[str], allowed_sources: Set[str]
+    ) -> List[str]:
+        """Filter candidate source names against allowed sources."""
+        return [v for v in candidates if v in allowed_sources]
+
+    def _canonicalize_source_values(
+        self, values: List[str], allowed_sources: Set[str]
+    ) -> List[str]:
+        """Prefer lowercase short_names when available and de-duplicate preserving order."""
+        canonical: List[str] = []
+        for v in values:
+            try:
+                lower_v = v.lower()
+            except Exception:
+                lower_v = v
+            if isinstance(v, str) and isinstance(lower_v, str) and lower_v in allowed_sources:
+                canonical.append(lower_v)
+            else:
+                canonical.append(v)
+
+        seen: Set[str] = set()
+        dedup: List[str] = []
+        for v in canonical:
+            if v not in seen:
+                dedup.append(v)
+                seen.add(v)
+        return dedup
 
     def _apply_filters(
         self, validated_conditions: List[Dict], extracted: Any, context: Dict, logger: Any
@@ -374,6 +418,18 @@ class QueryInterpretation(SearchOperation):
             # Process each source connection
             await self._process_source_connections(db, source_connections, available_fields, logger)
 
+            # Augment with PostgreSQL field catalog if present
+            try:
+                await self._augment_with_pg_catalog(
+                    db=db,
+                    source_connections=source_connections,
+                    available_fields=available_fields,
+                    logger=logger,
+                    ctx=ctx,
+                )
+            except Exception as e:
+                logger.debug(f"[{self.name}] Failed to augment with PG catalog: {e}")
+
             logger.debug(
                 f"[{self.name}] Discovered fields for {len(available_fields)} sources: "
                 f"{available_fields}"
@@ -383,6 +439,107 @@ class QueryInterpretation(SearchOperation):
             logger.warning(f"[{self.name}] Could not discover fields: {e}")
 
         return available_fields
+
+    async def _augment_with_pg_catalog(
+        self,
+        db: Any,
+        source_connections: List,
+        available_fields: Dict[str, Dict[str, str]],
+        logger: Any,
+        ctx: Any | None,
+    ) -> None:
+        """Augment available fields with Postgres catalog for matching connections.
+
+        Adds entries under the display source key "PostgreSQL" in the form
+        "table.column" with concise type hints. Also adds a lowercase alias key
+        "postgresql" (empty) so source_name filters can match payload values if needed.
+        """
+        if not source_connections or ctx is None:
+            return
+
+        pg_conns = self._filter_pg_connections(source_connections)
+        if not pg_conns:
+            return
+
+        organization_id = self._get_organization_id(ctx)
+        if not organization_id:
+            return
+
+        self._ensure_pg_keys_exist(available_fields)
+
+        for sc in pg_conns:
+            sc_id = getattr(sc, "id", None)
+            if not sc_id:
+                continue
+            try:
+                tables = await self._fetch_pg_tables(db, organization_id, str(sc_id))
+                added_count = self._add_pg_fields_from_tables(tables, available_fields)
+                if added_count:
+                    logger.debug(
+                        f"[{self.name}] Loaded {added_count} Postgres fields from catalog "
+                        f"for source_connection={sc_id}"
+                    )
+            except Exception as e:
+                logger.debug(f"[{self.name}] PG catalog lookup error: {e}")
+
+    def _filter_pg_connections(self, source_connections: List) -> List:
+        """Return connections whose short_name is 'postgresql'."""
+        return [sc for sc in source_connections if getattr(sc, "short_name", None) == "postgresql"]
+
+    def _get_organization_id(self, ctx: Any | None) -> Optional[str]:
+        """Safely extract organization id from ctx."""
+        if ctx is None:
+            return None
+        return getattr(getattr(ctx, "organization", None), "id", None)
+
+    def _ensure_pg_keys_exist(self, available_fields: Dict[str, Dict[str, str]]) -> None:
+        """Ensure 'PostgreSQL' and 'postgresql' keys exist in available_fields."""
+        if "PostgreSQL" not in available_fields:
+            available_fields["PostgreSQL"] = {}
+        if "postgresql" not in available_fields:
+            available_fields["postgresql"] = {}
+
+    async def _fetch_pg_tables(
+        self, db: Any, organization_id: str, source_connection_id: str
+    ) -> List:
+        """Fetch catalog tables with columns for a specific connection."""
+        # Lazy import to avoid circular deps
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+
+        from airweave.models.pg_field_catalog import (
+            PgFieldCatalogTable,
+        )
+
+        stmt = (
+            select(PgFieldCatalogTable)
+            .where(
+                PgFieldCatalogTable.organization_id == organization_id,
+                PgFieldCatalogTable.source_connection_id == source_connection_id,
+            )
+            .options(selectinload(PgFieldCatalogTable.columns))
+        )
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
+    def _add_pg_fields_from_tables(
+        self, tables: List, available_fields: Dict[str, Dict[str, str]]
+    ) -> int:
+        """Add table.column entries into available_fields['PostgreSQL']; return count added."""
+        added_count = 0
+        for t in tables or []:
+            table_name = getattr(t, "table_name", None)
+            if not table_name:
+                continue
+            for c in getattr(t, "columns", None) or []:
+                col_name = getattr(c, "column_name", None)
+                if not col_name:
+                    continue
+                dt = getattr(c, "data_type", None) or getattr(c, "udt_name", None) or ""
+                key = f"{table_name}.{col_name}"
+                available_fields["PostgreSQL"][key] = f"Postgres column ({dt})"
+                added_count += 1
+        return added_count
 
     def _get_common_fields(self) -> Dict[str, Dict[str, str]]:
         return {
@@ -485,6 +642,13 @@ class QueryInterpretation(SearchOperation):
         source_name = source.name
         if source_name not in available_fields:
             available_fields[source_name] = {}
+        # Also add the short_name bucket so validator can accept both display and stored casing
+        try:
+            short_name = getattr(source, "short_name", None)
+            if short_name and short_name not in available_fields:
+                available_fields[short_name] = {}
+        except Exception:
+            pass
 
         try:
             # Get all entity definitions for this source
@@ -665,8 +829,10 @@ class QueryInterpretation(SearchOperation):
             "the field names explicitly listed for each source or in Common fields.\n"
             "- If you cannot confidently map a term to an available field, omit the filter "
             "and lower the confidence.\n"
-            "- The value for source_name must match one of the listed sources exactly "
-            "(case-sensitive).\n"
+            "- The value for source_name must match one of the listed sources exactly. "
+            "If both a display-cased and lowercase variant are present (e.g., "
+            "'PostgreSQL' and 'postgresql'), prefer the lowercase short_name "
+            "(e.g., 'postgresql').\n"
             "- If you use a field that only exists for some sources, also include a matching "
             "source_name condition to scope the filter appropriately when the source is "
             "implied by the query.\n"
@@ -697,18 +863,47 @@ class QueryInterpretation(SearchOperation):
             "airweave_created_at",
             "airweave_updated_at",
         }
+        # Keep already-namespaced keys
+        if isinstance(key, str) and key.startswith("airweave_system_metadata."):
+            return key
         if key in nested_fields:
             return f"airweave_system_metadata.{key}"
+
+        # Support PostgreSQL table.column notation by flattening to column name
+        # since polymorphic entities store columns at the top level of payload.
+        # Example: "source.labels" -> "labels"; also map id -> id_
+        if isinstance(key, str) and "." in key:
+            try:
+                table, column = key.split(".", 1)
+                if column == "id":
+                    return "id_"
+                return column
+            except Exception:
+                return key
         return key
 
     def _build_qdrant_filter(self, filter_conditions: List[Dict[str, Any]]) -> Optional[Dict]:
         if not filter_conditions:
             return None
 
-        mapped_conditions = []
+        mapped_conditions: List[Dict[str, Any]] = []
         for cond in filter_conditions:
+            original_key = cond.get("key")
             new_cond = cond.copy()
-            new_cond["key"] = self._map_to_qdrant_path(new_cond["key"])
+            new_cond["key"] = self._map_to_qdrant_path(original_key)
             mapped_conditions.append(new_cond)
+
+            # If condition used table.column notation (not system metadata),
+            # also scope by table_name to avoid cross-table collisions.
+            if (
+                isinstance(original_key, str)
+                and "." in original_key
+                and not original_key.startswith("airweave_system_metadata.")
+            ):
+                try:
+                    table, _ = original_key.split(".", 1)
+                    mapped_conditions.append({"key": "table_name", "match": {"value": table}})
+                except Exception:
+                    pass
 
         return {"must": mapped_conditions}
