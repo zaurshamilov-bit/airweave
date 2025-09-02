@@ -3,8 +3,8 @@
 import time
 from typing import Any, Dict, List, Optional
 
-from monke.core.test_config import TestConfig
-from monke.core.test_steps import TestStepFactory
+from monke.core.config import TestConfig
+from monke.core.steps import TestStepFactory
 from monke.utils.logging import get_logger
 from monke.core import events
 
@@ -140,7 +140,7 @@ class TestFlow:
 
     async def _setup_infrastructure(self, bongo, airweave_client):
         collection_name = f"monke-{self.config.connector.type}-test-{int(time.time())}"
-        collection = airweave_client.collections.create_collection(name=collection_name)
+        collection = airweave_client.collections.create(name=collection_name)
         self.config._collection_id = collection.id
         self.config._collection_readable_id = collection.readable_id
 
@@ -164,7 +164,7 @@ class TestFlow:
                 self.logger.warning(
                     "Auth provider requested but DM_AUTH_PROVIDER_ID not set; falling back to explicit auth_fields if provided"
                 )
-                source_connection = airweave_client.source_connections.create_source_connection(
+                source_connection = airweave_client.source_connections.create(
                     name=f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
                     short_name=self.config.connector.type,
                     collection=self.config._collection_readable_id,
@@ -195,11 +195,9 @@ class TestFlow:
                 if auth_provider_config:
                     kwargs["auth_provider_config"] = auth_provider_config
 
-                source_connection = airweave_client.source_connections.create_source_connection(
-                    **kwargs
-                )
+                source_connection = airweave_client.source_connections.create(**kwargs)
         else:
-            source_connection = airweave_client.source_connections.create_source_connection(
+            source_connection = airweave_client.source_connections.create(
                 name=f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
                 short_name=self.config.connector.type,
                 collection=self.config._collection_readable_id,
@@ -216,15 +214,13 @@ class TestFlow:
             await self._emit_event("cleanup_started")
 
             if hasattr(self.config, "_source_connection_id"):
-                self.config._airweave_client.source_connections.delete_source_connection(
+                self.config._airweave_client.source_connections.delete(
                     self.config._source_connection_id
                 )
                 self.logger.info("✅ Deleted source connection")
 
             if hasattr(self.config, "_collection_readable_id"):
-                self.config._airweave_client.collections.delete_collection(
-                    self.config._collection_readable_id
-                )
+                self.config._airweave_client.collections.delete(self.config._collection_readable_id)
                 self.logger.info("✅ Deleted test collection")
 
             self.logger.info("✅ Test environment cleanup completed")

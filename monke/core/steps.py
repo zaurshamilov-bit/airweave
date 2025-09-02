@@ -5,7 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
-from monke.core.test_config import TestConfig
+from monke.core.config import TestConfig
 from monke.utils.logging import get_logger
 
 
@@ -97,9 +97,7 @@ class SyncStep(TestStep):
         # then START OUR OWN sync and wait for it too.
         target_job_id = None
         try:
-            run_resp = client.source_connections.run_source_connection(
-                self.config._source_connection_id
-            )
+            run_resp = client.source_connections.run(self.config._source_connection_id)
             target_job_id = (
                 getattr(run_resp, "id", None)
                 or getattr(run_resp, "job_id", None)
@@ -112,16 +110,14 @@ class SyncStep(TestStep):
                 active_job_id = self._find_active_job_id(client) or self._latest_job_id(client)
                 if not active_job_id:
                     # Last resort: brief wait then re-check
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(2.0)
                     active_job_id = self._find_active_job_id(client) or self._latest_job_id(client)
                 if not active_job_id:
                     raise  # nothing to wait on; re-raise original error
                 await self._wait_for_sync_completion(client, target_job_id=active_job_id)
 
                 # IMPORTANT: after the previous job completes, start *our* job
-                run_resp = client.source_connections.run_source_connection(
-                    self.config._source_connection_id
-                )
+                run_resp = client.source_connections.run(self.config._source_connection_id)
                 target_job_id = (
                     getattr(run_resp, "id", None)
                     or getattr(run_resp, "job_id", None)
@@ -137,10 +133,7 @@ class SyncStep(TestStep):
         return getattr(self.config, "_airweave_client", None)
 
     def _jobs_sorted(self, client):
-        jobs = (
-            client.source_connections.list_source_connection_jobs(self.config._source_connection_id)
-            or []
-        )
+        jobs = client.source_connections.list_jobs(self.config._source_connection_id) or []
 
         def _ts(j):
             return getattr(j, "started_at", None) or getattr(j, "created_at", None) or 0
@@ -164,7 +157,7 @@ class SyncStep(TestStep):
 
     def _latest_job_id(self, client) -> Optional[str]:
         try:
-            sc = client.source_connections.get_source_connection(self.config._source_connection_id)
+            sc = client.source_connections.get(self.config._source_connection_id)
             latest = getattr(sc, "latest_sync_job_id", None)
             if latest:
                 return str(latest)
@@ -221,15 +214,13 @@ class SyncStep(TestStep):
             prev_latest = getattr(self.config, "_last_sync_job_id", None)
 
             while time.monotonic() - start < timeout_seconds:
-                sc = client.source_connections.get_source_connection(
-                    self.config._source_connection_id
-                )
+                sc = client.source_connections.get(self.config._source_connection_id)
                 latest = getattr(sc, "latest_sync_job_id", None)
                 if latest and latest != prev_latest:
                     target_job_id = latest
                     self.logger.info(f"🆔 Detected sync job id: {target_job_id}")
                     break
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(2.0)
 
             if not target_job_id:
                 raise RuntimeError("Couldn’t obtain a sync job id to wait on.")
@@ -239,8 +230,8 @@ class SyncStep(TestStep):
             # Prefer a direct job lookup when available
             job = None
             try:
-                if hasattr(client.source_connections, "get_source_connection_job"):
-                    job = client.source_connections.get_source_connection_job(
+                if hasattr(client.source_connections, "get_job"):
+                    job = client.source_connections.get_job(
                         source_connection_id=self.config._source_connection_id,
                         job_id=target_job_id,
                     )
@@ -260,7 +251,7 @@ class SyncStep(TestStep):
                 job = None
 
             if not job:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(2.0)
                 continue
 
             fields = _job_status_fields(job)
@@ -282,7 +273,7 @@ class SyncStep(TestStep):
                 return
 
             if fields["status"] in ACTIVE or not fields["status"]:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(2.0)
                 continue
 
             # Unexpected state, keep polling briefly
@@ -326,7 +317,7 @@ async def _search_collection_async(
     """
 
     def _run():
-        return client.collections.search_collection(
+        return client.collections.search(
             readable_id=readable_id,
             query=query,
             limit=limit,
@@ -705,10 +696,121 @@ class VerifyCompleteDeletionStep(TestStep):
             return False
 
 
+class CleanupStep(TestStep):
+    """Cleanup step - clean up entire source workspace."""
+
+    async def execute(self):
+        """Clean up all test data from the source workspace."""
+        self.logger.info("🧹 Cleaning up source workspace")
+        bongo = self._get_bongo()
+
+        try:
+            await bongo.cleanup()
+            self.logger.info("✅ Source workspace cleanup completed")
+        except Exception as e:
+            # Don't fail the test if cleanup fails, just log the warning
+            self.logger.warning(f"⚠️ Cleanup encountered issues: {e}")
+
+    def _get_bongo(self):
+        return getattr(self.config, "_bongo", None)
+
+
+class CollectionCleanupStep(TestStep):
+    """Collection cleanup step - clean up old test collections from Airweave."""
+
+    async def execute(self):
+        """Clean up old test collections from Airweave."""
+        self.logger.info("🧹 Cleaning up old test collections")
+        client = self._get_airweave_client()
+
+        if not client:
+            self.logger.warning("⚠️ No Airweave client available for collection cleanup")
+            return
+
+        cleanup_stats = {"collections_deleted": 0, "errors": 0}
+
+        try:
+            # Find all test collections
+            test_collections = await self._find_test_collections(client)
+
+            if test_collections:
+                self.logger.info(f"🔍 Found {len(test_collections)} test collections to clean up")
+
+                for collection in test_collections:
+                    try:
+                        client.collections.delete(collection["readable_id"])
+                        cleanup_stats["collections_deleted"] += 1
+                        self.logger.info(
+                            f"✅ Deleted collection: {collection['name']} ({collection['readable_id']})"
+                        )
+                    except Exception as e:
+                        cleanup_stats["errors"] += 1
+                        self.logger.warning(
+                            f"⚠️ Failed to delete collection {collection['readable_id']}: {e}"
+                        )
+
+            # Log cleanup summary
+            self.logger.info(
+                f"🧹 Collection cleanup completed: {cleanup_stats['collections_deleted']} collections deleted, "
+                f"{cleanup_stats['errors']} errors"
+            )
+
+        except Exception as e:
+            self.logger.error(f"❌ Error during collection cleanup: {e}")
+            # Don't re-raise - cleanup should be best-effort
+
+    def _get_airweave_client(self):
+        return getattr(self.config, "_airweave_client", None)
+
+    async def _find_test_collections(self, client) -> List[Dict[str, Any]]:
+        """Find all test collections that should be cleaned up."""
+        test_collections = []
+
+        try:
+            # Get all collections
+            collections = client.collections.list()
+
+            # Convert to list if it's a generator or iterator
+            if hasattr(collections, "__iter__") and not isinstance(collections, list):
+                collections = list(collections)
+
+            for collection in collections:
+                # Convert to dict if it's a Pydantic model
+                if hasattr(collection, "model_dump"):
+                    collection_data = collection.model_dump()
+                elif hasattr(collection, "dict"):
+                    collection_data = collection.dict()
+                else:
+                    collection_data = (
+                        dict(collection) if hasattr(collection, "__dict__") else collection
+                    )
+
+                name = collection_data.get("name", "")
+                readable_id = collection_data.get("readable_id", "")
+
+                # Check if this looks like a test collection
+                is_test_collection = (
+                    name.lower().startswith("monke-")
+                    or "test" in name.lower()
+                    and ("collection" in name.lower() or "monke" in name.lower())
+                    or readable_id.startswith("monke-")
+                )
+
+                if is_test_collection:
+                    test_collections.append(collection_data)
+
+        except Exception as e:
+            self.logger.error(f"❌ Error finding test collections: {e}")
+
+        return test_collections
+
+
 class TestStepFactory:
     """Factory for creating test steps."""
 
     _steps = {
+        "cleanup": CleanupStep,
+        "collection_cleanup": CollectionCleanupStep,
         "create": CreateStep,
         "sync": SyncStep,
         "verify": VerifyStep,

@@ -12,6 +12,8 @@ connector:
 
 test_flow:
   steps:
+    - collection_cleanup  # Clean up old collections
+    - cleanup  # Clean up source workspace
     - create
     - sync
     - verify
@@ -25,6 +27,8 @@ test_flow:
     - complete_delete
     - sync
     - verify_complete_deletion
+    - cleanup  # Clean up source workspace
+    - collection_cleanup  # Clean up collections
 
 deletion:
   partial_delete_count: 1

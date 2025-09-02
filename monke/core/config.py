@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 @dataclass
 class ConnectorConfig:
     """Configuration for a specific connector."""
+
     name: str
     type: str
     auth_fields: Dict[str, Any]
@@ -18,6 +19,7 @@ class ConnectorConfig:
 @dataclass
 class DeletionConfig:
     """Configuration for incremental deletion testing."""
+
     # Phase 1: Partial deletion
     partial_delete_count: int = 1  # Number of entities to delete during partial deletion
 
@@ -30,18 +32,35 @@ class DeletionConfig:
 @dataclass
 class TestFlowConfig:
     """Configuration for test flow customization."""
-    steps: List[str] = field(default_factory=lambda: [
-        "create", "sync", "verify",
-        "update", "sync", "verify",
-        "partial_delete", "sync", "verify_partial_deletion", "verify_remaining_entities",
-        "complete_delete", "sync", "verify_complete_deletion"
-    ])
+
+    steps: List[str] = field(
+        default_factory=lambda: [
+            "collection_cleanup",  # Clean up old collections at the beginning
+            "cleanup",  # Clean up source workspace at the beginning
+            "create",
+            "sync",
+            "verify",
+            "update",
+            "sync",
+            "verify",
+            "partial_delete",
+            "sync",
+            "verify_partial_deletion",
+            "verify_remaining_entities",
+            "complete_delete",
+            "sync",
+            "verify_complete_deletion",
+            "cleanup",  # Clean up source workspace at the end
+            "collection_cleanup",  # Clean up collections at the end
+        ]
+    )
     custom_steps: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass
 class TestConfig:
     """Main test configuration."""
+
     name: str
     description: str
     connector: ConnectorConfig
@@ -55,7 +74,7 @@ class TestConfig:
     @classmethod
     def from_file(cls, config_path: str) -> "TestConfig":
         """Load configuration from YAML file."""
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             content = f.read()
 
         # Process environment variable substitution
@@ -67,7 +86,7 @@ class TestConfig:
             return os.getenv(var_name, match.group(0))
 
         # Replace ${VAR_NAME} with actual environment variable values
-        processed_content = re.sub(r'\$\{([^}]+)\}', substitute_env_vars, content)
+        processed_content = re.sub(r"\$\{([^}]+)\}", substitute_env_vars, content)
 
         # Load the processed YAML
         data = yaml.safe_load(processed_content)
@@ -81,7 +100,7 @@ class TestConfig:
             entity_count=data.get("entity_count", 10),
             collection_config=data.get("collection", {}),
             verification_config=data.get("verification", {}),
-            cleanup_config=data.get("cleanup", {})
+            cleanup_config=data.get("cleanup", {}),
         )
 
     @classmethod
@@ -96,5 +115,5 @@ class TestConfig:
             entity_count=data.get("entity_count", 10),
             collection_config=data.get("collection", {}),
             verification_config=data.get("verification", {}),
-            cleanup_config=data.get("cleanup", {})
+            cleanup_config=data.get("cleanup", {}),
         )

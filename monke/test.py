@@ -21,7 +21,7 @@ except ImportError:
     print("⚠️  python-dotenv not installed. Using system environment variables only.")
     load_dotenv = None
 
-from monke.core.test_runner import TestRunner
+from monke.core.runner import TestRunner
 from monke.utils.logging import get_logger
 
 

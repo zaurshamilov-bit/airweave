@@ -3,8 +3,8 @@
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
-from monke.core.test_config import TestConfig
-from monke.core.test_flow import TestFlow
+from monke.core.config import TestConfig
+from monke.core.flow import TestFlow
 from monke.utils.logging import get_logger
 
 

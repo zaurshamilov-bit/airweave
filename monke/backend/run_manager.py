@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from monke.core.test_config import TestConfig
+from monke.core.config import TestConfig
 from monke.core import events
 from monke.utils.logging import get_logger
 
@@ -118,7 +118,7 @@ class _RunLogHandler(logging.Handler):
                 "Creating file:",
                 "Checking if file exists",
                 "File doesn't exist",
-                "   "  # Skip lines that start with multiple spaces (indented metadata)
+                "   ",  # Skip lines that start with multiple spaces (indented metadata)
             ]
             if any(pattern in msg for pattern in skip_patterns):
                 return
@@ -133,7 +133,7 @@ class _RunLogHandler(logging.Handler):
                 "WARNING": "⚠️",
                 "ERROR": "❌",
                 "DEBUG": "🔍",
-                "CRITICAL": "🚨"
+                "CRITICAL": "🚨",
             }
 
             # Get the clean message without timestamp and logger name
@@ -161,7 +161,9 @@ class _RunContextFilter(logging.Filter):
 
 
 # Context variable to tag logs with the current run id
-CURRENT_RUN_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar("dm_current_run_id", default=None)
+CURRENT_RUN_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "dm_current_run_id", default=None
+)
 
 
 class RunManager:
@@ -280,8 +282,10 @@ class RunManager:
                             s.status = "passed"
                             s.ended_at = ev.get("ts", time.time())
                             dur = ev.get("duration")
-                            s.duration = float(dur) if dur is not None else (
-                                (s.ended_at - s.started_at) if s.started_at else None
+                            s.duration = (
+                                float(dur)
+                                if dur is not None
+                                else ((s.ended_at - s.started_at) if s.started_at else None)
                             )
                             break
                 elif et == "step_failed":
@@ -291,14 +295,18 @@ class RunManager:
                             s.status = "failed"
                             s.ended_at = ev.get("ts", time.time())
                             dur = ev.get("duration")
-                            s.duration = float(dur) if dur is not None else (
-                                (s.ended_at - s.started_at) if s.started_at else None
+                            s.duration = (
+                                float(dur)
+                                if dur is not None
+                                else ((s.ended_at - s.started_at) if s.started_at else None)
                             )
                             break
                 elif et in ("flow_completed", "flow_failed"):
                     record.ended_at = ev.get("ts", time.time())
                     # If any step failed -> failed; else passed
-                    record.status = "failed" if any(s.status == "failed" for s in record.steps) else "passed"
+                    record.status = (
+                        "failed" if any(s.status == "failed" for s in record.steps) else "passed"
+                    )
                 # persist
                 record.persist_state()
                 self._broadcast_run_state_local(record)
@@ -332,6 +340,7 @@ class RunManager:
             lg.setLevel(logging.WARNING)
         try:
             from monke.test import run_test
+
             # Tag this task's logs with run id so handler filter isolates records
             token = CURRENT_RUN_ID.set(record.id)
             try:

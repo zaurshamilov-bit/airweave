@@ -211,16 +211,67 @@ class AsanaBongo(BaseBongo):
         return deleted
 
     async def cleanup(self):
-        """Best-effort cleanup of tasks and project."""
-        self.logger.info("🧹 Cleaning up Asana test data")
+        """Comprehensive cleanup of all monke test data from the workspace."""
+        self.logger.info("🧹 Starting comprehensive Asana workspace cleanup")
+
+        # Ensure we have workspace access
+        await self._ensure_workspace()
+
+        cleanup_stats = {"projects_deleted": 0, "tasks_deleted": 0, "errors": 0}
+
         try:
-            await self.delete_specific_entities(self._tasks)
-        except Exception:
-            pass
-        try:
-            await self._delete_project()
-        except Exception:
-            pass
+            # Clean up current session data first
+            if self._tasks:
+                self.logger.info(f"🗑️ Cleaning up {len(self._tasks)} current session tasks")
+                await self.delete_specific_entities(self._tasks)
+                cleanup_stats["tasks_deleted"] += len(self._tasks)
+
+            if self._project_gid:
+                self.logger.info(f"🗑️ Cleaning up current session project {self._project_gid}")
+                await self._delete_project()
+                cleanup_stats["projects_deleted"] += 1
+
+            # Find and clean up all monke test projects
+            monke_projects = await self._find_monke_test_projects()
+            if monke_projects:
+                self.logger.info(f"🔍 Found {len(monke_projects)} monke test projects to clean up")
+                for project in monke_projects:
+                    try:
+                        await self._delete_project_by_gid(project["gid"])
+                        cleanup_stats["projects_deleted"] += 1
+                        self.logger.info(
+                            f"✅ Deleted project: {project['name']} ({project['gid']})"
+                        )
+                    except Exception as e:
+                        cleanup_stats["errors"] += 1
+                        self.logger.warning(f"⚠️ Failed to delete project {project['gid']}: {e}")
+
+            # Find and clean up orphaned monke test tasks
+            orphaned_tasks = await self._find_orphaned_monke_tasks()
+            if orphaned_tasks:
+                self.logger.info(
+                    f"🔍 Found {len(orphaned_tasks)} orphaned monke test tasks to clean up"
+                )
+                for task in orphaned_tasks:
+                    try:
+                        await self._delete_task_by_gid(task["gid"])
+                        cleanup_stats["tasks_deleted"] += 1
+                        self.logger.info(
+                            f"✅ Deleted orphaned task: {task['name']} ({task['gid']})"
+                        )
+                    except Exception as e:
+                        cleanup_stats["errors"] += 1
+                        self.logger.warning(f"⚠️ Failed to delete task {task['gid']}: {e}")
+
+            # Log cleanup summary
+            self.logger.info(
+                f"🧹 Cleanup completed: {cleanup_stats['projects_deleted']} projects, "
+                f"{cleanup_stats['tasks_deleted']} tasks deleted, {cleanup_stats['errors']} errors"
+            )
+
+        except Exception as e:
+            self.logger.error(f"❌ Error during comprehensive cleanup: {e}")
+            # Don't re-raise - cleanup should be best-effort
 
     async def _ensure_workspace(self):
         if self._workspace_gid:
@@ -277,17 +328,97 @@ class AsanaBongo(BaseBongo):
     async def _delete_project(self):
         if not self._project_gid:
             return
+        await self._delete_project_by_gid(self._project_gid)
+        self._project_gid = None
+
+    async def _delete_project_by_gid(self, project_gid: str):
+        """Delete a project by its GID."""
         async with httpx.AsyncClient() as client:
+            await self._rate_limit()
             r = await client.delete(
-                f"{self.API_BASE}/projects/{self._project_gid}", headers=self._headers()
+                f"{self.API_BASE}/projects/{project_gid}", headers=self._headers()
             )
             if r.status_code in (200, 204):
-                self.logger.info(f"Deleted project {self._project_gid}")
+                self.logger.debug(f"Deleted project {project_gid}")
             else:
                 self.logger.warning(
-                    f"Failed to delete project {self._project_gid}: {r.status_code} - {r.text}"
+                    f"Failed to delete project {project_gid}: {r.status_code} - {r.text}"
                 )
-        self._project_gid = None
+                r.raise_for_status()
+
+    async def _delete_task_by_gid(self, task_gid: str):
+        """Delete a task by its GID."""
+        async with httpx.AsyncClient() as client:
+            await self._rate_limit()
+            r = await client.delete(f"{self.API_BASE}/tasks/{task_gid}", headers=self._headers())
+            if r.status_code in (200, 204):
+                self.logger.debug(f"Deleted task {task_gid}")
+            else:
+                self.logger.warning(f"Failed to delete task {task_gid}: {r.status_code} - {r.text}")
+                r.raise_for_status()
+
+    async def _find_monke_test_projects(self) -> List[Dict[str, Any]]:
+        """Find all monke test projects in the workspace."""
+        monke_projects = []
+
+        async with httpx.AsyncClient() as client:
+            await self._rate_limit()
+            r = await client.get(
+                f"{self.API_BASE}/projects",
+                headers=self._headers(),
+                params={"workspace": self._workspace_gid, "opt_fields": "name,gid,created_at"},
+            )
+            r.raise_for_status()
+
+            projects = r.json().get("data", [])
+            for project in projects:
+                name = project.get("name", "")
+                if name.startswith("monke-asana-test-") or "monke" in name.lower():
+                    monke_projects.append(project)
+
+        return monke_projects
+
+    async def _find_orphaned_monke_tasks(self) -> List[Dict[str, Any]]:
+        """Find orphaned monke test tasks (tasks not in projects but containing monke identifiers)."""
+        orphaned_tasks = []
+
+        async with httpx.AsyncClient() as client:
+            # Search for tasks assigned to the authenticated user that might be monke tests
+            await self._rate_limit()
+            r = await client.get(
+                f"{self.API_BASE}/tasks",
+                headers=self._headers(),
+                params={
+                    "assignee": "me",
+                    "workspace": self._workspace_gid,
+                    "opt_fields": "name,gid,notes,projects.name",
+                    "completed_since": "now",  # Only get incomplete tasks
+                },
+            )
+
+            if r.status_code == 200:
+                tasks = r.json().get("data", [])
+                for task in tasks:
+                    name = task.get("name", "")
+                    notes = task.get("notes", "")
+                    projects = task.get("projects", [])
+
+                    # Check if this looks like a monke test task
+                    is_monke_task = (
+                        "monke" in name.lower()
+                        or "monke test" in notes.lower()
+                        or any(uuid_pattern in notes for uuid_pattern in ["-", "test-token"])
+                        or (not projects and "test" in name.lower())  # Orphaned test tasks
+                    )
+
+                    if is_monke_task:
+                        orphaned_tasks.append(task)
+            else:
+                self.logger.warning(
+                    f"Failed to search for orphaned tasks: {r.status_code} - {r.text}"
+                )
+
+        return orphaned_tasks
 
     def _headers(self) -> Dict[str, str]:
         return {
