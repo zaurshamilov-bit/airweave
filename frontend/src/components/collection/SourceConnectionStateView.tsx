@@ -364,7 +364,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
     return (
       <div className="w-full h-48 flex flex-col items-center justify-center space-y-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground">Loading entity state...</p>
+        <p className={cn(DESIGN_SYSTEM.typography.sizes.body, "text-muted-foreground")}>Loading entity state...</p>
       </div>
     );
   }
@@ -386,7 +386,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
   const syncStatus = getSyncStatusDisplay();
 
   return (
-    <div className="space-y-4">
+    <div className={cn("space-y-4", DESIGN_SYSTEM.typography.sizes.body)}>
       {/* Status Dashboard with Settings - All in one row */}
       <div className="flex items-center justify-between">
         <div className="flex gap-2 flex-wrap items-center">

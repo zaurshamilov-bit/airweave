@@ -217,6 +217,14 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
 
     // Combined copy function that copies the appropriate content based on active tab
     const traceContainerRef = useRef<HTMLDivElement>(null);
+    const [traceAutoScroll, setTraceAutoScroll] = useState(true);
+    const handleTraceScroll = useCallback(() => {
+        const el = traceContainerRef.current;
+        if (!el) return;
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        // Re-enable auto-scroll when user is near bottom; disable when they scroll up
+        setTraceAutoScroll(distanceFromBottom < 20);
+    }, []);
 
     const handleCopy = useCallback(async () => {
         if (activeTab === 'trace') {
@@ -232,6 +240,15 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
             await handleCopyJson();
         }
     }, [activeTab, responseType, completion, results, handleCopyCompletion, handleCopyJson]);
+
+    // Auto-scroll Trace to bottom on new events while searching, unless user scrolled up
+    useEffect(() => {
+        if (!isSearching) return;
+        if (!traceAutoScroll) return;
+        const el = traceContainerRef.current;
+        if (!el) return;
+        el.scrollTop = el.scrollHeight;
+    }, [events?.length, isSearching, traceAutoScroll]);
 
     // Handle clicking on entity references in completion
     const handleEntityClick = useCallback((entityId: string) => {
@@ -1091,13 +1108,6 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                         Error{e.operation ? ` in ${e.operation}` : ''}: {e.message}
                     </div>
                 );
-            } else if (event.type === 'cancelled') {
-                // final marker handled below, but if explicit event, show the line too
-                rows.push(
-                    <div key={`cancelled-${i}`} className="py-0.5 px-2 text-[11px] text-red-500">
-                        Search cancelled
-                    </div>
-                );
             } else {
                 continue;
             }
@@ -1448,7 +1458,7 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                     )}>
                         {/* Trace Tab Content */}
                         <div style={{ display: activeTab === 'trace' ? 'block' : 'none' }}>
-                            <div ref={traceContainerRef} className={cn(
+                            <div ref={traceContainerRef} onScroll={handleTraceScroll} className={cn(
                                 "overflow-auto max-h-[438px]",
                                 DESIGN_SYSTEM.spacing.padding.compact,
                                 isDark ? "bg-gray-950" : "bg-white"

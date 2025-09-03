@@ -96,6 +96,12 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 
     // Code block modal state
     const [showCodeBlock, setShowCodeBlock] = useState(false);
+    // First-time hint tooltip for the Code button
+    const [codeHintOpen, setCodeHintOpen] = useState(false);
+    const codeHintTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const codeHintDelayTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const codeHintShownKey = 'airweave:codeHintShown';
+    const hasShownCodeHintRef = useRef<boolean>(false);
 
     // Toggle buttons state
     const [toggles, setToggles] = useState<SearchToggles>({
@@ -132,6 +138,15 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
         fetchApiKey();
     }, []);
 
+    // Read first-time tooltip state from localStorage
+    useEffect(() => {
+        try {
+            hasShownCodeHintRef.current = localStorage.getItem(codeHintShownKey) === '1';
+        } catch {
+            hasShownCodeHintRef.current = false;
+        }
+    }, []);
+
     // Handle escape key for modal
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
@@ -153,10 +168,24 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
             if (tooltipTimeoutRef.current) {
                 clearTimeout(tooltipTimeoutRef.current);
             }
+            if (codeHintTimeoutRef.current) {
+                clearTimeout(codeHintTimeoutRef.current);
+                codeHintTimeoutRef.current = null;
+            }
+            if (codeHintDelayTimeoutRef.current) {
+                clearTimeout(codeHintDelayTimeoutRef.current);
+                codeHintDelayTimeoutRef.current = null;
+            }
             document.removeEventListener('keydown', handleEscape);
             document.body.style.overflow = '';
         };
     }, [showCodeBlock]);
+
+    const markCodeHintAsShown = useCallback(() => {
+        try { localStorage.setItem(codeHintShownKey, '1'); } catch (e) { /* noop */ }
+        hasShownCodeHintRef.current = true;
+        setCodeHintOpen(false);
+    }, [codeHintShownKey]);
 
     const hasQuery = query.trim().length > 0;
 
@@ -351,6 +380,27 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                 resultsCount: latestResults?.length
                             });
                             onSearch(finalResponse, currentResponseType, responseTime);
+                            // First-time helper: show tooltip near Code button
+                            try {
+                                if (!hasShownCodeHintRef.current) {
+                                    if (codeHintDelayTimeoutRef.current) {
+                                        clearTimeout(codeHintDelayTimeoutRef.current);
+                                        codeHintDelayTimeoutRef.current = null;
+                                    }
+                                    if (codeHintTimeoutRef.current) {
+                                        clearTimeout(codeHintTimeoutRef.current);
+                                        codeHintTimeoutRef.current = null;
+                                    }
+                                    codeHintDelayTimeoutRef.current = setTimeout(() => {
+                                        setCodeHintOpen(true);
+                                        codeHintTimeoutRef.current = setTimeout(() => {
+                                            try { localStorage.setItem(codeHintShownKey, '1'); } catch (e) { /* noop */ }
+                                            hasShownCodeHintRef.current = true;
+                                            setCodeHintOpen(false);
+                                        }, 3000);
+                                    }, 500);
+                                }
+                            } catch (e) { /* noop */ }
                             break;
                         }
                         default:
@@ -479,18 +529,58 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                     )}
                 >
                     <div className="relative px-2 pt-2 pb-1">
-                        {/* Code button - match header buttons */}
-                        <button
-                            type="button"
-                            onClick={() => setShowCodeBlock(true)}
-                            className={cn(
-                                "absolute top-2 right-2 h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
-                                isDark ? "bg-background border-border hover:bg-muted" : "bg-background border-border hover:bg-muted"
-                            )}
-                            title="View integration code"
-                        >
-                            <CodeXml className={cn(DESIGN_SYSTEM.icons.button, "text-muted-foreground")} />
-                        </button>
+                        {/* Code button with first-time helper tooltip */}
+                        <TooltipProvider>
+                            <Tooltip open={codeHintOpen}>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowCodeBlock(true);
+                                            // Mark as shown so it doesn't reappear
+                                            try { localStorage.setItem(codeHintShownKey, '1'); } catch (e) { /* noop */ }
+                                            setCodeHintOpen(false);
+                                            hasShownCodeHintRef.current = true;
+                                        }}
+                                        className={cn(
+                                            "absolute top-2 right-2 h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
+                                            isDark ? "bg-background border-border hover:bg-muted" : "bg-background border-border hover:bg-muted"
+                                        )}
+                                        title="View integration code"
+                                    >
+                                        <CodeXml className={cn(
+                                            DESIGN_SYSTEM.icons.button,
+                                            "text-muted-foreground"
+                                        )} />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                    side="left"
+                                    sideOffset={8}
+                                    className={DESIGN_SYSTEM.tooltip.content}
+                                    arrowClassName={DESIGN_SYSTEM.tooltip.arrow}
+                                >
+                                    <div className="space-y-2">
+                                        <div className={DESIGN_SYSTEM.tooltip.title}>Call the Search API</div>
+                                        <p className={DESIGN_SYSTEM.tooltip.description}>Open a ready-to-use snippet for JS or Python.</p>
+                                        <div className={DESIGN_SYSTEM.tooltip.divider}>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowCodeBlock(true);
+                                                    try { localStorage.setItem(codeHintShownKey, '1'); } catch (e) { /* noop */ }
+                                                    setCodeHintOpen(false);
+                                                    hasShownCodeHintRef.current = true;
+                                                }}
+                                                className={DESIGN_SYSTEM.tooltip.link}
+                                            >
+                                                Open example
+                                            </button>
+                                        </div>
+                                    </div>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
 
                         <textarea
                             value={query}

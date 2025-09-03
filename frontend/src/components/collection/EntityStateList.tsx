@@ -248,19 +248,20 @@ const SimplifiedSchemaView: React.FC<{ schema: any; isDark: boolean }> = ({ sche
                 <div key={key} className="group py-0.5 px-4">
                   <div className="flex items-baseline gap-3">
                     <div className="flex items-center gap-1.5 min-w-[140px]">
-                      <span className="font-mono text-xs font-medium">
+                      <span className={cn(DESIGN_SYSTEM.typography.sizes.label, "font-mono font-medium")}>
                         {key}
                       </span>
                       <span className="text-red-500 text-[10px]">•</span>
                     </div>
                     <span className={cn(
-                      "font-mono text-[11px] px-1.5 py-0.5 rounded",
+                      DESIGN_SYSTEM.typography.sizes.label,
+                      "font-mono px-1.5 py-0.5 rounded",
                       isDark ? "text-blue-400 bg-blue-400/10" : "text-blue-700 bg-blue-50"
                     )}>
                       {typeStr}
                     </span>
                     {description && (
-                      <span className="text-xs text-muted-foreground flex-1">
+                      <span className={cn(DESIGN_SYSTEM.typography.sizes.label, "text-muted-foreground flex-1")}>
                         {description}
                       </span>
                     )}
@@ -292,17 +293,18 @@ const SimplifiedSchemaView: React.FC<{ schema: any; isDark: boolean }> = ({ sche
               return (
                 <div key={key} className="group py-0.5 px-4">
                   <div className="flex items-baseline gap-3">
-                    <span className="font-mono text-xs min-w-[140px]">
+                    <span className={cn(DESIGN_SYSTEM.typography.sizes.label, "font-mono min-w-[140px]")}>
                       {key}
                     </span>
                     <span className={cn(
-                      "font-mono text-[11px] px-1.5 py-0.5 rounded",
+                      DESIGN_SYSTEM.typography.sizes.label,
+                      "font-mono px-1.5 py-0.5 rounded",
                       isDark ? "text-gray-400 bg-gray-400/10" : "text-gray-600 bg-gray-100"
                     )}>
                       {typeStr}
                     </span>
                     {description && (
-                      <span className="text-xs text-muted-foreground flex-1">
+                      <span className={cn(DESIGN_SYSTEM.typography.sizes.label, "text-muted-foreground flex-1")}>
                         {description}
                       </span>
                     )}
@@ -399,7 +401,7 @@ const EntityDetailView: React.FC<{
             </div>
           </div>
           {entity.definition?.description && (
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className={cn(DESIGN_SYSTEM.typography.sizes.body, "text-muted-foreground mt-1")}>
               {entity.definition.description}
             </p>
           )}
@@ -409,7 +411,7 @@ const EntityDetailView: React.FC<{
         <div className="flex-1 min-h-0 overflow-hidden">
           <TabsContent value="schema" className="h-full max-h-[400px] overflow-y-auto overflow-x-hidden scrollbar-thin">
             {entity.definition ? (
-              <div className="space-y-3 pb-2 px-1">
+              <div className={cn("space-y-3 pb-2 px-1", DESIGN_SYSTEM.typography.sizes.body)}>
                 {/* Schema Display */}
                 <div className="relative group">
                   <Button
@@ -437,7 +439,7 @@ const EntityDetailView: React.FC<{
                         // Handle file type entities
                         if (entity.definition.type === 'file' && Array.isArray(schema)) {
                           return (
-                            <div className="text-xs">
+                            <div className={cn(DESIGN_SYSTEM.typography.sizes.body)}>
                               <span className="text-muted-foreground">Supported: </span>
                               <span className="font-mono">
                                 {(schema as string[]).join(', ')}
@@ -460,7 +462,7 @@ const EntityDetailView: React.FC<{
                       } catch (error) {
                         console.error('Error parsing schema:', error);
                         return (
-                          <div className="text-xs text-muted-foreground">
+                          <div className={cn(DESIGN_SYSTEM.typography.sizes.body, "text-muted-foreground")}>
                             Error loading schema
                           </div>
                         );
@@ -519,7 +521,7 @@ const EntityDetailView: React.FC<{
                 </div>
                 <div>
                   <p className="text-sm font-medium mb-1">Coming Soon</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className={cn(DESIGN_SYSTEM.typography.sizes.body, "text-muted-foreground")}>
                     Example data preview will be available in a future update
                   </p>
                 </div>
