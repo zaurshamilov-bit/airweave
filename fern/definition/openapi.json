@@ -6935,6 +6935,12 @@
             "title": "Collection",
             "description": "Readable ID of the collection where synced data will be stored. If not provided, a new collection will be automatically created."
           },
+          "enable_daily_cleanup": {
+            "type": "boolean",
+            "title": "Enable Daily Cleanup",
+            "description": "Whether to create a daily forced full sync with entity cleanup. Defaults to true for resilience; set to false to rely solely on incremental changes.",
+            "default": true
+          },
           "auth_fields": {
             "anyOf": [
               {
@@ -7613,6 +7619,49 @@
             "short_name": "github",
             "status": "active",
             "sync_id": "123e4567-e89b-12d3-a456-426614174000"
+          }
+        ]
+      },
+      "SourceConnectionMakeContinuous": {
+        "properties": {
+          "cursor_field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor Field",
+            "description": "Specify which field in the entity should be used as the cursor for incremental syncs. If omitted, the source's default cursor field will be used if available. Required for sources without a default (e.g., PostgreSQL).",
+            "examples": [
+              "updated_at",
+              "modified_timestamp",
+              "last_modified"
+            ]
+          },
+          "enable_daily_cleanup": {
+            "type": "boolean",
+            "title": "Enable Daily Cleanup",
+            "description": "Whether to create a daily forced full sync with entity cleanup. This helps remove orphaned entities that incremental syncs cannot detect.",
+            "default": true
+          },
+          "run_initial_sync": {
+            "type": "boolean",
+            "title": "Run Initial Sync",
+            "description": "Whether to immediately trigger a sync job after enabling continuous mode. If no cursor data exists yet, this initial run will perform a full sync.",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "SourceConnectionMakeContinuous",
+        "description": "Schema for converting an existing source connection to continuous (BETA).",
+        "examples": [
+          {
+            "cursor_field": "updated_at",
+            "enable_daily_cleanup": true,
+            "run_initial_sync": true
           }
         ]
       },
