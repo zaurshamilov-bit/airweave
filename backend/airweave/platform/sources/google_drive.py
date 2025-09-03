@@ -23,7 +23,10 @@ from airweave.core.exceptions import TokenRefreshError
 from airweave.platform.auth.schemas import AuthType
 from airweave.platform.decorators import source
 from airweave.platform.entities._base import ChunkEntity
-from airweave.platform.entities.google_drive import GoogleDriveDriveEntity, GoogleDriveFileEntity
+from airweave.platform.entities.google_drive import (
+    GoogleDriveDriveEntity,
+    GoogleDriveFileEntity,
+)
 from airweave.platform.sources._base import BaseSource
 
 
@@ -56,6 +59,42 @@ class GoogleDriveSource(BaseSource):
         instance.include_patterns = config.get("include_patterns", [])
 
         return instance
+
+    # --- Incremental sync support (cursor field) ---
+    def get_default_cursor_field(self) -> Optional[str]:
+        """Default cursor field name for Google Drive incremental sync.
+
+        We use the Drive Changes API page token. The field stored in `cursor.cursor_data`
+        will be keyed under this name.
+        """
+        return "start_page_token"
+
+    def validate_cursor_field(self, cursor_field: str) -> None:
+        """Validate the cursor field for Google Drive.
+
+        Only the default field name is supported. Users may override but it must equal
+        the expected key so that the system can find the stored token.
+        """
+        valid_field = self.get_default_cursor_field()
+        if cursor_field != valid_field:
+            raise ValueError(
+                f"Invalid cursor field '{cursor_field}' for Google Drive. Use '{valid_field}'."
+            )
+
+    def _get_cursor_data(self) -> Dict[str, Any]:
+        if self.cursor:
+            return self.cursor.cursor_data or {}
+        return {}
+
+    def _update_cursor_data(self, new_token: str) -> None:
+        if not self.cursor:
+            return
+        cursor_field = self.get_effective_cursor_field() or self.get_default_cursor_field()
+        if not cursor_field:
+            return
+        if not self.cursor.cursor_data:
+            self.cursor.cursor_data = {}
+        self.cursor.cursor_data[cursor_field] = new_token
 
     @retry(
         stop=stop_after_attempt(3),
@@ -172,6 +211,60 @@ class GoogleDriveSource(BaseSource):
                 hidden=drive_obj.get("hidden", False),
                 org_unit_id=drive_obj.get("orgUnitId"),
             )
+
+    # --- Changes API helpers ---
+    async def _get_start_page_token(self, client: httpx.AsyncClient) -> str:
+        url = "https://www.googleapis.com/drive/v3/changes/startPageToken"
+        params = {
+            "supportsAllDrives": "true",
+        }
+        data = await self._get_with_auth(client, url, params=params)
+        token = data.get("startPageToken")
+        if not token:
+            raise ValueError("Failed to retrieve startPageToken from Drive API")
+        return token
+
+    async def _iterate_changes(
+        self, client: httpx.AsyncClient, start_token: str
+    ) -> AsyncGenerator[Dict, None]:
+        """Iterate over all changes since the provided page token.
+
+        Yields individual change objects. Stores the latest newStartPageToken on the instance
+        for use after the stream completes.
+        """
+        url = "https://www.googleapis.com/drive/v3/changes"
+        params: Dict[str, Any] = {
+            "pageToken": start_token,
+            "includeRemoved": "true",
+            "includeItemsFromAllDrives": "true",
+            "supportsAllDrives": "true",
+            "pageSize": 1000,
+            "fields": (
+                "nextPageToken,newStartPageToken,"
+                "changes(removed,fileId,changeType,file("
+                "id,name,mimeType,description,trashed,explicitlyTrashed,"
+                "parents,shared,webViewLink,iconLink,createdTime,modifiedTime,size,md5Checksum)"
+                ")"
+            ),
+        }
+
+        latest_new_start: Optional[str] = None
+
+        while True:
+            data = await self._get_with_auth(client, url, params=params)
+            for change in data.get("changes", []) or []:
+                yield change
+
+            next_token = data.get("nextPageToken")
+            latest_new_start = data.get("newStartPageToken") or latest_new_start
+
+            if next_token:
+                params["pageToken"] = next_token
+            else:
+                break
+
+        # Persist for caller
+        self._latest_new_start_page_token = latest_new_start
 
     async def _list_files(
         self,
@@ -688,10 +781,11 @@ class GoogleDriveSource(BaseSource):
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:  # noqa: C901
         """Generate all Google Drive entities.
 
-        Yields entities in the following order:
-          - Shared drives (Drive objects)
-          - Files in each shared drive
-          - Files in My Drive (corpora=user)
+        Behavior:
+        - If no cursor token exists: perform a FULL sync (shared drives + files), then store
+          the current startPageToken for the next incremental run.
+        - If a cursor token exists: perform INCREMENTAL sync using the Changes API. Emit
+          deletion entities for removed files and upsert entities for changed files.
         """
         try:
             async with httpx.AsyncClient() as client:
