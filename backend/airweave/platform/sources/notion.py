@@ -1468,3 +1468,14 @@ class NotionSource(BaseSource):
             return property_entities
 
         return extract_properties
+
+    async def validate(self) -> bool:
+        """Verify Notion OAuth2 token by pinging the /v1/users/me endpoint."""
+        return await self._validate_oauth2(
+            ping_url="https://api.notion.com/v1/users/me",
+            headers={
+                "Accept": "application/json",
+                "Notion-Version": "2022-06-28",
+            },
+            timeout=10.0,
+        )

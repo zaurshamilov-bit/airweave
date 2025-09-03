@@ -881,3 +881,59 @@ class GitHubSource(BaseSource):
                 # Still yield repository entity for cursor update, but skip file traversal
                 repo_entity = await self._get_repository_info(client, self.repo_name)
                 yield repo_entity
+
+    async def validate(self) -> bool:
+        """Verify GitHub PAT and repo/branch access with lightweight pings."""
+        if not getattr(self, "personal_access_token", None):
+            self.logger.error("GitHub validation failed: missing personal_access_token.")
+            return False
+
+        headers = {
+            "Authorization": f"token {self.personal_access_token}",
+            "Accept": "application/vnd.github.v3+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # 1) Token validity
+                me = await client.get(f"{self.BASE_URL}/user", headers=headers)
+                if not (200 <= me.status_code < 300):
+                    self.logger.warning(
+                        f"GitHub /user ping failed: {me.status_code} - {me.text[:200]}"
+                    )
+                    return False
+
+                # 2) Repo reachability (optional but recommended for this connector)
+                if getattr(self, "repo_name", None):
+                    repo = await client.get(
+                        f"{self.BASE_URL}/repos/{self.repo_name}", headers=headers
+                    )
+                    if not (200 <= repo.status_code < 300):
+                        self.logger.warning(
+                            f"GitHub repo '{self.repo_name}' check failed: "
+                            f"{repo.status_code} - {repo.text[:200]}"
+                        )
+                        return False
+
+                    # 3) Branch existence (only if user specified a branch)
+                    if getattr(self, "branch", None):
+                        br = await client.get(
+                            f"{self.BASE_URL}/repos/{self.repo_name}/branches/{self.branch}",
+                            headers=headers,
+                        )
+                        if not (200 <= br.status_code < 300):
+                            self.logger.warning(
+                                f"GitHub branch '{self.branch}' not found or inaccessible in "
+                                f"'{self.repo_name}': {br.status_code} - {br.text[:200]}"
+                            )
+                            return False
+
+            return True
+
+        except httpx.RequestError as e:
+            self.logger.error(f"GitHub validation request error: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Unexpected error during GitHub validation: {e}")
+            return False

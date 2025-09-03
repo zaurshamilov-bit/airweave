@@ -801,3 +801,54 @@ class LinearSource(BaseSource):
                     yield entity
             except Exception as e:
                 self.logger.error(f"Failed to generate issue/attachment entities: {str(e)}")
+
+    async def validate(self) -> bool:
+        """Verify Linear OAuth2 token by POSTing a minimal GraphQL query to /graphql."""
+        try:
+            token = await self.get_access_token()
+            if not token:
+                self.logger.error("Linear validation failed: no access token available.")
+                return False
+
+            query = {"query": "query { viewer { id } }"}
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                headers = {
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                }
+                resp = await client.post(
+                    "https://api.linear.app/graphql", headers=headers, json=query
+                )
+
+                # Handle 401 by attempting a one-time refresh
+                if resp.status_code == 401:
+                    self.logger.info("Linear validate: 401 Unauthorized; attempting token refresh.")
+                    new_token = await self.refresh_on_unauthorized()
+                    if new_token:
+                        headers["Authorization"] = f"Bearer {new_token}"
+                        resp = await client.post(
+                            "https://api.linear.app/graphql", headers=headers, json=query
+                        )
+
+                if not (200 <= resp.status_code < 300):
+                    self.logger.warning(
+                        f"Linear validate failed: HTTP {resp.status_code} - {resp.text[:200]}"
+                    )
+                    return False
+
+                body = resp.json()
+                if body.get("errors"):
+                    self.logger.warning(f"Linear validate GraphQL errors: {body['errors']}")
+                    return False
+
+                viewer = (body.get("data") or {}).get("viewer") or {}
+                return bool(viewer.get("id"))
+
+        except httpx.RequestError as e:
+            self.logger.error(f"Linear validation request error: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Unexpected error during Linear validation: {e}")
+            return False

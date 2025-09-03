@@ -326,3 +326,11 @@ class TodoistSource(BaseSource):
                         [project_breadcrumb, task_breadcrumb],
                     ):
                         yield comment_entity
+
+    async def validate(self) -> bool:
+        """Verify Todoist OAuth2 token by pinging a lightweight REST endpoint."""
+        return await self._validate_oauth2(
+            ping_url="https://api.todoist.com/rest/v2/projects",
+            headers={"Accept": "application/json"},
+            timeout=10.0,
+        )

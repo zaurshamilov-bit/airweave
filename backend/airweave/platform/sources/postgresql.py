@@ -773,3 +773,51 @@ class PostgreSQLSource(BaseSource):
         # Pick the highest score; if tie, keep first in ordinal_position order
         name_scores.sort(key=lambda x: (-x[0],))
         return name_scores[0][1] if name_scores else candidates[0]["column_name"]
+
+    async def validate(self) -> bool:
+        """Verify PostgreSQL credentials, schema access, and (optionally) tables."""
+        try:
+            # 1) Connect (handles common connection errors and timeouts)
+            await self._connect()
+
+            # 2) Simple ping
+            try:
+                _ = await self.conn.fetchval("SELECT 1;")
+            except Exception as e:
+                self.logger.error(f"PostgreSQL ping failed: {e}")
+                return False
+
+            # 3) Schema existence
+            schema = (self.config or {}).get("schema", "public")
+            exists = await self.conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = $1);",
+                schema,
+            )
+            if not exists:
+                self.logger.error(f"Schema '{schema}' does not exist or is inaccessible.")
+                return False
+
+            # 4) If specific tables were requested, verify they exist
+            tables_cfg = (self.config or {}).get("tables", "*")
+            if isinstance(tables_cfg, str) and tables_cfg != "*":
+                requested = [t.strip() for t in tables_cfg.split(",") if t.strip()]
+                available = await self._get_tables(schema)
+                missing = [t for t in requested if t not in available]
+                if missing:
+                    self.logger.error(
+                        f"Tables not found in schema '{schema}': {', '.join(missing)}"
+                    )
+                    return False
+
+            return True
+
+        except (asyncpg.InvalidPasswordError, asyncpg.InvalidCatalogNameError, ValueError) as e:
+            self.logger.error(f"PostgreSQL validation failed (credentials/config): {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Unexpected error during PostgreSQL validation: {e}")
+            return False
+        finally:
+            if self.conn:
+                await self.conn.close()
+                self.conn = None
