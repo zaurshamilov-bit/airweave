@@ -497,7 +497,7 @@ const EntityDetailView: React.FC<{
                 </div>
               </div>
             ) : (
-              <div className="text-xs text-muted-foreground p-4">
+              <div className={cn(DESIGN_SYSTEM.typography.sizes.body, "text-muted-foreground p-4")}>
                 No schema available
               </div>
             )}
@@ -725,7 +725,7 @@ export const EntityStateList: React.FC<EntityStateListProps> = ({
   const { containerRef, height, shouldRender } = useHeightTransition(!!expandedEntityData);
 
   return (
-    <div className="space-y-3">
+    <div className={cn("space-y-3", DESIGN_SYSTEM.typography.sizes.body)}>
       {/* Main Entities Card */}
       <Card className={cn(
         "overflow-hidden relative transition-all duration-500",
@@ -778,7 +778,7 @@ export const EntityStateList: React.FC<EntityStateListProps> = ({
           {/* Content */}
           {isLoadingDefinitions ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-xs text-muted-foreground">Loading entities...</div>
+              <div className={cn(DESIGN_SYSTEM.typography.sizes.body, "text-muted-foreground")}>Loading entities...</div>
             </div>
           ) : combinedEntities.length === 0 ? (
             <div className="flex items-center justify-center py-12">

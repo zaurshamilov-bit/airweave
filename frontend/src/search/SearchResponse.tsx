@@ -12,7 +12,9 @@ import {
     Layers,
     TerminalSquare,
     Clock,
-    SearchCode,
+    Footprints,
+    ClockArrowUp,
+    ListStart,
     Braces,
     Copy,
     Check,
@@ -27,19 +29,24 @@ import { materialOceanic, oneLight } from 'react-syntax-highlighter/dist/esm/sty
 import { JsonViewer } from '@textea/json-viewer';
 import { DESIGN_SYSTEM } from '@/lib/design-system';
 import { CollapsibleCard } from '@/components/ui/CollapsibleCard';
+import { FiLayers, FiFilter, FiSliders, FiList, FiClock, FiGitMerge, FiType } from "react-icons/fi";
+import { ChartScatter } from 'lucide-react';
+import type { SearchEvent } from '@/search/types';
 
 interface SearchResponseProps {
     searchResponse: any;
     isSearching: boolean;
     responseType?: 'raw' | 'completion';
     className?: string;
+    events?: SearchEvent[];
 }
 
 export const SearchResponse: React.FC<SearchResponseProps> = ({
     searchResponse,
     isSearching,
     responseType = 'raw',
-    className
+    className,
+    events = []
 }) => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
@@ -57,8 +64,8 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
         localStorage.setItem('searchResponse-expanded', JSON.stringify(isExpanded));
     }, [isExpanded]);
 
-    // State for active tab - entities first if raw, answer first if completion
-    const [activeTab, setActiveTab] = useState<'answer' | 'entities'>(
+    // State for active tab - default mirrors previous behavior; will be overridden on search start
+    const [activeTab, setActiveTab] = useState<'trace' | 'answer' | 'entities'>(
         responseType === 'completion' ? 'answer' : 'entities'
     );
 
@@ -209,13 +216,22 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
     }, [results]);
 
     // Combined copy function that copies the appropriate content based on active tab
+    const traceContainerRef = useRef<HTMLDivElement>(null);
+
     const handleCopy = useCallback(async () => {
+        if (activeTab === 'trace') {
+            const text = traceContainerRef.current?.innerText || '';
+            if (text.trim()) {
+                await navigator.clipboard.writeText(text.trim());
+            }
+            return;
+        }
         if (responseType === 'completion' && activeTab === 'answer' && completion) {
             await handleCopyCompletion();
         } else if (activeTab === 'entities' && results.length > 0) {
             await handleCopyJson();
         }
-    }, [responseType, activeTab, completion, results, handleCopyCompletion, handleCopyJson]);
+    }, [activeTab, responseType, completion, results, handleCopyCompletion, handleCopyJson]);
 
     // Handle clicking on entity references in completion
     const handleEntityClick = useCallback((entityId: string) => {
@@ -280,13 +296,886 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
         }, 100);
     }, [results, isDark]);
 
-    // Don't show anything if no response and not loading
-    // This should only happen before the first search
+    // (moved guard return below all hooks to satisfy hooks rules)
+
+    // Trace helpers (ported from SearchProcess)
+    const toDisplayFilter = useCallback((input: any): any => {
+        const SYS_PREFIX = 'airweave_system_metadata.';
+        const clone = (val: any): any => {
+            if (Array.isArray(val)) return val.map(clone);
+            if (val && typeof val === 'object') {
+                const out: any = {};
+                for (const k of Object.keys(val)) {
+                    out[k] = clone(val[k]);
+                }
+                if (typeof out.key === 'string' && out.key.startsWith(SYS_PREFIX)) {
+                    out.key = out.key.slice(SYS_PREFIX.length);
+                }
+                return out;
+            }
+            return val;
+        };
+        return clone(input);
+    }, []);
+
+    const JsonBlock: React.FC<{ value: string; isDark: boolean }> = ({ value, isDark }) => {
+        const [copiedLocal, setCopiedLocal] = useState(false);
+        const handleCopyLocal = useCallback(async () => {
+            try {
+                await navigator.clipboard.writeText(value);
+                setCopiedLocal(true);
+                setTimeout(() => setCopiedLocal(false), 1500);
+            } catch {
+                // noop
+            }
+        }, [value]);
+
+        return (
+            <div className="relative">
+                <button
+                    type="button"
+                    onClick={handleCopyLocal}
+                    title="Copy"
+                    className={cn(
+                        "absolute top-1 right-1 p-1 z-10",
+                        DESIGN_SYSTEM.radius.button,
+                        DESIGN_SYSTEM.transitions.standard,
+                        isDark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-700"
+                    )}
+                >
+                    {copiedLocal ? <Check className={DESIGN_SYSTEM.icons.inline} /> : <Copy className={DESIGN_SYSTEM.icons.inline} />}
+                </button>
+                <SyntaxHighlighter
+                    key={isDark ? 'json-dark' : 'json-light'}
+                    language="json"
+                    style={isDark ? materialOceanic : oneLight}
+                    customStyle={{
+                        margin: '0.25rem 0',
+                        borderRadius: '0.5rem',
+                        fontSize: '0.75rem',
+                        padding: '0.75rem',
+                        background: isDark ? 'rgba(17, 24, 39, 0.8)' : 'rgba(249, 250, 251, 0.95)'
+                    }}
+                >
+                    {value}
+                </SyntaxHighlighter>
+            </div>
+        );
+    };
+
+    const traceRows = useMemo(() => {
+        const src = (events?.length || 0) > 500 ? events.slice(-500) : events;
+        const rows: React.ReactNode[] = [];
+
+        let inInterpretation = false;
+        let interpretationHeaderShown = false;
+        let interpretationData = {
+            reasons: [] as string[],
+            confidence: null as number | null,
+            filters: [] as any[],
+            refinedQuery: null as string | null,
+            filterApplied: null as any
+        };
+
+        let inExpansion = false;
+        let expansionHeaderShown = false;
+        let expansionData = {
+            strategy: null as string | null,
+            reasons: [] as string[],
+            alternatives: [] as string[]
+        };
+
+        let inRecency = false;
+        let recencyData = {
+            weight: null as number | null,
+            field: null as string | null,
+            oldest: null as string | null,
+            newest: null as string | null,
+            spanSeconds: null as number | null
+        };
+
+        let inReranking = false;
+        let rerankingData = {
+            reasons: [] as string[],
+            rankings: [] as Array<{ index: number; relevance_score: number }>,
+            k: null as number | null
+        };
+
+        let inEmbedding = false;
+        let embeddingData = {
+            searchMethod: null as string | null,
+            neuralCount: null as number | null,
+            sparseCount: null as number | null,
+            dim: null as number | null,
+            model: null as string | null
+        };
+        let pendingEmbedding: {
+            searchMethod: string | null;
+            neuralCount: number | null;
+            sparseCount: number | null;
+            dim: number | null;
+            model: string | null;
+        } | null = null;
+
+        for (let i = 0; i < src.length; i++) {
+            const event = src[i] as any;
+
+            if (event.type === 'operator_start' && event.op === 'qdrant_filter') {
+                let filterData = null;
+                let mergeDetails: { merged?: any; existing?: any; user?: any } | null = null;
+                for (let j = i + 1; j < src.length && j < i + 5; j++) {
+                    if ((src[j] as any).type === 'filter_applied') {
+                        filterData = (src[j] as any).filter;
+                        break;
+                    }
+                    if ((src[j] as any).type === 'filter_merge') {
+                        const e = src[j] as any;
+                        mergeDetails = {
+                            merged: e.merged,
+                            existing: e.existing,
+                            user: e.user
+                        };
+                    }
+                    if ((src[j] as any).type === 'operator_end' && (src[j] as any).op === 'qdrant_filter') {
+                        break;
+                    }
+                }
+
+                rows.push(
+                    <div key={`qdrant-${i}-start`} className="px-2 py-1 text-[11px] flex items-center gap-1.5">
+                        <FiSliders className="h-3 w-3 opacity-80" />
+                        <span className="opacity-90">Filter</span>
+                        <span className={cn(
+                            "ml-1 px-1 py-0 rounded text-[10px]",
+                            isDark ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-700"
+                        )}>manual</span>
+                    </div>
+                );
+
+                const hasExisting = !!(mergeDetails && mergeDetails.existing && typeof mergeDetails.existing === 'object' && Object.keys(mergeDetails.existing).length > 0);
+                if (hasExisting) {
+                    rows.push(
+                        <div key={`qdrant-${i}-merge-label`} className="px-2 py-0.5 text-[11px] opacity-70">
+                            merged interpreted + manual
+                        </div>
+                    );
+                }
+
+                if (filterData && typeof filterData === 'object') {
+                    const display = toDisplayFilter(filterData);
+                    const pretty = JSON.stringify(display, null, 2);
+                    rows.push(
+                        <div key={`qdrant-filter-${i}`} className="py-0.5 px-2 text-[11px]">
+                            <span className="opacity-90">• Filter:</span>
+                            <div className="ml-3 mt-1">
+                                <JsonBlock value={pretty} isDark={isDark} />
+                            </div>
+                        </div>
+                    );
+                }
+
+                while (i < src.length && !((src[i] as any).type === 'operator_end' && (src[i] as any).op === 'qdrant_filter')) {
+                    i++;
+                }
+
+                if (i < src.length) {
+                    rows.push(
+                        <div key={`qdrant-${i}-end`} className="py-0.5 px-2 text-[11px] opacity-70">
+                            Filter applied
+                        </div>
+                    );
+
+                    rows.push(
+                        <div key={`qdrant-${i}-separator`} className="py-1">
+                            <div className="mx-2 border-t border-border/30"></div>
+                        </div>
+                    );
+                }
+                continue;
+            }
+
+            if (event.type === 'operator_start' && event.op === 'query_interpretation') {
+                inInterpretation = true;
+                interpretationData = {
+                    reasons: [],
+                    confidence: null,
+                    filters: [],
+                    refinedQuery: null,
+                    filterApplied: null
+                };
+                if (!interpretationHeaderShown) {
+                    const key = `interp-${i}`;
+                    rows.push(
+                        <div key={`${key}-start-immediate`} className="px-2 py-1 text-[11px] flex items-center gap-1.5">
+                            <FiFilter className="h-3 w-3 opacity-80" />
+                            <span className="opacity-90">Query interpretation</span>
+                        </div>
+                    );
+                    interpretationHeaderShown = true;
+                }
+                continue;
+            }
+
+            if (inInterpretation) {
+                if (event.type === 'interpretation_start') {
+                    continue;
+                }
+
+                if (event.type === 'interpretation_reason_delta') {
+                    const text = (event as any).text;
+                    if (typeof text === 'string' && text.trim()) {
+                        interpretationData.reasons.push(text.trim());
+                    }
+                    continue;
+                }
+
+                if (event.type === 'interpretation_delta') {
+                    const snap = (event as any).parsed_snapshot;
+                    if (snap) {
+                        if (typeof snap.confidence === 'number') {
+                            interpretationData.confidence = snap.confidence;
+                        }
+                        if (Array.isArray(snap.filters)) {
+                            interpretationData.filters = snap.filters;
+                        }
+                        if (typeof snap.refined_query === 'string') {
+                            interpretationData.refinedQuery = snap.refined_query;
+                        }
+                    }
+                    continue;
+                }
+
+                if (event.type === 'filter_applied') {
+                    interpretationData.filterApplied = (event as any).filter;
+                    continue;
+                }
+
+                if (event.type === 'operator_end' && event.op === 'query_interpretation') {
+                    const key = `interp-${i}`;
+
+                    interpretationData.reasons.forEach((reason, idx) => {
+                        rows.push(
+                            <div key={`${key}-reason-${idx}`} className="py-0.5 px-2 text-[11px] opacity-80">
+                                {reason}
+                            </div>
+                        );
+                    });
+
+                    if (typeof interpretationData.confidence === 'number') {
+                        const applied = !!interpretationData.filterApplied;
+                        rows.push(
+                            <div key={`${key}-conf`} className="py-0.5 px-2 text-[11px] opacity-90">
+                                {applied
+                                    ? `Confidence = ${interpretationData.confidence.toFixed(2)} → Applying ${interpretationData.filters.length} filter${interpretationData.filters.length !== 1 ? 's' : ''}`
+                                    : `Confidence = ${interpretationData.confidence.toFixed(2)} → Not applying filters (below threshold)`}
+                            </div>
+                        );
+                    }
+
+                    if (interpretationData.filterApplied && typeof interpretationData.filterApplied === 'object') {
+                        const appliedDisplay = toDisplayFilter(interpretationData.filterApplied);
+                        const appliedJson = JSON.stringify(appliedDisplay, null, 2);
+                        rows.push(
+                            <div key={`${key}-filter-applied`} className="py-0.5 px-2 text-[11px]">
+                                <span className="opacity-90">Applied filter</span>
+                                <div className="ml-3 mt-1">
+                                    <JsonBlock value={appliedJson} isDark={isDark} />
+                                </div>
+                            </div>
+                        );
+                    } else if (interpretationData.filters.length > 0) {
+                        const proposedDisplay = toDisplayFilter({ must: interpretationData.filters });
+                        const filterJson = JSON.stringify(proposedDisplay, null, 2);
+                        rows.push(
+                            <div key={`${key}-filter-proposed`} className="py-0.5 px-2 text-[11px]">
+                                <span className="opacity-90">Proposed filter (not applied)</span>
+                                <div className="ml-3 mt-1">
+                                    <JsonBlock value={filterJson} isDark={isDark} />
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    if (interpretationData.refinedQuery) {
+                        rows.push(
+                            <div key={`${key}-refined`} className="py-0.5 px-2 text-[11px] opacity-90">
+                                Refined query: {interpretationData.refinedQuery}
+                            </div>
+                        );
+                    }
+
+                    rows.push(
+                        <div key={`${key}-end`} className="py-0.5 px-2 text-[11px] opacity-70">
+                            Query interpretation complete
+                        </div>
+                    );
+
+                    rows.push(
+                        <div key={`${key}-separator`} className="py-1">
+                            <div className="mx-2 border-t border-border/30"></div>
+                        </div>
+                    );
+
+                    inInterpretation = false;
+                    continue;
+                }
+
+                continue;
+            }
+
+            if (event.type === 'operator_start' && event.op === 'query_expansion') {
+                inExpansion = true;
+                expansionData = {
+                    strategy: null,
+                    reasons: [],
+                    alternatives: []
+                };
+                if (!expansionHeaderShown) {
+                    const key = `exp-${i}`;
+                    rows.push(
+                        <div key={`${key}-start-immediate`} className="px-2 py-1 text-[11px] flex items-center gap-1.5">
+                            <FiLayers className="h-3 w-3 opacity-80" />
+                            <span className="opacity-90">Query expansion</span>
+                        </div>
+                    );
+                    expansionHeaderShown = true;
+                }
+                continue;
+            }
+
+            if (inExpansion) {
+                if (event.type === 'expansion_start') {
+                    const strategy = (event as any).strategy;
+                    if (strategy) {
+                        expansionData.strategy = String(strategy).toUpperCase();
+                    }
+                    continue;
+                }
+                if (event.type === 'expansion_reason_delta') {
+                    const text = (event as any).text;
+                    if (typeof text === 'string' && text.trim()) {
+                        expansionData.reasons.push(text.trim());
+                    }
+                    continue;
+                }
+                if (event.type === 'expansion_delta') {
+                    const alts = (event as any).alternatives_snapshot;
+                    if (Array.isArray(alts)) {
+                        expansionData.alternatives = alts;
+                    }
+                    continue;
+                }
+                if (event.type === 'expansion_done') {
+                    const alts = (event as any).alternatives;
+                    if (Array.isArray(alts)) {
+                        expansionData.alternatives = alts;
+                    }
+                }
+                if (event.type === 'operator_end' && event.op === 'query_expansion') {
+                    const key = `exp-${i}`;
+                    if (expansionData.strategy) {
+                        rows.push(
+                            <div key={`${key}-strategy`} className="py-0.5 px-2 text-[11px] opacity-80">
+                                Strategy: {expansionData.strategy}
+                            </div>
+                        );
+                    }
+                    expansionData.reasons.forEach((reason, idx) => {
+                        rows.push(
+                            <div key={`${key}-reason-${idx}`} className="py-0.5 px-2 text-[11px] opacity-80">
+                                {reason}
+                            </div>
+                        );
+                    });
+                    if (expansionData.alternatives.length > 0) {
+                        rows.push(
+                            <div key={`${key}-alts-header`} className="py-0.5 px-2 text-[11px] opacity-90">
+                                Generated {expansionData.alternatives.length} alternative{expansionData.alternatives.length !== 1 ? 's' : ''}:
+                            </div>
+                        );
+                        expansionData.alternatives.forEach((alt, idx) => {
+                            rows.push(
+                                <div key={`${key}-alt-${idx}`} className="py-0.5 px-2 pl-4 text-[11px] opacity-80">
+                                    {idx + 1}. {alt}
+                                </div>
+                            );
+                        });
+                    }
+                    rows.push(
+                        <div key={`${key}-end`} className="py-0.5 px-2 text-[11px] opacity-70">
+                            Query expansion complete
+                        </div>
+                    );
+                    rows.push(
+                        <div key={`${key}-separator`} className="py-1">
+                            <div className="mx-2 border-t border-border/30"></div>
+                        </div>
+                    );
+                    inExpansion = false;
+                    continue;
+                }
+                continue;
+            }
+
+            if (event.type === 'operator_start' && event.op === 'embedding') {
+                inEmbedding = true;
+                embeddingData = {
+                    searchMethod: null,
+                    neuralCount: null,
+                    sparseCount: null,
+                    dim: null,
+                    model: null
+                };
+                continue;
+            }
+            if (inEmbedding) {
+                if (event.type === 'embedding_start') {
+                    const method = (event as any).search_method;
+                    if (method) {
+                        embeddingData.searchMethod = String(method).toLowerCase();
+                    }
+                    continue;
+                }
+                if (event.type === 'embedding_done') {
+                    const e = event as any;
+                    embeddingData.neuralCount = e.neural_count;
+                    embeddingData.sparseCount = e.sparse_count;
+                    embeddingData.dim = e.dim;
+                    embeddingData.model = e.model;
+                }
+                if (event.type === 'embedding_fallback') {
+                    const reason = (event as any).reason;
+                    rows.push(
+                        <div key={`embed-fallback-${i}`} className="py-0.5 px-2 text-[11px] opacity-90">
+                            • Embedding fallback: {reason}
+                        </div>
+                    );
+                    inEmbedding = false;
+                    continue;
+                }
+                if (event.type === 'operator_end' && event.op === 'embedding') {
+                    pendingEmbedding = { ...embeddingData };
+                    inEmbedding = false;
+                    continue;
+                }
+                continue;
+            }
+
+            if (event.type === 'operator_start' && event.op === 'vector_search') {
+                const vectorSearchData = {
+                    method: null as string | null,
+                    finalCount: null as number | null,
+                    topScores: [] as number[]
+                };
+                let j = i + 1;
+                while (j < src.length && (src[j] as any).type !== 'operator_end') {
+                    const nextEvent = src[j] as any;
+                    if (nextEvent.type === 'vector_search_start') {
+                        vectorSearchData.method = nextEvent.method;
+                    } else if (nextEvent.type === 'vector_search_done') {
+                        vectorSearchData.finalCount = nextEvent.final_count;
+                        vectorSearchData.topScores = nextEvent.top_scores || [];
+                    }
+                    j++;
+                }
+
+                const key = `vector-${i}`;
+                const vMethod = (vectorSearchData.method || 'hybrid') as 'hybrid' | 'neural' | 'keyword';
+                const VIcon = vMethod === 'hybrid' ? FiGitMerge : vMethod === 'neural' ? ChartScatter : FiType;
+
+                rows.push(
+                    <div key={`${key}-start`} className="px-2 py-1 text-[11px] flex items-center gap-1.5">
+                        <VIcon className="h-3 w-3 opacity-80" />
+                        <span className="opacity-90">Retrieval</span>
+                        <span className={cn(
+                            "ml-1 px-1 py-0 rounded text-[10px]",
+                            isDark ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-700"
+                        )}>{vMethod}</span>
+                    </div>
+                );
+
+                if (pendingEmbedding) {
+                    if (pendingEmbedding.neuralCount && pendingEmbedding.neuralCount > 0) {
+                        rows.push(
+                            <div key={`${key}-embed-neural`} className="py-0.5 px-2 text-[11px] opacity-80">
+                                Embeddings: {pendingEmbedding.neuralCount} neural{pendingEmbedding.neuralCount !== 1 ? 's' : ''} (dim {pendingEmbedding.dim || 'unknown'})
+                            </div>
+                        );
+                    }
+                    if (pendingEmbedding.sparseCount && pendingEmbedding.sparseCount > 0) {
+                        rows.push(
+                            <div key={`${key}-embed-sparse`} className="py-0.5 px-2 text-[11px] opacity-80">
+                                Embeddings: {pendingEmbedding.sparseCount} sparse (BM25)
+                            </div>
+                        );
+                    }
+                }
+
+                if (vectorSearchData.finalCount !== null) {
+                    rows.push(
+                        <div key={`${key}-found`} className="py-0.5 px-2 text-[11px] opacity-80">
+                            Retrieved {vectorSearchData.finalCount} candidate result{vectorSearchData.finalCount !== 1 ? 's' : ''}
+                        </div>
+                    );
+                }
+
+                rows.push(
+                    <div key={`${key}-end`} className="py-0.5 px-2 text-[11px] opacity-70">
+                        Retrieval complete
+                    </div>
+                );
+                rows.push(
+                    <div key={`${key}-separator`} className="py-1">
+                        <div className="mx-2 border-t border-border/30"></div>
+                    </div>
+                );
+                pendingEmbedding = null;
+                while (i < src.length && !((src[i] as any).type === 'operator_end' && (src[i] as any).op === 'vector_search')) {
+                    i++;
+                }
+                continue;
+            }
+
+            if (event.type === 'operator_start' && event.op === 'recency') {
+                inRecency = true;
+                recencyData = {
+                    weight: null,
+                    field: null,
+                    oldest: null,
+                    newest: null,
+                    spanSeconds: null
+                };
+                continue;
+            }
+            if (inRecency) {
+                if (event.type === 'recency_start') {
+                    const weight = (event as any).requested_weight;
+                    if (typeof weight === 'number') {
+                        recencyData.weight = weight;
+                    }
+                    continue;
+                }
+                if (event.type === 'recency_span') {
+                    const e = event as any;
+                    recencyData.field = e.field;
+                    recencyData.oldest = e.oldest;
+                    recencyData.newest = e.newest;
+                    recencyData.spanSeconds = e.span_seconds;
+                    continue;
+                }
+                if (event.type === 'recency_skipped') {
+                    const reason = (event as any).reason;
+                    rows.push(
+                        <div key={`recency-skip-${i}`} className="py-0.5 px-2 text-[11px] opacity-90">
+                            • Recency bias skipped: {reason}
+                        </div>
+                    );
+                    rows.push(
+                        <div key={`recency-skip-${i}-separator`} className="py-1">
+                            <div className="mx-2 border-t border-border/30"></div>
+                        </div>
+                    );
+                    while (i < src.length && !((src[i] as any).type === 'operator_end' && (src[i] as any).op === 'recency')) {
+                        i++;
+                    }
+                    inRecency = false;
+                    continue;
+                }
+                if (event.type === 'operator_end' && event.op === 'recency') {
+                    const key = `recency-${i}`;
+                    const formatTimeSpan = (seconds: number | null) => {
+                        if (!seconds) return 'unknown';
+                        const days = Math.floor(seconds / 86400);
+                        const hours = Math.floor((seconds % 86400) / 3600);
+                        const minutes = Math.floor((seconds % 3600) / 60);
+                        const parts = [] as string[];
+                        if (days > 0) parts.push(`${days} day${days !== 1 ? 's' : ''}`);
+                        if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? 's' : ''}`);
+                        if (minutes > 0 && days === 0) parts.push(`${minutes} minute${minutes !== 1 ? 's' : ''}`);
+                        return parts.length > 0 ? parts.join(', ') : 'less than a minute';
+                    };
+                    const formatDate = (dateStr: string | null) => {
+                        if (!dateStr) return 'unknown';
+                        try {
+                            const date = new Date(dateStr);
+                            return date.toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
+                        } catch {
+                            return dateStr;
+                        }
+                    };
+                    rows.push(
+                        <div key={`${key}-start`} className="px-2 py-1 text-[11px] flex items-center gap-1.5">
+                            <ClockArrowUp className="h-3 w-3 opacity-80" />
+                            <span className="opacity-90">Recency bias</span>
+                            {recencyData.weight !== null && (
+                                <span className={cn(
+                                    "ml-1 px-1 py-0 rounded text-[10px]",
+                                    isDark ? "bg-gray-800 text-gray-300" : "bg-gray-100 text-gray-700"
+                                )}>{recencyData.weight}</span>
+                            )}
+                        </div>
+                    );
+                    if (recencyData.oldest) {
+                        rows.push(
+                            <div key={`${key}-oldest`} className="py-0.5 px-2 text-[11px] opacity-80">
+                                Oldest data point: {formatDate(recencyData.oldest)}
+                            </div>
+                        );
+                    }
+                    if (recencyData.newest) {
+                        rows.push(
+                            <div key={`${key}-newest`} className="py-0.5 px-2 text-[11px] opacity-80">
+                                Newest data point: {formatDate(recencyData.newest)}
+                            </div>
+                        );
+                    }
+                    if (recencyData.spanSeconds !== null) {
+                        rows.push(
+                            <div key={`${key}-span`} className="py-0.5 px-2 text-[11px] opacity-80">
+                                Time span: {formatTimeSpan(recencyData.spanSeconds)}
+                            </div>
+                        );
+                    }
+                    rows.push(
+                        <div key={`${key}-end`} className="py-0.5 px-2 text-[11px] opacity-70">
+                            Recency bias applied
+                        </div>
+                    );
+                    rows.push(
+                        <div key={`${key}-separator`} className="py-1">
+                            <div className="mx-2 border-t border-border/30"></div>
+                        </div>
+                    );
+                    inRecency = false;
+                    continue;
+                }
+                continue;
+            }
+
+            if (event.type === 'operator_start' && event.op === 'llm_reranking') {
+                inReranking = true;
+                rerankingData = { reasons: [], rankings: [], k: null };
+                rows.push(
+                    <div key={`rerank-${i}-start`} className="px-2 py-1 text-[11px] flex items-center gap-1.5">
+                        <ListStart className="h-3 w-3 opacity-80" />
+                        <span className="opacity-90">AI reranking</span>
+                    </div>
+                );
+                continue;
+            }
+            if (inReranking) {
+                if (event.type === 'reranking_start') {
+                    const k = (event as any).k;
+                    if (typeof k === 'number') {
+                        rerankingData.k = k;
+                        rows.push(
+                            <div key={`rerank-${i}-start-updated`} className="py-0.5 px-2 text-[11px] opacity-90">
+                                Reranking top {k} results
+                            </div>
+                        );
+                    }
+                    continue;
+                }
+                if (event.type === 'reranking_reason_delta') {
+                    const text = (event as any).text;
+                    if (typeof text === 'string' && text.trim()) {
+                        rerankingData.reasons.push(text.trim());
+                        rows.push(
+                            <div key={`rerank-${i}-reason-${rerankingData.reasons.length}`} className="py-0.5 px-2 text-[11px] opacity-80">
+                                {text.trim()}
+                            </div>
+                        );
+                    }
+                    continue;
+                }
+                if (event.type === 'reranking_delta') {
+                    const rankings = (event as any).rankings_snapshot;
+                    if (Array.isArray(rankings)) {
+                        rerankingData.rankings = rankings;
+                    }
+                    continue;
+                }
+                if (event.type === 'reranking_done') {
+                    const rankings = (event as any).rankings;
+                    if (Array.isArray(rankings)) {
+                        rerankingData.rankings = rankings;
+                    }
+                }
+                if (event.type === 'operator_end' && event.op === 'llm_reranking') {
+                    const key = `rerank-${i}`;
+                    if (rerankingData.rankings.length > 0) {
+                        rows.push(
+                            <div key={`${key}-rankings-header`} className="py-0.5 px-2 text-[11px] opacity-90">
+                                Reranked {rerankingData.rankings.length} result{rerankingData.rankings.length !== 1 ? 's' : ''}:
+                            </div>
+                        );
+                        const topRankings = rerankingData.rankings.slice(0, 5);
+                        topRankings.forEach((ranking, idx) => {
+                            const score = typeof ranking.relevance_score === 'number' ? ranking.relevance_score.toFixed(2) : 'N/A';
+                            rows.push(
+                                <div key={`${key}-rank-${idx}`} className="py-0.5 px-2 pl-4 text-[11px] opacity-80">
+                                    #{idx + 1}: Result {ranking.index} (relevance: {score})
+                                </div>
+                            );
+                        });
+                        if (rerankingData.rankings.length > 5) {
+                            rows.push(
+                                <div key={`${key}-more`} className="py-0.5 px-2 pl-4 text-[11px] opacity-60">
+                                    ... and {rerankingData.rankings.length - 5} more
+                                </div>
+                            );
+                        }
+                    }
+                    rows.push(
+                        <div key={`${key}-end`} className="py-0.5 px-2 text-[11px] opacity-70">
+                            Reranking complete
+                        </div>
+                    );
+                    rows.push(
+                        <div key={`${key}-separator`} className="py-1">
+                            <div className="mx-2 border-t border-border/30"></div>
+                        </div>
+                    );
+                    inReranking = false;
+                    continue;
+                }
+                continue;
+            }
+
+            if (event.type === 'completion_start' || event.type === 'completion_delta' || event.type === 'completion_done') {
+                continue;
+            }
+            if (event.type === 'operator_start' && event.op === 'completion') {
+                continue;
+            }
+            if (event.type === 'operator_end' && event.op === 'completion') {
+                continue;
+            }
+
+            if (event.type === 'connected') {
+                rows.push(
+                    <div key={(event.seq ?? i) + "-" + i} className="py-0.5 px-2 text-[11px] opacity-90">
+                        Connected
+                    </div>
+                );
+            } else if (event.type === 'start') {
+                rows.push(
+                    <div key={(event.seq ?? i) + "-" + i} className="py-0.5 px-2 text-[11px] opacity-90">
+                        Starting search
+                    </div>
+                );
+                rows.push(
+                    <div key={`${(event.seq ?? i)}-separator`} className="py-1">
+                        <div className="mx-2 border-t border-border/30"></div>
+                    </div>
+                );
+            } else if (event.type === 'done') {
+                rows.push(
+                    <div key={(event.seq ?? i) + "-" + i} className="py-0.5 px-2 text-[11px] opacity-90 flex items-center gap-1.5">
+                        <Check className="h-3 w-3 opacity-80" strokeWidth={1.5} />
+                        Search complete
+                    </div>
+                );
+            } else if (event.type === 'results' || event.type === 'summary') {
+                continue;
+            } else if (event.type === 'error') {
+                const e = event as any;
+                rows.push(
+                    <div key={(event.seq ?? i) + "-" + i} className="py-0.5 px-2 text-[11px] text-red-400">
+                        Error{e.operation ? ` in ${e.operation}` : ''}: {e.message}
+                    </div>
+                );
+            } else if (event.type === 'cancelled') {
+                // final marker handled below, but if explicit event, show the line too
+                rows.push(
+                    <div key={`cancelled-${i}`} className="py-0.5 px-2 text-[11px] text-red-500">
+                        Search cancelled
+                    </div>
+                );
+            } else {
+                continue;
+            }
+        }
+
+        if (inInterpretation && (interpretationData.reasons.length > 0)) {
+            const key = `interp-incomplete`;
+            rows.push(
+                <div key={`${key}-start`} className="py-0.5 px-2 text-[11px] opacity-90">
+                    • starting query interpretation
+                </div>
+            );
+            interpretationData.reasons.forEach((reason, idx) => {
+                rows.push(
+                    <div key={`${key}-reason-${idx}`} className="py-0.5 px-2 text-[11px] opacity-80">
+                        • {reason}
+                    </div>
+                );
+            });
+        }
+
+        if (inExpansion && (expansionData.reasons.length > 0 || expansionData.strategy || expansionData.alternatives.length > 0)) {
+            const key = `exp-incomplete`;
+            rows.push(
+                <div key={`${key}-start`} className="py-0.5 px-2 text-[11px] opacity-90">
+                    • Starting query expansion{expansionData.strategy ? ` with strategy '${expansionData.strategy}'` : ''}
+                </div>
+            );
+            expansionData.reasons.forEach((reason, idx) => {
+                rows.push(
+                    <div key={`${key}-reason-${idx}`} className="py-0.5 px-2 text-[11px] opacity-80">
+                        • {reason}
+                    </div>
+                );
+            });
+            if (expansionData.alternatives.length > 0) {
+                rows.push(
+                    <div key={`${key}-alts-header`} className="py-0.5 px-2 text-[11px] opacity-90">
+                        • Generated {expansionData.alternatives.length} alternative{expansionData.alternatives.length !== 1 ? 's' : ''}:
+                    </div>
+                );
+                expansionData.alternatives.forEach((alt, idx) => {
+                    rows.push(
+                        <div key={`${key}-alt-${idx}`} className="py-0.5 px-2 pl-4 text-[11px] opacity-80">
+                            {idx + 1}. {alt}
+                        </div>
+                    );
+                });
+            }
+        }
+
+        return rows;
+    }, [events, isDark, toDisplayFilter]);
+
+    // Tab switching effects
+    useEffect(() => {
+        if (searchStatus === 'cancelled') return;
+        if (isSearching) {
+            setActiveTab('trace');
+        }
+    }, [isSearching, searchStatus]);
+
+    useEffect(() => {
+        if (searchStatus === 'cancelled') return;
+        if (responseType === 'completion' && isSearching && completion && completion.length > 0) {
+            if (activeTab === 'trace') setActiveTab('answer');
+        }
+    }, [responseType, isSearching, completion, activeTab, searchStatus]);
+
+    useEffect(() => {
+        if (searchStatus === 'cancelled') return;
+        if (responseType === 'raw' && !isSearching && Array.isArray(results) && results.length > 0 && searchStatus === 'success') {
+            setActiveTab('entities');
+        }
+    }, [responseType, isSearching, results, searchStatus]);
+
+    // Guard: show nothing if no response and not loading (after hooks per lint rules)
     if (!searchResponse && !isSearching) {
-        console.log('[SearchResponseDisplay] RETURNING NULL - no response and not searching', {
-            searchResponse,
-            isSearching
-        });
         return null;
     }
 
@@ -371,7 +1260,7 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
             isExpanded={isExpanded}
             onToggle={setIsExpanded}
             onCopy={handleCopy}
-            copyTooltip={activeTab === 'answer' ? "Copy answer" : "Copy entities"}
+            copyTooltip={activeTab === 'trace' ? "Copy trace" : activeTab === 'answer' ? "Copy answer" : "Copy entities"}
             autoExpandOnSearch={isSearching}
             className={className}
         >
@@ -399,10 +1288,35 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                             "flex items-center border-t",
                             isDark ? "border-gray-800/50 bg-gray-900/70" : "border-gray-200/50 bg-gray-50"
                         )}>
-                            {/* Show tabs based on responseType */}
+                            {/* Trace tab (left) */}
+                            <button
+                                onClick={() => setActiveTab('trace')}
+                                className={cn(
+                                    "px-3.5 py-2 text-[13px] font-medium transition-colors relative",
+                                    activeTab === 'trace'
+                                        ? isDark
+                                            ? "text-white bg-gray-800/70"
+                                            : "text-gray-900 bg-white"
+                                        : isDark
+                                            ? "text-gray-400 hover:text-gray-200 hover:bg-gray-800/30"
+                                            : "text-gray-600 hover:text-gray-900 hover:bg-gray-100/50"
+                                )}
+                            >
+                                <div className="flex items-center gap-1.5">
+                                    <Footprints className="h-3 w-3" />
+                                    Trace
+                                </div>
+                                {activeTab === 'trace' && (
+                                    <div className={cn(
+                                        "absolute bottom-0 left-0 right-0 h-0.5",
+                                        isDark ? "bg-blue-400" : "bg-blue-600"
+                                    )} />
+                                )}
+                            </button>
+                            {/* Middle + Right depend on responseType */}
                             {responseType === 'raw' ? (
                                 <>
-                                    {/* Entities tab (active) */}
+                                    {/* Entities (middle) */}
                                     <button
                                         onClick={() => setActiveTab('entities')}
                                         className={cn(
@@ -428,7 +1342,7 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                                         )}
                                     </button>
 
-                                    {/* Answer tab (disabled with tooltip) */}
+                                    {/* Answer (right, disabled) */}
                                     <Tooltip open={openTooltip === "answerTab"}>
                                         <TooltipTrigger asChild>
                                             <button
@@ -469,7 +1383,7 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                                 </>
                             ) : (
                                 <>
-                                    {/* Answer tab (active) */}
+                                    {/* Answer (middle) */}
                                     <button
                                         onClick={() => setActiveTab('answer')}
                                         className={cn(
@@ -495,7 +1409,7 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                                         )}
                                     </button>
 
-                                    {/* Entities tab */}
+                                    {/* Entities (right) */}
                                     <button
                                         onClick={() => setActiveTab('entities')}
                                         className={cn(
@@ -532,6 +1446,59 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                         "border-t relative",
                         isDark ? "border-gray-800/50" : "border-gray-200/50"
                     )}>
+                        {/* Trace Tab Content */}
+                        <div style={{ display: activeTab === 'trace' ? 'block' : 'none' }}>
+                            <div ref={traceContainerRef} className={cn(
+                                "overflow-auto max-h-[438px]",
+                                DESIGN_SYSTEM.spacing.padding.compact,
+                                isDark ? "bg-gray-950" : "bg-white"
+                            )}>
+                                {(!events || events.length === 0) ? (
+                                    <div className="px-1 py-1">
+                                        <div className="space-y-2 animate-pulse">
+                                            <div className={cn("h-3 rounded", isDark ? "bg-gray-800" : "bg-gray-200")}></div>
+                                            <div className={cn("h-3 rounded", isDark ? "bg-gray-800" : "bg-gray-200")}></div>
+                                            <div className={cn("h-3 rounded w-5/6", isDark ? "bg-gray-800" : "bg-gray-200")}></div>
+                                            <div className="py-1">
+                                                <div className={cn("h-px", isDark ? "bg-gray-800" : "bg-gray-200")}></div>
+                                            </div>
+                                            <div className={cn("h-3 rounded", isDark ? "bg-gray-800" : "bg-gray-200")}></div>
+                                            <div className={cn("h-3 rounded w-2/3", isDark ? "bg-gray-800" : "bg-gray-200")}></div>
+                                            <div className={cn("h-3 rounded w-1/2", isDark ? "bg-gray-800" : "bg-gray-200")}></div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {traceRows}
+                                        {events.some((e: any) => e?.type === 'cancelled') && (
+                                            <div className="py-0.5 px-2 text-[11px] text-red-500">
+                                                Search cancelled
+                                            </div>
+                                        )}
+                                        {isSearching && (
+                                            <div className="py-0.5 px-2 text-[11px] opacity-70 flex items-center gap-2">
+                                                <span>Searching</span>
+                                                <span className="flex items-center gap-1">
+                                                    <span className={cn(
+                                                        "h-1 w-1 rounded-full animate-pulse",
+                                                        isDark ? "bg-gray-600" : "bg-gray-400"
+                                                    )} style={{ animationDelay: '0ms' }} />
+                                                    <span className={cn(
+                                                        "h-1 w-1 rounded-full animate-pulse",
+                                                        isDark ? "bg-gray-600" : "bg-gray-400"
+                                                    )} style={{ animationDelay: '150ms' }} />
+                                                    <span className={cn(
+                                                        "h-1 w-1 rounded-full animate-pulse",
+                                                        isDark ? "bg-gray-600" : "bg-gray-400"
+                                                    )} style={{ animationDelay: '300ms' }} />
+                                                </span>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
                         {/* Answer Tab Content - Always rendered but hidden when not active */}
                         {responseType === 'completion' && (completion || isSearching) && (
                             <div style={{ display: activeTab === 'answer' ? 'block' : 'none' }}>
@@ -540,7 +1507,7 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                                 <div className={cn(
                                     "overflow-auto max-h-[438px] leading-relaxed",
                                     DESIGN_SYSTEM.spacing.padding.compact,
-                                    DESIGN_SYSTEM.typography.sizes.label,
+                                    DESIGN_SYSTEM.typography.sizes.body,
                                     isDark ? "bg-gray-900 text-gray-200" : "bg-white text-gray-800"
                                 )}>
                                     {(() => {
@@ -788,7 +1755,7 @@ export const SearchResponse: React.FC<SearchResponseProps> = ({
                                                 value={results}
                                                 theme={isDark ? "dark" : "light"}
                                                 style={{
-                                                    fontSize: '0.68rem',
+                                                    fontSize: '0.62rem',
                                                     fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
                                                 }}
                                                 rootName={false}

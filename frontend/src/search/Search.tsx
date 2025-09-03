@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme-provider";
 import { SearchBox } from "@/search/SearchBox";
 import { SearchResponse } from "@/search/SearchResponse";
-import { SearchProcess } from "@/search/SearchProcess";
 import { DESIGN_SYSTEM } from "@/lib/design-system";
 
 interface SearchProps {
@@ -28,7 +27,6 @@ export const Search = ({ collectionReadableId }: SearchProps) => {
     const [searchResponseType, setSearchResponseType] = useState<'raw' | 'completion'>('raw');
 
     // Streaming lifecycle state (Milestone 1)
-    const [showProcessPanel, setShowProcessPanel] = useState<boolean>(false);
     const [showResponsePanel, setShowResponsePanel] = useState<boolean>(false);
 
     const [requestId, setRequestId] = useState<string | null>(null);
@@ -69,7 +67,6 @@ export const Search = ({ collectionReadableId }: SearchProps) => {
     const handleSearchStart = useCallback((responseType: 'raw' | 'completion') => {
         console.log('[CollectionNewView] handleSearchStart called with responseType:', responseType);
         // Open panels on first search
-        if (!showProcessPanel) setShowProcessPanel(true);
         if (!showResponsePanel) setShowResponsePanel(true);
 
         // Reset per-search state
@@ -82,7 +79,7 @@ export const Search = ({ collectionReadableId }: SearchProps) => {
         setStreamingCompletion("");
         setLiveResults([]);
         setRequestId(null);
-    }, [showProcessPanel, showResponsePanel]);
+    }, [showResponsePanel]);
 
     const handleSearchEnd = useCallback(() => {
         console.log('[CollectionNewView] handleSearchEnd called');
@@ -149,17 +146,6 @@ export const Search = ({ collectionReadableId }: SearchProps) => {
                 />
             </div>
 
-            {/* Live Process timeline */}
-            {showProcessPanel && (
-                <div>
-                    <SearchProcess
-                        requestId={requestId}
-                        events={events as any[]}
-                        isSearching={isSearching}
-                    />
-                </div>
-            )}
-
             {/* Search Response Display - visibility controlled by panel state (Milestone 1) */}
             {showResponsePanel && (
                 <div>
@@ -182,6 +168,7 @@ export const Search = ({ collectionReadableId }: SearchProps) => {
                         })()}
                         isSearching={isSearching}
                         responseType={searchResponseType}
+                        events={events as any[]}
                     />
                 </div>
             )}

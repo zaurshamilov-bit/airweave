@@ -8,7 +8,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ArrowUp, CodeXml, X, Loader2, Square } from "lucide-react";
+import { ArrowUp, CodeXml, X, Loader2, Square, ClockArrowUp, ListStart, ChartScatter } from "lucide-react";
 import { FiGitMerge, FiType, FiLayers, FiFilter, FiSliders, FiClock, FiList, FiMessageSquare, FiBox } from "react-icons/fi";
 import { ApiIntegrationDoc } from "@/search/CodeBlock";
 import { JsonFilterEditor } from "@/search/JsonFilterEditor";
@@ -479,23 +479,17 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                     )}
                 >
                     <div className="relative px-2 pt-2 pb-1">
-                        {/* Code button - prominent with label */}
+                        {/* Code button - match header buttons */}
                         <button
                             type="button"
                             onClick={() => setShowCodeBlock(true)}
                             className={cn(
-                                "absolute top-2 right-2 inline-flex items-center gap-1.5 border",
-                                DESIGN_SYSTEM.buttons.heights.secondary,
-                                DESIGN_SYSTEM.buttons.padding.secondary,
-                                DESIGN_SYSTEM.radius.button,
-                                DESIGN_SYSTEM.transitions.standard,
-                                "border-border/50",
-                                isDark ? "bg-background text-foreground hover:bg-muted" : "bg-white text-foreground hover:bg-muted"
+                                "absolute top-2 right-2 h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
+                                isDark ? "bg-background border-border hover:bg-muted" : "bg-background border-border hover:bg-muted"
                             )}
                             title="View integration code"
                         >
-                            <CodeXml className={DESIGN_SYSTEM.icons.button} />
-                            <span className={cn(DESIGN_SYSTEM.typography.sizes.body, DESIGN_SYSTEM.typography.weights.medium)}>CODE</span>
+                            <CodeXml className={cn(DESIGN_SYSTEM.icons.button, "text-muted-foreground")} />
                         </button>
 
                         <textarea
@@ -554,7 +548,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                     )}
                                                     title="Hybrid search"
                                                 >
-                                                    <FiGitMerge className="h-4 w-4" />
+                                                    <FiGitMerge className="h-4 w-4" strokeWidth={1.5} />
                                                 </button>
                                             </TooltipTrigger>
                                             <TooltipContent
@@ -602,7 +596,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                     )}
                                                     title="Neural search"
                                                 >
-                                                    <FiBox className="h-4 w-4" />
+                                                    <ChartScatter className="h-4 w-4" strokeWidth={1.5} />
                                                 </button>
                                             </TooltipTrigger>
                                             <TooltipContent
@@ -650,7 +644,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                     )}
                                                     title="Keyword search"
                                                 >
-                                                    <FiType className="h-4 w-4" />
+                                                    <FiType className="h-4 w-4" strokeWidth={1.5} />
                                                 </button>
                                             </TooltipTrigger>
                                             <TooltipContent
@@ -708,7 +702,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <FiLayers className="h-4 w-4" />
+                                                <FiLayers className="h-4 w-4" strokeWidth={1.5} />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
@@ -768,7 +762,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <FiSliders className="h-4 w-4" />
+                                                <FiSliders className="h-4 w-4" strokeWidth={1.5} />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
@@ -838,7 +832,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <FiFilter className="h-4 w-4" />
+                                                <FiFilter className="h-4 w-4" strokeWidth={1.5} />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
@@ -898,7 +892,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <FiClock className="h-4 w-4" />
+                                                <ClockArrowUp className="h-4 w-4" strokeWidth={1.5} />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
@@ -958,7 +952,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <FiList className="h-4 w-4" />
+                                                <ListStart className="h-4 w-4" strokeWidth={1.5} />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
@@ -1012,7 +1006,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                         : "text-foreground hover:bg-muted"
                                                 )}
                                             >
-                                                <FiMessageSquare className="h-4 w-4" />
+                                                <FiMessageSquare className="h-4 w-4" strokeWidth={1.5} />
                                             </button>
                                         </div>
                                     </TooltipTrigger>
@@ -1047,21 +1041,18 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                 onClick={isSearching ? handleCancelSearch : handleSendQuery}
                                 disabled={!isSearching && !hasQuery}
                                 className={cn(
-                                    DESIGN_SYSTEM.buttons.heights.secondary,
-                                    "w-8 flex items-center justify-center shadow-sm",
-                                    DESIGN_SYSTEM.radius.button,
-                                    DESIGN_SYSTEM.transitions.standard,
+                                    "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
                                     isSearching
                                         ? isDark
-                                            ? "bg-red-900/30 border border-red-700 hover:bg-red-900/50 cursor-pointer"
-                                            : "bg-red-50 border border-red-200 hover:bg-red-100 cursor-pointer"
+                                            ? "bg-red-900/30 border-red-700 hover:bg-red-900/50 cursor-pointer"
+                                            : "bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer"
                                         : hasQuery
                                             ? isDark
-                                                ? "text-white bg-blue-600 hover:bg-blue-700 ring-1 ring-blue-600/60"
-                                                : "text-white bg-blue-600 hover:bg-blue-700 ring-1 ring-blue-600/60"
+                                                ? "bg-background border-border hover:bg-muted text-foreground"
+                                                : "bg-background border-border hover:bg-muted text-foreground"
                                             : isDark
-                                                ? "text-muted-foreground bg-muted cursor-not-allowed"
-                                                : "text-muted-foreground bg-muted cursor-not-allowed"
+                                                ? "bg-muted text-muted-foreground cursor-not-allowed"
+                                                : "bg-muted text-muted-foreground cursor-not-allowed"
                                 )}
                                 title={isSearching ? "Stop search" : (hasQuery ? "Send query" : "Type a question to enable")}
                             >
