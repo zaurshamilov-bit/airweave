@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { Plus, FileText, Database, Code, Maximize2, Copy, CheckCircle, ChevronRight, X } from 'lucide-react';
 import { EntityState } from '@/stores/entityStateStore';
 import { apiClient } from '@/lib/api';
+import { DESIGN_SYSTEM } from '@/lib/design-system';
 
 // Entity Definition type matching backend schema
 interface EntityDefinition {
@@ -142,19 +143,19 @@ const EntityGridItem: React.FC<{
         // Disabled state for empty entities
         entity.count === 0
           ? cn(
-              "cursor-not-allowed opacity-50",
-              isDark ? "bg-gray-800/5 border-gray-700/5" : "bg-gray-50/30 border-gray-200/10"
-            )
+            "cursor-not-allowed opacity-50",
+            isDark ? "bg-gray-800/5 border-gray-700/5" : "bg-gray-50/30 border-gray-200/10"
+          )
           : cn(
-              "cursor-pointer hover:shadow-sm active:scale-[0.995]",
-              isExpanded
-                ? isDark
-                  ? "bg-blue-500/10 border-blue-500/30 shadow-sm"
-                  : "bg-blue-50 border-blue-200/60 shadow-sm"
-                : isDark
-                  ? "bg-gray-800/10 hover:bg-gray-800/30 border-gray-700/20 hover:border-gray-600/40"
-                  : "bg-white/70 hover:bg-white border-gray-200/40 hover:border-gray-300/60"
-            ),
+            "cursor-pointer hover:shadow-sm active:scale-[0.995]",
+            isExpanded
+              ? isDark
+                ? "bg-blue-500/10 border-blue-500/30 shadow-sm"
+                : "bg-blue-50 border-blue-200/60 shadow-sm"
+              : isDark
+                ? "bg-gray-800/10 hover:bg-gray-800/30 border-gray-700/20 hover:border-gray-600/40"
+                : "bg-white/70 hover:bg-white border-gray-200/40 hover:border-gray-300/60"
+          ),
         "border"
       )}
       disabled={entity.count === 0}
@@ -180,9 +181,9 @@ const EntityGridItem: React.FC<{
                 isExpanded
                   ? "rotate-90"
                   : cn(
-                      "opacity-25 group-hover:opacity-60",
-                      isDark ? "text-gray-400" : "text-gray-600"
-                    )
+                    "opacity-25 group-hover:opacity-60",
+                    isDark ? "text-gray-400" : "text-gray-600"
+                  )
               )} />
               {/* Show "view" text on hover */}
               {!isExpanded && (
@@ -386,10 +387,14 @@ const EntityDetailView: React.FC<{
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 rounded"
+                className={cn(
+                  DESIGN_SYSTEM.buttons.heights.compact,
+                  "w-6",
+                  DESIGN_SYSTEM.radius.button
+                )}
                 onClick={onClose}
               >
-                <X className="h-3 w-3" />
+                <X className={DESIGN_SYSTEM.icons.inline} />
               </Button>
             </div>
           </div>
@@ -411,15 +416,16 @@ const EntityDetailView: React.FC<{
                     variant="ghost"
                     size="icon"
                     className={cn(
-                      "absolute -top-1 right-0 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity z-10",
+                      "absolute -top-1 right-0 w-6 opacity-0 group-hover:opacity-100 transition-opacity z-10",
+                      DESIGN_SYSTEM.buttons.heights.compact,
                       isDark ? "hover:bg-gray-800" : "hover:bg-white/80"
                     )}
                     onClick={copySchema}
                   >
                     {copiedSchema ? (
-                      <CheckCircle className="h-3 w-3 text-green-500" />
+                      <CheckCircle className={cn(DESIGN_SYSTEM.icons.inline, "text-green-500")} />
                     ) : (
-                      <Copy className="h-3 w-3" />
+                      <Copy className={DESIGN_SYSTEM.icons.inline} />
                     )}
                   </Button>
 
@@ -465,19 +471,25 @@ const EntityDetailView: React.FC<{
 
                 {/* Technical Details - More Compact */}
                 <div className="space-y-1.5 pt-1 border-t border-border/30 px-4">
-                  <h5 className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                  <h5 className={cn(
+                    DESIGN_SYSTEM.typography.sizes.label,
+                    DESIGN_SYSTEM.typography.weights.medium,
+                    DESIGN_SYSTEM.typography.cases.uppercase,
+                    DESIGN_SYSTEM.typography.tracking.wider,
+                    "text-muted-foreground"
+                  )}>
                     Technical Details
                   </h5>
                   <div className="space-y-0.5">
-                    <div className="flex items-center justify-between text-xs">
+                    <div className={cn("flex items-center justify-between", DESIGN_SYSTEM.typography.sizes.body)}>
                       <span className="text-muted-foreground">Module</span>
-                      <code className="text-[10px] font-mono">
+                      <code className={cn(DESIGN_SYSTEM.typography.sizes.label, "font-mono")}>
                         {entity.definition.module_name}
                       </code>
                     </div>
-                    <div className="flex items-center justify-between text-xs">
+                    <div className={cn("flex items-center justify-between", DESIGN_SYSTEM.typography.sizes.body)}>
                       <span className="text-muted-foreground">Class</span>
-                      <code className="text-[10px] font-mono">
+                      <code className={cn(DESIGN_SYSTEM.typography.sizes.label, "font-mono")}>
                         {entity.definition.class_name}
                       </code>
                     </div>
@@ -717,88 +729,106 @@ export const EntityStateList: React.FC<EntityStateListProps> = ({
       {/* Main Entities Card */}
       <Card className={cn(
         "overflow-hidden relative transition-all duration-500",
+        DESIGN_SYSTEM.radius.card,
         isDark ? "bg-gray-900/40" : "bg-white",
         // Subtle animated border for sync status
         isSyncing ? "border-transparent" : isDark ? "border-gray-800" : "border-gray-200"
       )}
-      style={{
-        // Custom animated border using CSS gradient
-        ...(isSyncing && {
-          background: isDark
-            ? `linear-gradient(${isDark ? '#1a1f2e' : '#ffffff'}, ${isDark ? '#1a1f2e' : '#ffffff'}) padding-box,
+        style={{
+          // Custom animated border using CSS gradient
+          ...(isSyncing && {
+            background: isDark
+              ? `linear-gradient(${isDark ? '#1a1f2e' : '#ffffff'}, ${isDark ? '#1a1f2e' : '#ffffff'}) padding-box,
                linear-gradient(90deg,
                  ${isRunning ? '#3b82f6' : '#eab308'} 0%,
                  ${isRunning ? '#60a5fa' : '#fbbf24'} 25%,
                  ${isRunning ? '#3b82f6' : '#eab308'} 50%,
                  ${isRunning ? '#60a5fa' : '#fbbf24'} 75%,
                  ${isRunning ? '#3b82f6' : '#eab308'} 100%) border-box`
-            : `linear-gradient(white, white) padding-box,
+              : `linear-gradient(white, white) padding-box,
                linear-gradient(90deg,
                  ${isRunning ? '#3b82f6' : '#eab308'} 0%,
                  ${isRunning ? '#60a5fa' : '#fbbf24'} 25%,
                  ${isRunning ? '#3b82f6' : '#eab308'} 50%,
                  ${isRunning ? '#60a5fa' : '#fbbf24'} 75%,
                  ${isRunning ? '#3b82f6' : '#eab308'} 100%) border-box`,
-          border: '1px solid transparent',
-          backgroundSize: isSyncing ? '200% 100%, 200% 100%' : '100% 100%, 100% 100%',
-          backgroundPosition: isSyncing ? '0 0, 0 0' : '0 0, 0 0',
-          animation: isSyncing ? 'borderSlide 3s linear infinite' : 'none',
-        })
-      }}>
+            border: '1px solid transparent',
+            backgroundSize: isSyncing ? '200% 100%, 200% 100%' : '100% 100%, 100% 100%',
+            backgroundPosition: isSyncing ? '0 0, 0 0' : '0 0, 0 0',
+            animation: isSyncing ? 'borderSlide 3s linear infinite' : 'none',
+          })
+        }}>
         <CardContent className="p-4">
-        {/* Compact Header */}
-        <div className="flex items-center gap-2 mb-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Entities
-          </h3>
-          <span className="text-xs text-muted-foreground">
-            • {totalCount} total
-          </span>
-        </div>
+          {/* Compact Header */}
+          <div className={cn("flex items-center mb-4", DESIGN_SYSTEM.spacing.gaps.standard)}>
+            <h3 className={cn(
+              DESIGN_SYSTEM.typography.sizes.label,
+              DESIGN_SYSTEM.typography.weights.semibold,
+              DESIGN_SYSTEM.typography.cases.uppercase,
+              DESIGN_SYSTEM.typography.tracking.wider,
+              "text-muted-foreground"
+            )}>
+              Entities
+            </h3>
+            <span className={cn(DESIGN_SYSTEM.typography.sizes.label, "text-muted-foreground")}>
+              • {totalCount} total
+            </span>
+          </div>
 
-        {/* Content */}
-        {isLoadingDefinitions ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-xs text-muted-foreground">Loading entities...</div>
-          </div>
-        ) : combinedEntities.length === 0 ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <div className={cn(
-                "inline-flex p-3 rounded-full mb-3",
-                isDark ? "bg-gray-800/40" : "bg-gray-100"
-              )}>
-                <Database className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <h3 className="text-sm font-medium mb-1">No entities synced</h3>
-              <p className="text-xs text-muted-foreground mb-3 max-w-[200px] mx-auto">
-                Start a sync to see your data entities
-              </p>
-              <Button
-                onClick={onStartSync}
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs px-3"
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                Start Sync
-              </Button>
+          {/* Content */}
+          {isLoadingDefinitions ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-xs text-muted-foreground">Loading entities...</div>
             </div>
-          </div>
-        ) : (
-          /* Compact Entity Grid - Optimized for readability */
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5">
-            {combinedEntities.map((entity) => (
-              <EntityGridItem
-                key={entity.name}
-                entity={entity}
-                isDark={isDark}
-                isExpanded={expandedEntityData?.name === entity.name}
-                onClick={() => handleEntityClick(entity.name)}
-              />
-            ))}
-          </div>
-        )}
+          ) : combinedEntities.length === 0 ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className={cn(
+                  "inline-flex p-3 rounded-full mb-3",
+                  isDark ? "bg-gray-800/40" : "bg-gray-100"
+                )}>
+                  <Database className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <h3 className={cn(
+                  DESIGN_SYSTEM.typography.sizes.header,
+                  DESIGN_SYSTEM.typography.weights.medium,
+                  "mb-1"
+                )}>No entities synced</h3>
+                <p className={cn(
+                  DESIGN_SYSTEM.typography.sizes.body,
+                  "text-muted-foreground mb-3 max-w-[200px] mx-auto"
+                )}>
+                  Start a sync to see your data entities
+                </p>
+                <Button
+                  onClick={onStartSync}
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    DESIGN_SYSTEM.buttons.heights.compact,
+                    DESIGN_SYSTEM.typography.sizes.body,
+                    DESIGN_SYSTEM.buttons.padding.secondary
+                  )}
+                >
+                  <Plus className={cn(DESIGN_SYSTEM.icons.inline, "mr-1")} />
+                  Start Sync
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* Compact Entity Grid - Optimized for readability */
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5">
+              {combinedEntities.map((entity) => (
+                <EntityGridItem
+                  key={entity.name}
+                  entity={entity}
+                  isDark={isDark}
+                  isExpanded={expandedEntityData?.name === entity.name}
+                  onClick={() => handleEntityClick(entity.name)}
+                />
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

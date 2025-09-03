@@ -6,9 +6,7 @@ import { Toaster } from 'sonner';
 import DashboardLayout from '@/components/DashboardLayout';
 import Dashboard from '@/pages/Dashboard';
 import CollectionDetailView from "@/pages/CollectionDetailView";
-import CollectionNewView from "@/search/CollectionNewView";
 import CollectionsView from "@/pages/CollectionsView";
-import EntityStateSimulatorView from "@/pages/EntityStateSimulatorView";
 
 import AuthProviders from '@/pages/AuthProviders';
 import WhiteLabel from '@/pages/WhiteLabel';
@@ -56,7 +54,6 @@ function App() {
           <Route path={protectedPaths.dashboard} element={<Dashboard />} />
           <Route path={protectedPaths.collections} element={<CollectionsView />} />
           <Route path={protectedPaths.collectionDetail} element={<CollectionDetailView />} />
-          <Route path={protectedPaths.collectionNew} element={<CollectionNewView />} />
           <Route path={protectedPaths.apiKeys} />
           <Route path={protectedPaths.authProviders} element={<AuthProviders />} />
           <Route path={protectedPaths.whiteLabel} element={<WhiteLabel />} />

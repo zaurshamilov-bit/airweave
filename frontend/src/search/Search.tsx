@@ -1,21 +1,24 @@
 import { useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/theme-provider";
 import { SearchBox } from "@/search/SearchBox";
-import { SearchResponseDisplay } from "@/search/SearchResponseDisplay";
+import { SearchResponse } from "@/search/SearchResponse";
 import { SearchProcess } from "@/search/SearchProcess";
+import { DESIGN_SYSTEM } from "@/lib/design-system";
+
+interface SearchProps {
+    collectionReadableId: string;
+}
 
 /**
- * CollectionNewView Component
+ * Search Component
  *
- * The main search page for a collection, providing:
+ * The main search component for a collection, providing:
  * - SearchBox for query input and configuration
  * - SearchResponseDisplay for showing results
  * - Clean separation of concerns for maintainability
  */
-const CollectionNewView = () => {
-    const { readable_id } = useParams();
+export const Search = ({ collectionReadableId }: SearchProps) => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === "dark";
 
@@ -92,43 +95,47 @@ const CollectionNewView = () => {
         // The issue was that this callback was capturing initial null/empty values
     }, []);
 
-    if (!readable_id) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <p className="text-muted-foreground">No collection ID provided</p>
-            </div>
-        );
-    }
-
     return (
         <div
             className={cn(
-                // Reduce page width to ~60% on large screens, full width on small
-                "mx-auto py-6 px-4 sm:px-6 md:px-8 w-full md:w-[80%] lg:w-[70%] xl:w-[70%]",
+                "w-full max-w-[1000px]",
+                DESIGN_SYSTEM.spacing.margins.section,
                 isDark ? "text-foreground" : ""
             )}
         >
-            {/* Collection header */}
-            <div className="flex items-center justify-between py-2">
-                <div>
-                    <p className="text-muted-foreground text-sm mt-1">{readable_id}</p>
-                </div>
-            </div>
-
             {/* Search Box Component */}
-            <div className="mt-6">
+            <div>
                 <SearchBox
-                    collectionId={readable_id}
+                    collectionId={collectionReadableId}
                     onSearch={handleSearchResult}
                     onSearchStart={handleSearchStart}
                     onSearchEnd={handleSearchEnd}
+                    onCancel={() => {
+                        console.log('[CollectionNewView] onCancel received');
+                        setIsCancelling(true);
+                        // If we don’t yet have a final response, expose a cancelled placeholder
+                        setSearchResponse((prev) => {
+                            const next = prev || { results: [], completion: null, status: 'cancelled' };
+                            console.log('[CollectionNewView] onCancel -> setting searchResponse', { prev, next });
+                            return next;
+                        });
+                        setSearchResponseType((prev) => {
+                            console.log('[CollectionNewView] onCancel -> responseType remains', prev);
+                            return prev;
+                        });
+                        setIsSearching(false);
+                    }}
                     onStreamEvent={(event: any) => {
                         setEvents(prev => [...prev, event]);
+                        if (event?.type === 'cancelled') {
+                            console.log('[CollectionNewView] Stream event: cancelled');
+                        }
                         if (event?.type === 'connected' && event.request_id) {
                             setRequestId(event.request_id as string);
                         }
                     }}
                     onStreamUpdate={(partial: any) => {
+                        console.log('[CollectionNewView] onStreamUpdate', partial);
                         if (partial && Object.prototype.hasOwnProperty.call(partial, 'requestId')) {
                             setRequestId(partial.requestId ?? null);
                         }
@@ -144,15 +151,19 @@ const CollectionNewView = () => {
 
             {/* Live Process timeline */}
             {showProcessPanel && (
-                <div className="mt-4">
-                    <SearchProcess requestId={requestId} events={events as any[]} />
+                <div>
+                    <SearchProcess
+                        requestId={requestId}
+                        events={events as any[]}
+                        isSearching={isSearching}
+                    />
                 </div>
             )}
 
             {/* Search Response Display - visibility controlled by panel state (Milestone 1) */}
             {showResponsePanel && (
-                <div className="mt-6">
-                    <SearchResponseDisplay
+                <div>
+                    <SearchResponse
                         searchResponse={(() => {
                             const response = isSearching
                                 ? { status: 'in_progress', completion: streamingCompletion, results: liveResults }
@@ -177,5 +188,3 @@ const CollectionNewView = () => {
         </div>
     );
 };
-
-export default CollectionNewView;

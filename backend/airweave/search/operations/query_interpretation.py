@@ -27,12 +27,12 @@ class QueryInterpretation(SearchOperation):
         Refined query: "tickets"
     """
 
-    def __init__(self, model: str = "gpt-5", confidence_threshold: float = 0.75):
+    def __init__(self, model: str = "gpt-5", confidence_threshold: float = 0.7):
         """Initialize query interpretation.
 
         Args:
             model: OpenAI model to use for extraction
-            confidence_threshold: Minimum confidence to apply extracted filters (0.75 default)
+            confidence_threshold: Minimum confidence to apply extracted filters (0.7 default)
         """
         self.model = model
         self.confidence_threshold = confidence_threshold
@@ -106,6 +106,21 @@ class QueryInterpretation(SearchOperation):
 
             # Check confidence threshold
             if not self._check_confidence(extracted, logger):
+                # Emit not-applied notice so UI can show that interpretation was skipped
+                emitter = context.get("emit")
+                if callable(emitter):
+                    try:
+                        await emitter(
+                            "interpretation_skipped",
+                            {
+                                "reason": "confidence_below_threshold",
+                                "confidence": getattr(extracted, "confidence", None),
+                                "threshold": self.confidence_threshold,
+                            },
+                            op_name=self.name,
+                        )
+                    except Exception:
+                        pass
                 return
 
             # Process and validate extracted filters
@@ -121,7 +136,7 @@ class QueryInterpretation(SearchOperation):
             logger.error(f"[{self.name}] Failed: {e}")
             raise
 
-    async def _stream_llm_extraction(
+    async def _stream_llm_extraction(  # noqa: C901 - function complexity acceptable given streaming flow
         self,
         openai_api_key: str,
         query: str,

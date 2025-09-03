@@ -30,6 +30,10 @@ export interface DoneEvent extends BaseEvent {
     type: 'done';
 }
 
+export interface CancelledEvent extends BaseEvent {
+    type: 'cancelled';
+}
+
 export interface ErrorEvent extends BaseEvent {
     type: 'error';
     message: string;
@@ -80,10 +84,26 @@ export interface InterpretationDeltaEvent extends BaseEvent {
     };
 }
 
+// Interpretation explicitly skipped due to low confidence
+export interface InterpretationSkippedEvent extends BaseEvent {
+    type: 'interpretation_skipped';
+    reason: string;
+    confidence?: number;
+    threshold?: number;
+}
+
 export interface FilterAppliedEvent extends BaseEvent {
     type: 'filter_applied';
     filter: any | null;
     source?: string;
+}
+
+// Filter merge diagnostics (manual + interpretation)
+export interface FilterMergeEvent extends BaseEvent {
+    type: 'filter_merge';
+    existing?: any; // interpretation filter (if any)
+    user?: any;     // normalized manual filter
+    merged: any;    // final merged filter
 }
 
 // Query expansion
@@ -229,7 +249,9 @@ export type SearchEvent =
     | InterpretationStartEvent
     | InterpretationReasonDeltaEvent
     | InterpretationDeltaEvent
+    | InterpretationSkippedEvent
     | FilterAppliedEvent
+    | FilterMergeEvent
     | ExpansionStartEvent
     | ExpansionReasonDeltaEvent
     | ExpansionDeltaEvent
@@ -254,10 +276,11 @@ export type SearchEvent =
     | SummaryEvent
     | HeartbeatEvent
     | ErrorEvent
-    | DoneEvent;
+    | DoneEvent
+    | CancelledEvent;
 
 // Stream phase for higher-level UI state
-export type StreamPhase = 'searching' | 'answering' | 'finalized';
+export type StreamPhase = 'searching' | 'answering' | 'finalized' | 'cancelled';
 
 // Aggregated UI update emitted along raw events
 export interface PartialStreamUpdate {

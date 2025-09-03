@@ -30,7 +30,7 @@ export const JsonFilterEditor: React.FC<JsonFilterEditorProps> = ({
     {
       "key": "source_name",
       "match": {
-        "value": "Slack"
+        "value": "slack"
       }
     }
   ]

@@ -9,6 +9,7 @@ import { NodeIcon } from '@/components/icons/NodeIcon';
 import { McpIcon } from '@/components/icons/McpIcon';
 
 import { CodeBlock } from '@/components/ui/code-block';
+import { DESIGN_SYSTEM } from '@/lib/design-system';
 
 interface SearchConfig {
     search_method: "hybrid" | "neural" | "keyword";
@@ -222,7 +223,8 @@ ${nodeParams.join(',\n')}
             <div className="mb-8">
                 <div className="w-full opacity-95">
                     <div className={cn(
-                        "rounded-lg overflow-hidden border",
+                        DESIGN_SYSTEM.radius.card,
+                        "overflow-hidden border",
                         isDark ? "bg-gray-900 border-gray-800" : "bg-gray-100 border-gray-200"
                     )}>
                         {/* Tabs */}
@@ -232,7 +234,10 @@ ${nodeParams.join(',\n')}
                                 size="sm"
                                 onClick={() => setApiTab("rest")}
                                 className={cn(
-                                    "rounded-md text-sm flex items-center gap-2",
+                                    DESIGN_SYSTEM.radius.button,
+                                    DESIGN_SYSTEM.typography.sizes.header,
+                                    "flex items-center",
+                                    DESIGN_SYSTEM.spacing.gaps.standard,
                                     isDark
                                         ? "text-gray-200 hover:bg-gray-800/80"
                                         : "text-gray-700 hover:bg-gray-200/80",
@@ -241,7 +246,7 @@ ${nodeParams.join(',\n')}
                                         : ""
                                 )}
                             >
-                                <Terminal className="h-5 w-5" />
+                                <Terminal className={DESIGN_SYSTEM.icons.large} />
                                 <span>cURL</span>
                             </Button>
                             <Button
@@ -249,7 +254,10 @@ ${nodeParams.join(',\n')}
                                 size="sm"
                                 onClick={() => setApiTab("python")}
                                 className={cn(
-                                    "rounded-md text-sm flex items-center gap-2",
+                                    DESIGN_SYSTEM.radius.button,
+                                    DESIGN_SYSTEM.typography.sizes.header,
+                                    "flex items-center",
+                                    DESIGN_SYSTEM.spacing.gaps.standard,
                                     isDark
                                         ? "text-gray-200 hover:bg-gray-800/80"
                                         : "text-gray-700 hover:bg-gray-200/80",
@@ -258,7 +266,7 @@ ${nodeParams.join(',\n')}
                                         : ""
                                 )}
                             >
-                                <PythonIcon className="h-5 w-5" />
+                                <PythonIcon className={DESIGN_SYSTEM.icons.large} />
                                 <span>Python</span>
                             </Button>
                             <Button
@@ -266,7 +274,10 @@ ${nodeParams.join(',\n')}
                                 size="sm"
                                 onClick={() => setApiTab("node")}
                                 className={cn(
-                                    "rounded-md text-sm flex items-center gap-2",
+                                    DESIGN_SYSTEM.radius.button,
+                                    DESIGN_SYSTEM.typography.sizes.header,
+                                    "flex items-center",
+                                    DESIGN_SYSTEM.spacing.gaps.standard,
                                     isDark
                                         ? "text-gray-200 hover:bg-gray-800/80"
                                         : "text-gray-700 hover:bg-gray-200/80",
@@ -275,7 +286,7 @@ ${nodeParams.join(',\n')}
                                         : ""
                                 )}
                             >
-                                <NodeIcon className="h-5 w-5" />
+                                <NodeIcon className={DESIGN_SYSTEM.icons.large} />
                                 <span>Node.js</span>
                             </Button>
                             <Button
@@ -283,7 +294,10 @@ ${nodeParams.join(',\n')}
                                 size="sm"
                                 onClick={() => setApiTab("mcp")}
                                 className={cn(
-                                    "rounded-md text-sm flex items-center gap-2",
+                                    DESIGN_SYSTEM.radius.button,
+                                    DESIGN_SYSTEM.typography.sizes.header,
+                                    "flex items-center",
+                                    DESIGN_SYSTEM.spacing.gaps.standard,
                                     isDark
                                         ? "text-gray-200 hover:bg-gray-800/80"
                                         : "text-gray-700 hover:bg-gray-200/80",
@@ -292,7 +306,7 @@ ${nodeParams.join(',\n')}
                                         : ""
                                 )}
                             >
-                                <McpIcon className="h-5 w-5" />
+                                <McpIcon className={DESIGN_SYSTEM.icons.large} />
                                 <span>MCP</span>
                             </Button>
                         </div>

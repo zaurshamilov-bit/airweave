@@ -8,13 +8,14 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ArrowUp, CodeXml, X, Loader2 } from "lucide-react";
+import { ArrowUp, CodeXml, X, Loader2, Square } from "lucide-react";
 import { FiGitMerge, FiType, FiLayers, FiFilter, FiSliders, FiClock, FiList, FiMessageSquare, FiBox } from "react-icons/fi";
 import { ApiIntegrationDoc } from "@/search/CodeBlock";
 import { JsonFilterEditor } from "@/search/JsonFilterEditor";
 import { RecencyBiasSlider } from "@/search/RecencyBiasSlider";
 import { apiClient } from "@/lib/api";
 import type { SearchEvent, PartialStreamUpdate, StreamPhase } from "@/search/types";
+import { DESIGN_SYSTEM } from "@/lib/design-system";
 
 // Search method types
 type SearchMethod = "hybrid" | "neural" | "keyword";
@@ -162,6 +163,20 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     // Streaming controls
     const abortRef = useRef<AbortController | null>(null);
     const searchSeqRef = useRef(0);
+
+    // Cancel current search
+    const handleCancelSearch = useCallback(() => {
+        console.log('[SearchBox] Cancel requested');
+        const controller = abortRef.current;
+        if (controller) {
+            console.log('[SearchBox] Aborting current stream', { hasController: !!controller, seq: searchSeqRef.current });
+            controller.abort();
+            // Surface synthetic cancellation events to the parent
+            try { onStreamEventProp?.({ type: 'cancelled' } as any); } catch { void 0; }
+            try { onStreamUpdateProp?.({ status: 'cancelled' }); } catch { void 0; }
+            try { onCancel?.(); } catch { void 0; }
+        }
+    }, [onStreamEventProp, onStreamUpdateProp, onCancel]);
 
     // Main search handler
     const handleSendQuery = useCallback(async () => {
@@ -458,8 +473,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
             <div className={cn("w-full", className)}>
                 <div
                     className={cn(
-                        "rounded-2xl border overflow-hidden",
-                        isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-white"
+                        DESIGN_SYSTEM.radius.card,
+                        "border overflow-hidden",
+                        isDark ? "border-border bg-gray-900" : "border-border bg-white"
                     )}
                 >
                     <div className="relative px-2 pt-2 pb-1">
@@ -468,13 +484,18 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                             type="button"
                             onClick={() => setShowCodeBlock(true)}
                             className={cn(
-                                "absolute top-2 right-2 inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-white shadow-sm transition-colors",
-                                "bg-sky-900 hover:bg-sky-700 ring-1 ring-sky-900/60"
+                                "absolute top-2 right-2 inline-flex items-center gap-1.5 border",
+                                DESIGN_SYSTEM.buttons.heights.secondary,
+                                DESIGN_SYSTEM.buttons.padding.secondary,
+                                DESIGN_SYSTEM.radius.button,
+                                DESIGN_SYSTEM.transitions.standard,
+                                "border-border/50",
+                                isDark ? "bg-background text-foreground hover:bg-muted" : "bg-white text-foreground hover:bg-muted"
                             )}
                             title="View integration code"
                         >
-                            <CodeXml className="h-4 w-4" />
-                            <span className="text-xs font-medium">Code</span>
+                            <CodeXml className={DESIGN_SYSTEM.icons.button} />
+                            <span className={cn(DESIGN_SYSTEM.typography.sizes.body, DESIGN_SYSTEM.typography.weights.medium)}>CODE</span>
                         </button>
 
                         <textarea
@@ -490,7 +511,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                             placeholder="Ask a question about your data"
                             className={cn(
                                 // pr-16 ensures text wraps before overlay button
-                                "w-full h-20 px-2 pr-16 py-1.5 text-sm leading-relaxed resize-none overflow-y-auto outline-none rounded-xl bg-transparent",
+                                // increase right padding to prevent text from flowing under the top-right Code button at all widths
+                                "w-full h-20 px-2 pr-28 sm:pr-24 md:pr-28 py-1.5 leading-relaxed resize-none overflow-y-auto outline-none rounded-xl bg-transparent",
+                                DESIGN_SYSTEM.typography.sizes.header,
                                 isDark ? "placeholder:text-gray-500" : "placeholder:text-gray-500"
                             )}
                         />
@@ -504,7 +527,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                             {/* Left side controls */}
                             <div className="flex items-center gap-1.5">
                                 {/* 1. Method segmented control (icons) */}
-                                <div className="h-8 inline-block">
+                                <div className={cn(DESIGN_SYSTEM.buttons.heights.secondary, "inline-block")}>
                                     <div
                                         className={cn(
                                             "relative h-full",
@@ -522,7 +545,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                     onMouseEnter={() => handleTooltipMouseEnter("hybrid")}
                                                     onMouseLeave={() => handleTooltipMouseLeave("hybrid")}
                                                     className={cn(
-                                                        "aspect-square h-full flex items-center justify-center rounded transition-colors border",
+                                                        "aspect-square h-full flex items-center justify-center border",
+                                                        DESIGN_SYSTEM.radius.button,
+                                                        DESIGN_SYSTEM.transitions.standard,
                                                         searchMethod === "hybrid"
                                                             ? "text-primary border-primary hover:bg-primary/10 cursor-default"
                                                             : "text-foreground border-transparent hover:bg-muted cursor-pointer",
@@ -535,25 +560,22 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                             <TooltipContent
                                                 side="bottom"
                                                 sideOffset={2}
-                                                className={cn(
-                                                    "max-w-[280px] p-2.5 rounded-md bg-gray-900 text-white",
-                                                    "border border-white/10 shadow-lg text-xs"
-                                                )}
-                                                arrowClassName="fill-gray-900"
+                                                className={DESIGN_SYSTEM.tooltip.content}
+                                                arrowClassName={DESIGN_SYSTEM.tooltip.arrow}
                                                 onMouseEnter={() => handleTooltipContentMouseEnter("hybrid")}
                                                 onMouseLeave={() => handleTooltipContentMouseLeave("hybrid")}
                                             >
                                                 <div className="space-y-2">
-                                                    <div className="text-sm font-semibold">Search method: Hybrid</div>
-                                                    <p className="text-xs text-white/90">
+                                                    <div className={DESIGN_SYSTEM.tooltip.title}>Search method: Hybrid</div>
+                                                    <p className={DESIGN_SYSTEM.tooltip.description}>
                                                         Combines AI semantic and keyword signals for the best overall relevance.
                                                     </p>
-                                                    <div className="pt-2 mt-2 border-t border-white/10">
+                                                    <div className={DESIGN_SYSTEM.tooltip.divider}>
                                                         <a
                                                             href="https://docs.airweave.ai/search#search-method"
                                                             target="_blank"
                                                             rel="noreferrer"
-                                                            className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded ring-1 ring-white/15"
+                                                            className={DESIGN_SYSTEM.tooltip.link}
                                                         >
                                                             Docs
                                                         </a>
@@ -571,7 +593,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                     onMouseEnter={() => handleTooltipMouseEnter("neural")}
                                                     onMouseLeave={() => handleTooltipMouseLeave("neural")}
                                                     className={cn(
-                                                        "aspect-square h-full flex items-center justify-center rounded transition-colors border",
+                                                        "aspect-square h-full flex items-center justify-center border",
+                                                        DESIGN_SYSTEM.radius.button,
+                                                        DESIGN_SYSTEM.transitions.standard,
                                                         searchMethod === "neural"
                                                             ? "text-primary border-primary hover:bg-primary/10 cursor-default"
                                                             : "text-foreground border-transparent hover:bg-muted cursor-pointer",
@@ -584,25 +608,22 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                             <TooltipContent
                                                 side="bottom"
                                                 sideOffset={2}
-                                                className={cn(
-                                                    "max-w-[280px] p-2.5 rounded-md bg-gray-900 text-white",
-                                                    "border border-white/10 shadow-lg text-xs"
-                                                )}
-                                                arrowClassName="fill-gray-900"
+                                                className={DESIGN_SYSTEM.tooltip.content}
+                                                arrowClassName={DESIGN_SYSTEM.tooltip.arrow}
                                                 onMouseEnter={() => handleTooltipContentMouseEnter("neural")}
                                                 onMouseLeave={() => handleTooltipContentMouseLeave("neural")}
                                             >
                                                 <div className="space-y-2">
-                                                    <div className="text-sm font-semibold">Search method: Neural</div>
-                                                    <p className="text-xs text-white/90">
+                                                    <div className={DESIGN_SYSTEM.tooltip.title}>Search method: Neural</div>
+                                                    <p className={DESIGN_SYSTEM.tooltip.description}>
                                                         Pure semantic matching using transformer embeddings.
                                                     </p>
-                                                    <div className="pt-2 mt-2 border-t border-white/10">
+                                                    <div className={DESIGN_SYSTEM.tooltip.divider}>
                                                         <a
                                                             href="https://docs.airweave.ai/search#search-method"
                                                             target="_blank"
                                                             rel="noreferrer"
-                                                            className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded ring-1 ring-white/15"
+                                                            className={DESIGN_SYSTEM.tooltip.link}
                                                         >
                                                             Docs
                                                         </a>
@@ -620,7 +641,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                     onMouseEnter={() => handleTooltipMouseEnter("keyword")}
                                                     onMouseLeave={() => handleTooltipMouseLeave("keyword")}
                                                     className={cn(
-                                                        "aspect-square h-full flex items-center justify-center rounded transition-colors border",
+                                                        "aspect-square h-full flex items-center justify-center border",
+                                                        DESIGN_SYSTEM.radius.button,
+                                                        DESIGN_SYSTEM.transitions.standard,
                                                         searchMethod === "keyword"
                                                             ? "text-primary border-primary hover:bg-primary/10 cursor-default"
                                                             : "text-foreground border-transparent hover:bg-muted cursor-pointer",
@@ -633,25 +656,22 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                             <TooltipContent
                                                 side="bottom"
                                                 sideOffset={2}
-                                                className={cn(
-                                                    "max-w-[280px] p-2.5 rounded-md bg-gray-900 text-white",
-                                                    "border border-white/10 shadow-lg text-xs"
-                                                )}
-                                                arrowClassName="fill-gray-900"
+                                                className={DESIGN_SYSTEM.tooltip.content}
+                                                arrowClassName={DESIGN_SYSTEM.tooltip.arrow}
                                                 onMouseEnter={() => handleTooltipContentMouseEnter("keyword")}
                                                 onMouseLeave={() => handleTooltipContentMouseLeave("keyword")}
                                             >
                                                 <div className="space-y-2">
-                                                    <div className="text-sm font-semibold">Search method: Keyword</div>
-                                                    <p className="text-xs text-white/90">
+                                                    <div className={DESIGN_SYSTEM.tooltip.title}>Search method: Keyword</div>
+                                                    <p className={DESIGN_SYSTEM.tooltip.description}>
                                                         BM25 keyword matching for exact term precision.
                                                     </p>
-                                                    <div className="pt-2 mt-2 border-t border-white/10">
+                                                    <div className={DESIGN_SYSTEM.tooltip.divider}>
                                                         <a
                                                             href="https://docs.airweave.ai/search#search-method"
                                                             target="_blank"
                                                             rel="noreferrer"
-                                                            className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded ring-1 ring-white/15"
+                                                            className={DESIGN_SYSTEM.tooltip.link}
                                                         >
                                                             Docs
                                                         </a>
@@ -669,7 +689,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                             onMouseEnter={() => handleTooltipMouseEnter("queryExpansion")}
                                             onMouseLeave={() => handleTooltipMouseLeave("queryExpansion")}
                                             className={cn(
-                                                "h-8 w-8 rounded-md p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.buttons.heights.secondary,
+                                                "w-8 p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.radius.button,
                                                 toggles.queryExpansion ? "border-primary" : (isDark ? "border-border/50" : "border-border"),
                                                 isDark ? "bg-background" : "bg-white"
                                             )}
@@ -678,7 +700,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                 type="button"
                                                 onClick={() => handleToggle("queryExpansion", "query expansion")}
                                                 className={cn(
-                                                    "h-full w-full rounded flex items-center justify-center transition-colors",
+                                                    "h-full w-full flex items-center justify-center",
+                                                    DESIGN_SYSTEM.radius.button,
+                                                    DESIGN_SYSTEM.transitions.standard,
                                                     toggles.queryExpansion
                                                         ? "text-primary hover:bg-primary/10"
                                                         : "text-foreground hover:bg-muted"
@@ -690,23 +714,20 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                     </TooltipTrigger>
                                     <TooltipContent
                                         side="bottom"
-                                        className={cn(
-                                            "max-w-[220px] p-2.5 rounded-md bg-gray-900 text-white",
-                                            "border border-white/10 shadow-lg text-xs"
-                                        )}
-                                        arrowClassName="fill-gray-900"
+                                        className={cn(DESIGN_SYSTEM.tooltip.content, "max-w-[220px]")}
+                                        arrowClassName={DESIGN_SYSTEM.tooltip.arrow}
                                         onMouseEnter={() => handleTooltipContentMouseEnter("queryExpansion")}
                                         onMouseLeave={() => handleTooltipContentMouseLeave("queryExpansion")}
                                     >
                                         <div className="space-y-2">
-                                            <div className="text-sm font-semibold">Query expansion</div>
-                                            <p className="text-xs text-white/90">Generates similar versions of your query to improve recall.</p>
-                                            <div className="pt-2 mt-2 border-t border-white/10">
+                                            <div className={DESIGN_SYSTEM.tooltip.title}>Query expansion</div>
+                                            <p className={DESIGN_SYSTEM.tooltip.description}>Generates similar versions of your query to improve recall.</p>
+                                            <div className={DESIGN_SYSTEM.tooltip.divider}>
                                                 <a
                                                     href="https://docs.airweave.ai/search#query-expansion"
                                                     target="_blank"
                                                     rel="noreferrer"
-                                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded ring-1 ring-white/15"
+                                                    className={DESIGN_SYSTEM.tooltip.link}
                                                 >
                                                     Docs
                                                 </a>
@@ -722,7 +743,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                             onMouseEnter={() => handleTooltipMouseEnter("filter")}
                                             onMouseLeave={() => handleTooltipMouseLeave("filter")}
                                             className={cn(
-                                                "h-8 w-8 rounded-md p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.buttons.heights.secondary,
+                                                "w-8 p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.radius.button,
                                                 toggles.filter ? "border-primary" : (isDark ? "border-border/50" : "border-border"),
                                                 isDark ? "bg-background" : "bg-white"
                                             )}
@@ -737,7 +760,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                     }
                                                 }}
                                                 className={cn(
-                                                    "h-full w-full rounded flex items-center justify-center transition-colors",
+                                                    "h-full w-full flex items-center justify-center",
+                                                    DESIGN_SYSTEM.radius.button,
+                                                    DESIGN_SYSTEM.transitions.standard,
                                                     toggles.filter
                                                         ? "text-primary hover:bg-primary/10"
                                                         : "text-foreground hover:bg-muted"
@@ -749,22 +774,19 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                     </TooltipTrigger>
                                     <TooltipContent
                                         side="bottom"
-                                        className={cn(
-                                            "w-[360px] max-w-[90vw] p-2.5 rounded-md bg-gray-900 text-white",
-                                            "border border-white/10 shadow-lg text-xs"
-                                        )}
-                                        arrowClassName="fill-gray-900"
+                                        className={cn(DESIGN_SYSTEM.tooltip.content, "w-[360px] max-w-[90vw]")}
+                                        arrowClassName={DESIGN_SYSTEM.tooltip.arrow}
                                         onMouseEnter={() => handleTooltipContentMouseEnter("filter")}
                                         onMouseLeave={() => handleTooltipContentMouseLeave("filter")}
                                     >
                                         <div className="space-y-3">
                                             <div>
-                                                <div className="text-sm font-semibold">Metadata filtering</div>
-                                                <p className="text-xs text-white/90 mt-1">Filter by fields like source, status, or date before searching.</p>
+                                                <div className={DESIGN_SYSTEM.tooltip.title}>Metadata filtering</div>
+                                                <p className={cn(DESIGN_SYSTEM.tooltip.description, "mt-1")}>Filter by fields like source, status, or date before searching.</p>
                                             </div>
 
                                             <div className="space-y-2">
-                                                <div className="text-[11px] font-medium text-white/70">JSON:</div>
+                                                <div className={cn(DESIGN_SYSTEM.typography.sizes.label, DESIGN_SYSTEM.typography.weights.medium, "text-white/70")}>JSON:</div>
                                                 <JsonFilterEditor
                                                     value={filterJson}
                                                     onChange={(value, isValid) => {
@@ -776,12 +798,12 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                 />
                                             </div>
 
-                                            <div className="pt-2 border-t border-white/10">
+                                            <div className={DESIGN_SYSTEM.tooltip.divider}>
                                                 <a
                                                     href="https://docs.airweave.ai/search#filtering-results"
                                                     target="_blank"
                                                     rel="noreferrer"
-                                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded ring-1 ring-white/15"
+                                                    className={DESIGN_SYSTEM.tooltip.link}
                                                 >
                                                     Docs
                                                 </a>
@@ -797,7 +819,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                             onMouseEnter={() => handleTooltipMouseEnter("queryInterpretation")}
                                             onMouseLeave={() => handleTooltipMouseLeave("queryInterpretation")}
                                             className={cn(
-                                                "h-8 w-8 rounded-md p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.buttons.heights.secondary,
+                                                "w-8 p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.radius.button,
                                                 toggles.queryInterpretation ? "border-primary" : (isDark ? "border-border/50" : "border-border"),
                                                 isDark ? "bg-background" : "bg-white"
                                             )}
@@ -806,7 +830,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                 type="button"
                                                 onClick={() => handleToggle("queryInterpretation", "query interpretation")}
                                                 className={cn(
-                                                    "h-full w-full rounded flex items-center justify-center transition-colors",
+                                                    "h-full w-full flex items-center justify-center",
+                                                    DESIGN_SYSTEM.radius.button,
+                                                    DESIGN_SYSTEM.transitions.standard,
                                                     toggles.queryInterpretation
                                                         ? "text-primary hover:bg-primary/10"
                                                         : "text-foreground hover:bg-muted"
@@ -818,23 +844,20 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                     </TooltipTrigger>
                                     <TooltipContent
                                         side="bottom"
-                                        className={cn(
-                                            "max-w-[220px] p-2.5 rounded-md bg-gray-900 text-white",
-                                            "border border-white/10 shadow-lg text-xs"
-                                        )}
-                                        arrowClassName="fill-gray-900"
+                                        className={cn(DESIGN_SYSTEM.tooltip.content, "max-w-[220px]")}
+                                        arrowClassName={DESIGN_SYSTEM.tooltip.arrow}
                                         onMouseEnter={() => handleTooltipContentMouseEnter("queryInterpretation")}
                                         onMouseLeave={() => handleTooltipContentMouseLeave("queryInterpretation")}
                                     >
                                         <div className="space-y-2">
-                                            <div className="text-sm font-semibold">Query interpretation (beta)</div>
-                                            <p className="text-xs text-white/90">Auto-extracts filters from natural language. May be over‑restrictive.</p>
-                                            <div className="pt-2 mt-2 border-t border-white/10">
+                                            <div className={DESIGN_SYSTEM.tooltip.title}>Query interpretation (beta)</div>
+                                            <p className={DESIGN_SYSTEM.tooltip.description}>Auto-extracts filters from natural language. May be over‑restrictive.</p>
+                                            <div className={DESIGN_SYSTEM.tooltip.divider}>
                                                 <a
                                                     href="https://docs.airweave.ai/search#query-interpretation-beta"
                                                     target="_blank"
                                                     rel="noreferrer"
-                                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded ring-1 ring-white/15"
+                                                    className={DESIGN_SYSTEM.tooltip.link}
                                                 >
                                                     Docs
                                                 </a>
@@ -850,7 +873,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                             onMouseEnter={() => handleTooltipMouseEnter("recencyBias")}
                                             onMouseLeave={() => handleTooltipMouseLeave("recencyBias")}
                                             className={cn(
-                                                "h-8 w-8 rounded-md p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.buttons.heights.secondary,
+                                                "w-8 p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.radius.button,
                                                 toggles.recencyBias ? "border-primary" : (isDark ? "border-border/50" : "border-border"),
                                                 isDark ? "bg-background" : "bg-white"
                                             )}
@@ -865,7 +890,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                     }
                                                 }}
                                                 className={cn(
-                                                    "h-full w-full rounded flex items-center justify-center transition-colors",
+                                                    "h-full w-full flex items-center justify-center",
+                                                    DESIGN_SYSTEM.radius.button,
+                                                    DESIGN_SYSTEM.transitions.standard,
                                                     toggles.recencyBias
                                                         ? "text-primary hover:bg-primary/10"
                                                         : "text-foreground hover:bg-muted"
@@ -877,29 +904,26 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                     </TooltipTrigger>
                                     <TooltipContent
                                         side="bottom"
-                                        className={cn(
-                                            "w-[240px] max-w-[90vw] p-2.5 rounded-md bg-gray-900 text-white",
-                                            "border border-white/10 shadow-lg text-xs"
-                                        )}
-                                        arrowClassName="fill-gray-900"
+                                        className={cn(DESIGN_SYSTEM.tooltip.content, "w-[240px] max-w-[90vw]")}
+                                        arrowClassName={DESIGN_SYSTEM.tooltip.arrow}
                                         onMouseEnter={() => handleTooltipContentMouseEnter("recencyBias")}
                                         onMouseLeave={() => handleTooltipContentMouseLeave("recencyBias")}
                                     >
                                         <div className="space-y-2">
-                                            <div className="text-sm font-semibold">Recency bias</div>
-                                            <p className="text-xs text-white/90">Prioritize recent documents. Higher values give more weight to newer content.</p>
+                                            <div className={DESIGN_SYSTEM.tooltip.title}>Recency bias</div>
+                                            <p className={DESIGN_SYSTEM.tooltip.description}>Prioritize recent documents. Higher values give more weight to newer content.</p>
                                             <div className="pt-1 pb-1 px-1.5">
                                                 <RecencyBiasSlider
                                                     value={recencyBiasValue}
                                                     onChange={handleRecencyBiasChange}
                                                 />
                                             </div>
-                                            <div className="pt-2 mt-2 border-t border-white/10">
+                                            <div className={DESIGN_SYSTEM.tooltip.divider}>
                                                 <a
                                                     href="https://docs.airweave.ai/search#recency-bias"
                                                     target="_blank"
                                                     rel="noreferrer"
-                                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded ring-1 ring-white/15"
+                                                    className={DESIGN_SYSTEM.tooltip.link}
                                                 >
                                                     Docs
                                                 </a>
@@ -915,7 +939,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                             onMouseEnter={() => handleTooltipMouseEnter("reRanking")}
                                             onMouseLeave={() => handleTooltipMouseLeave("reRanking")}
                                             className={cn(
-                                                "h-8 w-8 rounded-md p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.buttons.heights.secondary,
+                                                "w-8 p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.radius.button,
                                                 toggles.reRanking ? "border-primary" : (isDark ? "border-border/50" : "border-border"),
                                                 isDark ? "bg-background" : "bg-white"
                                             )}
@@ -924,7 +950,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                 type="button"
                                                 onClick={() => handleToggle("reRanking", "re-ranking")}
                                                 className={cn(
-                                                    "h-full w-full rounded flex items-center justify-center transition-colors",
+                                                    "h-full w-full flex items-center justify-center",
+                                                    DESIGN_SYSTEM.radius.button,
+                                                    DESIGN_SYSTEM.transitions.standard,
                                                     toggles.reRanking
                                                         ? "text-primary hover:bg-primary/10"
                                                         : "text-foreground hover:bg-muted"
@@ -936,23 +964,20 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                     </TooltipTrigger>
                                     <TooltipContent
                                         side="bottom"
-                                        className={cn(
-                                            "max-w-[220px] p-2.5 rounded-md bg-gray-900 text-white",
-                                            "border border-white/10 shadow-lg text-xs"
-                                        )}
-                                        arrowClassName="fill-gray-900"
+                                        className={cn(DESIGN_SYSTEM.tooltip.content, "max-w-[220px]")}
+                                        arrowClassName={DESIGN_SYSTEM.tooltip.arrow}
                                         onMouseEnter={() => handleTooltipContentMouseEnter("reRanking")}
                                         onMouseLeave={() => handleTooltipContentMouseLeave("reRanking")}
                                     >
                                         <div className="space-y-2">
-                                            <div className="text-sm font-semibold">AI reranking</div>
-                                            <p className="text-xs text-white/90">LLM reorders results for better relevance. Adds latency.</p>
-                                            <div className="pt-2 mt-2 border-t border-white/10">
+                                            <div className={DESIGN_SYSTEM.tooltip.title}>AI reranking</div>
+                                            <p className={DESIGN_SYSTEM.tooltip.description}>LLM reorders results for better relevance. Adds latency.</p>
+                                            <div className={DESIGN_SYSTEM.tooltip.divider}>
                                                 <a
                                                     href="https://docs.airweave.ai/search#ai-reranking"
                                                     target="_blank"
                                                     rel="noreferrer"
-                                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded ring-1 ring-white/15"
+                                                    className={DESIGN_SYSTEM.tooltip.link}
                                                 >
                                                     Docs
                                                 </a>
@@ -968,7 +993,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                             onMouseEnter={() => handleTooltipMouseEnter("answer")}
                                             onMouseLeave={() => handleTooltipMouseLeave("answer")}
                                             className={cn(
-                                                "h-8 w-8 rounded-md p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.buttons.heights.secondary,
+                                                "w-8 p-0 overflow-hidden border",
+                                                DESIGN_SYSTEM.radius.button,
                                                 toggles.answer ? "border-primary" : (isDark ? "border-border/50" : "border-border"),
                                                 isDark ? "bg-background" : "bg-white"
                                             )}
@@ -977,7 +1004,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                                 type="button"
                                                 onClick={() => handleToggle("answer", "answer")}
                                                 className={cn(
-                                                    "h-full w-full rounded flex items-center justify-center transition-colors",
+                                                    "h-full w-full flex items-center justify-center",
+                                                    DESIGN_SYSTEM.radius.button,
+                                                    DESIGN_SYSTEM.transitions.standard,
                                                     toggles.answer
                                                         ? "text-primary hover:bg-primary/10"
                                                         : "text-foreground hover:bg-muted"
@@ -989,23 +1018,20 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                     </TooltipTrigger>
                                     <TooltipContent
                                         side="bottom"
-                                        className={cn(
-                                            "max-w-[220px] p-2.5 rounded-md bg-gray-900 text-white",
-                                            "border border-white/10 shadow-lg text-xs"
-                                        )}
-                                        arrowClassName="fill-gray-900"
+                                        className={cn(DESIGN_SYSTEM.tooltip.content, "max-w-[220px]")}
+                                        arrowClassName={DESIGN_SYSTEM.tooltip.arrow}
                                         onMouseEnter={() => handleTooltipContentMouseEnter("answer")}
                                         onMouseLeave={() => handleTooltipContentMouseLeave("answer")}
                                     >
                                         <div className="space-y-2">
-                                            <div className="text-sm font-semibold">Generate answer</div>
-                                            <p className="text-xs text-white/90">Returns an AI-written answer instead of raw results when enabled.</p>
-                                            <div className="pt-2 mt-2 border-t border-white/10">
+                                            <div className={DESIGN_SYSTEM.tooltip.title}>Generate answer</div>
+                                            <p className={DESIGN_SYSTEM.tooltip.description}>Returns an AI-written answer instead of raw results when enabled.</p>
+                                            <div className={DESIGN_SYSTEM.tooltip.divider}>
                                                 <a
                                                     href="https://docs.airweave.ai/search#generate-ai-answers"
                                                     target="_blank"
                                                     rel="noreferrer"
-                                                    className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded ring-1 ring-white/15"
+                                                    className={DESIGN_SYSTEM.tooltip.link}
                                                 >
                                                     Docs
                                                 </a>
@@ -1018,18 +1044,31 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                             {/* Right side send button */}
                             <button
                                 type="button"
-                                onClick={handleSendQuery}
-                                disabled={!hasQuery || isSearching}
+                                onClick={isSearching ? handleCancelSearch : handleSendQuery}
+                                disabled={!isSearching && !hasQuery}
                                 className={cn(
-                                    "h-8 w-8 rounded-md flex items-center justify-center shadow-sm transition-colors",
-                                    hasQuery && !isSearching ? "text-white bg-black hover:bg-gray-600 ring-1 ring-white" : "text-gray-400 bg-gray-200 cursor-not-allowed"
+                                    DESIGN_SYSTEM.buttons.heights.secondary,
+                                    "w-8 flex items-center justify-center shadow-sm",
+                                    DESIGN_SYSTEM.radius.button,
+                                    DESIGN_SYSTEM.transitions.standard,
+                                    isSearching
+                                        ? isDark
+                                            ? "bg-red-900/30 border border-red-700 hover:bg-red-900/50 cursor-pointer"
+                                            : "bg-red-50 border border-red-200 hover:bg-red-100 cursor-pointer"
+                                        : hasQuery
+                                            ? isDark
+                                                ? "text-white bg-blue-600 hover:bg-blue-700 ring-1 ring-blue-600/60"
+                                                : "text-white bg-blue-600 hover:bg-blue-700 ring-1 ring-blue-600/60"
+                                            : isDark
+                                                ? "text-muted-foreground bg-muted cursor-not-allowed"
+                                                : "text-muted-foreground bg-muted cursor-not-allowed"
                                 )}
-                                title={hasQuery ? (isSearching ? "Searching..." : "Send query") : "Type a question to enable"}
+                                title={isSearching ? "Stop search" : (hasQuery ? "Send query" : "Type a question to enable")}
                             >
                                 {isSearching ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <Square className={cn(DESIGN_SYSTEM.icons.button, "text-red-500")} />
                                 ) : (
-                                    <ArrowUp className="h-4 w-4" />
+                                    <ArrowUp className={DESIGN_SYSTEM.icons.button} />
                                 )}
                             </button>
                         </TooltipProvider>
@@ -1061,8 +1100,8 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                     "absolute top-2 right-2 z-10 h-8 w-8 rounded-md flex items-center justify-center",
                                     "transition-colors",
                                     isDark
-                                        ? "bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200"
-                                        : "bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-900"
+                                        ? "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground"
+                                        : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground"
                                 )}
                                 title="Close (Esc)"
                             >

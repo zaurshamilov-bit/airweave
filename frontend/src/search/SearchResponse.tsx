@@ -25,15 +25,17 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { materialOceanic, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { JsonViewer } from '@textea/json-viewer';
+import { DESIGN_SYSTEM } from '@/lib/design-system';
+import { CollapsibleCard } from '@/components/ui/CollapsibleCard';
 
-interface SearchResponseDisplayProps {
+interface SearchResponseProps {
     searchResponse: any;
     isSearching: boolean;
     responseType?: 'raw' | 'completion';
     className?: string;
 }
 
-export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
+export const SearchResponse: React.FC<SearchResponseProps> = ({
     searchResponse,
     isSearching,
     responseType = 'raw',
@@ -43,6 +45,17 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
     const isDark = resolvedTheme === 'dark';
     const [copiedCompletion, setCopiedCompletion] = useState(false);
     const [copiedJson, setCopiedJson] = useState(false);
+
+    // Collapsible state with localStorage persistence
+    const [isExpanded, setIsExpanded] = useState(() => {
+        const stored = localStorage.getItem('searchResponse-expanded');
+        return stored ? JSON.parse(stored) : true; // Default to expanded
+    });
+
+    // Persist state changes
+    useEffect(() => {
+        localStorage.setItem('searchResponse-expanded', JSON.stringify(isExpanded));
+    }, [isExpanded]);
 
     // State for active tab - entities first if raw, answer first if completion
     const [activeTab, setActiveTab] = useState<'answer' | 'entities'>(
@@ -85,6 +98,12 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
             console.warn('[SearchResponseDisplay] Component will return NULL on next render!');
         }
     }, [isSearching, responseType, searchResponse, completion, results, searchStatus, hasError, activeTab]);
+
+    useEffect(() => {
+        if (searchStatus === 'cancelled') {
+            console.log('[SearchResponseDisplay] Showing cancelled state with empty content');
+        }
+    }, [searchStatus]);
 
     // Memoize expensive style objects
     const syntaxStyle = useMemo(() => isDark ? materialOceanic : oneLight, [isDark]);
@@ -174,30 +193,29 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                 return isDark ? "bg-green-400" : "bg-green-500";
             case 'no_relevant_results':
                 return isDark ? "bg-amber-400" : "bg-amber-500";
+            case 'cancelled':
+                return isDark ? "bg-red-400" : "bg-red-500";
             default:
                 return isDark ? "bg-red-400" : "bg-red-500";
         }
     }, [isDark]);
 
     const handleCopyCompletion = useCallback(async () => {
-        try {
-            await navigator.clipboard.writeText(completion);
-            setCopiedCompletion(true);
-            setTimeout(() => setCopiedCompletion(false), 2000);
-        } catch (error) {
-            console.error('Failed to copy:', error);
-        }
+        await navigator.clipboard.writeText(completion);
     }, [completion]);
 
     const handleCopyJson = useCallback(async () => {
-        try {
-            await navigator.clipboard.writeText(JSON.stringify(results, null, 2));
-            setCopiedJson(true);
-            setTimeout(() => setCopiedJson(false), 2000);
-        } catch (error) {
-            console.error('Failed to copy:', error);
-        }
+        await navigator.clipboard.writeText(JSON.stringify(results, null, 2));
     }, [results]);
+
+    // Combined copy function that copies the appropriate content based on active tab
+    const handleCopy = useCallback(async () => {
+        if (responseType === 'completion' && activeTab === 'answer' && completion) {
+            await handleCopyCompletion();
+        } else if (activeTab === 'entities' && results.length > 0) {
+            await handleCopyJson();
+        }
+    }, [responseType, activeTab, completion, results, handleCopyCompletion, handleCopyJson]);
 
     // Handle clicking on entity references in completion
     const handleEntityClick = useCallback((entityId: string) => {
@@ -272,84 +290,91 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
         return null;
     }
 
-    return (
-        <div className={cn(
-            "rounded-lg shadow-sm overflow-hidden",
-            isDark ? "bg-gray-950" : "bg-white",
-            isDark ? "ring-1 ring-gray-800" : "ring-1 ring-gray-200",
-            className
-        )}>
-            {/* Status Ribbon - Always same height */}
-            <div className="h-1.5 w-full relative overflow-hidden">
-                {isSearching ? (
-                    <>
+    // Create header content with status information
+    const headerContent = (
+        <>
+            <span className={cn(DESIGN_SYSTEM.typography.sizes.label, "opacity-80")}>Response</span>
+            <div className="flex items-center gap-3">
+                {searchStatus && !hasError && (
+                    <div className="flex items-center">
                         <div className={cn(
-                            "absolute inset-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-500"
+                            "h-1.5 w-1.5 rounded-full mr-1",
+                            getStatusIndicator(searchStatus)
                         )}></div>
-                        <div className={cn(
-                            "absolute inset-0 h-1.5 bg-gradient-to-r from-transparent via-white/30 to-transparent",
-                            "animate-pulse"
-                        )}></div>
-                    </>
-                ) : (
-                    <div className={cn(
-                        "absolute inset-0 h-1.5 bg-gradient-to-r",
-                        hasError
-                            ? "from-red-500 to-red-600"
-                            : searchStatus === 'in_progress'
-                                ? "from-blue-500 to-indigo-500"
-                                : searchStatus === 'success'
-                                    ? "from-green-500 to-emerald-500"
-                                    : searchStatus === 'no_relevant_results'
-                                        ? "from-amber-400 to-amber-500"
-                                        : "from-gray-400 to-gray-500"
-                    )}></div>
+                        <span className={cn(DESIGN_SYSTEM.typography.sizes.label, "opacity-80")}>
+                            {searchStatus.replace(/_/g, ' ')}
+                        </span>
+                    </div>
+                )}
+
+                {hasError && (
+                    <div className="flex items-center text-red-500">
+                        <span className={DESIGN_SYSTEM.typography.sizes.body}>Error</span>
+                    </div>
                 )}
             </div>
 
-            {/* Metadata Bar */}
-            <div className={cn(
-                "w-full py-1.5 px-2.5",
-                isDark ? "bg-gray-900/60" : "bg-gray-50/80",
-                "flex items-center justify-between"
-            )}>
-                <div className="flex items-center gap-3">
-                    {searchStatus && !hasError && (
-                        <div className="flex items-center">
-                            <div className={cn(
-                                "h-1.5 w-1.5 rounded-full mr-1",
-                                getStatusIndicator(searchStatus)
-                            )}></div>
-                            <span className="text-[11px] opacity-80">
-                                {searchStatus.replace(/_/g, ' ')}
-                            </span>
-                        </div>
-                    )}
+            <div className="flex items-center gap-2.5">
+                {statusCode && (
+                    <div className={cn("flex items-center opacity-80", DESIGN_SYSTEM.typography.sizes.label)}>
+                        <TerminalSquare className={cn(DESIGN_SYSTEM.icons.inline, "mr-1")} strokeWidth={1.5} />
+                        <span className="font-mono">HTTP {statusCode}</span>
+                    </div>
+                )}
 
-                    {hasError && (
-                        <div className="flex items-center text-red-500">
-                            <span className="text-xs">Error</span>
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex items-center gap-2.5">
-                    {statusCode && (
-                        <div className="flex items-center text-[11px] opacity-80">
-                            <TerminalSquare className="h-3 w-3 mr-1" strokeWidth={1.5} />
-                            <span className="font-mono">HTTP {statusCode}</span>
-                        </div>
-                    )}
-
-                    {responseTime && (
-                        <div className="flex items-center text-[11px] opacity-80">
-                            <Clock className="h-3 w-3 mr-1" strokeWidth={1.5} />
-                            <span className="font-mono">{responseTime}ms</span>
-                        </div>
-                    )}
-                </div>
+                {responseTime && (
+                    <div className={cn("flex items-center opacity-80", DESIGN_SYSTEM.typography.sizes.label)}>
+                        <Clock className={cn(DESIGN_SYSTEM.icons.inline, "mr-1")} strokeWidth={1.5} />
+                        <span className="font-mono">{responseTime}ms</span>
+                    </div>
+                )}
             </div>
+        </>
+    );
 
+    // Create status ribbon
+    const statusRibbon = (
+        <div className="h-1.5 w-full relative overflow-hidden">
+            {isSearching ? (
+                <>
+                    <div className={cn(
+                        "absolute inset-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-500"
+                    )}></div>
+                    <div className={cn(
+                        "absolute inset-0 h-1.5 bg-gradient-to-r from-transparent via-white/30 to-transparent",
+                        "animate-pulse"
+                    )}></div>
+                </>
+            ) : (
+                <div className={cn(
+                    "absolute inset-0 h-1.5 bg-gradient-to-r",
+                    hasError
+                        ? "from-red-500 to-red-600"
+                        : searchStatus === 'in_progress'
+                            ? "from-blue-500 to-indigo-500"
+                            : searchStatus === 'success'
+                                ? "from-green-500 to-emerald-500"
+                                : searchStatus === 'no_relevant_results'
+                                    ? "from-amber-400 to-amber-500"
+                                    : searchStatus === 'cancelled'
+                                        ? "from-red-500 to-red-600"
+                                        : "from-gray-400 to-gray-500"
+                )}></div>
+            )}
+        </div>
+    );
+
+    return (
+        <CollapsibleCard
+            header={headerContent}
+            statusRibbon={statusRibbon}
+            isExpanded={isExpanded}
+            onToggle={setIsExpanded}
+            onCopy={handleCopy}
+            copyTooltip={activeTab === 'answer' ? "Copy answer" : "Copy entities"}
+            autoExpandOnSearch={isSearching}
+            className={className}
+        >
             {/* Content Section with Tabs */}
             <div className="flex flex-col">
                 {/* Error Display */}
@@ -510,30 +535,12 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                         {/* Answer Tab Content - Always rendered but hidden when not active */}
                         {responseType === 'completion' && (completion || isSearching) && (
                             <div style={{ display: activeTab === 'answer' ? 'block' : 'none' }}>
-                                {/* Copy button area - always visible */}
-                                <div className={cn(
-                                    "flex items-center justify-end px-0 py-0 border-b h-[21px]",
-                                    isDark ? "border-gray-800/50" : "border-gray-200/50"
-                                )}>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className={cn(
-                                            "text-[10px] gap-1 h-5 px-1",
-                                            isSearching || !completion
-                                                ? "opacity-50 cursor-not-allowed"
-                                                : "hover:bg-muted"
-                                        )}
-                                        onClick={isSearching || !completion ? undefined : handleCopyCompletion}
-                                        disabled={isSearching || !completion}
-                                    >
-                                        {copiedCompletion ? <Check className="h-1 w-1" strokeWidth={1.5} /> : <Copy className="h-1 w-1" strokeWidth={1.5} />}
-                                        Copy
-                                    </Button>
-                                </div>
+
 
                                 <div className={cn(
-                                    "px-1.5 py-1 overflow-auto max-h-[438px] text-[11px] leading-relaxed",
+                                    "overflow-auto max-h-[438px] leading-relaxed",
+                                    DESIGN_SYSTEM.spacing.padding.compact,
+                                    DESIGN_SYSTEM.typography.sizes.label,
                                     isDark ? "bg-gray-900 text-gray-200" : "bg-white text-gray-800"
                                 )}>
                                     {(() => {
@@ -745,33 +752,15 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                         {/* Entities Tab Content - Always rendered but hidden when not active */}
                         {(results.length > 0 || isSearching) && (
                             <div style={{ display: activeTab === 'entities' ? 'block' : 'none' }}>
-                                {/* Copy button area - always visible */}
-                                <div className={cn(
-                                    "flex items-center justify-end px-0 py-0 border-b h-[21px]",
-                                    isDark ? "border-gray-800/50" : "border-gray-200/50"
-                                )}>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className={cn(
-                                            "text-[10px] gap-1 h-5 px-1",
-                                            isSearching || results.length === 0
-                                                ? "opacity-50 cursor-not-allowed"
-                                                : "hover:bg-muted"
-                                        )}
-                                        onClick={isSearching || results.length === 0 ? undefined : handleCopyJson}
-                                        disabled={isSearching || results.length === 0}
-                                    >
-                                        {copiedJson ? <Check className="h-1 w-1" strokeWidth={1.5} /> : <Copy className="h-1 w-1" strokeWidth={1.5} />}
-                                        Copy
-                                    </Button>
-                                </div>
                                 <div className={cn(
                                     "overflow-auto max-h-[438px]",
                                     isDark ? "bg-gray-900" : "bg-white"
                                 )}>
                                     {isSearching ? (
-                                        <div className="p-4 animate-pulse space-y-2">
+                                        <div className={cn(
+                                            DESIGN_SYSTEM.spacing.padding.default,
+                                            "animate-pulse space-y-2"
+                                        )}>
                                             <div className="flex gap-2">
                                                 <div className="h-4 w-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
                                                 <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
@@ -791,7 +780,10 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                                             <div className="h-4 w-8 bg-gray-200 dark:bg-gray-700 rounded"></div>
                                         </div>
                                     ) : (
-                                        <div className="p-2.5 text-[11px]" ref={jsonViewerRef}>
+                                        <div className={cn(
+                                            DESIGN_SYSTEM.spacing.padding.compact,
+                                            DESIGN_SYSTEM.typography.sizes.label
+                                        )} ref={jsonViewerRef}>
                                             <JsonViewer
                                                 value={results}
                                                 theme={isDark ? "dark" : "light"}
@@ -824,6 +816,6 @@ export const SearchResponseDisplay: React.FC<SearchResponseDisplayProps> = ({
                     </div>
                 )}
             </div>
-        </div>
+        </CollapsibleCard>
     );
 };

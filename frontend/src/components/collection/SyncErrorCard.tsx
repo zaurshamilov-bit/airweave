@@ -1,6 +1,7 @@
 import { AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { DESIGN_SYSTEM } from "@/lib/design-system";
 
 export interface SyncErrorCardProps {
     error: string;
@@ -13,23 +14,29 @@ export const SyncErrorCard = ({
 }: SyncErrorCardProps) => {
     return (
         <Card className={cn(
-            "overflow-hidden border rounded-lg p-0",
+            "overflow-hidden border p-0",
+            DESIGN_SYSTEM.radius.card,
             isDark
                 ? "border-red-800/10 bg-transparent"
                 : "border-gray-200 bg-white"
         )}>
-            <CardHeader className="px-3 py-3 pb-0">
+            <CardHeader className={cn(DESIGN_SYSTEM.spacing.padding.compact, "pb-0")}>
                 <h3 className={cn(
-                    "text-base font-medium flex items-center",
+                    DESIGN_SYSTEM.typography.sizes.title,
+                    DESIGN_SYSTEM.typography.weights.medium,
+                    "flex items-center",
                     isDark ? "text-red-400/80" : "text-red-500/90"
                 )}>
-                    <AlertCircle className="h-4 w-4 mr-2 stroke-[2.5px]" />
+                    <AlertCircle className={cn(DESIGN_SYSTEM.icons.button, "mr-2 stroke-[2.5px]")} />
                     Sync Error
                 </h3>
             </CardHeader>
-            <CardContent className="px-3 py-3">
+            <CardContent className={DESIGN_SYSTEM.spacing.padding.compact}>
                 <div className={cn(
-                    "p-4 rounded-md font-mono text-xs whitespace-pre-wrap overflow-auto max-h-48",
+                    DESIGN_SYSTEM.spacing.padding.default,
+                    DESIGN_SYSTEM.radius.button,
+                    "font-mono whitespace-pre-wrap overflow-auto max-h-48",
+                    DESIGN_SYSTEM.typography.sizes.body,
                     isDark
                         ? "bg-gray-800/50 text-gray-200 border border-gray-700"
                         : "bg-gray-50 text-gray-700 border border-gray-200"
@@ -37,7 +44,8 @@ export const SyncErrorCard = ({
                     {error}
                 </div>
                 <p className={cn(
-                    "text-sm mt-3 flex items-center",
+                    DESIGN_SYSTEM.typography.sizes.header,
+                    "mt-3 flex items-center",
                     isDark ? "text-gray-400" : "text-gray-500"
                 )}>
                     Please fix the error and try running the sync again.

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
-import { Loader2, AlertCircle, RefreshCw, Clock, X, History } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Clock, X, History, Square } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 import { SourceConnectionSettings } from './SourceConnectionSettings';
@@ -19,6 +19,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { DESIGN_SYSTEM } from '@/lib/design-system';
 
 // Source Connection interface - matches backend schema
 interface SourceConnection {
@@ -54,7 +55,10 @@ interface Props {
   onConnectionDeleted?: () => void;
 }
 
-const SourceConnectionStateView: React.FC<Props> = ({ sourceConnectionId, onConnectionDeleted }) => {
+const SourceConnectionStateView: React.FC<Props> = ({
+  sourceConnectionId,
+  onConnectionDeleted
+}) => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [sourceConnection, setSourceConnection] = useState<SourceConnection | null>(null);
   const [isRunningSync, setIsRunningSync] = useState(false);
@@ -79,7 +83,7 @@ const SourceConnectionStateView: React.FC<Props> = ({ sourceConnectionId, onConn
     // These are actually UTC times but JavaScript interprets them as LOCAL time by default!
     // Check if it already has timezone info (Z, +, or - but not in the date part like 2024-01-15)
     const hasTimezone = dateStr.endsWith('Z') ||
-                       dateStr.match(/[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?[+-]\d{2}:?\d{2}$/);
+      dateStr.match(/[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?[+-]\d{2}:?\d{2}$/);
 
     const utcDateStr = hasTimezone ? dateStr : `${dateStr}Z`;
 
@@ -110,7 +114,7 @@ const SourceConnectionStateView: React.FC<Props> = ({ sourceConnectionId, onConn
     // Backend sends naive datetime strings that are actually UTC
     // We need to interpret them as UTC, not local time
     const hasTimezone = dateStr.endsWith('Z') ||
-                       dateStr.match(/[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?[+-]\d{2}:?\d{2}$/);
+      dateStr.match(/[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?[+-]\d{2}:?\d{2}$/);
 
     const utcDateStr = hasTimezone ? dateStr : `${dateStr}Z`;
 
@@ -388,51 +392,89 @@ const SourceConnectionStateView: React.FC<Props> = ({ sourceConnectionId, onConn
         <div className="flex gap-2 flex-wrap items-center">
           {/* Entities Card */}
           <div className={cn(
-            "rounded-lg p-3 flex items-center gap-2 shadow-sm transition-all duration-200 h-10 min-w-[100px]",
+            DESIGN_SYSTEM.radius.card,
+            "p-3 flex items-center shadow-sm transition-all duration-200 min-w-[100px]",
+            DESIGN_SYSTEM.spacing.gaps.standard,
+            DESIGN_SYSTEM.buttons.heights.primary,
             isDark
-              ? "bg-gray-800/60 border border-gray-700/50"
-              : "bg-white border border-gray-100"
+              ? "bg-background border border-border"
+              : "bg-background border border-border"
           )}>
-            <div className="text-xs uppercase tracking-wider font-medium opacity-60">
+            <div className={cn(
+              DESIGN_SYSTEM.typography.sizes.label,
+              DESIGN_SYSTEM.typography.cases.uppercase,
+              DESIGN_SYSTEM.typography.tracking.wider,
+              DESIGN_SYSTEM.typography.weights.medium,
+              "opacity-60"
+            )}>
               Entities
             </div>
-            <div className="text-base font-semibold">
+            <div className={cn(
+              DESIGN_SYSTEM.typography.sizes.title,
+              DESIGN_SYSTEM.typography.weights.semibold
+            )}>
               {state?.totalEntities.toLocaleString() || 0}
             </div>
           </div>
 
           {/* Status Card */}
           <div className={cn(
-            "rounded-lg p-3 flex items-center gap-2 shadow-sm transition-all duration-200 h-10 min-w-[110px]",
+            DESIGN_SYSTEM.radius.card,
+            "p-3 flex items-center shadow-sm transition-all duration-200 min-w-[110px]",
+            DESIGN_SYSTEM.spacing.gaps.standard,
+            DESIGN_SYSTEM.buttons.heights.primary,
             isDark
-              ? "bg-gray-800/60 border border-gray-700/50"
-              : "bg-white border border-gray-100"
+              ? "bg-background border border-border"
+              : "bg-background border border-border"
           )}>
-            <div className="text-xs uppercase tracking-wider font-medium opacity-60">
+            <div className={cn(
+              DESIGN_SYSTEM.typography.sizes.label,
+              DESIGN_SYSTEM.typography.cases.uppercase,
+              DESIGN_SYSTEM.typography.tracking.wider,
+              DESIGN_SYSTEM.typography.weights.medium,
+              "opacity-60"
+            )}>
               Status
             </div>
-            <div className="text-base font-medium flex items-center gap-1">
-              <span className={`inline-flex h-2 w-2 rounded-full ${syncStatus.color}`} />
-              <span className="capitalize text-xs">{syncStatus.text}</span>
+            <div className={cn(
+              DESIGN_SYSTEM.typography.sizes.title,
+              DESIGN_SYSTEM.typography.weights.medium,
+              "flex items-center gap-1"
+            )}>
+              <span className={`inline-flex ${DESIGN_SYSTEM.icons.status} rounded-full ${syncStatus.color}`} />
+              <span className={cn("capitalize", DESIGN_SYSTEM.typography.sizes.body)}>{syncStatus.text}</span>
             </div>
           </div>
 
           {/* Schedule Card */}
           <div className={cn(
-            "rounded-lg p-3 flex items-center gap-2 shadow-sm transition-all duration-200 h-10 min-w-[120px]",
+            DESIGN_SYSTEM.radius.card,
+            "p-3 flex items-center shadow-sm transition-all duration-200 min-w-[120px]",
+            DESIGN_SYSTEM.spacing.gaps.standard,
+            DESIGN_SYSTEM.buttons.heights.primary,
             isDark
-              ? "bg-gray-800/60 border border-gray-700/50"
-              : "bg-white border border-gray-100"
+              ? "bg-background border border-border"
+              : "bg-background border border-border"
           )}>
-            <div className="text-xs uppercase tracking-wider font-medium opacity-60">
+            <div className={cn(
+              DESIGN_SYSTEM.typography.sizes.label,
+              DESIGN_SYSTEM.typography.cases.uppercase,
+              DESIGN_SYSTEM.typography.tracking.wider,
+              DESIGN_SYSTEM.typography.weights.medium,
+              "opacity-60"
+            )}>
               Schedule
             </div>
             <div className="flex items-center gap-1">
               <Clock className={cn(
-                "w-4 h-4",
+                DESIGN_SYSTEM.icons.button,
                 isDark ? "text-gray-400" : "text-gray-500"
               )} />
-              <div className="text-base font-medium pl-1">
+              <div className={cn(
+                DESIGN_SYSTEM.typography.sizes.title,
+                DESIGN_SYSTEM.typography.weights.medium,
+                "pl-1"
+              )}>
                 {sourceConnection?.cron_schedule ?
                   (nextRunTime ? `In ${nextRunTime}` : 'Scheduled') :
                   'Manual'}
@@ -445,30 +487,41 @@ const SourceConnectionStateView: React.FC<Props> = ({ sourceConnectionId, onConn
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className={cn(
-                  "rounded-lg p-3 flex items-center gap-2 shadow-sm transition-all duration-200 h-10 min-w-[120px] cursor-help",
+                  DESIGN_SYSTEM.radius.card,
+                  "p-3 flex items-center shadow-sm transition-all duration-200 min-w-[120px] cursor-help",
+                  DESIGN_SYSTEM.spacing.gaps.standard,
+                  DESIGN_SYSTEM.buttons.heights.primary,
                   // Highlight when sync is running
                   (state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending')
                     ? isDark
                       ? "bg-blue-900/30 border border-blue-700/50"
                       : "bg-blue-50 border border-blue-200"
                     : isDark
-                      ? "bg-gray-800/60 border border-gray-700/50"
-                      : "bg-white border border-gray-100"
+                      ? "bg-background border border-border"
+                      : "bg-background border border-border"
                 )}>
-                  <div className="text-xs uppercase tracking-wider font-medium opacity-60">
+                  <div className={cn(
+                    DESIGN_SYSTEM.typography.sizes.label,
+                    DESIGN_SYSTEM.typography.cases.uppercase,
+                    DESIGN_SYSTEM.typography.tracking.wider,
+                    DESIGN_SYSTEM.typography.weights.medium,
+                    "opacity-60"
+                  )}>
                     Last Sync
                   </div>
                   <div className="flex items-center gap-1">
                     {(state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending') ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                      <Loader2 className={cn(DESIGN_SYSTEM.icons.button, "animate-spin text-blue-500")} />
                     ) : (
                       <History className={cn(
-                        "w-4 h-4",
+                        DESIGN_SYSTEM.icons.button,
                         isDark ? "text-gray-400" : "text-gray-500"
                       )} />
                     )}
                     <div className={cn(
-                      "text-base font-medium pl-1",
+                      DESIGN_SYSTEM.typography.sizes.title,
+                      DESIGN_SYSTEM.typography.weights.medium,
+                      "pl-1",
                       (state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending') && "text-blue-600 dark:text-blue-400"
                     )}>
                       {lastRanDisplay}
@@ -488,7 +541,7 @@ const SourceConnectionStateView: React.FC<Props> = ({ sourceConnectionId, onConn
         </div>
 
         {/* Settings and Action Buttons */}
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-1.5 items-center">
           {/* Refresh/Cancel Button - Square button that transforms */}
           <TooltipProvider delayDuration={100}>
             <Tooltip>
@@ -497,7 +550,10 @@ const SourceConnectionStateView: React.FC<Props> = ({ sourceConnectionId, onConn
                   variant="outline"
                   size="icon"
                   className={cn(
-                    "h-10 w-10 rounded-lg shadow-sm transition-all duration-200",
+                    DESIGN_SYSTEM.buttons.heights.primary,
+                    "w-10 shadow-sm",
+                    DESIGN_SYSTEM.radius.card,
+                    DESIGN_SYSTEM.transitions.standard,
                     isSyncing
                       ? isCancelling
                         ? isDark
@@ -508,24 +564,24 @@ const SourceConnectionStateView: React.FC<Props> = ({ sourceConnectionId, onConn
                           : "bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer"
                       : isRunningSync
                         ? isDark
-                          ? "bg-gray-800/50 border-gray-700/50 cursor-not-allowed"
-                          : "bg-gray-50 border-gray-200 cursor-not-allowed"
+                          ? "bg-muted border-border cursor-not-allowed"
+                          : "bg-muted border-border cursor-not-allowed"
                         : isDark
-                          ? "bg-gray-800/60 border-gray-700/50 hover:bg-gray-700 cursor-pointer"
-                          : "bg-white border-gray-100 hover:bg-gray-50 cursor-pointer"
+                          ? "bg-background border-border hover:bg-muted cursor-pointer"
+                          : "bg-background border-border hover:bg-muted cursor-pointer"
                   )}
                   onClick={isSyncing ? handleCancelSync : handleRunSync}
                   disabled={isRunningSync || isCancelling}
                 >
                   {isSyncing ? (
                     isCancelling ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-orange-500" />
+                      <Loader2 className={cn(DESIGN_SYSTEM.icons.button, "animate-spin text-orange-500")} />
                     ) : (
-                      <X className="h-4 w-4 text-red-500" />
+                      <Square className={cn(DESIGN_SYSTEM.icons.button, "text-red-500")} />
                     )
                   ) : (
                     <RefreshCw className={cn(
-                      "h-4 w-4",
+                      DESIGN_SYSTEM.icons.button,
                       isRunningSync && "animate-spin",
                       isDark ? "text-gray-400" : "text-gray-600"
                     )} />
@@ -546,13 +602,18 @@ const SourceConnectionStateView: React.FC<Props> = ({ sourceConnectionId, onConn
             </Tooltip>
           </TooltipProvider>
 
+
+
           {/* Settings Menu */}
           {sourceConnection && (
             <div className={cn(
-              "rounded-lg p-1 shadow-sm transition-all duration-200 h-10 flex items-center justify-center",
+              DESIGN_SYSTEM.radius.card,
+              "p-1 shadow-sm flex items-center justify-center",
+              DESIGN_SYSTEM.transitions.standard,
+              DESIGN_SYSTEM.buttons.heights.primary,
               isDark
-                ? "bg-gray-800/60 border border-gray-700/50"
-                : "bg-white border border-gray-100"
+                ? "bg-background border border-border"
+                : "bg-background border border-border"
             )}>
               <SourceConnectionSettings
                 sourceConnection={sourceConnection}

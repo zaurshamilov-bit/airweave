@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { SyncSchedule, SyncScheduleConfig, buildCronExpression, isValidCronExpression } from '@/components/sync/SyncSchedule';
 import { EditSourceConnectionDialog } from './EditSourceConnectionDialog';
 import { emitCollectionEvent, SOURCE_CONNECTION_UPDATED } from '@/lib/events';
+import { DESIGN_SYSTEM } from '@/lib/design-system';
 
 interface SourceConnection {
   id: string;
@@ -380,8 +381,11 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
       {/* Settings Dropdown Menu */}
       <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
         <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-            <MoreVertical className="h-4 w-4" />
+          <Button size="sm" variant="ghost" className={cn(
+            DESIGN_SYSTEM.buttons.heights.secondary,
+            "w-8 p-0"
+          )}>
+            <MoreVertical className={DESIGN_SYSTEM.icons.button} />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
@@ -389,7 +393,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
             setDropdownOpen(false);
             setShowEditDetailsDialog(true);
           }}>
-            <Edit className="h-4 w-4 mr-2" />
+            <Edit className={cn(DESIGN_SYSTEM.icons.button, "mr-2")} />
             Edit Details
           </DropdownMenuItem>
 
@@ -397,7 +401,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
             setDropdownOpen(false);
             setShowScheduleDialog(true);
           }}>
-            <Clock className="h-4 w-4 mr-2" />
+            <Clock className={cn(DESIGN_SYSTEM.icons.button, "mr-2")} />
             Edit Schedule
           </DropdownMenuItem>
 
@@ -410,7 +414,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
               setShowDeleteDialog(true);
             }}
           >
-            <Trash className="h-4 w-4 mr-2" />
+            <Trash className={cn(DESIGN_SYSTEM.icons.button, "mr-2")} />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
