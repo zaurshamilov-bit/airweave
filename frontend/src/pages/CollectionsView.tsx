@@ -5,7 +5,8 @@ import { Search, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { CollectionCard } from "@/components/dashboard";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
-import { DialogFlow } from "@/components/shared";
+import { CollectionCreationModal } from "@/components/CollectionCreationModal";
+import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
@@ -28,8 +29,8 @@ const CollectionsView = () => {
   const [filteredCollections, setFilteredCollections] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Dialog state
-  const [dialogOpen, setDialogOpen] = useState(false);
+  // Modal state
+  const { openModal } = useCollectionCreationStore();
 
   // State for usage limits
   const [collectionsAllowed, setCollectionsAllowed] = useState(true);
@@ -129,41 +130,28 @@ const CollectionsView = () => {
     }
   }, [searchQuery, collections]);
 
-  // Refresh collections after creating a new one
-  const handleDialogClose = async () => {
-    setDialogOpen(false);
-    // Force refresh collections to get the newly created one
-    fetchCollections(true);
-    // Re-check usage limits after creating a collection
-    await checkUsageActions();
+  // Open create collection modal
+  const handleCreateCollection = () => {
+    openModal();
   };
 
-  // Open create collection dialog
-  const handleCreateCollection = () => {
-    // Prefetch sources before opening the dialog
-    console.log("🔍 [CollectionsView] Pre-fetching sources before showing DialogFlow");
-    fetchSources()
-      .then(() => {
-        // Open the DialogFlow with create-collection mode
-        setDialogOpen(true);
-      })
-      .catch(err => {
-        console.error("❌ [CollectionsView] Error prefetching sources:", err);
-        // Still open the dialog even if prefetch fails
-        setDialogOpen(true);
-      });
-  };
+  // Refresh collections when modal closes
+  useEffect(() => {
+    const handleCollectionCreated = () => {
+      fetchCollections(true);
+      checkUsageActions();
+    };
+
+    window.addEventListener('collection-created', handleCollectionCreated);
+    return () => {
+      window.removeEventListener('collection-created', handleCollectionCreated);
+    };
+  }, [fetchCollections, checkUsageActions]);
 
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
-      {/* DialogFlow Dialog */}
-      <DialogFlow
-        isOpen={dialogOpen}
-        onOpenChange={setDialogOpen}
-        mode="create-collection"
-        dialogId="collections-view-create-collection"
-        onComplete={handleDialogClose}
-      />
+      {/* Collection Creation Modal */}
+      <CollectionCreationModal />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">

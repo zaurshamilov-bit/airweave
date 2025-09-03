@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { AuthProviderButton } from "@/components/dashboard";
 import { useAuthProvidersStore } from "@/lib/stores/authProviders";
-import { DialogFlow } from "@/components/shared/DialogFlow";
+// import { DialogFlow } from "@/components/shared/DialogFlow";
 
 export const AuthProviderTable = () => {
     // Use auth providers store
@@ -225,31 +225,8 @@ export const AuthProviderTable = () => {
                     mode: dialogMode,
                     authProviderShortName: selectedAuthProvider?.short_name
                 });
-                return (
-                    <DialogFlow
-                        key={dialogKey}
-                        isOpen={dialogOpen}
-                        onOpenChange={(open) => {
-                            console.log('🔀 [AuthProviderTable] onOpenChange called with:', open);
-                            setDialogOpen(open);
-                            if (!open) {
-                                console.log('🚪 [AuthProviderTable] Dialog closing, resetting state');
-                                // Reset state when dialog closes
-                                setSelectedAuthProvider(null);
-                                setSelectedConnection(null);
-                                setDialogMode('auth-provider');
-                            }
-                        }}
-                        mode={dialogMode}
-                        authProviderId={selectedAuthProvider?.id}
-                        authProviderName={selectedAuthProvider?.name}
-                        authProviderShortName={selectedAuthProvider?.short_name}
-                        authProviderAuthType={selectedAuthProvider?.auth_type}
-                        authProviderConnectionId={selectedConnection?.readable_id}
-                        onComplete={handleDialogComplete}
-                        dialogId="auth-provider-connection"
-                    />
-                );
+                // TODO: Replace with new modal for auth providers
+                return null;
             })()}
         </div>
     );

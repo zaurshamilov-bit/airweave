@@ -11,7 +11,8 @@ import {
   ExampleProjectCard,
 } from "@/components/dashboard";
 import { clearStoredErrorDetails, getStoredErrorDetails } from "@/lib/error-utils";
-import { DialogFlow } from "@/components/shared/DialogFlow";
+import { CollectionCreationModal } from "@/components/CollectionCreationModal";
+import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ interface Source {
   description?: string | null;
   short_name: string;
   labels?: string[];
+  auth_type?: string;
 }
 
 // Source Connection definition
@@ -68,13 +70,7 @@ const Dashboard = () => {
   // Use sources store
   const { sources, isLoading: isLoadingSources, fetchSources } = useSourcesStore();
 
-  // Dialog state
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedSource, setSelectedSource] = useState<{ id: string; name: string; short_name: string } | null>(null);
 
-  // Error state for connection errors
-  const [connectionError, setConnectionError] = useState<any>(null);
-  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
 
   // State for usage limits
   const [collectionsAllowed, setCollectionsAllowed] = useState(true);
@@ -146,8 +142,7 @@ const Dashboard = () => {
       const errorDetails = getStoredErrorDetails();
       if (errorDetails) {
         console.log("🔔 [Dashboard] Found stored error details:", errorDetails);
-        setConnectionError(errorDetails);
-        setErrorDialogOpen(true);
+        // TODO: Handle error display in new modal system
 
         // Clean up URL
         const newUrl = window.location.pathname;
@@ -191,72 +186,30 @@ const Dashboard = () => {
   };
 
   const handleSourceClick = (source: Source) => {
-    setSelectedSource(source);
-    setDialogOpen(true);
+    const store = useCollectionCreationStore.getState();
+    // Reset the store first to clear any previous state
+    store.reset();
+    // Pre-select the source
+    store.selectSource(source.short_name, source.name);
+    // Determine auth mode based on source
+    if (source.auth_type?.startsWith('oauth2')) {
+      store.setAuthMode('oauth2');
+    } else if (source.auth_type === 'api_key' || source.auth_type === 'basic') {
+      store.setAuthMode('direct_auth');
+    }
+    // Open modal directly at collection form since source is pre-selected
+    store.openModal('collection-form');
   };
 
 
-
-  // Handle dialog close
-  const handleDialogClose = async () => {
-    setDialogOpen(false);
-    setSelectedSource(null);
-    setConnectionError(null);
-    clearStoredErrorDetails(); // Ensure error data is cleared
-    // Refresh collections
-    fetchCollections();
-    // Re-check usage limits after potentially creating a collection
-    await checkUsageActions();
-  };
-
-  // Handle error dialog close
-  const handleErrorDialogClose = () => {
-    setErrorDialogOpen(false);
-    setConnectionError(null);
-    clearStoredErrorDetails();
-  };
 
   // Top 3 collections
   const topCollections = collections.slice(0, 3);
 
-  // Log when dialog open state changes
-  useEffect(() => {
-    console.log("🚪 Dashboard dialog open state:", dialogOpen);
-  }, [dialogOpen]);
-
-  // Modify the dialog open handler
-  const handleDialogOpen = (open: boolean) => {
-    console.log("🚪 Dashboard handleDialogOpen called with:", open);
-    setDialogOpen(open);
-  };
-
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
-      <DialogFlow
-        isOpen={dialogOpen}
-        onOpenChange={handleDialogOpen}
-        mode="source-button"
-        sourceId={selectedSource?.id}
-        sourceName={selectedSource?.name}
-        sourceShortName={selectedSource?.short_name}
-        dialogId="dashboard-source-dialog"
-        onComplete={() => {
-          // Handle completion
-          fetchCollections(false);
-        }}
-      />
-
-      {/* Error Dialog - for displaying errors from other pages */}
-      {connectionError && (
-        <DialogFlow
-          isOpen={errorDialogOpen}
-          onOpenChange={setErrorDialogOpen}
-          mode="source-button"
-          dialogId="dashboard-error-dialog"
-          errorData={connectionError}
-          onComplete={handleErrorDialogClose}
-        />
-      )}
+      {/* Collection Creation Modal */}
+      <CollectionCreationModal />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Main content (left column) */}
