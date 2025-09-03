@@ -391,141 +391,61 @@ const SourceConnectionStateView: React.FC<Props> = ({
       <div className="flex items-center justify-between">
         <div className="flex gap-2 flex-wrap items-center">
           {/* Entities Card */}
-          <div className={cn(
-            DESIGN_SYSTEM.radius.card,
-            "p-3 flex items-center shadow-sm transition-all duration-200 min-w-[100px]",
-            DESIGN_SYSTEM.spacing.gaps.standard,
-            DESIGN_SYSTEM.buttons.heights.primary,
-            isDark
-              ? "bg-background border border-border"
-              : "bg-background border border-border"
-          )}>
-            <div className={cn(
-              DESIGN_SYSTEM.typography.sizes.label,
-              DESIGN_SYSTEM.typography.cases.uppercase,
-              DESIGN_SYSTEM.typography.tracking.wider,
-              DESIGN_SYSTEM.typography.weights.medium,
-              "opacity-60"
-            )}>
-              Entities
-            </div>
-            <div className={cn(
-              DESIGN_SYSTEM.typography.sizes.title,
-              DESIGN_SYSTEM.typography.weights.semibold
-            )}>
-              {state?.totalEntities.toLocaleString() || 0}
-            </div>
+          <div className="h-8 px-3 py-1.5 bg-background border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[90px]">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">ENTITIES</span>
+            <span className="text-xs font-semibold text-foreground">{state?.totalEntities.toLocaleString() || 0}</span>
           </div>
 
           {/* Status Card */}
-          <div className={cn(
-            DESIGN_SYSTEM.radius.card,
-            "p-3 flex items-center shadow-sm transition-all duration-200 min-w-[110px]",
-            DESIGN_SYSTEM.spacing.gaps.standard,
-            DESIGN_SYSTEM.buttons.heights.primary,
-            isDark
-              ? "bg-background border border-border"
-              : "bg-background border border-border"
-          )}>
-            <div className={cn(
-              DESIGN_SYSTEM.typography.sizes.label,
-              DESIGN_SYSTEM.typography.cases.uppercase,
-              DESIGN_SYSTEM.typography.tracking.wider,
-              DESIGN_SYSTEM.typography.weights.medium,
-              "opacity-60"
-            )}>
-              Status
-            </div>
-            <div className={cn(
-              DESIGN_SYSTEM.typography.sizes.title,
-              DESIGN_SYSTEM.typography.weights.medium,
-              "flex items-center gap-1"
-            )}>
-              <span className={`inline-flex ${DESIGN_SYSTEM.icons.status} rounded-full ${syncStatus.color}`} />
-              <span className={cn("capitalize", DESIGN_SYSTEM.typography.sizes.body)}>{syncStatus.text}</span>
+          <div className="h-8 px-3 py-1.5 bg-background border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[90px]">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">STATUS</span>
+            <div className="flex items-center gap-1">
+              <span className={`inline-flex h-2 w-2 rounded-full ${syncStatus.color}`} />
+              <span className="text-xs font-medium text-foreground capitalize">{syncStatus.text}</span>
             </div>
           </div>
 
           {/* Schedule Card */}
-          <div className={cn(
-            DESIGN_SYSTEM.radius.card,
-            "p-3 flex items-center shadow-sm transition-all duration-200 min-w-[120px]",
-            DESIGN_SYSTEM.spacing.gaps.standard,
-            DESIGN_SYSTEM.buttons.heights.primary,
-            isDark
-              ? "bg-background border border-border"
-              : "bg-background border border-border"
-          )}>
-            <div className={cn(
-              DESIGN_SYSTEM.typography.sizes.label,
-              DESIGN_SYSTEM.typography.cases.uppercase,
-              DESIGN_SYSTEM.typography.tracking.wider,
-              DESIGN_SYSTEM.typography.weights.medium,
-              "opacity-60"
-            )}>
-              Schedule
-            </div>
+          <div className="h-8 px-3 py-1.5 bg-background border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[100px]">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">SCHEDULE</span>
             <div className="flex items-center gap-1">
-              <Clock className={cn(
-                DESIGN_SYSTEM.icons.button,
-                isDark ? "text-gray-400" : "text-gray-500"
-              )} />
-              <div className={cn(
-                DESIGN_SYSTEM.typography.sizes.title,
-                DESIGN_SYSTEM.typography.weights.medium,
-                "pl-1"
-              )}>
+              <Clock className="h-3 w-3 text-muted-foreground" />
+              <span className="text-xs font-medium text-foreground">
                 {sourceConnection?.cron_schedule ?
                   (nextRunTime ? `In ${nextRunTime}` : 'Scheduled') :
                   'Manual'}
-              </div>
+              </span>
             </div>
           </div>
 
-          {/* Last Ran Badge */}
+          {/* Last Sync Card */}
           <TooltipProvider delayDuration={100}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className={cn(
-                  DESIGN_SYSTEM.radius.card,
-                  "p-3 flex items-center shadow-sm transition-all duration-200 min-w-[120px] cursor-help",
-                  DESIGN_SYSTEM.spacing.gaps.standard,
-                  DESIGN_SYSTEM.buttons.heights.primary,
+                  "h-8 px-3 py-1.5 rounded-md shadow-sm flex items-center gap-2 min-w-[100px] cursor-help",
                   // Highlight when sync is running
                   (state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending')
                     ? isDark
                       ? "bg-blue-900/30 border border-blue-700/50"
                       : "bg-blue-50 border border-blue-200"
-                    : isDark
-                      ? "bg-background border border-border"
-                      : "bg-background border border-border"
+                    : "bg-background border border-border"
                 )}>
-                  <div className={cn(
-                    DESIGN_SYSTEM.typography.sizes.label,
-                    DESIGN_SYSTEM.typography.cases.uppercase,
-                    DESIGN_SYSTEM.typography.tracking.wider,
-                    DESIGN_SYSTEM.typography.weights.medium,
-                    "opacity-60"
-                  )}>
-                    Last Sync
-                  </div>
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">LAST SYNC</span>
                   <div className="flex items-center gap-1">
                     {(state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending') ? (
-                      <Loader2 className={cn(DESIGN_SYSTEM.icons.button, "animate-spin text-blue-500")} />
+                      <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
                     ) : (
-                      <History className={cn(
-                        DESIGN_SYSTEM.icons.button,
-                        isDark ? "text-gray-400" : "text-gray-500"
-                      )} />
+                      <History className="h-3 w-3 text-muted-foreground" />
                     )}
-                    <div className={cn(
-                      DESIGN_SYSTEM.typography.sizes.title,
-                      DESIGN_SYSTEM.typography.weights.medium,
-                      "pl-1",
-                      (state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending') && "text-blue-600 dark:text-blue-400"
+                    <span className={cn(
+                      "text-xs font-medium",
+                      (state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending')
+                        ? "text-blue-600 dark:text-blue-400"
+                        : "text-foreground"
                     )}>
                       {lastRanDisplay}
-                    </div>
+                    </span>
                   </div>
                 </div>
               </TooltipTrigger>
@@ -542,18 +462,16 @@ const SourceConnectionStateView: React.FC<Props> = ({
 
         {/* Settings and Action Buttons */}
         <div className="flex gap-1.5 items-center">
-          {/* Refresh/Cancel Button - Square button that transforms */}
+          {/* Refresh/Cancel Button */}
           <TooltipProvider delayDuration={100}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
+                <button
+                  type="button"
+                  onClick={isSyncing ? handleCancelSync : handleRunSync}
+                  disabled={isRunningSync || isCancelling}
                   className={cn(
-                    DESIGN_SYSTEM.buttons.heights.primary,
-                    "w-10 shadow-sm",
-                    DESIGN_SYSTEM.radius.card,
-                    DESIGN_SYSTEM.transitions.standard,
+                    "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
                     isSyncing
                       ? isCancelling
                         ? isDark
@@ -563,30 +481,24 @@ const SourceConnectionStateView: React.FC<Props> = ({
                           ? "bg-red-900/30 border-red-700 hover:bg-red-900/50 cursor-pointer"
                           : "bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer"
                       : isRunningSync
-                        ? isDark
-                          ? "bg-muted border-border cursor-not-allowed"
-                          : "bg-muted border-border cursor-not-allowed"
-                        : isDark
-                          ? "bg-background border-border hover:bg-muted cursor-pointer"
-                          : "bg-background border-border hover:bg-muted cursor-pointer"
+                        ? "bg-muted border-border cursor-not-allowed"
+                        : "bg-background border-border hover:bg-muted cursor-pointer"
                   )}
-                  onClick={isSyncing ? handleCancelSync : handleRunSync}
-                  disabled={isRunningSync || isCancelling}
+                  title={isSyncing ? (isCancelling ? "Cancelling sync..." : "Cancel sync") : (isRunningSync ? "Starting sync..." : "Refresh data")}
                 >
                   {isSyncing ? (
                     isCancelling ? (
-                      <Loader2 className={cn(DESIGN_SYSTEM.icons.button, "animate-spin text-orange-500")} />
+                      <Loader2 className="h-3 w-3 animate-spin text-orange-500" />
                     ) : (
-                      <Square className={cn(DESIGN_SYSTEM.icons.button, "text-red-500")} />
+                      <Square className="h-3 w-3 text-red-500" />
                     )
                   ) : (
                     <RefreshCw className={cn(
-                      DESIGN_SYSTEM.icons.button,
-                      isRunningSync && "animate-spin",
-                      isDark ? "text-gray-400" : "text-gray-600"
+                      "h-3 w-3 text-muted-foreground",
+                      isRunningSync && "animate-spin"
                     )} />
                   )}
-                </Button>
+                </button>
               </TooltipTrigger>
               <TooltipContent>
                 <p className="text-xs">
@@ -602,26 +514,23 @@ const SourceConnectionStateView: React.FC<Props> = ({
             </Tooltip>
           </TooltipProvider>
 
-
-
           {/* Settings Menu */}
           {sourceConnection && (
-            <div className={cn(
-              DESIGN_SYSTEM.radius.card,
-              "p-1 shadow-sm flex items-center justify-center",
-              DESIGN_SYSTEM.transitions.standard,
-              DESIGN_SYSTEM.buttons.heights.primary,
-              isDark
-                ? "bg-background border border-border"
-                : "bg-background border border-border"
-            )}>
-              <SourceConnectionSettings
-                sourceConnection={sourceConnection}
-                onUpdate={handleConnectionUpdate}
-                onDelete={onConnectionDeleted}
-                isDark={isDark}
-                resolvedTheme={resolvedTheme}
-              />
+            <div className="h-8 w-8 bg-background border border-border rounded-md shadow-sm flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => {/* Settings menu trigger logic would go here */ }}
+                className="h-8 w-8 flex items-center justify-center hover:bg-muted rounded-md transition-all duration-200"
+                title="Settings"
+              >
+                <SourceConnectionSettings
+                  sourceConnection={sourceConnection}
+                  onUpdate={handleConnectionUpdate}
+                  onDelete={onConnectionDeleted}
+                  isDark={isDark}
+                  resolvedTheme={resolvedTheme}
+                />
+              </button>
             </div>
           )}
         </div>

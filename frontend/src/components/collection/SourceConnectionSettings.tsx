@@ -385,7 +385,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
             DESIGN_SYSTEM.buttons.heights.secondary,
             "w-8 p-0"
           )}>
-            <MoreVertical className={DESIGN_SYSTEM.icons.button} />
+            <MoreVertical className={DESIGN_SYSTEM.icons.inline} />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
@@ -393,7 +393,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
             setDropdownOpen(false);
             setShowEditDetailsDialog(true);
           }}>
-            <Edit className={cn(DESIGN_SYSTEM.icons.button, "mr-2")} />
+            <Edit className={cn(DESIGN_SYSTEM.icons.inline, "mr-2")} />
             Edit Details
           </DropdownMenuItem>
 
@@ -401,7 +401,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
             setDropdownOpen(false);
             setShowScheduleDialog(true);
           }}>
-            <Clock className={cn(DESIGN_SYSTEM.icons.button, "mr-2")} />
+            <Clock className={cn(DESIGN_SYSTEM.icons.inline, "mr-2")} />
             Edit Schedule
           </DropdownMenuItem>
 
@@ -414,7 +414,7 @@ export const SourceConnectionSettings: React.FC<SourceConnectionSettingsProps> =
               setShowDeleteDialog(true);
             }}
           >
-            <Trash className={cn(DESIGN_SYSTEM.icons.button, "mr-2")} />
+            <Trash className={cn(DESIGN_SYSTEM.icons.inline, "mr-2")} />
             Delete
           </DropdownMenuItem>
         </DropdownMenuContent>

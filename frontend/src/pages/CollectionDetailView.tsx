@@ -764,41 +764,38 @@ const Collections = () => {
                         </div>
 
                         {/* Header action buttons */}
-                        <div className={cn("flex items-center gap-1.5")}>
-                            <Button
-                                variant="ghost"
-                                size="icon"
+                        <div className="flex gap-1.5 items-center">
+                            {/* Refresh Page Button - EXACT match to refresh source button */}
+                            <button
+                                type="button"
                                 onClick={reloadData}
                                 disabled={isReloading}
                                 className={cn(
-                                    DESIGN_SYSTEM.buttons.heights.compact,
-                                    "w-6 rounded-full",
-                                    DESIGN_SYSTEM.transitions.standard,
-                                    isDark ? "hover:bg-muted" : "hover:bg-muted",
+                                    "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
+                                    isReloading
+                                        ? "bg-muted border-border cursor-not-allowed"
+                                        : "bg-background border-border hover:bg-muted cursor-pointer"
                                 )}
                                 title="Reload page"
                             >
                                 <RotateCw className={cn(
-                                    DESIGN_SYSTEM.icons.inline,
+                                    "h-3 w-3 text-muted-foreground",
                                     "transition-transform duration-500",
-                                    isReloading ? "animate-spin" : "hover:rotate-90"
+                                    isReloading && "animate-spin"
                                 )} />
-                            </Button>
+                            </button>
 
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setShowDeleteDialog(true)}
-                                className={cn(
-                                    DESIGN_SYSTEM.buttons.heights.compact,
-                                    "w-6 rounded-full",
-                                    DESIGN_SYSTEM.transitions.standard,
-                                    isDark ? "hover:bg-muted" : "hover:bg-muted"
-                                )}
-                                title="Delete collection"
-                            >
-                                <Trash className={DESIGN_SYSTEM.icons.inline} />
-                            </Button>
+                            {/* Delete Collection Button - EXACT match to settings menu */}
+                            <div className="h-8 w-8 bg-background border border-border rounded-md shadow-sm flex items-center justify-center">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeleteDialog(true)}
+                                    className="h-8 w-8 flex items-center justify-center hover:bg-muted rounded-md transition-all duration-200"
+                                    title="Delete collection"
+                                >
+                                    <Trash className="h-3 w-3 text-muted-foreground" />
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -816,7 +813,7 @@ const Collections = () => {
 
 
                     {/* Source Connections Section */}
-                    <div className="w-full max-w-[1000px] mt-20">
+                    <div className="w-full max-w-[1000px] mt-8">
                         <div className={cn("flex flex-wrap", DESIGN_SYSTEM.spacing.gaps.standard)}>
                             {sourceConnections.map((connection) => (
                                 <div
