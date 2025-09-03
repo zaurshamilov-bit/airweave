@@ -1170,3 +1170,11 @@ class OutlookMailSource(BaseSource):
             self.logger.info(
                 f"===== OUTLOOK MAIL ENTITY GENERATION COMPLETE: {entity_count} entities ====="
             )
+
+    async def validate(self) -> bool:
+        """Verify Outlook Mail OAuth2 token by pinging the mailFolders endpoint."""
+        return await self._validate_oauth2(
+            ping_url=f"{self.GRAPH_BASE_URL}/me/mailFolders?$top=1",
+            headers={"Accept": "application/json"},
+            timeout=10.0,
+        )

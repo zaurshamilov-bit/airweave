@@ -6,7 +6,7 @@ automatically syncs data into your collection, enabling unified search across mu
 
 import re
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, Literal, Optional, Tuple, Union
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
@@ -165,8 +165,41 @@ class SourceConnectionCreateBase(BaseModel):
         return core_attrs, auxiliary_attrs
 
 
+# -----------------------------
+# Token injection for OAuth2
+# -----------------------------
+class TokenInject(BaseModel):
+    """Structured container for directly injecting OAuth2 tokens.
+
+    Used with auth_mode='oauth2' to create a connection without a browser redirect.
+    All fields are treated as write-only and are never returned by the API.
+    """
+
+    access_token: str = Field(
+        ...,
+        description="Bearer/OAuth2 access token",
+        json_schema_extra={"writeOnly": True},
+    )
+    refresh_token: Optional[str] = Field(
+        None,
+        description="OAuth2 refresh token",
+        json_schema_extra={"writeOnly": True},
+    )
+    token_type: Optional[str] = Field(None, description="e.g., 'Bearer'")
+    expires_at: Optional[datetime] = Field(None, description="Absolute expiry time (if known)")
+    extra: Optional[Dict[str, Any]] = Field(
+        None, description="Provider-specific token fields (optional)"
+    )
+
+
 class SourceConnectionCreate(SourceConnectionCreateBase):
-    """Schema for creating a source connection through the public API."""
+    """Schema for creating a source connection through the public API.
+
+    The `auth_mode` field determines how authentication is handled:
+    - `oauth2`: Browser-based OAuth flow or direct token injection
+    - `direct_auth`: Direct credentials via auth_fields
+    - `external_provider`: Through an auth provider like Composio
+    """
 
     collection: Optional[str] = Field(
         None,
@@ -183,40 +216,69 @@ class SourceConnectionCreate(SourceConnectionCreateBase):
             "minute hour day month weekday."
         ),
     )
-    auth_fields: Optional[ConfigValues] = Field(
-        None,
-        description=(
-            "Authentication credentials required to access the data source. The required fields "
-            "vary by source type. Check the documentation of a specific source (for example "
-            "[Github](https://docs.airweave.ai/docs/connectors/github)) to see what is required."
-        ),
-    )
-    auth_provider: Optional[str] = Field(
-        None,
-        description=(
-            "Unique readable ID of a connected auth provider to use for authentication instead of "
-            "providing auth_fields directly. When specified, credentials for the source will be "
-            "obtained and refreshed automatically by Airweave interaction with the auth provider. "
-            "To see which auth providers are supported and learn more about how to use them, "
-            "check [this page](https://docs.airweave.ai/docs/auth-providers)."
-        ),
-        examples=["composio"],
-    )
-    auth_provider_config: Optional[ConfigValues] = Field(
-        None,
-        description=(
-            "Configuration for the auth provider when using auth_provider field. "
-            "Required fields vary by auth provider. For Composio, use auth_config_id and "
-            " account_id to specify which integration and account from Composio you want "
-            "to use to connect to the source."
-        ),
-    )
     sync_immediately: bool = Field(
         True,
         description=(
             "Whether to start an initial data synchronization immediately after "
             "creating the connection."
         ),
+    )
+
+    # Authentication mode and fields
+    auth_mode: Literal["oauth2", "direct_auth", "external_provider"] = Field(
+        ...,
+        description=(
+            "Authentication mode that determines how credentials are provided:\n"
+            "- `oauth2`: OAuth2 flow (browser redirect or token injection)\n"
+            "- `direct_auth`: Direct credentials via auth_fields\n"
+            "- `external_provider`: Through an auth provider (e.g., Composio)"
+        ),
+    )
+
+    # Direct auth option
+    auth_fields: Optional[ConfigValues] = Field(
+        None,
+        description=(
+            "Authentication credentials for direct_auth mode. Required fields "
+            "vary by source type. Check the documentation of a specific source."
+        ),
+    )
+
+    # External provider option
+    auth_provider: Optional[str] = Field(
+        None,
+        description=(
+            "Readable ID of auth provider for external_provider mode. "
+            "See https://docs.airweave.ai/docs/auth-providers for details."
+        ),
+        examples=["composio"],
+    )
+    auth_provider_config: Optional[ConfigValues] = Field(
+        None,
+        description=("Configuration for the auth provider when using external_provider mode."),
+    )
+
+    # OAuth2 options
+    client_id: Optional[str] = Field(
+        None,
+        description="OAuth client ID for BYOC (Bring Your Own Credentials) OAuth flows.",
+    )
+    client_secret: Optional[str] = Field(
+        None,
+        description="OAuth client secret for BYOC OAuth flows.",
+        json_schema_extra={"writeOnly": True},
+    )
+    redirect_url: Optional[str] = Field(
+        None,
+        description="Final redirect URL after OAuth completion (defaults to app URL).",
+    )
+    token_inject: Optional[TokenInject] = Field(
+        None,
+        description=(
+            "For oauth2 mode: directly provide tokens to skip browser redirect. "
+            "Creates connection immediately without OAuth flow."
+        ),
+        json_schema_extra={"writeOnly": True},
     )
 
     model_config = ConfigDict(
@@ -227,6 +289,7 @@ class SourceConnectionCreate(SourceConnectionCreateBase):
                     "description": "Sync code and documentation from our main repository",
                     "short_name": "github",
                     "collection": "engineering-docs",
+                    "auth_mode": "direct_auth",
                     "auth_fields": {
                         "personal_access_token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
                         "repo_name": "airweave-ai/airweave",
@@ -234,6 +297,26 @@ class SourceConnectionCreate(SourceConnectionCreateBase):
                     "config_fields": {"branch": "main"},
                     "cron_schedule": "0 */6 * * *",
                     "sync_immediately": True,
+                },
+                {
+                    "name": "Slack Workspace",
+                    "description": "Connect to Slack via OAuth",
+                    "short_name": "slack",
+                    "auth_mode": "oauth2",
+                    "collection": "team-communications",
+                    "sync_immediately": True,
+                },
+                {
+                    "name": "GitHub via Composio",
+                    "description": "Using external auth provider",
+                    "short_name": "github",
+                    "auth_mode": "external_provider",
+                    "auth_provider": "composio",
+                    "auth_provider_config": {
+                        "auth_config_id": "github_oauth",
+                        "account_id": "user123",
+                    },
+                    "collection": "code-repos",
                 },
             ]
         }
@@ -251,6 +334,47 @@ class SourceConnectionCreate(SourceConnectionCreateBase):
                 "minute hour day month weekday"
             )
         return v
+
+    def _has_oauth_fields(self) -> bool:
+        """Check if any OAuth fields are present."""
+        return bool(self.client_id or self.client_secret or self.token_inject)
+
+    def _has_provider_fields(self) -> bool:
+        """Check if any auth provider fields are present."""
+        return bool(self.auth_provider or self.auth_provider_config)
+
+    @model_validator(mode="after")
+    def validate_auth_mode_fields(self):
+        """Validate that the correct fields are provided for each auth_mode."""
+        mode = self.auth_mode
+        validations = {
+            "direct_auth": [
+                (not self.auth_fields, "auth_fields is required for auth_mode='direct_auth'"),
+                (self._has_provider_fields(), "auth_provider/auth_provider_config not allowed"),
+                (self._has_oauth_fields(), "OAuth fields not allowed for auth_mode='direct_auth'"),
+            ],
+            "external_provider": [
+                (
+                    not self.auth_provider,
+                    "auth_provider is required for auth_mode='external_provider'",
+                ),
+                (self.auth_fields, "auth_fields not allowed for auth_mode='external_provider'"),
+                (
+                    self._has_oauth_fields(),
+                    "OAuth fields not allowed for auth_mode='external_provider'",
+                ),
+            ],
+            "oauth2": [
+                (self.auth_fields, "auth_fields not allowed for auth_mode='oauth2'"),
+                (self._has_provider_fields(), "auth_provider/auth_provider_config not allowed"),
+            ],
+        }
+
+        for condition, error in validations.get(mode, []):
+            if condition:
+                raise ValueError(error)
+
+        return self
 
 
 class SourceConnectionCreateWithWhiteLabel(SourceConnectionCreateBase):
@@ -472,7 +596,7 @@ class SourceConnectionUpdate(BaseModel):
             "with your own branding."
         ),
     )
-    auth_provider: Optional[str] = Field(
+    auth_provider: Optional[UUID] = Field(
         None,
         description=(
             "Updated auth provider readable ID. "
@@ -546,6 +670,7 @@ class SourceConnectionInDBBase(SourceConnectionBase):
             "Internal identifier for the underlying connection object that manages "
             "authentication and configuration."
         ),
+        exclude=True,  # Internal field, not exposed in API
     )
     collection: str = Field(
         ...,
@@ -569,6 +694,20 @@ class SourceConnectionInDBBase(SourceConnectionBase):
     modified_by_email: Optional[EmailStr] = Field(
         None,
         description="Email address of the user who last modified this source connection.",
+    )
+
+    is_authenticated: bool = Field(
+        False,
+        description=(
+            "Indicates if the connection has been successfully authenticated. "
+            "Will be 'false' for connections pending completion of an OAuth flow."
+        ),
+    )
+
+    connection_init_session_id: Optional[UUID] = Field(
+        None,
+        description="The internal ID of the initiation session used to create this connection.",
+        exclude=True,  # Internal field, not exposed in API
     )
 
     @model_validator(mode="before")
@@ -615,7 +754,7 @@ class SourceConnection(SourceConnectionInDBBase):
         "• **in_progress**: Currently syncing data from the source<br/>"
         "• **failing**: Recent sync attempts have failed and require attention",
     )
-    latest_sync_job_status: Optional[SyncJobStatus] = Field(
+    last_sync_job_status: Optional[SyncJobStatus] = Field(
         None,
         description="Status of the most recent data synchronization job:<br/>"
         "• **completed**: Last sync finished successfully<br/>"
@@ -623,25 +762,25 @@ class SourceConnection(SourceConnectionInDBBase):
         "• **in_progress**: Currently running a sync job<br/>"
         "• **pending**: Sync job is queued and waiting to start",
     )
-    latest_sync_job_id: Optional[UUID] = Field(
+    last_sync_job_id: Optional[UUID] = Field(
         None,
         description=(
             "Unique identifier of the most recent sync job. Use this to track sync progress "
             "or retrieve detailed job information."
         ),
     )
-    latest_sync_job_started_at: Optional[datetime] = Field(
+    last_sync_job_started_at: Optional[datetime] = Field(
         None,
         description="Timestamp when the most recent sync job started (ISO 8601 format).",
     )
-    latest_sync_job_completed_at: Optional[datetime] = Field(
+    last_sync_job_completed_at: Optional[datetime] = Field(
         None,
         description=(
             "Timestamp when the most recent sync job completed (ISO 8601 format). "
             "Null if the job is still running or failed."
         ),
     )
-    latest_sync_job_error: Optional[str] = Field(
+    last_sync_job_error: Optional[str] = Field(
         None,
         description=(
             "Error message from the most recent sync job if it failed. "
@@ -661,6 +800,13 @@ class SourceConnection(SourceConnectionInDBBase):
         description=(
             "Timestamp when the next automatic sync is scheduled to run (ISO 8601 format). "
             "Null if no automatic schedule is configured."
+        ),
+    )
+    authentication_url: Optional[str] = Field(
+        None,
+        description=(
+            "OAuth authorization URL to visit if the connection requires authentication. "
+            "Only present for OAuth sources that need user authorization."
         ),
     )
 
@@ -690,11 +836,11 @@ class SourceConnection(SourceConnectionInDBBase):
                         "repo_name": "airweave-ai/docs",
                     },
                     "config_fields": {"branch": "main"},
-                    "latest_sync_job_status": "completed",
-                    "latest_sync_job_id": "987fcdeb-51a2-43d7-8f3e-1234567890ab",
-                    "latest_sync_job_started_at": "2024-01-15T14:00:00Z",
-                    "latest_sync_job_completed_at": "2024-01-15T14:05:22Z",
-                    "latest_sync_job_error": None,
+                    "last_sync_job_status": "completed",
+                    "last_sync_job_id": "987fcdeb-51a2-43d7-8f3e-1234567890ab",
+                    "last_sync_job_started_at": "2024-01-15T14:00:00Z",
+                    "last_sync_job_completed_at": "2024-01-15T14:05:22Z",
+                    "last_sync_job_error": None,
                     "cron_schedule": "0 */6 * * *",
                     "next_scheduled_run": "2024-01-16T02:00:00Z",
                 }
@@ -930,9 +1076,10 @@ class SourceConnectionListItem(BaseModel):
         ...,
         description="When the source connection was last modified (ISO 8601 format).",
     )
-    sync_id: UUID = Field(
+    sync_id: Optional[UUID] = Field(
         ...,
-        description="Internal identifier for the sync configuration.",
+        description="Internal identifier for the sync configuration. "
+        "Will be null for pending connections.",
     )
     collection: str = Field(
         ...,
@@ -942,6 +1089,15 @@ class SourceConnectionListItem(BaseModel):
     white_label_id: Optional[UUID] = Field(
         None,
         description="Identifier for custom OAuth integrations, if applicable.",
+    )
+
+    is_authenticated: bool = Field(
+        ..., description="Indicates if the connection has valid, active credentials."
+    )
+
+    connection_init_session_id: Optional[UUID] = Field(
+        None,
+        description="Internal ID of the session that initiated this connection, if applicable.",
     )
 
     @model_validator(mode="after")

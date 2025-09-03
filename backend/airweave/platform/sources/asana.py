@@ -569,3 +569,11 @@ class AsanaSource(BaseSource):
                             task_breadcrumbs,
                         ):
                             yield file_entity
+
+    async def validate(self) -> bool:
+        """Verify OAuth2 token by pinging Asana's /users/me endpoint."""
+        return await self._validate_oauth2(
+            ping_url="https://app.asana.com/api/1.0/users/me",
+            headers={"Accept": "application/json"},
+            timeout=10.0,
+        )

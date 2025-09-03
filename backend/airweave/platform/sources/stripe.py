@@ -517,3 +517,22 @@ class StripeSource(BaseSource):
             # 11) Subscriptions
             async for sub_entity in self._generate_subscription_entities(client):
                 yield sub_entity
+
+    async def validate(self) -> bool:
+        """Verify Stripe API key by pinging a lightweight endpoint (/v1/balance)."""
+        if not getattr(self, "api_key", None):
+            self.logger.error("Stripe validation failed: missing API key.")
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Reuse the authenticated helper for consistency
+                await self._get_with_auth(client, "https://api.stripe.com/v1/balance")
+                return True
+        except httpx.HTTPStatusError as e:
+            self.logger.error(
+                f"Stripe validation failed: HTTP {e.response.status_code} - {e.response.text[:200]}"
+            )
+            return False
+        except Exception as e:
+            self.logger.error(f"Unexpected error during Stripe validation: {e}")
+            return False

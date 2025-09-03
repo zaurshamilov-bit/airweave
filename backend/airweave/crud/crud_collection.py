@@ -1,3 +1,5 @@
+# airweave/crud/crud_collection.py
+
 """CRUD operations for collections."""
 
 from typing import List, Optional
@@ -43,26 +45,32 @@ class CRUDCollection(CRUDBaseOrganization[Collection, CollectionCreate, Collecti
             db, readable_collection_id=collection.readable_id, ctx=ctx
         )
 
-        # If no source connections, the collection needs one
         if not source_connections:
             return CollectionStatus.NEEDS_SOURCE
 
-        # Count the number of failing source connections
+        # Filter out pending shells to evaluate the status of active connections
+        active_connections = [sc for sc in source_connections if sc.is_authenticated]
+
+        # If there are no authenticated connections, it's effectively the same as needing a source
+        if not active_connections:
+            return CollectionStatus.NEEDS_SOURCE
+
+        # Count the number of failing/in-progress connections among the active ones
         failing_count = 0
         in_progress_count = 0
 
-        for sc in source_connections:
+        for sc in active_connections:
             if sc.status == SourceConnectionStatus.FAILING:
                 failing_count += 1
             elif sc.status == SourceConnectionStatus.IN_PROGRESS:
                 in_progress_count += 1
 
-        # If any are in progress, the collection is active (in progress is considered an OK state)
+        # If any active connections are in progress, the collection is active
         if in_progress_count > 0:
             return CollectionStatus.ACTIVE
 
-        # If all are failing, the collection is in error
-        if failing_count == len(source_connections):
+        # If all active connections are failing, the collection is in error
+        if failing_count == len(active_connections):
             return CollectionStatus.ERROR
 
         # If some but not all are failing, the collection is in partial error

@@ -22,30 +22,30 @@ class CRUDSourceConnection(
     """CRUD operations for source connections."""
 
     async def get_status(
-        self, source_connection: SourceConnection, latest_sync_job: Optional[SyncJob] = None
+        self, source_connection: SourceConnection, last_sync_job: Optional[SyncJob] = None
     ) -> SourceConnectionStatus:
         """Determine the ephemeral status of a source connection based on its sync job status.
 
         Args:
             source_connection: The source connection
-            latest_sync_job: Optional pre-fetched latest sync job
+            last_sync_job: Optional pre-fetched latest sync job
 
         Returns:
             The derived ephemeral status
         """
         # When no sync job exists yet
-        if not source_connection.sync_id or not latest_sync_job:
+        if not source_connection.sync_id or not last_sync_job:
             return SourceConnectionStatus.ACTIVE
 
         # Map sync job status to source connection status
-        if latest_sync_job.status == SyncJobStatus.FAILED:
+        if last_sync_job.status == SyncJobStatus.FAILED:
             return SourceConnectionStatus.FAILING
-        elif latest_sync_job.status == SyncJobStatus.IN_PROGRESS:
+        elif last_sync_job.status == SyncJobStatus.IN_PROGRESS:
             return SourceConnectionStatus.IN_PROGRESS
         else:
             return SourceConnectionStatus.ACTIVE
 
-    async def _attach_latest_sync_job_info(
+    async def _attach_last_sync_job_info(
         self, db: AsyncSession, source_connections: List[SourceConnection]
     ) -> List[SourceConnection]:
         """Attach latest sync job information to source connections.
@@ -120,13 +120,22 @@ class CRUDSourceConnection(
 
         # Attach the latest sync job info to each source connection
         for sc in source_connections:
+            # If the connection is a shell pending authentication, set
+            # status and skip sync job logic
+            if not sc.is_authenticated:
+                sc.status = SourceConnectionStatus.PENDING
+                # Also null out other sync-related fields for consistency
+                sc.last_sync_job_id = None
+                sc.last_sync_job_status = None
+                continue
+
             sc_id = str(sc.id) if hasattr(sc, "id") else "unknown"
             if sc.sync_id and sc.sync_id in sync_job_info:
                 job_info = sync_job_info[sc.sync_id]
-                sc.latest_sync_job_id = job_info["id"]
-                sc.latest_sync_job_status = job_info["status"]
-                sc.latest_sync_job_started_at = job_info["started_at"]
-                sc.latest_sync_job_completed_at = job_info["completed_at"]
+                sc.last_sync_job_id = job_info["id"]
+                sc.last_sync_job_status = job_info["status"]
+                sc.last_sync_job_started_at = job_info["started_at"]
+                sc.last_sync_job_completed_at = job_info["completed_at"]
 
                 # Set the ephemeral status based on the latest sync job
                 job = SyncJob(
@@ -207,9 +216,7 @@ class CRUDSourceConnection(
 
         if source_connection:
             # Attach latest sync job info and compute status
-            source_connection = (await self._attach_latest_sync_job_info(db, [source_connection]))[
-                0
-            ]
+            source_connection = (await self._attach_last_sync_job_info(db, [source_connection]))[0]
             # Also attach schedule info
             source_connection = (await self._attach_sync_schedule_info(db, [source_connection]))[0]
 
@@ -239,7 +246,7 @@ class CRUDSourceConnection(
         source_connections = list(result.scalars().all())
 
         # Attach latest sync job info and compute statuses
-        source_connections = await self._attach_latest_sync_job_info(db, source_connections)
+        source_connections = await self._attach_last_sync_job_info(db, source_connections)
         # Also attach schedule info
         source_connections = await self._attach_sync_schedule_info(db, source_connections)
 
@@ -279,7 +286,7 @@ class CRUDSourceConnection(
         source_connections = list(result.scalars().all())
 
         # Attach latest sync job info and compute statuses
-        source_connections = await self._attach_latest_sync_job_info(db, source_connections)
+        source_connections = await self._attach_last_sync_job_info(db, source_connections)
         # Also attach schedule info
         source_connections = await self._attach_sync_schedule_info(db, source_connections)
 
@@ -307,9 +314,7 @@ class CRUDSourceConnection(
 
         if source_connection:
             # Attach latest sync job info and compute status
-            source_connection = (await self._attach_latest_sync_job_info(db, [source_connection]))[
-                0
-            ]
+            source_connection = (await self._attach_last_sync_job_info(db, [source_connection]))[0]
             # Also attach schedule info
             source_connection = (await self._attach_sync_schedule_info(db, [source_connection]))[0]
 
@@ -336,7 +341,7 @@ class CRUDSourceConnection(
         source_connections = list(result.scalars().all())
 
         # Attach latest sync job info and compute statuses
-        source_connections = await self._attach_latest_sync_job_info(db, source_connections)
+        source_connections = await self._attach_last_sync_job_info(db, source_connections)
         # Also attach schedule info
         source_connections = await self._attach_sync_schedule_info(db, source_connections)
 

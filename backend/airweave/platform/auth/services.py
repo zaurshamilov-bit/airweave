@@ -34,12 +34,14 @@ class OAuth2Service:
     async def generate_auth_url(
         oauth2_settings: OAuth2Settings,
         client_id: Optional[str] = None,
+        state: Optional[str] = None,
     ) -> str:
         """Generate the OAuth2 authorization URL for an integration.
 
         Args:
             oauth2_settings: The OAuth2 settings for the integration
             client_id: Optional client ID to override the default one
+            state: Optional state token to round-trip through the OAuth flow
 
         Returns:
             The authorization URL for the OAuth2 flow
@@ -62,6 +64,9 @@ class OAuth2Service:
 
         if oauth2_settings.scope:
             params["scope"] = oauth2_settings.scope
+
+        if state is not None:
+            params["state"] = state
 
         auth_url = f"{oauth2_settings.url}?{urlencode(params)}"
 
@@ -104,6 +109,69 @@ class OAuth2Service:
 
         if not client_id and not client_secret:
             client_id = oauth2_settings.client_id
+            client_secret = oauth2_settings.client_secret
+
+        return await OAuth2Service._exchange_code(
+            logger=ctx.logger,
+            code=code,
+            redirect_uri=redirect_uri,
+            client_id=client_id,
+            client_secret=client_secret,
+            integration_config=oauth2_settings,
+        )
+
+    @staticmethod
+    async def generate_auth_url_with_redirect(
+        oauth2_settings: OAuth2Settings,
+        *,
+        redirect_uri: str,
+        client_id: Optional[str] = None,
+        state: Optional[str] = None,
+    ) -> str:
+        """Generate an OAuth2 authorization URL but force a specific redirect_uri and include state.
+
+        Useful for API-hosted callback flows.
+        """
+        if not client_id:
+            client_id = oauth2_settings.client_id
+
+        params = {
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            **(oauth2_settings.additional_frontend_params or {}),
+        }
+        if state:
+            params["state"] = state
+        if oauth2_settings.scope:
+            params["scope"] = oauth2_settings.scope
+
+        return f"{oauth2_settings.url}?{urlencode(params)}"
+
+    @staticmethod
+    async def exchange_authorization_code_for_token_with_redirect(
+        ctx: ApiContext,
+        *,
+        source_short_name: str,
+        code: str,
+        redirect_uri: str,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+    ) -> OAuth2TokenResponse:
+        """Exchange an OAuth2 code using an explicit redirect_uri.
+
+        Must match the one used in auth.
+        """
+        try:
+            oauth2_settings = await integration_settings.get_by_short_name(source_short_name)
+        except KeyError as e:
+            raise HTTPException(
+                status_code=404, detail=f"Settings not found for source: {source_short_name}"
+            ) from e
+
+        if not client_id:
+            client_id = oauth2_settings.client_id
+        if not client_secret:
             client_secret = oauth2_settings.client_secret
 
         return await OAuth2Service._exchange_code(
@@ -460,7 +528,7 @@ class OAuth2Service:
         # paste: https://redirectmeto.com/ before the redirect uri
         # and set change the redirect uri in the oauth app as well
 
-        return f"{app_url}/auth/callback/{integration_short_name}"
+        return f"{app_url}/auth/callback"
 
     @staticmethod
     async def generate_auth_url_for_whitelabel(

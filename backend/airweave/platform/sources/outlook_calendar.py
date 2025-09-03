@@ -265,9 +265,9 @@ class OutlookCalendarSource(BaseSource):
             breadcrumbs=[cal_breadcrumb],
             subject=event_subject,
             body_preview=event_data.get("bodyPreview"),
-            body_content=event_data.get("body", {}).get("content")
-            if event_data.get("body")
-            else None,
+            body_content=(
+                event_data.get("body", {}).get("content") if event_data.get("body") else None
+            ),
             body_content_type=event_data.get("body", {}).get("contentType"),
             start_datetime=self._parse_datetime_field(start_info),
             start_timezone=start_info.get("timeZone"),
@@ -513,3 +513,11 @@ class OutlookCalendarSource(BaseSource):
             self.logger.info(
                 f"===== OUTLOOK CALENDAR ENTITY GENERATION COMPLETE: {entity_count} entities ====="
             )
+
+    async def validate(self) -> bool:
+        """Verify Outlook Calendar OAuth2 token by pinging the calendars endpoint."""
+        return await self._validate_oauth2(
+            ping_url=f"{self.GRAPH_BASE_URL}/me/calendars?$top=1",
+            headers={"Accept": "application/json"},
+            timeout=10.0,
+        )

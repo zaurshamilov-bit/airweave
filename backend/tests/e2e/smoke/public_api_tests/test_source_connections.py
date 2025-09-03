@@ -109,7 +109,7 @@ def test_source_connections(
 
     # Verify no sync job was created (since sync_immediately=false)
     assert (
-        source_conn.get("latest_sync_job_id") is None
+        source_conn.get("last_sync_job_id") is None
     ), "Should not have sync job when sync_immediately=false"
 
     print(f"  ✓ Source connection created: {source_conn['name']} (ID: {source_conn_id})")
@@ -232,10 +232,10 @@ def test_source_connections(
 
     conn_with_job = response.json()
     assert (
-        conn_with_job["latest_sync_job_id"] == job_id
-    ), "Source connection should have latest_sync_job_id"
-    assert "latest_sync_job_status" in conn_with_job, "Missing latest_sync_job_status"
-    assert "latest_sync_job_started_at" in conn_with_job, "Missing latest_sync_job_started_at"
+        conn_with_job["last_sync_job_id"] == job_id
+    ), "Source connection should have last_sync_job_id"
+    assert "last_sync_job_status" in conn_with_job, "Missing last_sync_job_status"
+    assert "last_sync_job_started_at" in conn_with_job, "Missing last_sync_job_started_at"
 
     print("  ✓ Source connection updated with sync job information")
 
@@ -336,8 +336,8 @@ def test_source_connections(
     assert (
         source_conn2["status"].upper() == "IN_PROGRESS"
     ), "Expected IN_PROGRESS for immediate sync"
-    assert "latest_sync_job_id" in source_conn2, "Missing latest_sync_job_id"
-    assert source_conn2["latest_sync_job_id"] is not None, "Should have active sync job"
+    assert "last_sync_job_id" in source_conn2, "Missing last_sync_job_id"
+    assert source_conn2["last_sync_job_id"] is not None, "Should have active sync job"
 
     print(f"  ✓ Second source connection created with auto-collection: {auto_collection}")
 

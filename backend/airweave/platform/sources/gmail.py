@@ -725,3 +725,11 @@ class GmailSource(BaseSource):
                     )
         except Exception as e:
             self.logger.error(f"Failed to capture starting Gmail historyId: {e}")
+
+    async def validate(self) -> bool:
+        """Verify Gmail OAuth2 token by pinging the users.getProfile endpoint."""
+        return await self._validate_oauth2(
+            ping_url="https://gmail.googleapis.com/gmail/v1/users/me/profile",
+            headers={"Accept": "application/json"},
+            timeout=10.0,
+        )

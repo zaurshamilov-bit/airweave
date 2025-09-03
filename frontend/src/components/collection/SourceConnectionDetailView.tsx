@@ -72,11 +72,11 @@ interface SourceConnection {
     modified_by_email: string;
     auth_fields?: Record<string, any> | string;
     status?: string;
-    latest_sync_job_status?: string;
-    latest_sync_job_id?: string;
-    latest_sync_job_started_at?: string;
-    latest_sync_job_completed_at?: string;
-    latest_sync_job_error?: string;
+    last_sync_job_status?: string;
+    last_sync_job_id?: string;
+    last_sync_job_started_at?: string;
+    last_sync_job_completed_at?: string;
+    last_sync_job_error?: string;
     cron_schedule?: string;
     next_scheduled_run?: string;
     auth_provider?: string;
@@ -629,7 +629,7 @@ const SourceConnectionDetailView = ({
 
     // API CALL 2: Fetch Sync Job details (from /source-connections/{id}/jobs/{job_id})
     const fetchSyncJob = async (connection: SourceConnection) => {
-        if (!connection.latest_sync_job_id) {
+        if (!connection.last_sync_job_id) {
             console.log("No latest sync job ID found");
             setSyncJob(null);
             setTotalEntities(0);
@@ -643,10 +643,10 @@ const SourceConnectionDetailView = ({
 
         try {
             console.log("Fetching sync job details...");
-            const response = await apiClient.get(`/source-connections/${connection.id}/jobs/${connection.latest_sync_job_id}`);
+            const response = await apiClient.get(`/source-connections/${connection.id}/jobs/${connection.last_sync_job_id}`);
 
             if (!response.ok) {
-                console.error(`Failed to fetch job with ID ${connection.latest_sync_job_id}, status: ${response.status}`);
+                console.error(`Failed to fetch job with ID ${connection.last_sync_job_id}, status: ${response.status}`);
                 setSyncJob(null);
                 setTotalEntities(0);
                 setTotalRuntime(null);
@@ -778,13 +778,13 @@ const SourceConnectionDetailView = ({
             // Track approximate start time for immediate runtime display (use UTC)
             setPendingJobStartTime(utcNow());
 
-            // Also update the source connection's latest_sync_job_status to reflect the new job
+            // Also update the source connection's last_sync_job_status to reflect the new job
             if (sourceConnection) {
                 setSourceConnection({
                     ...sourceConnection,
-                    latest_sync_job_status: newJob.status,
-                    latest_sync_job_id: newJob.id,
-                    latest_sync_job_started_at: newJob.started_at || undefined
+                    last_sync_job_status: newJob.status,
+                    last_sync_job_id: newJob.id,
+                    last_sync_job_started_at: newJob.started_at || undefined
                 });
             }
 
@@ -1373,7 +1373,7 @@ const SourceConnectionDetailView = ({
 
     // Save live progress to session storage
     useEffect(() => {
-        if (liveProgress && sourceConnection?.latest_sync_job_id &&
+        if (liveProgress && sourceConnection?.last_sync_job_id &&
             // Only save if we have actual progress data (not just empty initial state)
             (liveProgress.entities_inserted > 0 ||
                 liveProgress.entities_updated > 0 ||
@@ -1384,11 +1384,11 @@ const SourceConnectionDetailView = ({
                 liveProgress.is_failed)) {
             syncStorageService.saveProgress(
                 sourceConnectionId,
-                sourceConnection.latest_sync_job_id,
+                sourceConnection.last_sync_job_id,
                 liveProgress
             );
         }
-    }, [liveProgress, sourceConnectionId, sourceConnection?.latest_sync_job_id]);
+    }, [liveProgress, sourceConnectionId, sourceConnection?.last_sync_job_id]);
 
     // Reload data when sync completes
     useEffect(() => {

@@ -1,4 +1,4 @@
-"""Asana content generation adapter.
+0"""Asana content generation adapter.
 
 Generates realistic task content for testing Asana integration using LLM.
 """

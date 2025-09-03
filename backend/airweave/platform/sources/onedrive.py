@@ -395,3 +395,36 @@ class OneDriveSource(BaseSource):
                 client, drive_id, drive_name
             ):
                 yield file_entity
+
+    async def validate(self) -> bool:
+        """Verify OneDrive OAuth2 token and access with sensible fallbacks.
+
+        Tries default drive (/me/drive), then list drives (/me/drives),
+        then app-folder-only access (/me/drive/special/approot).
+        """
+        headers = {"Accept": "application/json"}
+
+        # 1) Default OneDrive (most common)
+        ok = await self._validate_oauth2(
+            ping_url="https://graph.microsoft.com/v1.0/me/drive",
+            headers=headers,
+            timeout=10.0,
+        )
+        if ok:
+            return True
+
+        # 2) Accounts without SPO default drive but with accessible drives list
+        ok = await self._validate_oauth2(
+            ping_url="https://graph.microsoft.com/v1.0/me/drives?$top=1",
+            headers=headers,
+            timeout=10.0,
+        )
+        if ok:
+            return True
+
+        # 3) App-folder-only scenario
+        return await self._validate_oauth2(
+            ping_url="https://graph.microsoft.com/v1.0/me/drive/special/approot",
+            headers=headers,
+            timeout=10.0,
+        )

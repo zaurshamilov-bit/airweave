@@ -514,3 +514,50 @@ class MondaySource(BaseSource):
                     client, board_entity.board_id, item_id=None, item_breadcrumbs=[board_breadcrumb]
                 ):
                     yield update_entity
+
+    async def validate(self) -> bool:
+        """Verify Monday OAuth2 token by POSTing a minimal GraphQL query to /v2."""
+        try:
+            token = await self.get_access_token()
+            if not token:
+                self.logger.error("Monday validation failed: no access token available.")
+                return False
+
+            query = {"query": "query { me { id } }"}
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                headers = {
+                    "Authorization": token,  # Monday expects the raw token here (no added 'Bearer')
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                }
+                resp = await client.post(self.GRAPHQL_ENDPOINT, json=query, headers=headers)
+
+                # One-time retry on 401 using BaseSource refresh helper
+                if resp.status_code == 401:
+                    self.logger.info("Monday validate: 401 Unauthorized; attempting token refresh.")
+                    new_token = await self.refresh_on_unauthorized()
+                    if new_token:
+                        headers["Authorization"] = new_token
+                        resp = await client.post(self.GRAPHQL_ENDPOINT, json=query, headers=headers)
+
+                if not (200 <= resp.status_code < 300):
+                    self.logger.warning(
+                        f"Monday validate failed: HTTP {resp.status_code} - {resp.text[:200]}"
+                    )
+                    return False
+
+                body = resp.json()
+                if body.get("errors"):
+                    self.logger.warning(f"Monday validate GraphQL errors: {body['errors']}")
+                    return False
+
+                me = (body.get("data") or {}).get("me") or {}
+                return bool(me.get("id"))
+
+        except httpx.RequestError as e:
+            self.logger.error(f"Monday validation request error: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Unexpected error during Monday validation: {e}")
+            return False

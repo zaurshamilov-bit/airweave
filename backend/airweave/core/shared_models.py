@@ -43,6 +43,7 @@ class SourceConnectionStatus(str, Enum):
     """Source connection status enum."""
 
     ACTIVE = "active"
+    PENDING = "pending"  # For shells pending authentication
     IN_PROGRESS = "in_progress"
     FAILING = "failing"
 

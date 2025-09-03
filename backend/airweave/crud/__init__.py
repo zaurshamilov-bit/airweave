@@ -5,6 +5,7 @@ from .crud_auth_provider import auth_provider
 from .crud_billing_period import billing_period
 from .crud_collection import collection
 from .crud_connection import connection
+from .crud_connection_init_session import connection_init_session
 from .crud_dag import sync_dag
 from .crud_destination import destination
 from .crud_embedding_model import embedding_model
@@ -13,6 +14,7 @@ from .crud_entity_definition import entity_definition
 from .crud_integration_credential import integration_credential
 from .crud_organization import organization
 from .crud_organization_billing import organization_billing
+from .crud_redirect_session import redirect_session
 from .crud_source import source
 from .crud_source_connection import source_connection
 from .crud_sync import sync
@@ -29,6 +31,7 @@ __all__ = [
     "auth_provider",
     "billing_period",
     "collection",
+    "connection_init_session",
     "connection",
     "destination",
     "embedding_model",
@@ -37,6 +40,7 @@ __all__ = [
     "integration_credential",
     "organization",
     "organization_billing",
+    "redirect_session",
     "source",
     "source_connection",
     "sync",

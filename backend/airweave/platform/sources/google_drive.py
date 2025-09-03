@@ -60,6 +60,14 @@ class GoogleDriveSource(BaseSource):
 
         return instance
 
+    async def validate(self) -> bool:
+        """Validate the Google Drive source connection."""
+        return await self._validate_oauth2(
+            ping_url="https://www.googleapis.com/drive/v3/drives?pageSize=1",
+            headers={"Accept": "application/json"},
+            timeout=10.0,
+        )
+
     # --- Incremental sync support (cursor field) ---
     def get_default_cursor_field(self) -> Optional[str]:
         """Default cursor field name for Google Drive incremental sync.

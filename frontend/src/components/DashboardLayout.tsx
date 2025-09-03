@@ -32,7 +32,6 @@ import { apiClient } from "@/lib/api";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_UPDATED } from "@/lib/events";
 import { APIKeysSettings } from "@/components/settings/APIKeysSettings";
-import { DialogFlow } from '@/components/shared';
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 import { useOrganizationStore } from "@/lib/stores/organizations";
 import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
@@ -44,6 +43,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ActionCheckResponse } from "@/types";
+import { SidePanelFlow } from "@/components/shared/SidePanelFlow"; // Import the new SidePanel
+import { useSidePanelStore } from "@/lib/stores/sidePanelStore"; // Import the new store
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
@@ -202,9 +203,7 @@ const DashboardLayout = () => {
   const { resolvedTheme, setTheme } = useTheme();
   const { fetchSources } = useSourcesStore();
   const { currentOrganization } = useOrganizationStore();
-
-  // State for the create collection dialog
-  const [showCreateCollectionFlow, setShowCreateCollectionFlow] = useState(false);
+  const { openPanel } = useSidePanelStore(); // Get the function to open the panel
 
   // State for usage limits
   const [collectionsAllowed, setCollectionsAllowed] = useState(true);
@@ -277,14 +276,8 @@ const DashboardLayout = () => {
   }, []);
 
   const handleCreateCollection = useCallback(() => {
-    setShowCreateCollectionFlow(true);
-  }, []);
-
-  const handleCreateCollectionComplete = useCallback(async () => {
-    setShowCreateCollectionFlow(false);
-    // Re-check usage limits after creating a collection
-    await checkUsageActions();
-  }, [checkUsageActions]);
+    openPanel('createCollection');
+  }, [openPanel]);
 
   // Check usage limits on mount
   useEffect(() => {
@@ -469,6 +462,9 @@ const DashboardLayout = () => {
   return (
     <GradientBackground className="min-h-screen">
       <GradientCard className="h-full">
+        {/* The new SidePanelFlow is added here, so it's available on all pages */}
+        <SidePanelFlow />
+
         <div className="flex h-screen overflow-hidden">
           {/* Mobile Menu Button */}
           <div className="lg:hidden fixed top-4 left-4 z-[30]">
@@ -639,15 +635,6 @@ const DashboardLayout = () => {
           </div>
         </div>
       </GradientCard>
-
-      {/* DialogFlow for creating a new collection starting with source selection */}
-      <DialogFlow
-        isOpen={showCreateCollectionFlow}
-        onOpenChange={setShowCreateCollectionFlow}
-        mode="create-collection"
-        dialogId="dashboard-layout-create-collection"
-        onComplete={handleCreateCollectionComplete}
-      />
     </GradientBackground>
   );
 };

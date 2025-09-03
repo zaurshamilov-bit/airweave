@@ -6242,7 +6242,7 @@
             ],
             "description": "Current operational status of the source connection:<br/>\u2022 **active**: Connection is healthy and ready for data synchronization<br/>\u2022 **in_progress**: Currently syncing data from the source<br/>\u2022 **failing**: Recent sync attempts have failed and require attention"
           },
-          "latest_sync_job_status": {
+          "last_sync_job_status": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/SyncJobStatus"
@@ -6253,7 +6253,7 @@
             ],
             "description": "Status of the most recent data synchronization job:<br/>\u2022 **completed**: Last sync finished successfully<br/>\u2022 **failed**: Last sync encountered errors<br/>\u2022 **in_progress**: Currently running a sync job<br/>\u2022 **pending**: Sync job is queued and waiting to start"
           },
-          "latest_sync_job_id": {
+          "last_sync_job_id": {
             "anyOf": [
               {
                 "type": "string",
@@ -6266,7 +6266,7 @@
             "title": "Latest Sync Job Id",
             "description": "Unique identifier of the most recent sync job. Use this to track sync progress or retrieve detailed job information."
           },
-          "latest_sync_job_started_at": {
+          "last_sync_job_started_at": {
             "anyOf": [
               {
                 "type": "string",
@@ -6279,7 +6279,7 @@
             "title": "Latest Sync Job Started At",
             "description": "Timestamp when the most recent sync job started (ISO 8601 format)."
           },
-          "latest_sync_job_completed_at": {
+          "last_sync_job_completed_at": {
             "anyOf": [
               {
                 "type": "string",
@@ -6292,7 +6292,7 @@
             "title": "Latest Sync Job Completed At",
             "description": "Timestamp when the most recent sync job completed (ISO 8601 format). Null if the job is still running or failed."
           },
-          "latest_sync_job_error": {
+          "last_sync_job_error": {
             "anyOf": [
               {
                 "type": "string"
@@ -6362,10 +6362,10 @@
             "cron_schedule": "0 */6 * * *",
             "description": "Sync technical documentation and code from our engineering repos",
             "id": "550e8400-e29b-41d4-a716-446655440000",
-            "latest_sync_job_completed_at": "2024-01-15T14:05:22Z",
-            "latest_sync_job_id": "987fcdeb-51a2-43d7-8f3e-1234567890ab",
-            "latest_sync_job_started_at": "2024-01-15T14:00:00Z",
-            "latest_sync_job_status": "completed",
+            "last_sync_job_completed_at": "2024-01-15T14:05:22Z",
+            "last_sync_job_id": "987fcdeb-51a2-43d7-8f3e-1234567890ab",
+            "last_sync_job_started_at": "2024-01-15T14:00:00Z",
+            "last_sync_job_status": "completed",
             "modified_at": "2024-01-15T14:22:15Z",
             "modified_by_email": "engineering@company.com",
             "name": "GitHub - Engineering Documentation",
@@ -6570,7 +6570,7 @@
             ],
             "description": "Current operational status of the source connection:<br/>\u2022 **active**: Connection is healthy and ready for data synchronization<br/>\u2022 **in_progress**: Currently syncing data from the source<br/>\u2022 **failing**: Recent sync attempts have failed and require attention"
           },
-          "latest_sync_job_status": {
+          "last_sync_job_status": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/SyncJobStatus"
@@ -6581,7 +6581,7 @@
             ],
             "description": "Status of the most recent data synchronization job:<br/>\u2022 **completed**: Last sync finished successfully<br/>\u2022 **failed**: Last sync encountered errors<br/>\u2022 **in_progress**: Currently running a sync job<br/>\u2022 **pending**: Sync job is queued and waiting to start"
           },
-          "latest_sync_job_id": {
+          "last_sync_job_id": {
             "anyOf": [
               {
                 "type": "string",
@@ -6594,7 +6594,7 @@
             "title": "Latest Sync Job Id",
             "description": "Unique identifier of the most recent sync job. Use this to track sync progress or retrieve detailed job information."
           },
-          "latest_sync_job_started_at": {
+          "last_sync_job_started_at": {
             "anyOf": [
               {
                 "type": "string",
@@ -6607,7 +6607,7 @@
             "title": "Latest Sync Job Started At",
             "description": "Timestamp when the most recent sync job started (ISO 8601 format)."
           },
-          "latest_sync_job_completed_at": {
+          "last_sync_job_completed_at": {
             "anyOf": [
               {
                 "type": "string",
@@ -6620,7 +6620,7 @@
             "title": "Latest Sync Job Completed At",
             "description": "Timestamp when the most recent sync job completed (ISO 8601 format). Null if the job is still running or failed."
           },
-          "latest_sync_job_error": {
+          "last_sync_job_error": {
             "anyOf": [
               {
                 "type": "string"
@@ -6711,10 +6711,10 @@
             "cron_schedule": "0 */6 * * *",
             "description": "Sync technical documentation and code from our engineering repos",
             "id": "550e8400-e29b-41d4-a716-446655440000",
-            "latest_sync_job_completed_at": "2024-01-15T14:05:22Z",
-            "latest_sync_job_id": "987fcdeb-51a2-43d7-8f3e-1234567890ab",
-            "latest_sync_job_started_at": "2024-01-15T14:00:00Z",
-            "latest_sync_job_status": "completed",
+            "last_sync_job_completed_at": "2024-01-15T14:05:22Z",
+            "last_sync_job_id": "987fcdeb-51a2-43d7-8f3e-1234567890ab",
+            "last_sync_job_started_at": "2024-01-15T14:00:00Z",
+            "last_sync_job_status": "completed",
             "modified_at": "2024-01-15T14:22:15Z",
             "modified_by_email": "engineering@company.com",
             "name": "GitHub - Engineering Documentation",

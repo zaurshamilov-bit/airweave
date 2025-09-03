@@ -535,3 +535,33 @@ class DropboxSource(BaseSource):
                         client, folder_entity.path_lower, folder_breadcrumbs
                     ):
                         yield entity
+
+    async def validate(self) -> bool:
+        """Verify Dropbox OAuth2 token by calling /users/get_current_account (POST, no body)."""
+        try:
+            # Quick sanity check before making the request
+            token = await self.get_access_token()
+            if not token:
+                self.logger.error("Dropbox validation failed: no access token available.")
+                return False
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Uses the same auth/refresh/retry logic as the rest of the connector
+                await self._post_with_auth(
+                    client,
+                    "https://api.dropboxapi.com/2/users/get_current_account",
+                    None,  # no request body for this endpoint
+                )
+            return True
+
+        except httpx.HTTPStatusError as e:
+            self.logger.error(
+                (
+                    f"Dropbox validation failed: HTTP"
+                    f"{e.response.status_code} - {e.response.text[:200]}"
+                )
+            )
+            return False
+        except Exception as e:
+            self.logger.error(f"Unexpected error during Dropbox validation: {e}")
+            return False

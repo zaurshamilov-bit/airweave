@@ -362,3 +362,11 @@ class HubspotSource(BaseSource):
             # Yield ticket entities
             async for ticket_entity in self._generate_ticket_entities(client):
                 yield ticket_entity
+
+    async def validate(self) -> bool:
+        """Verify HubSpot OAuth2 token by pinging a lightweight CRM endpoint."""
+        return await self._validate_oauth2(
+            ping_url="https://api.hubapi.com/crm/v3/objects/contacts?limit=1",
+            headers={"Accept": "application/json"},
+            timeout=10.0,
+        )

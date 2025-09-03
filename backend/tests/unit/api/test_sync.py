@@ -140,9 +140,9 @@ class TestCreateSync:
         mock_source_connection.created_at = datetime.now()
         mock_source_connection.modified_at = datetime.now()
         mock_source_connection.status = SourceConnectionStatus.ACTIVE
-        mock_source_connection.latest_sync_job_status = None
-        mock_source_connection.latest_sync_job_id = None
-        mock_source_connection.latest_sync_job_error = None
+        mock_source_connection.last_sync_job_status = None
+        mock_source_connection.last_sync_job_id = None
+        mock_source_connection.last_sync_job_error = None
         mock_source_connection.cron_schedule = None
         mock_source_connection.auth_fields = None
         mock_source_connection.config_fields = None
@@ -221,9 +221,9 @@ class TestCreateSync:
         mock_source_connection.created_at = datetime.now()
         mock_source_connection.modified_at = datetime.now()
         mock_source_connection.status = SourceConnectionStatus.ACTIVE
-        mock_source_connection.latest_sync_job_status = None
-        mock_source_connection.latest_sync_job_id = None
-        mock_source_connection.latest_sync_job_error = None
+        mock_source_connection.last_sync_job_status = None
+        mock_source_connection.last_sync_job_id = None
+        mock_source_connection.last_sync_job_error = None
         mock_source_connection.cron_schedule = None
         mock_source_connection.auth_fields = None
         mock_source_connection.config_fields = None

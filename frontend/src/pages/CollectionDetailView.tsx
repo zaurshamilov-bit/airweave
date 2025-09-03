@@ -30,13 +30,14 @@ import {
 import SourceConnectionDetailView from "@/components/collection/SourceConnectionDetailView";
 import { emitCollectionEvent, onCollectionEvent, COLLECTION_DELETED, SOURCE_CONNECTION_UPDATED } from "@/lib/events";
 import { QueryToolAndLiveDoc } from '@/components/collection/QueryToolAndLiveDoc';
-import { DialogFlow } from '@/components/shared';
 import { protectedPaths } from "@/constants/paths";
 import { useSyncStateStore } from "@/stores/syncStateStore";
 import { syncStorageService } from "@/services/syncStorageService";
 import { deriveSyncStatus, getSyncStatusColorClass } from "@/utils/syncStatus";
 import { redirectWithError } from "@/lib/error-utils";
 import { ActionCheckResponse } from "@/types";
+import { useSidePanelStore } from "@/lib/stores/sidePanelStore"; // Import the new panel store
+import { toast as sonnerToast } from "sonner"; // Import sonner for the toast notification
 
 interface DeleteCollectionDialogProps {
     open: boolean;
@@ -145,10 +146,10 @@ interface SourceConnection {
     modified_by_email: string;
     auth_fields?: Record<string, any> | string;
     status?: string;
-    latest_sync_job_status?: string;
-    latest_sync_job_id?: string;
-    latest_sync_job_started_at?: string;
-    latest_sync_job_completed_at?: string;
+    last_sync_job_status?: string;
+    last_sync_job_id?: string;
+    last_sync_job_started_at?: string;
+    last_sync_job_completed_at?: string;
     cron_schedule?: string;
 }
 
@@ -160,8 +161,11 @@ const Collections = () => {
     const { resolvedTheme } = useTheme();
     const isDark = resolvedTheme === 'dark';
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
-    const isFromOAuthSuccess = searchParams.get("connected") === "success";
+    const [searchParams, setSearchParams] = useSearchParams(); // Use setSearchParams to clean URL
+    const isFromOAuthSuccess = searchParams.get("status") === "success";
+
+    // Side panel store
+    const { openPanel, closePanel, isOpen: isPanelOpen } = useSidePanelStore();
 
     // Sync state store
     const syncStateStore = useSyncStateStore();
@@ -188,9 +192,6 @@ const Collections = () => {
 
     // Add state for copy animation
     const [isCopied, setIsCopied] = useState(false);
-
-    // Add state for add source dialog
-    const [showAddSourceDialog, setShowAddSourceDialog] = useState(false);
 
     // Add state for refreshing all sources
     const [isRefreshingAll, setIsRefreshingAll] = useState(false);
@@ -265,8 +266,8 @@ const Collections = () => {
                             if (detailResponse.ok) {
                                 const detailedData = await detailResponse.json();
                                 console.log(`📝 Fetched detailed data for ${connection.name}:`, {
-                                    latest_sync_job_status: detailedData.latest_sync_job_status,
-                                    latest_sync_job_id: detailedData.latest_sync_job_id
+                                    last_sync_job_status: detailedData.last_sync_job_status,
+                                    last_sync_job_id: detailedData.last_sync_job_id
                                 });
                                 return detailedData;
                             } else {
@@ -284,18 +285,24 @@ const Collections = () => {
 
                 // Check for active sync jobs and subscribe to them
                 detailedConnections.forEach(connection => {
-                    if ((connection.latest_sync_job_status === 'pending' ||
-                        connection.latest_sync_job_status === 'in_progress') &&
-                        connection.latest_sync_job_id) {
+                    if ((connection.last_sync_job_status === 'pending' ||
+                        connection.last_sync_job_status === 'in_progress') &&
+                        connection.last_sync_job_id) {
                         console.log(`🔄 Found active sync job for ${connection.name}, subscribing...`);
-                        subscribe(connection.latest_sync_job_id, connection.id);
+                        subscribe(connection.last_sync_job_id, connection.id);
                     }
                 });
 
                 // Always select the first connection when loading a new collection
                 if (detailedConnections.length > 0) {
-                    console.log("Auto-selecting first connection:", detailedConnections[0]);
-                    setSelectedConnection(detailedConnections[0]);
+                    // if a source connection was just added, select that one
+                    const newSourceId = searchParams.get("source_connection_id");
+                    const newConnection = newSourceId ? detailedConnections.find(c => c.id === newSourceId) : null;
+                    if (newConnection) {
+                        setSelectedConnection(newConnection);
+                    } else {
+                        setSelectedConnection(detailedConnections[0]);
+                    }
                 } else {
                     // If no connections, ensure selectedConnection is null
                     setSelectedConnection(null);
@@ -345,9 +352,49 @@ const Collections = () => {
         }
     };
 
+    // ** NEW: Handle OAuth callback and toast notification **
+    useEffect(() => {
+        if (isFromOAuthSuccess) {
+            const newSourceId = searchParams.get("source_connection_id");
+            if (newSourceId && sourceConnections.length > 0) {
+                const newConnection = sourceConnections.find(c => c.id === newSourceId);
+                if (newConnection) {
+                    sonnerToast.success(`Source "${newConnection.name}" connected successfully!`);
+
+                    // Clean up URL params
+                    const newSearchParams = new URLSearchParams(searchParams);
+                    newSearchParams.delete("status");
+                    newSearchParams.delete("source_connection_id");
+                    newSearchParams.delete("collection");
+                    setSearchParams(newSearchParams, { replace: true });
+                }
+            }
+        }
+    }, [isFromOAuthSuccess, sourceConnections, searchParams, setSearchParams]);
+
+    // ** NEW: Refresh connections when panel closes, in case a new one was added **
+    useEffect(() => {
+        if (!isPanelOpen) {
+            if (collection?.readable_id) {
+                fetchSourceConnections(collection.readable_id);
+            }
+        }
+    }, [isPanelOpen, collection?.readable_id]);
+
+
     /********************************************
      * UI EVENT HANDLERS
      ********************************************/
+
+    // ** MODIFIED: Trigger the new side panel **
+    const handleAddSource = () => {
+        if (collection) {
+            openPanel('addSource', {
+                collectionId: collection.readable_id,
+                collectionName: collection.name
+            });
+        }
+    };
 
     // Update selected connection
     const handleSelectConnection = async (connection: SourceConnection) => {
@@ -660,7 +707,7 @@ const Collections = () => {
         const statusValue = deriveSyncStatus(
             liveProgress,
             hasActiveSubscription,
-            connection.latest_sync_job_status
+            connection.last_sync_job_status
         );
 
         // Use shared utility to get color class
@@ -825,7 +872,7 @@ const Collections = () => {
                                     <span tabIndex={0}>
                                         <Button
                                             variant="outline"
-                                            onClick={() => setShowAddSourceDialog(true)}
+                                            onClick={handleAddSource}
                                             disabled={!sourceConnectionsAllowed || isCheckingUsage}
                                             className={cn(
                                                 "gap-1 text-xs font-medium h-8 px-3",
@@ -980,7 +1027,7 @@ const Collections = () => {
                                                         isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-200 hover:bg-gray-50",
                                                         (!sourceConnectionsAllowed || isCheckingUsage) && "opacity-50 cursor-not-allowed"
                                                     )}
-                                                    onClick={() => setShowAddSourceDialog(true)}
+                                                    onClick={handleAddSource}
                                                     disabled={!sourceConnectionsAllowed || isCheckingUsage}
                                                 >
                                                     <Plus className="h-4 w-4 mr-2" />
@@ -1060,36 +1107,6 @@ const Collections = () => {
                         confirmText={confirmText}
                         setConfirmText={setConfirmText}
                     />
-
-                    {/* Replace this ConnectFlow with DialogFlow */}
-                    {collection && (
-                        <DialogFlow
-                            isOpen={showAddSourceDialog}
-                            onOpenChange={setShowAddSourceDialog}
-                            mode="add-source"
-                            collectionId={collection.readable_id}
-                            collectionName={collection.name}
-                            dialogId="collection-detail-add-source"
-                            onComplete={async (newSourceConnection?: any) => {
-                                setShowAddSourceDialog(false);
-
-                                // If we have a new source connection with an active sync job, subscribe to it
-                                if (newSourceConnection &&
-                                    (newSourceConnection.latest_sync_job_status === 'pending' ||
-                                        newSourceConnection.latest_sync_job_status === 'in_progress') &&
-                                    newSourceConnection.latest_sync_job_id) {
-                                    console.log(`New source connection created, subscribing to sync job ${newSourceConnection.latest_sync_job_id}`);
-                                    subscribe(newSourceConnection.latest_sync_job_id, newSourceConnection.id);
-                                }
-
-                                // Reload to get the new source connection in the list
-                                await reloadData();
-
-                                // Re-check source connection limits after creating a new one
-                                await checkUsageActions(sourceConnections.length + 1);
-                            }}
-                        />
-                    )}
                 </>
             )}
         </div>

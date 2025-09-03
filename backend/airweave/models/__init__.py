@@ -5,6 +5,7 @@ from .auth_provider import AuthProvider
 from .billing_period import BillingPeriod
 from .collection import Collection
 from .connection import Connection
+from .connection_init_session import ConnectionInitSession
 from .dag import DagEdge, DagNode, SyncDag
 from .destination import Destination
 from .embedding_model import EmbeddingModel
@@ -14,6 +15,7 @@ from .entity_relation import EntityRelation
 from .integration_credential import IntegrationCredential
 from .organization import Organization
 from .organization_billing import OrganizationBilling
+from .redirect_session import RedirectSession
 from .source import Source
 from .source_connection import SourceConnection
 from .sync import Sync
@@ -33,6 +35,7 @@ __all__ = [
     "Collection",
     "Entity",
     "Connection",
+    "ConnectionInitSession",
     "DagNode",
     "DagEdge",
     "Destination",
@@ -42,6 +45,7 @@ __all__ = [
     "IntegrationCredential",
     "Organization",
     "OrganizationBilling",
+    "RedirectSession",
     "Source",
     "SourceConnection",
     "Sync",
