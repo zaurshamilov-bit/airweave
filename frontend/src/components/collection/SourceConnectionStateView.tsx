@@ -391,13 +391,13 @@ const SourceConnectionStateView: React.FC<Props> = ({
       <div className="flex items-center justify-between">
         <div className="flex gap-2 flex-wrap items-center">
           {/* Entities Card */}
-          <div className="h-8 px-3 py-1.5 bg-background border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[90px]">
+          <div className={cn("h-8 px-3 py-1.5 border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[90px]", isDark ? "bg-gray-900" : "bg-white")}>
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">ENTITIES</span>
             <span className="text-xs font-semibold text-foreground">{state?.totalEntities.toLocaleString() || 0}</span>
           </div>
 
           {/* Status Card */}
-          <div className="h-8 px-3 py-1.5 bg-background border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[90px]">
+          <div className={cn("h-8 px-3 py-1.5 border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[90px]", isDark ? "bg-gray-900" : "bg-white")}>
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">STATUS</span>
             <div className="flex items-center gap-1">
               <span className={`inline-flex h-2 w-2 rounded-full ${syncStatus.color}`} />
@@ -406,7 +406,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
           </div>
 
           {/* Schedule Card */}
-          <div className="h-8 px-3 py-1.5 bg-background border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[100px]">
+          <div className={cn("h-8 px-3 py-1.5 border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[100px]", isDark ? "bg-gray-900" : "bg-white")}>
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">SCHEDULE</span>
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3 text-muted-foreground" />
@@ -429,7 +429,9 @@ const SourceConnectionStateView: React.FC<Props> = ({
                     ? isDark
                       ? "bg-blue-900/30 border border-blue-700/50"
                       : "bg-blue-50 border border-blue-200"
-                    : "bg-background border border-border"
+                    : isDark
+                      ? "bg-gray-900 border border-border"
+                      : "bg-white border border-border"
                 )}>
                   <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">LAST SYNC</span>
                   <div className="flex items-center gap-1">
@@ -482,7 +484,9 @@ const SourceConnectionStateView: React.FC<Props> = ({
                           : "bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer"
                       : isRunningSync
                         ? "bg-muted border-border cursor-not-allowed"
-                        : "bg-background border-border hover:bg-muted cursor-pointer"
+                        : isDark
+                          ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
+                          : "bg-white border-border hover:bg-muted cursor-pointer"
                   )}
                   title={isSyncing ? (isCancelling ? "Cancelling sync..." : "Cancel sync") : (isRunningSync ? "Starting sync..." : "Refresh data")}
                 >
@@ -516,7 +520,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
 
           {/* Settings Menu */}
           {sourceConnection && (
-            <div className="h-8 w-8 bg-background border border-border rounded-md shadow-sm flex items-center justify-center">
+            <div className={cn("h-8 w-8 border border-border rounded-md shadow-sm flex items-center justify-center", isDark ? "bg-gray-900" : "bg-white")}>
               <button
                 type="button"
                 onClick={() => {/* Settings menu trigger logic would go here */ }}

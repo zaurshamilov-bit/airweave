@@ -773,8 +773,12 @@ const Collections = () => {
                                 className={cn(
                                     "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
                                     isReloading
-                                        ? "bg-muted border-border cursor-not-allowed"
-                                        : "bg-background border-border hover:bg-muted cursor-pointer"
+                                        ? isDark
+                                            ? "bg-gray-900 border-border cursor-not-allowed"
+                                            : "bg-white border-border cursor-not-allowed"
+                                        : isDark
+                                            ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
+                                            : "bg-white border-border hover:bg-muted cursor-pointer"
                                 )}
                                 title="Reload page"
                             >
@@ -785,17 +789,20 @@ const Collections = () => {
                                 )} />
                             </button>
 
-                            {/* Delete Collection Button - EXACT match to settings menu */}
-                            <div className="h-8 w-8 bg-background border border-border rounded-md shadow-sm flex items-center justify-center">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowDeleteDialog(true)}
-                                    className="h-8 w-8 flex items-center justify-center hover:bg-muted rounded-md transition-all duration-200"
-                                    title="Delete collection"
-                                >
-                                    <Trash className="h-3 w-3 text-muted-foreground" />
-                                </button>
-                            </div>
+                            {/* Delete Collection Button - EXACT match to refresh button styling */}
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteDialog(true)}
+                                className={cn(
+                                    "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
+                                    isDark
+                                        ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
+                                        : "bg-white border-border hover:bg-muted cursor-pointer"
+                                )}
+                                title="Delete collection"
+                            >
+                                <Trash className="h-3 w-3 text-muted-foreground" />
+                            </button>
                         </div>
                     </div>
 
@@ -827,10 +834,12 @@ const Collections = () => {
                                         DESIGN_SYSTEM.radius.button,
                                         DESIGN_SYSTEM.transitions.standard,
                                         selectedConnection?.id === connection.id
-                                            ? "border-2 border-primary"
+                                            ? isDark
+                                                ? "border-2 border-primary bg-gray-900"
+                                                : "border-2 border-primary bg-white"
                                             : isDark
-                                                ? "border border-border bg-muted/50 hover:bg-muted"
-                                                : "border border-border bg-background hover:bg-muted"
+                                                ? "border border-border bg-gray-900 hover:bg-muted"
+                                                : "border border-border bg-white hover:bg-muted"
                                     )}
                                     onClick={() => handleSelectConnection(connection)}
                                 >
@@ -870,19 +879,19 @@ const Collections = () => {
                                                 DESIGN_SYSTEM.transitions.standard,
                                                 "border-2 border-dashed",
                                                 (!sourceConnectionsAllowed || isCheckingUsage)
-                                                    ? "opacity-50 cursor-not-allowed border-border"
+                                                    ? "opacity-50 cursor-not-allowed border-border border"
                                                     : isDark
-                                                        ? "border-border bg-muted/30 hover:bg-muted/70 hover:border-border"
-                                                        : "border-border bg-muted/30 hover:bg-muted/70 hover:border-border"
+                                                        ? "border-blue-500 bg-blue-500/35 hover:bg-blue-500/20 hover:border-blue-400/80 border"
+                                                        : "border-blue-400 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 border"
                                             )}
                                             onClick={(!sourceConnectionsAllowed || isCheckingUsage) ? undefined : () => setShowAddSourceDialog(true)}
                                         >
                                             <Plus className={cn(
                                                 DESIGN_SYSTEM.icons.large,
                                                 (!sourceConnectionsAllowed || isCheckingUsage)
-                                                    ? "text-gray-400"
-                                                    : isDark ? "text-gray-400" : "text-gray-500"
-                                            )} />
+                                                    ? "text-black"
+                                                    : isDark ? "text-white" : "text-black"
+                                            )} strokeWidth={1.5} />
                                             <span className={cn(
                                                 DESIGN_SYSTEM.typography.sizes.header,
                                                 DESIGN_SYSTEM.typography.weights.medium,
@@ -925,7 +934,7 @@ const Collections = () => {
                                                         "mt-2",
                                                         DESIGN_SYSTEM.buttons.heights.secondary,
                                                         DESIGN_SYSTEM.buttons.padding.secondary,
-                                                        isDark ? "border-border hover:bg-muted" : "border-border hover:bg-muted",
+                                                        isDark ? "border-border-border hover:bg-muted" : "border-border hover:bg-muted",
                                                         (!sourceConnectionsAllowed || isCheckingUsage) && "opacity-50 cursor-not-allowed"
                                                     )}
                                                     onClick={() => setShowAddSourceDialog(true)}
