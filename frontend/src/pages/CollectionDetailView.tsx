@@ -691,7 +691,7 @@ const Collections = () => {
                                         key={connection.id}
                                         className={cn(
                                             "w-12 h-12 rounded-md border p-1 flex items-center justify-center overflow-hidden",
-                                            isDark ? "bg-background border-border" : "bg-background border-border"
+                                            isDark ? "bg-gray-900 border-border" : "bg-white border-border"
                                         )}
                                         style={{
                                             marginLeft: index > 0 ? `-${Math.min(index * 8, 24)}px` : "0px",

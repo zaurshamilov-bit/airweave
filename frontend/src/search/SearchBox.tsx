@@ -112,6 +112,15 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [hoveredTooltipContent, setHoveredTooltipContent] = useState<string | null>(null);
 
+    // Code button attention nudge state (Option 1)
+    const [hasCompletedSearch, setHasCompletedSearch] = useState(false);
+    const [isCodeButtonHovered, setIsCodeButtonHovered] = useState(false);
+    const [showCodeHalo, setShowCodeHalo] = useState(false);
+    const [isHaloGrow, setIsHaloGrow] = useState(false);
+    const codeButtonRef = useRef<HTMLButtonElement | null>(null);
+    const codePulseIntervalRef = useRef<number | null>(null);
+    const codePulseHideRef = useRef<number | null>(null);
+
     // Fetch API key on mount
     useEffect(() => {
         const fetchApiKey = async () => {
@@ -157,6 +166,57 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
             document.body.style.overflow = '';
         };
     }, [showCodeBlock]);
+
+    // Manage periodic halo pulses when eligible
+    useEffect(() => {
+        const shouldPulse = hasCompletedSearch && !isCodeButtonHovered && !showCodeBlock;
+
+        const clearTimers = () => {
+            if (codePulseIntervalRef.current !== null) {
+                window.clearInterval(codePulseIntervalRef.current);
+                codePulseIntervalRef.current = null;
+            }
+            if (codePulseHideRef.current !== null) {
+                window.clearTimeout(codePulseHideRef.current);
+                codePulseHideRef.current = null;
+            }
+            setShowCodeHalo(false);
+        };
+
+        if (!shouldPulse) {
+            clearTimers();
+            return () => clearTimers();
+        }
+
+        // Fire a pulse every ~12s, visible for ~3s with eased grow/shrink
+        const triggerPulse = () => {
+            setShowCodeHalo(true);
+            setIsHaloGrow(false);
+            // Double RAF to ensure transition kick-in after mount
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    setIsHaloGrow(true);
+                });
+            });
+            // Start shrink before hide for smoothness
+            codePulseHideRef.current = window.setTimeout(() => {
+                setIsHaloGrow(false);
+                // Give the shrink transition time to finish
+                window.setTimeout(() => setShowCodeHalo(false), 300);
+            }, 3000 - 300);
+        };
+
+        // Start immediately with a slight delay to avoid firing right on completion
+        const startTimeout = window.setTimeout(() => {
+            triggerPulse();
+            codePulseIntervalRef.current = window.setInterval(triggerPulse, 12000);
+        }, 1200);
+
+        return () => {
+            window.clearTimeout(startTimeout);
+            clearTimers();
+        };
+    }, [hasCompletedSearch, isCodeButtonHovered, showCodeBlock]);
 
     const hasQuery = query.trim().length > 0;
 
@@ -351,6 +411,8 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                 resultsCount: latestResults?.length
                             });
                             onSearch(finalResponse, currentResponseType, responseTime);
+                            // Mark that a search has successfully completed (enables code button nudge)
+                            setHasCompletedSearch(true);
                             break;
                         }
                         default:
@@ -483,24 +545,55 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setShowCodeBlock(true);
-                                        }}
-                                        className={cn(
-                                            "absolute top-2 right-2 h-8 w-8 rounded-md border-dashed border shadow-sm flex items-center justify-center transition-all duration-200",
-                                            isDark
-                                                ? "bg-blue-500/35 border-blue-500 hover:bg-blue-500/20 hover:border-blue-400/80"
-                                                : "bg-blue-50 border-blue-400 hover:bg-blue-100 hover:border-blue-400"
-                                        )}
-                                        title="View integration code"
+                                    <div
+                                        ref={codeButtonRef as unknown as React.RefObject<HTMLDivElement>}
+                                        className="absolute top-2 right-2 h-8 w-8 z-20"
+                                        onMouseEnter={() => setIsCodeButtonHovered(true)}
+                                        onMouseLeave={() => setIsCodeButtonHovered(false)}
                                     >
-                                        <CodeXml className={cn(
-                                            DESIGN_SYSTEM.icons.button,
-                                            isDark ? "text-white" : "text-black"
-                                        )} />
-                                    </button>
+                                        {/* Halo nudge (Option 1) */}
+                                        {showCodeHalo && (
+                                            <span
+                                                className={cn(
+                                                    "pointer-events-none absolute inset-0 rounded-md z-10"
+                                                )}
+                                                style={{
+                                                    // Slightly larger, still contained glow
+                                                    boxShadow: isHaloGrow
+                                                        ? (isDark
+                                                            ? "0 0 0 1px rgba(96,165,250,0.30), 0 0 16px 6px rgba(96,165,250,0.22)"
+                                                            : "0 0 0 1px rgba(59,130,246,0.24), 0 0 16px 6px rgba(59,130,246,0.20)")
+                                                        : (isDark
+                                                            ? "0 0 0 0px rgba(96,165,250,0.0), 0 0 0px 0px rgba(96,165,250,0.0)"
+                                                            : "0 0 0 0px rgba(59,130,246,0.0), 0 0 0px 0px rgba(59,130,246,0.0)"),
+                                                    opacity: isHaloGrow ? 1 : 0,
+                                                    transform: isHaloGrow ? 'scale(1.15)' : 'scale(0.99)',
+                                                    transition: 'transform 700ms cubic-bezier(0.22, 1, 0.36, 1), opacity 700ms ease, box-shadow 700ms ease',
+                                                    willChange: 'transform, opacity, box-shadow'
+                                                }}
+                                                aria-hidden
+                                            />
+                                        )}
+                                        {/* Actual button */}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setShowCodeBlock(true);
+                                            }}
+                                            className={cn(
+                                                "relative h-8 w-8 rounded-md border-dashed border shadow-sm flex items-center justify-center transition-all duration-200 z-20",
+                                                isDark
+                                                    ? "bg-blue-500/35 border-blue-500 hover:bg-blue-500/20 hover:border-blue-400/80"
+                                                    : "bg-blue-50 border-blue-400 hover:bg-blue-100 hover:border-blue-400"
+                                            )}
+                                            title="View integration code"
+                                        >
+                                            <CodeXml className={cn(
+                                                DESIGN_SYSTEM.icons.button,
+                                                isDark ? "text-white" : "text-black"
+                                            )} />
+                                        </button>
+                                    </div>
                                 </TooltipTrigger>
                                 <TooltipContent
                                     side="left"
@@ -1083,8 +1176,8 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                                             : "bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer"
                                         : hasQuery
                                             ? isDark
-                                                ? "bg-background border-border hover:bg-muted text-foreground"
-                                                : "bg-background border-border hover:bg-muted text-foreground"
+                                                ? "bg-gray-800 border-border hover:bg-muted text-foreground border-gray-700"
+                                                : "bg-white border-border hover:bg-muted text-foreground"
                                             : isDark
                                                 ? "bg-muted text-muted-foreground cursor-not-allowed"
                                                 : "bg-muted text-muted-foreground cursor-not-allowed"
