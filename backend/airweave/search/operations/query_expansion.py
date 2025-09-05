@@ -184,7 +184,7 @@ class QueryExpansion(SearchOperation):
 
             # Use structured outputs with the parse method
             completion = await self.openai_client.beta.chat.completions.parse(
-                model="gpt-5",
+                model="gpt-5-nano",
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message},
@@ -217,7 +217,7 @@ class QueryExpansion(SearchOperation):
         query = context["query"]
         logger = context["logger"]
 
-        model = "gpt-5"
+        model = "gpt-5-nano"
         emitter = context.get("emit")
         if callable(emitter):
             await emitter(
@@ -334,7 +334,7 @@ class QueryExpansion(SearchOperation):
         try:
             # Use structured outputs with the parse method
             completion = await self.openai_client.beta.chat.completions.parse(
-                model="gpt-5",
+                model="gpt-5-nano",
                 messages=[
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message},

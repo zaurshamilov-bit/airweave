@@ -121,7 +121,7 @@ class SearchResultEvaluator:
 
             # Call the OpenAI API
             response = client.chat.completions.create(
-                model="gpt-5",  # Use an appropriate model
+                model="gpt-5-nano",  # Use an appropriate model
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )

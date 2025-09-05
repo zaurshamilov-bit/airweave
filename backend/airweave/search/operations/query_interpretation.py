@@ -27,7 +27,7 @@ class QueryInterpretation(SearchOperation):
         Refined query: "tickets"
     """
 
-    def __init__(self, model: str = "gpt-5", confidence_threshold: float = 0.7):
+    def __init__(self, model: str = "gpt-5-nano", confidence_threshold: float = 0.7):
         """Initialize query interpretation.
 
         Args:

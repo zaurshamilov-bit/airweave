@@ -231,7 +231,9 @@ class SearchConfigBuilder:
 
         if response_type == ResponseType.COMPLETION:
             ctx.logger.debug("Enabling completion generation")
-            ops["completion"] = CompletionGeneration(default_model="gpt-5", max_results_context=100)
+            ops["completion"] = CompletionGeneration(
+                default_model="gpt-5-nano", max_results_context=100
+            )
         else:
             ops["completion"] = None
 

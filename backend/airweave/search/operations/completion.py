@@ -91,7 +91,10 @@ class CompletionGeneration(SearchOperation):
     """
 
     def __init__(
-        self, default_model: str = "gpt-5", max_results_context: int = 100, max_tokens: int = 10000
+        self,
+        default_model: str = "gpt-5-nano",
+        max_results_context: int = 100,
+        max_tokens: int = 10000,
     ):
         """Initialize completion generation.
 

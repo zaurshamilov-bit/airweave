@@ -17,7 +17,7 @@ class LLMReranking(SearchOperation):
     relevant results appear at the top.
     """
 
-    def __init__(self, model: str = "gpt-5", max_candidates: int = 100):
+    def __init__(self, model: str = "gpt-5-nano", max_candidates: int = 100):
         """Initialize LLM reranking.
 
         Args:
