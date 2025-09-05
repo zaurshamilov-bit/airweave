@@ -37,7 +37,8 @@ class EntityStateUpdate(BaseModel):
     This provides the total count of entities at a point in time during sync.
     """
 
-    type: Literal["entity_state"] = Field(default="entity_state", Literal=True)
+    # Use Literal in the type annotation and a plain default; do not pass invalid kwargs to Field
+    type: Literal["entity_state"] = "entity_state"
     job_id: UUID = Field(..., description="The sync job ID")
     sync_id: UUID = Field(..., description="The sync ID")
     entity_counts: Dict[str, int] = Field(
@@ -58,7 +59,8 @@ class SyncCompleteMessage(BaseModel):
     This is sent at the end of a sync to indicate final state.
     """
 
-    type: Literal["sync_complete"] = Field(default="sync_complete", Literal=True)
+    # Use Literal in the type annotation and a plain default; do not pass invalid kwargs to Field
+    type: Literal["sync_complete"] = "sync_complete"
     job_id: UUID = Field(..., description="The sync job ID")
     sync_id: UUID = Field(..., description="The sync ID")
     is_complete: bool = Field(..., description="Whether sync completed successfully")

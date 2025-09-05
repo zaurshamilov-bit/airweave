@@ -73,8 +73,12 @@ class CorePubSub:
 
         # Build Redis URL with authentication
         if settings.REDIS_PASSWORD:
+            # URL-encode password to handle special characters safely
+            from urllib.parse import quote
+
+            encoded_pwd = quote(settings.REDIS_PASSWORD, safe="")
             redis_url = (
-                f"redis://:{settings.REDIS_PASSWORD}@{settings.REDIS_HOST}:"
+                f"redis://:{encoded_pwd}@{settings.REDIS_HOST}:"
                 f"{settings.REDIS_PORT}/{settings.REDIS_DB}"
             )
         else:

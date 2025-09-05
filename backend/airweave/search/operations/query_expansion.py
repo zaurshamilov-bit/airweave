@@ -189,7 +189,7 @@ class QueryExpansion(SearchOperation):
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message},
                 ],
-                max_tokens=200,
+                max_tokens=2000,
                 response_format=QueryExpansions,
             )
 
@@ -206,7 +206,7 @@ class QueryExpansion(SearchOperation):
             # Log error but don't fail the search
             return [query]
 
-    async def _stream_llm_expand(self, context: Dict[str, Any]) -> None:
+    async def _stream_llm_expand(self, context: Dict[str, Any]) -> None:  # noqa: C901
         """Stream LLM-based expansions and publish deltas.
 
         Emits events:
@@ -307,8 +307,8 @@ class QueryExpansion(SearchOperation):
                             except Exception:
                                 pass
 
-                # Final completion
-                final_alts = snapshot_alts or [query]
+                # Final completion: always include original query first
+                final_alts = ([query] + snapshot_alts) if snapshot_alts else [query]
                 if len(final_alts) > self.max_expansions:
                     final_alts = final_alts[: self.max_expansions]
                 context["expanded_queries"] = final_alts
@@ -339,7 +339,7 @@ class QueryExpansion(SearchOperation):
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": user_message},
                 ],
-                max_tokens=200,
+                max_tokens=2000,
                 response_format=QueryExpansions,  # Use Pydantic model for structured output
             )
 
@@ -356,11 +356,38 @@ class QueryExpansion(SearchOperation):
     def _get_expansion_system_prompt(self) -> str:
         """Get the system prompt for query expansion."""
         return (
-            "You are a search query expansion assistant. Your task is to rewrite search queries "
-            "into semantically similar alternatives that might help find relevant information.\n\n"
+            "You are a search query expansion assistant focused on finding entities. "
+            "Generate up to N alternative queries that improve recall while "
+            "preserving the user's intent.\n\n"
+            "Core behaviors:\n"
+            "- Mix (A) literal/normalized expansions that spell out constraints, and "
+            "(B) semantic paraphrases.\n"
+            "- For FIND/LIST/SHOW queries, include at least one literal, "
+            "constraint-explicit alternative.\n"
+            "- Expand abbreviations and locations: 'eng'→'engineering'/'engineer', "
+            "'SF'→'San Francisco', 'NYC'→'New York City', 'NY'→'New York', "
+            "'LA'→'Los Angeles'.\n"
+            "- Replace vague qualifiers when helpful (e.g., 'good school'→'top universities "
+            "such as Harvard, Yale, Stanford, MIT, Cambridge, Oxford').\n"
+            "- Do not add constraints not implied by the query. Keep alternatives natural "
+            "and non-duplicative.\n\n"
+            "Examples:\n"
+            "Input: eng in sf\n"
+            "Alternatives (max 4):\n"
+            "- people with engineering roles at companies located in San Francisco\n"
+            "- engineers based in San Francisco, California\n"
+            "- software engineers OR engineering managers in San Francisco\n"
+            "- engineering roles in the San Francisco Bay Area\n\n"
+            "Input: designers that went to a good school\n"
+            "Alternatives (max 4):\n"
+            "- people with current or previous role designer who attended top universities "
+            "such as Harvard, Yale, Stanford, MIT, Cambridge, or Oxford\n"
+            "- designers who are alumni of highly ranked universities\n"
+            "- design professionals with degrees from elite universities\n"
+            "- people with role designer and education at top-tier schools\n\n"
             "Streaming requirements:\n"
-            "- Output a 'steps' array of concise reasoning strings FIRST to explain how "
-            "you derive alternatives.\n"
+            "- Output a 'steps' array of concise reasoning strings FIRST to explain how you "
+            "derive alternatives.\n"
             "- Then fill 'alternatives' with diverse phrasings that maintain the original intent.\n"
             "- Keep steps short and incremental so they can be streamed as they are produced."
         )
@@ -368,8 +395,16 @@ class QueryExpansion(SearchOperation):
     def _get_expansion_user_prompt(self, query: str) -> str:
         """Get the user prompt for query expansion."""
         return (
-            f"Generate up to {self.max_expansions} alternative phrasings "
-            f"for this search query:\n\n{query}"
+            f"Original query: {query}\n\n"
+            f"Instructions:\n"
+            f"- Generate up to {self.max_expansions} alternatives.\n"
+            f"- Include at least one literal/normalized alternative that spells out "
+            f"role/company/location/education constraints if present.\n"
+            f"- Expand abbreviations (e.g., 'eng'→'engineering', 'SF'→'San Francisco').\n"
+            f"- When helpful, replace vague qualifiers with concrete categories (e.g., "
+            f"'good school'→'top universities such as Harvard, Yale, Stanford, MIT, "
+            f"Cambridge, Oxford').\n"
+            f"- Avoid duplicates and keep the wording retrieval-friendly."
         )
 
     def _validate_alternatives(self, alternatives: list, original_query: str) -> List[str]:

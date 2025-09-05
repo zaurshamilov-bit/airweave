@@ -17,13 +17,15 @@ class LLMReranking(SearchOperation):
     relevant results appear at the top.
     """
 
-    def __init__(self, model: str = "gpt-5"):
+    def __init__(self, model: str = "gpt-5", max_candidates: int = 100):
         """Initialize LLM reranking.
 
         Args:
             model: OpenAI model to use for reranking
+            max_candidates: Maximum number of top results to consider for LLM reranking
         """
         self.model = model
+        self.max_candidates = max(1, int(max_candidates))
 
     @property
     def name(self) -> str:
@@ -35,7 +37,7 @@ class LLMReranking(SearchOperation):
         """Reranking depends on vector search."""
         return ["vector_search"]
 
-    async def execute(self, context: Dict[str, Any]) -> None:
+    async def execute(self, context: Dict[str, Any]) -> None:  # noqa: C901
         """Execute LLM-based reranking.
 
         Reads from context:
@@ -72,15 +74,16 @@ class LLMReranking(SearchOperation):
 
         try:
             # Prepare results for LLM with indices
+            k = min(len(results), self.max_candidates)
             results_for_llm = []
-            for i, result in enumerate(results[:20]):  # Limit to top 20 for LLM
+            for i, result in enumerate(results[:k]):
                 payload = result.get("payload", {})
                 content = (
                     payload.get("md_content")
                     or payload.get("content")
                     or payload.get("text", "")
                     or payload.get("embeddable_text", "")
-                )[:500]  # Truncate content
+                )
 
                 results_for_llm.append(
                     {

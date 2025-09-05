@@ -33,7 +33,7 @@ class SearchExecutor:
     The executor is stateless and can be reused across requests.
     """
 
-    async def execute(
+    async def execute(  # noqa: C901 - orchestrates full pipeline, acceptable complexity
         self,
         config: SearchConfig,
         db: AsyncSession,
@@ -348,13 +348,14 @@ class SearchExecutor:
         # Extract operations from config fields in logical order
         # The order here represents the typical execution flow
 
-        # 1. Query interpretation (optional)
-        if config.query_interpretation:
-            operations.append(config.query_interpretation)
-
-        # 2. Query expansion (optional)
+        # 1. Query expansion (optional) — run BEFORE interpretation so interpretation
+        #    can leverage all phrasings to derive higher-quality filters
         if config.query_expansion:
             operations.append(config.query_expansion)
+
+        # 2. Query interpretation (optional)
+        if config.query_interpretation:
+            operations.append(config.query_interpretation)
 
         # 3. Qdrant filter (optional)
         if config.qdrant_filter:

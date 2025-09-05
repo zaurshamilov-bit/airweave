@@ -181,7 +181,7 @@ async def search(
         ),
         examples=["raw", "completion"],
     ),
-    limit: int = Query(20, ge=1, le=1000, description="Maximum number of results to return"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of results to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip for pagination"),
     recency_bias: float | None = Query(
         None,
@@ -482,7 +482,7 @@ async def get_filter_schema() -> Dict[str, Any]:
 
 
 @router.post("/{readable_id}/search/stream")
-async def stream_search_collection_advanced(
+async def stream_search_collection_advanced(  # noqa: C901 - streaming orchestration is acceptable
     readable_id: str = Path(
         ..., description="The unique readable identifier of the collection to search"
     ),
@@ -533,7 +533,7 @@ async def stream_search_collection_advanced(
 
     search_task = asyncio.create_task(_run_search())
 
-    async def event_stream():
+    async def event_stream():  # noqa: C901 - streaming loop requires structured branching
         try:
             # Initial connected event with request_id and timestamp
             import datetime as _dt
@@ -587,6 +587,16 @@ async def stream_search_collection_advanced(
 
                 elif message["type"] == "subscribe":
                     ctx.logger.info(f"[SearchStream] Subscribed to channel search:{request_id}")
+                else:
+                    # If no messages of interest, still consider heartbeats
+                    current = asyncio.get_event_loop().time()
+                    if current - last_heartbeat > heartbeat_interval:
+                        heartbeat_event = {
+                            "type": "heartbeat",
+                            "ts": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                        }
+                        yield f"data: {json.dumps(heartbeat_event)}\n\n"
+                        last_heartbeat = current
 
         except asyncio.CancelledError:
             ctx.logger.info(f"[SearchStream] Cancelled stream id={request_id}")

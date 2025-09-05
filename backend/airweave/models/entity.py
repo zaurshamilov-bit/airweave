@@ -48,7 +48,7 @@ class Entity(OrganizationBase):
         lazy="noload",
     )
 
-    entity_definition: Mapped["EntityDefinition"] = relationship(
+    entity_definition: Mapped[Optional["EntityDefinition"]] = relationship(
         "EntityDefinition",
         lazy="noload",
     )

@@ -43,29 +43,13 @@ export const Search = ({ collectionReadableId }: SearchProps) => {
 
     // Handle search results from SearchBox
     const handleSearchResult = useCallback((response: any, responseType: 'raw' | 'completion', responseTimeMs: number) => {
-        console.log('[CollectionNewView] handleSearchResult called:', {
-            response,
-            responseType,
-            responseTimeMs,
-            hasCompletion: !!response?.completion,
-            completionLength: response?.completion?.length,
-            currentStreamingCompletion: streamingCompletion?.length,
-            currentIsSearching: isSearching
-        });
         setSearchResponse(response);
         setSearchResponseType(responseType);
         setResponseTime(responseTimeMs);
 
-        // Log the state after setting
-        console.log('[CollectionNewView] handleSearchResult - state will be:', {
-            searchResponse: response,
-            searchResponseType: responseType,
-            isSearching: isSearching // Note: this might still be true when this is called
-        });
     }, [streamingCompletion, isSearching]);
 
     const handleSearchStart = useCallback((responseType: 'raw' | 'completion') => {
-        console.log('[CollectionNewView] handleSearchStart called with responseType:', responseType);
         // Open panels on first search
         if (!showResponsePanel) setShowResponsePanel(true);
 
@@ -82,7 +66,6 @@ export const Search = ({ collectionReadableId }: SearchProps) => {
     }, [showResponsePanel]);
 
     const handleSearchEnd = useCallback(() => {
-        console.log('[CollectionNewView] handleSearchEnd called');
 
         setIsSearching(false);
         setIsCancelling(false);
@@ -108,16 +91,13 @@ export const Search = ({ collectionReadableId }: SearchProps) => {
                     onSearchStart={handleSearchStart}
                     onSearchEnd={handleSearchEnd}
                     onCancel={() => {
-                        console.log('[CollectionNewView] onCancel received');
                         setIsCancelling(true);
                         // If we don’t yet have a final response, expose a cancelled placeholder
                         setSearchResponse((prev) => {
                             const next = prev || { results: [], completion: null, status: 'cancelled' };
-                            console.log('[CollectionNewView] onCancel -> setting searchResponse', { prev, next });
                             return next;
                         });
                         setSearchResponseType((prev) => {
-                            console.log('[CollectionNewView] onCancel -> responseType remains', prev);
                             return prev;
                         });
                         setIsSearching(false);
@@ -125,14 +105,15 @@ export const Search = ({ collectionReadableId }: SearchProps) => {
                     onStreamEvent={(event: any) => {
                         setEvents(prev => [...prev, event]);
                         if (event?.type === 'cancelled') {
-                            console.log('[CollectionNewView] Stream event: cancelled');
+                            setIsCancelling(true);
+                            setIsSearching(false);
+                            setSearchResponse((prev) => prev || { results: [], completion: null, status: 'cancelled' });
                         }
                         if (event?.type === 'connected' && event.request_id) {
                             setRequestId(event.request_id as string);
                         }
                     }}
                     onStreamUpdate={(partial: any) => {
-                        console.log('[CollectionNewView] onStreamUpdate', partial);
                         if (partial && Object.prototype.hasOwnProperty.call(partial, 'requestId')) {
                             setRequestId(partial.requestId ?? null);
                         }
@@ -154,16 +135,6 @@ export const Search = ({ collectionReadableId }: SearchProps) => {
                             const response = isSearching
                                 ? { status: 'in_progress', completion: streamingCompletion, results: liveResults }
                                 : searchResponse;
-
-                            console.log('[CollectionNewView] Passing to SearchResponseDisplay:', {
-                                isSearching,
-                                responseType: searchResponseType,
-                                whichResponse: isSearching ? 'STREAMING (temporary object)' : 'FINAL (from handleSearchResult)',
-                                streamingCompletion: isSearching ? streamingCompletion?.substring(0, 50) + '...' : 'N/A',
-                                finalResponse: !isSearching ? searchResponse : 'N/A',
-                                responseObject: response
-                            });
-
                             return response;
                         })()}
                         isSearching={isSearching}

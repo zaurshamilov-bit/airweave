@@ -72,6 +72,15 @@ class QueryInterpretation(SearchOperation):
             return
 
         logger.info(f"[{self.name}] Analyzing query for filters: {query[:100]}...")
+        expanded_queries = context.get("expanded_queries")
+        if expanded_queries and isinstance(expanded_queries, list):
+            try:
+                count = len(expanded_queries)
+                logger.info(
+                    f"[{self.name}] Using {count} phrasings for interpretation (orig + expansions)"
+                )
+            except Exception:
+                pass
 
         # Discover available fields from the collection's entities
         available_fields = await self._discover_available_fields(
@@ -89,6 +98,7 @@ class QueryInterpretation(SearchOperation):
                 await self._stream_llm_extraction(
                     openai_api_key,
                     query,
+                    expanded_queries,
                     available_fields,
                     ExtractedFilters,
                     logger,
@@ -98,7 +108,12 @@ class QueryInterpretation(SearchOperation):
                 return
             else:
                 extracted = await self._get_llm_extraction(
-                    openai_api_key, query, available_fields, ExtractedFilters, logger
+                    openai_api_key,
+                    query,
+                    expanded_queries,
+                    available_fields,
+                    ExtractedFilters,
+                    logger,
                 )
 
             if not extracted:
@@ -140,6 +155,7 @@ class QueryInterpretation(SearchOperation):
         self,
         openai_api_key: str,
         query: str,
+        expanded_queries: Any,
         available_fields: Dict,
         ExtractedFilters: Any,
         logger: Any,
@@ -159,7 +175,10 @@ class QueryInterpretation(SearchOperation):
                 model=self.model,
                 messages=[
                     {"role": "system", "content": self._build_system_prompt(available_fields)},
-                    {"role": "user", "content": f"Extract filters from this search query: {query}"},
+                    {
+                        "role": "user",
+                        "content": self._build_user_prompt_for_extraction(query, expanded_queries),
+                    },
                 ],
                 response_format=ExtractedFilters,
             ) as stream:
@@ -355,6 +374,7 @@ class QueryInterpretation(SearchOperation):
         self,
         openai_api_key: str,
         query: str,
+        expanded_queries: Any,
         available_fields: Dict,
         ExtractedFilters: Any,
         logger: Any,
@@ -369,7 +389,7 @@ class QueryInterpretation(SearchOperation):
         system_prompt = self._build_system_prompt(available_fields)
         if logger.isEnabledFor(10):  # DEBUG
             logger.debug(f"[{self.name}] Prepared system prompt (chars={len(system_prompt)})")
-        user_prompt = f"Extract filters from this search query: {query}"
+        user_prompt = self._build_user_prompt_for_extraction(query, expanded_queries)
 
         # Get extraction from LLM
         response = await client.beta.chat.completions.parse(
@@ -1068,6 +1088,32 @@ class QueryInterpretation(SearchOperation):
             except Exception:
                 return key
         return key
+
+    def _build_user_prompt_for_extraction(self, query: str, expanded_queries: Any) -> str:
+        """Build the user prompt that includes original and expansions for filter extraction."""
+        variants: List[str] = []
+        try:
+            if isinstance(expanded_queries, list):
+                variants = [v for v in expanded_queries if isinstance(v, str) and v.strip()]
+        except Exception:
+            variants = []
+        # Ensure original is first and unique
+        all_phrasings: List[str] = []
+        if isinstance(query, str) and query.strip():
+            all_phrasings.append(query.strip())
+        for v in variants:
+            if v not in all_phrasings:
+                all_phrasings.append(v)
+        # Truncate to a reasonable number to keep prompt size manageable
+        MAX_PHRASES = 6
+        if len(all_phrasings) > MAX_PHRASES:
+            all_phrasings = all_phrasings[:MAX_PHRASES]
+        phr_lines = "\n- ".join(all_phrasings)
+        return (
+            "Extract filters from the following search phrasings (use ALL to infer constraints).\n"
+            "Consider role/company/location/education/time/source constraints when explicit.\n"
+            "Phrasings (original first):\n- " + phr_lines
+        )
 
     def _build_qdrant_filter(self, filter_conditions: List[Dict[str, Any]]) -> Optional[Dict]:
         if not filter_conditions:

@@ -174,9 +174,7 @@ ${nodeParams.join(',\n')}
       }
     }
   }
-}
-// Note: Advanced search parameters configured in the UI
-// will be applied via the API when MCP makes requests`;
+}`;
 
 
 
