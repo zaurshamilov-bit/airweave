@@ -3,7 +3,7 @@ Simplified search feature tests for the public API.
 
 Just checks if expected words appear in search results.
 No ordering, no scoring, no creativity - just content checks.
-Reranking and query expansion disabled for speed.
+All search features are enabled to verify end-to-end integration.
 """
 
 import json
@@ -46,65 +46,65 @@ def test_advanced_search_features(api_url: str, headers: dict, collection_id: st
                 return True
         return False
 
-    # TEST 1: Query Expansion Strategies (only test no_expansion for speed)
-    print("\n  📝 Testing Query Expansion (disabled for speed)")
+    # TEST 1: Query Expansion Strategies (AUTO)
+    print("\n  📝 Testing Query Expansion (AUTO)")
     response = requests.post(
         f"{api_url}/collections/{collection_id}/search",
         json={
             "query": "invoice payment",
-            "expansion_strategy": "no_expansion",
+            "expansion_strategy": "auto",
             "limit": 10,
             "response_type": "raw",
-            "enable_reranking": False,
+            "enable_reranking": True,
+            "enable_query_interpretation": True,
+            "recency_bias": 0.3,
         },
         headers=headers,
     )
-    assert response.status_code == 200, f"Failed no_expansion: {response.status_code}"
+    assert response.status_code == 200, f"Failed AUTO expansion: {response.status_code}"
     results = response.json().get("results", [])
     found = check_for_word(results, EXPECTED_WORD)
-    print(f"    no_expansion: {'✓ Found' if found else '⚠️ Not found'} '{EXPECTED_WORD}'")
+    print(f"    AUTO: {'✓ Found' if found else '⚠️ Not found'} '{EXPECTED_WORD}'")
 
-    # TEST 2: Query Interpretation
-    print("\n  🧠 Testing Query Interpretation")
-    for enable in [True, False]:
-        response = requests.post(
-            f"{api_url}/collections/{collection_id}/search",
-            json={
-                "query": "invoices from company",
-                "enable_query_interpretation": enable,
-                "limit": 10,
-                "response_type": "raw",
-                "expansion_strategy": "no_expansion",
-                "enable_reranking": False,
-            },
-            headers=headers,
-        )
-        assert (
-            response.status_code == 200
-        ), f"Failed interpretation {enable}: {response.status_code}"
-        results = response.json().get("results", [])
-        found = check_for_word(results, EXPECTED_WORD)
-        print(
-            f"    Interpretation {enable}: {'✓ Found' if found else '⚠️ Not found'} '{EXPECTED_WORD}'"
-        )
+    # TEST 2: Query Interpretation (enabled)
+    print("\n  🧠 Testing Query Interpretation (enabled)")
+    response = requests.post(
+        f"{api_url}/collections/{collection_id}/search",
+        json={
+            "query": "invoices from company",
+            "enable_query_interpretation": True,
+            "limit": 10,
+            "response_type": "raw",
+            "expansion_strategy": "auto",
+            "enable_reranking": True,
+            "recency_bias": 0.3,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200, f"Failed interpretation True: {response.status_code}"
+    results = response.json().get("results", [])
+    found = check_for_word(results, EXPECTED_WORD)
+    print(f"    Interpretation True: {'✓ Found' if found else '⚠️ Not found'} '{EXPECTED_WORD}'")
 
-    # TEST 3: Reranking (only test disabled for speed)
-    print("\n  🎯 Testing Reranking (disabled for speed)")
+    # TEST 3: Reranking (enabled)
+    print("\n  🎯 Testing Reranking (enabled)")
     response = requests.post(
         f"{api_url}/collections/{collection_id}/search",
         json={
             "query": "urgent payment invoice",
-            "enable_reranking": False,
+            "enable_reranking": True,
             "limit": 10,
             "response_type": "raw",
-            "expansion_strategy": "no_expansion",
+            "expansion_strategy": "auto",
+            "enable_query_interpretation": True,
+            "recency_bias": 0.3,
         },
         headers=headers,
     )
-    assert response.status_code == 200, f"Failed reranking False: {response.status_code}"
+    assert response.status_code == 200, f"Failed reranking True: {response.status_code}"
     results = response.json().get("results", [])
     found = check_for_word(results, EXPECTED_WORD)
-    print(f"    Reranking False: {'✓ Found' if found else '⚠️ Not found'} '{EXPECTED_WORD}'")
+    print(f"    Reranking True: {'✓ Found' if found else '⚠️ Not found'} '{EXPECTED_WORD}'")
 
     # TEST 4: Recency Bias
     print("\n  📅 Testing Recency Bias")
@@ -116,8 +116,9 @@ def test_advanced_search_features(api_url: str, headers: dict, collection_id: st
                 "recency_bias": bias,
                 "limit": 10,
                 "response_type": "raw",
-                "expansion_strategy": "no_expansion",
-                "enable_reranking": False,
+                "expansion_strategy": "auto",
+                "enable_reranking": True,
+                "enable_query_interpretation": True,
             },
             headers=headers,
         )
@@ -136,9 +137,10 @@ def test_advanced_search_features(api_url: str, headers: dict, collection_id: st
                 "search_method": method,
                 "limit": 10,
                 "response_type": "raw",
-                "enable_query_interpretation": False,
-                "expansion_strategy": "no_expansion",
-                "enable_reranking": False,
+                "enable_query_interpretation": True,
+                "expansion_strategy": "auto",
+                "enable_reranking": True,
+                "recency_bias": 0.3,
             },
             headers=headers,
         )
@@ -156,8 +158,10 @@ def test_advanced_search_features(api_url: str, headers: dict, collection_id: st
             "filter": {"must": [{"key": "source_name", "match": {"value": "stripe"}}]},
             "limit": 10,
             "response_type": "raw",
-            "expansion_strategy": "no_expansion",
-            "enable_reranking": False,
+            "expansion_strategy": "auto",
+            "enable_reranking": True,
+            "enable_query_interpretation": True,
+            "recency_bias": 0.3,
         },
         headers=headers,
     )
@@ -179,8 +183,10 @@ def test_advanced_search_features(api_url: str, headers: dict, collection_id: st
                 "score_threshold": threshold,
                 "limit": 10,
                 "response_type": "raw",
-                "expansion_strategy": "no_expansion",
-                "enable_reranking": False,
+                "expansion_strategy": "auto",
+                "enable_reranking": True,
+                "enable_query_interpretation": True,
+                "recency_bias": 0.3,
             },
             headers=headers,
         )
@@ -201,9 +207,10 @@ def test_advanced_search_features(api_url: str, headers: dict, collection_id: st
                 "offset": offset,
                 "limit": 5,
                 "response_type": "raw",
-                "enable_query_interpretation": False,
-                "expansion_strategy": "no_expansion",
-                "enable_reranking": False,
+                "enable_query_interpretation": True,
+                "expansion_strategy": "auto",
+                "enable_reranking": True,
+                "recency_bias": 0.3,
             },
             headers=headers,
         )
@@ -230,5 +237,26 @@ def test_advanced_search_features(api_url: str, headers: dict, collection_id: st
             response.status_code == expected_status
         ), f"{name}: Expected {expected_status}, got {response.status_code}"
         print(f"    {name}: ✓ Got expected error {expected_status}")
+
+    # TEST 10: Full pipeline + Completion (POST)
+    print("\n  🧾 Testing Full Pipeline with Completion (POST)")
+    response = requests.post(
+        f"{api_url}/collections/{collection_id}/search",
+        json={
+            "query": "invoice payment",
+            "response_type": "completion",
+            "limit": 10,
+            "expansion_strategy": "auto",
+            "enable_query_interpretation": True,
+            "enable_reranking": True,
+            "recency_bias": 0.3,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200, f"Failed completion (POST): {response.status_code}"
+    completion_res = response.json()
+    assert completion_res.get("response_type") == "completion", "Completion response_type mismatch"
+    completion_text = completion_res.get("completion", "")
+    assert isinstance(completion_text, str) and len(completion_text) > 0, "Empty completion text"
 
     print("\n✅ Search features test completed")
