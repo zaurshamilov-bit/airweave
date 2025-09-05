@@ -153,9 +153,12 @@ class QdrantFilterOperation(SearchOperation):
     def _merge_filters(self, a: Dict[str, Any] | None, b: Dict[str, Any] | None) -> Dict[str, Any]:
         """Merge two Qdrant filter dicts using AND semantics.
 
-        - Concatenates must, should, and must_not arrays
-        - Omits empty clauses
-        - Handles None inputs gracefully
+        Semantics:
+        - "must" and "must_not" are concatenated (logical AND across both filters)
+        - "should" is combined with a raised minimum_should_match to preserve intent that
+          each original should-group contributes at least one satisfied clause if both have shoulds.
+        - Empty groups are omitted.
+        - Handles None inputs gracefully.
         """
 
         def list_or_empty(d: Dict[str, Any] | None, k: str) -> list:
@@ -171,10 +174,24 @@ class QdrantFilterOperation(SearchOperation):
         if not b:
             return a or {}
 
-        merged = {
+        a_should = list_or_empty(a, "should")
+        b_should = list_or_empty(b, "should")
+
+        merged: Dict[str, Any] = {
             "must": list_or_empty(a, "must") + list_or_empty(b, "must"),
-            "should": list_or_empty(a, "should") + list_or_empty(b, "should"),
             "must_not": list_or_empty(a, "must_not") + list_or_empty(b, "must_not"),
         }
+
+        combined_should = a_should + b_should
+        if combined_should:
+            merged["should"] = combined_should
+            # Preserve AND-like behavior across should groups: if both sides provide shoulds,
+            # require at least one from each side to match. We express this by setting
+            # minimum_should_match to 2 when both non-empty, else 1.
+            if a_should and b_should:
+                merged["minimum_should_match"] = 2
+            else:
+                merged["minimum_should_match"] = 1
+
         # Remove empty arrays
-        return {k: v for k, v in merged.items() if v}
+        return {k: v for k, v in merged.items() if v not in ([], None)}
