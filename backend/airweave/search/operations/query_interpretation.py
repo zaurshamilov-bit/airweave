@@ -410,9 +410,22 @@ class QueryInterpretation(SearchOperation):
                     )
                 except Exception:
                     pass
+            # Log a concise summary without relying on optional fields
+            try:
+                first_step = None
+                if hasattr(extracted, "steps") and extracted.steps:
+                    # Pydantic model with Step objects having 'text'
+                    step_obj = extracted.steps[0]
+                    first_step = getattr(step_obj, "text", None) or str(step_obj)
+                summary_hint = first_step or getattr(extracted, "refined_query", "")
+                if isinstance(summary_hint, str):
+                    summary_hint = summary_hint[:100]
+            except Exception:
+                summary_hint = ""
+
             logger.info(
-                f"[{self.name}] Extracted filters with confidence {extracted.confidence:.2f}: "
-                f"{extracted.reasoning[:100]}..."
+                f"[{self.name}] Extracted filters with confidence "
+                f"{extracted.confidence:.2f}: {summary_hint}"
             )
             return extracted
         return None
