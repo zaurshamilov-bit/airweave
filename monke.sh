@@ -205,6 +205,7 @@ run_tests() {
     local connectors=("$@")
     local max_parallel="${MONKE_MAX_PARALLEL:-5}"
     local env_file="${MONKE_ENV_FILE:-${MONKE_DIR}/.env}"
+    local debug_port="${MONKE_DEBUG_PORT:-}"
 
     if [[ ${#connectors[@]} -eq 0 ]]; then
         log_error "No connectors to test"
@@ -240,11 +241,24 @@ run_tests() {
     cd "$MONKE_DIR"
 
     # Use unified runner for all cases
-    python runner.py \
-        "${connectors[@]}" \
-        --env "$(basename "$env_file")" \
-        --max-concurrency "$max_parallel" \
-        --run-id-prefix "local-"
+    if [[ -n "$debug_port" ]]; then
+        log_step "Debug mode enabled on port $debug_port"
+        if ! python -c "import debugpy" 2>/dev/null; then
+            log_info "Installing debugpy..."
+            pip install --quiet debugpy
+        fi
+        python -Xfrozen_modules=off -m debugpy --listen "$debug_port" --wait-for-client runner.py \
+            "${connectors[@]}" \
+            --env "$(basename "$env_file")" \
+            --max-concurrency "$max_parallel" \
+            --run-id-prefix "local-"
+    else
+        python runner.py \
+            "${connectors[@]}" \
+            --env "$(basename "$env_file")" \
+            --max-concurrency "$max_parallel" \
+            --run-id-prefix "local-"
+    fi
 
     local exit_code=$?
 

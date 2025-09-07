@@ -41,7 +41,9 @@ class LLMClient:
         )
         return getattr(resp, "output_text", "") or ""
 
-    async def generate_structured(self, schema: Type[BaseModel], instruction: str) -> BaseModel:
+    async def generate_structured(
+        self, schema: Type[BaseModel], instruction: str
+    ) -> BaseModel:
         """
         Generate an object that matches the given Pydantic schema using Structured Outputs.
 
@@ -66,7 +68,9 @@ class LLMClient:
             )
         except Exception as e:
             # Common causes: older SDK version, transient parsing issues, or unsupported model.
-            self.logger.exception("Structured parse failed; attempting JSON Schema fallback: %s", e)
+            self.logger.exception(
+                "Structured parse failed; attempting JSON Schema fallback: %s", e
+            )
 
         # --- Defensive fallback: strict JSON Schema response_format ---
         # Convert the Pydantic model to a JSON Schema and enforce strict adherence server-side.
