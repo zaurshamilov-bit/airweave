@@ -190,7 +190,7 @@ async def compute_entity_hash_async(entity: Any) -> str:
             ).hexdigest()
         except Exception:
             # Fall through to generic content hashing below
-            pass
+            logger.exception("🔢 HASH_FILE error; falling back to generic content hashing")
 
     # For regular entities, compute hash from content fields
     def _compute_entity_hash(entity_obj) -> str:
@@ -259,9 +259,9 @@ async def compute_entity_hash_async(entity: Any) -> str:
 
         # Use stable serialization
         stable_data = stable_serialize(content_data)
-        import json
+        import json as _json2
 
-        json_str = json.dumps(stable_data, sort_keys=True, separators=(",", ":"))
+        json_str = _json2.dumps(stable_data, sort_keys=True, separators=(",", ":"))
 
         digest = hashlib.sha256(json_str.encode()).hexdigest()
         try:
