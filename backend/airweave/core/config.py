@@ -235,7 +235,9 @@ class Settings(BaseSettings):
         return v
 
     @field_validator("RESEND_FROM_EMAIL", mode="before")
-    def validate_resend_email_settings(cls, v: Optional[str], info: ValidationInfo) -> Optional[str]:
+    def validate_resend_email_settings(
+        cls, v: Optional[str], info: ValidationInfo
+    ) -> Optional[str]:
         """Validate Resend email settings when RESEND_API_KEY is configured.
 
         Ensures that RESEND_FROM_EMAIL is set when email functionality is enabled,
