@@ -205,6 +205,27 @@ class TestFlow:
                         "account_id": account_id,
                     }
 
+                if not auth_provider_config:
+                    missing = []
+                    if not os.getenv(
+                        f"{src_upper}_AUTH_PROVIDER_AUTH_CONFIG_ID"
+                    ) and not os.getenv("DM_AUTH_PROVIDER_AUTH_CONFIG_ID"):
+                        missing.append(
+                            f"{src_upper}_AUTH_PROVIDER_AUTH_CONFIG_ID or DM_AUTH_PROVIDER_AUTH_CONFIG_ID"
+                        )
+                    if not os.getenv(
+                        f"{src_upper}_AUTH_PROVIDER_ACCOUNT_ID"
+                    ) and not os.getenv("DM_AUTH_PROVIDER_ACCOUNT_ID"):
+                        missing.append(
+                            f"{src_upper}_AUTH_PROVIDER_ACCOUNT_ID or DM_AUTH_PROVIDER_ACCOUNT_ID"
+                        )
+                    msg = (
+                        "Auth provider is configured but required auth_provider_config is missing. "
+                        "Please set: " + ", ".join(missing)
+                    )
+                    self.logger.error(msg)
+                    raise RuntimeError(msg)
+
                 kwargs = dict(
                     name=f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
                     short_name=self.config.connector.type,
@@ -216,7 +237,18 @@ class TestFlow:
                 if auth_provider_config:
                     kwargs["auth_provider_config"] = auth_provider_config
 
-                source_connection = airweave_client.source_connections.create(**kwargs)
+                try:
+                    source_connection = airweave_client.source_connections.create(
+                        **kwargs
+                    )
+                except Exception as create_err:
+                    hint = (
+                        "Failed to create source connection via auth provider. "
+                        "Verify auth_provider is valid and auth_provider_config contains both "
+                        "auth_config_id and account_id."
+                    )
+                    self.logger.error(f"{hint} Raw error: {create_err}")
+                    raise
         else:
             source_connection = airweave_client.source_connections.create(
                 name=f"{self.config.connector.type.title()} Test Connection {int(time.time())}",
