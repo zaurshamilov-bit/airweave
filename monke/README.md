@@ -300,7 +300,7 @@ In both local development and CI/CD, we use Composio to securely manage connecto
 
 #### 1. Create the env file
 ```bash
-touch monke/.env
+cp monke/.env.example monke/.env
 ```
 
 #### 2. Configure authentication
