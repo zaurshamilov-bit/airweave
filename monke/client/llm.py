@@ -37,13 +37,27 @@ class LLMClient:
         base_url = os.getenv("OPENAI_BASE_URL")
         self.client = AsyncOpenAI(base_url=base_url) if base_url else AsyncOpenAI()
 
-        if isinstance(model_override, ModelName):
-            resolved_model = model_override.value
-        else:
-            resolved_model = model_override
-
-        self.model = resolved_model or os.getenv("OPENAI_MODEL", ModelName.GPT_41.value)
+        self.model = self._resolve_model(model_override)
         self.logger = get_logger("llm_client")
+
+    def _resolve_model(self, model_override: Optional[Union["ModelName", str]]) -> str:
+        """Normalize provided model or fall back to environment default (no hard validation)."""
+        override_str = (
+            model_override.value
+            if isinstance(model_override, ModelName)
+            else model_override
+        )
+        candidate = override_str or os.getenv("OPENAI_MODEL") or ModelName.GPT_41.value
+        return candidate
+
+    def _sampling_kwargs(self, temperature: float) -> dict:
+        """Build sampling kwargs, omitting temperature for models that don't accept it."""
+        models_without_temp_prefixes = (ModelName.GPT_5.value,)
+        if any(
+            self.model.startswith(prefix) for prefix in models_without_temp_prefixes
+        ):
+            return {}
+        return {"temperature": temperature}
 
     async def generate_text(self, instruction: str) -> str:
         """Simple text generation using the Responses API."""
@@ -51,7 +65,7 @@ class LLMClient:
             model=self.model,
             instructions="You generate fresh, varied test data.",
             input=instruction,
-            **({} if self.model == "gpt-5" else {"temperature": 0.8}),
+            **self._sampling_kwargs(0.8),
         )
         return getattr(resp, "output_text", "") or ""
 
@@ -72,7 +86,7 @@ class LLMClient:
                 input=instruction,  # you can also pass a list of role/content items if you prefer
                 instructions="Return only a single object that conforms to the provided schema.",
                 text_format=schema,  # <- Pydantic class; SDK converts to JSON Schema and parses output
-                **({} if self.model == "gpt-5" else {"temperature": 0.7}),
+                **self._sampling_kwargs(0.7),
             )
             parsed = getattr(resp, "output_parsed", None)
             if parsed is not None:
@@ -103,7 +117,7 @@ class LLMClient:
             input=instruction,
             instructions="Return ONLY a single JSON object that matches the schema. No prose.",
             response_format=rf,
-            **({} if self.model == "gpt-5" else {"temperature": 0.7}),
+            **self._sampling_kwargs(0.7),
         )
 
         raw = getattr(resp2, "output_text", "") or ""
