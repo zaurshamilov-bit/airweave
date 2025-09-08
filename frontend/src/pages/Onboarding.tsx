@@ -903,23 +903,20 @@ export const Onboarding = () => {
         </div>
 
         {/* Actions */}
-        <div className="mt-12 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+        <div className="mt-12 flex items-center justify-between relative">
+          {/* Back button - only show after first step */}
+          {currentStep > 1 && (
             <button
               onClick={handleBack}
-              disabled={currentStep === 1}
-              className={cn(
-                "flex items-center space-x-2 px-4 py-2 rounded-lg transition-all",
-                currentStep === 1
-                  ? "opacity-0 pointer-events-none"
-                  : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
-              )}
+              className="flex items-center space-x-2 px-4 py-2 rounded-lg transition-all hover:bg-muted/50 text-muted-foreground hover:text-foreground"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Back</span>
             </button>
+          )}
 
-            {/* Logout button - positioned in flex flow to prevent overlap */}
+          {/* Logout button - only show on first step */}
+          {currentStep === 1 && (
             <button
               onClick={handleLogout}
               className="flex items-center space-x-2 px-4 py-2 rounded-lg transition-all bg-blue-500/10 text-muted-foreground hover:bg-blue-500/20"
@@ -928,8 +925,9 @@ export const Onboarding = () => {
               <LogOut className="w-4 h-4" />
               <span>Logout</span>
             </button>
-          </div>
+          )}
 
+          {/* Right side - Continue/Complete button */}
           {currentStep < totalSteps ? (
             <button
               onClick={handleNext}
