@@ -137,7 +137,7 @@ await client.collections.create({
 - **Versioning** for data changes
 - **White-labeling** support for SaaS builders
 
-## 🔧 Technology Stack
+## 🔧 Tech Stack
 
 - **Frontend**: React/TypeScript with ShadCN
 - **Backend**: FastAPI (Python)
@@ -146,10 +146,7 @@ await client.collections.create({
 
 ## 🛣️ Roadmap
 
-- Additional source integrations
-- Redis worker queues for large-scale syncs
-- Webhooks for event-driven syncs
-- Kubernetes support via Helm charts
+- TBD
 
 ## 👥 Contributing
 
