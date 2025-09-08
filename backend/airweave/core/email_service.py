@@ -20,14 +20,43 @@ async def send_welcome_email(to_email: str, user_name: str) -> None:
         resend.Emails.send({
             "from": settings.RESEND_FROM_EMAIL,
             "to": [to_email],
-            "subject": "Welcome to Airweave! 🎉",
+            "subject": "Welcome to Airweave",
             "html": f"""
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h1 style="color: #2563eb;">Welcome to Airweave, {user_name}! 🎉</h1>
-                <p>Thank you for joining Airweave! We're excited to help you make any app searchable for your agent.</p>
-                <p>Ready to get started? <a href="{settings.app_url}/onboarding" style="background: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Get Started</a></p>
-                <p>Best regards,<br>The Airweave Team</p>
-            </div>
+<div style="font-family: Arial, sans-serif; font-size: 10pt;">
+    <p style="margin: 0 0 15px 0;">
+        Hey,
+    </p>
+    
+    <p style="margin: 0 0 15px 0;">
+        Thanks for signing up, this is Lennert (co-founder at Airweave).
+    </p>
+
+    <p style="margin: 0 0 15px 0;">
+        Here's some useful stuff to get you started:
+    </p>
+    
+    <p style="margin: 0 0 8px 0;">
+        • Our docs: <a href="https://docs.airweave.ai/welcome" style="color: #0000EE; text-decoration: underline;">https://docs.airweave.ai/welcome</a>
+    </p>
+    <p style="margin: 0 0 8px 0;">
+        • Our repo: <a href="https://github.com/airweave-ai/airweave" style="color: #0000EE; text-decoration: underline;">https://github.com/airweave-ai/airweave</a>
+    </p>
+    <p style="margin: 0 0 15px 0;">
+        • Our discord: <a href="https://discord.com/invite/6wDWUhhuu2" style="color: #0000EE; text-decoration: underline;">https://discord.com/invite/6wDWUhhuu2</a>
+    </p>
+
+    <p style="margin: 15px 0;">
+        Let me know if you need anything or have any questions.
+    </p>
+    
+    <p style="margin: 15px 0 0 0;">
+        Btw, if you want to see Airweave in action or just chat about what you're building, feel free to book some time with me here: <a href="https://cal.com/lennert-airweave/airweave-demo" style="color: #0000EE; text-decoration: underline;">https://cal.com/lennert-airweave/airweave-demo</a>
+    </p>
+    
+    <p style="margin: 15px 0 0 0;">
+        Lennert<br>
+    </p>
+</div>
             """
         })
         
