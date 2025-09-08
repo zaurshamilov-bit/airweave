@@ -19,7 +19,7 @@ class TestFlow:
         self.step_factory = TestStepFactory()
         self.metrics: Dict[str, Any] = {}
         self.warnings: List[str] = []
-        self.run_id = run_id or f"run-{int(time.time()*1000)}"
+        self.run_id = run_id or f"run-{int(time.time() * 1000)}"
         self._step_idx = 0  # ensure unique metric keys
 
     @classmethod
@@ -57,7 +57,9 @@ class TestFlow:
                 await self.cleanup()
                 pass
             except Exception as cleanup_error:
-                self.logger.error(f"❌ Cleanup failed after test failure: {cleanup_error}")
+                self.logger.error(
+                    f"❌ Cleanup failed after test failure: {cleanup_error}"
+                )
             raise
 
     async def _execute_step(self, step_name: str):
@@ -77,7 +79,8 @@ class TestFlow:
             self.metrics[f"{idx:02d}_{step_name}_duration"] = duration
             self.logger.info(f"✅ Step {step_name} completed in {duration:.2f}s")
             await self._emit_event(
-                "step_completed", extra={"step": step_name, "index": idx, "duration": duration}
+                "step_completed",
+                extra={"step": step_name, "index": idx, "duration": duration},
             )
 
         except Exception as e:
@@ -86,7 +89,12 @@ class TestFlow:
             self.metrics[f"{idx:02d}_{step_name}_failed"] = True
             await self._emit_event(
                 "step_failed",
-                extra={"step": step_name, "index": idx, "duration": duration, "error": str(e)},
+                extra={
+                    "step": step_name,
+                    "index": idx,
+                    "duration": duration,
+                    "error": str(e),
+                },
             )
             raise
 
@@ -147,7 +155,9 @@ class TestFlow:
         import os
 
         has_explicit_auth = bool(self.config.connector.auth_fields)
-        use_provider = os.getenv("DM_AUTH_PROVIDER") is not None and not has_explicit_auth
+        use_provider = (
+            os.getenv("DM_AUTH_PROVIDER") is not None and not has_explicit_auth
+        )
 
         if has_explicit_auth:
             self.logger.info(
@@ -156,7 +166,9 @@ class TestFlow:
         elif use_provider:
             self.logger.info(f"🔐 Using auth provider: {os.getenv('DM_AUTH_PROVIDER')}")
         else:
-            self.logger.info("⚠️  No auth configured - will attempt with empty auth_fields")
+            self.logger.info(
+                "⚠️  No auth configured - will attempt with empty auth_fields"
+            )
 
         if use_provider:
             auth_provider_id = os.getenv("DM_AUTH_PROVIDER_ID")
@@ -179,6 +191,13 @@ class TestFlow:
                 src_upper = self.config.connector.type.upper()
                 auth_config_id = os.getenv(f"{src_upper}_AUTH_PROVIDER_AUTH_CONFIG_ID")
                 account_id = os.getenv(f"{src_upper}_AUTH_PROVIDER_ACCOUNT_ID")
+
+                # Fallback to global identifiers if source-specific ones are not provided
+                if not auth_config_id:
+                    auth_config_id = os.getenv("DM_AUTH_PROVIDER_AUTH_CONFIG_ID")
+                if not account_id:
+                    account_id = os.getenv("DM_AUTH_PROVIDER_ACCOUNT_ID")
+
                 auth_provider_config = None
                 if auth_config_id and account_id:
                     auth_provider_config = {
@@ -191,6 +210,8 @@ class TestFlow:
                     short_name=self.config.connector.type,
                     collection=self.config._collection_readable_id,
                     auth_provider=auth_provider_id,
+                    # Always pass through any connector config fields
+                    config_fields=self.config.connector.config_fields,
                 )
                 if auth_provider_config:
                     kwargs["auth_provider_config"] = auth_provider_config
@@ -255,7 +276,9 @@ class TestFlow:
             await self._emit_event("cleanup_failed", extra={"error": str(e)})
             return False
 
-    async def _emit_event(self, event_type: str, extra: Optional[Dict[str, Any]] = None) -> None:
+    async def _emit_event(
+        self, event_type: str, extra: Optional[Dict[str, Any]] = None
+    ) -> None:
         payload: Dict[str, Any] = {
             "type": event_type,
             "run_id": self.run_id,
