@@ -918,6 +918,18 @@ export const Onboarding = () => {
             <span>Back</span>
           </button>
 
+          {/* Logout button - positioned in bottom left, aligned with Continue button */}
+          <div className="absolute left-4">
+            <button
+              onClick={handleLogout}
+              className="flex items-center space-x-2 px-4 py-2 rounded-lg transition-all bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 dark:text-blue-400"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Logout</span>
+            </button>
+          </div>
+
           {currentStep < totalSteps ? (
             <button
               onClick={handleNext}
@@ -958,17 +970,6 @@ export const Onboarding = () => {
           )}
         </div>
 
-        {/* Logout button - positioned in bottom left, aligned with Continue button */}
-        <div className="absolute bottom-4 left-4">
-          <button
-            onClick={handleLogout}
-            className="flex items-center space-x-2 px-4 py-2 rounded-lg transition-all text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            title="Logout"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Logout</span>
-          </button>
-        </div>
       </div>
     </div>
   );
