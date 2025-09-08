@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Optional, Type
+from typing import Optional, Type, Union
+from enum import Enum
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 
 from monke.utils.logging import get_logger
+
+
+class ModelName(str, Enum):
+    GPT_41 = "gpt-4.1"
+    GPT_4O = "gpt-4o"
+    GPT_5 = "gpt-5"
+    O3_MINI = "o3-mini"
+    O1 = "o1"
 
 
 class LLMClient:
@@ -21,14 +30,19 @@ class LLMClient:
     - Falls back to JSON Schema response_format (strict) if `parse()` isn't available
     """
 
-    def __init__(self, model_override: Optional[str] = None):
+    def __init__(self, model_override: Optional[Union["ModelName", str]] = None):
         if not os.getenv("OPENAI_API_KEY"):
             raise RuntimeError("OPENAI_API_KEY is required in environment")
 
         base_url = os.getenv("OPENAI_BASE_URL")
         self.client = AsyncOpenAI(base_url=base_url) if base_url else AsyncOpenAI()
-        # Default to gpt-4.1 unless overridden via arg or env
-        self.model = model_override or os.getenv("OPENAI_MODEL", "gpt-4.1")
+
+        if isinstance(model_override, ModelName):
+            resolved_model = model_override.value
+        else:
+            resolved_model = model_override
+
+        self.model = resolved_model or os.getenv("OPENAI_MODEL", ModelName.GPT_41.value)
         self.logger = get_logger("llm_client")
 
     async def generate_text(self, instruction: str) -> str:
