@@ -75,7 +75,7 @@ const SemanticMcp = () => {
     // Track if we've already processed OAuth results to prevent double alerts
     const hasProcessedOAuthRef = useRef(false);
 
-    const logoSrc = resolvedTheme === "dark" ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg";
+    const logoSrc = resolvedTheme === "dark" ? "/logo-airweave-darkbg.svg" : "/logo-airweave-lightbg.svg";
 
     // Create or get API key from session
     const ensureApiKey = async () => {

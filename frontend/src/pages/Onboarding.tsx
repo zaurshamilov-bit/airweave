@@ -846,13 +846,13 @@ export const Onboarding = () => {
         {/* Header with logo branding */}
         <div className="mb-12 text-center">
           <img
-            src={isDark ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg"}
+            src={isDark ? "/logo-airweave-darkbg.svg" : "logo-airweave-lightbg.svg"}
             alt="Airweave"
             className="h-8 w-auto mx-auto mb-2"
             style={{ maxWidth: '180px' }}
           />
           <p className="text-xs text-muted-foreground">
-            Let agents search any app
+            Build smarter agents
           </p>
         </div>
 
