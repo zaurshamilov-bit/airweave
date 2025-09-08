@@ -1,6 +1,7 @@
 """Test flow execution engine with structured events (unique per-step metrics)."""
 
 import time
+import os
 from typing import Any, Dict, List, Optional
 
 from monke.core.config import TestConfig
@@ -49,8 +50,6 @@ class TestFlow:
             self.metrics["total_duration_wall_clock"] = time.time() - flow_start
             await self._emit_event("flow_completed")
         except Exception as e:
-            # print(e)
-            # raise e
             self.logger.error(f"❌ Test flow execution failed: {e}")
             self.metrics["total_duration_wall_clock"] = time.time() - flow_start
             try:
@@ -127,11 +126,10 @@ class TestFlow:
             self.config._bongo = bongo
 
             from airweave import AirweaveSDK
-            import os as _os
 
             airweave_client = AirweaveSDK(
-                base_url=_os.getenv("AIRWEAVE_API_URL", "http://localhost:8001"),
-                api_key=_os.getenv("AIRWEAVE_API_KEY"),
+                base_url=os.getenv("AIRWEAVE_API_URL", "http://localhost:8001"),
+                api_key=os.getenv("AIRWEAVE_API_KEY"),
             )
             self.config._airweave_client = airweave_client
 
@@ -151,8 +149,6 @@ class TestFlow:
         collection = airweave_client.collections.create(name=collection_name)
         self.config._collection_id = collection.id
         self.config._collection_readable_id = collection.readable_id
-
-        import os
 
         has_explicit_auth = bool(self.config.connector.auth_fields)
         use_provider = (
