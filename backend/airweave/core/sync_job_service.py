@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from uuid import UUID
 
 from airweave import crud, schemas
+from airweave.analytics.service import analytics
 from airweave.api.context import ApiContext
 from airweave.core.datetime_utils import utc_now_naive
 from airweave.core.logging import logger
@@ -144,8 +145,62 @@ class SyncJobService:
                     f"Successfully updated sync job {sync_job_id} status to {db_status_value}"
                 )
 
+                # Track analytics for sync completion
+                if status == SyncJobStatus.COMPLETED and stats:
+                    await self._track_sync_completion(sync_job_id, db_sync_job.sync_id, stats, ctx)
+
         except Exception as e:
             logger.error(f"Failed to update sync job status: {e}")
+
+    async def _track_sync_completion(
+        self, sync_job_id: UUID, sync_id: UUID, stats: SyncProgressUpdate, ctx: ApiContext
+    ) -> None:
+        """Track analytics for sync completion with entity counts per sync and entity type."""
+        try:
+            # Calculate total entities synced
+            total_entities = (
+                stats.inserted + stats.updated + stats.deleted + stats.kept + stats.skipped
+            )
+
+            # Track sync completion event with sync_id
+            analytics.track_event(
+                event_name="sync_completed",
+                distinct_id=str(ctx.user.id) if ctx.user else f"api_key_{ctx.organization.id}",
+                properties={
+                    "sync_job_id": str(sync_job_id),
+                    "sync_id": str(sync_id),
+                    "total_entities": total_entities,
+                    "entities_inserted": stats.inserted,
+                    "entities_updated": stats.updated,
+                    "entities_deleted": stats.deleted,
+                    "entities_kept": stats.kept,
+                    "entities_skipped": stats.skipped,
+                    "organization_name": getattr(ctx.organization, "name", "unknown"),
+                },
+                groups={"organization": str(ctx.organization.id)},
+            )
+
+            # Track individual entity type counts for detailed analysis
+            if hasattr(stats, "entities_encountered") and stats.entities_encountered:
+                for entity_type, entity_count in stats.entities_encountered.items():
+                    user_id = str(ctx.user.id) if ctx.user else f"api_key_{ctx.organization.id}"
+                    analytics.track_event(
+                        event_name="entities_synced_by_type",
+                        distinct_id=user_id,
+                        properties={
+                            "sync_job_id": str(sync_job_id),
+                            "sync_id": str(sync_id),
+                            "entity_type": entity_type,
+                            "entity_count": entity_count,
+                            "organization_name": getattr(ctx.organization, "name", "unknown"),
+                        },
+                        groups={"organization": str(ctx.organization.id)},
+                    )
+
+            logger.info(f"Tracked sync completion analytics for job {sync_job_id} (sync {sync_id})")
+
+        except Exception as e:
+            logger.error(f"Failed to track sync completion analytics: {e}")
 
 
 # Singleton instance
