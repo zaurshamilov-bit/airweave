@@ -16,9 +16,9 @@ from airweave.api import deps
 from airweave.api.auth import auth0
 from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
+from airweave.core.email_service import send_welcome_email
 from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import logger
-from airweave.core.email_service import send_welcome_email
 from airweave.db.unit_of_work import UnitOfWork
 from airweave.schemas import OrganizationWithRole, User
 
@@ -166,10 +166,10 @@ async def create_or_update_user(
         user = await organization_service.handle_new_user_signup(db, user_dict, create_org=False)
 
         logger.info(f"Created new user {user.email}.")
-        
+
         # Send welcome email (only works in production with RESEND_API_KEY)
         await send_welcome_email(user.email, user.full_name or user.email)
-        
+
         return schemas.User.model_validate(user)
 
     except Exception as e:
@@ -191,8 +191,8 @@ async def create_or_update_user(
                 uow=uow,
             )
         logger.info(f"Created user {user.email} with fallback method")
-        
+
         # Send welcome email (only works in production with RESEND_API_KEY)
         await send_welcome_email(user.email, user.full_name or user.email)
-        
+
         return user

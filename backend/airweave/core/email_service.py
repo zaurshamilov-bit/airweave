@@ -1,27 +1,29 @@
 """Simple email service for sending welcome emails via Resend."""
 
 import resend
+
 from airweave.core.config import settings
 from airweave.core.logging import logger
 
 
 async def send_welcome_email(to_email: str, user_name: str) -> None:
     """Send a welcome email to a new user.
-    
+
     Only works when RESEND_API_KEY is configured (production only).
     """
     if not settings.RESEND_API_KEY:
         logger.debug("RESEND_API_KEY not configured - skipping welcome email")
         return
-    
+
     try:
         resend.api_key = settings.RESEND_API_KEY
-        
-        resend.Emails.send({
-            "from": settings.RESEND_FROM_EMAIL,
-            "to": [to_email],
-            "subject": "Welcome to Airweave",
-            "html": f"""
+
+        resend.Emails.send(
+            {
+                "from": settings.RESEND_FROM_EMAIL,
+                "to": [to_email],
+                "subject": "Welcome to Airweave",
+                "html": """
 <div style="font-family: Arial, sans-serif; font-size: 10pt;">
     <p style="margin: 0 0 15px 0;">
         Hey,
@@ -57,9 +59,10 @@ async def send_welcome_email(to_email: str, user_name: str) -> None:
         Lennert<br>
     </p>
 </div>
-            """
-        })
-        
+            """,
+            }
+        )
+
         logger.info(f"Welcome email sent to {to_email}")
     except Exception as e:
         logger.warning(f"Failed to send welcome email to {to_email}: {e}")
