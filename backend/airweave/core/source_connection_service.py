@@ -454,10 +454,11 @@ class SourceConnectionService:
             if sync_job is not None:
                 sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
                 source_connection.status = SourceConnectionStatus.IN_PROGRESS
-                source_connection.last_sync_job_status = sync_job.status
-                source_connection.last_sync_job_id = sync_job.id
-                source_connection.last_sync_job_started_at = sync_job.started_at
-                source_connection.last_sync_job_completed_at = sync_job.completed_at
+                source_connection.latest_sync_job_status = sync_job.status
+                source_connection.latest_sync_job_id = sync_job.id
+                source_connection.latest_sync_job_started_at = sync_job.started_at
+                source_connection.latest_sync_job_completed_at = sync_job.completed_at
+                source_connection.latest_sync_job_error = sync_job.error if sync_job.error else None
             else:
                 source_connection.status = SourceConnectionStatus.ACTIVE
                 source_connection.last_sync_job_status = None

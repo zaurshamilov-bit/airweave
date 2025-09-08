@@ -74,7 +74,7 @@ If necessary (like editing ), refer [sync-architecture.mdc](mdc:.cursor/rules/sy
 - Background processing with Redis workers (upcoming)
 
 ### API Convention
-- RESTful endpoints in `api/v1/endpoints/` -> the version is NOT part of the endpoint. It's just host.com/{endpoint}!
+- RESTful endpoints in `endpoints/` -> the version is not part of the endpoint. It's just host.com/{endpoint}!
 - Consistent response structures
 - One router per resource type
 - Logger injected via `ctx` dependency for contextual logging

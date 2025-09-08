@@ -1,8 +1,12 @@
 """API endpoints for collections."""
 
-from typing import List
+import asyncio
+import json
+from typing import Any, Dict, List
 
 from fastapi import BackgroundTasks, Depends, HTTPException, Path, Query
+from fastapi.responses import StreamingResponse
+from qdrant_client.http.models import Filter as QdrantFilter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
@@ -17,10 +21,12 @@ from airweave.api.router import TrailingSlashRouter
 from airweave.core.collection_service import collection_service
 from airweave.core.guard_rail_service import GuardRailService
 from airweave.core.logging import ContextualLogger
+from airweave.core.pubsub import core_pubsub
 from airweave.core.shared_models import ActionType
 from airweave.core.source_connection_service import source_connection_service
 from airweave.core.sync_service import sync_service
 from airweave.core.temporal_service import temporal_service
+from airweave.db.session import AsyncSessionLocal
 from airweave.schemas.search import ResponseType, SearchRequest
 from airweave.search.search_service_v2 import search_service_v2 as search_service
 
@@ -175,7 +181,7 @@ async def search(
         ),
         examples=["raw", "completion"],
     ),
-    limit: int = Query(20, ge=1, le=1000, description="Maximum number of results to return"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of results to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip for pagination"),
     recency_bias: float | None = Query(
         None,
@@ -451,3 +457,184 @@ async def refresh_all_source_connections(
             await guard_rail.increment(ActionType.SYNCS)
 
     return sync_jobs
+
+
+@router.get("/internal/filter-schema")
+async def get_filter_schema() -> Dict[str, Any]:
+    """Get the JSON schema for Qdrant filter validation.
+
+    This endpoint returns the JSON schema that can be used to validate
+    filter objects in the frontend.
+    """
+    # Get the Pydantic model's JSON schema
+    schema = QdrantFilter.model_json_schema()
+
+    # Simplify the schema to make it more frontend-friendly
+    # Remove some internal fields that might confuse the validator
+    if "$defs" in schema:
+        # Keep definitions but clean them up
+        for _def_name, def_schema in schema.get("$defs", {}).items():
+            # Remove discriminator fields that might cause issues
+            if "discriminator" in def_schema:
+                del def_schema["discriminator"]
+
+    return schema
+
+
+@router.post("/{readable_id}/search/stream")
+async def stream_search_collection_advanced(  # noqa: C901 - streaming orchestration is acceptable
+    readable_id: str = Path(
+        ..., description="The unique readable identifier of the collection to search"
+    ),
+    search_request: SearchRequest = ...,
+    db: AsyncSession = Depends(deps.get_db),
+    ctx: ApiContext = Depends(deps.get_context),
+    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
+) -> StreamingResponse:
+    """Server-Sent Events (SSE) streaming endpoint for advanced search.
+
+    This endpoint initializes a streaming session for a search request,
+    subscribes to a Redis Pub/Sub channel scoped by a generated request ID,
+    and relays events to the client. It concurrently runs the real search
+    pipeline, which will publish lifecycle and data events to the same channel.
+    """
+    # Use the request ID from ApiContext for end-to-end tracing
+    request_id = ctx.request_id
+    ctx.logger.info(
+        f"[SearchStream] Starting stream for collection '{readable_id}' id={request_id}"
+    )
+
+    # Ensure the organization is allowed to perform queries
+    await guard_rail.is_allowed(ActionType.QUERIES)
+
+    # Subscribe to the search:<request_id> channel
+    pubsub = await core_pubsub.subscribe("search", request_id)
+
+    # Start real search in the background; it will publish to Redis
+    async def _run_search() -> None:
+        try:
+            # Use a dedicated DB session for the background task to avoid
+            # sharing the request-scoped session across tasks
+            async with AsyncSessionLocal() as search_db:
+                await search_service.search_with_request(
+                    search_db,
+                    readable_id=readable_id,
+                    search_request=search_request,
+                    ctx=ctx,
+                    request_id=request_id,
+                )
+        except Exception as e:
+            # Emit error to stream so clients get notified
+            await core_pubsub.publish(
+                "search",
+                request_id,
+                {"type": "error", "message": str(e)},
+            )
+
+    search_task = asyncio.create_task(_run_search())
+
+    async def event_stream():  # noqa: C901 - streaming loop requires structured branching
+        try:
+            # Initial connected event with request_id and timestamp
+            import datetime as _dt
+
+            connected_event = {
+                "type": "connected",
+                "request_id": request_id,
+                "ts": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+            }
+            yield f"data: {json.dumps(connected_event)}\n\n"
+
+            # Heartbeat every 30 seconds to keep the connection alive
+            last_heartbeat = asyncio.get_event_loop().time()
+            heartbeat_interval = 30
+
+            async for message in pubsub.listen():
+                # Heartbeat
+                now = asyncio.get_event_loop().time()
+                if now - last_heartbeat > heartbeat_interval:
+                    import datetime as _dt
+
+                    heartbeat_event = {
+                        "type": "heartbeat",
+                        "ts": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                    }
+                    yield f"data: {json.dumps(heartbeat_event)}\n\n"
+                    last_heartbeat = now
+
+                if message["type"] == "message":
+                    data = message["data"]
+                    # Relay the raw pubsub payload
+                    yield f"data: {data}\n\n"
+
+                    # If a done event arrives, stop streaming
+                    try:
+                        parsed = json.loads(data)
+                        if isinstance(parsed, dict) and parsed.get("type") == "done":
+                            ctx.logger.info(
+                                f"[SearchStream] Done event received for search:{request_id}. "
+                                "Closing stream"
+                            )
+                            # Increment usage upon completion
+                            try:
+                                await guard_rail.increment(ActionType.QUERIES)
+                            except Exception:
+                                pass
+                            break
+                    except Exception:
+                        # Non-JSON payloads are ignored for termination logic
+                        pass
+
+                elif message["type"] == "subscribe":
+                    ctx.logger.info(f"[SearchStream] Subscribed to channel search:{request_id}")
+                else:
+                    # If no messages of interest, still consider heartbeats
+                    current = asyncio.get_event_loop().time()
+                    if current - last_heartbeat > heartbeat_interval:
+                        heartbeat_event = {
+                            "type": "heartbeat",
+                            "ts": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                        }
+                        yield f"data: {json.dumps(heartbeat_event)}\n\n"
+                        last_heartbeat = current
+
+        except asyncio.CancelledError:
+            ctx.logger.info(f"[SearchStream] Cancelled stream id={request_id}")
+        except Exception as e:
+            ctx.logger.error(f"[SearchStream] Error id={request_id}: {str(e)}")
+            import datetime as _dt
+
+            error_event = {
+                "type": "error",
+                "message": str(e),
+                "ts": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+            }
+            yield f"data: {json.dumps(error_event)}\n\n"
+        finally:
+            # Ensure background task is cancelled if still running
+            if not search_task.done():
+                search_task.cancel()
+                try:
+                    await search_task
+                except Exception:
+                    pass
+            # Clean up pubsub connection
+            try:
+                await pubsub.close()
+                ctx.logger.info(
+                    f"[SearchStream] Closed pubsub subscription for search:{request_id}"
+                )
+            except Exception:
+                pass
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "Content-Type": "text/event-stream",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )

@@ -63,15 +63,9 @@ const CollectionsSection = memo(() => {
   // Refetch collections when organization changes (for auto-switching)
   useEffect(() => {
     if (currentOrganization) {
-      console.log(`🔄 [CollectionsSection] Organization changed to ${currentOrganization.name}, refetching collections`);
       fetchCollections(true); // Force refresh
     }
   }, [currentOrganization?.id, fetchCollections]);
-
-  // Log the actual collections count for debugging
-  useEffect(() => {
-    console.log(`🔍 [CollectionsSection] Total collections: ${collections.length}`);
-  }, [collections]);
 
   // Active status for nav items
   const isActive = useCallback((path: string) => {

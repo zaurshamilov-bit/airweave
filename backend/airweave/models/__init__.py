@@ -10,6 +10,7 @@ from .dag import DagEdge, DagNode, SyncDag
 from .destination import Destination
 from .embedding_model import EmbeddingModel
 from .entity import Entity
+from .entity_count import EntityCount
 from .entity_definition import EntityDefinition
 from .entity_relation import EntityRelation
 from .integration_credential import IntegrationCredential
@@ -34,6 +35,7 @@ __all__ = [
     "BillingPeriod",
     "Collection",
     "Entity",
+    "EntityCount",
     "Connection",
     "ConnectionInitSession",
     "DagNode",
