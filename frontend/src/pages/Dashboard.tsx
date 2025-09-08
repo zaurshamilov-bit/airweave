@@ -11,7 +11,6 @@ import {
   ExampleProjectCard,
 } from "@/components/dashboard";
 import { clearStoredErrorDetails, getStoredErrorDetails } from "@/lib/error-utils";
-import { CollectionCreationModal } from "@/components/CollectionCreationModal";
 import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 import { apiClient } from "@/lib/api";
@@ -187,18 +186,15 @@ const Dashboard = () => {
 
   const handleSourceClick = (source: Source) => {
     const store = useCollectionCreationStore.getState();
-    // Reset the store first to clear any previous state
-    store.reset();
-    // Pre-select the source
-    store.selectSource(source.short_name, source.name);
     // Determine auth mode based on source
+    let authMode: 'oauth2' | 'direct_auth' | undefined;
     if (source.auth_type?.startsWith('oauth2')) {
-      store.setAuthMode('oauth2');
+      authMode = 'oauth2';
     } else if (source.auth_type === 'api_key' || source.auth_type === 'basic') {
-      store.setAuthMode('direct_auth');
+      authMode = 'direct_auth';
     }
-    // Open modal directly at collection form since source is pre-selected
-    store.openModal('collection-form');
+    // Use the new flow-specific method
+    store.openForCreateWithSource(source.short_name, source.name, authMode);
   };
 
 
@@ -208,8 +204,6 @@ const Dashboard = () => {
 
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
-      {/* Collection Creation Modal */}
-      <CollectionCreationModal />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Main content (left column) */}

@@ -1,31 +1,27 @@
 import React, { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
 import { useCollectionCreationStore } from '@/stores/collectionCreationStore';
 import { CheckCircle, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import confetti from 'canvas-confetti';
+import { cn } from '@/lib/utils';
+import { useTheme } from '@/lib/theme-provider';
 
 interface SuccessViewProps {
   onComplete: () => void;
+  isAddingToExisting?: boolean;
 }
 
-export const SuccessView: React.FC<SuccessViewProps> = ({ onComplete }) => {
+export const SuccessView: React.FC<SuccessViewProps> = ({ onComplete, isAddingToExisting = false }) => {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
   const navigate = useNavigate();
+
   const {
     collectionId,
     collectionName,
-    sourceName,
-    reset
+    sourceName
   } = useCollectionCreationStore();
 
   useEffect(() => {
-    // Trigger confetti animation
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 }
-    });
-
     // Emit event for collection created
     window.dispatchEvent(new CustomEvent('collection-created'));
   }, []);
@@ -34,59 +30,94 @@ export const SuccessView: React.FC<SuccessViewProps> = ({ onComplete }) => {
     if (collectionId) {
       navigate(`/collections/${collectionId}`);
     }
-    reset();
     onComplete();
   };
 
-  const handleClose = () => {
-    reset();
+  const handleDone = () => {
     onComplete();
   };
 
   return (
-    <div className="p-8">
-      <div className="text-center space-y-6">
-        <div className="w-20 h-20 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto">
-          <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
-        </div>
-
-        <div>
-          <h2 className="text-3xl font-bold mb-2">All Set! 🎉</h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            Your collection is ready and syncing
-          </p>
-        </div>
-
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 text-left space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Collection:</span>
-            <span className="font-medium">{collectionName}</span>
+    <div className="h-full flex flex-col">
+      <div className="flex-1 flex items-center justify-center px-6 py-12">
+        <div className="text-center space-y-6 max-w-sm">
+          {/* Success icon */}
+          <div className={cn(
+            "w-20 h-20 rounded-full mx-auto flex items-center justify-center",
+            "bg-green-100 dark:bg-green-900/30"
+          )}>
+            <CheckCircle className="w-10 h-10 text-green-600 dark:text-green-400" />
           </div>
-          {sourceName && (
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Source:</span>
-              <span className="font-medium">{sourceName}</span>
+
+          {/* Success message */}
+          <div>
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              {isAddingToExisting ? 'Source added' : 'Collection created'}
+            </h2>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">
+              Your data is now syncing
+            </p>
+          </div>
+
+          {/* Collection info */}
+          <div className={cn(
+            "p-4 rounded-lg border",
+            isDark
+              ? "bg-gray-800/50 border-gray-700"
+              : "bg-gray-50 border-gray-200"
+          )}>
+            <div className="space-y-2 text-left">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Collection</span>
+                <span className="font-medium">{collectionName}</span>
+              </div>
+              {sourceName && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Source</span>
+                  <span className="font-medium">{sourceName}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Status</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span className="font-medium text-green-600 dark:text-green-400">
+                    Syncing
+                  </span>
+                </span>
+              </div>
             </div>
-          )}
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Status:</span>
-            <span className="text-green-600 dark:text-green-400 font-medium">Active</span>
           </div>
-        </div>
 
-        <div className="space-y-3">
-          <Button onClick={handleGoToCollection} className="w-full">
-            Go to Collection
-            <ArrowRight className="w-4 h-4 ml-2" />
-          </Button>
+          {/* Actions */}
+          <div className="space-y-3">
+            <button
+              onClick={handleGoToCollection}
+              className={cn(
+                "w-full py-2.5 px-4 rounded-lg font-medium",
+                "flex items-center justify-center gap-2",
+                "transition-all duration-200",
+                "bg-blue-600 hover:bg-blue-700 text-white"
+              )}
+            >
+              <span>View Collection</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
 
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            className="w-full"
-          >
-            Close
-          </Button>
+            <button
+              onClick={handleDone}
+              className={cn(
+                "w-full py-2.5 px-4 rounded-lg font-medium",
+                "transition-colors",
+                "border",
+                isDark
+                  ? "border-gray-700 hover:bg-gray-800 text-gray-300"
+                  : "border-gray-200 hover:bg-gray-50 text-gray-700"
+              )}
+            >
+              Done
+            </button>
+          </div>
         </div>
       </div>
     </div>

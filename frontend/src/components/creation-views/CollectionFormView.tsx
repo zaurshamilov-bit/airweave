@@ -1,13 +1,19 @@
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import React, { useState, useEffect } from 'react';
 import { useCollectionCreationStore } from '@/stores/collectionCreationStore';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
-import { Loader2, Database, ArrowRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useTheme } from '@/lib/theme-provider';
+import { HelpCircle } from 'lucide-react';
 
-export const CollectionFormView: React.FC = () => {
+interface CollectionFormViewProps {
+  humanReadableId: string;
+}
+
+export const CollectionFormView: React.FC<CollectionFormViewProps> = ({ humanReadableId }) => {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
   const {
     collectionName,
     selectedSource,
@@ -19,6 +25,11 @@ export const CollectionFormView: React.FC = () => {
 
   const [name, setName] = useState(collectionName);
   const [isCreating, setIsCreating] = useState(false);
+
+  // Update store when name changes
+  useEffect(() => {
+    setCollectionData(name);
+  }, [name, setCollectionData]);
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -59,58 +70,102 @@ export const CollectionFormView: React.FC = () => {
   };
 
   return (
-    <div className="p-8">
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-semibold mb-2">Create Collection</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            A collection groups your data sources together for unified search
-          </p>
-        </div>
-
-        <div className="space-y-4">
+    <div className="h-full flex flex-col">
+      <div className="px-8 py-10 flex-1">
+        <div className="space-y-8">
+          {/* Header */}
           <div>
-            <Label htmlFor="collection-name">Name</Label>
-            <Input
-              id="collection-name"
-              placeholder="e.g., Engineering Documentation"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              autoFocus
-              className="mt-1"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Choose a descriptive name for your collection
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Create Collection
+            </h2>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Collections group your data sources for unified search
             </p>
+          </div>
+
+          {/* Form */}
+          <div className="space-y-6">
+            <div>
+              <label
+                htmlFor="collection-name"
+                className={cn(
+                  "block text-sm font-medium mb-2",
+                  isDark ? "text-gray-200" : "text-gray-700"
+                )}
+              >
+                Name
+              </label>
+              <input
+                id="collection-name"
+                type="text"
+                placeholder="My Asana Collection"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !isCreating && handleCreate()}
+                autoFocus
+                className={cn(
+                  "w-full px-4 py-2.5 rounded-lg text-sm",
+                  "border transition-colors",
+                  "focus:outline-none focus:ring-2 focus:ring-blue-500",
+                  isDark
+                    ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                    : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                )}
+              />
+            </div>
+
+            {/* Help text */}
+            <div className="flex items-start gap-2">
+              <HelpCircle className={cn(
+                "h-4 w-4 mt-0.5 flex-shrink-0",
+                isDark ? "text-blue-400" : "text-blue-600"
+              )} />
+              <div className="text-sm">
+                <button
+                  type="button"
+                  className={cn(
+                    "font-medium hover:underline",
+                    isDark ? "text-blue-400" : "text-blue-600"
+                  )}
+                  onClick={() => {
+                    // Could open a tooltip or modal explaining collections
+                  }}
+                >
+                  What is a collection?
+                </button>
+                <p className={cn(
+                  "mt-1",
+                  isDark ? "text-gray-400" : "text-gray-500"
+                )}>
+                  A collection is a searchable group of connected data sources.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
+      </div>
 
-        {selectedSource && (
-          <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
-            <p className="text-sm text-blue-600 dark:text-blue-400">
-              Pre-selected source: <strong>{sourceName}</strong>
-            </p>
-          </div>
-        )}
-
-        <Button
+      {/* Bottom action */}
+      <div className={cn(
+        "px-8 py-6 border-t",
+        isDark ? "border-gray-800" : "border-gray-200"
+      )}>
+        <button
           onClick={handleCreate}
           disabled={!name.trim() || isCreating}
-          className="w-full"
-        >
-          {isCreating ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            <>
-              Next
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </>
+          className={cn(
+            "w-full py-3 px-4 rounded-lg font-medium",
+            "transition-all duration-200",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+            name.trim() && !isCreating
+              ? "bg-blue-600 hover:bg-blue-700 text-white"
+              : isDark
+                ? "bg-gray-800 text-gray-500"
+                : "bg-gray-100 text-gray-400"
           )}
-        </Button>
+        >
+          {isCreating ? 'Creating...' : 'Next'}
+        </button>
       </div>
     </div>
   );

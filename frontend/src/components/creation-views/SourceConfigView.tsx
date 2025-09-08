@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { useCollectionCreationStore } from '@/stores/collectionCreationStore';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2, Key, Cloud, Link } from 'lucide-react';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { ArrowLeft, Copy, ExternalLink, Check, User, Users, Mail, Link2, ChevronRight, Send } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useTheme } from '@/lib/theme-provider';
 
-export const SourceConfigView: React.FC = () => {
+interface SourceConfigViewProps {
+  humanReadableId: string;
+  isAddingToExisting?: boolean;
+}
+
+export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadableId, isAddingToExisting = false }) => {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
   const {
     collectionId,
     collectionName,
@@ -17,8 +22,6 @@ export const SourceConfigView: React.FC = () => {
     sourceName,
     authMode,
     setAuthMode,
-    setAuthConfig,
-    setConfigFields,
     setOAuthData,
     setConnectionId,
     setStep,
@@ -30,19 +33,45 @@ export const SourceConfigView: React.FC = () => {
   const [useOwnCredentials, setUseOwnCredentials] = useState(false);
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+  const [connectionUrl, setConnectionUrl] = useState('');
+  const [connectionMethod, setConnectionMethod] = useState<'self' | 'share'>('share'); // Default to share
+  const [copied, setCopied] = useState(false);
+
+  // Fetch source details to understand config requirements
+  useEffect(() => {
+    const fetchSourceDetails = async () => {
+      if (!selectedSource) return;
+
+      try {
+        const response = await apiClient.get(`/sources/detail/${selectedSource}`);
+        if (response.ok) {
+          const source = await response.json();
+          // Set auth mode based on source auth type
+          if (source.auth_type?.startsWith('oauth2')) {
+            setAuthMode('oauth2');
+          } else if (source.auth_type === 'api_key' || source.auth_type === 'basic') {
+            setAuthMode('direct_auth');
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching source details:', error);
+      }
+    };
+
+    fetchSourceDetails();
+  }, [selectedSource, setAuthMode]);
 
   const handleCreate = async () => {
     setIsCreating(true);
 
     try {
-      // Build the request payload based on auth mode
       const payload: any = {
         name: `${sourceName} - ${collectionName}`,
         description: `${sourceName} connection for ${collectionName}`,
         short_name: selectedSource,
         collection: collectionId,
-        auth_mode: authMode,
-        sync_immediately: true,
+        auth_mode: authMode || 'oauth2',
+        sync_immediately: false,
       };
 
       // Add config fields if any
@@ -58,7 +87,7 @@ export const SourceConfigView: React.FC = () => {
           return;
         }
         payload.auth_fields = authFields;
-      } else if (authMode === 'oauth2') {
+      } else if (authMode === 'oauth2' || !authMode) {
         if (useOwnCredentials) {
           if (!clientId || !clientSecret) {
             toast.error('Please provide OAuth client credentials');
@@ -68,11 +97,9 @@ export const SourceConfigView: React.FC = () => {
           payload.client_id = clientId;
           payload.client_secret = clientSecret;
         }
-        // Set redirect URL for OAuth
         payload.redirect_url = `${window.location.origin}?oauth_return=true`;
       }
 
-      // Create the source connection
       const response = await apiClient.post('/source-connections', payload);
 
       if (!response.ok) {
@@ -84,15 +111,14 @@ export const SourceConfigView: React.FC = () => {
 
       // Check if OAuth flow is needed
       if (result.authentication_url) {
-        // Store OAuth state and authentication URL
         setOAuthData(
-          result.id, // Using connection ID as state
+          result.id,
           payload.redirect_url || `${window.location.origin}?oauth_return=true`,
           result.authentication_url
         );
 
-        // Move to OAuth redirect view where user can copy URL or connect directly
-        setStep('oauth-redirect');
+        setConnectionUrl(result.authentication_url);
+        toast.success('Connection ready');
       } else {
         // Direct auth successful
         setConnectionId(result.id);
@@ -107,187 +133,346 @@ export const SourceConfigView: React.FC = () => {
     }
   };
 
-  const renderAuthFields = () => {
-    if (authMode === 'direct_auth') {
-      // For now, show generic API key field
-      // In production, this would be dynamic based on source requirements
-      return (
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="api-key">API Key / Access Token</Label>
-            <Textarea
-              id="api-key"
-              placeholder="Enter your API key, access token, or credentials"
-              value={authFields.api_key || authFields.access_token || authFields.personal_access_token || ''}
-              onChange={(e) => {
-                // Try to detect the type of credential
-                const value = e.target.value;
-                let fieldName = 'api_key';
-
-                // Common patterns for different auth field names
-                if (selectedSource === 'github') {
-                  fieldName = 'personal_access_token';
-                } else if (value.startsWith('Bearer ') || value.includes('ya29.')) {
-                  fieldName = 'access_token';
-                }
-
-                setAuthFields({ [fieldName]: value });
-              }}
-              className="mt-1 font-mono text-sm"
-              rows={3}
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Paste your authentication credentials here
-            </p>
-          </div>
-        </div>
-      );
+  const copyToClipboard = () => {
+    if (connectionUrl) {
+      navigator.clipboard.writeText(connectionUrl);
+      setCopied(true);
+      toast.success('Copied');
+      setTimeout(() => setCopied(false), 2000);
     }
+  };
 
-    if (authMode === 'oauth2') {
-      return (
-        <div className="space-y-4">
-          <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
-            <p className="text-sm">
-              You'll be redirected to {sourceName} to authorize access.
-            </p>
-            <p className="text-xs mt-2 text-blue-700 dark:text-blue-300">
-              After clicking Connect, you'll see the authentication URL that you can either:
-              • Use yourself to connect directly
-              • Copy and share with someone who needs to authorize
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={useOwnCredentials}
-                onChange={(e) => setUseOwnCredentials(e.target.checked)}
-                className="rounded"
-              />
-              <span className="text-sm">Use my own OAuth credentials</span>
-            </label>
-
-            {useOwnCredentials && (
-              <div className="space-y-3 pl-6">
-                <div>
-                  <Label htmlFor="client-id">Client ID</Label>
-                  <Input
-                    id="client-id"
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                    className="mt-1 font-mono text-sm"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="client-secret">Client Secret</Label>
-                  <Input
-                    id="client-secret"
-                    type="password"
-                    value={clientSecret}
-                    onChange={(e) => setClientSecret(e.target.value)}
-                    className="mt-1 font-mono text-sm"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      );
+  const handleConnect = () => {
+    if (connectionUrl) {
+      window.location.href = connectionUrl;
     }
+  };
 
-    return null;
+  const handleSendEmail = () => {
+    if (connectionUrl) {
+      const subject = encodeURIComponent(`Connect your ${sourceName} to ${collectionName}`);
+      const body = encodeURIComponent(
+        `Hi there,\n\nPlease click the link below to connect your ${sourceName} account:\n\n${connectionUrl}\n\nThis will allow us to sync your data securely.\n\nThanks!`
+      );
+      window.open(`mailto:?subject=${subject}&body=${body}`);
+    }
   };
 
   return (
-    <div className="p-8">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setStep('source-select')}
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div className="flex-1">
-            <h2 className="text-2xl font-semibold">Connect {sourceName}</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Configure authentication for your source
+    <div className="h-full flex flex-col">
+      <div className="px-8 py-10 flex-1 overflow-auto">
+        <div className="space-y-8">
+          {/* Header */}
+          <div>
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Create Source Connection
+            </h2>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              {sourceName} Connection
             </p>
           </div>
-        </div>
 
-        {/* Auth Mode Selection (if applicable) */}
-        {!authMode && (
-          <div className="space-y-3">
-            <Label>Authentication Method</Label>
-            <RadioGroup value={authMode} onValueChange={(v: any) => setAuthMode(v)}>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="oauth2" id="oauth2" />
-                <Label htmlFor="oauth2" className="flex items-center gap-2 cursor-pointer">
-                  <Link className="w-4 h-4" />
-                  OAuth2 (Browser)
-                </Label>
+          {/* Connection created state - Ultra sleek design */}
+          {connectionUrl ? (
+            <div className="space-y-6">
+              {/* Sleek tab toggle */}
+              <div className="flex gap-6 border-b border-gray-200 dark:border-gray-800">
+                <button
+                  onClick={() => setConnectionMethod('share')}
+                  className={cn(
+                    "pb-3 text-sm font-medium transition-all relative",
+                    connectionMethod === 'share'
+                      ? "text-gray-900 dark:text-white"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                  )}
+                >
+                  Share with user
+                  {connectionMethod === 'share' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                  )}
+                </button>
+                <button
+                  onClick={() => setConnectionMethod('self')}
+                  className={cn(
+                    "pb-3 text-sm font-medium transition-all relative",
+                    connectionMethod === 'self'
+                      ? "text-gray-900 dark:text-white"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                  )}
+                >
+                  Connect yourself
+                </button>
               </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="direct_auth" id="direct_auth" />
-                <Label htmlFor="direct_auth" className="flex items-center gap-2 cursor-pointer">
-                  <Key className="w-4 h-4" />
-                  API Key / Credentials
-                </Label>
-              </div>
-            </RadioGroup>
-          </div>
-        )}
 
-        {/* Auth Configuration */}
-        {authMode && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              {authMode === 'oauth2' ? (
-                <>
-                  <Link className="w-4 h-4" />
-                  <span>OAuth2 Authentication</span>
-                </>
-              ) : (
-                <>
-                  <Key className="w-4 h-4" />
-                  <span>API Credentials</span>
-                </>
-              )}
+              {/* Dynamic content based on selection */}
+              <div className="space-y-4">
+                {connectionMethod === 'share' ? (
+                  <>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Share this secure link
+                    </p>
+
+                    {/* Clean URL display with integrated copy button */}
+                    <div className={cn(
+                      "relative flex items-center gap-3 px-4 py-3 pr-12 rounded-lg",
+                      "border transition-all",
+                      "font-mono text-xs",
+                      isDark
+                        ? "bg-gray-900/50 border-gray-800"
+                        : "bg-gray-50 border-gray-200"
+                    )}>
+                      <Link2 className="h-3.5 w-3.5 flex-shrink-0 opacity-50" />
+                      <span className={cn(
+                        "flex-1 truncate",
+                        isDark ? "text-gray-400" : "text-gray-600"
+                      )}>
+                        {connectionUrl}
+                      </span>
+                      <button
+                        onClick={copyToClipboard}
+                        className={cn(
+                          "absolute right-2 p-2 rounded transition-all",
+                          copied
+                            ? "bg-green-600/10 text-green-500"
+                            : isDark
+                              ? "hover:bg-gray-800 text-gray-500 hover:text-gray-300"
+                              : "hover:bg-gray-200 text-gray-400 hover:text-gray-600"
+                        )}
+                        title="Copy link"
+                      >
+                        {copied ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Quick actions */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          window.open(`https://slack.com/share?url=${encodeURIComponent(connectionUrl)}`, '_blank');
+                        }}
+                        className={cn(
+                          "flex-1 px-4 py-2.5 text-sm rounded-lg",
+                          "border transition-all duration-200",
+                          "hover:scale-[1.02]",
+                          isDark
+                            ? "border-gray-800 hover:bg-gray-800 text-gray-400 hover:text-gray-200"
+                            : "border-gray-200 hover:bg-gray-50 text-gray-600 hover:text-gray-900"
+                        )}
+                      >
+                        Share on Slack
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.open(`https://teams.microsoft.com/share?url=${encodeURIComponent(connectionUrl)}`, '_blank');
+                        }}
+                        className={cn(
+                          "flex-1 px-4 py-2.5 text-sm rounded-lg",
+                          "border transition-all duration-200",
+                          "hover:scale-[1.02]",
+                          isDark
+                            ? "border-gray-800 hover:bg-gray-800 text-gray-400 hover:text-gray-200"
+                            : "border-gray-200 hover:bg-gray-50 text-gray-600 hover:text-gray-900"
+                        )}
+                      >
+                        Share on Teams
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Authenticate with your {sourceName} account
+                    </p>
+                    <button
+                      onClick={handleConnect}
+                      className={cn(
+                        "w-full py-4 px-6 rounded-xl",
+                        "bg-gradient-to-r from-blue-600 to-blue-500",
+                        "hover:from-blue-700 hover:to-blue-600",
+                        "text-white font-medium",
+                        "transition-all duration-300 transform hover:scale-[1.02]",
+                        "shadow-lg hover:shadow-xl",
+                        "flex items-center justify-center gap-3",
+                        "relative overflow-hidden group"
+                      )}
+                    >
+                      <span className="relative z-10">Connect Now</span>
+                      <ChevronRight className="h-4 w-4 relative z-10 transition-transform group-hover:translate-x-1" />
+                      <div className="absolute inset-0 bg-gradient-to-r from-blue-700 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
+          ) : (
+            <>
+              {/* Form fields - Clean minimal design */}
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    value={`${sourceName} Connection`}
+                    disabled
+                    className={cn(
+                      "w-full px-4 py-2.5 rounded-lg text-sm",
+                      "border bg-transparent",
+                      isDark
+                        ? "border-gray-800 text-gray-400"
+                        : "border-gray-200 text-gray-500"
+                    )}
+                  />
+                </div>
 
-            {renderAuthFields()}
-          </div>
-        )}
+                {/* Auth config fields */}
+                {authMode === 'direct_auth' && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                      Authentication
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="API Key or Access Token"
+                      value={authFields.api_key || ''}
+                      onChange={(e) => setAuthFields({ api_key: e.target.value })}
+                      className={cn(
+                        "w-full px-4 py-2.5 rounded-lg text-sm",
+                        "border bg-transparent",
+                        "focus:outline-none focus:ring-1 focus:ring-blue-500",
+                        isDark
+                          ? "border-gray-800 text-white placeholder:text-gray-600"
+                          : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                      )}
+                    />
+                  </div>
+                )}
 
-        {/* Actions */}
+                {/* Config fields */}
+                {selectedSource && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                      Configuration (optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Additional settings"
+                      className={cn(
+                        "w-full px-4 py-2.5 rounded-lg text-sm",
+                        "border bg-transparent",
+                        "focus:outline-none focus:ring-1 focus:ring-blue-500",
+                        isDark
+                          ? "border-gray-800 text-white placeholder:text-gray-600"
+                          : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                      )}
+                    />
+                  </div>
+                )}
+
+                {/* OAuth option - Sleek toggle */}
+                {authMode === 'oauth2' && (
+                  <div>
+                    <label className="flex items-center gap-3 cursor-pointer group">
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          checked={useOwnCredentials}
+                          onChange={(e) => setUseOwnCredentials(e.target.checked)}
+                          className="sr-only"
+                        />
+                        <div className={cn(
+                          "w-10 h-6 rounded-full transition-colors",
+                          useOwnCredentials
+                            ? "bg-blue-600"
+                            : isDark ? "bg-gray-800" : "bg-gray-200"
+                        )}>
+                          <div className={cn(
+                            "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform",
+                            useOwnCredentials && "translate-x-4"
+                          )} />
+                        </div>
+                      </div>
+                      <span className="text-sm text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200">
+                        Use custom OAuth credentials
+                      </span>
+                    </label>
+
+                    {useOwnCredentials && (
+                      <div className="mt-4 space-y-3 pl-13">
+                        <input
+                          type="text"
+                          placeholder="Client ID"
+                          value={clientId}
+                          onChange={(e) => setClientId(e.target.value)}
+                          className={cn(
+                            "w-full px-3 py-2 rounded-lg text-sm",
+                            "border bg-transparent",
+                            "focus:outline-none focus:ring-1 focus:ring-blue-500",
+                            isDark
+                              ? "border-gray-800 text-white placeholder:text-gray-600"
+                              : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                          )}
+                        />
+                        <input
+                          type="password"
+                          placeholder="Client Secret"
+                          value={clientSecret}
+                          onChange={(e) => setClientSecret(e.target.value)}
+                          className={cn(
+                            "w-full px-3 py-2 rounded-lg text-sm",
+                            "border bg-transparent",
+                            "focus:outline-none focus:ring-1 focus:ring-blue-500",
+                            isDark
+                              ? "border-gray-800 text-white placeholder:text-gray-600"
+                              : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                          )}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom actions - Clean minimal */}
+      <div className={cn(
+        "px-8 py-6 border-t",
+        isDark ? "border-gray-800" : "border-gray-200"
+      )}>
         <div className="flex gap-3">
-          <Button
-            variant="outline"
+          <button
             onClick={() => setStep('source-select')}
-            disabled={isCreating}
-            className="flex-1"
+            className={cn(
+              "px-6 py-2.5 rounded-lg text-sm font-medium transition-colors",
+              isDark
+                ? "text-gray-400 hover:text-gray-200"
+                : "text-gray-600 hover:text-gray-900"
+            )}
           >
             Back
-          </Button>
-          <Button
-            onClick={handleCreate}
-            disabled={!authMode || isCreating}
-            className="flex-1"
-          >
-            {isCreating ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              'Connect'
-            )}
-          </Button>
+          </button>
+
+          {!connectionUrl && (
+            <button
+              onClick={handleCreate}
+              disabled={isCreating}
+              className={cn(
+                "flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all",
+                "disabled:opacity-50 disabled:cursor-not-allowed",
+                "bg-blue-600 hover:bg-blue-700 text-white"
+              )}
+            >
+              {isCreating ? 'Creating...' : 'Create'}
+            </button>
+          )}
         </div>
       </div>
     </div>

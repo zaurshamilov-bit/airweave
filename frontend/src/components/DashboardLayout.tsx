@@ -45,6 +45,8 @@ import {
 import { ActionCheckResponse } from "@/types";
 import { SidePanelFlow } from "@/components/shared/SidePanelFlow"; // Import the new SidePanel
 import { useSidePanelStore } from "@/lib/stores/sidePanelStore"; // Import the new store
+import { useCollectionCreationStore } from "@/stores/collectionCreationStore"; // Import collection creation store
+import { CollectionCreationModal } from "@/components/CollectionCreationModal"; // Import the modal
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
@@ -270,8 +272,10 @@ const DashboardLayout = () => {
   }, []);
 
   const handleCreateCollection = useCallback(() => {
-    openPanel('createCollection');
-  }, [openPanel]);
+    // Use the modal instead of side panel for collection creation
+    const store = useCollectionCreationStore.getState();
+    store.openForCreateCollection();
+  }, []);
 
   // Check usage limits on mount
   useEffect(() => {
@@ -456,7 +460,8 @@ const DashboardLayout = () => {
   return (
     <GradientBackground className="min-h-screen">
       <GradientCard className="h-full">
-        {/* The new SidePanelFlow is added here, so it's available on all pages */}
+        {/* Global modals and panels - available on all pages */}
+        <CollectionCreationModal />
         <SidePanelFlow />
 
         <div className="flex h-screen overflow-hidden">

@@ -30,9 +30,11 @@ import {
 import SourceConnectionStateView from "@/components/collection/SourceConnectionStateView";
 import { emitCollectionEvent, onCollectionEvent, COLLECTION_DELETED, SOURCE_CONNECTION_UPDATED } from "@/lib/events";
 import { Search } from '@/search/Search';
-import { DialogFlow } from '@/components/shared';
+// import { DialogFlow } from '@/components/shared'; // TODO: Implement DialogFlow component
 import { protectedPaths } from "@/constants/paths";
 import { useEntityStateStore } from "@/stores/entityStateStore";
+import { useSidePanelStore } from "@/lib/stores/sidePanelStore";
+import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { redirectWithError } from "@/lib/error-utils";
 import { ActionCheckResponse } from "@/types";
 import { DESIGN_SYSTEM } from "@/lib/design-system";
@@ -164,6 +166,9 @@ const Collections = () => {
 
     // Entity state store for new architecture
     const entityStateStore = useEntityStateStore();
+
+    // Side panel store
+    const { isOpen: isPanelOpen, openPanel } = useSidePanelStore();
 
     // Page state
     const [isLoading, setIsLoading] = useState(true);
@@ -372,13 +377,11 @@ const Collections = () => {
      * UI EVENT HANDLERS
      ********************************************/
 
-    // ** MODIFIED: Trigger the new side panel **
+    // ** MODIFIED: Trigger the modal for adding source to existing collection **
     const handleAddSource = () => {
         if (collection) {
-            openPanel('addSource', {
-                collectionId: collection.readable_id,
-                collectionName: collection.name
-            });
+            const store = useCollectionCreationStore.getState();
+            store.openForAddToCollection(collection.readable_id, collection.name);
         }
     };
 
@@ -927,7 +930,7 @@ const Collections = () => {
                                                         ? "border-blue-500 bg-blue-500/35 hover:bg-blue-500/20 hover:border-blue-400/80 border"
                                                         : "border-blue-400 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 border"
                                             )}
-                                            onClick={(!sourceConnectionsAllowed || isCheckingUsage) ? undefined : () => setShowAddSourceDialog(true)}
+                                            onClick={(!sourceConnectionsAllowed || isCheckingUsage) ? undefined : handleAddSource}
                                         >
                                             <Plus className={cn(
                                                 DESIGN_SYSTEM.icons.large,
@@ -1036,28 +1039,6 @@ const Collections = () => {
                         setConfirmText={setConfirmText}
                     />
 
-                    {/* Replace this ConnectFlow with DialogFlow */}
-                    {collection && (
-                        <DialogFlow
-                            isOpen={showAddSourceDialog}
-                            onOpenChange={setShowAddSourceDialog}
-                            mode="add-source"
-                            collectionId={collection.readable_id}
-                            collectionName={collection.name}
-                            dialogId="collection-detail-add-source"
-                            onComplete={async (newSourceConnection?: any) => {
-                                setShowAddSourceDialog(false);
-
-                                // Entity state mediator will handle subscriptions automatically
-
-                                // Reload to get the new source connection in the list
-                                await reloadData();
-
-                                // Re-check source connection limits after creating a new one
-                                await checkUsageActions(sourceConnections.length + 1);
-                            }}
-                        />
-                    )}
                 </>
             )}
         </div>

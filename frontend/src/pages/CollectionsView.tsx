@@ -5,7 +5,6 @@ import { Search, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { CollectionCard } from "@/components/dashboard";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
-import { CollectionCreationModal } from "@/components/CollectionCreationModal";
 import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -150,9 +149,6 @@ const CollectionsView = () => {
 
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">
-      {/* Collection Creation Modal */}
-      <CollectionCreationModal />
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
         <div>
