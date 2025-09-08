@@ -40,29 +40,29 @@ The `monke.sh` script handles everything automatically:
 │                           MONKE FRAMEWORK                            │
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  runner.py ──► Core Framework ──► Bongo ──► External API            │
-│     │              │                │           │                   │
-│     │              │                │           ▼                   │
-│     │              │                │      (1) CREATE               │
-│     │              │                │       Test Data               │
-│     │              │                │                               │
-│     │              ▼                │                               │
-│     │         Test Config           │                               │
-│     │         (YAML files)          │                               │
-│     │                               │                               │
-│     │              │                │                               │
-│     │              ▼                ▼                               │
-│     │         (2) TRIGGER ──► Airweave Backend                      │
-│     │             Sync              │                               │
-│     │                               ▼                               │
-│     │                         (3) PULL DATA                         │
-│     │                         from External API                     │
-│     │                               │                               │
-│     │                               ▼                               │
-│     │                         (4) STORE in                          │
-│     │                         Qdrant Vector DB                      │
-│     │                               │                               │
-│     └──────► (5) VERIFY ───────────►│                               │
+│  runner.py ──► Core Framework ──► Bongo ──► External API             │
+│     │              │                │           │                    │
+│     │              │                │           ▼                    │
+│     │              │                │      (1) CREATE                │
+│     │              │                │       Test Data                │
+│     │              │                │                                │
+│     │              ▼                │                                │
+│     │         Test Config           │                                │
+│     │         (YAML files)          │                                │
+│     │                               │                                │
+│     │              │                │                                │
+│     │              ▼                ▼                                │
+│     │         (2) TRIGGER ──► Airweave Backend                       │
+│     │             Sync              │                                │
+│     │                               ▼                                │
+│     │                         (3) PULL DATA                          │
+│     │                         from External API                      │
+│     │                               │                                │
+│     │                               ▼                                │
+│     │                         (4) STORE in                           │
+│     │                         Qdrant Vector DB                       │
+│     │                               │                                │
+│     └──────► (5) VERIFY ───────────►│                                │
 │               Search & Check                                         │
 │               Relevance Scores                                       │
 │                                                                      │
