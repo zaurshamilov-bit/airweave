@@ -37,7 +37,7 @@ class LLMClient:
             model=self.model,
             instructions="You generate fresh, varied test data.",
             input=instruction,
-            temperature=0.8,
+            **({} if self.model == "gpt-5" else {"temperature": 0.8}),
         )
         return getattr(resp, "output_text", "") or ""
 
@@ -50,6 +50,7 @@ class LLMClient:
         Primary path: `responses.parse(...)` with `text_format=schema` (Pydantic class).
         Fallback:     `responses.create(...)` with response_format=json_schema + strict, then Pydantic-validate.
         """
+
         # --- Preferred: native structured parsing ---
         try:
             resp = await self.client.responses.parse(
@@ -57,7 +58,7 @@ class LLMClient:
                 input=instruction,  # you can also pass a list of role/content items if you prefer
                 instructions="Return only a single object that conforms to the provided schema.",
                 text_format=schema,  # <- Pydantic class; SDK converts to JSON Schema and parses output
-                temperature=0.7,
+                **({} if self.model == "gpt-5" else {"temperature": 0.7}),
             )
             parsed = getattr(resp, "output_parsed", None)
             if parsed is not None:
@@ -88,7 +89,7 @@ class LLMClient:
             input=instruction,
             instructions="Return ONLY a single JSON object that matches the schema. No prose.",
             response_format=rf,
-            temperature=0.7,
+            **({} if self.model == "gpt-5" else {"temperature": 0.7}),
         )
 
         raw = getattr(resp2, "output_text", "") or ""
