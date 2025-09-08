@@ -7,7 +7,7 @@ database, as it contains the endpoints for user creation and retrieval.
 from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import Depends, HTTPException
+from fastapi import BackgroundTasks, Depends, HTTPException
 from fastapi_auth0 import Auth0User
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -81,6 +81,7 @@ async def read_user_organizations(
 @router.post("/create_or_update", response_model=User)
 async def create_or_update_user(
     user_data: schemas.UserCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(deps.get_db),
     auth0_user: Optional[Auth0User] = Depends(auth0.get_user),
 ) -> schemas.User:
@@ -91,6 +92,7 @@ async def create_or_update_user(
 
     Args:
         user_data (schemas.UserCreate): The user object to be created.
+        background_tasks (BackgroundTasks): FastAPI background tasks for non-blocking operations.
         db (AsyncSession): Database session dependency to handle database operations.
         auth0_user (Auth0User): Authenticated auth0 user.
 
@@ -167,8 +169,8 @@ async def create_or_update_user(
 
         logger.info(f"Created new user {user.email}.")
 
-        # Send welcome email (only works in production with RESEND_API_KEY)
-        await send_welcome_email(user.email, user.full_name or user.email)
+        # Send welcome email in background to avoid blocking the response
+        background_tasks.add_task(send_welcome_email, user.email, user.full_name or user.email)
 
         return schemas.User.model_validate(user)
 
@@ -192,7 +194,7 @@ async def create_or_update_user(
             )
         logger.info(f"Created user {user.email} with fallback method")
 
-        # Send welcome email (only works in production with RESEND_API_KEY)
-        await send_welcome_email(user.email, user.full_name or user.email)
+        # Send welcome email in background to avoid blocking the response
+        background_tasks.add_task(send_welcome_email, user.email, user.full_name or user.email)
 
         return user

@@ -1,29 +1,22 @@
 """Simple email service for sending welcome emails via Resend."""
 
+import asyncio
 import resend
 
 from airweave.core.config import settings
 from airweave.core.logging import logger
 
 
-async def send_welcome_email(to_email: str, user_name: str) -> None:
-    """Send a welcome email to a new user.
+def _send_welcome_email_sync(to_email: str, user_name: str) -> None:
+    """Synchronous email sending function to be run in a thread pool."""
+    resend.api_key = settings.RESEND_API_KEY
 
-    Only works when RESEND_API_KEY is configured (production only).
-    """
-    if not settings.RESEND_API_KEY:
-        logger.debug("RESEND_API_KEY not configured - skipping welcome email")
-        return
-
-    try:
-        resend.api_key = settings.RESEND_API_KEY
-
-        resend.Emails.send(
-            {
-                "from": settings.RESEND_FROM_EMAIL,
-                "to": [to_email],
-                "subject": "Welcome to Airweave",
-                "html": """
+    resend.Emails.send(
+        {
+            "from": settings.RESEND_FROM_EMAIL,
+            "to": [to_email],
+            "subject": "Welcome to Airweave",
+            "html": """
 <div style="font-family: Arial, sans-serif; font-size: 10pt;">
     <p style="margin: 0 0 15px 0;">
         Hey,
@@ -60,9 +53,23 @@ async def send_welcome_email(to_email: str, user_name: str) -> None:
     </p>
 </div>
             """,
-            }
-        )
+        }
+    )
 
+
+async def send_welcome_email(to_email: str, user_name: str) -> None:
+    """Send a welcome email to a new user.
+
+    Only works when both RESEND_API_KEY and RESEND_FROM_EMAIL are configured (production only).
+    Uses asyncio.to_thread() to avoid blocking the event loop.
+    """
+    if not settings.RESEND_API_KEY or not settings.RESEND_FROM_EMAIL:
+        logger.debug("RESEND_API_KEY or RESEND_FROM_EMAIL not configured - skipping welcome email")
+        return
+
+    try:
+        # Offload the synchronous email sending to a thread pool to avoid blocking the event loop
+        await asyncio.to_thread(_send_welcome_email_sync, to_email, user_name)
         logger.info(f"Welcome email sent to {to_email}")
     except Exception as e:
         logger.warning(f"Failed to send welcome email to {to_email}: {e}")
