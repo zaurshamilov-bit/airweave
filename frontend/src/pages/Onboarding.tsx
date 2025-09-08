@@ -846,7 +846,7 @@ export const Onboarding = () => {
         {/* Header with logo branding */}
         <div className="mb-12 text-center">
           <img
-            src={isDark ? "/logo-airweave-darkbg.svg" : "logo-airweave-lightbg.svg"}
+            src={isDark ? "/logo-airweave-darkbg.svg" : "/logo-airweave-lightbg.svg"}
             alt="Airweave"
             className="h-8 w-auto mx-auto mb-2"
             style={{ maxWidth: '180px' }}
