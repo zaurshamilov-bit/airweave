@@ -922,7 +922,7 @@ export const Onboarding = () => {
           <div className="absolute left-4">
             <button
               onClick={handleLogout}
-              className="flex items-center space-x-2 px-4 py-2 rounded-lg transition-all bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 dark:text-blue-400"
+              className="flex items-center space-x-2 px-4 py-2 rounded-lg transition-all bg-blue-500/10 text-muted-foreground hover:bg-blue-500/20"
               title="Logout"
             >
               <LogOut className="w-4 h-4" />
