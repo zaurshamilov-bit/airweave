@@ -131,6 +131,10 @@ class Settings(BaseSettings):
     STRIPE_DEVELOPER_PRICE_ID: str = ""
     STRIPE_STARTUP_PRICE_ID: str = ""
 
+    # Email settings - only for production Airweave instance
+    RESEND_API_KEY: Optional[str] = None
+    RESEND_FROM_EMAIL: str = "lennert@airweave.ai"
+
     # Sync configuration
     SYNC_MAX_WORKERS: int = 100
     SYNC_THREAD_POOL_SIZE: int = 100

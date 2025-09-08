@@ -15,7 +15,8 @@ import {
   Shield,
   Cpu,
   Globe,
-  Loader2
+  Loader2,
+  LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
@@ -107,7 +108,7 @@ export const Onboarding = () => {
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   const { setCurrentOrganization } = useOrganizationStore();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -474,6 +475,14 @@ export const Onboarding = () => {
     }
   };
 
+  const handleLogout = () => {
+    // Clear token from localStorage
+    apiClient.clearToken();
+
+    // Use the logout from our auth context which handles both Auth0 and non-Auth0 cases
+    logout();
+  };
+
   const isStepValid = () => {
     switch (currentStep) {
       case 1:
@@ -677,9 +686,9 @@ export const Onboarding = () => {
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-medium text-lg">{plan.label}</h3>
                         {plan.hasTrial && (
-                           <span className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">
-                              14-day free trial
-                           </span>
+                          <span className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full">
+                            14-day free trial
+                          </span>
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground">{plan.description}</p>
@@ -787,40 +796,40 @@ export const Onboarding = () => {
               </div>
 
               {/* Team members list */}
-            {teamMembers.length > 0 && (
-              <div className="space-y-4 mt-6">
-                <div>
-                  <h3 className="text-sm font-medium text-foreground pt-2">Team members to invite</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {teamMembers.length} of {currentPlanLimit - 1} team members added
-                  </p>
-                </div>
+              {teamMembers.length > 0 && (
+                <div className="space-y-4 mt-6">
+                  <div>
+                    <h3 className="text-sm font-medium text-foreground pt-2">Team members to invite</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {teamMembers.length} of {currentPlanLimit - 1} team members added
+                    </p>
+                  </div>
 
-                <div className="border border-border rounded-lg divide-y divide-border">
-                  {teamMembers.map((member, index) => (
-                    <div key={index} className="flex items-center justify-between py-2 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="text-sm">{member.email}</div>
-                        <span className={cn(
-                          "text-xs px-2 py-0.5 rounded-full",
-                          member.role === 'admin'
-                            ? "bg-primary/10 text-primary"
-                            : "bg-muted text-muted-foreground"
-                        )}>
-                          {member.role}
-                        </span>
+                  <div className="border border-border rounded-lg divide-y divide-border">
+                    {teamMembers.map((member, index) => (
+                      <div key={index} className="flex items-center justify-between py-2 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="text-sm">{member.email}</div>
+                          <span className={cn(
+                            "text-xs px-2 py-0.5 rounded-full",
+                            member.role === 'admin'
+                              ? "bg-primary/10 text-primary"
+                              : "bg-muted text-muted-foreground"
+                          )}>
+                            {member.role}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveTeamMember(member.email)}
+                          className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleRemoveTeamMember(member.email)}
-                        className="p-1 rounded hover:bg-muted/50 transition-colors text-muted-foreground hover:text-foreground"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
             </div>
           </div>
@@ -860,8 +869,8 @@ export const Onboarding = () => {
                     i < currentStep
                       ? "w-6 bg-primary"
                       : i === currentStep - 1
-                      ? "w-12 bg-primary"
-                      : "w-6 bg-muted"
+                        ? "w-12 bg-primary"
+                        : "w-6 bg-muted"
                   )}
                 />
               ))}
@@ -877,6 +886,7 @@ export const Onboarding = () => {
               <button
                 onClick={() => navigate('/')}
                 className="p-2 rounded-lg hover:bg-muted/50 transition-colors"
+                title="Close"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -946,6 +956,18 @@ export const Onboarding = () => {
               )}
             </button>
           )}
+        </div>
+
+        {/* Logout button - positioned in bottom left, aligned with Continue button */}
+        <div className="absolute bottom-4 left-4">
+          <button
+            onClick={handleLogout}
+            className="flex items-center space-x-2 px-4 py-2 rounded-lg transition-all text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            title="Logout"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout</span>
+          </button>
         </div>
       </div>
     </div>
