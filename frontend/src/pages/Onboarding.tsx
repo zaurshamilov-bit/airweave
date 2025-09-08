@@ -904,22 +904,22 @@ export const Onboarding = () => {
 
         {/* Actions */}
         <div className="mt-12 flex items-center justify-between">
-          <button
-            onClick={handleBack}
-            disabled={currentStep === 1}
-            className={cn(
-              "flex items-center space-x-2 px-4 py-2 rounded-lg transition-all",
-              currentStep === 1
-                ? "opacity-0 pointer-events-none"
-                : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <ChevronLeft className="w-4 h-4" />
-            <span>Back</span>
-          </button>
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={handleBack}
+              disabled={currentStep === 1}
+              className={cn(
+                "flex items-center space-x-2 px-4 py-2 rounded-lg transition-all",
+                currentStep === 1
+                  ? "opacity-0 pointer-events-none"
+                  : "hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Back</span>
+            </button>
 
-          {/* Logout button - positioned in bottom left, aligned with Continue button */}
-          <div className="absolute left-4">
+            {/* Logout button - positioned in flex flow to prevent overlap */}
             <button
               onClick={handleLogout}
               className="flex items-center space-x-2 px-4 py-2 rounded-lg transition-all bg-blue-500/10 text-muted-foreground hover:bg-blue-500/20"
