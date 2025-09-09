@@ -33,7 +33,7 @@ async def create_organization(
     Args:
         organization_data: The organization data to create
         db: Database session
-        user: The current authenticated user
+        user: The authenticated user creating the organization
 
     Returns:
         The created organization with user's role
@@ -60,6 +60,9 @@ async def create_organization(
 
         return organization
     except Exception as e:
+        from airweave.core.logging import logger
+
+        logger.exception(f"Failed to create organization: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to create organization: {str(e)}"
         ) from e

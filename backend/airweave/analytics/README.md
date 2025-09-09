@@ -165,7 +165,7 @@ async def search_collection(ctx: ApiContext, query: str, ...):
 2. **Time to First Search**
    - Event: `search_query`
    - Type: Histogram (if supported) or Line Chart
-   - Property: `searched_at`
+   - Property: Event timestamp (PostHog default)
    - Time Range: Last 30 days
 
 ### Syncing Dashboard Widgets
@@ -178,7 +178,7 @@ async def search_collection(ctx: ApiContext, query: str, ...):
 2. **Entities Synced per Sync**
    - Event: `sync_completed`
    - Type: Bar Chart
-   - Property: `total_entities` (Sum)
+   - Property: `entities_processed` (Sum)
    - Breakdown: `sync_id`
    - Time Range: Last 7 days
 
@@ -263,7 +263,7 @@ The analytics service automatically handles PostHog errors and logs them without
 ## 🔒 Privacy & Compliance
 
 - All user data is sent to PostHog (ensure compliance with your privacy policy)
-- User IDs are hashed/obfuscated as needed
+- Distinct IDs are not hashed by default; ensure compliance when sending user identifiers.
 - Sensitive data should not be included in event properties
 - Consider data retention policies in PostHog
 
@@ -290,4 +290,3 @@ The analytics service automatically handles PostHog errors and logs them without
 
 - [PostHog Documentation](https://posthog.com/docs)
 - [PostHog Python SDK](https://posthog.com/docs/libraries/python)
-- [Airweave Analytics Examples](analytics_integration_example.py)

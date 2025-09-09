@@ -22,8 +22,8 @@ class BusinessEventTracker:
             properties: Additional properties
         """
         event_properties = {
-            "organization_id": str(organization_id),
             **(properties or {}),
+            "organization_id": str(organization_id),  # Ensure this can't be overridden
         }
 
         analytics.track_event(
@@ -97,54 +97,6 @@ class BusinessEventTracker:
 
         analytics.track_event(
             event_name="first_sync_completed",
-            distinct_id=str(ctx.user.id) if ctx.user else f"api_key_{ctx.organization.id}",
-            properties=properties,
-            groups={"organization": str(ctx.organization.id)},
-        )
-
-    @staticmethod
-    def track_usage_limit_approached(
-        organization_id: UUID, limit_type: str, current_usage: int, limit: int
-    ):
-        """Track when an organization approaches usage limits.
-
-        Args:
-        ----
-            organization_id: ID of the organization
-            limit_type: Type of limit (e.g., 'api_calls', 'storage_gb')
-            current_usage: Current usage count
-            limit: Limit threshold
-        """
-        properties = {
-            "limit_type": limit_type,
-            "current_usage": current_usage,
-            "limit": limit,
-            "usage_percentage": (current_usage / limit) * 100 if limit > 0 else 0,
-        }
-
-        analytics.track_event(
-            event_name="usage_limit_approached",
-            distinct_id=f"org_{organization_id}",  # Use org as distinct_id for system events
-            properties=properties,
-            groups={"organization": str(organization_id)},
-        )
-
-    @staticmethod
-    def track_user_login(ctx, login_method: str = "unknown"):
-        """Track user login events.
-
-        Args:
-        ----
-            ctx: API context containing user and organization info
-            login_method: Method used for login (e.g., 'oauth', 'api_key')
-        """
-        properties = {
-            "login_method": login_method,
-            "organization_name": getattr(ctx.organization, "name", "unknown"),
-        }
-
-        analytics.track_event(
-            event_name="user_login",
             distinct_id=str(ctx.user.id) if ctx.user else f"api_key_{ctx.organization.id}",
             properties=properties,
             groups={"organization": str(ctx.organization.id)},

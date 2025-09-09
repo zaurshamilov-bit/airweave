@@ -44,7 +44,13 @@ class AnalyticsService:
             return
 
         try:
-            posthog.capture(distinct_id=user_id, event="$identify", properties={"$set": properties})
+            # Create a copy to avoid mutating the caller's properties dict
+            user_properties = dict(properties) if properties else {}
+            user_properties["environment"] = settings.ENVIRONMENT
+
+            posthog.capture(
+                distinct_id=user_id, event="$identify", properties={"$set": user_properties}
+            )
             self.logger.debug(f"User identified: {user_id}")
         except Exception as e:
             self.logger.error(f"Failed to identify user {user_id}: {e}")
@@ -69,8 +75,8 @@ class AnalyticsService:
             return
 
         try:
-            # Add environment to all events for filtering
-            event_properties = properties or {}
+            # Create a copy to avoid mutating the caller's properties dict
+            event_properties = dict(properties) if properties else {}
             event_properties["environment"] = settings.ENVIRONMENT
 
             posthog.capture(
@@ -98,13 +104,17 @@ class AnalyticsService:
             return
 
         try:
+            # Create a copy to avoid mutating the caller's properties dict
+            group_properties = dict(properties) if properties else {}
+            group_properties["environment"] = settings.ENVIRONMENT
+
             posthog.capture(
                 distinct_id=group_key,
                 event="$groupidentify",
                 properties={
                     "$group_type": group_type,
                     "$group_key": group_key,
-                    "$group_set": properties,
+                    "$group_set": group_properties,
                 },
             )
             self.logger.debug(f"Group properties set: {group_type}:{group_key}")
