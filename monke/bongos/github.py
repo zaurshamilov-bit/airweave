@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 import httpx
 from monke.bongos.base_bongo import BaseBongo
 from monke.utils.logging import get_logger
+from monke.auth.keyvault_adapter import get_keyvault_adapter
 
 
 class GitHubBongo(BaseBongo):
@@ -27,7 +28,15 @@ class GitHubBongo(BaseBongo):
             **kwargs: Additional configuration (e.g., entity_count, file_types)
         """
         super().__init__(credentials)
-        self.personal_access_token = credentials["personal_access_token"]
+        # Resolve GitHub PAT from env or Azure Key Vault (fallback to provided credential)
+        adapter = get_keyvault_adapter()
+        self.personal_access_token = adapter.get_env_or_secret(
+            "GITHUB_PERSONAL_ACCESS_TOKEN", credentials.get("personal_access_token")
+        )
+        if not self.personal_access_token:
+            raise RuntimeError(
+                "GitHub PAT not found. Set GITHUB_PERSONAL_ACCESS_TOKEN in env or Key Vault."
+            )
         self.repo_name = credentials["repo_name"]
 
         # Configuration from kwargs
