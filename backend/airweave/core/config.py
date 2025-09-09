@@ -135,6 +135,11 @@ class Settings(BaseSettings):
     RESEND_API_KEY: Optional[str] = None
     RESEND_FROM_EMAIL: Optional[str] = None
 
+    # PostHog Analytics Configuration
+    POSTHOG_API_KEY: Optional[str] = None
+    POSTHOG_HOST: str = "https://app.posthog.com"
+    ANALYTICS_ENABLED: bool = True
+
     # Sync configuration
     SYNC_MAX_WORKERS: int = 100
     SYNC_THREAD_POOL_SIZE: int = 100
