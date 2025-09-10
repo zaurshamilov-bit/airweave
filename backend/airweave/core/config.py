@@ -136,8 +136,10 @@ class Settings(BaseSettings):
     RESEND_FROM_EMAIL: Optional[str] = None
 
     # PostHog Analytics Configuration
-    POSTHOG_API_KEY: Optional[str] = None
-    POSTHOG_HOST: str = "https://app.posthog.com"
+    # Public API key for open source and hosted platform
+    POSTHOG_API_KEY: str = "phc_Ytp26UB3WwGCdjHTpDBI9HQg2ZA38ITMDKI6fE6EPGS"
+    POSTHOG_HOST: str = "https://eu.i.posthog.com"
+    # Analytics enabled by default unless in local environment
     ANALYTICS_ENABLED: bool = True
 
     # Sync configuration
