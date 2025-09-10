@@ -17,7 +17,7 @@ export function formatSearchResponse(searchResponse: SearchResponse, responseTyp
     } else {
         // For raw results, format the search results simply
         const formattedResults = searchResponse.results
-            .map((result, index) => {
+            .map((result: any, index) => {
                 const parts = [
                     `**Result ${index + 1}${result.score ? ` (Score: ${result.score.toFixed(3)})` : ""}:**`
                 ];

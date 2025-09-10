@@ -1,9 +1,17 @@
-// Airweave API client for making requests
+// Airweave API client using the official SDK
 
+import { AirweaveSDKClient } from '@airweave/sdk';
 import { AirweaveConfig, SearchResponse } from './types.js';
 
 export class AirweaveClient {
-    constructor(private config: AirweaveConfig) { }
+    private client: AirweaveSDKClient;
+
+    constructor(private config: AirweaveConfig) {
+        this.client = new AirweaveSDKClient({
+            apiKey: config.apiKey,
+            baseUrl: config.baseUrl
+        });
+    }
 
     async search(searchRequest: any): Promise<SearchResponse> {
         const { query, response_type, limit, offset, recency_bias } = searchRequest;
@@ -13,47 +21,25 @@ export class AirweaveClient {
             return this.getMockResponse(searchRequest);
         }
 
-        // Construct the search endpoint URL
-        const endpoint = `/collections/${this.config.collection}/search`;
-        const searchParams = new URLSearchParams({
-            query,
-            response_type,
-            limit: limit.toString(),
-            offset: offset.toString(),
-        });
-
-        // Add recency_bias only if provided
-        if (recency_bias !== undefined) {
-            searchParams.append('recency_bias', recency_bias.toString());
-        }
-
-        const url = `${this.config.baseUrl}${endpoint}?${searchParams.toString()}`;
-
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'x-api-key': this.config.apiKey,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Airweave API error (${response.status}): ${errorText}`);
-        }
-
-        const responseText = await response.text();
-        let searchResponse: SearchResponse;
-
         try {
-            searchResponse = JSON.parse(responseText);
-        } catch (parseError) {
-            console.error("Failed to parse JSON response:", responseText.substring(0, 500));
-            throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}...`);
-        }
+            // Use the official SDK for the search request
+            const response = await this.client.collections.search(this.config.collection, {
+                query,
+                response_type,
+                limit,
+                offset,
+                recency_bias
+            });
 
-        return searchResponse;
+            return response;
+        } catch (error: any) {
+            // Handle SDK errors and convert to our error format
+            if (error.statusCode) {
+                throw new Error(`Airweave API error (${error.statusCode}): ${error.message}`);
+            } else {
+                throw new Error(`Airweave API error: ${error.message}`);
+            }
+        }
     }
 
     private getMockResponse(request: any): SearchResponse {

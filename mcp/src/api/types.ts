@@ -1,20 +1,12 @@
 // Type definitions for Airweave API responses
 
-export interface SearchResponse {
-    results: Record<string, any>[];
-    response_type: string;
-    completion?: string;
-    status: string;
-}
+import { AirweaveSDK } from '@airweave/sdk';
 
-export interface SearchRequest {
-    query: string;
-    response_type?: string;
-    limit?: number;
-    offset?: number;
-    recency_bias?: number;
-}
+// Re-export SDK types for consistency
+export type SearchResponse = AirweaveSDK.SearchResponse;
+export type SearchRequest = AirweaveSDK.SearchRequest;
 
+// Keep our custom config interface
 export interface AirweaveConfig {
     apiKey: string;
     collection: string;
