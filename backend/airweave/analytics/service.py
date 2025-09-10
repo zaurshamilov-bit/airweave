@@ -17,20 +17,42 @@ class AnalyticsService:
 
     def __init__(self):
         """Initialize the analytics service with PostHog configuration."""
-        # Enable analytics based on ANALYTICS_ENABLED setting
-        self.enabled = bool(settings.POSTHOG_API_KEY and settings.ANALYTICS_ENABLED)
+        # Enable analytics by default unless in local environment
+        self.enabled = settings.ANALYTICS_ENABLED and settings.ENVIRONMENT != "local"
         self.logger = logger.with_context(component="analytics")
 
         if self.enabled:
             posthog.api_key = settings.POSTHOG_API_KEY
-            posthog.host = settings.POSTHOG_HOST or "https://app.posthog.com"
+            posthog.host = settings.POSTHOG_HOST
             self.logger.info(f"PostHog analytics initialized (environment: {settings.ENVIRONMENT})")
         else:
             self.logger.info(
                 f"PostHog analytics disabled (environment: {settings.ENVIRONMENT}, "
-                f"api_key: {bool(settings.POSTHOG_API_KEY)}, "
                 f"enabled: {settings.ANALYTICS_ENABLED})"
             )
+
+    def _get_deployment_type(self) -> str:
+        """Determine if this is hosted platform or self-hosted deployment.
+
+        Returns:
+            str: "hosted" for app.airweave.ai, "self_hosted" for other deployments
+        """
+        if settings.ENVIRONMENT == "prd" and settings.APP_FULL_URL is None:
+            return "hosted"  # Production Airweave hosted platform
+        return "self_hosted"  # All other deployments (local, dev, test, custom)
+
+    def _get_deployment_identifier(self) -> str:
+        """Get a unique identifier for this deployment.
+
+        Returns:
+            str: Unique identifier for the deployment
+        """
+        if settings.ENVIRONMENT == "prd" and settings.APP_FULL_URL is None:
+            return "airweave-hosted"  # Official hosted platform
+        elif settings.API_FULL_URL:
+            return f"custom-{settings.API_FULL_URL}"  # Custom deployment
+        else:
+            return f"{settings.ENVIRONMENT}-{settings.API_FULL_URL or 'default'}"
 
     def identify_user(self, user_id: str, properties: Dict[str, Any]) -> None:
         """Identify a user with properties.
@@ -46,7 +68,16 @@ class AnalyticsService:
         try:
             # Create a copy to avoid mutating the caller's properties dict
             user_properties = dict(properties) if properties else {}
-            user_properties["environment"] = settings.ENVIRONMENT
+            user_properties.update(
+                {
+                    "environment": settings.ENVIRONMENT,
+                    "deployment_type": self._get_deployment_type(),
+                    "deployment_id": self._get_deployment_identifier(),
+                    "is_hosted_platform": self._get_deployment_type() == "hosted",
+                    "api_url": settings.api_url,
+                    "app_url": settings.app_url,
+                }
+            )
 
             posthog.capture(
                 distinct_id=user_id, event="$identify", properties={"$set": user_properties}
@@ -77,7 +108,16 @@ class AnalyticsService:
         try:
             # Create a copy to avoid mutating the caller's properties dict
             event_properties = dict(properties) if properties else {}
-            event_properties["environment"] = settings.ENVIRONMENT
+            event_properties.update(
+                {
+                    "environment": settings.ENVIRONMENT,
+                    "deployment_type": self._get_deployment_type(),
+                    "deployment_id": self._get_deployment_identifier(),
+                    "is_hosted_platform": self._get_deployment_type() == "hosted",
+                    "api_url": settings.api_url,
+                    "app_url": settings.app_url,
+                }
+            )
 
             posthog.capture(
                 distinct_id=distinct_id,
@@ -106,7 +146,16 @@ class AnalyticsService:
         try:
             # Create a copy to avoid mutating the caller's properties dict
             group_properties = dict(properties) if properties else {}
-            group_properties["environment"] = settings.ENVIRONMENT
+            group_properties.update(
+                {
+                    "environment": settings.ENVIRONMENT,
+                    "deployment_type": self._get_deployment_type(),
+                    "deployment_id": self._get_deployment_identifier(),
+                    "is_hosted_platform": self._get_deployment_type() == "hosted",
+                    "api_url": settings.api_url,
+                    "app_url": settings.app_url,
+                }
+            )
 
             posthog.capture(
                 distinct_id=group_key,
