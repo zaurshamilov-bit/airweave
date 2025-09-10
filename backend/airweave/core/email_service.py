@@ -74,8 +74,77 @@ def _send_welcome_email_sync(to_email: str, user_name: str) -> None:
     )
 
 
+def _send_welcome_followup_email_sync(to_email: str, user_name: str) -> None:
+    """Synchronous follow-up email sending function to be run in a thread pool."""
+    resend.api_key = settings.RESEND_API_KEY
+
+    # Generate random delay between 30 and 60 minutes
+    delay_minutes = random.randint(30, 60)
+
+    # Schedule for 5 days from now plus random delay
+    scheduled_time = datetime.now(timezone.utc) + timedelta(days=5, minutes=delay_minutes)
+    scheduled_at = scheduled_time.isoformat()
+
+    resend.Emails.send(
+        {
+            "from": settings.RESEND_FROM_EMAIL,
+            "to": [to_email],
+            "subject": "how's your Airweave setup going?",
+            "scheduled_at": scheduled_at,
+            "html": """
+<div style="font-family: Arial, sans-serif; font-size: 10pt;">
+    <p style="margin: 0 0 15px 0;">
+        Hey, just checking in.
+    </p>
+
+    <p style="margin: 0 0 15px 0;">
+        Saw you signed up and wanted to see how things are going with Airweave.
+        Have you had the chance to run a query yet?
+    </p>
+
+      <p style="margin: 0 0 15px 0;">
+        Would love to hear what you're building, and let me know if there's
+        anything I can do to help.
+    </p>
+
+    <p style="margin: 15px 0 0 0;">
+        Lennert (co-founder at Airweave)
+    </p>
+
+    <p style="margin: 15px 0 0 0;">
+
+    </p>
+</div>
+            """,
+        }
+    )
+
+
+async def send_welcome_followup_email(to_email: str, user_name: str) -> None:
+    """Send a follow-up welcome email to a user 5 days after signup.
+
+    Only works when both RESEND_API_KEY and RESEND_FROM_EMAIL are configured (production only).
+    Uses asyncio.to_thread() to avoid blocking the event loop.
+    The email will be scheduled for delivery 5 days from now using ISO 8601 format.
+    """
+    if not settings.RESEND_API_KEY or not settings.RESEND_FROM_EMAIL:
+        logger.debug(
+            "RESEND_API_KEY or RESEND_FROM_EMAIL not configured - skipping follow-up email"
+        )
+        return
+
+    try:
+        # Offload the synchronous email sending to a thread pool to avoid blocking the event loop
+        await asyncio.to_thread(_send_welcome_followup_email_sync, to_email, user_name)
+        logger.info(f"Follow-up welcome email scheduled for {to_email} (5 days from now)")
+    except Exception as e:
+        logger.error(f"Failed to schedule follow-up welcome email for {to_email}: {e}")
+
+
 async def send_welcome_email(to_email: str, user_name: str) -> None:
     """Send a welcome email to a new user with random scheduling between 10-40 minutes.
+
+    Also schedules a follow-up email 5 days later.
 
     Only works when both RESEND_API_KEY and RESEND_FROM_EMAIL are configured (production only).
     Uses asyncio.to_thread() to avoid blocking the event loop.
@@ -90,5 +159,8 @@ async def send_welcome_email(to_email: str, user_name: str) -> None:
         # Offload the synchronous email sending to a thread pool to avoid blocking the event loop
         await asyncio.to_thread(_send_welcome_email_sync, to_email, user_name)
         logger.info(f"Welcome email scheduled for {to_email}")
+
+        # Also schedule the follow-up email
+        await send_welcome_followup_email(to_email, user_name)
     except Exception as e:
         logger.error(f"Failed to schedule welcome email for {to_email}: {e}")
