@@ -10,6 +10,7 @@ from qdrant_client.http.models import Filter as QdrantFilter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.analytics import business_events, track_api_endpoint, track_search_operation
 from airweave.api import deps
 from airweave.api.context import ApiContext
 from airweave.api.examples import (
@@ -41,6 +42,7 @@ router = TrailingSlashRouter()
         "Finance data collection",
     ),
 )
+@track_api_endpoint("list_collections")
 async def list(
     skip: int = Query(0, description="Number of collections to skip for pagination"),
     limit: int = Query(
@@ -61,6 +63,7 @@ async def list(
 
 
 @router.post("/", response_model=schemas.Collection)
+@track_api_endpoint("create_collection")
 async def create(
     collection: schemas.CollectionCreate,
     db: AsyncSession = Depends(deps.get_db),
@@ -77,6 +80,11 @@ async def create(
 
     # Create the collection
     collection_obj = await collection_service.create(db, collection_in=collection, ctx=ctx)
+
+    # Track business event
+    business_events.track_collection_created(
+        ctx=ctx, collection_id=collection_obj.id, collection_name=collection_obj.name
+    )
 
     # Increment usage after successful creation
     await guard_rail.increment(ActionType.COLLECTIONS)
@@ -164,6 +172,7 @@ async def delete(
     response_model=schemas.SearchResponse,
     responses=create_search_response("raw_results", "Raw search results with metadata"),
 )
+@track_search_operation()
 async def search(
     readable_id: str = Path(
         ..., description="The unique readable identifier of the collection to search"
@@ -263,6 +272,7 @@ async def search(
     response_model=schemas.SearchResponse,
     responses=create_search_response("completion_response", "Search with AI-generated completion"),
 )
+@track_search_operation()
 async def search_advanced(
     readable_id: str = Path(
         ..., description="The unique readable identifier of the collection to search"

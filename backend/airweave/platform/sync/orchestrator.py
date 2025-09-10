@@ -86,6 +86,16 @@ class SyncOrchestrator:
             started_at=utc_now_naive(),
         )
 
+        # Track sync started
+        from airweave.analytics import business_events
+
+        business_events.track_sync_started(
+            ctx=self.sync_context.ctx,
+            sync_id=self.sync_context.sync.id,
+            source_type=self.sync_context.source_connection.short_name,
+            collection_id=self.sync_context.collection.id,
+        )
+
     async def _process_entities(self) -> None:  # noqa: C901
         """Process entities with explicit stream lifecycle management."""
         source_node = self.sync_context.dag.get_source_node()
@@ -278,6 +288,34 @@ class SyncOrchestrator:
             stats=stats,
         )
 
+        # Track sync completed
+        from airweave.analytics import business_events
+
+        entities_processed = 0
+        duration_ms = 0
+
+        if stats:
+            entities_processed = (
+                stats.inserted + stats.updated + stats.deleted + stats.kept + stats.skipped
+            )
+
+        # Calculate duration from sync job start to completion
+        if (
+            self.sync_context.sync_job
+            and hasattr(self.sync_context.sync_job, "started_at")
+            and self.sync_context.sync_job.started_at is not None
+        ):
+            duration_ms = int(
+                (utc_now_naive() - self.sync_context.sync_job.started_at).total_seconds() * 1000
+            )
+
+        business_events.track_sync_completed(
+            ctx=self.sync_context.ctx,
+            sync_id=self.sync_context.sync.id,
+            entities_processed=entities_processed,
+            duration_ms=duration_ms,
+        )
+
         self.sync_context.logger.info(
             f"Completed sync job {self.sync_context.sync_job.id} successfully. Stats: {stats}"
         )
@@ -337,4 +375,26 @@ class SyncOrchestrator:
             error=error_message,
             failed_at=utc_now_naive(),
             stats=stats,
+        )
+
+        # Track sync failed
+        from airweave.analytics import business_events
+
+        duration_ms = 0
+
+        if (
+            self.sync_context.sync_job
+            and hasattr(self.sync_context.sync_job, "started_at")
+            and self.sync_context.sync_job.started_at is not None
+        ):
+            # Calculate duration from start to failure
+            duration_ms = int(
+                (utc_now_naive() - self.sync_context.sync_job.started_at).total_seconds() * 1000
+            )
+
+        business_events.track_sync_failed(
+            ctx=self.sync_context.ctx,
+            sync_id=self.sync_context.sync.id,
+            error=error_message,
+            duration_ms=duration_ms,
         )

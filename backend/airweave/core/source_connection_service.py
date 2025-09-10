@@ -534,6 +534,15 @@ class SourceConnectionService:
             # Hide auth fields by default
             source_connection.auth_fields = "********"
 
+        # Track source connection creation after transaction commits
+        from airweave.analytics import business_events
+
+        business_events.track_source_connection_created(
+            ctx=ctx,
+            connection_id=source_connection.id,
+            source_short_name=source_connection_in.short_name,
+        )
+
         return source_connection, sync_job
 
     async def get_source_connection(
