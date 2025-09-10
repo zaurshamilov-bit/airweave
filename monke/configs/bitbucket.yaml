@@ -7,8 +7,6 @@ connector:
   type: "bitbucket"
   auth_fields:
     access_token: "${BITBUCKET_API_TOKEN}"
-    # workspace: "monke-prog"
-    # repo_slug: "monke/monke-test-repo"
   config_fields:
     openai_model: "gpt-4.1-mini"
     branch: "main"
