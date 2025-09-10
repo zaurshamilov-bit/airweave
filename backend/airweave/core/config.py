@@ -131,6 +131,17 @@ class Settings(BaseSettings):
     STRIPE_DEVELOPER_PRICE_ID: str = ""
     STRIPE_STARTUP_PRICE_ID: str = ""
 
+    # Email settings - only for production Airweave instance
+    RESEND_API_KEY: Optional[str] = None
+    RESEND_FROM_EMAIL: Optional[str] = None
+
+    # PostHog Analytics Configuration
+    # Public API key for open source and hosted platform
+    POSTHOG_API_KEY: str = "phc_Ytp26UB3WwGCdjHTpDBI9HQg2ZA38ITMDKI6fE6EPGS"
+    POSTHOG_HOST: str = "https://eu.i.posthog.com"
+    # Analytics enabled by default unless in local environment
+    ANALYTICS_ENABLED: bool = True
+
     # Sync configuration
     SYNC_MAX_WORKERS: int = 100
     SYNC_THREAD_POOL_SIZE: int = 100
@@ -228,6 +239,20 @@ class Settings(BaseSettings):
         if stripe_enabled and not v:
             field_name = info.field_name
             raise ValueError(f"{field_name} must be set when STRIPE_ENABLED is True")
+        return v
+
+    @field_validator("RESEND_FROM_EMAIL", mode="before")
+    def validate_resend_email_settings(
+        cls, v: Optional[str], info: ValidationInfo
+    ) -> Optional[str]:
+        """Validate Resend email settings when RESEND_API_KEY is configured.
+
+        Ensures that RESEND_FROM_EMAIL is set when email functionality is enabled,
+        preventing accidental use of default values in production.
+        """
+        resend_api_key = info.data.get("RESEND_API_KEY")
+        if resend_api_key and not v:
+            raise ValueError("RESEND_FROM_EMAIL must be set when RESEND_API_KEY is configured")
         return v
 
     @field_validator("SQLALCHEMY_ASYNC_DATABASE_URI", mode="before")

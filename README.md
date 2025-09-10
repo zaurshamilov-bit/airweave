@@ -1,7 +1,7 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="frontend/public/logo-and-lettermark-light.svg"/>
-  <source media="(prefers-color-scheme: light)" srcset="frontend/public/logo-and-lettermark.svg"/>
-  <img width="1673" alt="airweave-lettermark" style="padding-bottom: 12px;" src="frontend/public/logo-and-lettermark-light.svg"/>
+  <source media="(prefers-color-scheme: dark)" srcset="frontend/public/logo-airweave-darkbg.svg"/>
+  <source media="(prefers-color-scheme: light)" srcset="frontend/public/logo-airweave-lightbg.svg"/>
+  <img width="1673" alt="airweave-lettermark" style="padding-bottom: 12px;" src="frontend/public/logo-airweave-darkbg.svg"/>
 </picture>
 
 <div align="center">
