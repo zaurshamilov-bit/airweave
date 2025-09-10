@@ -91,4 +91,4 @@ async def send_welcome_email(to_email: str, user_name: str) -> None:
         await asyncio.to_thread(_send_welcome_email_sync, to_email, user_name)
         logger.info(f"Welcome email scheduled for {to_email}")
     except Exception as e:
-        logger.warning(f"Failed to schedule welcome email for {to_email}: {e}")
+        logger.error(f"Failed to schedule welcome email for {to_email}: {e}")
