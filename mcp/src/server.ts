@@ -11,7 +11,7 @@ export function createMcpServer(config: AirweaveConfig) {
     // Create MCP server instance
     const server = new McpServer({
         name: "airweave-search",
-        version: "2.0.0", // Major version bump for breaking changes
+        version: "2.1.0", // Minor version bump for advanced search features
         capabilities: {
             tools: {},
         },

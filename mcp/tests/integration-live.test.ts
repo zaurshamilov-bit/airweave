@@ -88,6 +88,113 @@ describe('MCP Server Integration with Live API', () => {
         });
     });
 
+    describe('Advanced Search Functionality', () => {
+        it('should handle score threshold parameter', async () => {
+            if (!hasApiCredentials) return;
+
+            const searchRequest = {
+                query: 'test',
+                score_threshold: 0.5
+            };
+
+            const response = await airweaveClient.search(searchRequest);
+
+            expect(response).toBeDefined();
+            expect(response.results).toBeDefined();
+            // All results should have score >= threshold (if any results returned)
+            if (response.results.length > 0) {
+                response.results.forEach(result => {
+                    expect(result.score).toBeGreaterThanOrEqual(0.5);
+                });
+            }
+        });
+
+        it('should handle search method parameter', async () => {
+            if (!hasApiCredentials) return;
+
+            const searchRequest = {
+                query: 'test',
+                search_method: 'neural'
+            };
+
+            const response = await airweaveClient.search(searchRequest);
+
+            expect(response).toBeDefined();
+            expect(response.results).toBeDefined();
+        });
+
+        it('should handle expansion strategy parameter', async () => {
+            if (!hasApiCredentials) return;
+
+            const searchRequest = {
+                query: 'test',
+                expansion_strategy: 'no_expansion'
+            };
+
+            const response = await airweaveClient.search(searchRequest);
+
+            expect(response).toBeDefined();
+            expect(response.results).toBeDefined();
+        });
+
+        it('should handle reranking parameter', async () => {
+            if (!hasApiCredentials) return;
+
+            const searchRequest = {
+                query: 'test',
+                enable_reranking: false
+            };
+
+            const response = await airweaveClient.search(searchRequest);
+
+            expect(response).toBeDefined();
+            expect(response.results).toBeDefined();
+        });
+
+        it('should handle query interpretation parameter', async () => {
+            if (!hasApiCredentials) return;
+
+            const searchRequest = {
+                query: 'test',
+                enable_query_interpretation: false
+            };
+
+            const response = await airweaveClient.search(searchRequest);
+
+            expect(response).toBeDefined();
+            expect(response.results).toBeDefined();
+        });
+
+        it('should handle complex advanced search combinations', async () => {
+            if (!hasApiCredentials) return;
+
+            const searchRequest = {
+                query: 'machine learning',
+                score_threshold: 0.7,
+                search_method: 'neural',
+                expansion_strategy: 'llm',
+                enable_reranking: true,
+                enable_query_interpretation: true,
+                limit: 5,
+                response_type: 'completion'
+            };
+
+            const response = await airweaveClient.search(searchRequest);
+
+            expect(response).toBeDefined();
+            expect(response.results).toBeDefined();
+            expect(response.response_type).toBe('completion');
+            expect(response.results.length).toBeLessThanOrEqual(5);
+
+            // All results should meet the score threshold
+            if (response.results.length > 0) {
+                response.results.forEach(result => {
+                    expect(result.score).toBeGreaterThanOrEqual(0.7);
+                });
+            }
+        });
+    });
+
     // Error handling tests require real API credentials
     // These will be added back when running in CI with real credentials
 
