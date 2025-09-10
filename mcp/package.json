@@ -14,7 +14,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run tests/integration-live.test.ts --reporter=verbose",
     "test:llm": "node tests/run-llm-tests.js",
+    "test:ci": "npm run test && npm run test:integration && npm run test:llm",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
