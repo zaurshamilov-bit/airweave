@@ -67,7 +67,7 @@ export const OAuthRedirectView: React.FC = () => {
 
             <button
               onClick={handleConnect}
-              className="w-full py-4 px-6 rounded-xl font-medium bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:scale-[1.02] active:scale-[0.98] transition-all transform flex items-center justify-center gap-2"
+              className="w-full py-2 px-4 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-all flex items-center justify-center gap-2"
             >
               <span>Connect with {sourceName}</span>
               <ExternalLink className="w-4 h-4" />

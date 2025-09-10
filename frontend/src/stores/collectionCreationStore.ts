@@ -8,7 +8,7 @@ export type CreationStep =
   | 'oauth-redirect'
   | 'success';
 
-export type AuthMode = 'oauth2' | 'direct_auth' | 'external_provider';
+export type AuthMode = 'oauth2' | 'direct_auth' | 'external_provider' | 'config_auth';
 
 // Flow types to track entry point
 export type FlowType =
@@ -32,6 +32,7 @@ interface CollectionCreationState {
   // Source connection data
   selectedSource?: string; // short_name
   sourceName?: string; // Display name
+  sourceConnectionName?: string; // User-provided connection name
   authMode?: AuthMode;
   authConfig?: Record<string, any>;
   configFields?: Record<string, any>;
@@ -49,6 +50,7 @@ interface CollectionCreationState {
   openForAddToCollection: (collectionId: string, collectionName: string) => void;
   closeModal: () => void;
   setStep: (step: CreationStep) => void;
+  handleBackFromSourceConfig: () => Promise<void>;
 
   // Collection actions
   setCollectionData: (name: string, description?: string) => void;
@@ -56,6 +58,7 @@ interface CollectionCreationState {
 
   // Source actions
   selectSource: (shortName: string, displayName: string) => void;
+  setSourceConnectionName: (name: string) => void;
   setAuthMode: (mode: AuthMode) => void;
   setAuthConfig: (config: Record<string, any>) => void;
   setConfigFields: (fields: Record<string, any>) => void;
@@ -84,6 +87,7 @@ const initialState = {
   existingCollectionName: undefined,
   selectedSource: undefined,
   sourceName: undefined,
+  sourceConnectionName: undefined,
   authMode: undefined,
   authConfig: undefined,
   configFields: undefined,
@@ -114,7 +118,7 @@ export const useCollectionCreationStore = create<CollectionCreationState>()(
             ...initialState,
             isOpen: true,
             flowType: 'create-collection',
-            currentStep: 'source-select', // Start with source selection
+            currentStep: 'collection-form', // Start with collection form to get the name first
           });
         }, 50);
       },
@@ -169,6 +173,40 @@ export const useCollectionCreationStore = create<CollectionCreationState>()(
 
       setStep: (step) => set({ currentStep: step }),
 
+      handleBackFromSourceConfig: async () => {
+        const state = get();
+
+        // If we created a collection and are going back, delete it
+        // (but not for add-to-collection flow where we're using an existing collection)
+        if (state.collectionId && state.flowType !== 'add-to-collection') {
+          try {
+            // Import apiClient dynamically to avoid circular dependency
+            const { apiClient } = await import('@/lib/api');
+            const response = await apiClient.delete(`/collections/${state.collectionId}`);
+            if (response.ok) {
+              console.log('Deleted temporary collection:', state.collectionId);
+            }
+          } catch (error) {
+            console.error('Failed to delete collection on back navigation:', error);
+          }
+
+          // Clear the collection ID since we deleted it
+          set({ collectionId: undefined });
+        }
+
+        // If we're in create-with-source flow, keep the source and go back to collection form
+        if (state.flowType === 'create-with-source') {
+          // Don't clear the source - it was pre-selected from Dashboard
+          set({ currentStep: 'collection-form' });
+        } else if (state.flowType === 'add-to-collection') {
+          // For add-to-collection, go back to source select
+          set({ currentStep: 'source-select' });
+        } else {
+          // For create-collection flow, go back to source select
+          set({ currentStep: 'source-select' });
+        }
+      },
+
       setCollectionData: (name, description) => set({
         collectionName: name,
         collectionDescription: description || ''
@@ -180,6 +218,8 @@ export const useCollectionCreationStore = create<CollectionCreationState>()(
         selectedSource: shortName,
         sourceName: displayName
       }),
+
+      setSourceConnectionName: (name) => set({ sourceConnectionName: name }),
 
       setAuthMode: (mode) => set({ authMode: mode }),
       setAuthConfig: (config) => set({ authConfig: config }),
@@ -198,6 +238,7 @@ export const useCollectionCreationStore = create<CollectionCreationState>()(
       resetSourceData: () => set({
         selectedSource: undefined,
         sourceName: undefined,
+        sourceConnectionName: undefined,
         authMode: undefined,
         authConfig: undefined,
         configFields: undefined,
@@ -217,7 +258,7 @@ export const useCollectionCreationStore = create<CollectionCreationState>()(
         const state = get();
         switch (state.flowType) {
           case 'create-collection':
-            return 'source-select';
+            return 'collection-form'; // Start with collection form to get the name
           case 'create-with-source':
             return 'collection-form';
           case 'add-to-collection':
@@ -239,6 +280,7 @@ export const useCollectionCreationStore = create<CollectionCreationState>()(
         existingCollectionName: state.existingCollectionName,
         selectedSource: state.selectedSource,
         sourceName: state.sourceName,
+        sourceConnectionName: state.sourceConnectionName,
         authMode: state.authMode,
         configFields: state.configFields,
         oauthState: state.oauthState,

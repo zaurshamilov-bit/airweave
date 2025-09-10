@@ -171,10 +171,9 @@ export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadabl
             onClick={() => closeModal()}
             className={cn(
               "w-full px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-              "border",
               isDark
-                ? "border-gray-700 text-gray-400 hover:text-gray-200 hover:bg-gray-800"
-                : "border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-white"
+                ? "text-gray-400 hover:text-gray-200"
+                : "text-gray-600 hover:text-gray-900"
             )}
           >
             Cancel
@@ -211,10 +210,9 @@ export const SourceSelectView: React.FC<SourceSelectViewProps> = ({ humanReadabl
                   onClick={() => handleSelectSource(source)}
                   className={cn(
                     "group relative p-3 rounded-lg border transition-all duration-200",
-                    "hover:shadow-md hover:scale-[1.02]",
                     "flex flex-col items-center gap-2",
                     isDark
-                      ? "bg-gray-800/50 border-gray-700 hover:border-gray-600 hover:bg-gray-800"
+                      ? "bg-gray-900/50 border-gray-800 hover:border-gray-700 hover:bg-gray-900"
                       : "bg-white border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                   )}
                   title={source.description || source.name}

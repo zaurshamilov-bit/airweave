@@ -94,9 +94,9 @@ export const SuccessView: React.FC<SuccessViewProps> = ({ onComplete, isAddingTo
             <button
               onClick={handleGoToCollection}
               className={cn(
-                "w-full py-2.5 px-4 rounded-lg font-medium",
+                "w-full py-2 px-4 rounded-lg text-sm font-medium",
                 "flex items-center justify-center gap-2",
-                "transition-all duration-200",
+                "transition-all",
                 "bg-blue-600 hover:bg-blue-700 text-white"
               )}
             >
@@ -107,12 +107,11 @@ export const SuccessView: React.FC<SuccessViewProps> = ({ onComplete, isAddingTo
             <button
               onClick={handleDone}
               className={cn(
-                "w-full py-2.5 px-4 rounded-lg font-medium",
+                "w-full py-2 px-4 rounded-lg text-sm font-medium",
                 "transition-colors",
-                "border",
                 isDark
-                  ? "border-gray-700 hover:bg-gray-800 text-gray-300"
-                  : "border-gray-200 hover:bg-gray-50 text-gray-700"
+                  ? "text-gray-400 hover:text-gray-200"
+                  : "text-gray-600 hover:text-gray-900"
               )}
             >
               Done

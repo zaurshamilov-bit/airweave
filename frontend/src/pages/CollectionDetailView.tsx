@@ -170,6 +170,9 @@ const Collections = () => {
     // Side panel store
     const { isOpen: isPanelOpen, openPanel } = useSidePanelStore();
 
+    // Collection creation store to track modal state
+    const { isOpen: isCreationModalOpen } = useCollectionCreationStore();
+
     // Page state
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -347,30 +350,39 @@ const Collections = () => {
     useEffect(() => {
         if (isFromOAuthSuccess) {
             const newSourceId = searchParams.get("source_connection_id");
+
+            // Always refresh source connections when returning from OAuth
+            if (collection?.readable_id) {
+                fetchSourceConnections(collection.readable_id);
+            }
+
             if (newSourceId && sourceConnections.length > 0) {
                 const newConnection = sourceConnections.find(c => c.id === newSourceId);
                 if (newConnection) {
-                    sonnerToast.success(`Source "${newConnection.name}" connected successfully!`);
-
-                    // Clean up URL params
-                    const newSearchParams = new URLSearchParams(searchParams);
-                    newSearchParams.delete("status");
-                    newSearchParams.delete("source_connection_id");
-                    newSearchParams.delete("collection");
-                    setSearchParams(newSearchParams, { replace: true });
+                    toast({
+                        title: "Success",
+                        description: `Source "${newConnection.name}" connected successfully!`
+                    });
                 }
             }
-        }
-    }, [isFromOAuthSuccess, sourceConnections, searchParams, setSearchParams]);
 
-    // ** NEW: Refresh connections when panel closes, in case a new one was added **
+            // Clean up URL params
+            const newSearchParams = new URLSearchParams(searchParams);
+            newSearchParams.delete("status");
+            newSearchParams.delete("source_connection_id");
+            newSearchParams.delete("collection");
+            setSearchParams(newSearchParams, { replace: true });
+        }
+    }, [isFromOAuthSuccess, collection?.readable_id, searchParams, setSearchParams]);
+
+    // ** NEW: Refresh connections when panel or creation modal closes, in case a new one was added **
     useEffect(() => {
-        if (!isPanelOpen) {
+        if (!isPanelOpen && !isCreationModalOpen) {
             if (collection?.readable_id) {
                 fetchSourceConnections(collection.readable_id);
             }
         }
-    }, [isPanelOpen, collection?.readable_id]);
+    }, [isPanelOpen, isCreationModalOpen, collection?.readable_id]);
 
 
     /********************************************

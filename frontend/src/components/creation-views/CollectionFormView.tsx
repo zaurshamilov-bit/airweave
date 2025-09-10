@@ -98,7 +98,7 @@ export const CollectionFormView: React.FC<CollectionFormViewProps> = ({ humanRea
               <input
                 id="collection-name"
                 type="text"
-                placeholder="My Asana Collection"
+                placeholder="Engineering documentation"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !isCreating && handleCreate()}
@@ -106,7 +106,7 @@ export const CollectionFormView: React.FC<CollectionFormViewProps> = ({ humanRea
                 className={cn(
                   "w-full px-4 py-2.5 rounded-lg text-sm",
                   "border transition-colors",
-                  "focus:outline-none focus:ring-2 focus:ring-blue-500",
+                  "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
                   isDark
                     ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
                     : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
@@ -154,14 +154,10 @@ export const CollectionFormView: React.FC<CollectionFormViewProps> = ({ humanRea
           onClick={handleCreate}
           disabled={!name.trim() || isCreating}
           className={cn(
-            "w-full py-3 px-4 rounded-lg font-medium",
-            "transition-all duration-200",
+            "w-full py-2 px-4 rounded-lg text-sm font-medium",
+            "transition-all",
             "disabled:opacity-50 disabled:cursor-not-allowed",
-            name.trim() && !isCreating
-              ? "bg-blue-600 hover:bg-blue-700 text-white"
-              : isDark
-                ? "bg-gray-800 text-gray-500"
-                : "bg-gray-100 text-gray-400"
+            "bg-blue-600 hover:bg-blue-700 text-white"
           )}
         >
           {isCreating ? 'Creating...' : 'Next'}

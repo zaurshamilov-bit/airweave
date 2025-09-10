@@ -2,12 +2,14 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
 import { getAppIconUrl } from '@/lib/utils/icons';
+import { Plus } from 'lucide-react';
 
 interface CollectionVisualizationProps {
   collectionName: string;
   humanReadableId: string;
   selectedSource?: string;
   sourceName?: string;
+  sourceConnectionName?: string;
   currentStep: string;
 }
 
@@ -16,6 +18,7 @@ export const CollectionVisualization: React.FC<CollectionVisualizationProps> = (
   humanReadableId,
   selectedSource,
   sourceName,
+  sourceConnectionName,
   currentStep,
 }) => {
   const { resolvedTheme } = useTheme();
@@ -24,15 +27,16 @@ export const CollectionVisualization: React.FC<CollectionVisualizationProps> = (
   // Get source icon using the proper utility function
   const getSourceIcon = () => {
     if (!selectedSource) {
-      // Abstract shape when no source selected
+      // Placeholder dashed box when no source selected
       return (
-        <div className="w-full h-full flex items-center justify-center">
-          <div className={cn(
-            "w-24 h-24 rounded-3xl flex items-center justify-center",
-            "bg-gradient-to-br from-red-500 to-red-600"
-          )}>
-            <div className="w-12 h-12 bg-white/20 rounded-full" />
-          </div>
+        <div className={cn(
+          "w-20 h-20 rounded-2xl border-2 border-dashed flex items-center justify-center",
+          isDark ? "border-gray-600" : "border-gray-400"
+        )}>
+          <Plus className={cn(
+            "w-8 h-8",
+            isDark ? "text-gray-600" : "text-gray-400"
+          )} />
         </div>
       );
     }
@@ -41,13 +45,11 @@ export const CollectionVisualization: React.FC<CollectionVisualizationProps> = (
     const iconUrl = getAppIconUrl(selectedSource, resolvedTheme);
 
     return (
-      <div className="w-full h-full flex items-center justify-center">
-        <img
-          src={iconUrl}
-          alt={sourceName || selectedSource}
-          className="w-16 h-16"
-        />
-      </div>
+      <img
+        src={iconUrl}
+        alt={sourceName || selectedSource}
+        className="w-20 h-20 opacity-90"
+      />
     );
   };
 
@@ -55,126 +57,192 @@ export const CollectionVisualization: React.FC<CollectionVisualizationProps> = (
     <div className="h-full flex flex-col px-8 py-8">
       <div className="flex-1 flex flex-col justify-center">
         <div className="w-full max-w-lg mx-auto">
-          {/* Collection title - with better spacing */}
+          {/* Collection title - with sketch-like appearance */}
           <div className="text-center mb-8">
             <h3 className={cn(
-              "text-3xl font-light tracking-tight",
-              isDark ? "text-white" : "text-gray-900"
+              "text-2xl font-light tracking-tight opacity-65",
+              isDark ? "text-gray-400" : "text-gray-600"
             )}>
-              {collectionName || 'My Collection'}
+              {collectionName || 'Your Collection'}
             </h3>
           </div>
 
-          {/* Collection container */}
+          {/* Sketch-like container with dashed border */}
           <div className="relative">
-            {/* Header with ID and pseudo-tabs */}
+            {/* Header with ID and pseudo-tabs - more muted */}
             <div className={cn(
-              "rounded-t-xl border border-b px-5 py-3",
+              "rounded-t-xl border-2 border-b-0 border-dashed px-5 py-3",
               isDark
-                ? "bg-gray-800 border-gray-700"
-                : "bg-white border-gray-200"
+                ? "bg-gray-900/35 border-gray-700"
+                : "bg-gray-50 border-gray-300"
             )}>
-              {/* Readable ID */}
+              {/* Readable ID - more prominent */}
               <div className={cn(
-                "text-xs font-mono mb-2 opacity-70",
+                "text-xs font-mono mb-2 opacity-80",
                 isDark ? "text-gray-400" : "text-gray-500"
               )}>
-                #{humanReadableId}
+                {humanReadableId ? `#${humanReadableId}` : '#your-collection-id'}
               </div>
 
-              {/* Pseudo tabs - left aligned, neutral colors */}
+              {/* Pseudo tabs - clearly non-interactive */}
               <div className="flex gap-4">
-                <button className={cn(
-                  "text-xs font-medium transition-colors pb-1",
-                  "border-b-2 border-transparent",
-                  isDark
-                    ? "text-gray-500 hover:text-gray-300"
-                    : "text-gray-400 hover:text-gray-600"
+                <div className={cn(
+                  "text-xs font-medium pb-1 cursor-default",
+                  "border-b-2 border-transparent opacity-45",
+                  isDark ? "text-gray-500" : "text-gray-400"
                 )}>
-                  search
-                </button>
-                <button className={cn(
-                  "text-xs font-medium transition-colors pb-1",
-                  "border-b-2",
+                  Search
+                </div>
+                <div className={cn(
+                  "text-xs font-medium pb-1 cursor-default",
+                  "border-b-2 opacity-65",
                   isDark
-                    ? "text-gray-300 border-gray-500"
-                    : "text-gray-700 border-gray-400"
+                    ? "text-gray-400 border-gray-600"
+                    : "text-gray-500 border-gray-400"
                 )}>
-                  source connections
-                </button>
+                  Source Connections
+                </div>
               </div>
             </div>
 
-            {/* Quadrant visualization - smaller for better proportions */}
+            {/* Quadrant visualization - sketch-like with dashed borders */}
             <div className={cn(
-              "rounded-b-xl border border-t-0 p-5",
+              "rounded-b-xl border-2 border-t border-dashed p-5",
               isDark
-                ? "bg-gray-800 border-gray-700"
-                : "bg-white border-gray-200"
+                ? "bg-gray-900/35 border-gray-700"
+                : "bg-gray-50 border-gray-300"
             )}>
               <div className={cn(
-                "grid grid-cols-2 gap-0.5 rounded-lg overflow-hidden",
-                isDark ? "bg-gray-900" : "bg-gray-100"
+                "grid grid-cols-2 gap-1 rounded-lg overflow-hidden",
+                isDark ? "bg-gray-800/25" : "bg-gray-100/60"
               )}>
-                {/* Top left - Selected source icon */}
+                {/* Top left - Selected source icon or placeholder */}
                 <div className={cn(
-                  "aspect-square p-5",
-                  isDark ? "bg-gray-800" : "bg-white"
+                  "aspect-square p-4",
+                  isDark ? "bg-gray-900/50" : "bg-white/70"
                 )}>
-                  {getSourceIcon()}
-                </div>
-
-                {/* Top right - Abstract shape */}
-                <div className={cn(
-                  "aspect-square p-5",
-                  isDark ? "bg-gray-800" : "bg-white"
-                )}>
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className={cn(
-                      "w-24 h-24 rounded-full",
-                      isDark ? "bg-gray-700" : "bg-gray-300"
-                    )} />
+                  <div className="w-full h-full flex flex-col items-center justify-center">
+                    {selectedSource ? (
+                      <>
+                        {getSourceIcon()}
+                        <div className={cn(
+                          "text-[10px] font-mono mt-2",
+                          selectedSource ? "opacity-50" : "opacity-35",
+                          isDark ? "text-gray-500" : "text-gray-400"
+                        )}>
+                          {sourceConnectionName || sourceName || selectedSource}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className={cn(
+                          "w-20 h-20 rounded-2xl border-2 border-dashed flex items-center justify-center",
+                          isDark ? "border-gray-700" : "border-gray-350"
+                        )}>
+                          <Plus className={cn(
+                            "w-8 h-8 opacity-35",
+                            isDark ? "text-gray-700" : "text-gray-350"
+                          )} />
+                        </div>
+                        <div className={cn(
+                          "text-[10px] font-mono opacity-35 mt-2",
+                          isDark ? "text-gray-600" : "text-gray-400"
+                        )}>
+                          future source
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {/* Bottom left - Abstract shape */}
+                {/* Top right - Placeholder for future source */}
                 <div className={cn(
-                  "aspect-square p-5",
-                  isDark ? "bg-gray-800" : "bg-white"
+                  "aspect-square p-4",
+                  isDark ? "bg-gray-900/50" : "bg-white/70"
                 )}>
-                  <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-full h-full flex flex-col items-center justify-center">
                     <div className={cn(
-                      "w-24 h-24",
-                      isDark ? "bg-gray-700" : "bg-gray-300"
-                    )} />
+                      "w-20 h-20 rounded-2xl border-2 border-dashed flex items-center justify-center",
+                      isDark ? "border-gray-700" : "border-gray-350"
+                    )}>
+                      <Plus className={cn(
+                        "w-8 h-8 opacity-35",
+                        isDark ? "text-gray-700" : "text-gray-350"
+                      )} />
+                    </div>
+                    <div className={cn(
+                      "text-[10px] font-mono opacity-35 mt-2",
+                      isDark ? "text-gray-600" : "text-gray-400"
+                    )}>
+                      future source
+                    </div>
                   </div>
                 </div>
 
-                {/* Bottom right - Abstract shape */}
+                {/* Bottom left - Placeholder for future source */}
                 <div className={cn(
-                  "aspect-square p-5",
-                  isDark ? "bg-gray-800" : "bg-white"
+                  "aspect-square p-4",
+                  isDark ? "bg-gray-900/50" : "bg-white/70"
                 )}>
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div
-                      className="w-0 h-0 border-l-[48px] border-l-transparent border-r-[48px] border-r-transparent border-b-[84px]"
-                      style={{
-                        borderBottomColor: isDark ? 'rgb(107 114 128)' : 'rgb(209 213 219)'
-                      }}
-                    />
+                  <div className="w-full h-full flex flex-col items-center justify-center">
+                    <div className={cn(
+                      "w-20 h-20 rounded-2xl border-2 border-dashed flex items-center justify-center",
+                      isDark ? "border-gray-700" : "border-gray-350"
+                    )}>
+                      <Plus className={cn(
+                        "w-8 h-8 opacity-35",
+                        isDark ? "text-gray-700" : "text-gray-350"
+                      )} />
+                    </div>
+                    <div className={cn(
+                      "text-[10px] font-mono opacity-35 mt-2",
+                      isDark ? "text-gray-600" : "text-gray-400"
+                    )}>
+                      future source
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom right - Placeholder for future source */}
+                <div className={cn(
+                  "aspect-square p-4",
+                  isDark ? "bg-gray-900/50" : "bg-white/70"
+                )}>
+                  <div className="w-full h-full flex flex-col items-center justify-center">
+                    <div className={cn(
+                      "w-20 h-20 rounded-2xl border-2 border-dashed flex items-center justify-center",
+                      isDark ? "border-gray-700" : "border-gray-350"
+                    )}>
+                      <Plus className={cn(
+                        "w-8 h-8 opacity-35",
+                        isDark ? "text-gray-700" : "text-gray-350"
+                      )} />
+                    </div>
+                    <div className={cn(
+                      "text-[10px] font-mono opacity-35 mt-2",
+                      isDark ? "text-gray-600" : "text-gray-400"
+                    )}>
+                      future source
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Bottom message - with better spacing */}
+          {/* Bottom message - more prominent to explain the sketch */}
           <div className="text-center mt-8">
             <p className={cn(
-              "text-sm opacity-75",
-              isDark ? "text-gray-400" : "text-gray-600"
+              "text-sm opacity-65 italic",
+              isDark ? "text-gray-500" : "text-gray-500"
             )}>
-              You can add more sources to this collection later.
+              This is a preview of your collection structure.
+            </p>
+            <p className={cn(
+              "text-xs opacity-55 mt-1",
+              isDark ? "text-gray-600" : "text-gray-400"
+            )}>
+              You can add more source connections anytime after creation.
             </p>
           </div>
         </div>

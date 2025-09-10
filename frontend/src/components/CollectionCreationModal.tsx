@@ -30,6 +30,7 @@ export const CollectionCreationModal: React.FC = () => {
     existingCollectionName,
     selectedSource,
     sourceName,
+    sourceConnectionName,
     closeModal,
     setStep,
     reset,
@@ -39,18 +40,40 @@ export const CollectionCreationModal: React.FC = () => {
   // Generate human-readable ID when collection name changes (only for new collections)
   useEffect(() => {
     // Only generate for new collections, not when adding to existing
-    if (!isAddingToExistingCollection()) {
-      const generateHumanReadableId = () => {
-        // This is a placeholder - you'll provide the exact algorithm later
-        const adjectives = ['quick', 'bright', 'cool', 'smart', 'fresh'];
-        const nouns = ['fox', 'star', 'wave', 'cloud', 'tree'];
-        const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-        const noun = nouns[Math.floor(Math.random() * nouns.length)];
-        const num = Math.floor(Math.random() * 100);
-        return `${adj}-${noun}-${num}`;
+    if (!isAddingToExistingCollection() && collectionName) {
+      const generateHumanReadableId = (name: string) => {
+        // Convert to lowercase and trim
+        let readableId = name.toLowerCase().trim();
+
+        // Remove any character that's not a letter, number, or space
+        readableId = readableId.replace(/[^a-z0-9\s]/g, '');
+
+        // Replace spaces with hyphens
+        readableId = readableId.replace(/\s+/g, '-');
+
+        // Ensure no consecutive hyphens
+        readableId = readableId.replace(/-+/g, '-');
+
+        // Trim hyphens from start and end
+        readableId = readableId.replace(/^-+|-+$/g, '');
+
+        // Generate random 6-character alphanumeric suffix
+        const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        let suffix = '';
+        for (let i = 0; i < 6; i++) {
+          suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+
+        // Combine with suffix
+        readableId = `${readableId}-${suffix}`;
+
+        return readableId;
       };
 
-      setHumanReadableId(generateHumanReadableId());
+      setHumanReadableId(generateHumanReadableId(collectionName));
+    } else if (!isAddingToExistingCollection() && !collectionName) {
+      // If collection name is empty, clear the readable ID
+      setHumanReadableId('');
     }
   }, [collectionName, isAddingToExistingCollection]);
 
@@ -114,7 +137,7 @@ export const CollectionCreationModal: React.FC = () => {
   };
 
   const renderCurrentView = () => {
-    // For add-to-collection flow, skip collection form
+    // For add-to-collection flow only, skip collection form
     if (isAddingToExistingCollection() && currentStep === 'collection-form') {
       setStep('source-select');
       return null;
@@ -184,7 +207,7 @@ export const CollectionCreationModal: React.FC = () => {
             "fixed left-[50%] top-[50%] z-50",
             "translate-x-[-50%] translate-y-[-50%]",
             "w-[1400px] max-w-[95vw] h-[800px] max-h-[95vh]",
-            "rounded-xl shadow-2xl border overflow-hidden",
+            "rounded-xl shadow-2xl border overflow-hidden outline-none",
             isDark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"
           )}
           onPointerDownOutside={(e) => {
@@ -256,6 +279,7 @@ export const CollectionCreationModal: React.FC = () => {
                     humanReadableId={humanReadableId}
                     selectedSource={selectedSource}
                     sourceName={sourceName}
+                    sourceConnectionName={sourceConnectionName}
                     currentStep={currentStep}
                   />
                 </div>
