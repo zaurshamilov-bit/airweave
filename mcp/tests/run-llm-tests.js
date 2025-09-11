@@ -62,7 +62,7 @@ const testCases = [
             limit: 100,
             offset: 0,
             response_type: 'raw',
-            recency_bias: 0.8
+            recency_bias: 0.7
         }
     },
     {
@@ -74,7 +74,82 @@ const testCases = [
             limit: 3,
             offset: 0,
             response_type: 'completion',
-            recency_bias: 0.8
+            recency_bias: 0.7
+        }
+    },
+    {
+        id: 'advanced-quality-001',
+        description: 'High-quality results request',
+        query: 'Find high-quality results about machine learning',
+        expectedParams: {
+            query: 'Find high-quality results about machine learning',
+            limit: 100,
+            offset: 0,
+            response_type: 'raw',
+            score_threshold: 0.8
+        }
+    },
+    {
+        id: 'advanced-method-001',
+        description: 'Specific search method request',
+        query: 'Use keyword search to find exact matches for neural networks',
+        expectedParams: {
+            query: 'Use keyword search to find exact matches for neural networks',
+            limit: 100,
+            offset: 0,
+            response_type: 'raw',
+            search_method: 'keyword'
+        }
+    },
+    {
+        id: 'advanced-expansion-001',
+        description: 'No expansion request',
+        query: 'Search for exact phrase without expanding the query',
+        expectedParams: {
+            query: 'Search for exact phrase without expanding the query',
+            limit: 100,
+            offset: 0,
+            response_type: 'raw',
+            expansion_strategy: 'no_expansion'
+        }
+    },
+    {
+        id: 'advanced-reranking-001',
+        description: 'Disable reranking request',
+        query: 'Find results without reranking for faster response',
+        expectedParams: {
+            query: 'Find results without reranking for faster response',
+            limit: 100,
+            offset: 0,
+            response_type: 'raw',
+            enable_reranking: false
+        }
+    },
+    {
+        id: 'advanced-interpretation-001',
+        description: 'Disable query interpretation request',
+        query: 'Search without interpreting the query automatically',
+        expectedParams: {
+            query: 'Search without interpreting the query automatically',
+            limit: 100,
+            offset: 0,
+            response_type: 'raw',
+            enable_query_interpretation: false
+        }
+    },
+    {
+        id: 'advanced-complex-001',
+        description: 'Complex advanced search with multiple parameters',
+        query: 'Find high-quality recent results about AI using neural search with LLM expansion and reranking',
+        expectedParams: {
+            query: 'Find high-quality recent results about AI using neural search with LLM expansion and reranking',
+            limit: 100,
+            offset: 0,
+            response_type: 'raw',
+            recency_bias: 0.7,
+            score_threshold: 0.8,
+            search_method: 'neural',
+            expansion_strategy: 'llm'
         }
     }
 ];
@@ -175,8 +250,35 @@ class LLMTestRunner {
             params.response_type = 'completion';
         }
 
-        if (query.includes('most recent') || query.includes('recent documents')) {
-            params.recency_bias = 0.8;
+        if (query.includes('most recent') || query.includes('recent documents') || query.includes('recent results')) {
+            params.recency_bias = 0.7;
+        }
+
+        // Advanced parameter extraction
+        if (query.includes('high-quality') || query.includes('quality results')) {
+            params.score_threshold = 0.8;
+        }
+
+        if (query.includes('keyword search') || query.includes('exact matches')) {
+            params.search_method = 'keyword';
+        } else if (query.includes('neural search') || query.includes('semantic search')) {
+            params.search_method = 'neural';
+        }
+
+        if (query.includes('without expanding') || query.includes('exact phrase') || query.includes('no expansion')) {
+            params.expansion_strategy = 'no_expansion';
+        } else if (query.includes('LLM expansion') || query.includes('AI expansion')) {
+            params.expansion_strategy = 'llm';
+        }
+
+        if (query.includes('without reranking') || query.includes('disable reranking') || query.includes('faster response')) {
+            params.enable_reranking = false;
+        } else if (query.includes('with reranking') || query.includes('enable reranking') || query.includes('and reranking')) {
+            params.enable_reranking = true;
+        }
+
+        if (query.includes('without interpreting') || query.includes('disable interpretation')) {
+            params.enable_query_interpretation = false;
         }
 
         return params;
