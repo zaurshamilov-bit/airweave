@@ -1,4 +1,4 @@
-name: Fern SDK Generation
+name: Publish SDKs and MCP
 
 on:
   release:
@@ -6,12 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "SDK version to release"
+        description: "Version to release (e.g., v0.5.8)"
         required: true
         type: string
 
 jobs:
-  generate-sdks:
+  generate-sdks-and-mcp:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -67,6 +67,30 @@ jobs:
           cd fern
           VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
           fern generate --group public --version $VERSION --log-level debug
+
+      - name: Update MCP package version
+        run: |
+          cd mcp
+          VERSION=${{ github.event.release.tag_name || github.event.inputs.version }}
+          # Remove 'v' prefix if present
+          VERSION=${VERSION#v}
+          npm version $VERSION --no-git-tag-version
+          echo "Updated MCP package to version $VERSION"
+
+      - name: Build MCP package
+        run: |
+          cd mcp
+          npm install
+          npm run build
+
+      - name: Publish MCP to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd mcp
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          npm publish --access public
+          echo "Published airweave-mcp-search to npm"
 
       - name: Trigger Docs Generation
         uses: actions/github-script@v6
