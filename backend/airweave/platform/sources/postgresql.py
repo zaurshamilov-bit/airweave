@@ -231,6 +231,19 @@ class PostgreSQLSource(BaseSource):
                     database=self.config["database"],
                     timeout=90.0,  # Connection timeout (1.5 minutes)
                     command_timeout=900.0,  # Command timeout (15 minutes for slow queries)
+                    # Add server settings to prevent idle timeouts
+                    server_settings={
+                        "jit": "off",  # Disable JIT for predictable performance
+                        "statement_timeout": "0",  # No statement timeout (handled client-side)
+                        "idle_in_transaction_session_timeout": "0",  # Disable idle timeout
+                        "tcp_keepalives_idle": "30",  # Send keepalive after 30s of idle
+                        "tcp_keepalives_interval": "10",  # Keepalive interval 10s
+                        "tcp_keepalives_count": "6",  # Number of keepalives before considering dead
+                    },
+                )
+                self.logger.info(
+                    f"Connected to PostgreSQL at {host}:{self.config['port']}, "
+                    f"database: {self.config['database']}"
                 )
             except asyncpg.InvalidPasswordError as e:
                 raise ValueError("Invalid database credentials") from e
@@ -248,6 +261,23 @@ class PostgreSQLSource(BaseSource):
                 ) from e
             except Exception as e:
                 raise ValueError(f"Database connection failed: {str(e)}") from e
+
+    async def _ensure_connection(self) -> None:
+        """Ensure connection is alive and reconnect if needed."""
+        if self.conn:
+            try:
+                # Test connection with a simple query
+                await self.conn.fetchval("SELECT 1")
+            except (asyncpg.ConnectionDoesNotExistError, asyncpg.InterfaceError, OSError) as e:
+                self.logger.warning(f"Connection lost, reconnecting: {e}")
+                self.conn = None
+                await self._connect()
+            except Exception as e:
+                self.logger.error(f"Connection test failed: {e}")
+                self.conn = None
+                await self._connect()
+        else:
+            await self._connect()
 
     async def _get_table_info(self, schema: str, table: str) -> Dict[str, Any]:
         """Get table/view structure information.
@@ -727,10 +757,20 @@ class PostgreSQLSource(BaseSource):
                 schema, table, cursor_field, last_cursor_value, BATCH_SIZE, offset
             )
 
-            if query_param is not None:
-                records = await self.conn.fetch(query, query_param)
-            else:
-                records = await self.conn.fetch(query)
+            # Execute query with connection retry on failure
+            try:
+                if query_param is not None:
+                    records = await self.conn.fetch(query, query_param)
+                else:
+                    records = await self.conn.fetch(query)
+            except (asyncpg.ConnectionDoesNotExistError, asyncpg.InterfaceError, OSError) as e:
+                self.logger.warning(f"Connection error during query, reconnecting: {e}")
+                await self._ensure_connection()
+                # Retry the query after reconnection
+                if query_param is not None:
+                    records = await self.conn.fetch(query, query_param)
+                else:
+                    records = await self.conn.fetch(query)
 
             # Break if no more records
             if not records:
@@ -785,11 +825,14 @@ class PostgreSQLSource(BaseSource):
             except Exception as e:
                 self.logger.warning(f"Failed to update Postgres field catalog: {e}")
 
-            # Start a transaction
-            async with self.conn.transaction():
-                for table in tables:
-                    async for entity in self._process_table(schema, table, cursor_data):
-                        yield entity
+            # Process tables WITHOUT a long-running transaction
+            # This prevents transaction timeout issues and allows better connection management
+            for table in tables:
+                # Check connection health before processing each table
+                await self._ensure_connection()
+
+                async for entity in self._process_table(schema, table, cursor_data):
+                    yield entity
 
         finally:
             if self.conn:
