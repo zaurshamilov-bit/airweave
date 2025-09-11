@@ -10,7 +10,11 @@ from qdrant_client.http.models import Filter as QdrantFilter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
-from airweave.analytics import business_events, track_api_endpoint, track_search_operation
+from airweave.analytics import (
+    business_events,
+    track_api_endpoint,
+    track_search_operation,
+)
 from airweave.api import deps
 from airweave.api.context import ApiContext
 from airweave.api.examples import (
@@ -516,6 +520,19 @@ async def stream_search_collection_advanced(  # noqa: C901 - streaming orchestra
 
     # Ensure the organization is allowed to perform queries
     await guard_rail.is_allowed(ActionType.QUERIES)
+
+    # Track stream initiation after permission check
+    from airweave.analytics.search_analytics import build_search_properties, track_search_event
+
+    if ctx and search_request.query:
+        properties = build_search_properties(
+            ctx=ctx,
+            query=search_request.query,
+            collection_slug=readable_id,
+            duration_ms=0,  # No duration for initiation
+            search_type="streaming",
+        )
+        track_search_event(ctx, properties, "search_stream_start")
 
     # Subscribe to the search:<request_id> channel
     pubsub = await core_pubsub.subscribe("search", request_id)
