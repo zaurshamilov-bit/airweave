@@ -750,60 +750,99 @@ class GoogleDriveSource(BaseSource):
                                 pattern=p,
                             )
                             if roots:
-                                # Concurrency for traversal results
-                                async def _worker_traverse(file_obj: Dict):
-                                    ent = await self._process_file_batch(file_obj)
-                                    if ent is not None:
-                                        yield ent
+                                if getattr(self, "batch_generation", False):
+                                    # Concurrent traversal
+                                    async def _worker_traverse(file_obj: Dict):
+                                        ent = await self._process_file_batch(file_obj)
+                                        if ent is not None:
+                                            yield ent
 
-                                items_gen = self._traverse_and_yield_files(
-                                    client,
-                                    corpora="drive",
-                                    include_all_drives=True,
-                                    drive_id=drive_id,
-                                    start_folder_ids=list(set(roots)),
-                                    filename_glob=fname_glob,
-                                    context=f"drive {drive_id}",
-                                )
+                                    items_gen = self._traverse_and_yield_files(
+                                        client,
+                                        corpora="drive",
+                                        include_all_drives=True,
+                                        drive_id=drive_id,
+                                        start_folder_ids=list(set(roots)),
+                                        filename_glob=fname_glob,
+                                        context=f"drive {drive_id}",
+                                    )
 
-                                async for processed in self.process_entities_concurrent(
-                                    items=items_gen,
-                                    worker=_worker_traverse,
-                                    batch_size=getattr(self, "batch_size", 30),
-                                    preserve_order=getattr(self, "preserve_order", False),
-                                    stop_on_error=getattr(self, "stop_on_error", False),
-                                    max_queue_size=getattr(self, "max_queue_size", 200),
-                                ):
-                                    yield processed
+                                    async for processed in self.process_entities_concurrent(
+                                        items=items_gen,
+                                        worker=_worker_traverse,
+                                        batch_size=getattr(self, "batch_size", 30),
+                                        preserve_order=getattr(self, "preserve_order", False),
+                                        stop_on_error=getattr(self, "stop_on_error", False),
+                                        max_queue_size=getattr(self, "max_queue_size", 200),
+                                    ):
+                                        yield processed
+                                else:
+                                    # Sequential traversal
+                                    async for file_obj in self._traverse_and_yield_files(
+                                        client,
+                                        corpora="drive",
+                                        include_all_drives=True,
+                                        drive_id=drive_id,
+                                        start_folder_ids=list(set(roots)),
+                                        filename_glob=fname_glob,
+                                        context=f"drive {drive_id}",
+                                    ):
+                                        file_entity = self._build_file_entity(file_obj)
+                                        if not file_entity:
+                                            continue
+                                        processed_entity = await self.process_file_entity(
+                                            file_entity=file_entity
+                                        )
+                                        if processed_entity:
+                                            yield processed_entity
 
                         # Filename-only patterns (no folder segments) -> global name search
                         filename_only_patterns = [p for p in patterns if "/" not in p]
                         import fnmatch as _fn
 
                         for pat in filename_only_patterns:
+                            if getattr(self, "batch_generation", False):
 
-                            async def _worker_match(file_obj: Dict, pattern=pat):
-                                name = file_obj.get("name", "")
-                                if _fn.fnmatch(name, pattern):
-                                    ent = await self._process_file_batch(file_obj)
-                                    if ent is not None:
-                                        yield ent
+                                async def _worker_match(file_obj: Dict, pattern=pat):
+                                    name = file_obj.get("name", "")
+                                    if _fn.fnmatch(name, pattern):
+                                        ent = await self._process_file_batch(file_obj)
+                                        if ent is not None:
+                                            yield ent
 
-                            async for processed in self.process_entities_concurrent(
-                                items=self._list_files(
+                                async for processed in self.process_entities_concurrent(
+                                    items=self._list_files(
+                                        client,
+                                        corpora="drive",
+                                        include_all_drives=True,
+                                        drive_id=drive_id,
+                                        context=f"drive {drive_id}",
+                                    ),
+                                    worker=_worker_match,
+                                    batch_size=getattr(self, "batch_size", 30),
+                                    preserve_order=getattr(self, "preserve_order", False),
+                                    stop_on_error=getattr(self, "stop_on_error", False),
+                                    max_queue_size=getattr(self, "max_queue_size", 200),
+                                ):
+                                    yield processed
+                            else:
+                                async for file_obj in self._list_files(
                                     client,
                                     corpora="drive",
                                     include_all_drives=True,
                                     drive_id=drive_id,
                                     context=f"drive {drive_id}",
-                                ),
-                                worker=_worker_match,
-                                batch_size=getattr(self, "batch_size", 30),
-                                preserve_order=getattr(self, "preserve_order", False),
-                                stop_on_error=getattr(self, "stop_on_error", False),
-                                max_queue_size=getattr(self, "max_queue_size", 200),
-                            ):
-                                yield processed
+                                ):
+                                    name = file_obj.get("name", "")
+                                    if _fn.fnmatch(name, pat):
+                                        file_entity = self._build_file_entity(file_obj)
+                                        if not file_entity:
+                                            continue
+                                        processed_entity = await self.process_file_entity(
+                                            file_entity=file_entity
+                                        )
+                                        if processed_entity:
+                                            yield processed_entity
 
                     except Exception as e:
                         self.logger.error(f"Include mode error for drive {drive_id}: {str(e)}")
@@ -819,59 +858,97 @@ class GoogleDriveSource(BaseSource):
                             pattern=p,
                         )
                         if roots:
+                            if getattr(self, "batch_generation", False):
 
-                            async def _worker_traverse_user(file_obj: Dict):
-                                ent = await self._process_file_batch(file_obj)
-                                if ent is not None:
-                                    yield ent
+                                async def _worker_traverse_user(file_obj: Dict):
+                                    ent = await self._process_file_batch(file_obj)
+                                    if ent is not None:
+                                        yield ent
 
-                            items_gen_user = self._traverse_and_yield_files(
-                                client,
-                                corpora="user",
-                                include_all_drives=False,
-                                drive_id=None,
-                                start_folder_ids=list(set(roots)),
-                                filename_glob=fname_glob,
-                                context="MY DRIVE",
-                            )
+                                items_gen_user = self._traverse_and_yield_files(
+                                    client,
+                                    corpora="user",
+                                    include_all_drives=False,
+                                    drive_id=None,
+                                    start_folder_ids=list(set(roots)),
+                                    filename_glob=fname_glob,
+                                    context="MY DRIVE",
+                                )
+
+                                async for processed in self.process_entities_concurrent(
+                                    items=items_gen_user,
+                                    worker=_worker_traverse_user,
+                                    batch_size=getattr(self, "batch_size", 30),
+                                    preserve_order=getattr(self, "preserve_order", False),
+                                    stop_on_error=getattr(self, "stop_on_error", False),
+                                    max_queue_size=getattr(self, "max_queue_size", 200),
+                                ):
+                                    yield processed
+                            else:
+                                async for file_obj in self._traverse_and_yield_files(
+                                    client,
+                                    corpora="user",
+                                    include_all_drives=False,
+                                    drive_id=None,
+                                    start_folder_ids=list(set(roots)),
+                                    filename_glob=fname_glob,
+                                    context="MY DRIVE",
+                                ):
+                                    file_entity = self._build_file_entity(file_obj)
+                                    if not file_entity:
+                                        continue
+                                    processed_entity = await self.process_file_entity(
+                                        file_entity=file_entity
+                                    )
+                                    if processed_entity:
+                                        yield processed_entity
+
+                    filename_only_patterns = [p for p in patterns if "/" not in p]
+                    import fnmatch as _fn
+
+                    for pat in filename_only_patterns:
+                        if getattr(self, "batch_generation", False):
+
+                            async def _worker_match_user(file_obj: Dict, pattern=pat):
+                                name = file_obj.get("name", "")
+                                if _fn.fnmatch(name, pattern):
+                                    ent = await self._process_file_batch(file_obj)
+                                    if ent is not None:
+                                        yield ent
 
                             async for processed in self.process_entities_concurrent(
-                                items=items_gen_user,
-                                worker=_worker_traverse_user,
+                                items=self._list_files(
+                                    client,
+                                    corpora="user",
+                                    include_all_drives=False,
+                                    drive_id=None,
+                                    context="MY DRIVE",
+                                ),
+                                worker=_worker_match_user,
                                 batch_size=getattr(self, "batch_size", 30),
                                 preserve_order=getattr(self, "preserve_order", False),
                                 stop_on_error=getattr(self, "stop_on_error", False),
                                 max_queue_size=getattr(self, "max_queue_size", 200),
                             ):
                                 yield processed
-
-                    filename_only_patterns = [p for p in patterns if "/" not in p]
-                    import fnmatch as _fn
-
-                    for pat in filename_only_patterns:
-
-                        async def _worker_match_user(file_obj: Dict, pattern=pat):
-                            name = file_obj.get("name", "")
-                            if _fn.fnmatch(name, pattern):
-                                ent = await self._process_file_batch(file_obj)
-                                if ent is not None:
-                                    yield ent
-
-                        async for processed in self.process_entities_concurrent(
-                            items=self._list_files(
+                        else:
+                            async for file_obj in self._list_files(
                                 client,
                                 corpora="user",
                                 include_all_drives=False,
                                 drive_id=None,
                                 context="MY DRIVE",
-                            ),
-                            worker=_worker_match_user,
-                            batch_size=getattr(self, "batch_size", 30),
-                            preserve_order=getattr(self, "preserve_order", False),
-                            stop_on_error=getattr(self, "stop_on_error", False),
-                            max_queue_size=getattr(self, "max_queue_size", 200),
-                        ):
-                            yield processed
+                            ):
+                                name = file_obj.get("name", "")
+                                if _fn.fnmatch(name, pat):
+                                    file_entity = self._build_file_entity(file_obj)
+                                    if not file_entity:
+                                        continue
+                                    processed_entity = await self.process_file_entity(
+                                        file_entity=file_entity
+                                    )
+                                    if processed_entity:
+                                        yield processed_entity
 
                 except Exception as e:
                     self.logger.error(f"Include mode error for My Drive: {str(e)}")
