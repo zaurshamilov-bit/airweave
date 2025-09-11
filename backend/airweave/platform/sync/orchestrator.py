@@ -336,6 +336,8 @@ class SyncOrchestrator:
     ) -> None:
         """Finalize stream and perform cleanup (ORIGINAL LOGIC PRESERVED)."""
         # Always clean up the stream first
+        self.sync_context.logger.info("Finalizing stream and cleaning up")
+        self.sync_context.logger.info(f"Stream error: {stream_error}")
         if stream:
             await stream.stop()
 

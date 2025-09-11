@@ -22,7 +22,7 @@ class AsyncSourceStream(Generic[T]):
     def __init__(
         self,
         source_generator: AsyncGenerator[T, None],
-        queue_size: int = 1000,
+        queue_size: int = 10000,
         logger: Optional[logging.Logger] = None,
     ):
         """Initialize the async source stream.
@@ -95,10 +95,11 @@ class AsyncSourceStream(Generic[T]):
     async def stop(self):
         """Stop the producer and clean up resources."""
         self.is_running = False
+        self.logger.info("Stopping producer task")
         if self.producer_task:
             # Give producer a chance to finish gracefully
             try:
-                await asyncio.wait_for(self.producer_task, timeout=5.0)
+                await asyncio.wait_for(self.producer_task, timeout=15.0)
             except asyncio.TimeoutError:
                 self.logger.warning("Producer task did not complete in time, cancelling")
                 self.producer_task.cancel()
@@ -106,6 +107,11 @@ class AsyncSourceStream(Generic[T]):
                     await self.producer_task
                 except asyncio.CancelledError:
                     pass
+            except Exception as e:
+                # Producer task already failed with an exception - don't re-raise
+                self.logger.warning(
+                    f"Producer task already failed with error: {get_error_message(e)}"
+                )
 
     async def get_entities(self) -> AsyncGenerator[T, None]:
         """Get entities with timeout to prevent cleanup deadlock."""

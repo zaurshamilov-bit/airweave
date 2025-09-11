@@ -11,7 +11,7 @@ from airweave.api.context import ApiContext
 from airweave.core import credentials
 from airweave.core.auth_provider_service import auth_provider_service
 from airweave.core.collection_service import collection_service
-from airweave.core.constants.native_connections import NATIVE_QDRANT_UUID, NATIVE_TEXT2VEC_UUID
+from airweave.core.constants.reserved_ids import NATIVE_QDRANT_UUID, NATIVE_TEXT2VEC_UUID
 from airweave.core.shared_models import ConnectionStatus, SourceConnectionStatus, SyncStatus
 from airweave.core.sync_service import sync_service
 from airweave.db.unit_of_work import UnitOfWork

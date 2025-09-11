@@ -5,6 +5,7 @@ based on its schema structure. It dynamically creates entity classes at runtime
 using the PolymorphicEntity system.
 """
 
+import hashlib
 import json
 from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional, Type, Union
@@ -228,8 +229,8 @@ class PostgreSQLSource(BaseSource):
                     user=self.config["user"],
                     password=self.config["password"],
                     database=self.config["database"],
-                    timeout=10.0,  # Add connection timeout
-                    command_timeout=10.0,  # Add command timeout
+                    timeout=60.0,  # Connection timeout (1 minute)
+                    command_timeout=300.0,  # Command timeout (5 minutes for slow queries)
                 )
             except asyncpg.InvalidPasswordError as e:
                 raise ValueError("Invalid database credentials") from e
@@ -284,14 +285,50 @@ class PostgreSQLSource(BaseSource):
             # This can happen for views which don't have primary keys
             primary_keys = []
 
-        # If no primary keys found (common for views), use all columns as composite key
-        # This ensures each row gets a unique entity_id
+        # If no primary keys found (common for views), try to find best candidate columns
+        # This ensures each row gets a unique entity_id without creating huge keys
         if not primary_keys and columns:
-            self.logger.debug(
-                f"No primary keys found for {schema}.{table} (might be a view). "
-                f"Using all columns for entity identification."
-            )
-            primary_keys = [col["column_name"] for col in columns]
+            column_names = [col["column_name"] for col in columns]
+
+            # Heuristic: Look for common primary key column names
+            # Priority order: id, uuid, guid, then any column ending with _id
+            if "id" in column_names:
+                primary_keys = ["id"]
+                self.logger.debug(
+                    f"No primary keys found for {schema}.{table} (might be a view). "
+                    f"Using 'id' column for entity identification."
+                )
+            elif "uuid" in column_names:
+                primary_keys = ["uuid"]
+                self.logger.debug(
+                    f"No primary keys found for {schema}.{table} (might be a view). "
+                    f"Using 'uuid' column for entity identification."
+                )
+            elif "guid" in column_names:
+                primary_keys = ["guid"]
+                self.logger.debug(
+                    f"No primary keys found for {schema}.{table} (might be a view). "
+                    f"Using 'guid' column for entity identification."
+                )
+            else:
+                # Look for columns ending with _id
+                id_columns = [col for col in column_names if col.endswith("_id")]
+                if id_columns:
+                    # Use the first _id column found
+                    primary_keys = [id_columns[0]]
+                    self.logger.debug(
+                        f"No primary keys found for {schema}.{table} (might be a view). "
+                        f"Using '{id_columns[0]}' column for entity identification."
+                    )
+                else:
+                    # Last resort: use first column to avoid huge composite keys
+                    # This prevents the index size error while still providing some identification
+                    primary_keys = [column_names[0]] if column_names else []
+                    self.logger.warning(
+                        f"No primary keys or id columns found for {schema}.{table}. "
+                        f"Using first column '{primary_keys[0] if primary_keys else 'none'}' "
+                        f"for entity identification. This may not guarantee uniqueness."
+                    )
 
         # Build column metadata
         column_info = {}
@@ -446,6 +483,100 @@ class PostgreSQLSource(BaseSource):
 
         return processed_data
 
+    def _update_max_cursor_value(
+        self, cursor_field: Optional[str], data: Dict[str, Any], max_cursor_value: Any
+    ) -> Any:
+        """Track the maximum cursor value from the current record.
+
+        Args:
+            cursor_field: Field to track for cursor updates
+            data: Current record data
+            max_cursor_value: Current maximum cursor value
+
+        Returns:
+            Updated maximum cursor value
+        """
+        if not cursor_field or cursor_field not in data:
+            return max_cursor_value
+
+        cursor_value = data[cursor_field]
+        if cursor_value is None:
+            return max_cursor_value
+
+        if max_cursor_value is None or cursor_value > max_cursor_value:
+            return cursor_value
+
+        return max_cursor_value
+
+    def _parse_json_fields(self, data: Dict[str, Any]) -> None:
+        """Parse string fields that contain JSON data.
+
+        Args:
+            data: Dictionary to process (modified in place)
+        """
+        for key, value in data.items():
+            if not isinstance(value, str):
+                continue
+
+            try:
+                parsed_value = json.loads(value)
+                data[key] = parsed_value
+            except (json.JSONDecodeError, ValueError):
+                # Keep as string if not valid JSON
+                pass
+
+    def _generate_entity_id(
+        self, schema: str, table: str, data: Dict[str, Any], primary_keys: List[str]
+    ) -> str:
+        """Generate entity ID from primary key values or hash.
+
+        Args:
+            schema: Schema name
+            table: Table name
+            data: Record data
+            primary_keys: List of primary key columns
+
+        Returns:
+            Generated entity ID
+        """
+        pk_values = [str(data[pk]) for pk in primary_keys if pk in data]
+
+        if pk_values:
+            return f"{schema}.{table}:" + ":".join(pk_values)
+
+        # Fallback: use a hash of the row data if no primary keys are available
+        row_hash = hashlib.md5(str(sorted(data.items())).encode()).hexdigest()[:16]
+        entity_id = f"{schema}.{table}:row_{row_hash}"
+        self.logger.warning(
+            f"No primary key values found for {schema}.{table} row. "
+            f"Using hash-based entity_id: {entity_id}"
+        )
+        return entity_id
+
+    def _ensure_entity_id_length(self, entity_id: str, schema: str, table: str) -> str:
+        """Ensure entity ID is within acceptable length limits.
+
+        Args:
+            entity_id: Original entity ID
+            schema: Schema name
+            table: Table name
+
+        Returns:
+            Entity ID (possibly hashed if too long)
+        """
+        # PostgreSQL btree index has a limit of ~2700 bytes, but we use 2000 to be safe
+        if len(entity_id) <= 2000:
+            return entity_id
+
+        original_id = entity_id
+        entity_hash = hashlib.sha256(entity_id.encode()).hexdigest()
+        entity_id = f"{schema}.{table}:hashed_{entity_hash}"
+        self.logger.warning(
+            f"Entity ID too long ({len(original_id)} chars) for {schema}.{table}. "
+            f"Using hashed ID: {entity_id}"
+        )
+        return entity_id
+
     async def _process_table_batch(
         self,
         schema: str,
@@ -467,31 +598,23 @@ class PostgreSQLSource(BaseSource):
             Entity instances
         """
         max_cursor_value = None
+        model_fields = entity_class.model_fields
+        primary_keys = model_fields["primary_key_columns"].default_factory()
 
         for record in batch:
             data = dict(record)
 
-            # Track max cursor value if cursor field is specified
-            if cursor_field and cursor_field in data:
-                cursor_value = data[cursor_field]
-                if cursor_value is not None:
-                    if max_cursor_value is None or cursor_value > max_cursor_value:
-                        max_cursor_value = cursor_value
+            # Track max cursor value
+            max_cursor_value = self._update_max_cursor_value(cursor_field, data, max_cursor_value)
 
-            # Simply try to convert all strings to JSON
-            for key, value in data.items():
-                if isinstance(value, str):
-                    try:
-                        parsed_value = json.loads(value)
-                        data[key] = parsed_value
-                    except (json.JSONDecodeError, ValueError):
-                        # Keep as string if not valid JSON
-                        pass
+            # Parse JSON fields
+            self._parse_json_fields(data)
 
-            model_fields = entity_class.model_fields
-            primary_keys = model_fields["primary_key_columns"].default_factory()
-            pk_values = [str(data[pk]) for pk in primary_keys]
-            entity_id = f"{schema}.{table}:" + ":".join(pk_values)
+            # Generate entity ID
+            entity_id = self._generate_entity_id(schema, table, data, primary_keys)
+
+            # Ensure entity ID is within length limits
+            entity_id = self._ensure_entity_id_length(entity_id, schema, table)
 
             # Convert field values to match expected types in the entity model
             processed_data = await self._convert_field_values(data, model_fields)
@@ -595,7 +718,7 @@ class PostgreSQLSource(BaseSource):
         self._log_sync_type(table_key, cursor_field, last_cursor_value)
 
         # Process table in batches
-        BATCH_SIZE = 50
+        BATCH_SIZE = 1000
         offset = 0
 
         while True:
