@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud
 from airweave.core.config import settings
+from airweave.core.constants.reserved_ids import RESERVED_TABLE_ENTITY_ID
 from airweave.core.logging import ContextualLogger
 from airweave.platform.entities._base import (
     BaseEntity,
@@ -143,7 +144,6 @@ class SyncDAGRouter:
 
         # Handle PolymorphicEntity subclasses
         if hasattr(entity_type, "__mro__") and issubclass(entity_type, PolymorphicEntity):
-            RESERVED_TABLE_ENTITY_ID = UUID("11111111-1111-1111-1111-111111111111")
             self.logger.debug(
                 f"🏷️  ROUTER_POLYMORPHIC Using reserved ID for "
                 f"PolymorphicEntity {entity_type.__name__}"

@@ -6,10 +6,11 @@ from typing import Dict, List, Optional, Set, Tuple
 from fastembed import SparseTextEmbedding
 
 from airweave import crud, models, schemas
+from airweave.core.constants.reserved_ids import RESERVED_TABLE_ENTITY_ID
 from airweave.core.exceptions import NotFoundException
 from airweave.core.shared_models import ActionType
 from airweave.db.session import get_db_context
-from airweave.platform.entities._base import BaseEntity, DestinationAction
+from airweave.platform.entities._base import BaseEntity, DestinationAction, PolymorphicEntity
 from airweave.platform.sync.async_helpers import compute_entity_hash_async, run_in_thread_pool
 from airweave.platform.sync.context import SyncContext
 
@@ -358,7 +359,7 @@ class EntityProcessor:
             sync_context.logger.info(f"🗑️ ACTION_DELETE [{entity_context}] Detected deletion entity")
             return None, DestinationAction.DELETE
 
-        sync_context.logger.info(
+        sync_context.logger.debug(
             f"🔍 ACTION_DB_LOOKUP [{entity_context}] Looking up existing entity in database"
         )
         db_start = asyncio.get_event_loop().time()
@@ -788,12 +789,19 @@ class EntityProcessor:
         entity_type = type(parent_entity)
         entity_definition_id = sync_context.entity_map.get(entity_type)
         if not entity_definition_id:
-            sync_context.logger.warning(
-                f"⚠️  INSERT_NO_DEF [{entity_context}] No entity definition found for "
-                f"type {entity_type.__name__}"
-            )
-            await sync_context.progress.increment("skipped", 1)
-            return
+            if hasattr(entity_type, "__mro__") and issubclass(entity_type, PolymorphicEntity):
+                entity_definition_id = RESERVED_TABLE_ENTITY_ID
+                sync_context.logger.debug(
+                    f"🏷️  INSERT_POLYMORPHIC [{entity_context}] Using reserved ID for "
+                    f"PolymorphicEntity {entity_type.__name__}"
+                )
+            else:
+                sync_context.logger.warning(
+                    f"⚠️  INSERT_NO_DEF [{entity_context}] No entity definition found for "
+                    f"type {entity_type.__name__}"
+                )
+                await sync_context.progress.increment("skipped", 1)
+                return
 
         # Create a new database session just for this insert
         async with get_db_context() as db:

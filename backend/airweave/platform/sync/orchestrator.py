@@ -48,7 +48,7 @@ class SyncOrchestrator:
 
         # Queue size provides buffering for bursty sources
         # Workers pull from this queue when ready
-        self.stream_buffer_size = 1000
+        self.stream_buffer_size = 10000
 
         # Batching configuration (read from context, with defaults)
         self.should_batch: bool = getattr(
@@ -336,6 +336,8 @@ class SyncOrchestrator:
     ) -> None:
         """Finalize stream and perform cleanup (ORIGINAL LOGIC PRESERVED)."""
         # Always clean up the stream first
+        self.sync_context.logger.info("Finalizing stream and cleaning up")
+        self.sync_context.logger.info(f"Stream error: {stream_error}")
         if stream:
             await stream.stop()
 

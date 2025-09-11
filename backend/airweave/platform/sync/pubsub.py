@@ -326,7 +326,7 @@ class SyncEntityStateTracker:
                 "sync_job_state", self.job_id, state_update.model_dump_json()
             )
 
-            self.logger.info(
+            self.logger.debug(
                 f"✅ Published entity state to {subscribers} subscribers: {entity_counts_named}"
             )
         except Exception as e:

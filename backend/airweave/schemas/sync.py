@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from airweave import schemas
-from airweave.core.constants.native_connections import NATIVE_TEXT2VEC_UUID
+from airweave.core.constants.reserved_ids import NATIVE_TEXT2VEC_UUID
 from airweave.core.shared_models import SyncStatus
 
 
