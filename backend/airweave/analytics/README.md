@@ -9,6 +9,7 @@ The analytics module is organized into several components:
 - **`service.py`**: Core PostHog integration service
 - **`decorators/`**: Decorators for automatic tracking of API endpoints and operations
 - **`events/`**: Business event tracking classes for high-level metrics
+- **`search_analytics.py`**: Shared utilities for unified search analytics tracking
 - **`config.py`**: Analytics configuration (integrated into core config)
 
 ## 🚀 Quick Start
@@ -47,7 +48,7 @@ business_events.track_organization_created(
 ### 3. Using Decorators
 
 ```python
-from airweave.analytics import track_api_endpoint, track_search_operation
+from airweave.analytics import track_api_endpoint, track_search_operation, track_streaming_search_initiation
 
 @track_api_endpoint("create_collection")
 async def create_collection(ctx: ApiContext, ...):
@@ -58,6 +59,24 @@ async def create_collection(ctx: ApiContext, ...):
 async def search_collection(ctx: ApiContext, query: str, ...):
     # Your search logic
     pass
+
+# For streaming search endpoints, use manual tracking after permission checks
+@router.post("/{readable_id}/search/stream")
+async def stream_search_collection_advanced(...):
+    # Ensure permissions first
+    await guard_rail.is_allowed(ActionType.QUERIES)
+    
+    # Track stream initiation after permission check
+    from airweave.analytics.search_analytics import build_search_properties, track_search_event
+    if ctx and search_request.query:
+        properties = build_search_properties(
+            ctx=ctx,
+            query=search_request.query,
+            collection_slug=readable_id,
+            duration_ms=0,
+            search_type="streaming",
+        )
+        track_search_event(ctx, properties, "search_stream_start")
 ```
 
 ## 📊 Complete Analytics Events Overview
@@ -76,8 +95,19 @@ async def search_collection(ctx: ApiContext, query: str, ...):
 - `search_advanced` - Advanced search queries
 
 ### Search Events
-- **`search_query`**: Successful search operations with query analysis
+- **`search_stream_start`**: Streaming search initiation (after permission check)
+- **`search_query`**: Successful search operations with unified analytics (regular and streaming)
 - **`search_query_error`**: Failed search operations with error details
+
+**Search Event Properties:**
+- `query_length`: Length of search query
+- `collection_slug`: Collection identifier
+- `duration_ms`: Search execution time
+- `search_type`: "regular" or "streaming"
+- `results_count`: Number of results returned
+- `organization_name`: Organization name
+- `status`: "success" or error status
+- `response_type`: Response type (for regular searches)
 
 ### Business Events
 - **`organization_created`**: New organization signup
@@ -235,15 +265,40 @@ ENVIRONMENT=test
 async def my_endpoint(ctx: ApiContext, ...):
     # Automatically tracks timing, errors, and context
     pass
+
+@track_search_operation()
+async def search_endpoint(ctx: ApiContext, query: str, ...):
+    # Automatically tracks search analytics with unified properties
+    pass
 ```
 
-### 2. Track Business Events at Key Milestones
+### 2. Use Shared Search Analytics Utilities
+```python
+from airweave.analytics.search_analytics import build_search_properties, track_search_event
+
+# Build unified search properties
+properties = build_search_properties(
+    ctx=ctx,
+    query=query,
+    collection_slug=collection_slug,
+    duration_ms=duration_ms,
+    search_type="streaming",  # or "regular"
+    results=search_results,  # optional
+    response_type="raw",  # optional
+    status="success",
+)
+
+# Track the event
+track_search_event(ctx, properties, "search_query")
+```
+
+### 3. Track Business Events at Key Milestones
 ```python
 # Track when user completes onboarding
 business_events.track_first_sync_completed(ctx, sync_id, entities_count)
 ```
 
-### 3. Include Rich Context
+### 4. Include Rich Context
 ```python
 analytics.track_event(
     event_name="custom_event",
@@ -257,8 +312,19 @@ analytics.track_event(
 )
 ```
 
-### 4. Handle Errors Gracefully
+### 5. Handle Errors Gracefully
 The analytics service automatically handles PostHog errors and logs them without affecting your application.
+
+### 6. Unified Search Analytics
+All search operations (regular and streaming) now use unified analytics tracking:
+
+- **Regular search endpoints**: Use `@track_search_operation()` decorator
+- **Streaming search endpoints**: Use manual tracking after permission checks
+- **Search completion**: Automatically tracked by SearchExecutor for both types
+- **Unified events**: `search_stream_start` and `search_query` with consistent properties
+- **Shared utilities**: Use `search_analytics.py` for consistent property building
+
+**Important**: For streaming endpoints, always track analytics AFTER permission checks to avoid counting blocked requests.
 
 ## 🔒 Privacy & Compliance
 
