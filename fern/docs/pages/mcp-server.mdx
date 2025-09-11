@@ -108,5 +108,25 @@ These environment variables can be set:
 
 The MCP server provides two tools:
 
-  - **search**: search across all source connections in the collection with optional AI completion. See the [search endpoint](https://docs.airweave.ai/api-reference/collections/search-collection-collections-readable-id-search-get) for more details.
+  - **search**: Enhanced search across all source connections in the collection with full parameter control and optional AI completion. Supports both basic parameters (query, limit, offset, recency_bias) and advanced parameters (score_threshold, search_method, expansion_strategy, enable_reranking, enable_query_interpretation). See the [search endpoint](https://docs.airweave.ai/api-reference/collections/search-collection-collections-readable-id-search-get) for more details.
   - **get-config**: View current configuration and connection status to verify everything is working correctly. No parameters required - shows your collection ID, API endpoint, and connection status.
+
+### Advanced Search Features
+
+The search tool automatically selects the optimal endpoint based on your parameters:
+
+- **Basic Search**: Uses GET endpoint for simple queries with core parameters only
+- **Advanced Search**: Uses POST endpoint when advanced parameters are specified
+
+**Advanced Parameters:**
+- `score_threshold`: Filter results by similarity score (0.0-1.0)
+- `search_method`: Choose between 'hybrid', 'neural', or 'keyword' search
+- `expansion_strategy`: Control query expansion with 'auto', 'llm', or 'no_expansion'
+- `enable_reranking`: Enable/disable LLM-based result reranking
+- `enable_query_interpretation`: Enable/disable automatic filter extraction
+
+**Natural Language Examples:**
+- "Find high-quality results about AI" → `score_threshold: 0.8`
+- "Use neural search for semantic similarity" → `search_method: "neural"`
+- "Search without expanding the query" → `expansion_strategy: "no_expansion"`
+- "Disable reranking for faster results" → `enable_reranking: false`
