@@ -342,10 +342,6 @@ async def subscribe_entity_state(
     """
     logger.info(f"🎯 SSE entity state subscription for user: {ctx}, job: {job_id}")
 
-    with open("test.txt", "w+") as file:
-        file.write(ctx.request_id)
-        file.write(str(job_id))
-
     # Log the channel we're subscribing to
     channel = f"sync_job_state:{job_id}"
     logger.info(f"📡 Subscribing to Redis channel: {channel}")
