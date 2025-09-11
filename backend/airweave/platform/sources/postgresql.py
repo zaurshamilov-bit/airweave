@@ -249,16 +249,16 @@ class PostgreSQLSource(BaseSource):
                 raise ValueError(f"Database connection failed: {str(e)}") from e
 
     async def _get_table_info(self, schema: str, table: str) -> Dict[str, Any]:
-        """Get table structure information.
+        """Get table/view structure information.
 
         Args:
             schema: Schema name
-            table: Table name
+            table: Table or view name
 
         Returns:
             Dictionary containing column information and primary keys
         """
-        # Get column information
+        # Get column information (works for both tables and views)
         columns_query = """
             SELECT
                 column_name,
@@ -271,14 +271,27 @@ class PostgreSQLSource(BaseSource):
         """
         columns = await self.conn.fetch(columns_query, schema, table)
 
-        # Get primary key information
+        # Get primary key information (views won't have primary keys)
         pk_query = """
             SELECT a.attname
             FROM pg_index i
             JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
             WHERE i.indrelid = ($1 || '.' || $2)::regclass AND i.indisprimary
         """
-        primary_keys = [pk["attname"] for pk in await self.conn.fetch(pk_query, schema, table)]
+        try:
+            primary_keys = [pk["attname"] for pk in await self.conn.fetch(pk_query, schema, table)]
+        except asyncpg.exceptions.UndefinedTableError:
+            # This can happen for views which don't have primary keys
+            primary_keys = []
+
+        # If no primary keys found (common for views), use all columns as composite key
+        # This ensures each row gets a unique entity_id
+        if not primary_keys and columns:
+            self.logger.debug(
+                f"No primary keys found for {schema}.{table} (might be a view). "
+                f"Using all columns for entity identification."
+            )
+            primary_keys = [col["column_name"] for col in columns]
 
         # Build column metadata
         column_info = {}
@@ -299,14 +312,14 @@ class PostgreSQLSource(BaseSource):
         }
 
     async def _create_entity_class(self, schema: str, table: str) -> Type[PolymorphicEntity]:
-        """Create a entity class for a specific table.
+        """Create a entity class for a specific table or view.
 
         Args:
             schema: Schema name
-            table: Table name
+            table: Table or view name
 
         Returns:
-            Dynamically created entity class for the table
+            Dynamically created entity class for the table/view
         """
         table_info = await self._get_table_info(schema, table)
 
@@ -335,21 +348,54 @@ class PostgreSQLSource(BaseSource):
         tables = await self.conn.fetch(query, schema)
         return [table["table_name"] for table in tables]
 
+    async def _get_tables_and_views(self, schema: str) -> List[str]:
+        """Get list of tables and views in a schema.
+
+        Args:
+            schema: Schema name
+
+        Returns:
+            List of table and view names
+        """
+        query = """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = $1
+            AND table_type IN ('BASE TABLE', 'VIEW')
+        """
+        tables_and_views = await self.conn.fetch(query, schema)
+        return [item["table_name"] for item in tables_and_views]
+
     async def _get_table_list(self, schema: str) -> List[str]:
-        """Get the list of tables to process based on configuration."""
+        """Get the list of tables to process based on configuration.
+
+        When wildcard (*) is used, only base tables are returned.
+        When specific names are provided, both tables and views are checked.
+        """
         tables_config = self.config.get("tables", "*")
 
         # Handle both wildcard and CSV list of tables
         if tables_config == "*":
+            # Default behavior: only sync base tables, not views
             return await self._get_tables(schema)
 
         # Split by comma and strip whitespace
         tables = [t.strip() for t in tables_config.split(",")]
-        # Validate that all specified tables exist
-        available_tables = await self._get_tables(schema)
-        invalid_tables = set(tables) - set(available_tables)
-        if invalid_tables:
-            raise ValueError(f"Tables not found in schema '{schema}': {', '.join(invalid_tables)}")
+
+        # When specific names are provided, check both tables and views
+        available_tables_and_views = await self._get_tables_and_views(schema)
+        invalid_items = set(tables) - set(available_tables_and_views)
+        if invalid_items:
+            raise ValueError(
+                f"Tables/views not found in schema '{schema}': {', '.join(invalid_items)}"
+            )
+
+        # Log if any views are being synced
+        base_tables = set(await self._get_tables(schema))
+        views = [t for t in tables if t not in base_tables]
+        if views:
+            self.logger.info(f"Including views in sync: {', '.join(views)}")
+
         return tables
 
     async def _convert_field_values(
