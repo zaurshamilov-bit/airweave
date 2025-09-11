@@ -13,7 +13,7 @@ The sync module orchestrates data flow from sources to destinations using a high
 ### 1. Pull-Based Concurrency Model
 - **Worker Pool Pattern**: Uses `AsyncWorkerPool` with semaphore-controlled concurrency (default: 20 workers)
 - **Pull vs Push**: Workers pull entities from the stream only when ready, preventing system overload
-- **Backpressure**: `AsyncSourceStream` uses bounded queues (default: 100) to naturally throttle producers
+- **Backpressure**: `AsyncSourceStream` uses bounded queues (default: 10000) to naturally throttle producers
 
 ### 2. Separation of Concerns
 - **Producer/Consumer Decoupling**: Source generation runs independently from entity processing
@@ -256,7 +256,7 @@ Every operation increments counter
 
 ### Concurrency Model
 - **Default**: 20 concurrent workers (configurable)
-- **Queue Size**: 100 entities buffered
+- **Queue Size**: 10000 entities buffered
 - **Backpressure**: Natural flow control via bounded queues
 - **Thread Pool**: Scales with CPU count for hash operations
 

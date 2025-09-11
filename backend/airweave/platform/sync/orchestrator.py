@@ -48,7 +48,7 @@ class SyncOrchestrator:
 
         # Queue size provides buffering for bursty sources
         # Workers pull from this queue when ready
-        self.stream_buffer_size = 1000
+        self.stream_buffer_size = 10000
 
         # Batching configuration (read from context, with defaults)
         self.should_batch: bool = getattr(
