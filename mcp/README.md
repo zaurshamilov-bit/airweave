@@ -14,9 +14,20 @@ An MCP (Model Context Protocol) server that provides comprehensive search capabi
 - 🧪 **Comprehensive Testing**: Full test suite with LLM testing strategy
 - 🏗️ **Simple Architecture**: Clean, maintainable code structure without over-engineering
 
-## Breaking Changes in v2.0.0
+## Version History
 
-⚠️ **This is a major version update with breaking changes:**
+### v2.1.0 - Advanced Search Features
+
+🚀 **New advanced search capabilities:**
+
+- **Advanced Parameters**: Added `score_threshold`, `search_method`, `expansion_strategy`, `enable_reranking`, `enable_query_interpretation`
+- **Smart Endpoint Selection**: Automatically uses POST endpoint for advanced features, GET for basic search
+- **Enhanced AI Integration**: Better parameter extraction from natural language queries
+- **Comprehensive Testing**: Full test suite including LLM simulation tests
+
+### v2.0.0 - Enhanced Search Parameters
+
+⚠️ **Major version update with breaking changes:**
 
 - **Parameter Structure**: The search tool now uses an object-based parameter structure instead of positional arguments
 - **New Parameters**: Added `limit`, `offset`, and `recency_bias` parameters
@@ -28,7 +39,7 @@ An MCP (Model Context Protocol) server that provides comprehensive search capabi
 // Old format (v1.0.7)
 search("customer feedback", "raw")
 
-// New format (v2.0.0)
+// New format (v2.0.0+)
 search({ query: "customer feedback", response_type: "raw" })
 ```
 
@@ -121,11 +132,20 @@ Once configured, you can use natural language to search:
 Searches within the configured Airweave collection with full parameter control.
 
 **Parameters:**
+
+**Core Parameters:**
 - `query` (required): The search query text to find relevant documents and data
 - `response_type` (optional, default: "raw"): Format of the response: 'raw' returns search results, 'completion' returns AI-generated answers
 - `limit` (optional, default: 100): Maximum number of results to return (1-1000)
 - `offset` (optional, default: 0): Number of results to skip for pagination (≥0)
 - `recency_bias` (optional): How much to weigh recency vs similarity (0..1). 0 = no recency effect; 1 = rank by recency only
+
+**Advanced Parameters:**
+- `score_threshold` (optional): Minimum similarity score threshold (0..1). Only return results above this score
+- `search_method` (optional): Search method: 'hybrid' (default, combines neural + keyword), 'neural' (semantic only), 'keyword' (text matching only)
+- `expansion_strategy` (optional): Query expansion strategy: 'auto' (default, generates query variations), 'llm' (AI-powered expansion), 'no_expansion' (use exact query)
+- `enable_reranking` (optional): Enable LLM-based reranking to improve result relevance (default: true)
+- `enable_query_interpretation` (optional): Enable automatic filter extraction from natural language query (default: true)
 
 **Examples:**
 ```typescript
@@ -151,13 +171,34 @@ search({
   recency_bias: 0.8 
 })
 
+// Advanced search with high-quality results
+search({ 
+  query: "customer complaints", 
+  score_threshold: 0.8,
+  search_method: "neural",
+  enable_reranking: true
+})
+
+// Fast keyword search without expansion
+search({ 
+  query: "API documentation", 
+  search_method: "keyword",
+  expansion_strategy: "no_expansion",
+  enable_reranking: false
+})
+
 // Full parameter search
 search({ 
   query: "support tickets", 
   response_type: "completion",
   limit: 5,
   offset: 0,
-  recency_bias: 0.7
+  recency_bias: 0.7,
+  score_threshold: 0.6,
+  search_method: "hybrid",
+  expansion_strategy: "llm",
+  enable_reranking: true,
+  enable_query_interpretation: true
 })
 ```
 
