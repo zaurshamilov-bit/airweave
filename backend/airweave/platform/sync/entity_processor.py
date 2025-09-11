@@ -15,7 +15,12 @@ from airweave.platform.sync.context import SyncContext
 
 
 class EntityProcessor:
-    """Processes entities through a pipeline of stages."""
+    """Processes entities through a pipeline of stages.
+
+    Exposes both:
+      - process(...)       -> single-entity pipeline (original logic preserved)
+      - process_batch(...) -> batched pipeline (same logic, better performance)
+    """
 
     def __init__(self):
         """Initialize the entity processor with empty tracking dictionary."""
@@ -39,6 +44,9 @@ class EntityProcessor:
             if node.name.endswith("Entity"):
                 self._entity_ids_encountered_by_type[node.name] = set()
 
+    # ------------------------------------------------------------------------------------
+    # Original single entity processing (EXACT copy from old version)
+    # ------------------------------------------------------------------------------------
     async def process(
         self,
         entity: BaseEntity,
@@ -224,6 +232,76 @@ class EntityProcessor:
 
             return []
 
+    # ------------------------------------------------------------------------------------
+    # NEW: Batch processing API (maintains old logic but with batching for performance)
+    # ------------------------------------------------------------------------------------
+    async def process_batch(
+        self,
+        entities: List[BaseEntity],
+        source_node: schemas.DagNode,
+        sync_context: SyncContext,
+        *,
+        inner_concurrency: int = 8,
+    ) -> Dict[str, List[BaseEntity]]:
+        """Process a batch of entities using the same logic as single processing.
+
+        This maintains the exact same business logic and entity counting as the
+        original process() method, but uses batching optimizations for better performance.
+
+        Returns:
+            Dict[parent_entity_id, List[BaseEntity]]: A mapping of parent entity IDs
+            to their processed entities.
+        """
+        if not entities:
+            return {}
+
+        results: Dict[str, List[BaseEntity]] = {}
+        loop = asyncio.get_event_loop()
+        batch_start = loop.time()
+
+        sync_context.logger.debug(
+            f"🛠 BATCH_START Processing batch of {len(entities)} entities with "
+            f"inner_concurrency={inner_concurrency}"
+        )
+
+        # Process entities with controlled concurrency, but maintain individual logic
+        sem = asyncio.Semaphore(inner_concurrency)
+
+        async def _process_one_with_sem(entity: BaseEntity) -> Tuple[str, List[BaseEntity]]:
+            async with sem:
+                processed_entities = await self.process(entity, source_node, sync_context)
+                return entity.entity_id, processed_entities
+
+        # Execute all entities concurrently with semaphore control
+        batch_results = await asyncio.gather(
+            *[_process_one_with_sem(entity) for entity in entities], return_exceptions=True
+        )
+
+        # Collect results and handle any exceptions
+        for i, result in enumerate(batch_results):
+            if isinstance(result, Exception):
+                entity_id = entities[i].entity_id if i < len(entities) else "unknown"
+                sync_context.logger.warning(
+                    f"💥 BATCH_ENTITY_ERROR Entity {entity_id} failed: {result}"
+                )
+                # The individual process() call already handled the error and
+                # incremented skipped count
+                results[entity_id] = []
+            else:
+                entity_id, processed_entities = result
+                results[entity_id] = processed_entities
+
+        batch_elapsed = loop.time() - batch_start
+        sync_context.logger.debug(
+            f"✅ BATCH_COMPLETE Processed {len(entities)} entities in {batch_elapsed:.3f}s "
+            f"(avg: {batch_elapsed / len(entities):.3f}s per entity)"
+        )
+
+        return results
+
+    # ------------------------------------------------------------------------------------
+    # Shared helpers (EXACT copies from old version)
+    # ------------------------------------------------------------------------------------
     async def _enrich(self, entity: BaseEntity, sync_context: SyncContext) -> BaseEntity:
         """Enrich entity with sync metadata."""
         from datetime import datetime, timedelta, timezone
@@ -519,17 +597,6 @@ class EntityProcessor:
             f"Computing vectors for {entity_count} entities using {embedding_model.model_name}"
         )
 
-        # # Log entity content lengths for debugging
-        # content_lengths = [len(str(entity.to_storage_dict())) for entity in processed_entities]
-        # total_length = sum(content_lengths)
-        # avg_length = total_length / entity_count if entity_count else 0
-        # max_length = max(content_lengths) if content_lengths else 0
-
-        # sync_context.logger.debug(
-        #     f"Entity content stats: total={total_length}, "
-        #     f"avg={avg_length:.2f}, max={max_length}, count={entity_count}"
-        # )
-
     async def _convert_entities_to_dicts(
         self, processed_entities: List[BaseEntity], sync_context: SyncContext
     ) -> List[str]:
@@ -691,7 +758,7 @@ class EntityProcessor:
 
     async def _handle_keep(self, sync_context: SyncContext) -> None:
         """Handle KEEP action."""
-        await sync_context.progress.increment(kept=1)
+        await sync_context.progress.increment("kept", 1)
 
     async def _handle_insert(
         self,

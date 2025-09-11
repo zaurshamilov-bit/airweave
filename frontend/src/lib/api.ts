@@ -286,6 +286,34 @@ const makeRequest = async <T>(
   return queueOrExecute(requestFn);
 };
 
+// ---- SSE support (unified with the same baseURL, headers, and token-refresh) ----
+
+type SSEHandlers = {
+  onMessage: (msg: MessageEvent) => void;
+  onOpen?: (res: Response) => void | Promise<void>;
+  onError?: (err: any) => void;
+  onClose?: () => void;
+};
+
+const waitForAuthReady = async () => {
+  if (tokenProvider.isReady && !tokenProvider.isReady()) {
+    await new Promise<void>((resolve) => {
+      const started = Date.now();
+      const interval = setInterval(() => {
+        if (!tokenProvider.isReady || tokenProvider.isReady()) {
+          clearInterval(interval);
+          resolve();
+        }
+        // Hard cap to avoid dangling intervals
+        if (Date.now() - started > 10_000) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+    });
+  }
+};
+
 export const apiClient = {
   clearToken: () => {
     if (tokenProvider.clearToken) {
@@ -325,5 +353,78 @@ export const apiClient = {
 
   async delete<T>(endpoint: string, params?: Record<string, any>): ApiResponse<T> {
     return makeRequest<T>('DELETE', endpoint, { params });
+  },
+
+  // New: SSE method that uses the same baseURL + headers + token refresh semantics
+  async sse(
+    endpoint: string,
+    handlers: SSEHandlers,
+    options?: {
+      params?: Record<string, any>;
+      signal?: AbortSignal;
+      method?: 'GET' | 'POST'; // usually GET for SSE
+      openWhenHidden?: boolean;
+    }
+  ): Promise<void> {
+    await waitForAuthReady();
+
+    const url = new URL(`${API_CONFIG.baseURL}${endpoint}`);
+    if (options?.params) {
+      Object.entries(options.params).forEach(([k, v]) =>
+        url.searchParams.append(k, String(v))
+      );
+    }
+
+    const { fetchEventSource } = await import('@microsoft/fetch-event-source');
+
+    // Bridge the caller's AbortSignal into our own so we can cleanly abort
+    const controller = new AbortController();
+    if (options?.signal) {
+      options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+
+    return fetchEventSource(url.toString(), {
+      method: options?.method ?? 'GET',
+      signal: controller.signal,
+      openWhenHidden: options?.openWhenHidden ?? true,
+
+      // Initial headers (Authorization + X-Organization-ID)
+      headers: await getHeaders(),
+
+      onopen: async (res) => {
+        if (handlers.onOpen) await handlers.onOpen(res);
+        if (res.status === 401 || res.status === 403) {
+          // force a refresh on first unauthorized open, then let the library retry
+          tokenProvider.clearToken?.();
+          throw new Error('Unauthorized; retrying with refreshed token');
+        }
+        if (!res.ok) {
+          throw new Error(`SSE failed with status ${res.status}`);
+        }
+      },
+
+      onmessage: handlers.onMessage as any,
+
+      onerror: (err) => {
+        handlers.onError?.(err);
+        // Throw to allow the library to decide retry/stop behavior
+        throw err;
+      },
+
+      // Ensure each (re)connect uses fresh headers and one-shot token refresh
+      fetch: async (input, init) => {
+        let headers = await getHeaders();
+        let res = await fetch(input, { ...init, headers });
+
+        if ((res.status === 401 || res.status === 403) && tokenProvider.clearToken) {
+          tokenProvider.clearToken();
+          headers = await getHeaders();
+          res = await fetch(input, { ...init, headers });
+        }
+        return res;
+      },
+    }).finally(() => {
+      handlers.onClose?.();
+    });
   },
 };
