@@ -14,35 +14,6 @@ An MCP (Model Context Protocol) server that provides comprehensive search capabi
 - 🧪 **Comprehensive Testing**: Full test suite with LLM testing strategy
 - 🏗️ **Simple Architecture**: Clean, maintainable code structure without over-engineering
 
-## Version History
-
-### v2.1.0 - Advanced Search Features
-
-🚀 **New advanced search capabilities:**
-
-- **Advanced Parameters**: Added `score_threshold`, `search_method`, `expansion_strategy`, `enable_reranking`, `enable_query_interpretation`
-- **Smart Endpoint Selection**: Automatically uses POST endpoint for advanced features, GET for basic search
-- **Enhanced AI Integration**: Better parameter extraction from natural language queries
-- **Comprehensive Testing**: Full test suite including LLM simulation tests
-
-### v2.0.0 - Enhanced Search Parameters
-
-⚠️ **Major version update with breaking changes:**
-
-- **Parameter Structure**: The search tool now uses an object-based parameter structure instead of positional arguments
-- **New Parameters**: Added `limit`, `offset`, and `recency_bias` parameters
-- **Enhanced Validation**: Improved parameter validation with detailed error messages
-- **Version Bump**: Updated from v1.0.7 to v2.0.0
-
-**Migration Guide:**
-```typescript
-// Old format (v1.0.7)
-search("customer feedback", "raw")
-
-// New format (v2.0.0+)
-search({ query: "customer feedback", response_type: "raw" })
-```
-
 ## Quick Start
 
 ### Installation from npm
@@ -153,43 +124,43 @@ Searches within the configured Airweave collection with full parameter control.
 search({ query: "customer feedback about pricing" })
 
 // Search with AI completion
-search({ 
-  query: "billing issues", 
-  response_type: "completion" 
+search({
+  query: "billing issues",
+  response_type: "completion"
 })
 
 // Paginated search
-search({ 
-  query: "API documentation", 
-  limit: 10, 
-  offset: 20 
+search({
+  query: "API documentation",
+  limit: 10,
+  offset: 20
 })
 
 // Recent results with recency bias
-search({ 
-  query: "customer complaints", 
-  recency_bias: 0.8 
+search({
+  query: "customer complaints",
+  recency_bias: 0.8
 })
 
 // Advanced search with high-quality results
-search({ 
-  query: "customer complaints", 
+search({
+  query: "customer complaints",
   score_threshold: 0.8,
   search_method: "neural",
   enable_reranking: true
 })
 
 // Fast keyword search without expansion
-search({ 
-  query: "API documentation", 
+search({
+  query: "API documentation",
   search_method: "keyword",
   expansion_strategy: "no_expansion",
   enable_reranking: false
 })
 
 // Full parameter search
-search({ 
-  query: "support tickets", 
+search({
+  query: "support tickets",
   response_type: "completion",
   limit: 5,
   offset: 0,
