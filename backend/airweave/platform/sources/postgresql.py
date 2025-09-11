@@ -229,8 +229,8 @@ class PostgreSQLSource(BaseSource):
                     user=self.config["user"],
                     password=self.config["password"],
                     database=self.config["database"],
-                    timeout=60.0,  # Connection timeout (1 minute)
-                    command_timeout=300.0,  # Command timeout (5 minutes for slow queries)
+                    timeout=90.0,  # Connection timeout (1.5 minutes)
+                    command_timeout=900.0,  # Command timeout (15 minutes for slow queries)
                 )
             except asyncpg.InvalidPasswordError as e:
                 raise ValueError("Invalid database credentials") from e
@@ -718,7 +718,7 @@ class PostgreSQLSource(BaseSource):
         self._log_sync_type(table_key, cursor_field, last_cursor_value)
 
         # Process table in batches
-        BATCH_SIZE = 1000
+        BATCH_SIZE = 10000
         offset = 0
 
         while True:
