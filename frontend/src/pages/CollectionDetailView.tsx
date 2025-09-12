@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Alert } from "@/components/ui/alert";
 import { AlertCircle, RefreshCw, Pencil, Trash, Plus, Clock, Play, Plug, Copy, Check, Loader2, RotateCw } from "lucide-react";
 import { apiClient } from "@/lib/api";
+import { useUsageStore } from "@/lib/stores/usage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -36,8 +37,9 @@ import { useEntityStateStore } from "@/stores/entityStateStore";
 import { useSidePanelStore } from "@/lib/stores/sidePanelStore";
 import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { redirectWithError } from "@/lib/error-utils";
-import { ActionCheckResponse } from "@/types";
+import { SingleActionCheckResponse } from "@/types";
 import { DESIGN_SYSTEM } from "@/lib/design-system";
+
 
 interface DeleteCollectionDialogProps {
     open: boolean;
@@ -146,6 +148,8 @@ interface SourceConnection {
     modified_by_email: string;
     auth_fields?: Record<string, any> | string;
     status?: string;
+    is_authenticated?: boolean;
+    authentication_url?: string;
     last_sync_job_status?: string;
     last_sync_job_id?: string;
     last_sync_job_started_at?: string;
@@ -199,56 +203,21 @@ const Collections = () => {
     const [isRefreshingAll, setIsRefreshingAll] = useState(false);
     const [refreshingSourceIds, setRefreshingSourceIds] = useState<string[]>([]);
 
-    // Add state for usage limits
-    const [sourceConnectionsAllowed, setSourceConnectionsAllowed] = useState(true);
-    const [sourceConnectionCheckDetails, setSourceConnectionCheckDetails] = useState<ActionCheckResponse | null>(null);
-    const [entitiesAllowed, setEntitiesAllowed] = useState(true);
-    const [entitiesCheckDetails, setEntitiesCheckDetails] = useState<ActionCheckResponse | null>(null);
-    const [syncsAllowed, setSyncsAllowed] = useState(true);
-    const [syncsCheckDetails, setSyncsCheckDetails] = useState<ActionCheckResponse | null>(null);
-    const [isCheckingUsage, setIsCheckingUsage] = useState(true);
+    // Usage check from store (read-only, checking happens at app level)
+    const actionChecks = useUsageStore(state => state.actionChecks);
+    const isCheckingUsage = useUsageStore(state => state.isLoading);
+
+    // Derived states from usage store
+    const sourceConnectionsAllowed = actionChecks.source_connections?.allowed ?? true;
+    const sourceConnectionCheckDetails = actionChecks.source_connections ?? null;
+    const entitiesAllowed = actionChecks.entities?.allowed ?? true;
+    const entitiesCheckDetails = actionChecks.entities ?? null;
+    const syncsAllowed = actionChecks.syncs?.allowed ?? true;
+    const syncsCheckDetails = actionChecks.syncs ?? null;
 
     /********************************************
      * API AND DATA FETCHING FUNCTIONS
      ********************************************/
-
-    // Check if actions are allowed based on usage limits
-    const checkUsageActions = useCallback(async (syncAmount: number = 1) => {
-        try {
-            // Check all three actions in parallel
-            const [sourceResponse, entitiesResponse, syncsResponse] = await Promise.all([
-                apiClient.get('/usage/check-action?action=source_connections'),
-                apiClient.get('/usage/check-action?action=entities'),
-                apiClient.get(`/usage/check-action?action=syncs&amount=${syncAmount}`)
-            ]);
-
-            if (sourceResponse.ok) {
-                const data: ActionCheckResponse = await sourceResponse.json();
-                setSourceConnectionsAllowed(data.allowed);
-                setSourceConnectionCheckDetails(data);
-            }
-
-            if (entitiesResponse.ok) {
-                const data: ActionCheckResponse = await entitiesResponse.json();
-                setEntitiesAllowed(data.allowed);
-                setEntitiesCheckDetails(data);
-            }
-
-            if (syncsResponse.ok) {
-                const data: ActionCheckResponse = await syncsResponse.json();
-                setSyncsAllowed(data.allowed);
-                setSyncsCheckDetails(data);
-            }
-        } catch (error) {
-            console.error('Failed to check usage actions:', error);
-            // Default to allowed on error to not block users
-            setSourceConnectionsAllowed(true);
-            setEntitiesAllowed(true);
-            setSyncsAllowed(true);
-        } finally {
-            setIsCheckingUsage(false);
-        }
-    }, []);
 
     // Fetch source connections for a collection with detailed sync job status
     const fetchSourceConnections = async (collectionId: string) => {
@@ -502,19 +471,9 @@ const Collections = () => {
         console.log(`\nFetching collection because of readable id change\n`)
         setSelectedConnection(null);
         fetchCollection();
-    }, [readable_id]);
+    }, [readable_id]); // Only depend on readable_id
 
-    // Initial usage check on mount
-    useEffect(() => {
-        checkUsageActions(1);
-    }, []);
-
-    // Re-check usage limits when source connections change
-    useEffect(() => {
-        if (!isCheckingUsage && sourceConnections.length > 0) {
-            checkUsageActions(sourceConnections.length);
-        }
-    }, [sourceConnections.length, checkUsageActions]);
+    // Usage is now checked at app level by UsageChecker component
 
     // Handle collection deletion
     const handleDeleteCollection = async () => {
@@ -619,8 +578,7 @@ const Collections = () => {
                     setIsRefreshingAll(false);
                 }
 
-                // Re-check usage limits after refresh
-                await checkUsageActions(sourceConnections.length);
+                // Usage limits will be checked automatically by UsageChecker
             } else {
                 throw new Error("Failed to refresh sources");
             }
@@ -684,7 +642,11 @@ const Collections = () => {
         let colorClass = "bg-gray-400";
         let status = "unknown";
 
-        if (entityState) {
+        // Check for NOT_YET_AUTHORIZED status first
+        if (connection.status === 'not_yet_authorized' || !connection.is_authenticated) {
+            colorClass = "bg-orange-500";
+            status = "not authorized";
+        } else if (entityState) {
             if (entityState.syncStatus === 'pending') {
                 colorClass = "bg-yellow-500 animate-pulse";
                 status = "pending";
@@ -1030,9 +992,16 @@ const Collections = () => {
                             <SourceConnectionStateView
                                 key={selectedConnection.id}
                                 sourceConnectionId={selectedConnection.id}
+                                sourceConnectionData={selectedConnection}
                                 onConnectionDeleted={() => {
                                     // Clear selection and reload connections
                                     setSelectedConnection(null);
+                                    if (collection?.readable_id) {
+                                        fetchSourceConnections(collection.readable_id);
+                                    }
+                                }}
+                                onConnectionUpdated={() => {
+                                    // Refresh the connection data
                                     if (collection?.readable_id) {
                                         fetchSourceConnections(collection.readable_id);
                                     }

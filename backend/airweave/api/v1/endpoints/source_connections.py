@@ -171,12 +171,13 @@ async def get(
     ctx: ApiContext = Depends(deps.get_context),
 ) -> schemas.SourceConnection:
     """Retrieve a specific source connection by its ID."""
-    return await source_connection_service.get_source_connection(
+    result = await source_connection_service.get_source_connection(
         db=db,
         source_connection_id=source_connection_id,
         show_auth_fields=show_auth_fields,
         ctx=ctx,
     )
+    return result
 
 
 @router.post("/", response_model=schemas.SourceConnection)

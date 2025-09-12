@@ -809,6 +809,10 @@ class SourceConnection(SourceConnectionInDBBase):
             "Only present for OAuth sources that need user authorization."
         ),
     )
+    authentication_url_expiry: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when the authentication URL will expire (ISO 8601 format).",
+    )
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -843,6 +847,8 @@ class SourceConnection(SourceConnectionInDBBase):
                     "last_sync_job_error": None,
                     "cron_schedule": "0 */6 * * *",
                     "next_scheduled_run": "2024-01-16T02:00:00Z",
+                    "authentication_url": "https://app.airweave.ai/source-connections/authorize/1234567890",
+                    "authentication_url_expiry": "2024-01-16T02:00:00Z",
                 }
             ]
         },

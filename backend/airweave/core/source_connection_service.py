@@ -615,6 +615,68 @@ class SourceConnectionService:
                 access_token=access_token,
             )
 
+    async def _generate_authentication_url_for_connection(
+        self,
+        db: AsyncSession,
+        source_connection: Any,
+        ctx: ApiContext,
+    ) -> Tuple[Optional[str], Optional[datetime]]:
+        """Generate authentication URL for an unauthenticated source connection.
+
+        Returns:
+            Tuple of (authentication_url, expiry_datetime)
+        """
+        # Only generate for unauthenticated connections
+        if source_connection.is_authenticated:
+            return None, None
+
+        # Check if there's an existing init session we can reuse
+        if source_connection.connection_init_session_id:
+            init_session = await connection_init_session.get(
+                db, id=source_connection.connection_init_session_id, ctx=ctx
+            )
+            if init_session and init_session.status == ConnectionInitStatus.PENDING:
+                # Regenerate the proxy URL for this session
+                proxy_ttl = int(getattr(core_settings, "REDIRECT_SESSION_TTL_MINUTES", 30))
+                proxy_expires = datetime.now(timezone.utc) + timedelta(minutes=proxy_ttl)
+                code8 = await redirect_session.generate_unique_code(db, length=8)
+
+                # Get the OAuth URL
+                source = await crud.source.get_by_short_name(
+                    db, short_name=source_connection.short_name
+                )
+                if not source:
+                    return None, None
+
+                oauth2_settings = await integration_settings.get_by_short_name(source.short_name)
+                if not oauth2_settings:
+                    return None, None
+
+                api_callback = f"{core_settings.api_url}/source-connections/callback"
+
+                provider_auth_url = await oauth2_service.generate_auth_url_with_redirect(
+                    oauth2_settings,
+                    redirect_uri=api_callback,
+                    client_id=None,  # Will use default
+                    state=init_session.state,  # Reuse the existing state
+                )
+
+                # Create redirect session
+                await redirect_session.create(
+                    db,
+                    code=code8,
+                    final_url=provider_auth_url,
+                    expires_at=proxy_expires,
+                    ctx=ctx,
+                )
+
+                proxy_url = f"{core_settings.api_url}/source-connections/authorize/{code8}"
+                return proxy_url, proxy_expires
+
+        # For connections without init session, we can't generate OAuth URL
+        # This might be the case for direct auth connections that failed
+        return None, None
+
     async def get_source_connection(
         self,
         db: AsyncSession,
@@ -671,15 +733,13 @@ class SourceConnectionService:
                     f"next_scheduled_run={sync.next_scheduled_run}"
                 )
 
-        # Before returning, add a log to see what's actually being sent
-        ctx.logger.info(
-            "\nRETURNING SOURCE CONNECTION: "
-            f"last_sync_job_id={source_connection_schema.last_sync_job_id},\n"
-            f"cron_schedule={source_connection_schema.cron_schedule},\n"
-            f"next_scheduled_run={source_connection_schema.next_scheduled_run},\n"
-            "all job info="
-            f"{source_connection_schema if 'source_connection_schema' in locals() else 'None'}\n"
+        # Generate authentication URL for unauthenticated connections
+        auth_url, auth_expiry = await self._generate_authentication_url_for_connection(
+            db, source_connection, ctx
         )
+        if auth_url:
+            source_connection_schema.authentication_url = auth_url
+            source_connection_schema.authentication_url_expiry = auth_expiry
 
         return source_connection_schema
 
@@ -704,7 +764,6 @@ class SourceConnectionService:
                 name=sc.name,
                 description=sc.description,
                 short_name=sc.short_name,
-                status=sc.status,
                 created_at=sc.created_at,
                 modified_at=sc.modified_at,
                 sync_id=sc.sync_id,
@@ -743,10 +802,10 @@ class SourceConnectionService:
                 name=sc.name,
                 description=sc.description,
                 short_name=sc.short_name,
-                status=sc.status,
                 created_at=sc.created_at,
                 modified_at=sc.modified_at,
                 sync_id=sc.sync_id,
+                status=sc.status,
                 collection=sc.readable_collection_id,
                 is_authenticated=sc.is_authenticated,
                 white_label_id=sc.white_label_id,
@@ -1455,8 +1514,9 @@ class SourceConnectionService:
 
         proxy_url = f"{core_settings.api_url}/source-connections/authorize/{code8}"
 
-        # Add authentication URL to the schema
+        # Add authentication URL and expiry to the schema
         sc_shell_schema.authentication_url = proxy_url
+        sc_shell_schema.authentication_url_expiry = proxy_expires
 
         return init_id, proxy_url, sc_shell_schema, None
 

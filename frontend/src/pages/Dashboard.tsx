@@ -13,6 +13,7 @@ import {
 import { clearStoredErrorDetails, getStoredErrorDetails } from "@/lib/error-utils";
 import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
+import { useUsageStore } from "@/lib/stores/usage";
 import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
@@ -21,7 +22,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ActionCheckResponse } from "@/types";
+import { SingleActionCheckResponse } from "@/types";
 
 // Collection type definition
 interface Collection {
@@ -71,68 +72,19 @@ const Dashboard = () => {
 
 
 
-  // State for usage limits
-  const [collectionsAllowed, setCollectionsAllowed] = useState(true);
-  const [sourceConnectionsAllowed, setSourceConnectionsAllowed] = useState(true);
-  const [entitiesAllowed, setEntitiesAllowed] = useState(true);
-  const [syncsAllowed, setSyncsAllowed] = useState(true);
-  const [usageCheckDetails, setUsageCheckDetails] = useState<{
-    collections?: ActionCheckResponse | null;
-    source_connections?: ActionCheckResponse | null;
-    entities?: ActionCheckResponse | null;
-    syncs?: ActionCheckResponse | null;
-  }>({});
-  const [isCheckingUsage, setIsCheckingUsage] = useState(true);
+  // Usage check from store
+  const checkActions = useUsageStore(state => state.checkActions);
+  const actionChecks = useUsageStore(state => state.actionChecks);
+  const isCheckingUsage = useUsageStore(state => state.isLoading);
 
-  // Check if actions are allowed based on usage limits
-  const checkUsageActions = useCallback(async () => {
-    try {
-      // Check all four actions in parallel
-      const [collectionsRes, sourceConnectionsRes, entitiesRes, syncsRes] = await Promise.all([
-        apiClient.get('/usage/check-action?action=collections'),
-        apiClient.get('/usage/check-action?action=source_connections'),
-        apiClient.get('/usage/check-action?action=entities'),
-        apiClient.get('/usage/check-action?action=syncs')
-      ]);
+  // Derived states from usage store
+  const collectionsAllowed = actionChecks.collections?.allowed ?? true;
+  const sourceConnectionsAllowed = actionChecks.source_connections?.allowed ?? true;
+  const entitiesAllowed = actionChecks.entities?.allowed ?? true;
+  const syncsAllowed = actionChecks.syncs?.allowed ?? true;
+  const usageCheckDetails = actionChecks;
 
-      const details: typeof usageCheckDetails = {};
-
-      if (collectionsRes.ok) {
-        const data: ActionCheckResponse = await collectionsRes.json();
-        setCollectionsAllowed(data.allowed);
-        details.collections = data;
-      }
-
-      if (sourceConnectionsRes.ok) {
-        const data: ActionCheckResponse = await sourceConnectionsRes.json();
-        setSourceConnectionsAllowed(data.allowed);
-        details.source_connections = data;
-      }
-
-      if (entitiesRes.ok) {
-        const data: ActionCheckResponse = await entitiesRes.json();
-        setEntitiesAllowed(data.allowed);
-        details.entities = data;
-      }
-
-      if (syncsRes.ok) {
-        const data: ActionCheckResponse = await syncsRes.json();
-        setSyncsAllowed(data.allowed);
-        details.syncs = data;
-      }
-
-      setUsageCheckDetails(details);
-    } catch (error) {
-      console.error('Failed to check usage actions:', error);
-      // Default to allowed on error to not block users
-      setCollectionsAllowed(true);
-      setSourceConnectionsAllowed(true);
-      setEntitiesAllowed(true);
-      setSyncsAllowed(true);
-    } finally {
-      setIsCheckingUsage(false);
-    }
-  }, []);
+  // Usage checking is now handled by UsageChecker component at app level
 
   // Check for connection errors on mount
   useEffect(() => {
@@ -173,10 +125,7 @@ const Dashboard = () => {
     };
   }, [fetchCollections, fetchSources]);
 
-  // Check usage limits on mount
-  useEffect(() => {
-    checkUsageActions();
-  }, [checkUsageActions]);
+  // Usage limits are now checked by UsageChecker component
 
 
   const handleRequestNewKey = () => {

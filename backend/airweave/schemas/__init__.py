@@ -142,7 +142,7 @@ from .sync_job import (
 )
 from .transformer import Transformer, TransformerCreate, TransformerUpdate
 from .usage import (
-    ActionCheckResponse,
+    SingleActionCheckResponse,
     Usage,
     UsageCreate,
     UsageInDBBase,

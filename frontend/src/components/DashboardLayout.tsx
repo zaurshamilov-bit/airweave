@@ -34,6 +34,7 @@ import { onCollectionEvent, COLLECTION_DELETED, COLLECTION_CREATED, COLLECTION_U
 import { APIKeysSettings } from "@/components/settings/APIKeysSettings";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 import { useOrganizationStore } from "@/lib/stores/organizations";
+import { useUsageStore } from "@/lib/stores/usage";
 import { getStoredErrorDetails, clearStoredErrorDetails } from "@/lib/error-utils";
 import { BillingGuard } from "@/components/BillingGuard";
 import {
@@ -42,11 +43,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ActionCheckResponse } from "@/types";
+import { SingleActionCheckResponse } from "@/types";
 import { SidePanelFlow } from "@/components/shared/SidePanelFlow"; // Import the new SidePanel
 import { useSidePanelStore } from "@/lib/stores/sidePanelStore"; // Import the new store
 import { useCollectionCreationStore } from "@/stores/collectionCreationStore"; // Import collection creation store
 import { CollectionCreationModal } from "@/components/CollectionCreationModal"; // Import the modal
+import { UsageChecker } from "@/components/UsageChecker"; // App-level usage checker
 
 // Memoized Collections Section to prevent re-renders of the entire sidebar
 const CollectionsSection = memo(() => {
@@ -61,13 +63,6 @@ const CollectionsSection = memo(() => {
     const unsubscribe = useCollectionsStore.getState().subscribeToEvents();
     return unsubscribe;
   }, [fetchCollections]);
-
-  // Refetch collections when organization changes (for auto-switching)
-  useEffect(() => {
-    if (currentOrganization) {
-      fetchCollections(true); // Force refresh
-    }
-  }, [currentOrganization?.id, fetchCollections]);
 
   // Active status for nav items
   const isActive = useCallback((path: string) => {
@@ -201,18 +196,17 @@ const DashboardLayout = () => {
   const { currentOrganization } = useOrganizationStore();
   const { openPanel } = useSidePanelStore(); // Get the function to open the panel
 
-  // State for usage limits
-  const [collectionsAllowed, setCollectionsAllowed] = useState(true);
-  const [sourceConnectionsAllowed, setSourceConnectionsAllowed] = useState(true);
-  const [entitiesAllowed, setEntitiesAllowed] = useState(true);
-  const [syncsAllowed, setSyncsAllowed] = useState(true);
-  const [usageCheckDetails, setUsageCheckDetails] = useState<{
-    collections?: ActionCheckResponse | null;
-    source_connections?: ActionCheckResponse | null;
-    entities?: ActionCheckResponse | null;
-    syncs?: ActionCheckResponse | null;
-  }>({});
-  const [isCheckingUsage, setIsCheckingUsage] = useState(true);
+  // Usage check from store
+  const checkActions = useUsageStore(state => state.checkActions);
+  const actionChecks = useUsageStore(state => state.actionChecks);
+  const isCheckingUsage = useUsageStore(state => state.isLoading);
+
+  // Derived states from usage store
+  const collectionsAllowed = actionChecks.collections?.allowed ?? true;
+  const sourceConnectionsAllowed = actionChecks.source_connections?.allowed ?? true;
+  const entitiesAllowed = actionChecks.entities?.allowed ?? true;
+  const syncsAllowed = actionChecks.syncs?.allowed ?? true;
+  const usageCheckDetails = actionChecks;
 
   // Add array of routes that should be non-scrollable
   const nonScrollableRoutes = ['/chat', '/chat/'];
@@ -221,55 +215,7 @@ const DashboardLayout = () => {
   const isNonScrollable = nonScrollableRoutes.some(route =>
     location.pathname === route || location.pathname.startsWith('/chat/'));
 
-  // Check if actions are allowed based on usage limits
-  const checkUsageActions = useCallback(async () => {
-    try {
-      // Check all four actions in parallel
-      const [collectionsRes, sourceConnectionsRes, entitiesRes, syncsRes] = await Promise.all([
-        apiClient.get('/usage/check-action?action=collections'),
-        apiClient.get('/usage/check-action?action=source_connections'),
-        apiClient.get('/usage/check-action?action=entities'),
-        apiClient.get('/usage/check-action?action=syncs')
-      ]);
-
-      const details: typeof usageCheckDetails = {};
-
-      if (collectionsRes.ok) {
-        const data: ActionCheckResponse = await collectionsRes.json();
-        setCollectionsAllowed(data.allowed);
-        details.collections = data;
-      }
-
-      if (sourceConnectionsRes.ok) {
-        const data: ActionCheckResponse = await sourceConnectionsRes.json();
-        setSourceConnectionsAllowed(data.allowed);
-        details.source_connections = data;
-      }
-
-      if (entitiesRes.ok) {
-        const data: ActionCheckResponse = await entitiesRes.json();
-        setEntitiesAllowed(data.allowed);
-        details.entities = data;
-      }
-
-      if (syncsRes.ok) {
-        const data: ActionCheckResponse = await syncsRes.json();
-        setSyncsAllowed(data.allowed);
-        details.syncs = data;
-      }
-
-      setUsageCheckDetails(details);
-    } catch (error) {
-      console.error('Failed to check usage actions:', error);
-      // Default to allowed on error to not block users
-      setCollectionsAllowed(true);
-      setSourceConnectionsAllowed(true);
-      setEntitiesAllowed(true);
-      setSyncsAllowed(true);
-    } finally {
-      setIsCheckingUsage(false);
-    }
-  }, []);
+  // Usage checking is now handled by UsageChecker component at app level
 
   const handleCreateCollection = useCallback(() => {
     // Use the modal instead of side panel for collection creation
@@ -277,18 +223,7 @@ const DashboardLayout = () => {
     store.openForCreateCollection();
   }, []);
 
-  // Check usage limits on mount
-  useEffect(() => {
-    checkUsageActions();
-  }, [checkUsageActions]);
-
-  // Re-check usage limits when organization changes
-  useEffect(() => {
-    if (currentOrganization) {
-      console.log(`🔄 [DashboardLayout] Organization changed to ${currentOrganization.name}, re-checking usage limits`);
-      checkUsageActions();
-    }
-  }, [currentOrganization?.id, checkUsageActions]);
+  // Usage limits are now checked by UsageChecker component
 
   // Memoize active status checks
   const isDashboardActive = useMemo(() =>
@@ -460,6 +395,9 @@ const DashboardLayout = () => {
   return (
     <GradientBackground className="min-h-screen">
       <GradientCard className="h-full">
+        {/* Global usage checker - checks once at app level */}
+        <UsageChecker />
+
         {/* Global modals and panels - available on all pages */}
         <CollectionCreationModal />
         <SidePanelFlow />

@@ -7,6 +7,7 @@ import { CollectionCard } from "@/components/dashboard";
 import { useCollectionsStore, useSourcesStore } from "@/lib/stores";
 import { useCollectionCreationStore } from "@/stores/collectionCreationStore";
 import { apiClient } from "@/lib/api";
+import { useUsageStore } from "@/lib/stores/usage";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -14,7 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ActionCheckResponse } from "@/types";
+import { SingleActionCheckResponse } from "@/types";
 
 const CollectionsView = () => {
   const navigate = useNavigate();
@@ -31,68 +32,19 @@ const CollectionsView = () => {
   // Modal state
   const { openModal } = useCollectionCreationStore();
 
-  // State for usage limits
-  const [collectionsAllowed, setCollectionsAllowed] = useState(true);
-  const [sourceConnectionsAllowed, setSourceConnectionsAllowed] = useState(true);
-  const [entitiesAllowed, setEntitiesAllowed] = useState(true);
-  const [syncsAllowed, setSyncsAllowed] = useState(true);
-  const [usageCheckDetails, setUsageCheckDetails] = useState<{
-    collections?: ActionCheckResponse | null;
-    source_connections?: ActionCheckResponse | null;
-    entities?: ActionCheckResponse | null;
-    syncs?: ActionCheckResponse | null;
-  }>({});
-  const [isCheckingUsage, setIsCheckingUsage] = useState(true);
+  // Usage check from store
+  const checkActions = useUsageStore(state => state.checkActions);
+  const actionChecks = useUsageStore(state => state.actionChecks);
+  const isCheckingUsage = useUsageStore(state => state.isLoading);
 
-  // Check if actions are allowed based on usage limits
-  const checkUsageActions = useCallback(async () => {
-    try {
-      // Check all four actions in parallel
-      const [collectionsRes, sourceConnectionsRes, entitiesRes, syncsRes] = await Promise.all([
-        apiClient.get('/usage/check-action?action=collections'),
-        apiClient.get('/usage/check-action?action=source_connections'),
-        apiClient.get('/usage/check-action?action=entities'),
-        apiClient.get('/usage/check-action?action=syncs')
-      ]);
+  // Derived states from usage store
+  const collectionsAllowed = actionChecks.collections?.allowed ?? true;
+  const sourceConnectionsAllowed = actionChecks.source_connections?.allowed ?? true;
+  const entitiesAllowed = actionChecks.entities?.allowed ?? true;
+  const syncsAllowed = actionChecks.syncs?.allowed ?? true;
+  const usageCheckDetails = actionChecks;
 
-      const details: typeof usageCheckDetails = {};
-
-      if (collectionsRes.ok) {
-        const data: ActionCheckResponse = await collectionsRes.json();
-        setCollectionsAllowed(data.allowed);
-        details.collections = data;
-      }
-
-      if (sourceConnectionsRes.ok) {
-        const data: ActionCheckResponse = await sourceConnectionsRes.json();
-        setSourceConnectionsAllowed(data.allowed);
-        details.source_connections = data;
-      }
-
-      if (entitiesRes.ok) {
-        const data: ActionCheckResponse = await entitiesRes.json();
-        setEntitiesAllowed(data.allowed);
-        details.entities = data;
-      }
-
-      if (syncsRes.ok) {
-        const data: ActionCheckResponse = await syncsRes.json();
-        setSyncsAllowed(data.allowed);
-        details.syncs = data;
-      }
-
-      setUsageCheckDetails(details);
-    } catch (error) {
-      console.error('Failed to check usage actions:', error);
-      // Default to allowed on error to not block users
-      setCollectionsAllowed(true);
-      setSourceConnectionsAllowed(true);
-      setEntitiesAllowed(true);
-      setSyncsAllowed(true);
-    } finally {
-      setIsCheckingUsage(false);
-    }
-  }, []);
+  // Usage checking is now handled by UsageChecker component at app level
 
   // Initialize collections and event listeners
   useEffect(() => {
@@ -109,10 +61,7 @@ const CollectionsView = () => {
     return unsubscribe;
   }, [fetchCollections]);
 
-  // Check usage limits on mount
-  useEffect(() => {
-    checkUsageActions();
-  }, [checkUsageActions]);
+  // Usage limits are now checked by UsageChecker component
 
   // Filter collections based on search query
   useEffect(() => {
@@ -138,14 +87,14 @@ const CollectionsView = () => {
   useEffect(() => {
     const handleCollectionCreated = () => {
       fetchCollections(true);
-      checkUsageActions();
+      // Usage will be checked automatically by UsageChecker
     };
 
     window.addEventListener('collection-created', handleCollectionCreated);
     return () => {
       window.removeEventListener('collection-created', handleCollectionCreated);
     };
-  }, [fetchCollections, checkUsageActions]);
+  }, [fetchCollections]);
 
   return (
     <div className="mx-auto w-full max-w-[1800px] px-6 py-6 pb-8">

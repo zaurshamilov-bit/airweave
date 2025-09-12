@@ -125,7 +125,7 @@ class CRUDSourceConnection(
             # If the connection is a shell pending authentication, set
             # status and skip sync job logic
             if not sc.is_authenticated:
-                sc.status = SourceConnectionStatus.PENDING
+                sc.status = SourceConnectionStatus.NOT_YET_AUTHORIZED
                 # Also null out other sync-related fields for consistency
                 sc.last_sync_job_id = None
                 sc.last_sync_job_status = None
@@ -150,7 +150,7 @@ class CRUDSourceConnection(
                 )
                 sc.status = await self.get_status(sc, job)
             else:
-                logger.info(
+                logger.warning(
                     f"Source connection {sc_id} with sync_id {sc.sync_id}: "
                     f"No matching latest job found"
                 )
@@ -287,6 +287,18 @@ class CRUDSourceConnection(
         )
         result = await db.execute(query)
         source_connections = list(result.scalars().all())
+
+        # First check if the source connections are authenticated
+        authenticated_connections = [sc for sc in source_connections if sc.is_authenticated]
+        if not authenticated_connections:
+            for sc in source_connections:
+                sc.status = SourceConnectionStatus.NOT_YET_AUTHORIZED
+                sc.last_sync_job_status = None
+                sc.last_sync_job_id = None
+                sc.last_sync_job_started_at = None
+                sc.last_sync_job_completed_at = None
+                sc.last_sync_job_error = None
+            return source_connections
 
         # Attach latest sync job info and compute statuses
         source_connections = await self._attach_last_sync_job_info(db, source_connections)

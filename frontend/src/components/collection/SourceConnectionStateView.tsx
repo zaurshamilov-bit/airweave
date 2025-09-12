@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
-import { Loader2, AlertCircle, RefreshCw, Clock, X, History, Square } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Clock, X, History, Square, ExternalLink, Copy, Check, Send } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 import { SourceConnectionSettings } from './SourceConnectionSettings';
@@ -39,6 +39,8 @@ interface SourceConnection {
   modified_by_email: string;
   auth_fields?: Record<string, any> | string;
   status?: string;
+  is_authenticated?: boolean;
+  authentication_url?: string;
   latest_sync_job_status?: string;
   latest_sync_job_id?: string;
   latest_sync_job_started_at?: string;
@@ -52,19 +54,25 @@ interface SourceConnection {
 
 interface Props {
   sourceConnectionId: string;
+  sourceConnectionData?: SourceConnection;  // Accept data as prop
   onConnectionDeleted?: () => void;
+  onConnectionUpdated?: () => void;  // Callback to refresh data in parent
 }
 
 const SourceConnectionStateView: React.FC<Props> = ({
   sourceConnectionId,
-  onConnectionDeleted
+  sourceConnectionData,
+  onConnectionDeleted,
+  onConnectionUpdated
 }) => {
   const [isInitializing, setIsInitializing] = useState(true);
-  const [sourceConnection, setSourceConnection] = useState<SourceConnection | null>(null);
+  const [sourceConnection, setSourceConnection] = useState<SourceConnection | null>(sourceConnectionData || null);
   const [isRunningSync, setIsRunningSync] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [nextRunTime, setNextRunTime] = useState<string | null>(null);
   const [lastRanDisplay, setLastRanDisplay] = useState<string>('Never');
+  const [copied, setCopied] = useState(false);
+  const [connectionMethod, setConnectionMethod] = useState<'self' | 'share'>('self');
 
   const mediator = useRef<EntityStateMediator | null>(null);
   const { resolvedTheme } = useTheme();
@@ -198,8 +206,19 @@ const SourceConnectionStateView: React.FC<Props> = ({
     }
   }, []);
 
-  // Fetch source connection details
+  // Fetch source connection details (only when not provided as prop)
   const fetchSourceConnection = useCallback(async () => {
+    // If data is provided as prop, use it instead of fetching
+    if (sourceConnectionData) {
+      setSourceConnection(sourceConnectionData);
+      // Calculate next run time
+      if (sourceConnectionData.cron_schedule) {
+        const nextRun = calculateNextRunTime(sourceConnectionData.cron_schedule);
+        setNextRunTime(nextRun);
+      }
+      return;
+    }
+
     try {
       const response = await apiClient.get(`/source-connections/${sourceConnectionId}`);
       if (response.ok) {
@@ -211,11 +230,23 @@ const SourceConnectionStateView: React.FC<Props> = ({
           const nextRun = calculateNextRunTime(data.cron_schedule);
           setNextRunTime(nextRun);
         }
+
+        // If not authenticated and no auth URL, try to get one
+        if ((!data.is_authenticated || data.status === 'not_yet_authorized') && !data.authentication_url) {
+          // Try to regenerate the auth URL by fetching with special parameter
+          const authResponse = await apiClient.get(`/source-connections/${sourceConnectionId}?regenerate_auth_url=true`);
+          if (authResponse.ok) {
+            const authData = await authResponse.json();
+            if (authData.authentication_url) {
+              setSourceConnection(prev => ({ ...prev!, authentication_url: authData.authentication_url }));
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to fetch source connection:', error);
     }
-  }, [sourceConnectionId, calculateNextRunTime]);
+  }, [sourceConnectionId, sourceConnectionData, calculateNextRunTime]);
 
   useEffect(() => {
     // Initialize state mediator
@@ -234,7 +265,19 @@ const SourceConnectionStateView: React.FC<Props> = ({
     return () => {
       mediator.current?.cleanup();
     };
-  }, [sourceConnectionId, fetchSourceConnection]);
+  }, [sourceConnectionId]); // Remove fetchSourceConnection from deps to prevent loops
+
+  // Update source connection when prop changes
+  useEffect(() => {
+    if (sourceConnectionData && sourceConnectionData !== sourceConnection) {
+      setSourceConnection(sourceConnectionData);
+      // Calculate next run time
+      if (sourceConnectionData.cron_schedule) {
+        const nextRun = calculateNextRunTime(sourceConnectionData.cron_schedule);
+        setNextRunTime(nextRun);
+      }
+    }
+  }, [sourceConnectionData, calculateNextRunTime]);
 
   // Update next run time when cron_schedule changes
   useEffect(() => {
@@ -376,6 +419,9 @@ const SourceConnectionStateView: React.FC<Props> = ({
 
   // Get sync status display
   const getSyncStatusDisplay = () => {
+    if (sourceConnection?.status === 'not_yet_authorized' || !sourceConnection?.is_authenticated) {
+      return { text: 'Not Authorized', color: 'bg-orange-500' };
+    }
     if (state?.syncStatus === 'failed') return { text: 'Failed', color: 'bg-red-500' };
     if (state?.syncStatus === 'completed') return { text: 'Completed', color: 'bg-green-500' };
     if (isRunning) return { text: 'Running', color: 'bg-blue-500 animate-pulse' };
@@ -384,9 +430,276 @@ const SourceConnectionStateView: React.FC<Props> = ({
   };
 
   const syncStatus = getSyncStatusDisplay();
+  const isNotAuthorized = sourceConnection?.status === 'not_yet_authorized' || !sourceConnection?.is_authenticated;
+
+  // Helper functions for authorization UI
+  const copyToClipboard = () => {
+    if (sourceConnection?.authentication_url) {
+      navigator.clipboard.writeText(sourceConnection.authentication_url);
+      setCopied(true);
+      toast({
+        title: "Copied",
+        description: "Authorization URL copied to clipboard"
+      });
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleConnect = () => {
+    if (sourceConnection?.authentication_url) {
+      window.location.href = sourceConnection.authentication_url;
+    }
+  };
+
+  const handleSendEmail = () => {
+    if (sourceConnection?.authentication_url) {
+      const subject = encodeURIComponent(`Authorize ${sourceConnection.name}`);
+      const body = encodeURIComponent(
+        `Hi there,\n\nPlease click the link below to authorize ${sourceConnection.name}:\n\n${sourceConnection.authentication_url}\n\nThis will allow us to sync your data securely.\n\nThanks!`
+      );
+      window.open(`mailto:?subject=${subject}&body=${body}`);
+    }
+  };
 
   return (
     <div className={cn("space-y-4", DESIGN_SYSTEM.typography.sizes.body)}>
+      {/* Show authorization UI if not authorized - matching SourceConfigView.tsx style */}
+      {isNotAuthorized && (
+        <div className={cn(
+          "p-6 rounded-xl border",
+          isDark ? "bg-gray-900/50 border-gray-800" : "bg-white border-gray-200"
+        )}>
+          <div className="space-y-6">
+            {/* Success indicator */}
+            <div className="flex items-center gap-2">
+              <div className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                "bg-orange-500"
+              )} />
+              <div>
+                <p className={cn(
+                  "text-sm font-medium",
+                  isDark ? "text-white" : "text-gray-900"
+                )}>
+                  Connection needs authorization
+                </p>
+                <p className={cn(
+                  "text-xs mt-0.5",
+                  isDark ? "text-gray-500" : "text-gray-500"
+                )}>
+                  Choose how to authorize access to {sourceConnection?.name}
+                </p>
+              </div>
+            </div>
+
+            {/* Two clean options - matching SourceConfigView exactly */}
+            <div className="space-y-3">
+              {/* Option 1: Connect yourself */}
+              <div
+                className={cn(
+                  "p-5 rounded-xl transition-all cursor-pointer",
+                  "border",
+                  connectionMethod === 'self'
+                    ? isDark
+                      ? "border-white/15 bg-white/[0.02]"
+                      : "border-gray-300 bg-white"
+                    : isDark
+                      ? "border-white/10 hover:border-white/15"
+                      : "border-gray-200 hover:border-gray-300"
+                )}
+                onClick={() => setConnectionMethod('self')}
+              >
+                <h3 className={cn(
+                  "text-sm font-semibold mb-1",
+                  isDark ? "text-white" : "text-gray-900"
+                )}>
+                  Connect your own account
+                </h3>
+                <p className={cn(
+                  "text-xs leading-relaxed",
+                  isDark ? "text-gray-400" : "text-gray-600"
+                )}>
+                  Authorize Airweave to access your {sourceConnection?.name} data directly. Quick and simple.
+                </p>
+
+                {connectionMethod === 'self' && (
+                  sourceConnection?.authentication_url ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleConnect();
+                      }}
+                      className={cn(
+                        "mt-4 px-4 py-2 rounded-lg",
+                        "bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100",
+                        "text-white dark:text-black",
+                        "font-medium text-xs",
+                        "transition-colors"
+                      )}
+                    >
+                      Authorize with {sourceConnection?.name}
+                    </button>
+                  ) : (
+                    <div className={cn(
+                      "mt-4 p-3 rounded-lg border",
+                      isDark
+                        ? "bg-yellow-900/20 border-yellow-800/50"
+                        : "bg-yellow-50 border-yellow-200"
+                    )}>
+                      <p className={cn(
+                        "text-xs",
+                        isDark ? "text-yellow-400" : "text-yellow-700"
+                      )}>
+                        Authorization URL not available. Please retry or contact support.
+                      </p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          fetchSourceConnection();
+                        }}
+                        className={cn(
+                          "mt-2 px-3 py-1.5 rounded-lg text-xs font-medium",
+                          "bg-yellow-600 hover:bg-yellow-700 text-white",
+                          "transition-colors inline-flex items-center gap-1"
+                        )}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Retry
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Option 2: Share with someone else */}
+              <div
+                className={cn(
+                  "p-5 rounded-xl transition-all cursor-pointer",
+                  "border",
+                  connectionMethod === 'share'
+                    ? isDark
+                      ? "border-white/15 bg-white/[0.02]"
+                      : "border-gray-300 bg-white"
+                    : isDark
+                      ? "border-white/10 hover:border-white/15"
+                      : "border-gray-200 hover:border-gray-300"
+                )}
+                onClick={() => setConnectionMethod('share')}
+              >
+                <h3 className={cn(
+                  "text-sm font-semibold mb-1",
+                  isDark ? "text-white" : "text-gray-900"
+                )}>
+                  Have someone else connect
+                </h3>
+                <p className={cn(
+                  "text-xs leading-relaxed",
+                  isDark ? "text-gray-400" : "text-gray-600"
+                )}>
+                  Send this secure link to someone with {sourceConnection?.name} access. They'll authorize on your behalf.
+                </p>
+
+                {connectionMethod === 'share' && (
+                  sourceConnection?.authentication_url ? (
+                    <div className="mt-4 space-y-3">
+                      {/* Clean URL display */}
+                      <div className={cn(
+                        "relative",
+                        "px-3 py-2 pr-20 rounded-lg",
+                        "border",
+                        isDark
+                          ? "bg-black/30 border-white/10"
+                          : "bg-gray-50 border-gray-200"
+                      )}>
+                        <code className={cn(
+                          "block text-[11px] font-mono truncate select-all",
+                          isDark ? "text-gray-400" : "text-gray-600"
+                        )}>
+                          {sourceConnection.authentication_url}
+                        </code>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyToClipboard();
+                          }}
+                          className={cn(
+                            "absolute right-2 top-1/2 -translate-y-1/2",
+                            "px-2.5 py-1 rounded-md",
+                            "text-[10px] font-medium",
+                            "transition-colors",
+                            copied
+                              ? isDark
+                                ? "text-green-400"
+                                : "text-green-600"
+                              : isDark
+                                ? "text-gray-500 hover:text-gray-300"
+                                : "text-gray-500 hover:text-gray-700"
+                          )}
+                        >
+                          {copied ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+
+                      {/* Email share link */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSendEmail();
+                        }}
+                        className={cn(
+                          "text-xs font-medium transition-colors",
+                          isDark
+                            ? "text-gray-500 hover:text-gray-300"
+                            : "text-gray-500 hover:text-gray-700"
+                        )}
+                      >
+                        Share via email
+                      </button>
+                    </div>
+                  ) : (
+                    <div className={cn(
+                      "mt-4 p-3 rounded-lg border",
+                      isDark
+                        ? "bg-yellow-900/20 border-yellow-800/50"
+                        : "bg-yellow-50 border-yellow-200"
+                    )}>
+                      <p className={cn(
+                        "text-xs",
+                        isDark ? "text-yellow-400" : "text-yellow-700"
+                      )}>
+                        Authorization URL not available. Please retry or contact support.
+                      </p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          fetchSourceConnection();
+                        }}
+                        className={cn(
+                          "mt-2 px-3 py-1.5 rounded-lg text-xs font-medium",
+                          "bg-yellow-600 hover:bg-yellow-700 text-white",
+                          "transition-colors inline-flex items-center gap-1"
+                        )}
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Retry
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+
+            {/* Help text */}
+            <p className={cn(
+              "text-[11px]",
+              isDark ? "text-gray-600" : "text-gray-400"
+            )}>
+              This authorization is secure and can be revoked anytime from your {sourceConnection?.name} settings.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Status Dashboard with Settings - All in one row */}
       <div className="flex items-center justify-between">
         <div className="flex gap-2 flex-wrap items-center">
@@ -471,22 +784,24 @@ const SourceConnectionStateView: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={isSyncing ? handleCancelSync : handleRunSync}
-                  disabled={isRunningSync || isCancelling}
+                  disabled={isRunningSync || isCancelling || isNotAuthorized}
                   className={cn(
                     "h-8 w-8 rounded-md border shadow-sm flex items-center justify-center transition-all duration-200",
-                    isSyncing
-                      ? isCancelling
-                        ? isDark
-                          ? "bg-orange-900/30 border-orange-700 hover:bg-orange-900/50 cursor-not-allowed"
-                          : "bg-orange-50 border-orange-200 hover:bg-orange-100 cursor-not-allowed"
-                        : isDark
-                          ? "bg-red-900/30 border-red-700 hover:bg-red-900/50 cursor-pointer"
-                          : "bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer"
-                      : isRunningSync
-                        ? "bg-muted border-border cursor-not-allowed"
-                        : isDark
-                          ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
-                          : "bg-white border-border hover:bg-muted cursor-pointer"
+                    isNotAuthorized
+                      ? "opacity-50 cursor-not-allowed bg-muted border-border"
+                      : isSyncing
+                        ? isCancelling
+                          ? isDark
+                            ? "bg-orange-900/30 border-orange-700 hover:bg-orange-900/50 cursor-not-allowed"
+                            : "bg-orange-50 border-orange-200 hover:bg-orange-100 cursor-not-allowed"
+                          : isDark
+                            ? "bg-red-900/30 border-red-700 hover:bg-red-900/50 cursor-pointer"
+                            : "bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer"
+                        : isRunningSync
+                          ? "bg-muted border-border cursor-not-allowed"
+                          : isDark
+                            ? "bg-gray-900 border-border hover:bg-muted cursor-pointer"
+                            : "bg-white border-border hover:bg-muted cursor-pointer"
                   )}
                   title={isSyncing ? (isCancelling ? "Cancelling sync..." : "Cancel sync") : (isRunningSync ? "Starting sync..." : "Refresh data")}
                 >
@@ -506,13 +821,15 @@ const SourceConnectionStateView: React.FC<Props> = ({
               </TooltipTrigger>
               <TooltipContent>
                 <p className="text-xs">
-                  {isSyncing
-                    ? isCancelling
-                      ? "Cancelling sync..."
-                      : "Cancel sync"
-                    : isRunningSync
-                      ? "Starting sync..."
-                      : "Refresh data"}
+                  {isNotAuthorized
+                    ? "Authorization required before syncing"
+                    : isSyncing
+                      ? isCancelling
+                        ? "Cancelling sync..."
+                        : "Cancel sync"
+                      : isRunningSync
+                        ? "Starting sync..."
+                        : "Refresh data"}
                 </p>
               </TooltipContent>
             </Tooltip>

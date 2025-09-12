@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, RefreshCw, Play, Clock, Loader2, X, MoreVertical, Edit, Trash, Pencil, Eye, EyeOff } from "lucide-react";
 import { apiClient } from "@/lib/api";
+import { useUsageStore } from "@/lib/stores/usage";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -45,7 +46,7 @@ import {
 } from "@/components/ui/tooltip";
 import { EditSourceConnectionDialog } from "./EditSourceConnectionDialog";
 import { emitCollectionEvent, SOURCE_CONNECTION_UPDATED } from "@/lib/events";
-import { ActionCheckResponse } from "@/types";
+import { SingleActionCheckResponse } from "@/types";
 
 const nodeTypes = {
     sourceNode: SourceNode,
@@ -527,12 +528,16 @@ const SourceConnectionDetailView = ({
     });
     const [nextRunTime, setNextRunTime] = useState<string | null>(null);
 
-    // Add state for usage limits
-    const [entitiesAllowed, setEntitiesAllowed] = useState(true);
-    const [entitiesCheckDetails, setEntitiesCheckDetails] = useState<ActionCheckResponse | null>(null);
-    const [syncsAllowed, setSyncsAllowed] = useState(true);
-    const [syncsCheckDetails, setSyncsCheckDetails] = useState<ActionCheckResponse | null>(null);
-    const [isCheckingUsage, setIsCheckingUsage] = useState(true);
+    // Usage check from store
+    const checkActions = useUsageStore(state => state.checkActions);
+    const actionChecks = useUsageStore(state => state.actionChecks);
+    const isCheckingUsage = useUsageStore(state => state.isLoading);
+
+    // Derived states from usage store
+    const entitiesAllowed = actionChecks.entities?.allowed ?? true;
+    const entitiesCheckDetails = actionChecks.entities ?? null;
+    const syncsAllowed = actionChecks.syncs?.allowed ?? true;
+    const syncsCheckDetails = actionChecks.syncs ?? null;
 
     const flowContainerRef = useRef<HTMLDivElement>(null);
 
@@ -568,32 +573,14 @@ const SourceConnectionDetailView = ({
     // Check if actions are allowed based on usage limits
     const checkUsageActions = useCallback(async () => {
         try {
-            // Check both entities and syncs in parallel
-            const [entitiesResponse, syncsResponse] = await Promise.all([
-                apiClient.get('/usage/check-action?action=entities'),
-                apiClient.get('/usage/check-action?action=syncs')
-            ]);
-
-            if (entitiesResponse.ok) {
-                const data: ActionCheckResponse = await entitiesResponse.json();
-                setEntitiesAllowed(data.allowed);
-                setEntitiesCheckDetails(data);
-            }
-
-            if (syncsResponse.ok) {
-                const data: ActionCheckResponse = await syncsResponse.json();
-                setSyncsAllowed(data.allowed);
-                setSyncsCheckDetails(data);
-            }
+            await checkActions({
+                entities: 1,
+                syncs: 1
+            });
         } catch (error) {
             console.error('Failed to check usage actions:', error);
-            // Default to allowed on error to not block users
-            setEntitiesAllowed(true);
-            setSyncsAllowed(true);
-        } finally {
-            setIsCheckingUsage(false);
         }
-    }, []);
+    }, [checkActions]);
 
     // API CALL 1: Fetch Source Connection details (from /source-connections/{id})
     const fetchSourceConnection = async () => {
