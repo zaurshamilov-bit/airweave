@@ -62,6 +62,23 @@ class NotionSource(BaseSource):
         logger.info("Creating new Notion source")
         instance = cls()
         instance.access_token = credentials.access_token
+
+        # ---- per-instance materialization controls (match Drive-style knobs) ----
+        config = config or {}
+        try:
+            instance.batch_generation = bool(
+                config.get("batch_generation", instance.batch_generation)
+            )
+        except Exception:
+            pass
+        try:
+            instance.batch_size = int(config.get("batch_size", instance.batch_size))
+        except Exception:
+            pass
+        # Rebuild the gate in case batch_size changed
+        instance._materialize_semaphore = asyncio.Semaphore(instance.batch_size)
+        # ------------------------------------------------------------------------
+
         return instance
 
     @classmethod
@@ -116,6 +133,12 @@ class NotionSource(BaseSource):
         }
         logger.info("Initialized comprehensive Notion source with content aggregation")
         self._client_ref = None
+
+        # ---- new: per-instance gating for lazy materialization ----
+        self.batch_generation: bool = True  # enable gate by default
+        self.batch_size: int = 6  # max concurrent materializations
+        self._materialize_semaphore: asyncio.Semaphore = asyncio.Semaphore(self.batch_size)
+        # -----------------------------------------------------------
 
     async def _wait_for_rate_limit(self):
         """Implement rate limiting for Notion API requests."""
@@ -1116,7 +1139,8 @@ class NotionSource(BaseSource):
         self, client: httpx.AsyncClient
     ) -> AsyncGenerator[ChunkEntity, None]:
         """Stream database discovery and immediately yield database entities with their pages."""
-        self.logger.info("Streaming database discovery...")
+        self.loggerinfo = self.logger.info  # micro-opt for f-strings below (no functional change)
+        self.loggerinfo("Streaming database discovery...")
 
         # Search for databases and process them one by one
         async for database in self._search_objects(client, "database"):
@@ -1128,7 +1152,7 @@ class NotionSource(BaseSource):
 
             try:
                 # Get the database schema
-                self.logger.info(f"Fetching schema for database: {database_id}")
+                self.loggerinfo(f"Fetching schema for database: {database_id}")
                 schema = await self._get_with_auth(
                     client, f"https://api.notion.com/v1/databases/{database_id}"
                 )
@@ -1139,7 +1163,7 @@ class NotionSource(BaseSource):
                 yield database_entity
 
                 database_title = self._extract_rich_text_plain(schema.get("title", []))
-                self.logger.info(f"Processing pages in database: {database_title}")
+                self.loggerinfo(f"Processing pages in database: {database_title}")
 
                 # Query and yield pages in this database
                 async for page in self._query_database_pages(client, database_id):
@@ -1365,26 +1389,42 @@ class NotionSource(BaseSource):
         return entity
 
     def _create_content_fetcher(self, access_token: str, rate_limit_config: dict):
-        """Create a content fetcher that uses the shared rate limiter."""
+        """Create a content fetcher that uses the shared rate limiter and optional gating."""
 
         async def fetch_content(page_id: str, breadcrumbs: List[Breadcrumb]) -> dict:
-            """Fetch page content with shared rate limiting."""
-            async with httpx.AsyncClient() as client:
-                headers = {
-                    "Authorization": f"Bearer {access_token}",
-                    "Notion-Version": "2022-06-28",
-                }
+            """Fetch page content with shared rate limiting and optional concurrency gate."""
 
-                # Create request helper with shared rate limiting
-                async def make_request(method: str, url: str, **kwargs):
-                    await NotionSource._shared_wait_for_rate_limit()  # Use shared rate limiter
-                    response = await getattr(client, method.lower())(url, headers=headers, **kwargs)
-                    response.raise_for_status()
-                    return response.json()
+            async def _do_fetch() -> dict:
+                async with httpx.AsyncClient() as client:
+                    headers = {
+                        "Authorization": f"Bearer {access_token}",
+                        "Notion-Version": "2022-06-28",
+                    }
 
-                # Fetch all blocks and aggregate content
-                result = await self._fetch_and_aggregate_blocks(make_request, page_id, breadcrumbs)
-                return result
+                    # Create request helper with shared rate limiting
+                    async def make_request(method: str, url: str, **kwargs):
+                        await NotionSource._shared_wait_for_rate_limit()  # Use shared rate limiter
+                        response = await getattr(client, method.lower())(
+                            url, headers=headers, **kwargs
+                        )
+                        response.raise_for_status()
+                        return response.json()
+
+                    # Fetch all blocks and aggregate content
+                    return await self._fetch_and_aggregate_blocks(
+                        make_request, page_id, breadcrumbs
+                    )
+
+            # gate concurrent materializations if enabled
+            if getattr(self, "batch_generation", False):
+                async with self._materialize_semaphore:
+                    self.logger.debug(
+                        f"[Notion] Materializing page {page_id} "
+                        f"(batch_generation=True, batch_size={self.batch_size})"
+                    )
+                    return await _do_fetch()
+            else:
+                return await _do_fetch()
 
         return fetch_content
 

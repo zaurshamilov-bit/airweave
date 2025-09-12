@@ -10,6 +10,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.analytics import track_api_endpoint
 from airweave.api import deps
 from airweave.api.context import ApiContext
 from airweave.api.examples import (
@@ -179,6 +180,7 @@ async def get(
 
 
 @router.post("/", response_model=schemas.SourceConnection)
+@track_api_endpoint("create_source_connection")
 async def create(
     *,
     db: AsyncSession = Depends(deps.get_db),

@@ -123,4 +123,3 @@ volumes:
   postgres_data:
   redis_data:
   qdrant_data:
-  pgadmin_data:

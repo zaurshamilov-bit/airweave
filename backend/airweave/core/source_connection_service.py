@@ -14,7 +14,7 @@ from airweave.core import credentials
 from airweave.core.auth_provider_service import auth_provider_service
 from airweave.core.collection_service import collection_service
 from airweave.core.config import settings as core_settings
-from airweave.core.constants.native_connections import NATIVE_QDRANT_UUID, NATIVE_TEXT2VEC_UUID
+from airweave.core.constants.reserved_ids import NATIVE_QDRANT_UUID, NATIVE_TEXT2VEC_UUID
 from airweave.core.shared_models import ConnectionStatus, SourceConnectionStatus, SyncStatus
 from airweave.core.sync_service import sync_service
 from airweave.crud import (
@@ -468,7 +468,16 @@ class SourceConnectionService:
 
             source_connection.auth_fields = "********"
 
-        return None, None, source_connection, sync_job
+        # Track source connection creation after transaction commits
+        from airweave.analytics import business_events
+
+        business_events.track_source_connection_created(
+            ctx=ctx,
+            connection_id=source_connection.id,
+            source_short_name=source_connection_in.short_name,
+        )
+
+        return source_connection, sync_job
 
     async def _validate_token_with_source(
         self, db: AsyncSession, source_short_name: str, access_token: str, ctx: ApiContext

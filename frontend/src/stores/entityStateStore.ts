@@ -65,8 +65,8 @@ export const useEntityStateStore = create<EntityStateStore>()(
           const currentStates = current.entityStates instanceof Map
             ? current.entityStates
             : new Map<string, EntityState>(Array.isArray(current.entityStates)
-              ? current.entityStates as [string, EntityState][]
-              : []);
+                ? current.entityStates as [string, EntityState][]
+                : []);
 
           const newStates = new Map<string, EntityState>(currentStates);
           newStates.set(connectionId, {
@@ -83,8 +83,8 @@ export const useEntityStateStore = create<EntityStateStore>()(
           const currentStates = current.entityStates instanceof Map
             ? current.entityStates
             : new Map<string, EntityState>(Array.isArray(current.entityStates)
-              ? current.entityStates as [string, EntityState][]
-              : []);
+                ? current.entityStates as [string, EntityState][]
+                : []);
 
           const existing = currentStates.get(connectionId);
 
@@ -130,8 +130,8 @@ export const useEntityStateStore = create<EntityStateStore>()(
           const currentStates = current.entityStates instanceof Map
             ? current.entityStates
             : new Map<string, EntityState>(Array.isArray(current.entityStates)
-              ? current.entityStates as [string, EntityState][]
-              : []);
+                ? current.entityStates as [string, EntityState][]
+                : []);
 
           const newStates = new Map<string, EntityState>(currentStates);
           newStates.delete(connectionId);
@@ -145,8 +145,8 @@ export const useEntityStateStore = create<EntityStateStore>()(
         const entityStates = state.entityStates instanceof Map
           ? state.entityStates
           : new Map<string, EntityState>(Array.isArray(state.entityStates)
-            ? state.entityStates as [string, EntityState][]
-            : []);
+              ? state.entityStates as [string, EntityState][]
+              : []);
 
         return entityStates.get(connectionId) || null;
       },
@@ -157,8 +157,8 @@ export const useEntityStateStore = create<EntityStateStore>()(
         const entityStates = state.entityStates instanceof Map
           ? state.entityStates
           : new Map<string, EntityState>(Array.isArray(state.entityStates)
-            ? state.entityStates as [string, EntityState][]
-            : []);
+              ? state.entityStates as [string, EntityState][]
+              : []);
 
         const entityState = entityStates.get(connectionId);
         if (!entityState) return 0;
@@ -169,20 +169,70 @@ export const useEntityStateStore = create<EntityStateStore>()(
     }),
     {
       name: 'entity-state-storage',
-      // Persist entityStates as array entries with ISO dates to avoid Map/Date serialization issues
-      partialize: (state: EntityStateStore) => {
-        const entityStates = state.entityStates instanceof Map
-          ? Array.from(state.entityStates.entries()).map(([key, entityState]) => [
+      // Custom storage adapter for Map serialization
+      storage: {
+        getItem: (name) => {
+          const str = localStorage.getItem(name);
+          if (!str) return null;
+
+          try {
+            const parsed = JSON.parse(str);
+            const state = parsed.state;
+
+            // Reconstruct Map and convert ISO strings back to Dates
+            const entries = Array.isArray(state.entityStates)
+              ? state.entityStates.map(([key, value]: [string, any]) => [
+                  key,
+                  {
+                    ...value,
+                    lastUpdated: value.lastUpdated ? new Date(value.lastUpdated) : new Date()
+                  }
+                ])
+              : [];
+
+            return {
+              ...parsed,
+              state: {
+                ...state,
+                entityStates: new Map(entries)
+              }
+            };
+          } catch (e) {
+            return null;
+          }
+        },
+        setItem: (name, value) => {
+          // Ensure entityStates is a Map before serializing
+          const entityStates = value.state.entityStates instanceof Map
+            ? value.state.entityStates
+            : new Map<string, EntityState>(Array.isArray(value.state.entityStates)
+                ? value.state.entityStates as [string, EntityState][]
+                : []);
+
+          // Convert Map to array and serialize dates as ISO strings
+          const entries = Array.from(entityStates.entries()).map(([key, entityState]) => [
             key,
             {
               ...entityState,
               lastUpdated: entityState.lastUpdated instanceof Date
                 ? entityState.lastUpdated.toISOString()
-                : (entityState.lastUpdated as any)
+                : entityState.lastUpdated
             }
-          ])
-          : (state.entityStates as any);
-        return { entityStates } as unknown as EntityStateStore;
+          ]);
+
+          const toStore = {
+            ...value,
+            state: {
+              ...value.state,
+              entityStates: entries
+            }
+          };
+
+          localStorage.setItem(name, JSON.stringify(toStore));
+        },
+        removeItem: (name) => {
+          localStorage.removeItem(name);
+        }
       }
     }
   )

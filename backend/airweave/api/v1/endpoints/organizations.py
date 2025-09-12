@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airweave import crud, schemas
+from airweave.analytics import business_events, track_api_endpoint
 from airweave.api import deps
 from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
@@ -19,6 +20,7 @@ router = TrailingSlashRouter()
 
 
 @router.post("/", response_model=schemas.Organization)
+@track_api_endpoint("create_organization")
 async def create_organization(
     organization_data: schemas.OrganizationCreate,
     db: AsyncSession = Depends(deps.get_db),
@@ -31,7 +33,7 @@ async def create_organization(
     Args:
         organization_data: The organization data to create
         db: Database session
-        user: The current authenticated user
+        user: The authenticated user creating the organization
 
     Returns:
         The created organization with user's role
@@ -45,8 +47,22 @@ async def create_organization(
             db=db, org_data=organization_data, owner_user=user
         )
 
+        # Track business event
+        business_events.track_organization_created(
+            organization_id=organization.id,
+            user_id=user.id,
+            properties={
+                "plan": "trial",  # Default plan for new organizations
+                "source": "signup",
+                "organization_name": organization.name,
+            },
+        )
+
         return organization
     except Exception as e:
+        from airweave.core.logging import logger
+
+        logger.exception(f"Failed to create organization: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to create organization: {str(e)}"
         ) from e

@@ -7,7 +7,7 @@ database, as it contains the endpoints for user creation and retrieval.
 from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import Depends, HTTPException
+from fastapi import BackgroundTasks, Depends, HTTPException
 from fastapi_auth0 import Auth0User
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,7 @@ from airweave.api import deps
 from airweave.api.auth import auth0
 from airweave.api.context import ApiContext
 from airweave.api.router import TrailingSlashRouter
+from airweave.core.email_service import send_welcome_email
 from airweave.core.exceptions import NotFoundException
 from airweave.core.logging import logger
 from airweave.db.unit_of_work import UnitOfWork
@@ -80,6 +81,7 @@ async def read_user_organizations(
 @router.post("/create_or_update", response_model=User)
 async def create_or_update_user(
     user_data: schemas.UserCreate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(deps.get_db),
     auth0_user: Optional[Auth0User] = Depends(auth0.get_user),
 ) -> schemas.User:
@@ -90,6 +92,7 @@ async def create_or_update_user(
 
     Args:
         user_data (schemas.UserCreate): The user object to be created.
+        background_tasks (BackgroundTasks): FastAPI background tasks for non-blocking operations.
         db (AsyncSession): Database session dependency to handle database operations.
         auth0_user (Auth0User): Authenticated auth0 user.
 
@@ -165,6 +168,10 @@ async def create_or_update_user(
         user = await organization_service.handle_new_user_signup(db, user_dict, create_org=False)
 
         logger.info(f"Created new user {user.email}.")
+
+        # Send welcome email in background to avoid blocking the response
+        background_tasks.add_task(send_welcome_email, user.email, user.full_name or user.email)
+
         return schemas.User.model_validate(user)
 
     except Exception as e:
@@ -186,4 +193,8 @@ async def create_or_update_user(
                 uow=uow,
             )
         logger.info(f"Created user {user.email} with fallback method")
+
+        # Send welcome email in background to avoid blocking the response
+        background_tasks.add_task(send_welcome_email, user.email, user.full_name or user.email)
+
         return user

@@ -1,4 +1,3 @@
-// services/entityStateMediator.ts
 import { apiClient } from '@/lib/api';
 import { useEntityStateStore, EntityState, EntityStateUpdate, SyncCompleteMessage, SyncStatus } from '@/stores/entityStateStore';
 import { useSyncStateStore } from '@/stores/syncStateStore';
@@ -178,105 +177,97 @@ export class EntityStateMediator {
     sourceConnectionId: string,
     onUpdate: (state: EntityStateUpdate) => void
   ): Promise<void> {
-    // Use fetchEventSource from Microsoft's library which supports headers
-    const { fetchEventSource } = await import('@microsoft/fetch-event-source');
+    // Use apiClient.sse so headers/baseURL/token-refresh are consistent
     const controller = new AbortController();
     this.eventSource = controller;
-    const sseUrl = `${import.meta.env.VITE_API_URL}/sync/job/${jobId}/subscribe-state`;
 
     try {
-      await fetchEventSource(sseUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${await apiClient.getToken()}`,
-        },
-        signal: controller.signal,
+      await apiClient.sse(
+        `/sync/job/${jobId}/subscribe-state`,
+        {
+          onMessage: (msg: MessageEvent) => {
+            const data = JSON.parse((msg as any).data);
 
-        onmessage: (msg: any) => {
-          const data = JSON.parse(msg.data);
+            if (data.type === 'entity_state') {
+              const update = data as EntityStateUpdate;
 
-          if (data.type === 'entity_state') {
-            const update = data as EntityStateUpdate;
+              // Always call onUpdate to update counts
+              onUpdate(update);
 
-            // Always call onUpdate to update counts
-            onUpdate(update);
+              // Additionally, handle state transition from pending to running
+              const currentState = this.stateStore.getEntityState(this.connectionId);
+              if (currentState?.syncStatus === 'pending') {
+                // The updateFromStream in the store will handle the transition
+                // We just need to ensure the status changes
+                this.stateStore.setEntityState(this.connectionId, {
+                  ...currentState,
+                  syncStatus: 'in_progress',
+                  lastUpdated: new Date()
+                });
+              }
+            } else if (data.type === 'sync_complete') {
+              const completeMsg = data as SyncCompleteMessage;
 
-            // Additionally, handle state transition from pending to running
-            const currentState = this.stateStore.getEntityState(this.connectionId);
-            if (currentState?.syncStatus === 'pending') {
-              // The updateFromStream in the store will handle the transition
-              // We just need to ensure the status changes
-              this.stateStore.setEntityState(this.connectionId, {
-                ...currentState,
-                syncStatus: 'in_progress',
-                lastUpdated: new Date()
+              console.log('[EntityStateMediator] Sync completion message received:', {
+                is_failed: completeMsg.is_failed,
+                final_status: completeMsg.final_status,
+                error: completeMsg.error,
+                final_counts: completeMsg.final_counts
               });
+
+              // IMMEDIATELY update status to reflect completion
+              const currentState = this.stateStore.getEntityState(this.connectionId);
+              if (currentState) {
+                // Use the final_status from backend (completed/failed)
+                const finalStatus = completeMsg.final_status || (completeMsg.is_failed ? 'failed' : 'completed');
+                const finalCounts = completeMsg.final_counts || currentState.entityCounts;
+                const finalTotal = completeMsg.total_entities ?? currentState.totalEntities;
+                const errorMessage = completeMsg.error || (completeMsg.is_failed ? 'Sync failed' : undefined);
+
+                console.log('[EntityStateMediator] Updating state with:', {
+                  finalStatus,
+                  errorMessage,
+                  isSyncing: false
+                });
+
+                this.stateStore.setEntityState(this.connectionId, {
+                  ...currentState,
+                  entityCounts: finalCounts,
+                  totalEntities: finalTotal,
+                  syncStatus: finalStatus,
+                  currentJobId: undefined, // Clear job ID
+                  lastUpdated: new Date(),
+                  error: errorMessage
+                });
+              }
+
+              // Close the SSE connection
+              controller.abort();
+              this.eventSource = undefined;
+
+              // Fetch DB state after a short delay to ensure it's updated
+              setTimeout(() => {
+                this.fetchDatabaseState().then(dbState => {
+                  const current = this.stateStore.getEntityState(this.connectionId);
+                  if (current && dbState.totalEntities !== current.totalEntities) {
+                    this.stateStore.setEntityState(this.connectionId, dbState);
+                  }
+                }).catch(error => {
+                  // Silent fail - we already have the stream data
+                });
+              }, 1000);
             }
-          } else if (data.type === 'sync_complete') {
-            const completeMsg = data as SyncCompleteMessage;
-
-            console.log('[EntityStateMediator] Sync completion message received:', {
-              is_failed: completeMsg.is_failed,
-              final_status: completeMsg.final_status,
-              error: completeMsg.error,
-              final_counts: completeMsg.final_counts
-            });
-
-            // IMMEDIATELY update status to reflect completion
-            const currentState = this.stateStore.getEntityState(this.connectionId);
-            if (currentState) {
-              // Use the final_status from backend (completed/failed)
-              const finalStatus = completeMsg.final_status || (completeMsg.is_failed ? 'failed' : 'completed');
-              const finalCounts = completeMsg.final_counts || currentState.entityCounts;
-              const finalTotal = completeMsg.total_entities ?? currentState.totalEntities;
-              const errorMessage = completeMsg.error || (completeMsg.is_failed ? 'Sync failed' : undefined);
-
-              console.log('[EntityStateMediator] Updating state with:', {
-                finalStatus,
-                errorMessage,
-                isSyncing: false
-              });
-
-              this.stateStore.setEntityState(this.connectionId, {
-                ...currentState,
-                entityCounts: finalCounts,
-                totalEntities: finalTotal,
-                syncStatus: finalStatus,
-                currentJobId: undefined, // Clear job ID
-                lastUpdated: new Date(),
-                error: errorMessage
-              });
-            }
-
-            // Close the SSE connection
-            controller.abort();
-            this.eventSource = undefined;
-
-            // Fetch DB state after a short delay to ensure it's updated
-            setTimeout(() => {
-              this.fetchDatabaseState().then(dbState => {
-                const current = this.stateStore.getEntityState(this.connectionId);
-                if (current && dbState.totalEntities !== current.totalEntities) {
-                  this.stateStore.setEntityState(this.connectionId, dbState);
-                }
-              }).catch(error => {
-                // Silent fail - we already have the stream data
-              });
-            }, 1000);
+          },
+          onError: (err) => {
+            // Don't retry on error here - let it fail gracefully
           }
         },
-
-        onerror: (err) => {
-          // Don't retry on error - let it fail gracefully
-          throw err;
-        }
-      });
+        { signal: controller.signal }
+      );
     } catch (error) {
       // Silent fail - subscription errors are non-critical
     }
   }
-
-
 
   async cleanup(): Promise<void> {
     if (this.eventSource) {

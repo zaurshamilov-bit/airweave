@@ -90,13 +90,13 @@ export default function BillingSetup() {
         {/* Header with logo */}
         <div className="mb-12 text-center">
           <img
-            src={isDark ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg"}
+            src={isDark ? "/logo-airweave-darkbg.svg" : "/logo-airweave-lightbg.svg"}
             alt="Airweave"
             className="h-8 w-auto mx-auto mb-2"
             style={{ maxWidth: '180px' }}
           />
           <p className="text-xs text-muted-foreground">
-            Let agents search any app
+            Build smarter agents
           </p>
         </div>
 
@@ -207,24 +207,24 @@ export default function BillingSetup() {
               </button>
             ) : (
               <div className="w-full flex justify-center">
-              <button
-                onClick={handleSetupPayment}
-                disabled={isLoading}
-                className={cn(
-                  "flex items-center justify-center space-x-2 px-6 py-3 rounded-lg transition-all",
-                  "bg-primary text-primary-foreground hover:bg-primary/90",
-                  isLoading && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                {isLoading ? (
-                  <>
-                    <span>Setting up payment</span>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  </>
-                ) : (
-                  <>
-                    <span>{isInitialSetup ? 'Complete Setup' : 'Update Payment Method'}</span>
-                    <ChevronRight className="w-4 h-4" />
+                <button
+                  onClick={handleSetupPayment}
+                  disabled={isLoading}
+                  className={cn(
+                    "flex items-center justify-center space-x-2 px-6 py-3 rounded-lg transition-all",
+                    "bg-primary text-primary-foreground hover:bg-primary/90",
+                    isLoading && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  {isLoading ? (
+                    <>
+                      <span>Setting up payment</span>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    </>
+                  ) : (
+                    <>
+                      <span>{isInitialSetup ? 'Complete Setup' : 'Update Payment Method'}</span>
+                      <ChevronRight className="w-4 h-4" />
                     </>
                   )}
                 </button>
@@ -237,8 +237,8 @@ export default function BillingSetup() {
             {selectedPlan === 'developer' && isInitialSetup
               ? "You won't be charged during your 14-day trial. Cancel anytime."
               : selectedPlan === 'startup' && isInitialSetup
-              ? "Your subscription will start immediately."
-              : "Update your payment method to continue your subscription."}
+                ? "Your subscription will start immediately."
+                : "Update your payment method to continue your subscription."}
           </p>
         </div>
       </div>

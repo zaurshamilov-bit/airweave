@@ -1,14 +1,18 @@
 # Airweave MCP Search Server
 
-An MCP (Model Context Protocol) server that provides search capabilities for Airweave collections. This server allows AI assistants to search through your Airweave data using natural language queries.
+An MCP (Model Context Protocol) server that provides comprehensive search capabilities for Airweave collections. This server allows AI assistants to search through your Airweave data using natural language queries with full parameter control.
 
 ## Features
 
-- 🔍 **Search Tool**: Query Airweave collections with natural language
+- 🔍 **Enhanced Search Tool**: Query Airweave collections with natural language and full parameter control
 - 🤖 **AI Completion**: Get AI-processed responses from search results
+- 📊 **Pagination Control**: Limit results and control pagination with offset
+- ⏰ **Recency Bias**: Prioritize recent results with configurable recency weighting
 - ⚙️ **Configuration Tool**: View current server configuration
 - 🔐 **Secure**: Uses API key authentication
 - 🌐 **Flexible**: Configurable base URL for different environments
+- 🧪 **Comprehensive Testing**: Full test suite with LLM testing strategy
+- 🏗️ **Simple Architecture**: Clean, maintainable code structure without over-engineering
 
 ## Quick Start
 
@@ -94,17 +98,79 @@ Once configured, you can use natural language to search:
 
 ## Available Tools
 
-### `search`
+### `search-{collection}`
 
-Searches within the configured Airweave collection.
+Searches within the configured Airweave collection with full parameter control.
 
 **Parameters:**
-- `query` (required): The search query to execute
-- `response_type` (optional): Either `"RAW"` for search results or `"COMPLETION"` for AI-processed response
 
-**Example:**
-```
-search("customer feedback about pricing", "RAW")
+**Core Parameters:**
+- `query` (required): The search query text to find relevant documents and data
+- `response_type` (optional, default: "raw"): Format of the response: 'raw' returns search results, 'completion' returns AI-generated answers
+- `limit` (optional, default: 100): Maximum number of results to return (1-1000)
+- `offset` (optional, default: 0): Number of results to skip for pagination (≥0)
+- `recency_bias` (optional): How much to weigh recency vs similarity (0..1). 0 = no recency effect; 1 = rank by recency only
+
+**Advanced Parameters:**
+- `score_threshold` (optional): Minimum similarity score threshold (0..1). Only return results above this score
+- `search_method` (optional): Search method: 'hybrid' (default, combines neural + keyword), 'neural' (semantic only), 'keyword' (text matching only)
+- `expansion_strategy` (optional): Query expansion strategy: 'auto' (default, generates query variations), 'llm' (AI-powered expansion), 'no_expansion' (use exact query)
+- `enable_reranking` (optional): Enable LLM-based reranking to improve result relevance (default: true)
+- `enable_query_interpretation` (optional): Enable automatic filter extraction from natural language query (default: true)
+
+**Examples:**
+```typescript
+// Basic search
+search({ query: "customer feedback about pricing" })
+
+// Search with AI completion
+search({
+  query: "billing issues",
+  response_type: "completion"
+})
+
+// Paginated search
+search({
+  query: "API documentation",
+  limit: 10,
+  offset: 20
+})
+
+// Recent results with recency bias
+search({
+  query: "customer complaints",
+  recency_bias: 0.8
+})
+
+// Advanced search with high-quality results
+search({
+  query: "customer complaints",
+  score_threshold: 0.8,
+  search_method: "neural",
+  enable_reranking: true
+})
+
+// Fast keyword search without expansion
+search({
+  query: "API documentation",
+  search_method: "keyword",
+  expansion_strategy: "no_expansion",
+  enable_reranking: false
+})
+
+// Full parameter search
+search({
+  query: "support tickets",
+  response_type: "completion",
+  limit: 5,
+  offset: 0,
+  recency_bias: 0.7,
+  score_threshold: 0.6,
+  search_method: "hybrid",
+  expansion_strategy: "llm",
+  enable_reranking: true,
+  enable_query_interpretation: true
+})
 ```
 
 ### `get-config`
@@ -127,6 +193,43 @@ This server interfaces with the Airweave Collections API:
 - **Query Parameters**:
   - `query`: Search query string
   - `response_type`: `RAW` or `COMPLETION`
+
+## Testing
+
+This MCP server includes comprehensive testing to ensure reliability and proper LLM interaction.
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run LLM-specific tests
+npm run test:llm
+```
+
+### Test Categories
+
+1. **Unit Tests**: Parameter validation and schema testing
+2. **Integration Tests**: API calls and error handling
+3. **LLM Tests**: How AI assistants interact with the enhanced parameters
+
+### LLM Testing Strategy
+
+The server includes a comprehensive LLM testing framework to evaluate how different AI assistants use the enhanced parameters:
+
+- **Basic Tests**: Simple parameter usage
+- **Advanced Tests**: Complex parameter combinations
+- **Error Tests**: Invalid parameter handling
+- **Edge Tests**: Boundary conditions and special cases
+
+See `tests/llm-testing-strategy.md` for detailed testing methodology.
 
 ## Development
 
@@ -164,6 +267,9 @@ npm run build
 
 # Run built version
 npm run start
+
+# Run tests
+npm test
 ```
 
 ## Error Handling

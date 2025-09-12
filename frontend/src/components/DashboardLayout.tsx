@@ -156,7 +156,7 @@ CollectionsSection.displayName = 'CollectionsSection';
 
 // Memoized Logo component
 const Logo = memo(({ theme }: { theme: string }) => {
-  const logoSrc = theme === "dark" ? "/logo-and-lettermark-light.svg" : "/logo-and-lettermark.svg";
+  const logoSrc = theme === "dark" ? "/logo-airweave-darkbg.svg" : "/logo-airweave-lightbg.svg";
 
   return (
     <Link to="/" className="flex items-center">

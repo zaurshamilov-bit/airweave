@@ -5,6 +5,7 @@ based on its schema structure. It dynamically creates entity classes at runtime
 using the PolymorphicEntity system.
 """
 
+import hashlib
 import json
 from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, List, Optional, Type, Union
@@ -129,6 +130,10 @@ class PostgreSQLSource(BaseSource):
                 raise ValueError(f"Invalid JSON in cursor field mapping: {e}") from e
         # Otherwise accept any string as a column name
 
+    def _get_table_key(self, schema: str, table: str) -> str:
+        """Generate consistent table key for identification."""
+        return f"{schema}.{table}"
+
     def _get_cursor_data(self) -> Dict[str, Any]:
         """Get cursor data from cursor.
 
@@ -160,7 +165,7 @@ class PostgreSQLSource(BaseSource):
 
                 cursor_map = json.loads(cursor_field)
                 # Try exact match first
-                table_key = f"{schema}.{table}"
+                table_key = self._get_table_key(schema, table)
                 if table_key in cursor_map:
                     return cursor_map[table_key]
                 # Fall back to table name without schema
@@ -185,7 +190,7 @@ class PostgreSQLSource(BaseSource):
             return
 
         # Store cursor value per table
-        cursor_key = f"{schema}.{table}"
+        cursor_key = self._get_table_key(schema, table)
         if not self.cursor.cursor_data:
             self.cursor.cursor_data = {}
 
@@ -228,8 +233,21 @@ class PostgreSQLSource(BaseSource):
                     user=self.config["user"],
                     password=self.config["password"],
                     database=self.config["database"],
-                    timeout=10.0,  # Add connection timeout
-                    command_timeout=10.0,  # Add command timeout
+                    timeout=90.0,  # Connection timeout (1.5 minutes)
+                    command_timeout=900.0,  # Command timeout (15 minutes for slow queries)
+                    # Add server settings to prevent idle timeouts
+                    server_settings={
+                        "jit": "off",  # Disable JIT for predictable performance
+                        "statement_timeout": "0",  # No statement timeout (handled client-side)
+                        "idle_in_transaction_session_timeout": "0",  # Disable idle timeout
+                        "tcp_keepalives_idle": "30",  # Send keepalive after 30s of idle
+                        "tcp_keepalives_interval": "10",  # Keepalive interval 10s
+                        "tcp_keepalives_count": "6",  # Number of keepalives before considering dead
+                    },
+                )
+                self.logger.info(
+                    f"Connected to PostgreSQL at {host}:{self.config['port']}, "
+                    f"database: {self.config['database']}"
                 )
             except asyncpg.InvalidPasswordError as e:
                 raise ValueError("Invalid database credentials") from e
@@ -248,17 +266,34 @@ class PostgreSQLSource(BaseSource):
             except Exception as e:
                 raise ValueError(f"Database connection failed: {str(e)}") from e
 
+    async def _ensure_connection(self) -> None:
+        """Ensure connection is alive and reconnect if needed."""
+        if self.conn:
+            try:
+                # Test connection with a simple query
+                await self.conn.fetchval("SELECT 1")
+            except (asyncpg.ConnectionDoesNotExistError, asyncpg.InterfaceError, OSError) as e:
+                self.logger.warning(f"Connection lost, reconnecting: {e}")
+                self.conn = None
+                await self._connect()
+            except Exception as e:
+                self.logger.error(f"Connection test failed: {e}")
+                self.conn = None
+                await self._connect()
+        else:
+            await self._connect()
+
     async def _get_table_info(self, schema: str, table: str) -> Dict[str, Any]:
-        """Get table structure information.
+        """Get table/view structure information.
 
         Args:
             schema: Schema name
-            table: Table name
+            table: Table or view name
 
         Returns:
             Dictionary containing column information and primary keys
         """
-        # Get column information
+        # Get column information (works for both tables and views)
         columns_query = """
             SELECT
                 column_name,
@@ -271,14 +306,65 @@ class PostgreSQLSource(BaseSource):
         """
         columns = await self.conn.fetch(columns_query, schema, table)
 
-        # Get primary key information
+        # Get primary key information (views won't have primary keys)
         pk_query = """
             SELECT a.attname
             FROM pg_index i
             JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
             WHERE i.indrelid = ($1 || '.' || $2)::regclass AND i.indisprimary
         """
-        primary_keys = [pk["attname"] for pk in await self.conn.fetch(pk_query, schema, table)]
+        try:
+            primary_keys = [pk["attname"] for pk in await self.conn.fetch(pk_query, schema, table)]
+        except asyncpg.exceptions.UndefinedTableError:
+            # This can happen for views which don't have primary keys
+            primary_keys = []
+
+        # If no primary keys found (common for views), try to find best candidate columns
+        # This ensures each row gets a unique entity_id without creating huge keys
+        if not primary_keys and columns:
+            column_names = [col["column_name"] for col in columns]
+
+            # Heuristic: Look for common primary key column names
+            # Priority order: id, uuid, guid, then any column ending with _id
+            table_key = self._get_table_key(schema, table)
+            if "id" in column_names:
+                primary_keys = ["id"]
+                self.logger.debug(
+                    f"No primary keys found for {table_key} (might be a view). "
+                    f"Using 'id' column for entity identification."
+                )
+            elif "uuid" in column_names:
+                primary_keys = ["uuid"]
+                self.logger.debug(
+                    f"No primary keys found for {table_key} (might be a view). "
+                    f"Using 'uuid' column for entity identification."
+                )
+            elif "guid" in column_names:
+                primary_keys = ["guid"]
+                self.logger.debug(
+                    f"No primary keys found for {table_key} (might be a view). "
+                    f"Using 'guid' column for entity identification."
+                )
+            else:
+                # Look for columns ending with _id
+                id_columns = [col for col in column_names if col.endswith("_id")]
+                if id_columns:
+                    # Use the first _id column found
+                    primary_keys = [id_columns[0]]
+                    self.logger.debug(
+                        f"No primary keys found for {table_key} (might be a view). "
+                        f"Using '{id_columns[0]}' column for entity identification."
+                    )
+                else:
+                    # Last resort: use first column to avoid huge composite keys
+                    # This prevents the index size error while still providing some identification
+                    primary_keys = [column_names[0]] if column_names else []
+                    table_key = self._get_table_key(schema, table)
+                    self.logger.warning(
+                        f"No primary keys or id columns found for {table_key}. "
+                        f"Using first column '{primary_keys[0] if primary_keys else 'none'}' "
+                        f"for entity identification. This may not guarantee uniqueness."
+                    )
 
         # Build column metadata
         column_info = {}
@@ -299,14 +385,14 @@ class PostgreSQLSource(BaseSource):
         }
 
     async def _create_entity_class(self, schema: str, table: str) -> Type[PolymorphicEntity]:
-        """Create a entity class for a specific table.
+        """Create a entity class for a specific table or view.
 
         Args:
             schema: Schema name
-            table: Table name
+            table: Table or view name
 
         Returns:
-            Dynamically created entity class for the table
+            Dynamically created entity class for the table/view
         """
         table_info = await self._get_table_info(schema, table)
 
@@ -335,21 +421,54 @@ class PostgreSQLSource(BaseSource):
         tables = await self.conn.fetch(query, schema)
         return [table["table_name"] for table in tables]
 
+    async def _get_tables_and_views(self, schema: str) -> List[str]:
+        """Get list of tables and views in a schema.
+
+        Args:
+            schema: Schema name
+
+        Returns:
+            List of table and view names
+        """
+        query = """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = $1
+            AND table_type IN ('BASE TABLE', 'VIEW')
+        """
+        tables_and_views = await self.conn.fetch(query, schema)
+        return [item["table_name"] for item in tables_and_views]
+
     async def _get_table_list(self, schema: str) -> List[str]:
-        """Get the list of tables to process based on configuration."""
+        """Get the list of tables to process based on configuration.
+
+        When wildcard (*) is used, only base tables are returned.
+        When specific names are provided, both tables and views are checked.
+        """
         tables_config = self.config.get("tables", "*")
 
         # Handle both wildcard and CSV list of tables
         if tables_config == "*":
+            # Default behavior: only sync base tables, not views
             return await self._get_tables(schema)
 
         # Split by comma and strip whitespace
         tables = [t.strip() for t in tables_config.split(",")]
-        # Validate that all specified tables exist
-        available_tables = await self._get_tables(schema)
-        invalid_tables = set(tables) - set(available_tables)
-        if invalid_tables:
-            raise ValueError(f"Tables not found in schema '{schema}': {', '.join(invalid_tables)}")
+
+        # When specific names are provided, check both tables and views
+        available_tables_and_views = await self._get_tables_and_views(schema)
+        invalid_items = set(tables) - set(available_tables_and_views)
+        if invalid_items:
+            raise ValueError(
+                f"Tables/views not found in schema '{schema}': {', '.join(invalid_items)}"
+            )
+
+        # Log if any views are being synced
+        base_tables = set(await self._get_tables(schema))
+        views = [t for t in tables if t not in base_tables]
+        if views:
+            self.logger.info(f"Including views in sync: {', '.join(views)}")
+
         return tables
 
     async def _convert_field_values(
@@ -400,61 +519,98 @@ class PostgreSQLSource(BaseSource):
 
         return processed_data
 
-    async def _process_table_batch(
-        self,
-        schema: str,
-        table: str,
-        entity_class: Type[PolymorphicEntity],
-        batch: List,
-        cursor_field: Optional[str] = None,
-    ) -> AsyncGenerator[ChunkEntity, None]:
-        """Process a batch of records from a table.
+    def _parse_json_fields(self, data: Dict[str, Any]) -> None:
+        """Parse string fields that contain JSON data.
+
+        Args:
+            data: Dictionary to process (modified in place)
+        """
+        for key, value in data.items():
+            if not isinstance(value, str):
+                continue
+
+            try:
+                parsed_value = json.loads(value)
+                data[key] = parsed_value
+            except (json.JSONDecodeError, ValueError):
+                # Keep as string if not valid JSON
+                pass
+
+    def _generate_entity_id(
+        self, schema: str, table: str, data: Dict[str, Any], primary_keys: List[str]
+    ) -> str:
+        """Generate entity ID from primary key values or hash.
 
         Args:
             schema: Schema name
             table: Table name
-            entity_class: Entity class for the table
-            batch: Batch of records to process
-            cursor_field: Field to track for cursor updates
+            data: Record data
+            primary_keys: List of primary key columns
 
-        Yields:
-            Entity instances
+        Returns:
+            Generated entity ID
         """
-        max_cursor_value = None
+        pk_values = [str(data[pk]) for pk in primary_keys if pk in data]
+        table_key = self._get_table_key(schema, table)
 
-        for record in batch:
-            data = dict(record)
+        if pk_values:
+            return f"{table_key}:" + ":".join(pk_values)
 
-            # Track max cursor value if cursor field is specified
-            if cursor_field and cursor_field in data:
-                cursor_value = data[cursor_field]
-                if cursor_value is not None:
-                    if max_cursor_value is None or cursor_value > max_cursor_value:
-                        max_cursor_value = cursor_value
+        # Fallback: use a hash of the row data if no primary keys are available
+        row_hash = hashlib.md5(str(sorted(data.items())).encode()).hexdigest()[:16]
+        entity_id = f"{table_key}:row_{row_hash}"
+        self.logger.warning(
+            f"No primary key values found for {table_key} row. "
+            f"Using hash-based entity_id: {entity_id}"
+        )
+        return entity_id
 
-            # Simply try to convert all strings to JSON
-            for key, value in data.items():
-                if isinstance(value, str):
-                    try:
-                        parsed_value = json.loads(value)
-                        data[key] = parsed_value
-                    except (json.JSONDecodeError, ValueError):
-                        # Keep as string if not valid JSON
-                        pass
+    def _ensure_entity_id_length(self, entity_id: str, schema: str, table: str) -> str:
+        """Ensure entity ID is within acceptable length limits.
 
-            model_fields = entity_class.model_fields
-            primary_keys = model_fields["primary_key_columns"].default_factory()
-            pk_values = [str(data[pk]) for pk in primary_keys]
-            entity_id = f"{schema}.{table}:" + ":".join(pk_values)
+        Args:
+            entity_id: Original entity ID
+            schema: Schema name
+            table: Table name
 
-            # Convert field values to match expected types in the entity model
-            processed_data = await self._convert_field_values(data, model_fields)
+        Returns:
+            Entity ID (possibly hashed if too long)
+        """
+        # PostgreSQL btree index has a limit of ~2700 bytes, but we use 2000 to be safe
+        if len(entity_id) <= 2000:
+            return entity_id
 
-            yield entity_class(entity_id=entity_id, **processed_data)
+        original_id = entity_id
+        entity_hash = hashlib.sha256(entity_id.encode()).hexdigest()
+        table_key = self._get_table_key(schema, table)
+        entity_id = f"{table_key}:hashed_{entity_hash}"
+        self.logger.warning(
+            f"Entity ID too long ({len(original_id)} chars) for {table_key}. "
+            f"Using hashed ID: {entity_id}"
+        )
+        return entity_id
 
-        # Update cursor with the max value from this batch
-        if cursor_field and max_cursor_value is not None:
-            self._update_cursor_data(schema, table, max_cursor_value)
+    async def _process_record_to_entity(
+        self,
+        record: Any,
+        schema: str,
+        table: str,
+        entity_class: Type[PolymorphicEntity],
+        primary_keys: List[str],
+        cursor_field: Optional[str] = None,
+    ) -> tuple[ChunkEntity, Any]:
+        """Process a database record into an entity."""
+        data = dict(record)
+        cursor_value = data.get(cursor_field) if cursor_field else None
+
+        self._parse_json_fields(data)
+
+        entity_id = self._generate_entity_id(schema, table, data, primary_keys)
+        entity_id = self._ensure_entity_id_length(entity_id, schema, table)
+
+        processed_data = await self._convert_field_values(data, entity_class.model_fields)
+
+        return entity_class(entity_id=entity_id, **processed_data), cursor_value
 
     def _prepare_cursor_value(self, last_cursor_value: Any) -> Any:
         """Convert ISO string back to datetime for PostgreSQL query if needed."""
@@ -469,8 +625,11 @@ class PostgreSQLSource(BaseSource):
                 pass
         return last_cursor_value
 
-    def _log_sync_type(self, table_key: str, cursor_field: Optional[str], last_cursor_value: Any):
+    def _log_sync_type(
+        self, schema: str, table: str, cursor_field: Optional[str], last_cursor_value: Any
+    ):
         """Log the type of sync being performed for a table."""
+        table_key = self._get_table_key(schema, table)
         if cursor_field and last_cursor_value:
             self.logger.info(
                 f"Table {table_key}: INCREMENTAL sync using field '{cursor_field}' "
@@ -483,37 +642,113 @@ class PostgreSQLSource(BaseSource):
         else:
             self.logger.debug(f"Table {table_key}: FULL sync (no cursor field configured)")
 
-    def _build_table_query(
+    async def _process_table_with_streaming(  # noqa: C901
         self,
         schema: str,
         table: str,
+        entity_class: Type[PolymorphicEntity],
         cursor_field: Optional[str],
         last_cursor_value: Any,
-        batch_size: int,
-        offset: int,
-    ) -> tuple[str, Optional[Any]]:
-        """Build the query for fetching table data."""
-        if cursor_field and last_cursor_value:
-            # Incremental query - only get records updated after last sync
-            query = (
-                f'SELECT * FROM "{schema}"."{table}" '
-                f'WHERE "{cursor_field}" > $1 '
-                f'ORDER BY "{cursor_field}" '
-                f"LIMIT {batch_size} OFFSET {offset}"
+    ) -> AsyncGenerator[ChunkEntity, None]:
+        """Process table using server-side cursor for efficient streaming.
+
+        Uses PostgreSQL's server-side cursor for optimal performance on large tables.
+        This avoids the OFFSET penalty and streams data efficiently.
+
+        Args:
+            schema: Schema name
+            table: Table name
+            entity_class: Entity class for the table
+            cursor_field: Field to track for cursor updates
+            last_cursor_value: Last cursor value for incremental sync
+
+        Yields:
+            Entities from the table
+        """
+        table_key = self._get_table_key(schema, table)
+
+        total_records = 0
+        max_cursor_value = None
+        primary_keys = entity_class.model_fields["primary_key_columns"].default_factory()
+
+        try:
+            # Use server-side cursor for efficient streaming
+            # This is much more efficient than client-side fetch with OFFSET
+            self.logger.info(f"Starting server-side cursor stream for {table_key}")
+
+            buffer = []
+            BUFFER_SIZE = 1000  # Process in chunks for progress updates
+
+            # Build query for server-side cursor
+            if cursor_field and last_cursor_value:
+                # Incremental: SELECT with WHERE clause
+                query = f"""
+                    SELECT * FROM "{schema}"."{table}"
+                    WHERE "{cursor_field}" > $1
+                    ORDER BY "{cursor_field}"
+                """
+                query_args = [last_cursor_value]
+            elif cursor_field:
+                # Full sync with cursor ordering
+                query = f"""
+                    SELECT * FROM "{schema}"."{table}"
+                    ORDER BY "{cursor_field}"
+                """
+                query_args = []
+            else:
+                # Full sync without ordering
+                query = f"""
+                    SELECT * FROM "{schema}"."{table}"
+                """
+                query_args = []
+
+            # Use server-side cursor with prefetch for efficient streaming
+            # This streams data from PostgreSQL without loading all into memory
+            async with self.conn.transaction():
+                cursor = self.conn.cursor(query, *query_args, prefetch=BUFFER_SIZE)
+
+                async for record in cursor:
+                    # Process record to entity using consolidated logic
+                    entity, cursor_value = await self._process_record_to_entity(
+                        record, schema, table, entity_class, primary_keys, cursor_field
+                    )
+
+                    # Track max cursor value
+                    if cursor_value is not None:
+                        if max_cursor_value is None or cursor_value > max_cursor_value:
+                            max_cursor_value = cursor_value
+
+                    # Buffer entity
+                    buffer.append(entity)
+
+                    # Yield buffered entities periodically
+                    if len(buffer) >= BUFFER_SIZE:
+                        for e in buffer:
+                            yield e
+                            total_records += 1
+
+                        if total_records % 1000 == 0:
+                            self.logger.info(f"Table {table_key}: Streamed {total_records} records")
+                        buffer = []
+
+            # Yield remaining buffered entities
+            for e in buffer:
+                yield e
+                total_records += 1
+
+            self.logger.info(
+                f"Table {table_key}: Completed server-side cursor stream, {total_records} records"
             )
-            return query, last_cursor_value
-        elif cursor_field:
-            # Full sync with cursor field - order by it for consistent results
-            query = (
-                f'SELECT * FROM "{schema}"."{table}" '
-                f'ORDER BY "{cursor_field}" '
-                f"LIMIT {batch_size} OFFSET {offset}"
-            )
-            return query, None
-        else:
-            # No cursor field, regular full sync
-            query = f'SELECT * FROM "{schema}"."{table}" LIMIT {batch_size} OFFSET {offset}'
-            return query, None
+
+            # Update cursor with max value
+            if cursor_field and max_cursor_value is not None:
+                self._update_cursor_data(schema, table, max_cursor_value)
+
+        except Exception as e:
+            self.logger.error(f"Server-side cursor failed for {table_key}: {e}")
+            # Re-raise the exception since we don't have a fallback
+            # The sync will fail and can be retried
+            raise
 
     async def _process_table(
         self,
@@ -521,7 +756,10 @@ class PostgreSQLSource(BaseSource):
         table: str,
         cursor_data: Dict[str, Any],
     ) -> AsyncGenerator[ChunkEntity, None]:
-        """Process a single table with incremental support.
+        """Process a single table with incremental support using server-side cursor.
+
+        Uses PostgreSQL's server-side cursor for efficient streaming of data,
+        maintaining transaction consistency and avoiding OFFSET penalties.
 
         Args:
             schema: Schema name
@@ -531,52 +769,29 @@ class PostgreSQLSource(BaseSource):
         Yields:
             Entities from the table
         """
-        # Create entity class if not already created
-        if f"{schema}.{table}" not in self.entity_classes:
-            self.entity_classes[f"{schema}.{table}"] = await self._create_entity_class(
-                schema, table
-            )
+        table_key = self._get_table_key(schema, table)
 
-        entity_class = self.entity_classes[f"{schema}.{table}"]
+        # Create entity class if not already created
+        if table_key not in self.entity_classes:
+            self.entity_classes[table_key] = await self._create_entity_class(schema, table)
+
+        entity_class = self.entity_classes[table_key]
         cursor_field = self._get_cursor_field_for_table(schema, table)
-        table_key = f"{schema}.{table}"
 
         # Get and prepare last cursor value
         last_cursor_value = cursor_data.get(table_key) if cursor_data else None
         last_cursor_value = self._prepare_cursor_value(last_cursor_value)
 
         # Log sync type
-        self._log_sync_type(table_key, cursor_field, last_cursor_value)
+        self._log_sync_type(schema, table, cursor_field, last_cursor_value)
 
-        # Process table in batches
-        BATCH_SIZE = 50
-        offset = 0
-
-        while True:
-            # Build and execute query
-            query, query_param = self._build_table_query(
-                schema, table, cursor_field, last_cursor_value, BATCH_SIZE, offset
-            )
-
-            if query_param is not None:
-                records = await self.conn.fetch(query, query_param)
-            else:
-                records = await self.conn.fetch(query)
-
-            # Break if no more records
-            if not records:
-                if offset == 0 and cursor_field and last_cursor_value:
-                    self.logger.info(f"Table {table_key}: No new records since last sync")
-                break
-
-            # Process the batch with cursor tracking
-            async for entity in self._process_table_batch(
-                schema, table, entity_class, records, cursor_field
-            ):
-                yield entity
-
-            # Increment offset for next batch
-            offset += BATCH_SIZE
+        # Always use server-side cursor for efficient streaming
+        # This provides consistent snapshot isolation and better performance
+        self.logger.info(f"Using server-side cursor for streaming {table_key}")
+        async for entity in self._process_table_with_streaming(
+            schema, table, entity_class, cursor_field, last_cursor_value
+        ):
+            yield entity
 
     async def generate_entities(self) -> AsyncGenerator[ChunkEntity, None]:
         """Generate entities for all tables in specified schemas with incremental support."""
@@ -584,6 +799,10 @@ class PostgreSQLSource(BaseSource):
             await self._connect()
             schema = self.config.get("schema", "public")
             tables = await self._get_table_list(schema)
+
+            self.logger.info(
+                f"Found {len(tables)} table(s) to sync in schema '{schema}': {', '.join(tables)}"
+            )
 
             # Get cursor data for incremental sync
             cursor_data = self._get_cursor_data()
@@ -616,14 +835,23 @@ class PostgreSQLSource(BaseSource):
             except Exception as e:
                 self.logger.warning(f"Failed to update Postgres field catalog: {e}")
 
-            # Start a transaction
-            async with self.conn.transaction():
-                for table in tables:
-                    async for entity in self._process_table(schema, table, cursor_data):
-                        yield entity
+            # Process tables WITHOUT a long-running transaction
+            # This prevents transaction timeout issues and allows better connection management
+            for i, table in enumerate(tables, 1):
+                table_key = self._get_table_key(schema, table)
+                self.logger.info(f"Processing table {i}/{len(tables)}: {table_key}")
+
+                # Check connection health before processing each table
+                await self._ensure_connection()
+
+                async for entity in self._process_table(schema, table, cursor_data):
+                    yield entity
+
+            self.logger.info(f"Successfully completed sync for all {len(tables)} table(s)")
 
         finally:
             if self.conn:
+                self.logger.info("Closing PostgreSQL connection")
                 await self.conn.close()
                 self.conn = None
 
