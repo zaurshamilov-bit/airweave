@@ -51,11 +51,9 @@ class SyncOrchestrator:
         self.stream_buffer_size = 10000
 
         # Batching configuration (read from context, with defaults)
-        self.should_batch: bool = getattr(
-            sync_context, "should_batch", False
-        )  # Default to original behavior
-        self.batch_size: int = getattr(sync_context, "batch_size", 32)
-        self.max_batch_latency_ms: int = getattr(sync_context, "max_batch_latency_ms", 200)
+        self.should_batch = sync_context.should_batch
+        self.batch_size = sync_context.batch_size
+        self.max_batch_latency_ms = sync_context.max_batch_latency_ms
 
     async def run(self) -> schemas.Sync:
         """Execute the synchronization process.

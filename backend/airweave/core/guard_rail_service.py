@@ -151,9 +151,6 @@ class GuardRailService:
         async with self._lock:
             # Bypass all checks for local development
             if settings.LOCAL_DEVELOPMENT:
-                self.logger.debug(
-                    f"Local development mode allows action {action_type.value} without restrictions"
-                )
                 return True
 
             # Check if organization has billing - legacy orgs are exempt

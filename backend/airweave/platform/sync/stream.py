@@ -62,7 +62,7 @@ class AsyncSourceStream(Generic[T]):
                     break
 
                 # Put item in queue, waiting if queue is full.
-                # This is a blocking call, so consumer will wait until the queue has space
+                # This is a blocking call, so producer will wait until the queue has space
                 # Effectively, this is a backpressure mechanism.
                 await self.queue.put(item)
                 items_produced += 1

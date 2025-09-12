@@ -68,7 +68,6 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             timeout=1200.0,  # 20 minutes total timeout (was 10 minutes default)
             max_retries=2,  # Retry on transient errors
         )
-        self.logger.debug("Created shared OpenAI client with 20 minute timeout")
 
     @staticmethod
     def _count_tokens(txt: str) -> int:  # ~1 µs – negligible
@@ -118,16 +117,9 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         context_prefix = f"{entity_context} " if entity_context else ""
 
         if not text.strip():
-            self.logger.debug(
-                f"{context_prefix}Empty text provided for embedding, returning zero vector"
-            )
             return [0.0] * self.vector_dimensions
 
         used_model = model or self.embedding_model
-        self.logger.debug(
-            f"{context_prefix}Embedding single text with model {used_model} "
-            f"(text length: {len(text)})"
-        )
 
         loop = asyncio.get_event_loop()
         cpu_start = loop.time()
@@ -136,11 +128,6 @@ class OpenAIText2Vec(BaseEmbeddingModel):
             response = await self._rate_limited_embed([text], used_model, encoding_format)
 
             embedding = response.data[0].embedding
-            cpu_elapsed = loop.time() - cpu_start
-            self.logger.debug(
-                f"{context_prefix}Embedding completed in {cpu_elapsed:.2f}s, "
-                f"vector size: {len(embedding)}"
-            )
             return embedding
 
         except Exception as e:
@@ -167,22 +154,14 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         context_prefix = f"{entity_context} " if entity_context else ""
 
         if not texts:
-            self.logger.debug(f"📭 OPENAI_EMPTY [{context_prefix}] Empty texts list provided")
             return []
-
-        self.logger.debug(
-            f"🤖 OPENAI_START [{context_prefix}] Starting batch embedding for {len(texts)} texts"
-        )
 
         # Filter empty texts and track indices
         filtered_result = self._filter_empty_texts(texts, context_prefix)
         filtered_texts, empty_indices = filtered_result
 
         if not filtered_texts:
-            self.logger.debug(f"📭 OPENAI_ALL_EMPTY [{context_prefix}] All texts were empty")
             return [[0.0] * self.vector_dimensions] * len(texts)
-
-        self._log_processing_stats(filtered_texts, empty_indices, context_prefix)
 
         used_model = model or self.embedding_model
         embeddings = await self._process_embeddings_in_batches(
@@ -207,25 +186,10 @@ class OpenAIText2Vec(BaseEmbeddingModel):
 
         return filtered_texts, empty_indices
 
-    def _log_processing_stats(
-        self, filtered_texts: List[str], empty_indices: set, context_prefix: str
-    ):
-        """Log statistics about texts being processed."""
-        total_chars = sum(len(text) for text in filtered_texts)
-        avg_chars = total_chars / len(filtered_texts) if filtered_texts else 0
-
-        self.logger.debug(
-            f"📊 OPENAI_STATS [{context_prefix}] Processing {len(filtered_texts)} non-empty texts "
-            f"(skipped {len(empty_indices)} empty, avg chars: {avg_chars:.0f})"
-        )
-
     async def _process_embeddings_in_batches(
         self, texts: List[str], model: str, encoding_format: str, context_prefix: str
     ) -> List[List[float]]:
         """Process embeddings in optimized batches."""
-        loop = asyncio.get_event_loop()
-        cpu_start = loop.time()
-
         # Process in batches to avoid API limits
         # OpenAI limits: 8191 tokens per text, 2048 texts per batch, 300k total tokens per request
         MAX_BATCH_SIZE = 100  # Well under the 2048 limit, allows good parallelism
@@ -262,20 +226,11 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         if current_batch:
             batches.append(current_batch)
 
-        self.logger.debug(
-            f"📦 OPENAI_BATCHES [{context_prefix}] Created {len(batches)} batches "
-            f"from {len(texts)} texts"
-        )
-
         # Process batches in parallel with concurrency limit
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_BATCHES)
 
         async def process_batch_with_limit(batch, batch_idx):
             async with semaphore:
-                self.logger.debug(
-                    f"🔄 OPENAI_BATCH_START [{context_prefix}] Processing batch "
-                    f"{batch_idx + 1}/{len(batches)} ({len(batch)} texts)"
-                )
                 return await self._process_single_batch(
                     batch, model, encoding_format, context_prefix
                 )
@@ -291,29 +246,15 @@ class OpenAIText2Vec(BaseEmbeddingModel):
         for batch_embeddings in batch_results:
             embeddings.extend(batch_embeddings)
 
-        cpu_elapsed = loop.time() - cpu_start
-        self.logger.debug(
-            f"✅ OPENAI_COMPLETE [{context_prefix}] All {len(batches)} batches completed "
-            f"in {cpu_elapsed:.2f}s ({len(embeddings)} vectors returned)"
-        )
-
         return embeddings
 
     async def _process_single_batch(
         self, batch: List[str], model: str, encoding_format: str, context_prefix: str
     ) -> List[List[float]]:
         """Process a single batch of texts."""
-        loop = asyncio.get_event_loop()
-        t0 = loop.time()
         try:
             response = await self._rate_limited_embed(batch, model, encoding_format)
             embeddings = [e.embedding for e in response.data]
-            self.logger.debug(
-                "✅ OPENAI_BATCH_SUCCESS [%s] %d tokens, %.2fs",
-                context_prefix,
-                len(batch),
-                loop.time() - t0,
-            )
             return embeddings
         except Exception as e:
             # Check if it's a token limit error
@@ -390,11 +331,9 @@ class OpenAIText2Vec(BaseEmbeddingModel):
                 result.append(embeddings[embedding_idx])
                 embedding_idx += 1
 
-        self.logger.debug(f"📦 OPENAI_FINAL Final result: {len(result)} vectors")
         return result
 
     async def close(self):
         """Clean up the shared client when done."""
         if self._client:
             await self._client.close()
-            self.logger.debug("OpenAI client closed successfully")
