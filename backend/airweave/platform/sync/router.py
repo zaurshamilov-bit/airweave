@@ -44,9 +44,6 @@ class SyncDAGRouter:
 
     async def initialize_transformer_cache(self, db: AsyncSession) -> None:
         """Pre-load all transformers to eliminate database lookups during processing."""
-        self.logger.debug("🔧 ROUTER_CACHE_INIT Initializing transformer cache")
-        cache_start = asyncio.get_event_loop().time()
-
         # Get all transformer IDs used in the DAG
         transformer_ids = set()
         for node in self.dag.nodes:
@@ -58,15 +55,6 @@ class SyncDAGRouter:
             transformer = await crud.transformer.get(db, id=transformer_id)
             if transformer:
                 self._transformer_cache[transformer_id] = transformer
-                self.logger.debug(
-                    f"🔧 ROUTER_CACHE_ADD Cached transformer: {transformer.method_name}"
-                )
-
-        cache_elapsed = asyncio.get_event_loop().time() - cache_start
-        self.logger.debug(
-            f"✅ ROUTER_CACHE_READY Transformer cache initialized in {cache_elapsed:.3f}s "
-            f"({len(self._transformer_cache)} transformers cached)"
-        )
 
     def _build_execution_route(self) -> dict[tuple[UUID, UUID], list[Optional[UUID]]]:
         """Construct an execution route for the DAG.
@@ -133,60 +121,34 @@ class SyncDAGRouter:
         Raises:
             ValueError: If no matching entity definition is found
         """
-        self.logger.debug(f"🔍 ROUTER_LOOKUP_DEF Looking up definition for {entity_type.__name__}")
-
         # First try direct lookup
         if entity_type in self.entity_map:
-            self.logger.debug(
-                f"✅ ROUTER_DIRECT_MATCH Found direct match for {entity_type.__name__}"
-            )
             return self.entity_map[entity_type]
 
         # Handle PolymorphicEntity subclasses
         if hasattr(entity_type, "__mro__") and issubclass(entity_type, PolymorphicEntity):
-            self.logger.debug(
-                f"🏷️  ROUTER_POLYMORPHIC Using reserved ID for "
-                f"PolymorphicEntity {entity_type.__name__}"
-            )
             return RESERVED_TABLE_ENTITY_ID
 
         # Handle dynamically created Parent/Chunk/UnifiedChunk classes
         entity_name = entity_type.__name__
         entity_module = entity_type.__module__
 
-        self.logger.debug(
-            f"🔍 ROUTER_DYNAMIC_LOOKUP Searching for dynamic class pattern: {entity_name}"
-        )
-
         base_name = None
         if entity_name.endswith("Parent"):
             base_name = entity_name.replace("Parent", "Entity")
-            self.logger.debug(
-                f"🔍 ROUTER_PARENT_PATTERN Detected Parent class, looking for base: {base_name}"
-            )
         elif entity_name.endswith("Chunk"):
             base_name = entity_name.replace("Chunk", "Entity")
-            self.logger.debug(
-                f"🔍 ROUTER_CHUNK_PATTERN Detected Chunk class, looking for base: {base_name}"
-            )
         elif entity_name.endswith("UnifiedChunk"):
             base_name = entity_name.replace("UnifiedChunk", "Entity")
-            self.logger.debug(
-                f"🔍 ROUTER_UNIFIED_CHUNK_PATTERN Detected UnifiedChunk class, "
-                f"looking for base: {base_name}"
-            )
 
         if base_name:
             for cls, definition_id in self.entity_map.items():
                 if cls.__name__ == base_name and cls.__module__ == entity_module:
-                    self.logger.debug(
-                        f"✅ ROUTER_BASE_MATCH Found base class {base_name} for {entity_name}"
-                    )
                     # Cache the result for future lookups
                     self.entity_map[entity_type] = definition_id
                     return definition_id
 
-        self.logger.warning(f"❌ ROUTER_NO_DEF_FOUND No entity definition found for {entity_type}")
+        self.logger.warning(f"No entity definition found for {entity_type}")
         raise ValueError(f"No entity definition found for {entity_type}")
 
     async def process_entity(self, producer_id: UUID, entity: BaseEntity) -> list[BaseEntity]:
@@ -194,11 +156,6 @@ class SyncDAGRouter:
         entity_context = f"Entity({entity.entity_id})"
         entity_type = type(entity)
         router_start = asyncio.get_event_loop().time()
-
-        self.logger.debug(
-            f"🔀 ROUTER_START [{entity_context}] Routing entity of type {entity_type.__name__} "
-            f"from producer {producer_id}"
-        )
 
         # Handle special entity types with dedicated processing
         if self._is_code_file_entity(entity_type, entity):
@@ -239,123 +196,49 @@ class SyncDAGRouter:
         self, entity: BaseEntity, entity_context: str, router_start: float
     ) -> list[BaseEntity]:
         """Handle CodeFileEntity processing with chunking and optional summarization."""
-        self.logger.debug(
-            f"💻 ROUTER_CODE_FILE [{entity_context}] Detected CodeFileEntity, applying code chunker"
-        )
-        chunk_start = asyncio.get_event_loop().time()
-
         transformed_entities = await code_file_chunker(entity, self.logger)
-
-        chunk_elapsed = asyncio.get_event_loop().time() - chunk_start
-        self.logger.debug(
-            f"💻 ROUTER_CODE_CHUNK_DONE [{entity_context}] "
-            f"Code chunking complete in {chunk_elapsed:.3f}s "
-            f"({len(transformed_entities)} chunks created)"
-        )
 
         if settings.CODE_SUMMARIZER_ENABLED:
             transformed_entities = await self._apply_code_summarization(
                 transformed_entities, entity_context
             )
 
-        total_elapsed = asyncio.get_event_loop().time() - router_start
-        self.logger.debug(
-            f"✅ ROUTER_CODE_COMPLETE [{entity_context}] "
-            f"Code processing complete in {total_elapsed:.3f}s"
-        )
         return transformed_entities
 
     async def _apply_code_summarization(
         self, transformed_entities: list[BaseEntity], entity_context: str
     ) -> list[BaseEntity]:
         """Apply code summarization to transformed entities."""
-        self.logger.debug(
-            f"📝 ROUTER_CODE_SUMMARY_START [{entity_context}] Applying code summarizer"
-        )
-        summary_start = asyncio.get_event_loop().time()
-
-        for i, transformed_entity in enumerate(transformed_entities):
-            self.logger.debug(
-                f"📝 ROUTER_CODE_SUMMARY_{i} [{entity_context}] Summarizing chunk {i + 1}"
-            )
+        for transformed_entity in transformed_entities:
             transformed_entity = await code_file_summarizer(transformed_entity, self.logger)
 
-        summary_elapsed = asyncio.get_event_loop().time() - summary_start
-        self.logger.debug(
-            f"📝 ROUTER_CODE_SUMMARY_DONE [{entity_context}] Summarization complete "
-            f"in {summary_elapsed:.3f}s"
-        )
         return transformed_entities
 
     async def _handle_regular_file_entity(
         self, entity: BaseEntity, entity_context: str, router_start: float
     ) -> list[BaseEntity]:
         """Handle regular FileEntity processing."""
-        entity_type = type(entity)
-        self.logger.debug(
-            f"📄 ROUTER_FILE [{entity_context}] Detected FileEntity "
-            f"(type: {entity_type.__name__}), applying file chunker"
-        )
-        chunk_start = asyncio.get_event_loop().time()
-
         # Try to use optimized chunker if available
         try:
             from airweave.platform.transformers.optimized_file_chunker import (
                 optimized_file_chunker,
             )
 
-            self.logger.debug(
-                f"🚀 ROUTER_FILE_OPTIMIZED [{entity_context}] Using optimized file chunker"
-            )
             transformed_entities = await optimized_file_chunker(entity, self.logger)
         except ImportError:
-            self.logger.debug(
-                f"📄 ROUTER_FILE_DEFAULT [{entity_context}] Using default file chunker"
-            )
             transformed_entities = await file_chunker(entity, self.logger)
 
-        chunk_elapsed = asyncio.get_event_loop().time() - chunk_start
-        self.logger.debug(
-            f"📄 ROUTER_FILE_CHUNK_DONE [{entity_context}] "
-            f"File chunking complete in {chunk_elapsed:.3f}s "
-            f"({len(transformed_entities)} unified chunks created)"
-        )
-
-        total_elapsed = asyncio.get_event_loop().time() - router_start
-        self.logger.debug(
-            f"✅ ROUTER_FILE_COMPLETE [{entity_context}] "
-            f"File processing complete in {total_elapsed:.3f}s"
-        )
         return transformed_entities
 
     async def _handle_chunk_entity_processing(
         self, entity: BaseEntity, entity_context: str, router_start: float
     ) -> list[BaseEntity]:
         """Handle ChunkEntity field processing."""
-        self.logger.debug(
-            f"🔧 ROUTER_CHUNK_FIELD [{entity_context}] Detected ChunkEntity, applying field chunker"
-        )
-        field_start = asyncio.get_event_loop().time()
-
         chunked_entities = await entity_chunker(entity, self.logger)
 
-        field_elapsed = asyncio.get_event_loop().time() - field_start
-
         if len(chunked_entities) > 1:
-            self.logger.debug(
-                f"🔧 ROUTER_CHUNK_FIELD_SPLIT [{entity_context}] "
-                f"Entity split into {len(chunked_entities)} parts in {field_elapsed:.3f}s"
-            )
-            total_elapsed = asyncio.get_event_loop().time() - router_start
-            self.logger.debug(
-                f"✅ ROUTER_CHUNK_COMPLETE [{entity_context}] "
-                f"Field chunking complete in {total_elapsed:.3f}s"
-            )
             return chunked_entities
         else:
-            self.logger.debug(
-                f"🔧 ROUTER_CHUNK_FIELD_KEEP [{entity_context}] No field chunking needed"
-            )
             # Continue with normal DAG routing since no chunking occurred
             return [entity]
 
@@ -368,63 +251,26 @@ class SyncDAGRouter:
         router_start: float,
     ) -> list[BaseEntity]:
         """Handle normal DAG routing for entities."""
-        self.logger.debug(f"🗺️  ROUTER_DAG_START [{entity_context}] Starting normal DAG routing")
-
         try:
             entity_definition_id = self._get_entity_definition_id(entity_type)
-            self.logger.debug(
-                f"🆔 ROUTER_ENTITY_DEF [{entity_context}] "
-                f"Found entity definition ID: {entity_definition_id}"
-            )
         except ValueError as e:
-            self.logger.warning(
-                f"❌ ROUTER_NO_DEF [{entity_context}] No entity definition found: {str(e)}"
-            )
+            self.logger.warning(f"No entity definition found for {entity_type}: {str(e)}")
             # Return entity as-is if no definition found
             return [entity]
 
         route_key = (producer_id, entity_definition_id)
 
         if route_key not in self.route:
-            self.logger.debug(
-                f"🛑 ROUTER_NO_ROUTE [{entity_context}] No route found, treating as destination"
-            )
-            total_elapsed = asyncio.get_event_loop().time() - router_start
-            self.logger.debug(
-                f"✅ ROUTER_DESTINATION [{entity_context}] "
-                f"Routing to destination in {total_elapsed:.3f}s"
-            )
             return [entity]
 
         consumer_id = self.route[route_key]
 
         if consumer_id is None:
-            self.logger.debug(
-                f"🏁 ROUTER_TERMINAL [{entity_context}] Terminal route, sending to destination"
-            )
-            total_elapsed = asyncio.get_event_loop().time() - router_start
-            self.logger.debug(
-                f"✅ ROUTER_TERMINAL_COMPLETE [{entity_context}] "
-                f"Terminal routing complete in {total_elapsed:.3f}s"
-            )
             return [entity]
 
         # Get the consumer node and apply transformer
         consumer = self.dag.get_node(consumer_id)
-        self.logger.debug(
-            f"🔄 ROUTER_TRANSFORM [{entity_context}] Applying transformer from node {consumer_id} "
-            f"(type: {consumer.type})"
-        )
-
-        transform_start = asyncio.get_event_loop().time()
         transformed_entities = await self._apply_transformer(consumer, entity)
-        transform_elapsed = asyncio.get_event_loop().time() - transform_start
-
-        self.logger.debug(
-            f"🔄 ROUTER_TRANSFORM_DONE [{entity_context}] "
-            f"Transformation complete in {transform_elapsed:.3f}s "
-            f"({len(transformed_entities)} entities produced)"
-        )
 
         # Route the transformed entities recursively
         return await self._route_transformed_entities(
@@ -439,31 +285,10 @@ class SyncDAGRouter:
         router_start: float,
     ) -> list[BaseEntity]:
         """Route transformed entities recursively."""
-        self.logger.debug(
-            f"🔁 ROUTER_RECURSIVE [{entity_context}] "
-            f"Routing {len(transformed_entities)} transformed entities"
-        )
-        recursive_start = asyncio.get_event_loop().time()
-
         result_entities = []
-        for i, transformed_entity in enumerate(transformed_entities):
-            self.logger.debug(
-                f"🔁 ROUTER_RECURSIVE_{i} [{entity_context}] Routing transformed entity {i + 1}"
-            )
+        for transformed_entity in transformed_entities:
             sub_entities = await self.process_entity(consumer_id, transformed_entity)
             result_entities.extend(sub_entities)
-
-        recursive_elapsed = asyncio.get_event_loop().time() - recursive_start
-        total_elapsed = asyncio.get_event_loop().time() - router_start
-
-        self.logger.debug(
-            f"🔁 ROUTER_RECURSIVE_DONE [{entity_context}] "
-            f"Recursive routing complete in {recursive_elapsed:.3f}s "
-            f"({len(result_entities)} final entities)"
-        )
-        self.logger.debug(
-            f"✅ ROUTER_COMPLETE [{entity_context}] All routing complete in {total_elapsed:.3f}s"
-        )
 
         return result_entities
 
@@ -476,18 +301,11 @@ class SyncDAGRouter:
         entity_context = f"Entity({entity.entity_id})"
 
         if consumer.transformer_id:
-            self.logger.debug(
-                f"🔧 ROUTER_TRANSFORMER_LOOKUP [{entity_context}] "
-                f"Looking up transformer {consumer.transformer_id}"
-            )
-            lookup_start = asyncio.get_event_loop().time()
-
             # Use cached transformer instead of database lookup
             transformer = self._transformer_cache.get(consumer.transformer_id)
             if not transformer:
                 self.logger.warning(
-                    f"⚠️  ROUTER_CACHE_MISS [{entity_context}] Transformer not in cache, "
-                    f"falling back to database lookup"
+                    f"Transformer {consumer.transformer_id} not in cache, falling back to lookup"
                 )
                 # Create a temporary database session just for this lookup
                 from airweave.db.session import get_db_context
@@ -498,27 +316,8 @@ class SyncDAGRouter:
                     if transformer:
                         self._transformer_cache[consumer.transformer_id] = transformer
 
-            lookup_elapsed = asyncio.get_event_loop().time() - lookup_start
-            self.logger.debug(
-                f"🔧 ROUTER_TRANSFORMER_FOUND [{entity_context}] "
-                f"Transformer found in {lookup_elapsed:.3f}s "
-                f"(cached: {consumer.transformer_id in self._transformer_cache})"
-            )
-
-            self.logger.debug(
-                f"⚙️  ROUTER_TRANSFORMER_APPLY [{entity_context}] Applying transformer"
-            )
-            apply_start = asyncio.get_event_loop().time()
-
             transformer_callable = resource_locator.get_transformer(transformer)
             result = await transformer_callable(entity, self.logger)
-
-            apply_elapsed = asyncio.get_event_loop().time() - apply_start
-            self.logger.debug(
-                f"⚙️  ROUTER_TRANSFORMER_DONE [{entity_context}] "
-                f"Transformer applied in {apply_elapsed:.3f}s "
-                f"(produced {len(result)} entities)"
-            )
 
             return result
         else:

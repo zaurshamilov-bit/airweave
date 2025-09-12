@@ -748,8 +748,11 @@ class PostgreSQLSource(BaseSource):
         self._log_sync_type(table_key, cursor_field, last_cursor_value)
 
         # Process table in batches
-        BATCH_SIZE = 10000
+        BATCH_SIZE = 5000
         offset = 0
+        total_records = 0
+
+        self.logger.info(f"Starting to process table {table_key} with batch size {BATCH_SIZE}")
 
         while True:
             # Build and execute query
@@ -759,6 +762,9 @@ class PostgreSQLSource(BaseSource):
 
             # Execute query with connection retry on failure
             try:
+                self.logger.debug(
+                    f"Executing query for {table_key} (offset={offset}, batch={BATCH_SIZE})"
+                )
                 if query_param is not None:
                     records = await self.conn.fetch(query, query_param)
                 else:
@@ -772,17 +778,34 @@ class PostgreSQLSource(BaseSource):
                 else:
                     records = await self.conn.fetch(query)
 
+                self.logger.debug("Retry query completed.")
+
             # Break if no more records
             if not records:
                 if offset == 0 and cursor_field and last_cursor_value:
                     self.logger.info(f"Table {table_key}: No new records since last sync")
+                else:
+                    self.logger.info(
+                        f"Table {table_key}: Completed processing {total_records} records"
+                    )
                 break
 
+            self.logger.debug(f"Successfully fetched {len(records)} records for {table_key}")
+
             # Process the batch with cursor tracking
+            batch_count = 0
             async for entity in self._process_table_batch(
                 schema, table, entity_class, records, cursor_field
             ):
+                batch_count += 1
                 yield entity
+
+            total_records += batch_count
+            if batch_count > 0:
+                self.logger.info(
+                    f"Table {table_key}: Processed batch at offset {offset}, "
+                    f"{batch_count} records (total: {total_records})"
+                )
 
             # Increment offset for next batch
             offset += BATCH_SIZE
@@ -793,6 +816,10 @@ class PostgreSQLSource(BaseSource):
             await self._connect()
             schema = self.config.get("schema", "public")
             tables = await self._get_table_list(schema)
+
+            self.logger.info(
+                f"Found {len(tables)} table(s) to sync in schema '{schema}': {', '.join(tables)}"
+            )
 
             # Get cursor data for incremental sync
             cursor_data = self._get_cursor_data()
@@ -827,15 +854,20 @@ class PostgreSQLSource(BaseSource):
 
             # Process tables WITHOUT a long-running transaction
             # This prevents transaction timeout issues and allows better connection management
-            for table in tables:
+            for i, table in enumerate(tables, 1):
+                self.logger.info(f"Processing table {i}/{len(tables)}: {schema}.{table}")
+
                 # Check connection health before processing each table
                 await self._ensure_connection()
 
                 async for entity in self._process_table(schema, table, cursor_data):
                     yield entity
 
+            self.logger.info(f"Successfully completed sync for all {len(tables)} table(s)")
+
         finally:
             if self.conn:
+                self.logger.info("Closing PostgreSQL connection")
                 await self.conn.close()
                 self.conn = None
 

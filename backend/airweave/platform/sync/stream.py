@@ -62,7 +62,7 @@ class AsyncSourceStream(Generic[T]):
                     break
 
                 # Put item in queue, waiting if queue is full.
-                # This is a blocking call, so consumer will wait until the queue has space
+                # This is a blocking call, so producer will wait until the queue has space
                 # Effectively, this is a backpressure mechanism.
                 await self.queue.put(item)
                 items_produced += 1
@@ -147,7 +147,7 @@ class AsyncSourceStream(Generic[T]):
         while True:
             try:
                 # Try to get with timeout
-                item = await asyncio.wait_for(self.queue.get(), timeout=0.5)
+                item = await asyncio.wait_for(self.queue.get(), timeout=2)
                 self.queue.task_done()
                 return item
 
