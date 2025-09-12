@@ -147,7 +147,7 @@ class AsyncSourceStream(Generic[T]):
         while True:
             try:
                 # Try to get with timeout
-                item = await asyncio.wait_for(self.queue.get(), timeout=0.5)
+                item = await asyncio.wait_for(self.queue.get(), timeout=2)
                 self.queue.task_done()
                 return item
 

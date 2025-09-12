@@ -538,11 +538,6 @@ class EntityProcessor:
                         continue
 
                     sparse_vector = sparse_vectors[i] if sparse_vectors else None
-                    vector_dim = len(neural_vector) if neural_vector else 0
-                    sync_context.logger.debug(
-                        f"Assigning vector of dimension {vector_dim} to "
-                        f"entity {processed_entity.entity_id}"
-                    )
                     # Ensure system metadata exists before setting vector
                     if processed_entity.airweave_system_metadata is None:
                         from airweave.platform.entities._base import AirweaveSystemMetadata
