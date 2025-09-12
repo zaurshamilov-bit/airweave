@@ -1895,7 +1895,7 @@
         ],
         "summary": "Get White Label Oauth2 Auth Url",
         "description": "Generate a branded OAuth2 authorization URL for customer authentication.\n\n<br/><br/>\nCreates the OAuth consent URL that customers should be redirected to for\nauthentication. The OAuth consent screen will display your company name and\nbranding instead of Airweave.",
-        "operationId": "get_white_label_oauth2_auth_url_white_labels__white_label_id__oauth2_auth_url_get",
+        "operationId": "get_white_label_oauth2_auth_url_white_labels__white_label_id__oauth2_auth_url_options",
         "parameters": [
           {
             "name": "white_label_id",
@@ -1917,7 +1917,7 @@
               "application/json": {
                 "schema": {
                   "type": "string",
-                  "title": "Response Get White Label Oauth2 Auth Url White Labels  White Label Id  Oauth2 Auth Url Get"
+                  "title": "Response Get White Label Oauth2 Auth Url White Labels  White Label Id  Oauth2 Auth Url Options"
                 },
                 "examples": {
                   "slack_auth_url": {
