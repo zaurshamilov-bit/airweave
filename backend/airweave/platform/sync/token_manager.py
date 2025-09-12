@@ -239,16 +239,37 @@ class TokenManager:
                 credential_update = schemas.IntegrationCredentialUpdate(
                     encrypted_credentials=credentials.encrypt(fresh_credentials)
                 )
-                await crud.integration_credential.update_by_id(
-                    self.db,
-                    id=self.integration_credential_id,
-                    obj_in=credential_update,
-                    ctx=self.ctx,
-                )
+
+                # Use a separate database session for the update to avoid transaction issues
+                from airweave.db.session import get_db_context
+
+                try:
+                    async with get_db_context() as update_db:
+                        # Get the credential in the new session
+                        credential = await crud.integration_credential.get(
+                            update_db, self.integration_credential_id, self.ctx
+                        )
+                        if credential:
+                            await crud.integration_credential.update(
+                                update_db,
+                                db_obj=credential,
+                                obj_in=credential_update,
+                                ctx=self.ctx,
+                            )
+                except Exception as db_error:
+                    self.logger.error(f"Failed to update credentials in database: {str(db_error)}")
+                    # Continue anyway - we have the token, just couldn't persist it
 
             return access_token
 
         except Exception as e:
+            # Ensure the main session is rolled back if it's in a bad state
+            try:
+                await self.db.rollback()
+            except Exception:
+                # Session might not be in a transaction, that's OK
+                pass
+
             self.logger.error(f"Failed to refresh token via auth provider instance: {str(e)}")
             raise TokenRefreshError(f"Auth provider refresh failed: {str(e)}") from e
 
@@ -261,43 +282,61 @@ class TokenManager:
         Raises:
             TokenRefreshError: If refresh fails
         """
-        # Get the stored credentials
-        if not self.integration_credential_id:
-            raise TokenRefreshError("No integration credential found for token refresh")
+        try:
+            # Use a separate database session to avoid transaction issues
+            from airweave.db.session import get_db_context
 
-        credential = await crud.integration_credential.get(
-            self.db, self.integration_credential_id, self.ctx
-        )
-        if not credential:
-            raise TokenRefreshError("Integration credential not found")
+            async with get_db_context() as refresh_db:
+                # Get the stored credentials
+                if not self.integration_credential_id:
+                    raise TokenRefreshError("No integration credential found for token refresh")
 
-        decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
+                credential = await crud.integration_credential.get(
+                    refresh_db, self.integration_credential_id, self.ctx
+                )
+                if not credential:
+                    raise TokenRefreshError("Integration credential not found")
 
-        # Reconstruct white_label object only if we have white label values
-        white_label = None
-        if self.white_label_source_short_name:
-            # Create a minimal white label object with only the fields needed by oauth2_service
-            white_label = type(
-                "WhiteLabel",
-                (),
-                {
-                    "source_short_name": self.white_label_source_short_name,
-                    "client_id": self.white_label_client_id,
-                    "client_secret": self.white_label_client_secret,
-                },
-            )()
+                decrypted_credential = credentials.decrypt(credential.encrypted_credentials)
 
-        # Use the oauth2_service to refresh the token
-        oauth2_response = await oauth2_service.refresh_access_token(
-            db=self.db,
-            integration_short_name=self.source_short_name,
-            ctx=self.ctx,
-            connection_id=self.connection_id,
-            decrypted_credential=decrypted_credential,
-            white_label=white_label,
-        )
+                # Reconstruct white_label object only if we have white label values
+                white_label = None
+                if self.white_label_source_short_name:
+                    # Create a minimal white label object with fields needed by oauth2_service
+                    white_label = type(
+                        "WhiteLabel",
+                        (),
+                        {
+                            "source_short_name": self.white_label_source_short_name,
+                            "client_id": self.white_label_client_id,
+                            "client_secret": self.white_label_client_secret,
+                        },
+                    )()
 
-        return oauth2_response.access_token
+                # Use the oauth2_service to refresh the token
+                oauth2_response = await oauth2_service.refresh_access_token(
+                    db=refresh_db,
+                    integration_short_name=self.source_short_name,
+                    ctx=self.ctx,
+                    connection_id=self.connection_id,
+                    decrypted_credential=decrypted_credential,
+                    white_label=white_label,
+                )
+
+                return oauth2_response.access_token
+
+        except Exception as e:
+            # Ensure the main session is rolled back if it's in a bad state
+            try:
+                await self.db.rollback()
+            except Exception:
+                # Session might not be in a transaction, that's OK
+                pass
+
+            # Re-raise the original error
+            if isinstance(e, TokenRefreshError):
+                raise
+            raise TokenRefreshError(f"OAuth refresh failed: {str(e)}") from e
 
     def _extract_token_from_credentials(self, credentials: Any) -> Optional[str]:
         """Extract OAuth access token from credentials.
