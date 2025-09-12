@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { ArrowLeft, Copy, ExternalLink, Check, User, Users, Mail, Link2, ChevronRight, Send, Info, HelpCircle, Share2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
+import { SourceAuthorizationView } from '@/components/shared/SourceAuthorizationView';
 
 interface SourceConfigViewProps {
   humanReadableId: string;
@@ -68,8 +69,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     setSourceConnectionName(connectionName);
   }, []);
   const [connectionUrl, setConnectionUrl] = useState('');
-  const [connectionMethod, setConnectionMethod] = useState<'self' | 'share'>('share'); // Default to share
-  const [copied, setCopied] = useState(false);
 
   // Sources that require custom OAuth credentials (BYOC - Bring Your Own Credentials)
   const BYOC_SOURCES = ['google_drive', 'gmail', 'dropbox', 'google_calendar'];
@@ -109,7 +108,8 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                 setUseOwnCredentials(true);
               }
             } else {
-              setAuthMode('config_auth');
+              // Config-based auth (like GitHub) uses direct_auth mode
+              setAuthMode('direct_auth');
             }
           } else if (source.auth_type?.startsWith('oauth2')) {
             setAuthMode('oauth2');
@@ -161,7 +161,9 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         short_name: selectedSource,
         collection: collectionId,
         auth_mode: authMode || 'oauth2',
-        sync_immediately: false,
+        // For direct auth (API key, config), sync immediately since we have credentials
+        // For OAuth, don't sync until after authorization is complete
+        sync_immediately: authMode === 'direct_auth',
       };
 
       // Add config fields if any
@@ -170,7 +172,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       }
 
       // Handle different auth modes
-      if (authMode === 'config_auth') {
+      if (authMode === 'direct_auth' && isConfigAuth()) {
         // Config-based auth (like GitHub)
         if (Object.keys(authFields).length === 0) {
           toast.error('Please provide all required configuration fields');
@@ -233,30 +235,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     }
   };
 
-  const copyToClipboard = () => {
-    if (connectionUrl) {
-      navigator.clipboard.writeText(connectionUrl);
-      setCopied(true);
-      toast.success('Copied');
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleConnect = () => {
-    if (connectionUrl) {
-      window.location.href = connectionUrl;
-    }
-  };
-
-  const handleSendEmail = () => {
-    if (connectionUrl) {
-      const subject = encodeURIComponent(`Connect your ${sourceName} to ${collectionName}`);
-      const body = encodeURIComponent(
-        `Hi there,\n\nPlease click the link below to connect your ${sourceName} account:\n\n${connectionUrl}\n\nThis will allow us to sync your data securely.\n\nThanks!`
-      );
-      window.open(`mailto:?subject=${subject}&body=${body}`);
-    }
-  };
 
   return (
     <div className="h-full flex flex-col">
@@ -287,176 +265,12 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
             />
           </div>
 
-          {/* Connection created state - Minimal clean design */}
+          {/* Connection created state - Use shared component */}
           {connectionUrl ? (
-            <div className="space-y-6">
-              {/* Success indicator */}
-              <div className="flex items-center gap-2">
-                <div className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  isDark ? "bg-green-500" : "bg-green-600"
-                )} />
-                <div>
-                  <p className={cn(
-                    "text-sm font-medium",
-                    isDark ? "text-white" : "text-gray-900"
-                  )}>
-                    Connection ready
-                  </p>
-                  <p className={cn(
-                    "text-xs mt-0.5",
-                    isDark ? "text-gray-500" : "text-gray-500"
-                  )}>
-                    Choose how to authorize access to {sourceName}
-                  </p>
-                </div>
-              </div>
-
-              {/* Two clean options */}
-              <div className="space-y-3">
-                {/* Option 1: Connect yourself */}
-                <div
-                  className={cn(
-                    "p-5 rounded-xl transition-all cursor-pointer",
-                    "border",
-                    connectionMethod === 'self'
-                      ? isDark
-                        ? "border-white/15 bg-white/[0.02]"
-                        : "border-gray-300 bg-white"
-                      : isDark
-                        ? "border-white/10 hover:border-white/15"
-                        : "border-gray-200 hover:border-gray-300"
-                  )}
-                  onClick={() => setConnectionMethod('self')}
-                >
-                  <h3 className={cn(
-                    "text-sm font-semibold mb-1",
-                    isDark ? "text-white" : "text-gray-900"
-                  )}>
-                    Connect your own account
-                  </h3>
-                  <p className={cn(
-                    "text-xs leading-relaxed",
-                    isDark ? "text-gray-400" : "text-gray-600"
-                  )}>
-                    Authorize Airweave to access your {sourceName} data directly. Quick and simple.
-                  </p>
-
-                  {connectionMethod === 'self' && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConnect();
-                      }}
-                      className={cn(
-                        "mt-4 px-4 py-2 rounded-lg",
-                        "bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100",
-                        "text-white dark:text-black",
-                        "font-medium text-xs",
-                        "transition-colors"
-                      )}
-                    >
-                      Authorize with {sourceName}
-                    </button>
-                  )}
-                </div>
-
-                {/* Option 2: Share with someone else */}
-                <div
-                  className={cn(
-                    "p-5 rounded-xl transition-all cursor-pointer",
-                    "border",
-                    connectionMethod === 'share'
-                      ? isDark
-                        ? "border-white/15 bg-white/[0.02]"
-                        : "border-gray-300 bg-white"
-                      : isDark
-                        ? "border-white/10 hover:border-white/15"
-                        : "border-gray-200 hover:border-gray-300"
-                  )}
-                  onClick={() => setConnectionMethod('share')}
-                >
-                  <h3 className={cn(
-                    "text-sm font-semibold mb-1",
-                    isDark ? "text-white" : "text-gray-900"
-                  )}>
-                    Have someone else connect
-                  </h3>
-                  <p className={cn(
-                    "text-xs leading-relaxed",
-                    isDark ? "text-gray-400" : "text-gray-600"
-                  )}>
-                    Send this secure link to someone with {sourceName} access. They'll authorize on your behalf.
-                  </p>
-
-                  {connectionMethod === 'share' && (
-                    <div className="mt-4 space-y-3">
-                      {/* Clean URL display */}
-                        <div className={cn(
-                          "relative",
-                          "px-3 py-2 pr-20 rounded-lg",
-                        "border",
-                        isDark
-                          ? "bg-black/30 border-white/10"
-                          : "bg-gray-50 border-gray-200"
-                      )}>
-                        <code className={cn(
-                          "block text-[11px] font-mono truncate select-all",
-                          isDark ? "text-gray-400" : "text-gray-600"
-                        )}>
-                          {connectionUrl}
-                        </code>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyToClipboard();
-                          }}
-                          className={cn(
-                            "absolute right-2 top-1/2 -translate-y-1/2",
-                            "px-2.5 py-1 rounded-md",
-                            "text-[10px] font-medium",
-                            "transition-colors",
-                            copied
-                              ? isDark
-                                ? "text-green-400"
-                                : "text-green-600"
-                              : isDark
-                                ? "text-gray-500 hover:text-gray-300"
-                                : "text-gray-500 hover:text-gray-700"
-                          )}
-                        >
-                          {copied ? "Copied" : "Copy"}
-                        </button>
-                      </div>
-
-                      {/* Email share link */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSendEmail();
-                        }}
-                        className={cn(
-                          "text-xs font-medium transition-colors",
-                          isDark
-                            ? "text-gray-500 hover:text-gray-300"
-                            : "text-gray-500 hover:text-gray-700"
-                        )}
-                      >
-                        Share via email
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Help text */}
-              <p className={cn(
-                "text-[11px]",
-                isDark ? "text-gray-600" : "text-gray-400"
-              )}>
-                This authorization is secure and can be revoked anytime from your {sourceName} settings.
-              </p>
-            </div>
+            <SourceAuthorizationView
+              sourceName={sourceName}
+              authenticationUrl={connectionUrl}
+            />
           ) : (
             <>
               {/* Form fields - Clean minimal design */}
@@ -482,7 +296,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                 </div>
 
                 {/* Config-based auth fields (like GitHub) */}
-                {authMode === 'config_auth' && sourceDetails?.auth_fields?.fields && (
+                {authMode === 'direct_auth' && isConfigAuth() && sourceDetails?.auth_fields?.fields && (
                   <div className="space-y-4">
                     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Configuration
@@ -518,7 +332,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                 )}
 
                 {/* Direct auth fields (API key, basic auth) */}
-                {authMode === 'direct_auth' && sourceDetails?.auth_fields?.fields && (
+                {authMode === 'direct_auth' && !isConfigAuth() && sourceDetails?.auth_fields?.fields && (
                   <div className="space-y-4">
                     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Authentication

@@ -422,7 +422,9 @@ class SourceConnectionService:
                 destination_connection_ids=[NATIVE_QDRANT_UUID],
                 cron_schedule=aux_attrs["cron_schedule"],
                 status=SyncStatus.ACTIVE,
-                run_immediately=aux_attrs["sync_immediately"],
+                run_immediately=aux_attrs.get(
+                    "sync_immediately", True
+                ),  # Use sync_immediately from request
             )
 
             sync, sync_job = await sync_service.create_and_run_sync(
@@ -454,11 +456,11 @@ class SourceConnectionService:
             if sync_job is not None:
                 sync_job = schemas.SyncJob.model_validate(sync_job, from_attributes=True)
                 source_connection.status = SourceConnectionStatus.IN_PROGRESS
-                source_connection.latest_sync_job_status = sync_job.status
-                source_connection.latest_sync_job_id = sync_job.id
-                source_connection.latest_sync_job_started_at = sync_job.started_at
-                source_connection.latest_sync_job_completed_at = sync_job.completed_at
-                source_connection.latest_sync_job_error = sync_job.error if sync_job.error else None
+                source_connection.last_sync_job_status = sync_job.status
+                source_connection.last_sync_job_id = sync_job.id
+                source_connection.last_sync_job_started_at = sync_job.started_at
+                source_connection.last_sync_job_completed_at = sync_job.completed_at
+                source_connection.last_sync_job_error = sync_job.error if sync_job.error else None
             else:
                 source_connection.status = SourceConnectionStatus.ACTIVE
                 source_connection.last_sync_job_status = None
@@ -477,7 +479,7 @@ class SourceConnectionService:
             source_short_name=source_connection_in.short_name,
         )
 
-        return source_connection, sync_job
+        return None, None, source_connection, sync_job
 
     async def _validate_token_with_source(
         self, db: AsyncSession, source_short_name: str, access_token: str, ctx: ApiContext
@@ -1359,7 +1361,7 @@ class SourceConnectionService:
                 destination_connection_ids=[NATIVE_QDRANT_UUID],
                 cron_schedule=source_connection_in.cron_schedule,
                 status=SyncStatus.ACTIVE,
-                run_immediately=source_connection_in.sync_immediately,
+                run_immediately=True,  # Always run immediately after authentication
             )
             sync, sync_job = await sync_service.create_and_run_sync(
                 db=uow.session, sync_in=sync_in, ctx=ctx, uow=uow
@@ -1651,7 +1653,7 @@ class SourceConnectionService:
                 destination_connection_ids=[NATIVE_QDRANT_UUID],
                 cron_schedule=payload.get("cron_schedule"),
                 status=SyncStatus.ACTIVE,
-                run_immediately=payload.get("sync_immediately", True),
+                run_immediately=True,  # Always run immediately after authentication
             )
             sync, sync_job_obj = await sync_service.create_and_run_sync(
                 db=uow.session, sync_in=sync_in, ctx=ctx, uow=uow
@@ -1700,7 +1702,7 @@ class SourceConnectionService:
             await uow.commit()
 
         meta = {
-            "sync_immediately": payload.get("sync_immediately", True),
+            "sync_immediately": True,  # Always true after authentication
             "creating_new_collection": created_new_collection,
         }
         return sc_schema, final_redirect_url, sync_job, meta

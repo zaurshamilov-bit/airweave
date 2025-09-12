@@ -134,11 +134,11 @@ class CRUDSourceConnection(
             sc_id = str(sc.id) if hasattr(sc, "id") else "unknown"
             if sc.sync_id and sc.sync_id in sync_job_info:
                 job_info = sync_job_info[sc.sync_id]
-                sc.latest_sync_job_id = job_info["id"]
-                sc.latest_sync_job_status = job_info["status"]
-                sc.latest_sync_job_started_at = job_info["started_at"]
-                sc.latest_sync_job_completed_at = job_info["completed_at"]
-                sc.latest_sync_job_error = job_info["error"] if "error" in job_info else None
+                sc.last_sync_job_id = job_info["id"]
+                sc.last_sync_job_status = job_info["status"]
+                sc.last_sync_job_started_at = job_info["started_at"]
+                sc.last_sync_job_completed_at = job_info["completed_at"]
+                sc.last_sync_job_error = job_info["error"] if "error" in job_info else None
 
                 # Set the ephemeral status based on the latest sync job
                 job = SyncJob(

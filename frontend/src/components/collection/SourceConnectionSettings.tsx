@@ -53,11 +53,11 @@ interface SourceConnection {
   modified_by_email: string;
   auth_fields?: Record<string, any> | string;
   status?: string;
-  latest_sync_job_status?: string;
-  latest_sync_job_id?: string;
-  latest_sync_job_started_at?: string;
-  latest_sync_job_completed_at?: string;
-  latest_sync_job_error?: string;
+  last_sync_job_status?: string;
+  last_sync_job_id?: string;
+  last_sync_job_started_at?: string;
+  last_sync_job_completed_at?: string;
+  last_sync_job_error?: string;
   cron_schedule?: string;
   next_scheduled_run?: string;
   auth_provider?: string;

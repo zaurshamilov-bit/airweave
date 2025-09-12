@@ -13,6 +13,7 @@ import { toast } from '@/hooks/use-toast';
 import { SourceConnectionSettings } from './SourceConnectionSettings';
 import { EntityStateList } from './EntityStateList';
 import { SyncErrorCard } from './SyncErrorCard';
+import { SourceAuthorizationView } from '@/components/shared/SourceAuthorizationView';
 import {
   Tooltip,
   TooltipContent,
@@ -41,11 +42,11 @@ interface SourceConnection {
   status?: string;
   is_authenticated?: boolean;
   authentication_url?: string;
-  latest_sync_job_status?: string;
-  latest_sync_job_id?: string;
-  latest_sync_job_started_at?: string;
-  latest_sync_job_completed_at?: string;
-  latest_sync_job_error?: string;
+  last_sync_job_status?: string;
+  last_sync_job_id?: string;
+  last_sync_job_started_at?: string;
+  last_sync_job_completed_at?: string;
+  last_sync_job_error?: string;
   cron_schedule?: string;
   next_scheduled_run?: string;
   auth_provider?: string;
@@ -71,8 +72,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
   const [isCancelling, setIsCancelling] = useState(false);
   const [nextRunTime, setNextRunTime] = useState<string | null>(null);
   const [lastRanDisplay, setLastRanDisplay] = useState<string>('Never');
-  const [copied, setCopied] = useState(false);
-  const [connectionMethod, setConnectionMethod] = useState<'self' | 'share'>('self');
+  const [isRefreshingAuth, setIsRefreshingAuth] = useState(false);
 
   const mediator = useRef<EntityStateMediator | null>(null);
   const { resolvedTheme } = useTheme();
@@ -207,7 +207,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
   }, []);
 
   // Fetch source connection details (only when not provided as prop)
-  const fetchSourceConnection = useCallback(async () => {
+  const fetchSourceConnection = useCallback(async (regenerateAuthUrl = false) => {
     // If data is provided as prop, use it instead of fetching
     if (sourceConnectionData) {
       setSourceConnection(sourceConnectionData);
@@ -220,7 +220,10 @@ const SourceConnectionStateView: React.FC<Props> = ({
     }
 
     try {
-      const response = await apiClient.get(`/source-connections/${sourceConnectionId}`);
+      const url = regenerateAuthUrl
+        ? `/source-connections/${sourceConnectionId}?regenerate_auth_url=true`
+        : `/source-connections/${sourceConnectionId}`;
+      const response = await apiClient.get(url);
       if (response.ok) {
         const data = await response.json();
         setSourceConnection(data);
@@ -231,25 +234,38 @@ const SourceConnectionStateView: React.FC<Props> = ({
           setNextRunTime(nextRun);
         }
 
-        // If not authenticated and no auth URL, try to get one
-        if ((!data.is_authenticated || data.status === 'not_yet_authorized') && !data.authentication_url) {
-          // Try to regenerate the auth URL by fetching with special parameter
-          const authResponse = await apiClient.get(`/source-connections/${sourceConnectionId}?regenerate_auth_url=true`);
-          if (authResponse.ok) {
-            const authData = await authResponse.json();
-            if (authData.authentication_url) {
-              setSourceConnection(prev => ({ ...prev!, authentication_url: authData.authentication_url }));
-            }
-          }
-        }
+        // No need for separate auth URL fetch, it's handled by the regenerateAuthUrl parameter
       }
     } catch (error) {
       console.error('Failed to fetch source connection:', error);
     }
   }, [sourceConnectionId, sourceConnectionData, calculateNextRunTime]);
 
+  // Handler for refreshing authentication URL
+  const handleRefreshAuthUrl = useCallback(async () => {
+    setIsRefreshingAuth(true);
+    try {
+      await fetchSourceConnection(true);
+      toast({
+        title: "Refreshed",
+        description: "Authentication URL has been refreshed"
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to refresh authentication URL",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRefreshingAuth(false);
+    }
+  }, [fetchSourceConnection]);
+
   useEffect(() => {
-    // Initialize state mediator
+    const isNotAuthorized = sourceConnectionData?.status === 'not_yet_authorized' || !sourceConnectionData?.is_authenticated;
+
+    // Only initialize mediator if authenticated
+    if (!isNotAuthorized) {
     mediator.current = new EntityStateMediator(sourceConnectionId);
 
     Promise.all([
@@ -261,11 +277,20 @@ const SourceConnectionStateView: React.FC<Props> = ({
       console.error('Failed to initialize:', error);
       setIsInitializing(false);
     });
+    } else {
+      // Just fetch connection details if not authenticated
+      fetchSourceConnection().then(() => {
+        setIsInitializing(false);
+      }).catch(error => {
+        console.error('Failed to fetch connection:', error);
+        setIsInitializing(false);
+      });
+    }
 
     return () => {
       mediator.current?.cleanup();
     };
-  }, [sourceConnectionId]); // Remove fetchSourceConnection from deps to prevent loops
+  }, [sourceConnectionId, sourceConnectionData?.status, sourceConnectionData?.is_authenticated]); // Add auth status to deps
 
   // Update source connection when prop changes
   useEffect(() => {
@@ -295,8 +320,8 @@ const SourceConnectionStateView: React.FC<Props> = ({
       // If a sync is currently running, show "Running now"
       if (state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending') {
         setLastRanDisplay('Running now');
-      } else if (sourceConnection?.latest_sync_job_started_at) {
-        setLastRanDisplay(formatTimeAgo(sourceConnection.latest_sync_job_started_at));
+      } else if (sourceConnection?.last_sync_job_started_at) {
+        setLastRanDisplay(formatTimeAgo(sourceConnection.last_sync_job_started_at));
       } else {
         setLastRanDisplay('Never');
       }
@@ -307,7 +332,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
     const interval = setInterval(updateLastRan, 60000);
 
     return () => clearInterval(interval);
-  }, [sourceConnection?.latest_sync_job_started_at, state?.syncStatus, formatTimeAgo]);
+  }, [sourceConnection?.last_sync_job_started_at, state?.syncStatus, formatTimeAgo]);
 
   // Clear cancelling state when sync status changes to cancelled
   useEffect(() => {
@@ -323,7 +348,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
   // Refetch source connection when sync fails to get latest error details
   useEffect(() => {
     if (state?.syncStatus === 'failed' || state?.error) {
-      // Refetch to get the latest_sync_job_error from backend
+      // Refetch to get the last_sync_job_error from backend
       fetchSourceConnection();
     }
   }, [state?.syncStatus, state?.error, fetchSourceConnection]);
@@ -420,7 +445,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
   // Get sync status display
   const getSyncStatusDisplay = () => {
     if (sourceConnection?.status === 'not_yet_authorized' || !sourceConnection?.is_authenticated) {
-      return { text: 'Not Authorized', color: 'bg-orange-500' };
+      return { text: 'Not Authenticated', color: 'bg-cyan-500' };
     }
     if (state?.syncStatus === 'failed') return { text: 'Failed', color: 'bg-red-500' };
     if (state?.syncStatus === 'completed') return { text: 'Completed', color: 'bg-green-500' };
@@ -432,275 +457,20 @@ const SourceConnectionStateView: React.FC<Props> = ({
   const syncStatus = getSyncStatusDisplay();
   const isNotAuthorized = sourceConnection?.status === 'not_yet_authorized' || !sourceConnection?.is_authenticated;
 
-  // Helper functions for authorization UI
-  const copyToClipboard = () => {
-    if (sourceConnection?.authentication_url) {
-      navigator.clipboard.writeText(sourceConnection.authentication_url);
-      setCopied(true);
-      toast({
-        title: "Copied",
-        description: "Authorization URL copied to clipboard"
-      });
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const handleConnect = () => {
-    if (sourceConnection?.authentication_url) {
-      window.location.href = sourceConnection.authentication_url;
-    }
-  };
-
-  const handleSendEmail = () => {
-    if (sourceConnection?.authentication_url) {
-      const subject = encodeURIComponent(`Authorize ${sourceConnection.name}`);
-      const body = encodeURIComponent(
-        `Hi there,\n\nPlease click the link below to authorize ${sourceConnection.name}:\n\n${sourceConnection.authentication_url}\n\nThis will allow us to sync your data securely.\n\nThanks!`
-      );
-      window.open(`mailto:?subject=${subject}&body=${body}`);
-    }
-  };
-
   return (
     <div className={cn("space-y-4", DESIGN_SYSTEM.typography.sizes.body)}>
-      {/* Show authorization UI if not authorized - matching SourceConfigView.tsx style */}
-      {isNotAuthorized && (
-        <div className={cn(
-          "p-6 rounded-xl border",
-          isDark ? "bg-gray-900/50 border-gray-800" : "bg-white border-gray-200"
-        )}>
-          <div className="space-y-6">
-            {/* Success indicator */}
-            <div className="flex items-center gap-2">
-              <div className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                "bg-orange-500"
-              )} />
-              <div>
-                <p className={cn(
-                  "text-sm font-medium",
-                  isDark ? "text-white" : "text-gray-900"
-                )}>
-                  Connection needs authorization
-                </p>
-                <p className={cn(
-                  "text-xs mt-0.5",
-                  isDark ? "text-gray-500" : "text-gray-500"
-                )}>
-                  Choose how to authorize access to {sourceConnection?.name}
-                </p>
-              </div>
-            </div>
-
-            {/* Two clean options - matching SourceConfigView exactly */}
-            <div className="space-y-3">
-              {/* Option 1: Connect yourself */}
-              <div
-                className={cn(
-                  "p-5 rounded-xl transition-all cursor-pointer",
-                  "border",
-                  connectionMethod === 'self'
-                    ? isDark
-                      ? "border-white/15 bg-white/[0.02]"
-                      : "border-gray-300 bg-white"
-                    : isDark
-                      ? "border-white/10 hover:border-white/15"
-                      : "border-gray-200 hover:border-gray-300"
-                )}
-                onClick={() => setConnectionMethod('self')}
-              >
-                <h3 className={cn(
-                  "text-sm font-semibold mb-1",
-                  isDark ? "text-white" : "text-gray-900"
-                )}>
-                  Connect your own account
-                </h3>
-                <p className={cn(
-                  "text-xs leading-relaxed",
-                  isDark ? "text-gray-400" : "text-gray-600"
-                )}>
-                  Authorize Airweave to access your {sourceConnection?.name} data directly. Quick and simple.
-                </p>
-
-                {connectionMethod === 'self' && (
-                  sourceConnection?.authentication_url ? (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConnect();
-                      }}
-                      className={cn(
-                        "mt-4 px-4 py-2 rounded-lg",
-                        "bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-100",
-                        "text-white dark:text-black",
-                        "font-medium text-xs",
-                        "transition-colors"
-                      )}
-                    >
-                      Authorize with {sourceConnection?.name}
-                    </button>
-                  ) : (
-                    <div className={cn(
-                      "mt-4 p-3 rounded-lg border",
-                      isDark
-                        ? "bg-yellow-900/20 border-yellow-800/50"
-                        : "bg-yellow-50 border-yellow-200"
-                    )}>
-                      <p className={cn(
-                        "text-xs",
-                        isDark ? "text-yellow-400" : "text-yellow-700"
-                      )}>
-                        Authorization URL not available. Please retry or contact support.
-                      </p>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          fetchSourceConnection();
-                        }}
-                        className={cn(
-                          "mt-2 px-3 py-1.5 rounded-lg text-xs font-medium",
-                          "bg-yellow-600 hover:bg-yellow-700 text-white",
-                          "transition-colors inline-flex items-center gap-1"
-                        )}
-                      >
-                        <RefreshCw className="h-3 w-3" />
-                        Retry
-                      </button>
-                    </div>
-                  )
-                )}
-              </div>
-
-              {/* Option 2: Share with someone else */}
-              <div
-                className={cn(
-                  "p-5 rounded-xl transition-all cursor-pointer",
-                  "border",
-                  connectionMethod === 'share'
-                    ? isDark
-                      ? "border-white/15 bg-white/[0.02]"
-                      : "border-gray-300 bg-white"
-                    : isDark
-                      ? "border-white/10 hover:border-white/15"
-                      : "border-gray-200 hover:border-gray-300"
-                )}
-                onClick={() => setConnectionMethod('share')}
-              >
-                <h3 className={cn(
-                  "text-sm font-semibold mb-1",
-                  isDark ? "text-white" : "text-gray-900"
-                )}>
-                  Have someone else connect
-                </h3>
-                <p className={cn(
-                  "text-xs leading-relaxed",
-                  isDark ? "text-gray-400" : "text-gray-600"
-                )}>
-                  Send this secure link to someone with {sourceConnection?.name} access. They'll authorize on your behalf.
-                </p>
-
-                {connectionMethod === 'share' && (
-                  sourceConnection?.authentication_url ? (
-                    <div className="mt-4 space-y-3">
-                      {/* Clean URL display */}
-                      <div className={cn(
-                        "relative",
-                        "px-3 py-2 pr-20 rounded-lg",
-                        "border",
-                        isDark
-                          ? "bg-black/30 border-white/10"
-                          : "bg-gray-50 border-gray-200"
-                      )}>
-                        <code className={cn(
-                          "block text-[11px] font-mono truncate select-all",
-                          isDark ? "text-gray-400" : "text-gray-600"
-                        )}>
-                          {sourceConnection.authentication_url}
-                        </code>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyToClipboard();
-                          }}
-                          className={cn(
-                            "absolute right-2 top-1/2 -translate-y-1/2",
-                            "px-2.5 py-1 rounded-md",
-                            "text-[10px] font-medium",
-                            "transition-colors",
-                            copied
-                              ? isDark
-                                ? "text-green-400"
-                                : "text-green-600"
-                              : isDark
-                                ? "text-gray-500 hover:text-gray-300"
-                                : "text-gray-500 hover:text-gray-700"
-                          )}
-                        >
-                          {copied ? "Copied" : "Copy"}
-                        </button>
-                      </div>
-
-                      {/* Email share link */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSendEmail();
-                        }}
-                        className={cn(
-                          "text-xs font-medium transition-colors",
-                          isDark
-                            ? "text-gray-500 hover:text-gray-300"
-                            : "text-gray-500 hover:text-gray-700"
-                        )}
-                      >
-                        Share via email
-                      </button>
-                    </div>
-                  ) : (
-                    <div className={cn(
-                      "mt-4 p-3 rounded-lg border",
-                      isDark
-                        ? "bg-yellow-900/20 border-yellow-800/50"
-                        : "bg-yellow-50 border-yellow-200"
-                    )}>
-                      <p className={cn(
-                        "text-xs",
-                        isDark ? "text-yellow-400" : "text-yellow-700"
-                      )}>
-                        Authorization URL not available. Please retry or contact support.
-                      </p>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          fetchSourceConnection();
-                        }}
-                        className={cn(
-                          "mt-2 px-3 py-1.5 rounded-lg text-xs font-medium",
-                          "bg-yellow-600 hover:bg-yellow-700 text-white",
-                          "transition-colors inline-flex items-center gap-1"
-                        )}
-                      >
-                        <RefreshCw className="h-3 w-3" />
-                        Retry
-                      </button>
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-
-            {/* Help text */}
-            <p className={cn(
-              "text-[11px]",
-              isDark ? "text-gray-600" : "text-gray-400"
-            )}>
-              This authorization is secure and can be revoked anytime from your {sourceConnection?.name} settings.
-            </p>
-          </div>
-        </div>
+      {/* Show authorization UI if not authorized */}
+      {isNotAuthorized && sourceConnection && (
+        <SourceAuthorizationView
+          sourceName={sourceConnection.name}
+          authenticationUrl={sourceConnection.authentication_url}
+          onRefreshUrl={handleRefreshAuthUrl}
+          isRefreshing={isRefreshingAuth}
+        />
       )}
 
-      {/* Status Dashboard with Settings - All in one row */}
+      {/* Status Dashboard with Settings - Only show when authenticated */}
+      {!isNotAuthorized && (
       <div className="flex items-center justify-between">
         <div className="flex gap-2 flex-wrap items-center">
           {/* Entities Card */}
@@ -768,7 +538,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
                 <p className="text-xs">
                   {state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending'
                     ? 'Sync is currently running'
-                    : formatExactTime(sourceConnection?.latest_sync_job_started_at)}
+                    : formatExactTime(sourceConnection?.last_sync_job_started_at)}
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -822,7 +592,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
               <TooltipContent>
                 <p className="text-xs">
                   {isNotAuthorized
-                    ? "Authorization required before syncing"
+                    ? "Authentication required before syncing"
                     : isSyncing
                       ? isCancelling
                         ? "Cancelling sync..."
@@ -856,16 +626,20 @@ const SourceConnectionStateView: React.FC<Props> = ({
           )}
         </div>
       </div>
+      )}
 
+      {/* Only show sync-related UI when authenticated */}
+      {!isNotAuthorized && (
+        <>
       {/* Show error card if sync failed or there's an error */}
       {((state?.error || state?.syncStatus === 'failed') && state?.syncStatus !== 'cancelled') && (
         <SyncErrorCard
-          error={state?.error || sourceConnection?.latest_sync_job_error || "The last sync failed. Check the logs for more details."}
+          error={state?.error || sourceConnection?.last_sync_job_error || "The last sync failed. Check the logs for more details."}
           isDark={isDark}
         />
       )}
 
-      {/* Always show Entity State List */}
+          {/* Show Entity State List only when authenticated */}
       <EntityStateList
         state={state}
         sourceShortName={sourceConnection?.short_name || ''}
@@ -874,6 +648,8 @@ const SourceConnectionStateView: React.FC<Props> = ({
         isRunning={isRunning}
         isPending={isPending}
       />
+        </>
+      )}
     </div>
   );
 };

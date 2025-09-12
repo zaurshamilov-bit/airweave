@@ -641,30 +641,41 @@ const Collections = () => {
 
         let colorClass = "bg-gray-400";
         let status = "unknown";
+        let isAnimated = false;
 
         // Check for NOT_YET_AUTHORIZED status first
         if (connection.status === 'not_yet_authorized' || !connection.is_authenticated) {
-            colorClass = "bg-orange-500";
-            status = "not authorized";
+            colorClass = "bg-cyan-500";
+            status = "Authentication required";
         } else if (entityState) {
             if (entityState.syncStatus === 'pending') {
-                colorClass = "bg-yellow-500 animate-pulse";
-                status = "pending";
+                colorClass = "bg-yellow-500";
+                status = "Sync pending";
+                isAnimated = true;
             } else if (entityState.syncStatus === 'in_progress') {
-                colorClass = "bg-blue-500 animate-pulse";
-                status = "running";
+                colorClass = "bg-blue-500";
+                status = "Syncing";
+                isAnimated = true;
             } else if (entityState.syncStatus === 'failed') {
                 colorClass = "bg-red-500";
-                status = "error";
+                status = "Sync failed";
             } else if (entityState.syncStatus === 'completed') {
                 colorClass = "bg-green-500";
-                status = "healthy";
+                status = "Synced";
             }
+        } else if (connection.is_authenticated) {
+            // Authenticated but no sync state yet
+            colorClass = "bg-gray-400";
+            status = "Ready to sync";
         }
 
         return (
             <span
-                className={`inline-flex h-2.5 w-2.5 rounded-full ${colorClass} opacity-80`}
+                className={cn(
+                    "inline-flex h-2 w-2 rounded-full opacity-80",
+                    colorClass,
+                    isAnimated && "animate-pulse"
+                )}
                 title={status}
             />
         );
@@ -828,8 +839,8 @@ const Collections = () => {
 
 
 
-                    {/* Add Search component when a connection with syncId is selected */}
-                    {selectedConnection?.sync_id && collection?.readable_id && (
+                    {/* Add Search component when collection has any synced data */}
+                    {collection?.readable_id && (
                         <div className="w-full max-w-[1000px] mt-10">
                             <Search
                                 collectionReadableId={collection.readable_id}

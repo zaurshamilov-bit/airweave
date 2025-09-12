@@ -83,15 +83,15 @@ export class EntityStateMediator {
     // Map backend status directly - no translation needed anymore
 
     // Map backend status directly - no translation needed anymore
-    switch (connection.latest_sync_job_status) {
+    switch (connection.last_sync_job_status) {
       case 'created':
       case 'pending':
         syncStatus = 'pending';
-        currentJobId = connection.latest_sync_job_id;
+        currentJobId = connection.last_sync_job_id;
         break;
       case 'in_progress':
         syncStatus = 'in_progress';
-        currentJobId = connection.latest_sync_job_id;
+        currentJobId = connection.last_sync_job_id;
         break;
       case 'failed':
         syncStatus = 'failed';
@@ -105,9 +105,9 @@ export class EntityStateMediator {
       default:
         // No sync job or unknown status - check if we have a job ID
         // This handles the case where a new sync was just started
-        if (connection.latest_sync_job_id && !connection.latest_sync_job_status) {
+        if (connection.last_sync_job_id && !connection.last_sync_job_status) {
           syncStatus = 'pending';
-          currentJobId = connection.latest_sync_job_id;
+          currentJobId = connection.last_sync_job_id;
         } else {
           syncStatus = 'completed';  // Default to completed if no active sync
         }
@@ -121,7 +121,7 @@ export class EntityStateMediator {
       syncStatus,
       currentJobId,
       lastUpdated: new Date(),
-      error: connection.latest_sync_job_error
+      error: connection.last_sync_job_error
     };
   }
 

@@ -153,10 +153,15 @@ class SourceConnectionCreateBase(BaseModel):
 
         # Auxiliary attributes used in the creation process but not directly in the model
         auxiliary_attrs = {
+            "auth_mode": data.pop("auth_mode", None),  # Auth mode is for routing, not stored
             "auth_fields": data.pop("auth_fields", None),
             "credential_id": data.pop("credential_id", None),
             "cron_schedule": data.pop("cron_schedule", None),
             "sync_immediately": data.pop("sync_immediately", True),
+            "client_id": data.pop("client_id", None),  # OAuth-specific, not stored
+            "client_secret": data.pop("client_secret", None),  # OAuth-specific, not stored
+            "redirect_url": data.pop("redirect_url", None),  # OAuth-specific, not stored
+            "token_inject": data.pop("token_inject", None),  # OAuth-specific, not stored
         }
 
         # Everything else is a core attribute for the SourceConnection model
