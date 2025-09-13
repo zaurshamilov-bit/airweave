@@ -649,7 +649,7 @@ const Collections = () => {
             status = "Authentication required";
         } else if (entityState) {
             if (entityState.syncStatus === 'pending') {
-                colorClass = "bg-yellow-500";
+                colorClass = "bg-blue-500";  // Changed from yellow to blue
                 status = "Sync pending";
                 isAnimated = true;
             } else if (entityState.syncStatus === 'in_progress') {
@@ -852,128 +852,162 @@ const Collections = () => {
 
                     {/* Source Connections Section */}
                     <div className="w-full max-w-[1000px] mt-8">
-                        <div className={cn("flex flex-wrap", DESIGN_SYSTEM.spacing.gaps.standard)}>
-                            {sourceConnections.map((connection) => (
-                                <div
-                                    key={connection.id}
-                                    className={cn(
-                                        DESIGN_SYSTEM.buttons.heights.primary,
-                                        "flex items-center overflow-hidden flex-shrink-0 flex-grow-0 cursor-pointer",
-                                        DESIGN_SYSTEM.spacing.gaps.standard,
-                                        DESIGN_SYSTEM.buttons.padding.secondary,
-                                        "py-2",
-                                        DESIGN_SYSTEM.radius.button,
-                                        DESIGN_SYSTEM.transitions.standard,
-                                        selectedConnection?.id === connection.id
-                                            ? isDark
-                                                ? "border-2 border-primary bg-gray-900"
-                                                : "border-2 border-primary bg-white"
-                                            : isDark
-                                                ? "border border-border bg-gray-900 hover:bg-muted"
-                                                : "border border-border bg-white hover:bg-muted"
-                                    )}
-                                    onClick={() => handleSelectConnection(connection)}
-                                >
-                                    {getConnectionStatusIndicator(connection)}
+                        {sourceConnections.length > 0 && (
+                            <div className={cn("flex flex-wrap", DESIGN_SYSTEM.spacing.gaps.standard)}>
+                                {sourceConnections.map((connection) => (
+                                    <div
+                                        key={connection.id}
+                                        className={cn(
+                                            DESIGN_SYSTEM.buttons.heights.primary,
+                                            "flex items-center overflow-hidden flex-shrink-0 flex-grow-0 cursor-pointer",
+                                            DESIGN_SYSTEM.spacing.gaps.standard,
+                                            DESIGN_SYSTEM.buttons.padding.secondary,
+                                            "py-2",
+                                            DESIGN_SYSTEM.radius.button,
+                                            DESIGN_SYSTEM.transitions.standard,
+                                            selectedConnection?.id === connection.id
+                                                ? isDark
+                                                    ? "border border-blue-500/40 bg-gray-900"
+                                                    : "border border-blue-400/30 bg-white"
+                                                : isDark
+                                                    ? "border border-gray-800/50 bg-gray-900 hover:bg-muted"
+                                                    : "border border-gray-200/60 bg-white hover:bg-muted"
+                                        )}
+                                        onClick={() => handleSelectConnection(connection)}
+                                    >
+                                        {getConnectionStatusIndicator(connection)}
 
-                                    <div className={cn(
-                                        "rounded-md flex items-center justify-center overflow-hidden flex-shrink-0",
-                                    )}>
-                                        <img
-                                            src={getAppIconUrl(connection.short_name, resolvedTheme)}
-                                            alt={connection.name}
-                                            className={cn(DESIGN_SYSTEM.icons.large, "object-contain")}
-                                        />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <span className={cn(
-                                            DESIGN_SYSTEM.typography.sizes.header,
-                                            DESIGN_SYSTEM.typography.weights.medium,
-                                            "truncate block text-foreground"
-                                        )}>{connection.name}</span>
-                                    </div>
-                                </div>
-                            ))}
-
-                            {/* Add Source Button - Now in the source connections row */}
-                            <TooltipProvider delayDuration={100}>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <div
-                                            className={cn(
-                                                DESIGN_SYSTEM.buttons.heights.primary,
-                                                "flex items-center overflow-hidden flex-shrink-0 flex-grow-0 cursor-pointer",
-                                                DESIGN_SYSTEM.spacing.gaps.standard,
-                                                DESIGN_SYSTEM.buttons.padding.secondary,
-                                                "py-2",
-                                                DESIGN_SYSTEM.radius.button,
-                                                DESIGN_SYSTEM.transitions.standard,
-                                                "border-2 border-dashed",
-                                                (!sourceConnectionsAllowed || isCheckingUsage)
-                                                    ? "opacity-50 cursor-not-allowed border-border border"
-                                                    : isDark
-                                                        ? "border-blue-500 bg-blue-500/35 hover:bg-blue-500/20 hover:border-blue-400/80 border"
-                                                        : "border-blue-400 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 border"
-                                            )}
-                                            onClick={(!sourceConnectionsAllowed || isCheckingUsage) ? undefined : handleAddSource}
-                                        >
-                                            <Plus className={cn(
-                                                DESIGN_SYSTEM.icons.large,
-                                                (!sourceConnectionsAllowed || isCheckingUsage)
-                                                    ? "text-black"
-                                                    : isDark ? "text-white" : "text-black"
-                                            )} strokeWidth={1.5} />
+                                        <div className={cn(
+                                            "rounded-md flex items-center justify-center overflow-hidden flex-shrink-0",
+                                        )}>
+                                            <img
+                                                src={getAppIconUrl(connection.short_name, resolvedTheme)}
+                                                alt={connection.name}
+                                                className={cn(DESIGN_SYSTEM.icons.large, "object-contain")}
+                                            />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
                                             <span className={cn(
                                                 DESIGN_SYSTEM.typography.sizes.header,
                                                 DESIGN_SYSTEM.typography.weights.medium,
-                                                "text-foreground"
-                                            )}>Add Source</span>
+                                                "truncate block text-foreground"
+                                            )}>{connection.name}</span>
                                         </div>
-                                    </TooltipTrigger>
-                                    {!sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'usage_limit_exceeded' && (
-                                        <TooltipContent className="max-w-xs">
-                                            <p className={DESIGN_SYSTEM.typography.sizes.body}>
-                                                Source connection limit reached.{' '}
-                                                <a
-                                                    href="/organization/settings?tab=billing"
-                                                    className="underline"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                >
-                                                    Upgrade your plan
-                                                </a>
-                                                {' '}for more connections.
-                                            </p>
-                                        </TooltipContent>
-                                    )}
-                                </Tooltip>
-                            </TooltipProvider>
-                        </div>
+                                    </div>
+                                ))}
+
+                                {/* Add Source Button - Only show when there are existing connections */}
+                                <TooltipProvider delayDuration={100}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div
+                                                className={cn(
+                                                    DESIGN_SYSTEM.buttons.heights.primary,
+                                                    "flex items-center overflow-hidden flex-shrink-0 flex-grow-0 cursor-pointer",
+                                                    DESIGN_SYSTEM.spacing.gaps.standard,
+                                                    DESIGN_SYSTEM.buttons.padding.secondary,
+                                                    "py-2",
+                                                    DESIGN_SYSTEM.radius.button,
+                                                    DESIGN_SYSTEM.transitions.standard,
+                                                    "border border-dashed",
+                                                    (!sourceConnectionsAllowed || isCheckingUsage)
+                                                        ? "opacity-50 cursor-not-allowed border-gray-300 dark:border-gray-700"
+                                                        : isDark
+                                                            ? "border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/15 hover:border-blue-400/40"
+                                                            : "border-blue-400/40 bg-blue-50/30 hover:bg-blue-50/70 hover:border-blue-400/50"
+                                                )}
+                                                onClick={(!sourceConnectionsAllowed || isCheckingUsage) ? undefined : handleAddSource}
+                                            >
+                                                <Plus className={cn(
+                                                    DESIGN_SYSTEM.icons.large,
+                                                    (!sourceConnectionsAllowed || isCheckingUsage)
+                                                        ? "text-gray-400"
+                                                        : isDark ? "text-blue-400" : "text-blue-500"
+                                                )} strokeWidth={1.5} />
+                                                <span className={cn(
+                                                    DESIGN_SYSTEM.typography.sizes.header,
+                                                    DESIGN_SYSTEM.typography.weights.medium,
+                                                    "text-foreground"
+                                                )}>Add Source</span>
+                                            </div>
+                                        </TooltipTrigger>
+                                        {!sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'usage_limit_exceeded' && (
+                                            <TooltipContent className="max-w-xs">
+                                                <p className={DESIGN_SYSTEM.typography.sizes.body}>
+                                                    Source connection limit reached.{' '}
+                                                    <a
+                                                        href="/organization/settings?tab=billing"
+                                                        className="underline"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        Upgrade your plan
+                                                    </a>
+                                                    {' '}for more connections.
+                                                </p>
+                                            </TooltipContent>
+                                        )}
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </div>
+                        )}
 
                         {sourceConnections.length === 0 && (
                             <div className={cn(
-                                "text-center py-6 rounded-md border",
-                                isDark ? "border-border bg-muted/20 text-muted-foreground" : "border-border bg-background text-muted-foreground"
+                                "flex flex-col items-center justify-center py-12 rounded-lg border-2 border-dashed",
+                                isDark
+                                    ? "border-gray-700 bg-gray-900/30"
+                                    : "border-gray-200 bg-gray-50/50"
                             )}>
-                                <p className="mb-2">No source connections found.</p>
+                                <div className={cn(
+                                    "w-12 h-12 rounded-full flex items-center justify-center mb-4",
+                                    isDark
+                                        ? "bg-gray-800 border border-gray-700"
+                                        : "bg-white border border-gray-200"
+                                )}>
+                                    <Plug className={cn(
+                                        "h-6 w-6",
+                                        isDark ? "text-gray-400" : "text-gray-500"
+                                    )} strokeWidth={1.5} />
+                                </div>
+
+                                <h3 className={cn(
+                                    "text-base font-medium mb-1",
+                                    isDark ? "text-gray-200" : "text-gray-900"
+                                )}>
+                                    No sources connected
+                                </h3>
+                                <p className={cn(
+                                    "text-sm mb-6 max-w-sm text-center",
+                                    isDark ? "text-gray-400" : "text-gray-600"
+                                )}>
+                                    Connect your first data source to start syncing and searching your data
+                                </p>
+
                                 <TooltipProvider delayDuration={100}>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <span tabIndex={0}>
-                                                <Button
-                                                    variant="outline"
+                                                <button
+                                                    type="button"
                                                     className={cn(
-                                                        "mt-2",
-                                                        DESIGN_SYSTEM.buttons.heights.secondary,
-                                                        DESIGN_SYSTEM.buttons.padding.secondary,
-                                                        isDark ? "border-border-border hover:bg-muted" : "border-border hover:bg-muted",
-                                                        (!sourceConnectionsAllowed || isCheckingUsage) && "opacity-50 cursor-not-allowed"
+                                                        "inline-flex items-center justify-center",
+                                                        "h-9 px-4 py-2",
+                                                        "text-sm font-medium",
+                                                        "rounded-md",
+                                                        "transition-all duration-200",
+                                                        "border",
+                                                        (!sourceConnectionsAllowed || isCheckingUsage)
+                                                            ? "opacity-50 cursor-not-allowed border-gray-300 bg-gray-100 text-gray-400"
+                                                            : isDark
+                                                                ? "border-blue-500 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 hover:border-blue-400"
+                                                                : "border-blue-500 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:border-blue-600"
                                                     )}
-                                                    onClick={handleAddSource}
+                                                    onClick={(!sourceConnectionsAllowed || isCheckingUsage) ? undefined : handleAddSource}
                                                     disabled={!sourceConnectionsAllowed || isCheckingUsage}
                                                 >
-                                                    <Plus className={cn(DESIGN_SYSTEM.icons.button, "mr-2")} />
-                                                    Add a source connection
-                                                </Button>
+                                                    <Plus className="h-4 w-4 mr-1.5" strokeWidth={2} />
+                                                    Connect a source
+                                                </button>
                                             </span>
                                         </TooltipTrigger>
                                         {!sourceConnectionsAllowed && sourceConnectionCheckDetails?.reason === 'usage_limit_exceeded' && (

@@ -316,10 +316,8 @@ const SourceConnectionStateView: React.FC<Props> = ({
   // Update last ran display
   useEffect(() => {
     const updateLastRan = () => {
-      // If a sync is currently running, show "Running now"
-      if (state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending') {
-        setLastRanDisplay('Running now');
-      } else if (sourceConnection?.last_sync_job_started_at) {
+      // Don't show "Running now" - let the status badge handle that
+      if (sourceConnection?.last_sync_job_started_at) {
         setLastRanDisplay(formatTimeAgo(sourceConnection.last_sync_job_started_at));
       } else {
         setLastRanDisplay('Never');
@@ -331,7 +329,7 @@ const SourceConnectionStateView: React.FC<Props> = ({
     const interval = setInterval(updateLastRan, 60000);
 
     return () => clearInterval(interval);
-  }, [sourceConnection?.last_sync_job_started_at, state?.syncStatus, formatTimeAgo]);
+  }, [sourceConnection?.last_sync_job_started_at, formatTimeAgo]);
 
   // Clear cancelling state when sync status changes to cancelled
   useEffect(() => {
@@ -444,13 +442,13 @@ const SourceConnectionStateView: React.FC<Props> = ({
   // Get sync status display
   const getSyncStatusDisplay = () => {
     if (sourceConnection?.status === 'not_yet_authorized' || !sourceConnection?.is_authenticated) {
-      return { text: 'Not Authenticated', color: 'bg-cyan-500' };
+      return { text: 'Not Authenticated', color: 'bg-cyan-500', icon: null };
     }
-    if (state?.syncStatus === 'failed') return { text: 'Failed', color: 'bg-red-500' };
-    if (state?.syncStatus === 'completed') return { text: 'Completed', color: 'bg-green-500' };
-    if (isRunning) return { text: 'Running', color: 'bg-blue-500 animate-pulse' };
-    if (isPending) return { text: 'Pending', color: 'bg-yellow-500 animate-pulse' };
-    return { text: 'Ready', color: 'bg-gray-400' };
+    if (state?.syncStatus === 'failed') return { text: 'Failed', color: 'bg-red-500', icon: null };
+    if (state?.syncStatus === 'completed') return { text: 'Completed', color: 'bg-green-500', icon: null };
+    if (isRunning) return { text: 'Syncing', color: 'bg-blue-500 animate-pulse', icon: 'loader' };
+    if (isPending) return { text: 'Pending', color: 'bg-yellow-500 animate-pulse', icon: 'loader' };
+    return { text: 'Ready', color: 'bg-gray-400', icon: null };
   };
 
   const syncStatus = getSyncStatusDisplay();
@@ -480,11 +478,28 @@ const SourceConnectionStateView: React.FC<Props> = ({
           </div>
 
           {/* Status Card */}
-          <div className={cn("h-8 px-3 py-1.5 border border-border rounded-md shadow-sm flex items-center gap-2 min-w-[90px]", isDark ? "bg-gray-900" : "bg-white")}>
+          <div className={cn(
+            "h-8 px-3 py-1.5 rounded-md shadow-sm flex items-center gap-2 min-w-[90px]",
+            // Highlight when sync is running
+            (isRunning || isPending)
+              ? isDark
+                ? "bg-blue-900/30 border border-blue-700/50"
+                : "bg-blue-50 border border-blue-200"
+              : isDark
+                ? "bg-gray-900 border border-border"
+                : "bg-white border border-border"
+          )}>
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">STATUS</span>
             <div className="flex items-center gap-1">
-              <span className={`inline-flex h-2 w-2 rounded-full ${syncStatus.color}`} />
-              <span className="text-xs font-medium text-foreground capitalize">{syncStatus.text}</span>
+              {syncStatus.icon === 'loader' ? (
+                <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+              ) : (
+                <span className={`inline-flex h-2 w-2 rounded-full ${syncStatus.color}`} />
+              )}
+              <span className={cn(
+                "text-xs font-medium capitalize",
+                (isRunning || isPending) ? "text-blue-600 dark:text-blue-400" : "text-foreground"
+              )}>{syncStatus.text}</span>
             </div>
           </div>
 
@@ -501,48 +516,32 @@ const SourceConnectionStateView: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Last Sync Card */}
-          <TooltipProvider delayDuration={100}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className={cn(
-                  "h-8 px-3 py-1.5 rounded-md shadow-sm flex items-center gap-2 min-w-[100px] cursor-help",
-                  // Highlight when sync is running
-                  (state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending')
-                    ? isDark
-                      ? "bg-blue-900/30 border border-blue-700/50"
-                      : "bg-blue-50 border border-blue-200"
-                    : isDark
-                      ? "bg-gray-900 border border-border"
-                      : "bg-white border border-border"
-                )}>
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">LAST SYNC</span>
-                  <div className="flex items-center gap-1">
-                    {(state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending') ? (
-                      <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                    ) : (
+          {/* Last Sync Card - Only show when not actively syncing */}
+          {!(state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending') && (
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className={cn(
+                    "h-8 px-3 py-1.5 rounded-md shadow-sm flex items-center gap-2 min-w-[100px] cursor-help",
+                    isDark ? "bg-gray-900 border border-border" : "bg-white border border-border"
+                  )}>
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">LAST SYNC</span>
+                    <div className="flex items-center gap-1">
                       <History className="h-3 w-3 text-muted-foreground" />
-                    )}
-                    <span className={cn(
-                      "text-xs font-medium",
-                      (state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending')
-                        ? "text-blue-600 dark:text-blue-400"
-                        : "text-foreground"
-                    )}>
-                      {lastRanDisplay}
-                    </span>
+                      <span className="text-xs font-medium text-foreground">
+                        {lastRanDisplay}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">
-                  {state?.syncStatus === 'in_progress' || state?.syncStatus === 'pending'
-                    ? 'Sync is currently running'
-                    : formatExactTime(sourceConnection?.last_sync_job_started_at)}
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">
+                    {formatExactTime(sourceConnection?.last_sync_job_started_at)}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
 
         {/* Settings and Action Buttons */}

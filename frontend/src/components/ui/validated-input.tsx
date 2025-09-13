@@ -134,7 +134,7 @@ export const ValidatedInput: React.FC<ValidatedInputProps> = ({
         onBlur={handleBlur}
         onFocus={handleFocus}
         className={cn(
-          'w-full px-4 py-2.5 rounded-lg text-sm',
+          'w-full px-4 py-2 rounded-lg text-sm',
           'border transition-colors duration-150',
           'focus:outline-none',
           getBorderClass(),

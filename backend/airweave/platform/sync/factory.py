@@ -644,7 +644,6 @@ class SyncFactory:
                 ctx,
                 connection_id,
                 decrypted_credential,
-                None,
             )
             # Just use the access token
             return oauth2_response.access_token

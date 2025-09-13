@@ -737,23 +737,23 @@ export const EntityStateList: React.FC<EntityStateListProps> = ({
         isSyncing ? "border-transparent" : isDark ? "border-gray-800" : "border-gray-200"
       )}
         style={{
-          // Custom animated border using CSS gradient
+          // Custom animated border using CSS gradient - blue for both running and pending
           ...(isSyncing && {
             background: isDark
               ? `linear-gradient(${isDark ? '#1a1f2e' : '#ffffff'}, ${isDark ? '#1a1f2e' : '#ffffff'}) padding-box,
                linear-gradient(90deg,
-                 ${isRunning ? '#3b82f6' : '#eab308'} 0%,
-                 ${isRunning ? '#60a5fa' : '#fbbf24'} 25%,
-                 ${isRunning ? '#3b82f6' : '#eab308'} 50%,
-                 ${isRunning ? '#60a5fa' : '#fbbf24'} 75%,
-                 ${isRunning ? '#3b82f6' : '#eab308'} 100%) border-box`
+                 #3b82f6 0%,
+                 #60a5fa 25%,
+                 #3b82f6 50%,
+                 #60a5fa 75%,
+                 #3b82f6 100%) border-box`
               : `linear-gradient(white, white) padding-box,
                linear-gradient(90deg,
-                 ${isRunning ? '#3b82f6' : '#eab308'} 0%,
-                 ${isRunning ? '#60a5fa' : '#fbbf24'} 25%,
-                 ${isRunning ? '#3b82f6' : '#eab308'} 50%,
-                 ${isRunning ? '#60a5fa' : '#fbbf24'} 75%,
-                 ${isRunning ? '#3b82f6' : '#eab308'} 100%) border-box`,
+                 #3b82f6 0%,
+                 #60a5fa 25%,
+                 #3b82f6 50%,
+                 #60a5fa 75%,
+                 #3b82f6 100%) border-box`,
             border: '1px solid transparent',
             backgroundSize: isSyncing ? '200% 100%, 200% 100%' : '100% 100%, 100% 100%',
             backgroundPosition: isSyncing ? '0 0, 0 0' : '0 0, 0 0',

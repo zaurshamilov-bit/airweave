@@ -190,6 +190,120 @@ export const clientSecretValidation: FieldValidation<string> = {
 };
 
 /**
+ * Auth provider config ID validation
+ * Requirements: Non-empty, alphanumeric with underscores
+ */
+export const authConfigIdValidation: FieldValidation<string> = {
+  field: 'authConfigId',
+  debounceMs: 500,
+  showOn: 'change',
+  validate: (value: string): ValidationResult => {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return { isValid: true, severity: 'info' };
+    }
+
+    // Check for valid characters (alphanumeric, underscore, hyphen)
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+      return {
+        isValid: false,
+        hint: 'Only letters, numbers, underscores, and hyphens allowed',
+        severity: 'warning'
+      };
+    }
+
+    return { isValid: true, severity: 'info' };
+  }
+};
+
+/**
+ * Account ID validation
+ * Requirements: Non-empty, alphanumeric with underscores
+ */
+export const accountIdValidation: FieldValidation<string> = {
+  field: 'accountId',
+  debounceMs: 500,
+  showOn: 'change',
+  validate: (value: string): ValidationResult => {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return { isValid: true, severity: 'info' };
+    }
+
+    // Check for valid characters (alphanumeric, underscore, hyphen)
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+      return {
+        isValid: false,
+        hint: 'Only letters, numbers, underscores, and hyphens allowed',
+        severity: 'warning'
+      };
+    }
+
+    return { isValid: true, severity: 'info' };
+  }
+};
+
+/**
+ * Workflow ID validation (for Pipedream)
+ * Requirements: Non-empty, starts with p_
+ */
+export const workflowIdValidation: FieldValidation<string> = {
+  field: 'workflowId',
+  debounceMs: 500,
+  showOn: 'change',
+  validate: (value: string): ValidationResult => {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      return { isValid: true, severity: 'info' };
+    }
+
+    // Check if starts with p_
+    if (!trimmed.startsWith('p_')) {
+      return {
+        isValid: false,
+        hint: 'Workflow ID should start with "p_"',
+        severity: 'info'
+      };
+    }
+
+    return { isValid: true, severity: 'info' };
+  }
+};
+
+/**
+ * Redirect URL validation
+ */
+export const redirectUrlValidation: FieldValidation<string> = {
+  field: 'redirectUrl',
+  debounceMs: 500,
+  showOn: 'change',
+  validate: (value: string): ValidationResult => {
+    if (!value) return { isValid: true, severity: 'info' };
+
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        return {
+          isValid: false,
+          hint: 'Must start with http:// or https://',
+          severity: 'info'
+        };
+      }
+      return { isValid: true, severity: 'info' };
+    } catch {
+      return {
+        isValid: false,
+        hint: 'Invalid URL format',
+        severity: 'info'
+      };
+    }
+  }
+};
+
+/**
  * Get validation for a specific auth field type
  */
 export function getAuthFieldValidation(fieldType: string): FieldValidation<string> | null {
@@ -212,6 +326,12 @@ export function getAuthFieldValidation(fieldType: string): FieldValidation<strin
       return clientIdValidation;
     case 'client_secret':
       return clientSecretValidation;
+    case 'auth_config_id':
+      return authConfigIdValidation;
+    case 'account_id':
+      return accountIdValidation;
+    case 'workflow_id':
+      return workflowIdValidation;
     default:
       return null;
   }

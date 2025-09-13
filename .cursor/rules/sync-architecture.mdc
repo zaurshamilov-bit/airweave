@@ -298,6 +298,7 @@ Every operation increments counter
 - Tokens never logged
 - Automatic refresh before expiry
 - Secure storage in database
+- Custom OAuth2 Token support
 
 ### Data Isolation
 - Organization-based filtering

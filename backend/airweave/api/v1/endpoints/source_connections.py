@@ -1,11 +1,12 @@
 """API endpoints for managing source connections."""
 
 import urllib.parse
+import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import BackgroundTasks, Body, Depends, HTTPException, Path, Query
+from fastapi import BackgroundTasks, Body, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,7 @@ from airweave.api.context import ApiContext
 from airweave.api.examples import (
     create_job_list_response,
     create_single_job_response,
+    create_source_connection_create_examples,
     create_source_connection_list_response,
 )
 from airweave.api.router import TrailingSlashRouter
@@ -41,21 +43,81 @@ SUPPORTED_CONTINUOUS_SOURCES = [
 ]
 
 
-@router.get("/callback")
+@router.get(
+    "/callback",
+    summary="OAuth Callback Handler",
+    description="Handles OAuth callbacks from external providers",
+    tags=["OAuth"],
+    response_class=RedirectResponse,
+)
 async def complete_source_connection_callback(
     *,
+    request: Request,
     db: AsyncSession = Depends(deps.get_db),
-    code: str = Query(..., description="Authorization code returned by provider"),
-    state: str = Query(..., description="State value returned by provider"),
-    ctx: ApiContext = Depends(deps.get_context),
-    guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
+    code: str = Query(..., description="Authorization code returned by OAuth provider"),
+    state: str = Query(..., description="State token for CSRF protection and session tracking"),
     background_tasks: BackgroundTasks,
 ):
-    """OAuth2 callback endpoint (no short_name).
+    """OAuth2 callback endpoint for completing source connection authentication.
 
-    Completes the connection, kicks off the initial sync if requested,
-    and redirects to the final app URL.
+    This endpoint is called by external OAuth providers (Google, Slack, etc.) after
+    the user grants permission. It:
+    1. Validates the state parameter to retrieve the connection session
+    2. Exchanges the authorization code for access tokens
+    3. Creates the source connection with the obtained credentials
+    4. Optionally triggers an initial sync
+    5. Redirects back to the application with the connection status
+
+    Note: This endpoint doesn't require authentication as it's called by external
+    providers. Organization context is securely extracted from the state parameter.
     """
+    from sqlalchemy import select
+
+    from airweave.core.logging import logger
+    from airweave.models import ConnectionInitSession
+
+    # Get request ID from middleware
+    request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
+
+    # Look up the init session by state (without organization context)
+    # We need to bypass the normal CRUD method that requires ctx
+    q = select(ConnectionInitSession).where(ConnectionInitSession.state == state)
+    res = await db.execute(q)
+    session_obj = res.scalar_one_or_none()
+
+    if not session_obj:
+        raise HTTPException(status_code=404, detail="Invalid or expired OAuth state")
+
+    # Get the organization
+    organization = await crud.organization.get(
+        db, id=session_obj.organization_id, skip_access_validation=True
+    )
+    if not organization:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    organization_schema = schemas.Organization.model_validate(organization, from_attributes=True)
+
+    # Create minimal context for OAuth callback
+    base_logger = logger.with_context(
+        request_id=request_id,
+        organization_id=str(organization_schema.id),
+        organization_name=organization_schema.name,
+        auth_method="oauth_callback",
+        context_base="api",
+    )
+
+    ctx = ApiContext(
+        request_id=request_id,
+        organization=organization_schema,
+        user=None,  # No user context for OAuth callbacks
+        auth_method="oauth_callback",
+        auth_metadata={"oauth_state": state},
+        logger=base_logger,
+    )
+
+    # Create guard rail service with the OAuth context
+    guard_rail = await deps.get_guard_rail_service(ctx)
+
     (
         source_connection,
         final_redirect_url,
@@ -185,7 +247,10 @@ async def get(
 async def create(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    source_connection_in: schemas.SourceConnectionCreate = Body(...),
+    source_connection_in: schemas.SourceConnectionCreate = Body(
+        ...,
+        examples=create_source_connection_create_examples(),
+    ),
     ctx: ApiContext = Depends(deps.get_context),
     guard_rail: GuardRailService = Depends(deps.get_guard_rail_service),
     background_tasks: BackgroundTasks,
@@ -1282,15 +1347,31 @@ async def make_source_connection_continuous_BETA(
     return response
 
 
-@router.get("/authorize/{code}")
+@router.get(
+    "/authorize/{code}",
+    summary="OAuth Authorization Redirect",
+    description="Redirects to OAuth provider for user consent",
+    tags=["OAuth"],
+    response_class=RedirectResponse,
+)
 async def resolve_authorize_code(
     *,
     db: AsyncSession = Depends(deps.get_db),
-    code: str = Path(..., description="8-character pre-consent authorize code"),
+    code: str = Path(..., description="8-character temporary authorization code"),
 ):
-    """Resolve the pre-consent authorize code into the PROVIDER OAuth URL.
+    """Resolve the temporary authorization code and redirect to OAuth provider.
 
-    We keep it reusable until TTL expiry to allow user retries.
+    This endpoint acts as a proxy to the OAuth provider's authorization URL.
+    It's used to:
+    1. Hide the actual OAuth URL from the client
+    2. Provide a shorter, cleaner URL for the authorization flow
+    3. Allow for URL expiry and one-time use semantics
+
+    The code is temporary (TTL-based) and can be reused until expiry to allow
+    for user retries if needed.
+
+    Note: This endpoint doesn't require authentication as it's accessed via
+    a temporary code that acts as a secure proxy to the OAuth provider.
     """
     rs = await redirect_session.get_by_code(db, code)
     if not rs:

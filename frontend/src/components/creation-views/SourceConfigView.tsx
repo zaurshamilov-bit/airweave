@@ -11,7 +11,7 @@ import { AuthMethodSelector } from './AuthMethodSelector';
 import { AuthProviderSelector } from './AuthProviderSelector';
 import { useAuthProvidersStore } from '@/lib/stores/authProviders';
 import { ValidatedInput } from '@/components/ui/validated-input';
-import { sourceConnectionNameValidation, getAuthFieldValidation, clientIdValidation, clientSecretValidation } from '@/lib/validation/rules';
+import { sourceConnectionNameValidation, getAuthFieldValidation, clientIdValidation, clientSecretValidation, redirectUrlValidation } from '@/lib/validation/rules';
 
 interface SourceConfigViewProps {
   humanReadableId: string;
@@ -84,6 +84,8 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
   );
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+  const [customRedirectUrl, setCustomRedirectUrl] = useState('');
+  const [showCustomRedirect, setShowCustomRedirect] = useState(false);
 
   // Update store when connection name changes
   useEffect(() => {
@@ -228,15 +230,49 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     fetchSourceDetails();
   }, [selectedSource]); // Don't re-run when authProviderConnections changes to preserve user selection
 
+  // Helper function to get required config fields for a provider
+  const getRequiredProviderConfigFields = (providerShortName: string) => {
+    switch (providerShortName) {
+      case 'composio':
+        return ['auth_config_id', 'account_id'];
+      case 'pipedream':
+        return ['workflow_id', 'account_id'];
+      default:
+        return [];
+    }
+  };
+
   // Check if form is valid for submission
   const isFormValid = () => {
     // Must have a valid connection name (4-42 characters)
     const trimmedName = connectionName.trim();
     if (!trimmedName || trimmedName.length < 4 || trimmedName.length > 42) return false;
 
+    // Check if custom redirect URL is valid (if provided)
+    if (authMode === 'oauth2' && customRedirectUrl) {
+      const validation = redirectUrlValidation.validate(customRedirectUrl);
+      if (!validation.isValid) return false;
+    }
+
     // Check auth mode specific requirements
     if (authMode === 'external_provider') {
-      return !!selectedAuthProvider;
+      // Must have a provider selected
+      if (!selectedAuthProvider) return false;
+
+      // Find the selected provider to check its requirements
+      const selectedProviderConnection = authProviderConnections.find(
+        p => p.readable_id === selectedAuthProvider
+      );
+
+      if (selectedProviderConnection) {
+        // Check if all required config fields are filled
+        const requiredFields = getRequiredProviderConfigFields(selectedProviderConnection.short_name);
+        if (requiredFields.length > 0) {
+          return requiredFields.every(fieldName => authProviderConfig[fieldName]?.trim());
+        }
+      }
+
+      return true;
     } else if (authMode === 'direct_auth') {
       // Need auth fields filled
       if (sourceDetails?.auth_fields?.fields) {
@@ -320,7 +356,9 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
           payload.client_id = clientId;
           payload.client_secret = clientSecret;
         }
-        payload.redirect_url = `${window.location.origin}?oauth_return=true`;
+        // Use custom redirect URL if provided, otherwise use default
+        const redirectUrl = customRedirectUrl.trim() || `${window.location.origin}?oauth_return=true`;
+        payload.redirect_url = redirectUrl;
       }
 
       const response = await apiClient.post('/source-connections', payload);
@@ -376,14 +414,15 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
   return (
     <div className="h-full flex flex-col">
-      <div className="px-8 py-10 flex-1 overflow-auto">
-        <div className="space-y-8">
+      <div className="px-8 py-8 flex-1 overflow-auto">
+        <div className="min-h-full flex flex-col">
+          <div className="space-y-6 flex-1">
           {/* Header */}
           <div>
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
               Create Source Connection
             </h2>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">
               Connect your {sourceName || 'data source'} to sync and search its content
             </p>
           </div>
@@ -398,9 +437,9 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
           ) : (
             <>
               {/* Form fields - Clean minimal design */}
-              <div className="space-y-6">
+              <div className="space-y-5">
                 <div>
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
                     Name
                   </label>
                   <ValidatedInput
@@ -442,18 +481,18 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
                 {/* Config-based auth fields (like GitHub) */}
                 {authMode === 'direct_auth' && isConfigAuth() && sourceDetails?.auth_fields?.fields && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Configuration
                     </label>
                     {sourceDetails.auth_fields.fields.map((field) => (
                       <div key={field.name}>
-                        <label className="block text-sm font-medium mb-1.5">
+                        <label className="block text-sm font-medium mb-1">
                           {field.title || field.name}
                           {field.required && <span className="text-red-500 ml-1">*</span>}
                         </label>
                         {field.description && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
                             {field.description}
                           </p>
                         )}
@@ -477,13 +516,13 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
                 {/* Direct auth fields (API key, basic auth) */}
                 {authMode === 'direct_auth' && !isConfigAuth() && sourceDetails?.auth_fields?.fields && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Authentication
                     </label>
                     {sourceDetails.auth_fields.fields.map((field) => (
                       <div key={field.name}>
-                        <label className="block text-sm font-medium mb-1.5">
+                        <label className="block text-sm font-medium mb-1">
                           {field.title || field.name}
                           {field.required && <span className="text-red-500 ml-1">*</span>}
                         </label>
@@ -507,17 +546,17 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
                 {/* Config fields (optional additional configuration) */}
                 {sourceDetails?.config_fields?.fields && sourceDetails.config_fields.fields.length > 0 && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Additional Configuration (optional)
                     </label>
                     {sourceDetails.config_fields.fields.map((field) => (
                       <div key={field.name}>
-                        <label className="block text-sm font-medium mb-1.5">
+                        <label className="block text-sm font-medium mb-1">
                           {field.title || field.name}
                         </label>
                         {field.description && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1.5">
                             {field.description}
                           </p>
                         )}
@@ -527,7 +566,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                           value={configData[field.name] || ''}
                           onChange={(e) => setConfigData({ ...configData, [field.name]: e.target.value })}
                           className={cn(
-                            "w-full px-4 py-2.5 rounded-lg text-sm",
+                            "w-full px-4 py-2 rounded-lg text-sm",
                             "border bg-transparent",
                             "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
                             isDark
@@ -626,7 +665,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                           </div>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-2.5">
                           <ValidatedInput
                             type="text"
                             placeholder="Client ID"
@@ -734,7 +773,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                         </div>
 
                         {useOwnCredentials && (
-                          <div className="mt-4 space-y-3 pl-13">
+                          <div className="mt-3 space-y-2.5 pl-13">
                             <ValidatedInput
                               type="text"
                               placeholder="Client ID"
@@ -769,6 +808,108 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                 )}
               </div>
             </>
+          )}
+          </div>
+
+          {/* OAuth Redirect URL - At the absolute bottom, right above button border */}
+          {authMode === 'oauth2' && !connectionUrl && (
+            <div className="mt-auto pt-8">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <label className={cn(
+                      "text-xs uppercase tracking-wider",
+                      isDark ? "text-gray-500" : "text-gray-400"
+                    )}>
+                      Redirect URL
+                    </label>
+                    <div className="relative group">
+                      <Info className={cn(
+                        "h-3 w-3 cursor-help transition-colors",
+                        isDark
+                          ? "text-gray-600 group-hover:text-gray-400"
+                          : "text-gray-400 group-hover:text-gray-600"
+                      )} />
+                      {/* Hover tooltip */}
+                      <div className={cn(
+                        "absolute left-0 bottom-5 z-50 w-64 p-3 rounded-lg shadow-xl",
+                        "opacity-0 invisible group-hover:opacity-100 group-hover:visible",
+                        "transition-all duration-200 transform group-hover:-translate-y-1",
+                        isDark
+                          ? "bg-gray-800 border border-gray-700"
+                          : "bg-white border border-gray-200"
+                      )}>
+                        <p className={cn(
+                          "text-xs leading-relaxed",
+                          isDark ? "text-gray-400" : "text-gray-600"
+                        )}>
+                          The URL where users will be redirected after authorizing the connection.
+                          By default, this is set to the current application URL.
+                          Change this if you have a specific redirect flow requirement.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  {!showCustomRedirect && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomRedirect(true)}
+                      className={cn(
+                        "text-xs hover:underline transition-colors",
+                        isDark
+                          ? "text-gray-600 hover:text-gray-400"
+                          : "text-gray-500 hover:text-gray-700"
+                      )}
+                    >
+                      Customize
+                    </button>
+                  )}
+                </div>
+
+                {showCustomRedirect ? (
+                  <div className="space-y-2">
+                    <ValidatedInput
+                      type="text"
+                      value={customRedirectUrl}
+                      onChange={setCustomRedirectUrl}
+                      placeholder={`${window.location.origin}?oauth_return=true`}
+                      validation={redirectUrlValidation}
+                      className={cn(
+                        "text-xs",
+                        "focus:border-gray-400 dark:focus:border-gray-600",
+                        isDark
+                          ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                          : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                      )}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCustomRedirect(false);
+                        setCustomRedirectUrl('');
+                      }}
+                      className={cn(
+                        "text-xs hover:underline transition-colors",
+                        isDark
+                          ? "text-gray-600 hover:text-gray-400"
+                          : "text-gray-500 hover:text-gray-700"
+                      )}
+                    >
+                      Use default
+                    </button>
+                  </div>
+                ) : (
+                  <div className={cn(
+                    "px-3 py-2 rounded-lg text-xs font-mono",
+                    isDark
+                      ? "bg-gray-900/50 text-gray-500 border border-gray-800"
+                      : "bg-gray-50 text-gray-400 border border-gray-100"
+                  )}>
+                    {`${window.location.origin}?oauth_return=true`}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>

@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
 import { Check } from 'lucide-react';
 import { getAuthProviderIconUrl } from '@/lib/utils/icons';
+import { ValidatedInput } from '@/components/ui/validated-input';
+import { authConfigIdValidation, accountIdValidation, workflowIdValidation } from '@/lib/validation/rules';
 
 interface AuthProviderSelectorProps {
   selectedProvider?: string;
@@ -48,13 +50,13 @@ export const AuthProviderSelector: React.FC<AuthProviderSelectorProps> = ({
     switch (providerShortName) {
       case 'composio':
         return [
-          { name: 'auth_config_id', label: 'Auth Config ID', placeholder: 'config_xyz789', required: true },
-          { name: 'account_id', label: 'Account ID', placeholder: 'account_abc123', required: true },
+          { name: 'auth_config_id', label: 'Auth Config ID', placeholder: 'config_xyz789', required: true, validation: authConfigIdValidation },
+          { name: 'account_id', label: 'Account ID', placeholder: 'account_abc123', required: true, validation: accountIdValidation },
         ];
       case 'pipedream':
         return [
-          { name: 'workflow_id', label: 'Workflow ID', placeholder: 'p_abc123', required: true },
-          { name: 'account_id', label: 'Account ID', placeholder: 'account_123', required: true },
+          { name: 'workflow_id', label: 'Workflow ID', placeholder: 'p_abc123', required: true, validation: workflowIdValidation },
+          { name: 'account_id', label: 'Account ID', placeholder: 'account_123', required: true, validation: accountIdValidation },
         ];
       default:
         return [];
@@ -100,7 +102,7 @@ export const AuthProviderSelector: React.FC<AuthProviderSelectorProps> = ({
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Provider Selection */}
       <div className="space-y-2">
         <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -112,7 +114,7 @@ export const AuthProviderSelector: React.FC<AuthProviderSelectorProps> = ({
               key={provider.readable_id}
               onClick={() => onProviderSelect(provider.readable_id)}
               className={cn(
-                "w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left",
+                "w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all text-left",
                 selectedProvider === provider.readable_id
                   ? isDark
                     ? "border-blue-500/50 bg-blue-500/10"
@@ -155,7 +157,7 @@ export const AuthProviderSelector: React.FC<AuthProviderSelectorProps> = ({
 
       {/* Provider Configuration */}
       {selectedProviderConnection && (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
         <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
           Provider Configuration
         </label>
@@ -163,21 +165,20 @@ export const AuthProviderSelector: React.FC<AuthProviderSelectorProps> = ({
           {getProviderConfigFields(selectedProviderConnection.short_name).map((field) => (
             <div key={field.name}>
               <label className={cn(
-                "block text-sm mb-1.5",
+                "block text-sm mb-1",
                 isDark ? "text-gray-300" : "text-gray-600"
               )}>
                 {field.label}
                 {field.required && <span className="text-red-500 ml-1">*</span>}
               </label>
-              <input
+              <ValidatedInput
                 type="text"
                 placeholder={field.placeholder}
                 value={providerConfig[field.name] || ''}
-                onChange={(e) => handleConfigFieldChange(field.name, e.target.value)}
+                onChange={(value) => handleConfigFieldChange(field.name, value)}
+                validation={field.validation}
                 className={cn(
-                  "w-full px-4 py-2.5 rounded-lg text-sm",
-                  "border transition-colors",
-                  "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                  "focus:border-gray-400 dark:focus:border-gray-600",
                   isDark
                     ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
                     : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
