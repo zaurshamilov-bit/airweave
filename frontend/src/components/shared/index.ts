@@ -1,2 +1,2 @@
 // Shared components exports
-export { SourceAuthorizationView } from './SourceAuthorizationView';
+export { SourceAuthenticationView } from './SourceAuthenticationView';

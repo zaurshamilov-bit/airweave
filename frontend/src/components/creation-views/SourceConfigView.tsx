@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { useCollectionCreationStore } from '@/stores/collectionCreationStore';
+import { useNavigate } from 'react-router-dom';
+import { useCollectionCreationStore, AuthMode } from '@/stores/collectionCreationStore';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
 import { ArrowLeft, Copy, ExternalLink, Check, User, Users, Mail, Link2, ChevronRight, Send, Info, HelpCircle, Share2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
-import { SourceAuthorizationView } from '@/components/shared/SourceAuthorizationView';
+import { SourceAuthenticationView } from '@/components/shared/SourceAuthenticationView';
+import { AuthMethodSelector } from './AuthMethodSelector';
+import { AuthProviderSelector } from './AuthProviderSelector';
+import { useAuthProvidersStore } from '@/lib/stores/authProviders';
+import { ValidatedInput } from '@/components/ui/validated-input';
+import { sourceConnectionNameValidation, getAuthFieldValidation, clientIdValidation, clientSecretValidation } from '@/lib/validation/rules';
 
 interface SourceConfigViewProps {
   humanReadableId: string;
@@ -40,34 +46,53 @@ interface SourceDetails {
 export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadableId, isAddingToExisting = false }) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
+  const navigate = useNavigate();
 
   const {
     collectionId,
     collectionName,
     selectedSource,
     sourceName,
+    sourceConnectionName,
     authMode,
     setAuthMode,
+    selectedAuthProvider,
+    setSelectedAuthProvider,
+    authProviderConfig,
+    setAuthProviderConfig,
     setOAuthData,
     setConnectionId,
     setStep,
     handleBackFromSourceConfig,
     setSourceConnectionName,
+    existingCollectionId,
+    closeModal,
+    reset,
+    isAddingToExistingCollection
   } = useCollectionCreationStore();
+
+  const { authProviderConnections, fetchAuthProviderConnections } = useAuthProvidersStore();
 
   const [isCreating, setIsCreating] = useState(false);
   const [sourceDetails, setSourceDetails] = useState<SourceDetails | null>(null);
   const [authFields, setAuthFields] = useState<Record<string, string>>({});
   const [configData, setConfigData] = useState<Record<string, string>>({});
   const [useOwnCredentials, setUseOwnCredentials] = useState(false);
-  const [connectionName, setConnectionName] = useState(`${sourceName} Connection`);
+  // Initialize connection name from store or with source default
+  const [connectionName, setConnectionName] = useState(
+    sourceConnectionName || (sourceName ? `${sourceName} Connection` : '')
+  );
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
 
-  // Sync connection name with store on mount and when it changes
+  // Update store when connection name changes
   useEffect(() => {
-    setSourceConnectionName(connectionName);
-  }, []);
+    // Only update if the value actually changed
+    if (connectionName !== sourceConnectionName) {
+      setSourceConnectionName(connectionName);
+    }
+  }, [connectionName]); // Only depend on connectionName changes
+
   const [connectionUrl, setConnectionUrl] = useState('');
 
   // Sources that require custom OAuth credentials (BYOC - Bring Your Own Credentials)
@@ -85,6 +110,35 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
            !sourceDetails?.auth_config_class?.includes('OAuth');
   };
 
+  // Determine available auth methods based on source
+  const getAvailableAuthMethods = (): AuthMode[] => {
+    if (!sourceDetails) return [];
+
+    const methods: AuthMode[] = [];
+
+    // Check for direct auth/config auth
+    if (sourceDetails.auth_type === 'api_key' || sourceDetails.auth_type === 'basic' || isConfigAuth()) {
+      methods.push('direct_auth');
+    }
+
+    // Check for OAuth
+    if (sourceDetails.auth_type?.startsWith('oauth2') || sourceDetails.auth_config_class?.includes('OAuth')) {
+      methods.push('oauth2');
+    }
+
+    // Add external provider if any are connected
+    if (authProviderConnections.length > 0) {
+      methods.push('external_provider');
+    }
+
+    return methods;
+  };
+
+  // Fetch auth provider connections on mount
+  useEffect(() => {
+    fetchAuthProviderConnections();
+  }, [fetchAuthProviderConnections]);
+
   // Fetch source details to understand config requirements
   useEffect(() => {
     const fetchSourceDetails = async () => {
@@ -96,25 +150,53 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
           const source = await response.json();
           setSourceDetails(source);
 
-          // Set auth mode based on source auth type
-          if (source.auth_type === 'config_class') {
-            // Check if it's OAuth config or direct config
-            if (source.auth_config_class?.includes('OAuth')) {
-              setAuthMode('oauth2');
-              // Auto-enable custom credentials for BYOC sources
-              const isBYOC = BYOC_SOURCES.includes(selectedSource || '') ||
-                            source.auth_config_class?.includes('BYOC');
-              if (isBYOC) {
-                setUseOwnCredentials(true);
-              }
-            } else {
-              // Config-based auth (like GitHub) uses direct_auth mode
-              setAuthMode('direct_auth');
+          // Only set auth mode if it hasn't been set yet (preserve user selection)
+          if (!authMode) {
+            // Determine available methods inline to avoid dependency issues
+            const methods: AuthMode[] = [];
+            if (source.auth_type === 'api_key' || source.auth_type === 'basic' ||
+                (source.auth_type === 'config_class' && !source.auth_config_class?.includes('OAuth'))) {
+              methods.push('direct_auth');
             }
-          } else if (source.auth_type?.startsWith('oauth2')) {
-            setAuthMode('oauth2');
-          } else if (source.auth_type === 'api_key' || source.auth_type === 'basic') {
-            setAuthMode('direct_auth');
+            if (source.auth_type?.startsWith('oauth2') || source.auth_config_class?.includes('OAuth')) {
+              methods.push('oauth2');
+            }
+            if (authProviderConnections.length > 0) {
+              methods.push('external_provider');
+            }
+
+            // Default to direct credentials or OAuth, not auth provider
+            if (source.auth_type === 'config_class') {
+              // Check if it's OAuth config or direct config
+              if (source.auth_config_class?.includes('OAuth')) {
+                setAuthMode('oauth2');
+                // Auto-enable custom credentials for BYOC sources
+                const isBYOC = BYOC_SOURCES.includes(selectedSource || '') ||
+                              source.auth_config_class?.includes('BYOC');
+                if (isBYOC) {
+                  setUseOwnCredentials(true);
+                }
+              } else {
+                // Config-based auth (like GitHub) uses direct_auth mode
+                setAuthMode('direct_auth');
+              }
+            } else if (source.auth_type === 'api_key' || source.auth_type === 'basic') {
+              setAuthMode('direct_auth');
+            } else if (source.auth_type?.startsWith('oauth2')) {
+              setAuthMode('oauth2');
+            } else if (methods.includes('direct_auth')) {
+              // Prefer direct auth if available
+              setAuthMode('direct_auth');
+            } else if (methods.includes('oauth2')) {
+              // Then OAuth
+              setAuthMode('oauth2');
+            } else if (methods.includes('external_provider')) {
+              // Auth provider as last resort
+              setAuthMode('external_provider');
+            } else if (methods.length > 0) {
+              // Set first available method as default
+              setAuthMode(methods[0]);
+            }
           }
 
           // Initialize auth fields for config-based auth
@@ -144,26 +226,54 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
     };
 
     fetchSourceDetails();
-  }, [selectedSource, setAuthMode]);
+  }, [selectedSource]); // Don't re-run when authProviderConnections changes to preserve user selection
 
-  // Update connection name when source name changes
-  useEffect(() => {
-    setConnectionName(`${sourceName} Connection`);
-  }, [sourceName]);
+  // Check if form is valid for submission
+  const isFormValid = () => {
+    // Must have a valid connection name (4-42 characters)
+    const trimmedName = connectionName.trim();
+    if (!trimmedName || trimmedName.length < 4 || trimmedName.length > 42) return false;
+
+    // Check auth mode specific requirements
+    if (authMode === 'external_provider') {
+      return !!selectedAuthProvider;
+    } else if (authMode === 'direct_auth') {
+      // Need auth fields filled
+      if (sourceDetails?.auth_fields?.fields) {
+        const requiredFields = sourceDetails.auth_fields.fields.filter(f => f.required);
+        return requiredFields.every(field => authFields[field.name]?.trim());
+      }
+    } else if (authMode === 'oauth2') {
+      // Check if custom credentials are required
+      if (requiresCustomOAuth() || useOwnCredentials) {
+        return !!(clientId.trim() && clientSecret.trim());
+      }
+    }
+
+    return true;
+  };
 
   const handleCreate = async () => {
     setIsCreating(true);
 
     try {
+      // Validate connection name
+      if (!connectionName.trim()) {
+        toast.error('Please enter a connection name');
+        setIsCreating(false);
+        return;
+      }
+
       const payload: any = {
-        name: connectionName.trim() || `${sourceName} Connection`,
+        name: connectionName.trim(),
         description: `${sourceName} connection for ${collectionName}`,
         short_name: selectedSource,
         collection: collectionId,
         auth_mode: authMode || 'oauth2',
         // For direct auth (API key, config), sync immediately since we have credentials
         // For OAuth, don't sync until after authorization is complete
-        sync_immediately: authMode === 'direct_auth',
+        // For external provider, sync immediately since we're using existing auth
+        sync_immediately: authMode === 'direct_auth' || authMode === 'external_provider',
       };
 
       // Add config fields if any
@@ -172,7 +282,18 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
       }
 
       // Handle different auth modes
-      if (authMode === 'direct_auth' && isConfigAuth()) {
+      if (authMode === 'external_provider') {
+        // External provider auth
+        if (!selectedAuthProvider) {
+          toast.error('Please select an auth provider');
+          setIsCreating(false);
+          return;
+        }
+        payload.auth_provider = selectedAuthProvider;
+        if (authProviderConfig && Object.keys(authProviderConfig).length > 0) {
+          payload.auth_provider_config = authProviderConfig;
+        }
+      } else if (authMode === 'direct_auth' && isConfigAuth()) {
         // Config-based auth (like GitHub)
         if (Object.keys(authFields).length === 0) {
           toast.error('Please provide all required configuration fields');
@@ -220,11 +341,28 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
         );
 
         setConnectionUrl(result.authentication_url);
-        toast.success('Connection ready');
       } else {
-        // Direct auth or config auth successful
+        // Direct auth, config auth, or external provider successful
         setConnectionId(result.id);
-        setStep('success');
+
+        // For direct token sources, navigate directly to collection detail
+        // instead of showing the success screen
+        const targetCollectionId = isAddingToExisting ? existingCollectionId : collectionId;
+        if (targetCollectionId) {
+          // Close the modal
+          closeModal();
+
+          // Navigate to collection detail with success params
+          navigate(`/collections/${targetCollectionId}?status=success&source_connection_id=${result.id}`);
+
+          // Reset store state after navigation
+          setTimeout(() => {
+            reset();
+          }, 100);
+        } else {
+          // Fallback to success view if no collection ID
+          setStep('success');
+        }
       }
 
     } catch (error) {
@@ -245,49 +383,37 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
               Create Source Connection
             </h2>
-            <input
-              type="text"
-              value={connectionName}
-              onChange={(e) => {
-                setConnectionName(e.target.value);
-                setSourceConnectionName(e.target.value);
-              }}
-              placeholder="Connection name"
-              className={cn(
-                "mt-2 text-sm bg-transparent border-none outline-none",
-                "text-gray-500 dark:text-gray-400",
-                "hover:text-gray-700 dark:hover:text-gray-300",
-                "focus:text-gray-900 dark:focus:text-white",
-                "transition-colors cursor-text",
-                "px-0 py-0 w-full"
-              )}
-              style={{ minWidth: '200px' }}
-            />
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Connect your {sourceName || 'data source'} to sync and search its content
+            </p>
           </div>
 
           {/* Connection created state - Use shared component */}
           {connectionUrl ? (
-            <SourceAuthorizationView
+            <SourceAuthenticationView
               sourceName={sourceName}
               authenticationUrl={connectionUrl}
+              showBorder={false}
             />
           ) : (
             <>
               {/* Form fields - Clean minimal design */}
               <div className="space-y-6">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
                     Name
                   </label>
-                  <input
+                  <ValidatedInput
                     type="text"
                     value={connectionName}
-                    onChange={(e) => setConnectionName(e.target.value)}
+                    onChange={(value) => {
+                      setConnectionName(value);
+                      setSourceConnectionName(value);
+                    }}
                     placeholder="Enter connection name"
+                    validation={sourceConnectionNameValidation}
                     className={cn(
-                      "w-full px-4 py-2.5 rounded-lg text-sm",
-                      "border transition-colors",
-                      "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                      "focus:border-gray-400 dark:focus:border-gray-600",
                       isDark
                         ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
                         : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
@@ -295,10 +421,29 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                   />
                 </div>
 
+                {/* Auth Method Selection */}
+                {sourceDetails && (
+                  <AuthMethodSelector
+                    selectedMethod={authMode}
+                    onMethodChange={setAuthMode}
+                    availableAuthMethods={getAvailableAuthMethods()}
+                    hasAuthProviders={authProviderConnections.length > 0}
+                  />
+                )}
+
+                {/* Auth Provider Selection */}
+                {authMode === 'external_provider' && (
+                  <AuthProviderSelector
+                    selectedProvider={selectedAuthProvider}
+                    onProviderSelect={setSelectedAuthProvider}
+                    onConfigChange={setAuthProviderConfig}
+                  />
+                )}
+
                 {/* Config-based auth fields (like GitHub) */}
                 {authMode === 'direct_auth' && isConfigAuth() && sourceDetails?.auth_fields?.fields && (
                   <div className="space-y-4">
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Configuration
                     </label>
                     {sourceDetails.auth_fields.fields.map((field) => (
@@ -312,18 +457,17 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                             {field.description}
                           </p>
                         )}
-                        <input
+                        <ValidatedInput
                           type={field.name.includes('password') || field.name.includes('token') ? 'password' : 'text'}
-                          placeholder={field.description || `Enter ${field.title || field.name}`}
+                          placeholder=""
                           value={authFields[field.name] || ''}
-                          onChange={(e) => setAuthFields({ ...authFields, [field.name]: e.target.value })}
+                          onChange={(value) => setAuthFields({ ...authFields, [field.name]: value })}
+                          validation={getAuthFieldValidation(field.name)}
                           className={cn(
-                            "w-full px-4 py-2.5 rounded-lg text-sm",
-                            "border bg-transparent",
-                            "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                            "focus:border-gray-400 dark:focus:border-gray-600",
                             isDark
-                              ? "border-gray-800 text-white placeholder:text-gray-600"
-                              : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                              ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                              : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
                           )}
                         />
                       </div>
@@ -334,7 +478,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                 {/* Direct auth fields (API key, basic auth) */}
                 {authMode === 'direct_auth' && !isConfigAuth() && sourceDetails?.auth_fields?.fields && (
                   <div className="space-y-4">
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Authentication
                     </label>
                     {sourceDetails.auth_fields.fields.map((field) => (
@@ -343,18 +487,17 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                           {field.title || field.name}
                           {field.required && <span className="text-red-500 ml-1">*</span>}
                         </label>
-                        <input
+                        <ValidatedInput
                           type={field.name.includes('password') || field.name.includes('key') || field.name.includes('token') ? 'password' : 'text'}
-                          placeholder={field.description || `Enter ${field.title || field.name}`}
+                          placeholder=""
                           value={authFields[field.name] || ''}
-                          onChange={(e) => setAuthFields({ ...authFields, [field.name]: e.target.value })}
+                          onChange={(value) => setAuthFields({ ...authFields, [field.name]: value })}
+                          validation={getAuthFieldValidation(field.name)}
                           className={cn(
-                            "w-full px-4 py-2.5 rounded-lg text-sm",
-                            "border bg-transparent",
-                            "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                            "focus:border-gray-400 dark:focus:border-gray-600",
                             isDark
-                              ? "border-gray-800 text-white placeholder:text-gray-600"
-                              : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                              ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                              : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
                           )}
                         />
                       </div>
@@ -365,7 +508,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                 {/* Config fields (optional additional configuration) */}
                 {sourceDetails?.config_fields?.fields && sourceDetails.config_fields.fields.length > 0 && (
                   <div className="space-y-4">
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Additional Configuration (optional)
                     </label>
                     {sourceDetails.config_fields.fields.map((field) => (
@@ -380,7 +523,7 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                         )}
                         <input
                           type="text"
-                          placeholder={field.description || `Enter ${field.title || field.name}`}
+                          placeholder=""
                           value={configData[field.name] || ''}
                           onChange={(e) => setConfigData({ ...configData, [field.name]: e.target.value })}
                           className={cn(
@@ -484,32 +627,30 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
                         </div>
 
                         <div className="space-y-3">
-                          <input
+                          <ValidatedInput
                             type="text"
                             placeholder="Client ID"
                             value={clientId}
-                            onChange={(e) => setClientId(e.target.value)}
+                            onChange={setClientId}
+                            validation={clientIdValidation}
                             className={cn(
-                              "w-full px-4 py-2.5 rounded-lg text-sm",
-                              "border bg-transparent",
-                              "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                              "focus:border-gray-400 dark:focus:border-gray-600",
                               isDark
-                                ? "border-gray-800 text-white placeholder:text-gray-600"
-                                : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                                ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                                : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
                             )}
                           />
-                          <input
+                          <ValidatedInput
                             type="password"
                             placeholder="Client Secret"
                             value={clientSecret}
-                            onChange={(e) => setClientSecret(e.target.value)}
+                            onChange={setClientSecret}
+                            validation={clientSecretValidation}
                             className={cn(
-                              "w-full px-4 py-2.5 rounded-lg text-sm",
-                              "border bg-transparent",
-                              "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                              "focus:border-gray-400 dark:focus:border-gray-600",
                               isDark
-                                ? "border-gray-800 text-white placeholder:text-gray-600"
-                                : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                                ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                                : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
                             )}
                           />
                         </div>
@@ -594,32 +735,30 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
 
                         {useOwnCredentials && (
                           <div className="mt-4 space-y-3 pl-13">
-                            <input
+                            <ValidatedInput
                               type="text"
                               placeholder="Client ID"
                               value={clientId}
-                              onChange={(e) => setClientId(e.target.value)}
+                              onChange={setClientId}
+                              validation={clientIdValidation}
                               className={cn(
-                                "w-full px-3 py-2 rounded-lg text-sm",
-                                "border bg-transparent",
-                                "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                                "focus:border-gray-400 dark:focus:border-gray-600",
                                 isDark
-                                  ? "border-gray-800 text-white placeholder:text-gray-600"
-                                  : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                                  ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                                  : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
                               )}
                             />
-                            <input
+                            <ValidatedInput
                               type="password"
                               placeholder="Client Secret"
                               value={clientSecret}
-                              onChange={(e) => setClientSecret(e.target.value)}
+                              onChange={setClientSecret}
+                              validation={clientSecretValidation}
                               className={cn(
-                                "w-full px-3 py-2 rounded-lg text-sm",
-                                "border bg-transparent",
-                                "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                                "focus:border-gray-400 dark:focus:border-gray-600",
                                 isDark
-                                  ? "border-gray-800 text-white placeholder:text-gray-600"
-                                  : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                                  ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                                  : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
                               )}
                             />
                           </div>
@@ -655,11 +794,13 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ humanReadabl
           {!connectionUrl && (
             <button
               onClick={handleCreate}
-              disabled={isCreating}
+              disabled={isCreating || !isFormValid()}
               className={cn(
                 "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
-                "bg-blue-600 hover:bg-blue-700 text-white"
+                isFormValid() && !isCreating
+                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                  : "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
               )}
             >
               {isCreating ? 'Creating...' : 'Create'}

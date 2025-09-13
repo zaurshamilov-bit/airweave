@@ -639,7 +639,7 @@ class SourceConnectionService:
             )
             if init_session and init_session.status == ConnectionInitStatus.PENDING:
                 # Regenerate the proxy URL for this session
-                proxy_ttl = int(getattr(core_settings, "REDIRECT_SESSION_TTL_MINUTES", 30))
+                proxy_ttl = int(getattr(core_settings, "REDIRECT_SESSION_TTL_MINUTES", 1440))
                 proxy_expires = datetime.now(timezone.utc) + timedelta(minutes=proxy_ttl)
                 code8 = await redirect_session.generate_unique_code(db, length=8)
 
@@ -1503,7 +1503,7 @@ class SourceConnectionService:
         sc_shell_schema = schemas.SourceConnection.from_orm_with_collection_mapping(sc_shell_obj)
 
         # PRE-CONSENT PROXY: generate 8-char code that redirects to provider OAuth URL
-        proxy_ttl = int(getattr(core_settings, "REDIRECT_SESSION_TTL_MINUTES", 5))
+        proxy_ttl = int(getattr(core_settings, "REDIRECT_SESSION_TTL_MINUTES", 1440))  # 1 day
         proxy_expires = datetime.now(timezone.utc) + timedelta(minutes=proxy_ttl)
         code8 = await redirect_session.generate_unique_code(db, length=8)
         await redirect_session.create(
@@ -1522,7 +1522,7 @@ class SourceConnectionService:
 
         return init_id, proxy_url, sc_shell_schema, None
 
-    async def complete_connection_from_oauth_callback(
+    async def complete_connection_from_oauth_callback(  # noqa: C901
         self,
         db: AsyncSession,
         *,
@@ -1571,6 +1571,13 @@ class SourceConnectionService:
             client_id=overrides.get("client_id"),
             client_secret=overrides.get("client_secret"),
         )
+        if token_response.access_token:
+            await self._validate_token_with_source(
+                db=db,
+                source_short_name=source_short_name,
+                access_token=token_response.access_token,
+                ctx=ctx,
+            )
 
         auth_fields = token_response.model_dump()
         if overrides.get("client_id"):

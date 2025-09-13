@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { AuthProviderButton } from "@/components/dashboard";
 import { useAuthProvidersStore } from "@/lib/stores/authProviders";
-// import { DialogFlow } from "@/components/shared/DialogFlow";
+import { AuthProviderDialog } from "./AuthProviderDialog";
 
 export const AuthProviderTable = () => {
     // Use auth providers store
@@ -217,17 +217,16 @@ export const AuthProviderTable = () => {
                 )}
             </div>
 
-            {/* Dialog for connecting to auth provider - with stable key */}
-            {(() => {
-                console.log('🎭 [AuthProviderTable] Rendering DialogFlow with:', {
-                    key: dialogKey,
-                    isOpen: dialogOpen,
-                    mode: dialogMode,
-                    authProviderShortName: selectedAuthProvider?.short_name
-                });
-                // TODO: Replace with new modal for auth providers
-                return null;
-            })()}
+            {/* Dialog for connecting to auth provider */}
+            <AuthProviderDialog
+                key={dialogKey}
+                open={dialogOpen}
+                onOpenChange={setDialogOpen}
+                mode={dialogMode}
+                authProvider={selectedAuthProvider}
+                connection={selectedConnection}
+                onComplete={handleDialogComplete}
+            />
         </div>
     );
 };

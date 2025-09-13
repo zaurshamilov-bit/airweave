@@ -13,7 +13,7 @@ import { toast } from '@/hooks/use-toast';
 import { SourceConnectionSettings } from './SourceConnectionSettings';
 import { EntityStateList } from './EntityStateList';
 import { SyncErrorCard } from './SyncErrorCard';
-import { SourceAuthorizationView } from '@/components/shared/SourceAuthorizationView';
+import { SourceAuthenticationView } from '@/components/shared/SourceAuthenticationView';
 import {
   Tooltip,
   TooltipContent,
@@ -461,11 +461,12 @@ const SourceConnectionStateView: React.FC<Props> = ({
     <div className={cn("space-y-4", DESIGN_SYSTEM.typography.sizes.body)}>
       {/* Show authorization UI if not authorized */}
       {isNotAuthorized && sourceConnection && (
-        <SourceAuthorizationView
+        <SourceAuthenticationView
           sourceName={sourceConnection.name}
           authenticationUrl={sourceConnection.authentication_url}
           onRefreshUrl={handleRefreshAuthUrl}
           isRefreshing={isRefreshingAuth}
+          showBorder={true}
         />
       )}
 

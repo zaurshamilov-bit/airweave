@@ -37,6 +37,10 @@ interface CollectionCreationState {
   authConfig?: Record<string, any>;
   configFields?: Record<string, any>;
 
+  // Auth provider data
+  selectedAuthProvider?: string; // readable_id of auth provider connection
+  authProviderConfig?: Record<string, any>; // Provider-specific config (e.g. auth_config_id, account_id)
+
   // OAuth flow state
   oauthState?: string;
   redirectUrl?: string;
@@ -62,6 +66,10 @@ interface CollectionCreationState {
   setAuthMode: (mode: AuthMode) => void;
   setAuthConfig: (config: Record<string, any>) => void;
   setConfigFields: (fields: Record<string, any>) => void;
+
+  // Auth provider actions
+  setSelectedAuthProvider: (providerId: string | undefined) => void;
+  setAuthProviderConfig: (config: Record<string, any>) => void;
 
   // OAuth actions
   setOAuthData: (state: string, redirectUrl: string, authUrl?: string) => void;
@@ -91,6 +99,8 @@ const initialState = {
   authMode: undefined,
   authConfig: undefined,
   configFields: undefined,
+  selectedAuthProvider: undefined,
+  authProviderConfig: undefined,
   oauthState: undefined,
   redirectUrl: undefined,
   authenticationUrl: undefined,
@@ -225,6 +235,9 @@ export const useCollectionCreationStore = create<CollectionCreationState>()(
       setAuthConfig: (config) => set({ authConfig: config }),
       setConfigFields: (fields) => set({ configFields: fields }),
 
+      setSelectedAuthProvider: (providerId) => set({ selectedAuthProvider: providerId }),
+      setAuthProviderConfig: (config) => set({ authProviderConfig: config }),
+
       setOAuthData: (state, redirectUrl, authUrl) => set({
         oauthState: state,
         redirectUrl: redirectUrl,
@@ -242,6 +255,8 @@ export const useCollectionCreationStore = create<CollectionCreationState>()(
         authMode: undefined,
         authConfig: undefined,
         configFields: undefined,
+        selectedAuthProvider: undefined,
+        authProviderConfig: undefined,
         oauthState: undefined,
         redirectUrl: undefined,
         authenticationUrl: undefined,

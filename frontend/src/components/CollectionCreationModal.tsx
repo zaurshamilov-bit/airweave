@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
 import { X } from 'lucide-react';
+import { toast } from 'sonner';
 
 // Import view components
 import { CollectionFormView } from './creation-views/CollectionFormView';
@@ -90,17 +91,22 @@ export const CollectionCreationModal: React.FC = () => {
           useCollectionCreationStore.getState().setConnectionId(connectionId);
         }
 
-        // Only update step and re-open if we have valid collection data
-        // (this means the user didn't close the modal intentionally)
+        // Get store data to navigate to collection
         const store = useCollectionCreationStore.getState();
-        if (store.collectionName || store.existingCollectionId) {
-          setStep('success');
+        const collectionId = store.collectionId || store.existingCollectionId;
 
-          // Re-open modal if it was closed during OAuth
-          if (!isOpen) {
-            // Just set isOpen without resetting state
-            store.openModal('success');
-          }
+        if (collectionId) {
+          // Close modal and navigate directly to collection detail view
+          store.closeModal();
+
+          // Navigate to collection with success params
+          navigate(`/collections/${collectionId}?status=success&source_connection_id=${connectionId}`);
+
+          // Reset store state after navigation
+          setTimeout(() => {
+            store.reset();
+          }, 100);
+
         }
       } else if (status === 'error') {
         // Handle error
@@ -111,7 +117,7 @@ export const CollectionCreationModal: React.FC = () => {
       const newUrl = window.location.pathname;
       window.history.replaceState({}, '', newUrl);
     }
-  }, [searchParams, setStep, isOpen]);
+  }, [searchParams, navigate]);
 
   const handleClose = () => {
     // Don't close during OAuth redirect
@@ -176,9 +182,9 @@ export const CollectionCreationModal: React.FC = () => {
   const getColumnWidths = () => {
     // Use much wider form column for source-config (URL sharing needs more space)
     if (currentStep === 'source-config') {
-      return { left: 'w-[600px]', right: 'flex-1' };
+      return { left: 'w-[640px]', right: 'flex-1' };
     }
-    return { left: 'w-[420px]', right: 'flex-1' };
+    return { left: 'w-[440px]', right: 'flex-1' };
   };
 
   const columnWidths = getColumnWidths();
@@ -206,7 +212,7 @@ export const CollectionCreationModal: React.FC = () => {
           className={cn(
             "fixed left-[50%] top-[50%] z-50",
             "translate-x-[-50%] translate-y-[-50%]",
-            "w-[1400px] max-w-[95vw] h-[800px] max-h-[95vh]",
+            "w-[1440px] max-w-[95vw] h-[840px] max-h-[95vh]",
             "rounded-xl shadow-2xl border overflow-hidden outline-none",
             isDark ? "bg-gray-900 border-gray-800" : "bg-white border-gray-200"
           )}

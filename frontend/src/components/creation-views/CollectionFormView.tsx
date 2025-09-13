@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/lib/theme-provider';
 import { HelpCircle } from 'lucide-react';
+import { ValidatedInput } from '@/components/ui/validated-input';
+import { collectionNameValidation } from '@/lib/validation/rules';
 
 interface CollectionFormViewProps {
   humanReadableId: string;
@@ -95,18 +97,17 @@ export const CollectionFormView: React.FC<CollectionFormViewProps> = ({ humanRea
               >
                 Name
               </label>
-              <input
+              <ValidatedInput
                 id="collection-name"
                 type="text"
-                placeholder="Engineering documentation"
+                placeholder="Acme's HR Applications"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={setName}
                 onKeyDown={(e) => e.key === 'Enter' && !isCreating && handleCreate()}
                 autoFocus
+                validation={collectionNameValidation}
                 className={cn(
-                  "w-full px-4 py-2.5 rounded-lg text-sm",
-                  "border transition-colors",
-                  "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                  "focus:border-gray-400 dark:focus:border-gray-600",
                   isDark
                     ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
                     : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
@@ -114,32 +115,56 @@ export const CollectionFormView: React.FC<CollectionFormViewProps> = ({ humanRea
               />
             </div>
 
-            {/* Help text */}
-            <div className="flex items-start gap-2">
-              <HelpCircle className={cn(
-                "h-4 w-4 mt-0.5 flex-shrink-0",
-                isDark ? "text-blue-400" : "text-blue-600"
-              )} />
-              <div className="text-sm">
-                <button
-                  type="button"
-                  className={cn(
-                    "font-medium hover:underline",
-                    isDark ? "text-blue-400" : "text-blue-600"
-                  )}
-                  onClick={() => {
-                    // Could open a tooltip or modal explaining collections
-                  }}
-                >
-                  What is a collection?
-                </button>
-                <p className={cn(
-                  "mt-1",
-                  isDark ? "text-gray-400" : "text-gray-500"
+            {/* Help section with hover info */}
+            <div className="flex items-start gap-2 group">
+              <div className="relative">
+                <HelpCircle className={cn(
+                  "h-4 w-4 mt-0.5 flex-shrink-0 transition-all cursor-help",
+                  isDark
+                    ? "text-gray-500 group-hover:text-blue-400"
+                    : "text-gray-400 group-hover:text-blue-600"
+                )} />
+
+                {/* Hover tooltip */}
+                <div className={cn(
+                  "absolute left-0 top-6 z-50 w-80 p-4 rounded-lg shadow-xl",
+                  "opacity-0 invisible group-hover:opacity-100 group-hover:visible",
+                  "transition-all duration-200 transform group-hover:translate-y-0 translate-y-1",
+                  isDark
+                    ? "bg-gray-800 border border-gray-700"
+                    : "bg-white border border-gray-200"
                 )}>
-                  A collection is a searchable group of connected data sources.
-                </p>
+                  <div className="space-y-3">
+                    <p className={cn(
+                      "text-sm font-medium",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}>
+                      What is a collection?
+                    </p>
+                    <p className={cn(
+                      "text-xs leading-relaxed",
+                      isDark ? "text-gray-400" : "text-gray-600"
+                    )}>
+                      A collection is like a folder that groups related data sources. It can include multiple sources from a user, organization, or project. When your agent searches, it queries all sources in the collection at once.
+                    </p>
+                    <div className={cn(
+                      "text-xs space-y-1 pt-2 border-t",
+                      isDark ? "border-gray-700" : "border-gray-200"
+                    )}>
+                      <p className={cn(isDark ? "text-gray-500" : "text-gray-500")}>
+                        <span className="font-medium">Example:</span> Group all HR tools (Jira, Notion, Google Drive) at Acme Corp into one searchable collection
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              <p className={cn(
+                "text-sm",
+                isDark ? "text-gray-500" : "text-gray-500"
+              )}>
+                What is a collection?
+              </p>
             </div>
           </div>
         </div>
@@ -152,12 +177,14 @@ export const CollectionFormView: React.FC<CollectionFormViewProps> = ({ humanRea
       )}>
         <button
           onClick={handleCreate}
-          disabled={!name.trim() || isCreating}
+          disabled={!name.trim() || name.trim().length < 4 || name.trim().length > 64 || isCreating}
           className={cn(
             "w-full py-2 px-4 rounded-lg text-sm font-medium",
             "transition-all",
             "disabled:opacity-50 disabled:cursor-not-allowed",
-            "bg-blue-600 hover:bg-blue-700 text-white"
+            name.trim().length >= 4 && name.trim().length <= 64 && !isCreating
+              ? "bg-blue-600 hover:bg-blue-700 text-white"
+              : "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
           )}
         >
           {isCreating ? 'Creating...' : 'Next'}

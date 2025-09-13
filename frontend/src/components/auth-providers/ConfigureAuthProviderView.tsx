@@ -2,13 +2,10 @@ import React, { useState, useRef, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import { Button } from "@/components/ui/button";
-import { DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { DialogViewProps } from "../DialogFlow";
+import type { DialogViewProps } from "@/components/types/dialog";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
-import { Loader2, Pencil, Info } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuthProvidersStore } from "@/lib/stores/authProviders";
@@ -413,27 +410,26 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
     }
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="h-full flex flex-col">
             {/* Content area - scrollable */}
-            <div className="flex-grow overflow-y-auto">
-                <div className="p-8 h-full flex flex-col">
-                    {/* Heading */}
-                    <DialogTitle className="text-4xl font-semibold text-left mb-4">
-                        Connect to {authProviderName}
-                    </DialogTitle>
-                    <DialogDescription className="text-sm text-muted-foreground mb-8">
-                        Create a connection to {authProviderName} that can be used to authenticate to data sources.
-                    </DialogDescription>
+            <div className="px-8 py-10 flex-1 overflow-auto">
+                <div className="space-y-8">
+                    {/* Header */}
+                    <div>
+                        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                            Connect to {authProviderName}
+                        </h2>
+                        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                            Create a connection to {authProviderName} that can be used to authenticate to data sources
+                        </p>
+                    </div>
 
-                    {/* Small spacer to push emblem down 10% */}
-                    <div style={{ height: "5%" }}></div>
-
-                    {/* Auth Provider Icon - make much larger */}
+                    {/* Auth Provider Icon - smaller, cleaner */}
                     {authProviderShortName && (
-                        <div className="flex justify-center items-center mb-6" style={{ minHeight: "20%" }}>
+                        <div className="flex justify-center py-8">
                             <div className={cn(
-                                "w-64 h-64 flex items-center justify-center border rounded-lg p-2",
-                                isDark ? "border-gray-700" : "border-gray-300"
+                                "w-32 h-32 flex items-center justify-center rounded-2xl p-4",
+                                isDark ? "bg-gray-800/50" : "bg-gray-50"
                             )}>
                                 <img
                                     src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
@@ -443,7 +439,7 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                                         e.currentTarget.style.display = 'none';
                                         e.currentTarget.parentElement!.innerHTML = `
                                             <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
-                                                <span class="text-5xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
+                                                <span class="text-3xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
                                                     ${authProviderShortName.substring(0, 2).toUpperCase()}
                                                 </span>
                                             </div>
@@ -454,136 +450,138 @@ export const ConfigureAuthProviderView: React.FC<ConfigureAuthProviderViewProps>
                         </div>
                     )}
 
-                    {/* Reduced spacer to bring form up closer to emblem */}
-                    <div className="flex-grow" style={{ minHeight: "15%" }}></div>
-
-                    {/* Form - positioned closer to emblem */}
-                    <div className="px-2 max-w-md mx-auto w-full">
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            {/* Name field */}
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium ml-1">Name</label>
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        className={cn(
-                                            "w-full py-2 px-3 rounded-md border bg-transparent pr-10",
-                                            isDark
-                                                ? "border-gray-700 focus:border-blue-500"
-                                                : "border-gray-300 focus:border-blue-500",
-                                            "focus:outline-none",
-                                            form.formState.errors.name ? "border-red-500" : ""
-                                        )}
-                                        value={nameValue}
-                                        onChange={handleNameChange}
-                                        placeholder="My Connection"
-                                    />
-                                    <Pencil className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-70" />
-                                </div>
-                                {form.formState.errors.name && (
-                                    <p className="text-sm text-red-500 mt-1">
-                                        {form.formState.errors.name.message}
-                                    </p>
+                    {/* Form fields - Clean minimal design */}
+                    <div className="space-y-6">
+                        {/* Name field */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                Name
+                            </label>
+                            <input
+                                type="text"
+                                value={nameValue}
+                                onChange={handleNameChange}
+                                placeholder="My Connection"
+                                className={cn(
+                                    "w-full px-4 py-2.5 rounded-lg text-sm",
+                                    "border transition-colors",
+                                    "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                                    isDark
+                                        ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                                        : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400",
+                                    form.formState.errors.name ? "border-red-500" : ""
                                 )}
-                            </div>
-
-                            {/* Readable ID field */}
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium ml-1">Readable ID</label>
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        className={cn(
-                                            "w-full py-2 px-3 rounded-md border bg-transparent pr-10",
-                                            isDark
-                                                ? "border-gray-700 focus:border-blue-500"
-                                                : "border-gray-300 focus:border-blue-500",
-                                            "focus:outline-none",
-                                            errors.readable_id || form.formState.errors.readable_id ? "border-red-500" : ""
-                                        )}
-                                        value={readableIdValue}
-                                        onChange={handleReadableIdChange}
-                                        placeholder="Auto-generated"
-                                    />
-                                    <Pencil className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-70" />
-                                </div>
-                                {form.formState.errors.readable_id && (
-                                    <p className="text-sm text-red-500 mt-1">
-                                        {form.formState.errors.readable_id.message}
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Auth fields */}
-                            {authProviderDetails?.auth_fields?.fields && authProviderDetails.auth_fields.fields.length > 0 && (
-                                <div className="space-y-4 mt-6">
-                                    {authProviderDetails.auth_fields.fields.map((field: any) => (
-                                        <div key={field.name} className="space-y-1">
-                                            <label className="text-sm font-medium ml-1">
-                                                {field.title || field.name}
-                                            </label>
-                                            {field.description && (
-                                                <p className="text-xs text-muted-foreground mb-1">{field.description}</p>
-                                            )}
-                                            <input
-                                                type={field.secret ? 'password' : 'text'}
-                                                className={cn(
-                                                    "w-full py-2 px-3 rounded-md border bg-transparent",
-                                                    isDark
-                                                        ? "border-gray-700 focus:border-blue-500"
-                                                        : "border-gray-300 focus:border-blue-500",
-                                                    "focus:outline-none",
-                                                    errors[field.name] ? "border-red-500" : ""
-                                                )}
-                                                value={authFieldValues[field.name] || ''}
-                                                onChange={(e) => handleAuthFieldChange(field.name, e.target.value)}
-                                                placeholder={field.secret ? '••••••••' : ''}
-                                            />
-                                            {errors[field.name] && (
-                                                <p className="text-xs text-red-500">{errors[field.name]}</p>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
+                            />
+                            {form.formState.errors.name && (
+                                <p className="text-xs text-red-500 mt-1">
+                                    {form.formState.errors.name.message}
+                                </p>
                             )}
-                        </form>
-                    </div>
+                        </div>
 
-                    {/* Small spacer at bottom */}
-                    <div style={{ height: "5%" }}></div>
+                        {/* Readable ID field */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                Readable ID
+                            </label>
+                            <input
+                                type="text"
+                                value={readableIdValue}
+                                onChange={handleReadableIdChange}
+                                placeholder="Auto-generated"
+                                className={cn(
+                                    "w-full px-4 py-2.5 rounded-lg text-sm",
+                                    "border transition-colors",
+                                    "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                                    isDark
+                                        ? "bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+                                        : "bg-white border-gray-200 text-gray-900 placeholder:text-gray-400",
+                                    errors.readable_id || form.formState.errors.readable_id ? "border-red-500" : ""
+                                )}
+                            />
+                            {form.formState.errors.readable_id && (
+                                <p className="text-xs text-red-500 mt-1">
+                                    {form.formState.errors.readable_id.message}
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Auth fields */}
+                        {authProviderDetails?.auth_fields?.fields && authProviderDetails.auth_fields.fields.length > 0 && (
+                            <>
+                                <div className="pt-2">
+                                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
+                                        Authentication
+                                    </label>
+                                    <div className="space-y-4">
+                                        {authProviderDetails.auth_fields.fields.map((field: any) => (
+                                            <div key={field.name}>
+                                                <label className="block text-sm font-medium mb-1.5">
+                                                    {field.title || field.name}
+                                                    {field.required && <span className="text-red-500 ml-1">*</span>}
+                                                </label>
+                                                {field.description && (
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                                                        {field.description}
+                                                    </p>
+                                                )}
+                                                <input
+                                                    type={field.secret ? 'password' : 'text'}
+                                                    value={authFieldValues[field.name] || ''}
+                                                    onChange={(e) => handleAuthFieldChange(field.name, e.target.value)}
+                                                    placeholder={field.secret ? '••••••••' : `Enter ${field.title || field.name}`}
+                                                    className={cn(
+                                                        "w-full px-4 py-2.5 rounded-lg text-sm",
+                                                        "border bg-transparent",
+                                                        "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                                                        isDark
+                                                            ? "border-gray-800 text-white placeholder:text-gray-600"
+                                                            : "border-gray-200 text-gray-900 placeholder:text-gray-400",
+                                                        errors[field.name] ? "border-red-500" : ""
+                                                    )}
+                                                />
+                                                {errors[field.name] && (
+                                                    <p className="text-xs text-red-500 mt-1">{errors[field.name]}</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
-            {/* Footer - fixed at bottom */}
-            <div className="flex-shrink-0 border-t">
-                <DialogFooter className="flex justify-end gap-3 p-6">
-                    <Button
-                        type="button"
-                        variant="outline"
+            {/* Bottom actions - Clean minimal */}
+            <div className={cn(
+                "px-8 py-6 border-t",
+                isDark ? "border-gray-800" : "border-gray-200"
+            )}>
+                <div className="flex gap-3">
+                    <button
                         onClick={onCancel}
                         className={cn(
-                            "px-6",
-                            isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
+                            "px-6 py-2 rounded-lg text-sm font-medium transition-colors",
+                            isDark
+                                ? "text-gray-400 hover:text-gray-200"
+                                : "text-gray-600 hover:text-gray-900"
                         )}
                     >
                         Cancel
-                    </Button>
-                    <Button
-                        type="button"
+                    </button>
+                    <button
                         onClick={handleSubmit}
                         disabled={isSubmitting || hasEmptyRequiredFields()}
-                        className="px-6 bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                        {isSubmitting ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Connecting...
-                            </>
-                        ) : (
-                            "Connect"
+                        className={cn(
+                            "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all",
+                            "disabled:opacity-50 disabled:cursor-not-allowed",
+                            "bg-blue-600 hover:bg-blue-700 text-white"
                         )}
-                    </Button>
-                </DialogFooter>
+                    >
+                        {isSubmitting ? 'Connecting...' : 'Connect'}
+                    </button>
+                </div>
             </div>
         </div>
     );

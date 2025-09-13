@@ -147,7 +147,6 @@ export const SourceConfigView: React.FC<SourceConfigViewProps> = ({ context }) =
             const result = await response.json();
 
             if (result.status === 'created') {
-                toast.success(`${sourceName} connected successfully!`);
                 useSidePanelStore.getState().closePanel();
                 // We need to trigger a refresh of the source connections on the collection page
                 // This is now handled in the Collections.tsx component's useEffect

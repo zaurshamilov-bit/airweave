@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { DialogViewProps } from "../DialogFlow";
+import type { DialogViewProps } from "@/components/types/dialog";
 import { useTheme } from "@/lib/theme-provider";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
@@ -21,7 +19,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
 
 // Delete Connection Dialog component
 interface DeleteConnectionDialogProps {
@@ -68,11 +65,18 @@ const DeleteConnectionDialog: React.FC<DeleteConnectionDialogProps> = ({
                         <label htmlFor="confirm-delete" className="text-sm font-medium block mb-2">
                             Type <span className="font-bold">{connectionReadableId}</span> to confirm deletion
                         </label>
-                        <Input
+                        <input
                             id="confirm-delete"
                             value={confirmText}
                             onChange={(e) => setConfirmText(e.target.value)}
-                            className="w-full"
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg text-sm",
+                                "border bg-transparent",
+                                "focus:outline-none focus:border-gray-400 dark:focus:border-gray-600",
+                                isDark
+                                    ? "border-gray-700 text-white placeholder:text-gray-500"
+                                    : "border-gray-200 text-gray-900 placeholder:text-gray-400"
+                            )}
                             placeholder={connectionReadableId}
                         />
                     </div>
@@ -281,34 +285,37 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
     );
 
     const CopyButton = ({ value, fieldName }: { value: string; fieldName: string }) => (
-        <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
+        <button
             onClick={() => handleCopy(value, fieldName)}
+            className={cn(
+                "p-1.5 rounded-md transition-colors",
+                isDark
+                    ? "hover:bg-gray-700"
+                    : "hover:bg-gray-100"
+            )}
         >
             {copiedField === fieldName ? (
                 <Check className="h-4 w-4 text-green-500" />
             ) : (
-                <Copy className="h-4 w-4" />
+                <Copy className="h-4 w-4 text-gray-500" />
             )}
-        </Button>
+        </button>
     );
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="h-full flex flex-col">
             {/* Content area - scrollable */}
-            <div className="flex-grow overflow-y-auto">
-                <div className="p-8 h-full flex flex-col">
-                    {/* Heading with delete button */}
-                    <div className="flex items-start justify-between mb-4">
+            <div className="px-8 py-10 flex-1 overflow-auto">
+                <div className="space-y-8">
+                    {/* Header with action buttons */}
+                    <div className="flex items-start justify-between">
                         <div>
-                            <DialogTitle className="text-4xl font-semibold text-left">
-                                {authProviderName} Connection Details
-                            </DialogTitle>
-                            <DialogDescription className="text-sm text-muted-foreground mt-2">
-                                View details for your {authProviderName} connection.
-                            </DialogDescription>
+                            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                                {authProviderName} Connection
+                            </h2>
+                            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                                View and manage your {authProviderName} connection details
+                            </p>
                         </div>
 
                         {/* Action buttons */}
@@ -377,15 +384,12 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                         </div>
                     </div>
 
-                    {/* Small spacer to push emblem down 10% */}
-                    <div style={{ height: "5%" }}></div>
-
-                    {/* Auth Provider Icon - make much larger */}
+                    {/* Auth Provider Icon - smaller, cleaner */}
                     {authProviderShortName && (
-                        <div className="flex justify-center items-center mb-6" style={{ minHeight: "20%" }}>
+                        <div className="flex justify-center py-8">
                             <div className={cn(
-                                "w-64 h-64 flex items-center justify-center border rounded-lg p-2",
-                                isDark ? "border-gray-700" : "border-gray-300"
+                                "w-32 h-32 flex items-center justify-center rounded-2xl p-4",
+                                isDark ? "bg-gray-800/50" : "bg-gray-50"
                             )}>
                                 <img
                                     src={getAuthProviderIconUrl(authProviderShortName, resolvedTheme)}
@@ -395,7 +399,7 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                                         e.currentTarget.style.display = 'none';
                                         e.currentTarget.parentElement!.innerHTML = `
                                             <div class="w-full h-full rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}">
-                                                <span class="text-5xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
+                                                <span class="text-3xl font-bold ${isDark ? 'text-blue-400' : 'text-blue-600'}">
                                                     ${authProviderShortName.substring(0, 2).toUpperCase()}
                                                 </span>
                                             </div>
@@ -406,105 +410,126 @@ export const AuthProviderDetailView: React.FC<AuthProviderDetailViewProps> = ({
                         </div>
                     )}
 
-                    {/* Reduced spacer to bring details up closer to emblem */}
-                    <div className="flex-grow" style={{ minHeight: "15%" }}></div>
+                    {/* Connection Details */}
+                    <div className="space-y-6">
+                        {/* Name */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                Name
+                            </label>
+                            <div className={cn(
+                                "w-full px-4 py-2.5 rounded-lg text-sm",
+                                "border",
+                                isDark
+                                    ? "bg-gray-800 border-gray-700 text-white"
+                                    : "bg-white border-gray-200 text-gray-900"
+                            )}>
+                                {connectionDetails.name}
+                            </div>
+                        </div>
 
-                    {/* Connection Details - positioned closer to emblem */}
-                    <div className="px-2 max-w-md mx-auto w-full">
-                        <div className="space-y-6">
-                            {/* Name */}
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium ml-1">Name</label>
+                        {/* Readable ID */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                Readable ID
+                            </label>
+                            <div className={cn(
+                                "w-full px-4 py-2.5 rounded-lg text-sm flex items-center justify-between",
+                                "border",
+                                isDark
+                                    ? "bg-gray-800 border-gray-700 text-white"
+                                    : "bg-white border-gray-200 text-gray-900"
+                            )}>
+                                <span className="font-mono break-all">{connectionDetails.readable_id}</span>
+                                <CopyButton value={connectionDetails.readable_id} fieldName="Readable ID" />
+                            </div>
+                        </div>
+
+                        {/* Created By */}
+                        {connectionDetails.created_by_email && (
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                    Created By
+                                </label>
                                 <div className={cn(
-                                    "w-full py-2 px-3 rounded-md border bg-transparent",
-                                    isDark ? "border-gray-700" : "border-gray-300"
+                                    "w-full px-4 py-2.5 rounded-lg text-sm",
+                                    "border",
+                                    isDark
+                                        ? "bg-gray-800 border-gray-700 text-white"
+                                        : "bg-white border-gray-200 text-gray-900"
                                 )}>
-                                    <span className="text-sm">{connectionDetails.name}</span>
+                                    {connectionDetails.created_by_email}
                                 </div>
                             </div>
+                        )}
 
-                            {/* Readable ID */}
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium ml-1">Readable ID</label>
+                        {/* Created At */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                Created At
+                            </label>
+                            <div className={cn(
+                                "w-full px-4 py-2.5 rounded-lg text-sm",
+                                "border",
+                                isDark
+                                    ? "bg-gray-800 border-gray-700 text-white"
+                                    : "bg-white border-gray-200 text-gray-900"
+                            )}>
+                                {formatDate(connectionDetails.created_at)}
+                            </div>
+                        </div>
+
+                        {/* Modified By */}
+                        {connectionDetails.modified_by_email && (
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                    Modified By
+                                </label>
                                 <div className={cn(
-                                    "w-full py-2 px-3 rounded-md border bg-transparent flex items-center justify-between",
-                                    isDark ? "border-gray-700" : "border-gray-300"
+                                    "w-full px-4 py-2.5 rounded-lg text-sm",
+                                    "border",
+                                    isDark
+                                        ? "bg-gray-800 border-gray-700 text-white"
+                                        : "bg-white border-gray-200 text-gray-900"
                                 )}>
-                                    <span className="text-sm font-mono break-all">{connectionDetails.readable_id}</span>
-                                    <CopyButton value={connectionDetails.readable_id} fieldName="Readable ID" />
+                                    {connectionDetails.modified_by_email}
                                 </div>
                             </div>
+                        )}
 
-                            {/* Created By */}
-                            {connectionDetails.created_by_email && (
-                                <div className="space-y-1">
-                                    <label className="text-sm font-medium ml-1">Created By</label>
-                                    <div className={cn(
-                                        "w-full py-2 px-3 rounded-md border bg-transparent",
-                                        isDark ? "border-gray-700" : "border-gray-300"
-                                    )}>
-                                        <span className="text-sm">{connectionDetails.created_by_email}</span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Created At */}
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium ml-1">Created At</label>
-                                <div className={cn(
-                                    "w-full py-2 px-3 rounded-md border bg-transparent",
-                                    isDark ? "border-gray-700" : "border-gray-300"
-                                )}>
-                                    <span className="text-sm">{formatDate(connectionDetails.created_at)}</span>
-                                </div>
-                            </div>
-
-                            {/* Modified By */}
-                            {connectionDetails.modified_by_email && (
-                                <div className="space-y-1">
-                                    <label className="text-sm font-medium ml-1">Modified By</label>
-                                    <div className={cn(
-                                        "w-full py-2 px-3 rounded-md border bg-transparent",
-                                        isDark ? "border-gray-700" : "border-gray-300"
-                                    )}>
-                                        <span className="text-sm">{connectionDetails.modified_by_email}</span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Modified At */}
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium ml-1">Modified At</label>
-                                <div className={cn(
-                                    "w-full py-2 px-3 rounded-md border bg-transparent",
-                                    isDark ? "border-gray-700" : "border-gray-300"
-                                )}>
-                                    <span className="text-sm">{formatDate(connectionDetails.modified_at)}</span>
-                                </div>
+                        {/* Modified At */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                                Modified At
+                            </label>
+                            <div className={cn(
+                                "w-full px-4 py-2.5 rounded-lg text-sm",
+                                "border",
+                                isDark
+                                    ? "bg-gray-800 border-gray-700 text-white"
+                                    : "bg-white border-gray-200 text-gray-900"
+                            )}>
+                                {formatDate(connectionDetails.modified_at)}
                             </div>
                         </div>
                     </div>
-
-                    {/* Small spacer at bottom */}
-                    <div style={{ height: "5%" }}></div>
                 </div>
             </div>
 
-            {/* Footer - fixed at bottom */}
-            <div className="flex-shrink-0 border-t">
-                <DialogFooter className="flex justify-end gap-3 p-6">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={onCancel}
-                        className={cn(
-                            "px-6",
-                            isDark ? "border-gray-700 hover:bg-gray-800" : "border-gray-300 hover:bg-gray-100"
-                        )}
-                    >
-                        Close
-                    </Button>
-                </DialogFooter>
+            {/* Bottom actions - Clean minimal */}
+            <div className={cn(
+                "px-8 py-6 border-t",
+                isDark ? "border-gray-800" : "border-gray-200"
+            )}>
+                <button
+                    onClick={onCancel}
+                    className={cn(
+                        "w-full py-2 px-4 rounded-lg text-sm font-medium transition-all",
+                        "bg-blue-600 hover:bg-blue-700 text-white"
+                    )}
+                >
+                    Close
+                </button>
             </div>
 
             {/* Delete Connection Dialog */}
